@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Direction B — Ledger (light)</title>
+<style>
+/* ==========================================================================
+   DIRECTION B — "LEDGER"
+   Register: calm, editorial, almost paper. The queue reads as a written
+   record of what the machine could not decide.
+   Status is encoded WITHOUT colour: by GROUPING (three sections named for
+   what the item asks of you), by a small-caps type label, and by weight.
+   The only saturated ink in the whole screen is a single rust rule that
+   marks rows past two days. Sans for prose, mono strictly for machine
+   strings — ids, routes, test-ids, commands.
+   Reference space: GitHub in light mode with the noise removed; a lab
+   notebook; Linear's typographic restraint.
+
+   PALETTE
+   --paper       #FBFAF7  page ground (warm off-white)
+   --paper-2     #FFFFFF  panel
+   --paper-3     #F3F1EC  inset / code / hover
+   --rule        #E3DFD7  hairline
+   --rule-2      #CFC9BD  stronger rule
+   --ink         #1C1A17  primary text (warm near-black)
+   --ink-2       #55504A  secondary
+   --ink-3       #8B857B  tertiary / meta
+   --mark        #A8442A  the one accent — aging, breach, red spec (rust)
+   --mark-soft   #F0E2DC  rust tint background
+   --ok          #2F6B4A  green, used only for a passing gate
+   --link        #1F4F8C  interactive text
+   ========================================================================== */
+
+:root{
+  --paper:#FBFAF7; --paper-2:#FFFFFF; --paper-3:#F3F1EC;
+  --rule:#E3DFD7; --rule-2:#CFC9BD;
+  --ink:#1C1A17; --ink-2:#55504A; --ink-3:#8B857B;
+  --mark:#A8442A; --mark-soft:#F0E2DC; --ok:#2F6B4A; --link:#1F4F8C;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.page{max-width:1140px;margin:0 auto;padding:34px 24px 96px}
+.rationale{max-width:720px;margin:0 0 30px;padding-left:16px;border-left:3px solid var(--mark)}
+.rationale h1{margin:0 0 8px;font-size:18px;font-weight:600;letter-spacing:-.01em}
+.rationale p{margin:0;color:var(--ink-2);font-size:13.5px;line-height:1.7}
+.caption{color:var(--ink-3);font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 8px}
+.screen{border:1px solid var(--rule-2);background:var(--paper-2);margin:0 0 36px;border-radius:3px;overflow:hidden}
+.chrome{display:flex;align-items:center;gap:9px;padding:8px 12px;background:var(--paper-3);border-bottom:1px solid var(--rule)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--rule-2)}
+.url{color:var(--ink-3);font-family:var(--mono);font-size:11px}
+
+/* ---- shell ---- */
+.shell{display:grid;grid-template-columns:200px 1fr}
+.rail{border-right:1px solid var(--rule);padding:18px 0;min-height:600px;background:var(--paper)}
+.rail .brand{padding:0 18px 20px;font-size:14px;font-weight:600;letter-spacing:-.01em}
+.rail .brand span{display:block;font-weight:400;color:var(--ink-3);font-size:11.5px;margin-top:2px}
+.rail a{display:flex;justify-content:space-between;padding:6px 18px;color:var(--ink-2);text-decoration:none;font-size:13.5px}
+.rail a.on{color:var(--ink);font-weight:600;background:var(--paper-3);box-shadow:inset 3px 0 0 var(--ink)}
+.rail a .n{color:var(--ink-3);font-family:var(--mono);font-size:11.5px}
+.rail .grp{padding:20px 18px 6px;color:var(--ink-3);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase}
+
+.main{min-width:0;background:var(--paper-2)}
+.head{padding:24px 30px 18px;border-bottom:1px solid var(--rule)}
+.head h2{margin:0 0 4px;font-size:22px;font-weight:600;letter-spacing:-.02em}
+.head p{margin:0;color:var(--ink-3);font-size:13px}
+.toolrow{display:flex;align-items:center;gap:10px;padding:10px 30px;border-bottom:1px solid var(--rule);background:var(--paper)}
+.toolrow input{flex:1;max-width:280px;border:1px solid var(--rule-2);background:var(--paper-2);border-radius:2px;padding:4px 8px;font-family:var(--sans);font-size:12.5px;color:var(--ink-2)}
+.toolrow .chip{border:1px solid var(--rule-2);background:var(--paper-2);border-radius:2px;padding:3px 9px;font-size:11.5px;color:var(--ink-2);cursor:pointer}
+.toolrow .chip.on{background:var(--ink);color:var(--paper-2);border-color:var(--ink)}
+.toolrow .sp{flex:1}
+
+/* ---- grouped list ---- */
+.group{border-bottom:1px solid var(--rule)}
+.group > h3{margin:0;padding:16px 30px 7px;font-size:12px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--ink)}
+.group > h3 em{font-style:normal;font-weight:400;color:var(--ink-3);letter-spacing:0;text-transform:none;font-size:12.5px;margin-left:8px}
+.item{display:block;text-decoration:none;color:inherit;padding:9px 30px 10px;border-top:1px solid var(--rule)}
+.item:hover{background:var(--paper-3)}
+.item.aged{box-shadow:inset 3px 0 0 var(--mark)}
+.item .l1{display:flex;align-items:baseline;gap:10px}
+.item .kind{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);width:126px;flex:none}
+.item.aged .kind{color:var(--mark)}
+.item .ttl{font-size:14.5px;font-weight:600;letter-spacing:-.01em;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .age{font-family:var(--mono);font-size:12px;color:var(--ink-3);flex:none}
+.item.aged .age{color:var(--mark)}
+.item .l2{display:flex;gap:10px;margin-top:3px;padding-left:136px}
+.item .why{color:var(--ink-2);font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .where{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);flex:none}
+code,.m{font-family:var(--mono);font-size:.92em}
+.m{color:var(--ink-2)}
+.foot{padding:12px 30px;color:var(--ink-3);font-size:12.5px;background:var(--paper)}
+
+/* ---- empty ---- */
+.empty{padding:60px 30px 66px;border-bottom:1px solid var(--rule)}
+.empty h3{margin:0 0 6px;font-size:20px;font-weight:600;letter-spacing:-.02em}
+.empty p{margin:0 0 22px;color:var(--ink-3);font-size:13.5px}
+.running{border-top:1px solid var(--rule);max-width:640px}
+.running div{display:flex;gap:14px;padding:9px 0;border-bottom:1px solid var(--rule);font-size:13px;align-items:baseline}
+.running div .st{width:78px;flex:none;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.running div .nm{flex:1;color:var(--ink)}
+.running div .el{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+
+/* ---- detail ---- */
+.dhead{padding:26px 44px 22px;border-bottom:1px solid var(--rule)}
+.crumb{font-size:12.5px;color:var(--ink-3);margin-bottom:14px}
+.crumb a{color:var(--link);text-decoration:none}
+.kindline{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--mark);margin-bottom:8px}
+.dtitle{margin:0 0 10px;font-size:28px;line-height:1.2;font-weight:600;letter-spacing:-.025em;max-width:22ch}
+.dmeta{color:var(--ink-3);font-size:12.5px;font-family:var(--mono);line-height:1.9}
+.dmeta b{color:var(--ink-2);font-weight:400}
+.dbody{padding:34px 44px 56px;max-width:860px}
+.sec{margin:0 0 40px}
+.sec h4{margin:0 0 14px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.quote{font-size:17px;line-height:1.68;color:var(--ink);border-left:3px solid var(--mark);padding:2px 0 2px 20px;max-width:62ch}
+.quote .attrib{display:block;margin-top:12px;font-size:11.5px;color:var(--ink-3);font-family:var(--mono)}
+.crit{border-top:1px solid var(--rule);padding:16px 0 4px}
+.crit:last-of-type{border-bottom:1px solid var(--rule);margin-bottom:14px}
+.crit .ch{display:flex;align-items:baseline;gap:12px;margin-bottom:9px}
+.crit .ch .cid{font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:600}
+.crit .ch .rt{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.crit .ch .sp{flex:1}
+.crit .ch .vd{font-family:var(--mono);font-size:11.5px;color:var(--ok)}
+.crit .ch .vd.red{color:var(--mark)}
+.gwt{margin:0;display:grid;grid-template-columns:64px 1fr;row-gap:6px;column-gap:14px}
+.gwt dt{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);padding-top:3px}
+.gwt dd{margin:0;font-size:14.5px;line-height:1.55;max-width:60ch}
+.tid{font-family:var(--mono);font-size:12.5px;background:var(--paper-3);padding:1px 4px;border-radius:2px;color:var(--ink-2)}
+ol.did{list-style:none;margin:0;padding:0;counter-reset:s}
+ol.did li{display:grid;grid-template-columns:64px 1fr;gap:16px;padding:9px 0;border-top:1px solid var(--rule);font-size:14px;color:var(--ink-2)}
+ol.did li:last-child{border-bottom:1px solid var(--rule);color:var(--ink);font-weight:600}
+ol.did li .t{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);padding-top:2px}
+.cmdbox{border:1px solid var(--rule-2);border-radius:3px;overflow:hidden}
+.cmdbox .cb{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--paper-3);border-bottom:1px solid var(--rule)}
+.cmdbox .cb span{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+.cmdbox .cb .sp{flex:1}
+.cmdbox pre{margin:0;padding:16px 16px;font-family:var(--mono);font-size:13px;line-height:1.75;color:var(--ink);overflow-x:auto;background:var(--paper-2)}
+.btn{border:1px solid var(--rule-2);background:var(--paper-2);border-radius:2px;padding:4px 11px;font-family:var(--sans);font-size:12px;color:var(--ink-2);cursor:pointer}
+.btn:hover{border-color:var(--ink-3);color:var(--ink)}
+.btn.pri{background:var(--ink);border-color:var(--ink);color:var(--paper-2);font-weight:600}
+.note{margin-top:12px;color:var(--ink-3);font-size:12.5px;line-height:1.65;max-width:62ch}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:36px}
+.kv{width:100%;border-collapse:collapse}
+.kv td{padding:7px 0;border-bottom:1px solid var(--rule);font-size:13px}
+.kv td:first-child{color:var(--ink-3)}
+.kv td:last-child{text-align:right;font-family:var(--mono);font-size:12.5px}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:26px;padding-top:20px;border-top:1px solid var(--rule)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="rationale">
+    <h1>Direction B — Ledger</h1>
+    <p>Paper, not console. The inbox groups by what the item asks of you — an answer, a decision, a fix — so the operator's first read is about their own next action rather than a taxonomy of failure modes. Status carries in position, small-caps labels and weight; the single rust rule is spent only on rows past two days and on a red spec. Detail is a page rather than a panel: 28px title, quoted question at reading size, criteria set as definition lists, and the resume command given the same care as a citation.</p>
+  </div>
+
+  <!-- =========================== HERO: REVIEW INBOX =========================== -->
+  <p class="caption">Hero — Review inbox · grouped by what it asks of you</p>
+  <div class="screen">
+    <div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="url">ai-orchestrator.local/inbox</span></div>
+    <div class="shell">
+      <nav class="rail" data-testid="nav-rail">
+        <div class="brand">AI Orchestrator<span>M1 · single operator</span></div>
+        <a href="#" class="on" data-testid="nav-inbox">Inbox <span class="n">6</span></a>
+        <a href="#" data-testid="nav-runs">Runs <span class="n">2</span></a>
+        <a href="#" data-testid="nav-queue">Queue <span class="n">1</span></a>
+        <div class="grp">Configure</div>
+        <a href="#" data-testid="nav-projects">Projects <span class="n">3</span></a>
+        <a href="#" data-testid="nav-repositories">Repositories <span class="n">4</span></a>
+        <a href="#" data-testid="nav-workflows">Workflows <span class="n">3</span></a>
+        <div class="grp">Evidence</div>
+        <a href="#" data-testid="nav-metrics">Metrics</a>
+        <a href="#" data-testid="nav-gate-record">Gate record</a>
+      </nav>
+
+      <div class="main">
+        <div class="head">
+          <h2>Inbox</h2>
+          <p data-testid="inbox-count">Six things need you. Oldest has been waiting three days.</p>
+        </div>
+        <div class="toolrow" data-testid="inbox-filters">
+          <input type="text" placeholder="Filter by project, repository, epic…" data-testid="inbox-search">
+          <button class="chip on" data-testid="inbox-filter-all">All</button>
+          <button class="chip" data-testid="inbox-filter-blocked">Blocked</button>
+          <button class="chip" data-testid="inbox-filter-qa">Ready for QA</button>
+          <button class="chip" data-testid="inbox-filter-budget">Budget</button>
+          <button class="chip" data-testid="inbox-filter-rework">Rework</button>
+          <button class="chip" data-testid="inbox-filter-infra">Infrastructure</button>
+          <button class="chip" data-testid="inbox-filter-criterion">Criteria</button>
+          <span class="sp"></span>
+          <button class="chip" data-testid="inbox-sort-age">Oldest first</button>
+        </div>
+
+        <section class="group" data-testid="inbox-group-answer">
+          <h3>Needs an answer <em>the run is parked until you reply in your terminal</em></h3>
+
+          <a class="item aged" href="#detail" data-testid="inbox-row-blocked-3-2">
+            <span class="l1">
+              <span class="kind" data-testid="inbox-row-blocked-3-2-type">Blocked story</span>
+              <span class="ttl" data-testid="inbox-row-blocked-3-2-title">E3 Saved views · S3.2 Persist filter state across sessions</span>
+              <span class="age" data-testid="inbox-row-blocked-3-2-age">2d 04h</span>
+            </span>
+            <span class="l2">
+              <span class="why" data-testid="inbox-row-blocked-3-2-hint">Do filters persist for a signed-out visitor, or clear at logout? AC-2 does not say, and the agent declined to guess.</span>
+              <span class="where"><span data-testid="inbox-row-blocked-3-2-project">Fullstack App</span> · <span data-testid="inbox-row-blocked-3-2-repo">optimai/fullstack-app</span></span>
+            </span>
+          </a>
+
+          <a class="item" href="#detail" data-testid="inbox-row-criterion-epic-4">
+            <span class="l1">
+              <span class="kind" data-testid="inbox-row-criterion-epic-4-type">Unmatched criterion</span>
+              <span class="ttl" data-testid="inbox-row-criterion-epic-4-title">E4 Review inbox · G2 cannot open</span>
+              <span class="age" data-testid="inbox-row-criterion-epic-4-age">4h 12m</span>
+            </span>
+            <span class="l2">
+              <span class="why" data-testid="inbox-row-criterion-epic-4-hint">AC-3 names test-id <code>inbox-row-age</code> but no generated spec asserts it. Amend the criterion or accept a gap.</span>
+              <span class="where"><span data-testid="inbox-row-criterion-epic-4-project">AI Orchestrator</span> · <span data-testid="inbox-row-criterion-epic-4-repo">optimai/ai-orchestrator</span></span>
+            </span>
+          </a>
+        </section>
+
+        <section class="group" data-testid="inbox-group-decision">
+          <h3>Needs a decision <em>work is finished and waiting on your judgement</em></h3>
+
+          <a class="item" href="#detail" data-testid="inbox-row-qa-epic-2">
+            <span class="l1">
+              <span class="kind" data-testid="inbox-row-qa-epic-2-type">Ready for QA · G3</span>
+              <span class="ttl" data-testid="inbox-row-qa-epic-2-title">E2 Bulk invoice export · run the feature, then merge or reject</span>
+              <span class="age" data-testid="inbox-row-qa-epic-2-age">6h 41m</span>
+            </span>
+            <span class="l2">
+              <span class="why" data-testid="inbox-row-qa-epic-2-hint">PR #418 open. Quality gate green, 14 of 14 Playwright specs green against a seeded database. 3 routine assumptions recorded.</span>
+              <span class="where"><span data-testid="inbox-row-qa-epic-2-project">Fullstack App</span> · <span data-testid="inbox-row-qa-epic-2-repo">optimai/fullstack-app</span></span>
+            </span>
+          </a>
+
+          <a class="item" href="#detail" data-testid="inbox-row-budget-1-4">
+            <span class="l1">
+              <span class="kind" data-testid="inbox-row-budget-1-4-type">Budget breach</span>
+              <span class="ttl" data-testid="inbox-row-budget-1-4-title">E1 Workflow versioning · S1.4 Pin run to document version</span>
+              <span class="age" data-testid="inbox-row-budget-1-4-age">1d 03h</span>
+            </span>
+            <span class="l2">
+              <span class="why" data-testid="inbox-row-budget-1-4-hint">Halted at $18.40 against a $15.00 per-run budget — 6.1M tokens on claude-opus-4. Raise the budget, or stop the run.</span>
+              <span class="where"><span data-testid="inbox-row-budget-1-4-project">AI Orchestrator</span> · <span data-testid="inbox-row-budget-1-4-repo">optimai/ai-orchestrator</span></span>
+            </span>
+          </a>
+        </section>
+
+        <section class="group" data-testid="inbox-group-fix">
+          <h3>Needs a fix <em>the machine has stopped trying</em></h3>
+
+          <a class="item aged" href="#detail" data-testid="inbox-row-rework-3-1">
+            <span class="l1">
+              <span class="kind" data-testid="inbox-row-rework-3-1-type">Rework cap reached</span>
+              <span class="ttl" data-testid="inbox-row-rework-3-1-title">E3 Saved views · S3.1 Filter chips read from URL query</span>
+              <span class="age" data-testid="inbox-row-rework-3-1-age">3d 01h</span>
+            </span>
+            <span class="l2">
+              <span class="why" data-testid="inbox-row-rework-3-1-hint">Both rework cycles spent and <code>filters-restore-from-url</code> is still red. Likely a wrong premise in the criterion, not the code.</span>
+              <span class="where"><span data-testid="inbox-row-rework-3-1-project">Fullstack App</span> · <span data-testid="inbox-row-rework-3-1-repo">optimai/fullstack-app</span></span>
+            </span>
+          </a>
+
+          <a class="item" href="#detail" data-testid="inbox-row-infra-5-1">
+            <span class="l1">
+              <span class="kind" data-testid="inbox-row-infra-5-1-type">Infrastructure failure</span>
+              <span class="ttl" data-testid="inbox-row-infra-5-1-title">E5 Audit log viewer · S5.1 Filterable event table</span>
+              <span class="age" data-testid="inbox-row-infra-5-1-age">22m</span>
+            </span>
+            <span class="l2">
+              <span class="why" data-testid="inbox-row-infra-5-1-hint">Postgres unreachable while provisioning the E2E environment. Three retries exhausted; nothing was implemented.</span>
+              <span class="where"><span data-testid="inbox-row-infra-5-1-project">Customer Portal</span> · <span data-testid="inbox-row-infra-5-1-repo">optimai/customer-portal</span></span>
+            </span>
+          </a>
+        </section>
+
+        <div class="foot" data-testid="inbox-footer-status">
+          Two runs in flight, one queued. Execution is serialized in M1 — a parked run holds the queue behind it.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== STATE VARIANT =========================== -->
+  <p class="caption">State variant — empty inbox</p>
+  <div class="screen">
+    <div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="url">ai-orchestrator.local/inbox</span></div>
+    <div class="shell">
+      <nav class="rail">
+        <div class="brand">AI Orchestrator<span>M1 · single operator</span></div>
+        <a href="#" class="on" data-testid="nav-inbox-empty">Inbox <span class="n">0</span></a>
+        <a href="#" data-testid="nav-runs-empty">Runs <span class="n">2</span></a>
+        <a href="#" data-testid="nav-queue-empty">Queue <span class="n">1</span></a>
+      </nav>
+      <div class="main">
+        <div class="head"><h2>Inbox</h2><p>Empty.</p></div>
+        <div class="empty" data-testid="inbox-empty-state">
+          <h3>Nothing needs you.</h3>
+          <p>Everything is running. Come back when an epic completes or a story blocks.</p>
+          <div class="running" data-testid="inbox-empty-running-list">
+            <div><span class="st">Running</span><span class="nm">E1 Workflow versioning · S1.5 Resolve referenced workflow at pinned version</span><span class="el">08m</span></div>
+            <div><span class="st">Running</span><span class="nm">E6 Trace export · S6.1 Share trace id across orchestrator and harness spans</span><span class="el">41m</span></div>
+            <div><span class="st">Queued</span><span class="nm">E5 Audit log viewer · S5.2 Export filtered events as CSV</span><span class="el">—</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== SECONDARY: BLOCKED STORY =========================== -->
+  <p class="caption" id="detail">Secondary — opened item · blocked story</p>
+  <div class="screen">
+    <div class="chrome"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="url">ai-orchestrator.local/inbox/blocked/story-3-2</span></div>
+    <div class="shell">
+      <nav class="rail">
+        <div class="brand">AI Orchestrator<span>M1 · single operator</span></div>
+        <a href="#" class="on" data-testid="nav-inbox-detail">Inbox <span class="n">6</span></a>
+        <a href="#" data-testid="nav-runs-detail">Runs <span class="n">2</span></a>
+        <a href="#" data-testid="nav-queue-detail">Queue <span class="n">1</span></a>
+      </nav>
+      <div class="main" data-testid="detail-root">
+        <div class="dhead">
+          <div class="crumb"><a href="#" data-testid="detail-back">← Inbox</a> &nbsp;·&nbsp; Needs an answer</div>
+          <div class="kindline" data-testid="detail-type-badge">Blocked story · parked 2 days 4 hours</div>
+          <h1 class="dtitle" data-testid="detail-story-title">S3.2 Persist filter state across sessions</h1>
+          <div class="dmeta" data-testid="detail-story-meta">
+            Fullstack App · <b>optimai/fullstack-app</b> · epic <b>E3 Saved views</b><br>
+            branch <b>feat/saved-views-3-2</b> · worktree <b>/work/fullstack-app/feat-saved-views-3-2</b><br>
+            run <b>run_01J8QK</b> · workflow <b>stories v4</b> (pinned) · trace <b>4bf92f3577b34da6</b>
+          </div>
+        </div>
+
+        <div class="dbody">
+
+          <div class="sec">
+            <h4>The question that parked the run</h4>
+            <blockquote class="quote" data-testid="detail-question">
+              AC-2 says a returning user sees the filters they last applied, but it does not say what a
+              signed-out visitor sees. Should filters persist in <span class="tid">localStorage</span> for
+              anonymous sessions, or be cleared at logout? I implemented the signed-in path against the
+              <span class="tid">saved_view</span> table and stopped before touching client storage rather
+              than guess at a privacy decision.
+              <span class="attrib">agent · claude-opus-4 · 2026-08-23 09:52 · escalated on one open question and one material assumption</span>
+            </blockquote>
+          </div>
+
+          <div class="sec">
+            <h4>Acceptance criteria — signed at G2, the specs were generated from these</h4>
+
+            <div class="crit" data-testid="detail-criterion-ac-1">
+              <div class="ch"><span class="cid">AC-1</span><span class="rt">route /invoices</span><span class="sp"></span><span class="vd">saved-views.spec.ts:12 · green</span></div>
+              <dl class="gwt">
+                <dt>Given</dt><dd>a signed-in user with a saved filter set</dd>
+                <dt>When</dt><dd>they open <span class="tid">/invoices</span></dd>
+                <dt>Then</dt><dd>the filter bar renders the saved chips — <span class="tid">invoices-filter-bar</span>, <span class="tid">invoices-filter-chip</span></dd>
+              </dl>
+            </div>
+
+            <div class="crit" data-testid="detail-criterion-ac-2">
+              <div class="ch"><span class="cid">AC-2</span><span class="rt">route /invoices</span><span class="sp"></span><span class="vd red">saved-views.spec.ts:31 · red</span></div>
+              <dl class="gwt">
+                <dt>Given</dt><dd>a signed-in user who changes their filters</dd>
+                <dt>When</dt><dd>they reload <span class="tid">/invoices</span></dd>
+                <dt>Then</dt><dd>the same filters are applied and the table reflects them — <span class="tid">invoices-filter-chip</span>, <span class="tid">invoices-table-row</span></dd>
+              </dl>
+            </div>
+
+            <div class="crit" data-testid="detail-criterion-ac-3">
+              <div class="ch"><span class="cid">AC-3</span><span class="rt">route /invoices</span><span class="sp"></span><span class="vd">saved-views.spec.ts:58 · green</span></div>
+              <dl class="gwt">
+                <dt>Given</dt><dd>a user with no saved view</dd>
+                <dt>When</dt><dd>they open <span class="tid">/invoices</span></dd>
+                <dt>Then</dt><dd>the default "Open · last 30 days" set is applied — <span class="tid">invoices-filter-chip-default</span></dd>
+              </dl>
+            </div>
+          </div>
+
+          <div class="sec">
+            <h4>What the agent has done</h4>
+            <ol class="did" data-testid="detail-activity">
+              <li data-testid="detail-activity-step-1"><span class="t">08:12</span><span>Branch and worktree created, dependencies installed, baseline quality gate green</span></li>
+              <li data-testid="detail-activity-step-2"><span class="t">08:19</span><span>Playwright specs generated from AC-1 to AC-3 and approved at G2 — three specs, three criteria, none unmatched</span></li>
+              <li data-testid="detail-activity-step-3"><span class="t">08:41</span><span>Migration <code>0042_saved_view.sql</code> written and applied to the run database</span></li>
+              <li data-testid="detail-activity-step-4"><span class="t">09:07</span><span>GET and PUT <code>/api/saved-views</code> implemented; unit tests 12 passed, 0 failed</span></li>
+              <li data-testid="detail-activity-step-5"><span class="t">09:36</span><span>Filter bar wired to the saved view on <code>/invoices</code>; AC-1 and AC-3 green, AC-2 still red</span></li>
+              <li data-testid="detail-activity-step-6"><span class="t">09:52</span><span>Open question raised. Run parked at the human gate, worktree held.</span></li>
+            </ol>
+          </div>
+
+          <div class="sec">
+            <h4>Answer it in your terminal</h4>
+            <div class="cmdbox">
+              <div class="cb"><span>Resume command</span><span class="sp"></span>
+                <button class="btn pri" data-testid="detail-resume-copy">Copy command</button>
+              </div>
+              <pre data-testid="detail-resume-command">cd /work/fullstack-app/feat-saved-views-3-2 &amp;&amp; \
+claude --resume 6f2a1c94-8d3e-4b77-a0f5-2c9e41d8b3aa</pre>
+            </div>
+            <p class="note">Answer inside that session and close it — the orchestrator detects completion and resumes the run
+              by itself. Harness session content expires after thirty days; this one has <strong>27d 20h</strong> left,
+              after which the task must be reconstructed from stored inputs rather than replayed.</p>
+          </div>
+
+          <div class="sec">
+            <div class="two">
+              <div>
+                <h4>Structured output · last task</h4>
+                <table class="kv" data-testid="detail-structured-output">
+                  <tr><td>status</td><td>blocked</td></tr>
+                  <tr><td>artifacts written</td><td>6 files</td></tr>
+                  <tr><td>open questions</td><td>1</td></tr>
+                  <tr><td>assumptions</td><td>1 material · 2 routine</td></tr>
+                  <tr><td>rework cycles used</td><td>0 of 2</td></tr>
+                </table>
+              </div>
+              <div>
+                <h4>Cost and time</h4>
+                <table class="kv" data-testid="detail-cost">
+                  <tr><td>tokens · claude-opus-4</td><td>1.24M</td></tr>
+                  <tr><td>cost, this story</td><td>$4.18</td></tr>
+                  <tr><td>per-run budget</td><td>$4.18 / $15.00</td></tr>
+                  <tr><td>elapsed since G2</td><td>2d 06h 09m</td></tr>
+                  <tr><td>your active minutes</td><td>0m</td></tr>
+                </table>
+              </div>
+            </div>
+            <div class="acts">
+              <button class="btn" data-testid="detail-open-diff">Open diff</button>
+              <button class="btn" data-testid="detail-open-trace">Open trace</button>
+              <button class="btn" data-testid="detail-open-logs">Agent logs</button>
+              <button class="btn" data-testid="detail-dismiss">Dismiss escalation</button>
+              <button class="btn" data-testid="detail-cancel-run">Cancel run and roll back branch</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

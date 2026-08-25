@@ -1,0 +1,7 @@
+# ── BMad Method (v6.11.0) ───────────────────────────────────────
+# Committed: _bmad/{config.toml,custom/config.toml,_config,core,bmm,scripts}
+# and _bmad-output/ — so every worktree is BMad-ready with no setup.
+# _bmad/render/ and _bmad/custom/*.user.toml self-ignore via their own
+# .gitignore files; the two rules below are the ones BMad does not ship.
+_bmad/config.user.toml
+.claude/skills/bmad-*
