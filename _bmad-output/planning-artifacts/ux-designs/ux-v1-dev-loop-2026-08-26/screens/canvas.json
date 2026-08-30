@@ -1,0 +1,131 @@
+{
+  "artboards": [
+    {
+      "file": "Flow.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 520,
+      "title": "00 \u00b7 Operator workflow"
+    },
+    {
+      "file": "Login.dc.html",
+      "x": 0,
+      "y": 680,
+      "w": 1440,
+      "h": 900,
+      "title": "01 \u00b7 Login"
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 1560,
+      "y": 680,
+      "w": 1440,
+      "h": 900,
+      "title": "02 \u00b7 Workflows board (home)"
+    },
+    {
+      "file": "NewWorkflow.dc.html",
+      "x": 0,
+      "y": 1740,
+      "w": 1440,
+      "h": 900,
+      "title": "02.1 \u00b7 New workflow"
+    },
+    {
+      "file": "RunDetail.dc.html",
+      "x": 1560,
+      "y": 1740,
+      "w": 1440,
+      "h": 900,
+      "title": "02.2 \u00b7 Workflow run detail (blocked)"
+    },
+    {
+      "file": "Projects.dc.html",
+      "x": 0,
+      "y": 2800,
+      "w": 1440,
+      "h": 900,
+      "title": "03 \u00b7 Projects"
+    },
+    {
+      "file": "NewProject.dc.html",
+      "x": 1560,
+      "y": 2800,
+      "w": 1440,
+      "h": 900,
+      "title": "03.1 \u00b7 New project + clone check"
+    },
+    {
+      "file": "Runs.dc.html",
+      "x": 0,
+      "y": 3860,
+      "w": 1440,
+      "h": 900,
+      "title": "04 \u00b7 Step / task runs"
+    },
+    {
+      "file": "Templates.dc.html",
+      "x": 1560,
+      "y": 3860,
+      "w": 1440,
+      "h": 900,
+      "title": "05 \u00b7 Workflow templates"
+    },
+    {
+      "file": "RunDiagram.dc.html",
+      "x": 0,
+      "y": 4920,
+      "w": 1440,
+      "h": 900,
+      "title": "02.3 \u00b7 Run diagram (tree view of one run)"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "read-me",
+      "x": 1560,
+      "y": 0,
+      "w": 420,
+      "text": "AI Orchestrator v1 \u2014 dev-loop screens\n\nDesign system: instrument-dark (DESIGN.md 2026-08-25), values lifted verbatim. Colour is signal only: green = running, amber = needs you, red = failed, grey = queued / done.\n\nStatus tokens: QUE \u00b7 RUN \u00b7 BLK (agent blocked) \u00b7 CHK (checkpoint) \u00b7 ERR \u00b7 DON \u00b7 SKP.\n\nStatic mockups, 1440\u00d7900 desktop, one operator. Mock data is illustrative."
+    },
+    {
+      "id": "attention-rule",
+      "x": 2000,
+      "y": 0,
+      "w": 420,
+      "text": "Attention rule on every screen\n\nExactly one thing may be amber or red at a time on a card or row: the reason it needs you. Everything else is grey text. If nothing needs you, the screen has no amber or red pixel.\n\nWords carry the state (blocked, skipped, unvalidated, exit 1) \u2014 colour only reinforces."
+    },
+    {
+      "id": "board-note",
+      "x": 3040,
+      "y": 680,
+      "w": 300,
+      "text": "Board columns are STATUS, not pipeline stage: the v1 template is one dev loop, so the stage lives on the card as 'story 3-2 \u00b7 build'.\n\nNeeds you = BLK + CHK + budget breach. Its header is the only amber label on the page."
+    },
+    {
+      "id": "detail-note",
+      "x": 3040,
+      "y": 1740,
+      "w": 300,
+      "text": "Primary reply path is the ANSWER box: the blocked story file is archived to stories/.answers/ with the answer, and the story is re-planned with the answer as prompt context. Harness-independent and survives session loss.\n\nThe terminal resume command is the secondary path (Claude / Codex only)."
+    },
+    {
+      "id": "templates-note",
+      "x": 3040,
+      "y": 3860,
+      "w": 300,
+      "text": "YAML is editable; the diagram is rendered from it and read-only (no drag-and-drop editor \u2014 a product in itself, cut for v1). Save creates a new version; running workflows stay pinned."
+    },
+    {
+      "id": "diagram-note",
+      "x": 1560,
+      "y": 4920,
+      "w": 420,
+      "text": "Run diagram = the Templates renderer with a run's statuses bound. Left-to-right tree: Run \u2192 steps \u2192 epics (story-id prefix) \u2192 stories. One token per node is the only signal; 'now' marks the current node; QUE = scheduled.\n\nNo initiative, no cross-repository level: one workflow = one repository (deferred to a future version)."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

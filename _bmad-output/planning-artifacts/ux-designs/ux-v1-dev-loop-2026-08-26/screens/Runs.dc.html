@@ -1,0 +1,218 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>Runs</title>
+  <style>
+body{margin:0;background:#0B0D0E;color:#DDE3E5;font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+a{color:#7FD4C1;text-decoration:none} a:hover{color:#DDE3E5}
+*{box-sizing:border-box}
+.app{width:1440px;height:900px;display:grid;grid-template-columns:172px 1fr;background:#0B0D0E;overflow:hidden}
+.rail{background:#0E1113;border-right:1px solid #21272A;padding:14px 0 0;display:flex;flex-direction:column}
+.brand{padding:0 14px 16px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#DDE3E5}
+.brand span{display:block;color:#5C686C;font-size:10.5px;letter-spacing:.04em;text-transform:none;margin-top:3px}
+.nav{display:flex;justify-content:space-between;padding:5px 14px;color:#8B979B;font-size:12px}
+.nav.on{color:#DDE3E5;background:#171B1D;box-shadow:inset 2px 0 0 #7FD4C1}
+.nav .n{color:#5C686C}
+.nav .n.att{color:#E4B33C}
+.grp{padding:16px 14px 5px;color:#5C686C;font-size:10px;letter-spacing:.18em;text-transform:uppercase}
+.railfoot{margin-top:auto;padding:10px 14px 12px;color:#5C686C;font-size:10.5px;line-height:1.7;border-top:1px solid #21272A}
+.railfoot b{color:#8B979B;font-weight:400}
+.main{min-width:0;display:flex;flex-direction:column;height:900px;overflow:hidden}
+.bar{display:flex;align-items:baseline;gap:16px;padding:12px 16px;border-bottom:1px solid #21272A;flex:none}
+.bar h1{margin:0;font-size:13px;letter-spacing:.18em;text-transform:uppercase;font-weight:400}
+.count{color:#5C686C;font-size:11.5px}
+.spacer{flex:1}
+.filters{display:flex;border:1px solid #21272A}
+.filters span{border-right:1px solid #21272A;color:#5C686C;font-size:11px;padding:3px 9px;letter-spacing:.08em;white-space:nowrap}
+.filters span:last-child{border-right:0}
+.filters span.on{background:#171B1D;color:#DDE3E5}
+.search{background:#0A0C0D;border:1px solid #21272A;color:#5C686C;font-size:11.5px;padding:3px 8px;width:190px}
+.btn{display:inline-block;background:transparent;border:1px solid #2C3438;color:#8B979B;font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;white-space:nowrap}
+.btn.pri{border-color:#7FD4C1;color:#7FD4C1}
+.btn.des{border-color:#E05252;color:#E05252}
+.btn.dis{border-color:#21272A;color:#5C686C}
+.tok{font-size:11px;letter-spacing:.1em;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.tok i{width:7px;height:7px;display:inline-block;flex:none}
+.s-run{color:#4FB477}.s-run i{background:#4FB477}
+.s-blk{color:#E4B33C}.s-blk i{background:#E4B33C}
+.s-err{color:#E05252}.s-err i{background:#E05252}
+.s-que{color:#5C686C}.s-que i{border:1px solid #5C686C}
+.s-don{color:#8B979B}.s-don i{border:1px solid #8B979B}
+.s-skp{color:#5C686C}.s-skp i{border:1px dashed #5C686C}
+.t1{color:#DDE3E5}.t2{color:#8B979B}.t3{color:#5C686C}.ac{color:#7FD4C1}
+.amber{color:#E4B33C}.red{color:#E05252}.green{color:#4FB477}
+.sec{margin:0 0 30px}
+.sec-h{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#5C686C;padding-bottom:7px;border-bottom:1px solid #21272A;margin:0 0 12px;display:flex;gap:12px;align-items:baseline}
+.sec-h .spacer{flex:1}
+.kv{width:100%;border-collapse:collapse}
+.kv td{padding:5px 0;font-size:12px;border-bottom:1px solid #21272A}
+.kv td:first-child{color:#5C686C;width:44%}
+.kv td:last-child{color:#DDE3E5;text-align:right}
+table.rec{width:100%;border-collapse:collapse;table-layout:fixed}
+.rec th{text-align:left;font-weight:400;color:#5C686C;font-size:10px;letter-spacing:.18em;text-transform:uppercase;padding:7px 10px;border-bottom:1px solid #21272A;background:#0E1113;white-space:nowrap}
+.rec td{padding:7px 10px;border-bottom:1px solid #21272A;font-size:12px;color:#8B979B;vertical-align:top;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rec td.r,.rec th.r{text-align:right}
+.rec tr.cur td{color:#DDE3E5}
+.board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));flex:1;min-height:0}
+.col{border-right:1px solid #21272A;display:flex;flex-direction:column;min-width:0}
+.col:last-child{border-right:0}
+.colh{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #21272A;background:#0E1113;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5C686C}
+.colh.att{color:#E4B33C}
+.colh.run{color:#4FB477}
+.cards{padding:10px;display:flex;flex-direction:column;gap:8px;overflow:auto}
+.card{background:#111416;border:1px solid #21272A;padding:10px;display:flex;flex-direction:column;gap:5px}
+.card .ttl{font-size:12.5px;color:#DDE3E5;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .meta{font-size:11.5px;color:#5C686C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .step{font-size:11.5px;color:#8B979B;line-height:1.5}
+.card .foot{display:flex;justify-content:space-between;font-size:11.5px;color:#5C686C}
+.card .foot .old{color:#E4B33C}
+.empty{color:#5C686C;font-size:11.5px;padding:18px 0 0;text-align:center}
+.form{padding:22px 28px 30px;max-width:940px;overflow:auto;flex:1;min-height:0}
+.f{display:grid;grid-template-columns:190px 1fr;gap:6px 18px;align-items:start;padding:9px 0;border-bottom:1px solid #21272A}
+.f label{color:#5C686C;font-size:11px;letter-spacing:.14em;text-transform:uppercase;padding-top:6px}
+.in{background:#0A0C0D;border:1px solid #21272A;color:#DDE3E5;font-size:12.5px;padding:5px 8px;min-height:27px;line-height:1.3}
+.in.ph{color:#5C686C}
+.in.sel::after{content:"▾";float:right;color:#5C686C}
+.in.ta{min-height:64px;white-space:pre-wrap;line-height:1.55}
+.hint{color:#5C686C;font-size:11px;margin-top:5px;line-height:1.6}
+.hint b{color:#8B979B;font-weight:400}
+.seg{display:inline-flex;border:1px solid #21272A}
+.seg span{padding:4px 12px;font-size:11px;letter-spacing:.1em;color:#5C686C;border-right:1px solid #21272A;text-transform:uppercase}
+.seg span:last-child{border-right:0}
+.seg span.on{background:#171B1D;color:#DDE3E5}
+.actions{display:flex;gap:8px;padding-top:16px;border-top:1px solid #21272A;margin-top:8px;align-items:center}
+.actions .note{color:#5C686C;font-size:11px;margin-left:6px}
+.banner{background:#171B1D;border-left:2px solid #E4B33C;padding:14px 18px;display:flex;gap:16px;align-items:baseline;font-size:12.5px}
+.banner.err{border-left-color:#E05252}
+.banner .msg{color:#DDE3E5}
+.banner .go{margin-left:auto}
+.dhead{padding:16px 28px 14px;border-bottom:1px solid #21272A;flex:none}
+.crumb{color:#5C686C;font-size:11px;margin-bottom:10px}
+.dtitle{font-size:19px;line-height:1.3;color:#DDE3E5;letter-spacing:-.01em;margin:6px 0 8px;display:flex;gap:14px;align-items:baseline}
+.dmeta{color:#5C686C;font-size:11.5px;line-height:1.7}
+.dmeta b{color:#8B979B;font-weight:400}
+.dbody{padding:22px 28px 40px;overflow:auto;flex:1;min-height:0}
+.q{background:#171B1D;border-left:2px solid #E4B33C;padding:14px 18px;font-size:14px;line-height:1.7;color:#DDE3E5}
+.q .who{display:block;color:#5C686C;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;margin-bottom:8px}
+.cmd{background:#08090A;border:1px solid #2C3438}
+.cmd .cbar{display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid #21272A;color:#5C686C;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase}
+.cmd pre{margin:0;padding:12px 14px;font-size:13px;color:#DDE3E5;overflow-x:auto;line-height:1.7;white-space:pre}
+.cmd .p{color:#5C686C}.cmd .fl{color:#7FD4C1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.tree{font-size:12.5px;line-height:1.7;color:#8B979B}
+.tree div{display:flex;gap:10px;align-items:center}
+.tree .d1{padding-left:14px;border-left:1px solid #21272A;margin-left:4px}
+.tree .d2{padding-left:28px;border-left:1px solid #21272A;margin-left:4px}
+.tree .new{width:7px;height:7px;background:#7FD4C1;display:inline-block;flex:none}
+.tree .ts{margin-left:auto;color:#5C686C;font-size:11px}
+.strip{display:flex;gap:4px}
+.strip span{flex:1;height:14px;border:1px solid #2C3438;font-size:9px;letter-spacing:.06em;color:#5C686C;display:flex;align-items:center;justify-content:center}
+.strip span.d{background:#171B1D;color:#8B979B}
+.strip span.b{border-color:#E4B33C;color:#E4B33C}
+.strip span.r{border-color:#4FB477;color:#4FB477}
+.check{display:grid;grid-template-columns:22px 1fr auto;gap:8px 10px;font-size:12px;line-height:1.6;padding:6px 0;border-bottom:1px solid #21272A}
+.check .g{color:#8B979B}.check .w{color:#E4B33C}.check .x{color:#E05252}.check .n{color:#5C686C}
+.check .out{grid-column:2/4;background:#08090A;border:1px solid #21272A;color:#8B979B;font-size:11.5px;padding:8px 10px;white-space:pre;overflow:hidden}
+.two{display:grid;grid-template-columns:300px 1fr;flex:1;min-height:0}
+.list{border-right:1px solid #21272A;overflow:auto}
+.li{padding:10px 14px;border-bottom:1px solid #21272A;display:flex;flex-direction:column;gap:3px}
+.li.on{background:#171B1D;box-shadow:inset 2px 0 0 #7FD4C1}
+.li .ttl{color:#DDE3E5;font-size:12.5px}
+.li .meta{color:#5C686C;font-size:11.5px}
+.code{background:#0A0C0D;border-right:1px solid #21272A;font-size:12px;line-height:1.65;padding:12px 0;overflow:auto;counter-reset:ln}
+.code div{display:grid;grid-template-columns:38px 1fr;white-space:pre}
+.code div::before{counter-increment:ln;content:counter(ln);color:#5C686C;text-align:right;padding-right:12px;font-size:11px}
+.code .k{color:#8B979B}.code .v{color:#DDE3E5}.code .c{color:#5C686C}.code .s{color:#7FD4C1}
+.code div.hl{background:#171B1D}
+.diag{padding:16px 18px;overflow:auto}
+.node{border:1px solid #2C3438;background:#111416;padding:6px 10px;font-size:11.5px;color:#DDE3E5;display:flex;gap:10px;align-items:baseline;width:250px}
+.node .ty{color:#5C686C;font-size:10px;letter-spacing:.14em;text-transform:uppercase;width:70px;flex:none}
+.node .gt{margin-left:auto;color:#5C686C;font-size:10px}
+.node.ag{border-color:#7FD4C1}
+.node.hu{border-color:#E4B33C}
+.edge{width:1px;height:14px;background:#2C3438;margin-left:125px}
+.loop{border:1px dashed #2C3438;padding:10px 12px 12px;margin:0 0 0 0;width:274px;position:relative}
+
+.tree{display:flex;align-items:center;padding:26px 28px 10px;overflow:auto;flex:1;min-height:0}
+.row{display:flex;align-items:center}
+.kids{display:flex;flex-direction:column;gap:6px;padding-left:30px;position:relative}
+.kids::before{content:"";position:absolute;left:15px;top:18px;bottom:18px;width:1px;background:#2C3438}
+.kids::after{content:"";position:absolute;left:0;top:50%;width:15px;height:1px;background:#2C3438}
+.kid{position:relative}
+.kid::before{content:"";position:absolute;left:-15px;top:50%;width:15px;height:1px;background:#2C3438}
+.nd{border:1px solid #21272A;background:#111416;padding:6px 10px;display:flex;flex-direction:column;gap:3px;min-width:170px;max-width:230px}
+.nd .l1{display:flex;gap:10px;align-items:center;justify-content:space-between;font-size:12px;color:#8B979B;white-space:nowrap}
+.nd .l1 .nm{overflow:hidden;text-overflow:ellipsis}
+.nd .l2{font-size:10.5px;color:#5C686C;white-space:nowrap}
+.nd.cur{border-color:#2C3438}
+.nd.cur .l1{color:#DDE3E5}
+.nd .now{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#5C686C}
+.nd .sub{display:flex;gap:10px;font-size:10px;letter-spacing:.06em;color:#5C686C;margin-top:2px}
+.nd .sub span{white-space:nowrap}
+.nd .sub span.on{color:#8B979B}
+.root{min-width:200px;padding:10px 12px}
+.root .l1{font-size:12.5px;color:#DDE3E5}
+.heads{display:grid;grid-template-columns:230px 260px 260px 1fr;padding:10px 28px 0;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5C686C}
+.treefoot{padding:10px 28px 14px;border-top:1px solid #21272A;font-size:11.5px;color:#5C686C;display:flex;gap:18px}
+.treefoot b{color:#8B979B;font-weight:400}
+.loop .lbl{position:absolute;top:-8px;left:10px;background:#0B0D0E;padding:0 6px;color:#5C686C;font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+</style>
+</helmet>
+
+<div class="app" data-testid="runs-root">
+  <nav class="rail" data-testid="nav-rail">
+  <div class="brand" data-testid="nav-brand">AI Orchestrator<span>v1 · dev loop · single operator</span></div>
+  <div class="nav" data-testid="nav-workflows"><span>Workflows</span><span class="n att">7 · <span class="amber">2 need you</span></span></div><div class="nav on" data-testid="nav-runs"><span>Runs</span><span class="n">31</span></div>
+  <div class="grp">Configure</div>
+  <div class="nav" data-testid="nav-projects"><span>Projects</span><span class="n">3</span></div><div class="nav" data-testid="nav-templates"><span>Templates</span><span class="n">3</span></div>
+  <div class="railfoot" data-testid="global-run-status"><b>2 running</b> · 1 queued<br>2 need you<br>updated 09:41:12 · <span class="ac">refresh</span></div>
+</nav>
+  <div class="main">
+    <div class="bar">
+      <h1>Runs</h1>
+      <span class="count">every step, every workflow · 31 today</span>
+      <span class="spacer"></span>
+      <span class="search">filter…</span>
+      <div class="filters"><span class="on">ALL PROJECTS</span><span>FULLSTACK APP</span><span>AI ORCHESTRATOR</span><span>WEBSITE</span></div>
+      <div class="filters"><span class="on">ALL</span><span>QUE</span><span>RUN</span><span>BLK</span><span>ERR</span><span>DON</span></div>
+    </div>
+    <div class="dbody" style="padding:18px 16px 30px">
+      <div class="sec">
+        <div class="sec-h">Queue <span class="spacer"></span><span class="t3" style="letter-spacing:0;text-transform:none">dbos queue <b>steps</b> · concurrency 2 · one active run per repository</span></div>
+        <table class="rec"><thead><tr><th style="width:40px">Pos</th><th style="width:140px">Project</th><th style="width:200px">Workflow</th><th style="width:200px">Next step</th><th>Waiting because</th><th class="r" style="width:110px">Waiting</th></tr></thead>
+        <tbody>
+          <tr><td class="t3">1</td><td>Fullstack App</td><td>feat/export-csv</td><td>checkout · git.worktree</td><td>repository <span class="ac">optimai/fullstack-app</span> locked by feat/saved-views</td><td class="r">00h 18m</td></tr>
+          <tr><td class="t3">—</td><td>Fullstack App</td><td>feat/notifications-mm</td><td>story 4-1 · build (re-dispatch)</td><td>waiting for your answer · not queued until then</td><td class="r">2d 04h</td></tr>
+        </tbody></table>
+      </div>
+      <div class="sec">
+        <div class="sec-h">History <span class="spacer"></span><span class="t3" style="letter-spacing:0;text-transform:none">newest first · page 1 of 4</span></div>
+        <table class="rec"><thead><tr><th style="width:110px">Time</th><th style="width:130px">Project</th><th style="width:180px">Workflow</th><th style="width:170px">Step</th><th style="width:100px">Type</th><th style="width:130px">Harness</th><th style="width:70px">Status</th><th class="r" style="width:70px">Time</th><th class="r" style="width:64px">Cost</th><th style="width:56px"></th></tr></thead>
+        <tbody>
+          <tr class="cur"><td class="t3">09:40:51</td><td>Fullstack App</td><td>feat/saved-views</td><td>story 3-2 · build</td><td>agent</td><td>claude · sonnet-5</td><td><span class="tok s-run"><i></i>RUN</span></td><td class="r">42m</td><td class="r">$1.90</td><td><a>trace</a></td></tr>
+          <tr class="cur"><td class="t3">09:39:02</td><td>AI Orchestrator</td><td>feat/board-kanban</td><td>story 2-1 · verify</td><td>shell</td><td>—</td><td><span class="tok s-run"><i></i>RUN</span></td><td class="r">1m</td><td class="r">—</td><td><a>trace</a></td></tr>
+          <tr><td class="t3">09:12:44</td><td>AI Orchestrator</td><td>feat/board-kanban</td><td>story 2-1 · build</td><td>agent</td><td>codex · gpt-5.2-codex</td><td><span class="tok s-don"><i></i>DON</span></td><td class="r">26m</td><td class="r">$1.14</td><td><a>trace</a></td></tr>
+          <tr><td class="t3">08:58:10</td><td>Fullstack App</td><td>feat/saved-views</td><td>story 3-1 · commit</td><td>git</td><td>—</td><td><span class="tok s-don"><i></i>DON</span></td><td class="r">2s</td><td class="r">—</td><td><a>trace</a></td></tr>
+          <tr><td class="t3">08:57:31</td><td>Fullstack App</td><td>feat/saved-views</td><td>story 3-1 · verify</td><td>shell</td><td>—</td><td><span class="tok s-don"><i></i>DON</span></td><td class="r">1m 04s</td><td class="r">—</td><td><a>trace</a></td></tr>
+          <tr><td class="t3">08:31:20</td><td>Fullstack App</td><td>feat/saved-views</td><td>story 3-1 · build</td><td>agent</td><td>claude · sonnet-5</td><td><span class="tok s-don"><i></i>DON</span></td><td class="r">25m</td><td class="r">$1.61</td><td><a>trace</a></td></tr>
+          <tr><td class="t3">06:20:05</td><td>AI Orchestrator</td><td>feat/auth-token</td><td>checkpoint after 1-2</td><td>human</td><td>—</td><td><span class="tok s-blk"><i></i>CHK</span></td><td class="r">3h 21m</td><td class="r">—</td><td><a>trace</a></td></tr>
+          <tr><td class="t3">06:02:47</td><td>AI Orchestrator</td><td>feat/auth-token</td><td>story 1-2 · build</td><td>agent</td><td>local · qwen3-coder</td><td><span class="tok s-don"><i></i>DON</span></td><td class="r">41m</td><td class="r">$0.00</td><td><a>trace</a></td></tr>
+          <tr><td class="t3">04:01:12</td><td>Website</td><td>feat/pricing-page</td><td>baseline</td><td>shell</td><td>—</td><td><span class="tok s-err"><i></i>ERR</span></td><td class="r">48s</td><td class="r">—</td><td><a>trace</a></td></tr>
+          <tr><td class="t3">04:00:58</td><td>Website</td><td>feat/pricing-page</td><td>checkout</td><td>git.worktree</td><td>—</td><td><span class="tok s-don"><i></i>DON</span></td><td class="r">6s</td><td class="r">—</td><td><a>trace</a></td></tr>
+          <tr><td class="t3">08-24 09:52</td><td>Fullstack App</td><td>feat/notifications-mm</td><td>story 4-1 · build</td><td>agent</td><td>claude · sonnet-5</td><td><span class="tok s-blk"><i></i>BLK</span></td><td class="r">22m</td><td class="r">$2.10</td><td><a>trace</a></td></tr>
+          <tr><td class="t3">08-24 09:29</td><td>Fullstack App</td><td>feat/notifications-mm</td><td>story 3-2 · verify</td><td>shell</td><td>—</td><td><span class="tok s-don"><i></i>DON</span></td><td class="r">57s</td><td class="r">—</td><td><a>trace</a></td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>
