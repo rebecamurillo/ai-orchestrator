@@ -100,8 +100,8 @@
   <div class="meta">
     <span><b>spine</b> _bmad-output/planning-artifacts/mvp/architecture/ARCHITECTURE-SPINE.md</span>
     <span><b>decisions</b> AD-1 … AD-20</span>
-    <span><b>written</b> 2026-09-02</span>
-    <span><b>binds</b> FR-1 … FR-29, NFR-1 … NFR-8</span>
+    <span><b>written</b> 2026-09-02 · updated the same day after the PRD's reviewer gate</span>
+    <span><b>binds</b> FR-1 … FR-33, NFR-1 … NFR-9</span>
   </div>
 </header>
 
@@ -153,10 +153,10 @@ graph LR
 <section id="run">
   <h2>Life of a Run</h2>
   <h3>Planned completely before anything executes</h3>
-  <p>Starting a run does not start a workflow that discovers its steps as it goes. A pure function reads the pinned template version, its callee templates and the list files (<code>epics.yaml</code>, <code>stories.yaml</code>) straight from the remote branch, and expands the whole tree into rows: one per step, with a dense sequence number, a human-readable path such as <code>epics[0].epic.stories[3].story.build</code>, its resolved parameters, and status <code>planned</code>. Pre-flight's "What will run" is that same function without persistence. Only after the rows are stored is the run enqueued.</p>
-  <p>Three shipped templates compose by call: <code>initiative</code> loops over epics and calls <code>epic</code>, which loops over stories and calls <code>story</code>. A fourth, <code>repo-init</code>, prepares a repository for the method. The PRD's <code>dev-loop</code> is exactly <code>initiative → epic → story</code>.</p>
+  <p>Starting a run does not start a workflow that discovers its steps as it goes. A pure function reads the pinned template version, its callee templates and the list files (<code>epics.yaml</code>, <code>stories.yaml</code>) straight from the remote branch, and expands the whole tree into rows: one per step, with a dense sequence number, a path such as <code>epics[0].stories[3].build</code>, a human label (<code>epic 1 · story 4-1 · build</code>), its resolved parameters, and status <code>planned</code>. The first row of every plan is <code>plan.check</code>: when the run finally starts it re-reads the list files at the branch head and parks the run as <code>plan stale</code> if they changed, so a plan is never silently executed against a branch that moved. Pre-flight's "What will run" is that same function without persistence. Only after the rows are stored is the run enqueued.</p>
+  <p>Three shipped templates compose by call: <code>initiative</code> loops over epics and calls <code>epic</code>, which loops over stories and calls <code>story</code>. A fourth, <code>repo-init</code>, prepares a repository for the method. The PRD's <code>dev-loop</code> is exactly <code>initiative → epic → story</code>; <code>story</code> is a callee only, since it has no checkout of its own, so New workflow offers <code>initiative</code>, <code>epic</code> and <code>repo-init</code>. Each epic names its branch in <code>epics.yaml</code>; consecutive epics on one branch stack, different branches get their own worktree and compare link.</p>
   <h3>Walked by a durable engine that only reads the plan</h3>
-  <p>DBOS provides durability, but it sits behind an application port. The walker executes rows in sequence order, each inside an engine step; a restart resumes at the last completed row, and a completed row is never re-run. Executors are pure over the ports and return a result; one use case, <code>apply_step_result</code>, applies every execution transition and writes the gate record. If the run needs a human, the result says so, and the engine adapter parks the workflow with a single durable receive, holding the repository lock for as long as it waits.</p>
+  <p>DBOS provides durability, but it sits behind an application port. The walker executes rows in sequence order, each inside an engine step; a restart resumes at the last completed row, and a completed row is never re-run. Executors are pure over the ports and return a result; two use cases own execution writes: <code>start_attempt</code> opens the attempt in its own transaction before the executor runs, and <code>apply_step_result</code> applies the completion, writes the gate record and queues the next row. The agent executor records the start commit, the frozen test set and the process group before it waits on the harness, so a restart finds them. If the run needs a human, the result says so, and the engine adapter parks the workflow with a single durable receive, holding the repository lock and its concurrency slot for as long as it waits; after 30 days without a signal the run fails as <code>parked 30 days</code>.</p>
   <pre class="mermaid">
 %%{init: {"theme":"dark","themeVariables":{"fontFamily":"IBM Plex Mono, monospace","fontSize":"12px","primaryColor":"#171B1D","primaryBorderColor":"#2C3438","primaryTextColor":"#DDE3E5","lineColor":"#5C686C","secondaryColor":"#111416","tertiaryColor":"#0E1113","edgeLabelBackground":"#0B0D0E"}}}%%
 stateDiagram-v2
@@ -165,6 +165,7 @@ stateDiagram-v2
   queued --> running: walker starts
   running --> needs_you: park
   needs_you --> running: answer / continue / retry / skip / budget_raise
+  needs_you --> failed: parked 30 days
   running --> done: last row done or skipped
   running --> failed: baseline fail / on_fail fail
   needs_you --> cancelled: cancel
@@ -175,17 +176,17 @@ stateDiagram-v2
   <p>Every operator action is one signal, <code>POST /runs/{id}/signals</code>, validated against the run's current status. The signal handler records the gate entry, applies the transition, re-queues the target row and wakes the engine. The worktree side effects of a signal, archiving the blocked story file with the answer, de-duplicating ambiguous files on retry, committing a skipped story, happen inside the resumed engine step, so they are durable and never done twice. Cancel is the one exception: it kills the harness process group, removes every worktree the run created, and deletes only branches the run created and never pushed.</p>
   <div class="tablewrap"><table>
     <tr><th>Signal</th><th>Valid when</th><th>What resumes</th></tr>
-    <tr><td><span class="tok amber">answer</span></td><td>agent reported <code>blocked</code></td><td>the same story, re-planned from scratch with the answer as context; the old file archived under <code>stories/.answers/</code></td></tr>
-    <tr><td><span class="tok amber">continue</span></td><td>a checkpoint</td><td>spec checkpoint: implementation without re-planning; done checkpoint: the next story</td></tr>
-    <tr><td><span class="tok red">retry</span></td><td>timeout, push rejected, misconfiguration, internal error, verify failed twice</td><td>the same row as a new attempt</td></tr>
-    <tr><td><span class="tok">skip_story</span></td><td>any stop except budget</td><td>the story's remaining agent rows are skipped; its verify runs as the re-baseline, then commit-guard</td></tr>
-    <tr><td><span class="tok">skip_epic</span></td><td>as above</td><td>the rest of the epic including push and link; the next epic starts on a committed tree</td></tr>
-    <tr><td><span class="tok amber">budget_raise</span></td><td>budget halt</td><td>the run itself, at the first row not done</td></tr>
+    <tr><td><span class="tok amber">answer</span></td><td>agent reported <code>blocked</code>, or a spec checkpoint (<em>Reject with a reason</em>)</td><td>the same story, re-planned from scratch with the answer as context; the old file archived under <code>stories/.answers/</code></td></tr>
+    <tr><td><span class="tok amber">continue</span></td><td>a checkpoint; a protected-path stop (<em>Accept</em>); a stale plan</td><td>spec checkpoint: implementation without re-planning; done checkpoint: the next story; accept: routing resumes on the same tree with the files recorded, no new dispatch; stale plan: the recorded plan proceeds</td></tr>
+    <tr><td><span class="tok red">retry</span></td><td>timeout, push rejected or sync diverged, misconfiguration, internal error, verify failed twice</td><td>the same row as a new attempt; push and verify rows sync from the remote first</td></tr>
+    <tr><td><span class="tok">skip_story</span></td><td>any stop inside a story except budget, stale plan, or a rejected push</td><td>the story's remaining agent rows are skipped; its verify runs as the re-baseline, then commit-guard</td></tr>
+    <tr><td><span class="tok">skip_epic</span></td><td>any stop inside an epic except budget or stale plan</td><td>the epic's remaining stories are skipped; its commit-guard, push and compare link still run so done commits reach the remote; the next epic starts on a committed tree</td></tr>
+    <tr><td><span class="tok amber">budget_raise</span></td><td>budget halt</td><td>the row's own status: a story that had routed to <code>blocked</code> shows its question again without a dispatch; a done row lets the run continue</td></tr>
     <tr><td><span class="tok red">cancel</span></td><td>any non-terminal</td><td>nothing; processes killed, worktrees removed</td></tr>
-    <tr><td><span class="tok">terminal_release / terminal_resume</span></td><td>terminal session</td><td>a scheduled poll detects a clean <code>done</code> and resumes at verify</td></tr>
+    <tr><td><span class="tok">terminal_start / terminal_release / terminal_resume</span></td><td>terminal session</td><td>copying the command starts the session; a scheduled poll detects a clean <code>done</code>, closes the story row and resumes at verify</td></tr>
   </table></div>
   <h3>Guarded by anchors an agent cannot move</h3>
-  <p>After every agent attempt the orchestrator diffs the tree against the attempt's start commit. A modified <code>SPEC.md</code>, <code>stories.yaml</code>, <code>epics.yaml</code>, any <code>AGENTS.md</code>, or any existing test file parks the run. Operator edits through the file endpoint are committed immediately, so they never look like agent edits. Automatic retries exist only where the pinned template declares them and are always bounded and recorded.</p>
+  <p>Before every dispatch the orchestrator commits what it wrote (<code>project-context.md</code>, an archived answer, a verify-failure note) as a <em>prepare</em> commit, because the build skill refuses a dirty tree; the attempt's start commit is taken after it. After the harness exits, the orchestrator diffs only the agent's own range, start commit to end commit plus anything uncommitted, so an operator edit made while the run was parked can never be blamed on the agent. A modified <code>SPEC.md</code>, <code>stories.yaml</code>, <code>epics.yaml</code>, any <code>AGENTS.md</code>, or any test file that existed when the story's first attempt began parks the run; tests the agent added during the story stay editable on its later attempts. The operator can accept such a change once, and the accepted files are recorded and excluded from the story's later checks. Automatic retries exist only where the pinned template declares them and are always bounded and recorded.</p>
 </section>
 
 <section id="contracts">
@@ -198,8 +199,8 @@ stateDiagram-v2
     <tr><td><code>Git</code></td><td>ls-remote, read and list files at a ref, worktree add, sync, status, diff names, commit, push, remove, delete branch</td><td>git with the token injected per command</td></tr>
     <tr><td><code>Workspace</code></td><td>read, write, glob, exists, move, tree, rooted at the run's worktree</td><td>filesystem under <code>/work</code></td></tr>
     <tr><td><code>ProcessRunner</code></td><td>start in its own process group with a timeout, wait, kill group</td><td>subprocess; owns every timeout</td></tr>
-    <tr><td><code>Gateway</code></td><td>spend for an attempt</td><td>LiteLLM <code>/spend/logs/v2</code> by end-user id and session id</td></tr>
-    <tr><td><code>Tracer</code></td><td>create run trace, open attempt span, export traceparent</td><td>Langfuse SDK</td></tr>
+    <tr><td><code>Gateway</code></td><td>spend for an attempt</td><td>LiteLLM <code>/spend/logs/v2</code> by end-user id and session id, read with the admin-side spend key</td></tr>
+    <tr><td><code>Tracer</code></td><td>create run trace, open attempt span, export traceparent, tell whether an attempt was observed</td><td>Langfuse SDK</td></tr>
   </table></div>
   <p>Because DBOS is reached only through the engine port and its identifiers are opaque, replacing it is one adapter and no use case. The same holds for every other port.</p>
 </section>
@@ -213,7 +214,8 @@ stateDiagram-v2
     <tr><td>codex <span class="tok green">parented</span></td><td>same trace, child spans</td><td>native <code>[otel]</code> export; inbound <code>TRACEPARENT</code> verified in source only, a day-one check</td></tr>
     <tr><td>local (opencode) <span class="tok blue">session</span></td><td>separate traces, same user id</td><td>Langfuse plugin; no inbound parent exists</td></tr>
   </table></div>
-  <p>Cost is not read from the harnesses. Every gateway request carries the run id as LiteLLM end-user, the attempt id as LiteLLM session, and a tag set; the open-source proxy records all three, and one query per attempt returns its spend and tokens. Budget is checked after every agent attempt, before verify, and a halt keeps the row's own status while the run parks for a raise.</p>
+  <p>Cost is not read from the harnesses. Every gateway request carries the run id as LiteLLM end-user, the attempt id as LiteLLM session, and a tag set; the open-source proxy records all three, and one query per attempt returns its spend and tokens. Budget is checked after every agent attempt, retries included, before verify, and a halt keeps the row's own status while the run parks for a raise; while the gateway figure is not yet in, the harness's own usage stands in and is marked provisional.</p>
+  <div class="callout"><b>Two gateway keys.</b> The key a harness receives is a LiteLLM virtual key restricted to model routes (<code>key_type: llm_api</code>); it cannot read spend or manage keys. The key that reads <code>/spend/logs/v2</code> is a master or proxy-admin key held by the backend only, because spend logs are scoped to the calling user otherwise. Issuing both on the host is a day-one check.</div>
 </section>
 
 <section id="harness">
@@ -224,7 +226,7 @@ stateDiagram-v2
     <div class="panel"><h4>In each target repository</h4><ul><li><code>_bmad/</code> with config, scripts and <code>custom/</code> overrides</li><li>the spec folders</li><li><code>.claude/skills/bmad-*</code> and <code>.agents/skills/bmad-*</code> git-ignored</li><li>version must equal the image's, checked at pre-flight</li></ul></div>
   </div>
   <p>The shipped <code>repo-init</code> template does the initialisation through the same engine: worktree on <code>chore/bmad-init</code>, install, ignore the skill folders, commit, push, compare link. Upgrading BMAD is an image rebuild plus one <code>repo-init</code> run per repository.</p>
-  <p>Harness config files under the agent home reference environment variable <em>names</em> only. Per-attempt values, run id, attempt id, story id, trace parent, gateway key, arrive through a fixed environment contract populated by the adapter, so two concurrent runs never race on a shared config file. A harness is offered in New workflow only after it has completed a one-story fixture repository to <code>done</code> and its spend showed up in the gateway.</p>
+  <p>Harness config files under the agent home reference environment variable <em>names</em> only. Per-attempt values, run id, attempt id, story id, tags, trace parent, gateway key, arrive through a fixed environment contract declared once in <code>_common.sh</code> and populated by the adapter, with each harness script naming the native aliases it derives (Claude's auth token and custom headers, OpenCode's Langfuse variables), so two concurrent runs never race on a shared config file and a unit test can assert the key set. Readiness is state: a harness is offered in New workflow only after an <code>epic</code> run on a one-story fixture repository, built at container start under a built-in <code>readiness</code> project, reached <code>done</code>, its spans were seen in Langfuse, and its spend showed up in the gateway; each check is a line the operator can read, a changed version pin disables the harness until it passes again, and runs already parked on it keep it.</p>
 </section>
 
 <section id="deploy">
@@ -257,7 +259,8 @@ graph TB
   <dl class="kv">
     <dt>environments</dt><dd>one: the Mac mini stack; local development is the same compose file with LiteLLM and Langfuse at localhost</dd>
     <dt>configuration</dt><dd>environment variables only; <code>.env.example</code> is the contract and lint fails when a setting is missing from it</dd>
-    <dt>credentials</dt><dd>one operator token for login and API; GitHub token and gateway key from the instance env; project env vars Fernet-encrypted</dd>
+    <dt>credentials</dt><dd>one operator token for login and API; GitHub token, a model-only gateway key for harnesses and an admin spend key for the backend, all from the instance env; project env vars Fernet-encrypted</dd>
+    <dt>concurrency</dt><dd><code>MAX_ACTIVE_RUNS</code> (default 2) active runs, one per repository; a parked run keeps its slot, which is the stated trade-off of one worktree per run</dd>
     <dt>backups</dt><dd>nightly <code>pg_dump</code> of both schemas by host cron, 14 days; worktrees and logs removed 7 days after a run ends; agent sessions not backed up</dd>
     <dt>migrations</dt><dd>Alembic at container start, before the engine launches; the DBOS schema migrates itself</dd>
   </dl>
@@ -270,19 +273,19 @@ graph TB
   <div class="ad"><div class="id">AD-2</div><div><div class="title">Dependency direction inside backend-api</div><div class="rule">domain ← application ← api, infrastructure. No framework, engine, filesystem or subprocess imports above infrastructure. Linted.</div></div></div>
   <div class="ad"><div class="id">AD-3</div><div><div class="title">Contract owned by the backend, generated into the client</div><div class="rule">Pydantic → openapi.json → TypeScript types; CI fails on drift.</div></div></div>
   <div class="ad"><div class="id">AD-4</div><div><div class="title">One secret token, two carriers</div><div class="rule">Bearer on the API, signed cookie on the web; the same value.</div></div></div>
-  <div class="ad"><div class="id">AD-5</div><div><div class="title">Credentials stop at the process that needs them</div><div class="rule">Git alone sees the GitHub token; harnesses see the gateway key, tracing keys and project env; nothing else.</div></div></div>
+  <div class="ad"><div class="id">AD-5</div><div><div class="title">Credentials stop at the process that needs them</div><div class="rule">Git alone sees the GitHub token; harnesses see a model-only gateway key, tracing keys and project env; the spend key stays in the backend.</div></div></div>
   <div class="ad"><div class="id">AD-6</div><div><div class="title">The engine is a port; identifiers are opaque</div><div class="rule">Six operations; DBOS ids stored as JSON only the adapter reads; application version pinned.</div></div></div>
   <div class="ad"><div class="id">AD-7</div><div><div class="title">Planned completely, purely, from the remote branch</div><div class="rule">Every row exists with a sequence number before enqueue; nothing executes that is not in the plan.</div></div></div>
-  <div class="ad"><div class="id">AD-8</div><div><div class="title">One writer per transition</div><div class="rule"><code>apply_step_result</code> for execution, <code>signal_run</code> for the operator; executors and routers never touch status.</div></div></div>
+  <div class="ad"><div class="id">AD-8</div><div><div class="title">One writer per transition</div><div class="rule"><code>start_attempt</code> and <code>apply_step_result</code> for execution, <code>signal_run</code> for the operator; executors and routers never touch status.</div></div></div>
   <div class="ad"><div class="id">AD-9</div><div><div class="title">One module per step kind; bounded re-execution</div><div class="rule">A registry is the only enumeration; retries exist only where the pinned template declares them.</div></div></div>
-  <div class="ad"><div class="id">AD-10</div><div><div class="title">Harness adapters behind one port, enabled after a readiness run</div><div class="rule">Config references env names only; adapters never interpret model output; resume only within a row.</div></div></div>
+  <div class="ad"><div class="id">AD-10</div><div><div class="title">Harness adapters behind one port, enabled after a readiness run</div><div class="rule">Config references env names only; adapters never interpret model output; resume only within a row; readiness is a persisted table fed by an <code>epic</code> run on the fixture.</div></div></div>
   <div class="ad"><div class="id">AD-11</div><div><div class="title">One run, one session; parented where possible; every call attributable</div><div class="rule">Run id as session, attempt id on every gateway request; spend read per attempt from the open-source proxy.</div></div></div>
   <div class="ad"><div class="id">AD-12</div><div><div class="title">Repository lock is the queue partition</div><div class="rule">Held for the run's whole life, including while it waits for you.</div></div></div>
   <div class="ad"><div class="id">AD-13</div><div><div class="title">Signals write the database; effects happen in the resumed step</div><div class="rule">A per-signal table fixes validity, writes and row transition; cancel is the one request-path exception.</div></div></div>
   <div class="ad"><div class="id">AD-14</div><div><div class="title">Filesystem, git and processes go through three ports</div><div class="rule">One worktree per run and branch, tracked on the run; the process runner owns timeouts.</div></div></div>
   <div class="ad"><div class="id">AD-15</div><div><div class="title">Immutable versions, one validator, one graph builder</div><div class="rule">Callees pinned transitively; variables do not inherit; the browser only lays out and renders.</div></div></div>
   <div class="ad"><div class="id">AD-16</div><div><div class="title">BMAD in the image and in <code>_bmad/</code>; skill folders never committed</div><div class="rule">Version equality checked at pre-flight; <code>repo-init</code> prepares a repository.</div></div></div>
-  <div class="ad"><div class="id">AD-17</div><div><div class="title">Frozen anchors checked after every agent attempt</div><div class="rule">Spec, stories, epics, AGENTS.md and existing tests; a hit parks the run and is never auto-retried.</div></div></div>
+  <div class="ad"><div class="id">AD-17</div><div><div class="title">Frozen anchors checked after every agent attempt</div><div class="rule">Spec, stories, epics, AGENTS.md and the tests that existed at the story's first attempt, checked over the agent's own commit range; a hit parks the run, is never auto-retried, and can be accepted once.</div></div></div>
   <div class="ad"><div class="id">AD-18</div><div><div class="title">Layered tests, shared fakes, checkable gates</div><div class="rule">Unit on fakes; API E2E with httpx and Schemathesis; UI E2E with Playwright; coverage thresholds in CI.</div></div></div>
   <div class="ad"><div class="id">AD-19</div><div><div class="title">Trajectory capture is a table</div><div class="rule">One append-only row per done story; exported as JSONL.</div></div></div>
   <div class="ad"><div class="id">AD-20</div><div><div class="title">Configuration is the environment</div><div class="rule"><code>.env.example</code> is the contract; harness config generated from it at start.</div></div></div>
@@ -319,15 +322,16 @@ graph TB
       <li>The Claude tool allowlist that lets <code>bmad-build-auto</code> finish under <code>dontAsk</code></li>
       <li>Global skill stubs resolve the worktree as project root; Codex and OpenCode subagents satisfy the skill</li>
       <li>Spend headers coexist with Langfuse session headers</li>
+      <li>Two gateway keys on the host LiteLLM: a model-only key (<code>key_type: llm_api</code>) for harnesses, an admin key for spend</li>
     </ol></div>
   </div>
-  <p>None of the five blocks the architecture; each is confined to one adapter and has a written fallback in the spine.</p>
+  <p>None of the six blocks the architecture; each is confined to one adapter or the host configuration and has a written fallback in the spine.</p>
 </section>
 
 <section id="next">
   <h2>What happens next</h2>
   <ol>
-    <li><b>PRD update.</b> <code>prd-deltas.md</code> lists every PRD sentence the spine changes, plus three candidate requirements: repository initialisation, protected paths, trajectory export. Apply with <code>bmad-prd</code>.</li>
+    <li><b>PRD and spine reconciled (done 2026-09-02).</b> The PRD was updated to the spine (FR-30 repository initialisation, FR-31 protected paths, FR-32 trajectory export, FR-33 harness readiness); its reviewer gate fed thirteen gaps back, and the spine absorbed them in the same day. The experience spec was refreshed to match.</li>
     <li><b>Spec companion.</b> Adopt the spine into the spec so stories can cite <code>AD-n</code> ids, with <code>bmad-spec</code>.</li>
     <li><b>Epics and stories.</b> Cut the epics against the spine with <code>bmad-create-epics-and-stories</code>; the adversarial review's epic list (scaffold, projects, templates, run and walker, step kinds, agent and harnesses, signals, board and detail, runs screen, trajectories) is a sound starting cut.</li>
     <li><b>Scaffold.</b> The drafts under <code>deliverables/</code> (three <code>AGENTS.md</code>, four harness scripts, <code>.env.example</code>) move into the repository unchanged as the first epic's inputs.</li>

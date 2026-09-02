@@ -32,7 +32,7 @@ a{color:#7FD4C1;text-decoration:none} a:hover{color:#DDE3E5}
 .filters span{border-right:1px solid #21272A;color:#5C686C;font-size:11px;padding:3px 9px;letter-spacing:.08em;white-space:nowrap}
 .filters span:last-child{border-right:0}
 .filters span.on{background:#171B1D;color:#DDE3E5}
-.search{background:#0A0C0D;border:1px solid #21272A;color:#5C686C;font-size:11.5px;padding:3px 8px;width:190px}
+.search{background:#0A0C0D;border:1px solid #21272A;color:#5C686C;font-size:11.5px;padding:3px 8px;width:110px}
 .btn{display:inline-block;background:transparent;border:1px solid #2C3438;color:#8B979B;font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;white-space:nowrap}
 .btn.pri{border-color:#7FD4C1;color:#7FD4C1}
 .btn.des{border-color:#E05252;color:#E05252}
@@ -45,6 +45,7 @@ a{color:#7FD4C1;text-decoration:none} a:hover{color:#DDE3E5}
 .s-que{color:#5C686C}.s-que i{border:1px solid #5C686C}
 .s-don{color:#8B979B}.s-don i{border:1px solid #8B979B}
 .s-skp{color:#5C686C}.s-skp i{border:1px dashed #5C686C}
+.s-can{color:#5C686C}.s-can i{border:1px solid #5C686C;background:#21272A}
 .t1{color:#DDE3E5}.t2{color:#8B979B}.t3{color:#5C686C}.ac{color:#7FD4C1}
 .amber{color:#E4B33C}.red{color:#E05252}.green{color:#4FB477}
 .sec{margin:0 0 30px}
@@ -59,6 +60,8 @@ table.rec{width:100%;border-collapse:collapse;table-layout:fixed}
 .rec td{padding:7px 10px;border-bottom:1px solid #21272A;font-size:12px;color:#8B979B;vertical-align:top;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rec td.r,.rec th.r{text-align:right}
 .rec tr.cur td{color:#DDE3E5}
+.rec.dense th{padding:5px 8px}
+.rec.dense td{padding:4px 8px;font-size:11.5px}
 .board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));flex:1;min-height:0}
 .col{border-right:1px solid #21272A;display:flex;flex-direction:column;min-width:0}
 .col:last-child{border-right:0}
@@ -66,10 +69,13 @@ table.rec{width:100%;border-collapse:collapse;table-layout:fixed}
 .colh.att{color:#E4B33C}
 .colh.run{color:#4FB477}
 .cards{padding:10px;display:flex;flex-direction:column;gap:8px;overflow:auto}
-.card{background:#111416;border:1px solid #21272A;padding:10px;display:flex;flex-direction:column;gap:5px}
+.card{background:#111416;border:1px solid #21272A;padding:10px 8px;display:flex;flex-direction:column;gap:5px}
+.card.att{box-shadow:inset 2px 0 0 #E4B33C}
+.card.err{box-shadow:inset 2px 0 0 #E05252}
 .card .ttl{font-size:12.5px;color:#DDE3E5;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card .meta{font-size:11.5px;color:#5C686C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card .step{font-size:11.5px;color:#8B979B;line-height:1.5}
+.card .step{font-size:11px;color:#8B979B;line-height:1.5}
+.card .prog{font-size:11px;color:#5C686C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card .foot{display:flex;justify-content:space-between;font-size:11.5px;color:#5C686C}
 .card .foot .old{color:#E4B33C}
 .empty{color:#5C686C;font-size:11.5px;padding:18px 0 0;text-align:center}
@@ -86,10 +92,17 @@ table.rec{width:100%;border-collapse:collapse;table-layout:fixed}
 .seg span{padding:4px 12px;font-size:11px;letter-spacing:.1em;color:#5C686C;border-right:1px solid #21272A;text-transform:uppercase}
 .seg span:last-child{border-right:0}
 .seg span.on{background:#171B1D;color:#DDE3E5}
-.actions{display:flex;gap:8px;padding-top:16px;border-top:1px solid #21272A;margin-top:8px;align-items:center}
+.hrl{display:grid;grid-template-columns:16px 64px 1fr auto;gap:0 12px;align-items:baseline;font-size:12px;padding:4px 0}
+.hrl .rd{width:9px;height:9px;border:1px solid #5C686C;display:inline-block;border-radius:50%}
+.hrl .rd.on{border-color:#DDE3E5;box-shadow:inset 0 0 0 2px #0A0C0D;background:#DDE3E5}
+.hrl .rd.dis{border-style:dashed}
+.hrl .nm{color:#DDE3E5}
+.hrl.dis .nm{color:#5C686C}
+.actions{display:flex;gap:8px;padding-top:16px;border-top:1px solid #21272A;margin-top:8px;align-items:center;flex-wrap:wrap}
 .actions .note{color:#5C686C;font-size:11px;margin-left:6px}
 .banner{background:#171B1D;border-left:2px solid #E4B33C;padding:14px 18px;display:flex;gap:16px;align-items:baseline;font-size:12.5px}
 .banner.err{border-left-color:#E05252}
+.banner.grey{border-left-color:#2C3438}
 .banner .msg{color:#DDE3E5}
 .banner .go{margin-left:auto}
 .dhead{padding:16px 28px 14px;border-bottom:1px solid #21272A;flex:none}
@@ -104,21 +117,22 @@ table.rec{width:100%;border-collapse:collapse;table-layout:fixed}
 .cmd .cbar{display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid #21272A;color:#5C686C;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase}
 .cmd pre{margin:0;padding:12px 14px;font-size:13px;color:#DDE3E5;overflow-x:auto;line-height:1.7;white-space:pre}
 .cmd .p{color:#5C686C}.cmd .fl{color:#7FD4C1}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:26px}
 .tree{font-size:12.5px;line-height:1.7;color:#8B979B}
 .tree div{display:flex;gap:10px;align-items:center}
 .tree .d1{padding-left:14px;border-left:1px solid #21272A;margin-left:4px}
 .tree .d2{padding-left:28px;border-left:1px solid #21272A;margin-left:4px}
 .tree .new{width:7px;height:7px;background:#7FD4C1;display:inline-block;flex:none}
-.tree .ts{margin-left:auto;color:#5C686C;font-size:11px}
+.tree .ts{margin-left:auto;color:#5C686C;font-size:11px;white-space:nowrap}
 .strip{display:flex;gap:4px}
 .strip span{flex:1;height:14px;border:1px solid #2C3438;font-size:9px;letter-spacing:.06em;color:#5C686C;display:flex;align-items:center;justify-content:center}
 .strip span.d{background:#171B1D;color:#8B979B}
 .strip span.b{border-color:#E4B33C;color:#E4B33C}
 .strip span.r{border-color:#4FB477;color:#4FB477}
+.strip span.s{border-style:dashed;text-decoration:line-through}
 .check{display:grid;grid-template-columns:22px 1fr auto;gap:8px 10px;font-size:12px;line-height:1.6;padding:6px 0;border-bottom:1px solid #21272A}
 .check .g{color:#8B979B}.check .w{color:#E4B33C}.check .x{color:#E05252}.check .n{color:#5C686C}
-.check .out{grid-column:2/4;background:#08090A;border:1px solid #21272A;color:#8B979B;font-size:11.5px;padding:8px 10px;white-space:pre;overflow:hidden}
+.check .out{grid-column:2/4;background:#08090A;border:1px solid #21272A;color:#8B979B;font-size:11.5px;padding:8px 10px;white-space:pre-wrap;overflow:hidden}
 .two{display:grid;grid-template-columns:300px 1fr;flex:1;min-height:0}
 .list{border-right:1px solid #21272A;overflow:auto}
 .li{padding:10px 14px;border-bottom:1px solid #21272A;display:flex;flex-direction:column;gap:3px}
@@ -129,93 +143,96 @@ table.rec{width:100%;border-collapse:collapse;table-layout:fixed}
 .code div{display:grid;grid-template-columns:38px 1fr;white-space:pre}
 .code div::before{counter-increment:ln;content:counter(ln);color:#5C686C;text-align:right;padding-right:12px;font-size:11px}
 .code .k{color:#8B979B}.code .v{color:#DDE3E5}.code .c{color:#5C686C}.code .s{color:#7FD4C1}
-.code div.hl{background:#171B1D}
+.code div.hl{background:#171B1D;display:grid}
+.code.ed{border:1px solid #21272A;border-right:1px solid #21272A;font-size:11.5px;padding:6px 0;line-height:1.6}
+.code.ed div{grid-template-columns:30px 1fr;white-space:pre-wrap}
 .diag{padding:16px 18px;overflow:auto}
-.node{border:1px solid #2C3438;background:#111416;padding:6px 10px;font-size:11.5px;color:#DDE3E5;display:flex;gap:10px;align-items:baseline;width:250px}
-.node .ty{color:#5C686C;font-size:10px;letter-spacing:.14em;text-transform:uppercase;width:70px;flex:none}
-.node .gt{margin-left:auto;color:#5C686C;font-size:10px}
-.node.ag{border-color:#7FD4C1}
-.node.hu{border-color:#E4B33C}
-.edge{width:1px;height:14px;background:#2C3438;margin-left:125px}
-.loop{border:1px dashed #2C3438;padding:10px 12px 12px;margin:0 0 0 0;width:274px;position:relative}
+.ltr{display:flex;align-items:center}
+.ltr .e{width:14px;height:1px;background:#2C3438;flex:none}
+.tn{width:112px;flex:none;border:1px solid #21272A;background:#111416;padding:5px 8px;display:flex;flex-direction:column;gap:2px}
+.tn .ty{color:#5C686C;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase}
+.tn .nm{color:#DDE3E5;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tn .gt{color:#5C686C;font-size:10px}
+.tn.ag{border-color:#7FD4C1}
+.tn.hu{border-color:#2C3438}
+.tn.on{background:#171B1D}
+.loop{border:1px dashed #2C3438;padding:12px 10px 8px;position:relative;flex:none}
+.loop .lbl{position:absolute;top:-8px;left:8px;background:#0B0D0E;padding:0 6px;color:#5C686C;font-size:10px;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
 
-.tree{display:flex;align-items:center;padding:26px 28px 10px;overflow:auto;flex:1;min-height:0}
+.dtree{display:flex;align-items:center;padding:8px 28px 6px;overflow:auto;flex:1;min-height:0}
 .row{display:flex;align-items:center}
-.kids{display:flex;flex-direction:column;gap:6px;padding-left:30px;position:relative}
-.kids::before{content:"";position:absolute;left:15px;top:18px;bottom:18px;width:1px;background:#2C3438}
+.kids{display:flex;flex-direction:column;gap:4px;padding-left:30px;position:relative}
+.kids::before{content:"";position:absolute;left:15px;top:16px;bottom:16px;width:1px;background:#2C3438}
 .kids::after{content:"";position:absolute;left:0;top:50%;width:15px;height:1px;background:#2C3438}
 .kid{position:relative}
 .kid::before{content:"";position:absolute;left:-15px;top:50%;width:15px;height:1px;background:#2C3438}
-.nd{border:1px solid #21272A;background:#111416;padding:6px 10px;display:flex;flex-direction:column;gap:3px;min-width:170px;max-width:230px}
+.nd{border:1px solid #21272A;background:#111416;padding:4px 10px;display:flex;flex-direction:column;gap:1px;min-width:170px;max-width:272px}
 .nd .l1{display:flex;gap:10px;align-items:center;justify-content:space-between;font-size:12px;color:#8B979B;white-space:nowrap}
 .nd .l1 .nm{overflow:hidden;text-overflow:ellipsis}
-.nd .l2{font-size:10.5px;color:#5C686C;white-space:nowrap}
+.nd .l2{font-size:10.5px;color:#5C686C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nd.cur{border-color:#2C3438}
 .nd.cur .l1{color:#DDE3E5}
 .nd .now{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#5C686C}
-.nd .sub{display:flex;gap:10px;font-size:10px;letter-spacing:.06em;color:#5C686C;margin-top:2px}
+.nd .sub{display:flex;gap:6px;font-size:9px;letter-spacing:0;color:#5C686C;margin-top:1px;overflow:hidden}
 .nd .sub span{white-space:nowrap}
 .nd .sub span.on{color:#8B979B}
-.root{min-width:200px;padding:10px 12px}
+.nd.sm{min-width:150px;padding:3px 10px}
+.nd.xs{min-width:150px;max-width:190px;padding:2px 10px;gap:0}
+.nd.xs .l1{font-size:11.5px}
+.root{min-width:236px;max-width:none;padding:8px 12px}
 .root .l1{font-size:12.5px;color:#DDE3E5}
-.heads{display:grid;grid-template-columns:230px 260px 260px 1fr;padding:10px 28px 0;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5C686C}
-.treefoot{padding:10px 28px 14px;border-top:1px solid #21272A;font-size:11.5px;color:#5C686C;display:flex;gap:18px}
+.heads{display:grid;grid-template-columns:266px 300px 302px 1fr;padding:10px 28px 0;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5C686C}
+.treefoot{padding:8px 28px 10px;border-top:1px solid #21272A;font-size:11.5px;color:#5C686C;display:flex;gap:18px}
 .treefoot b{color:#8B979B;font-weight:400}
-.loop .lbl{position:absolute;top:-8px;left:10px;background:#0B0D0E;padding:0 6px;color:#5C686C;font-size:10px;letter-spacing:.14em;text-transform:uppercase}
 </style>
 </helmet>
 
 <div class="app" data-testid="newwf-root">
   <nav class="rail" data-testid="nav-rail">
   <div class="brand" data-testid="nav-brand">AI Orchestrator<span>v1 · dev loop · single operator</span></div>
-  <div class="nav on" data-testid="nav-workflows"><span>Workflows</span><span class="n att">7 · <span class="amber">2 need you</span></span></div><div class="nav" data-testid="nav-runs"><span>Runs</span><span class="n">31</span></div>
+  <div class="nav on" data-testid="nav-workflows"><span>Workflows</span><span class="n att">9 · <span class="amber">2 need you</span></span></div><div class="nav" data-testid="nav-runs"><span>Runs</span><span class="n">34</span></div>
   <div class="grp">Configure</div>
-  <div class="nav" data-testid="nav-projects"><span>Projects</span><span class="n">3</span></div><div class="nav" data-testid="nav-templates"><span>Templates</span><span class="n">3</span></div>
-  <div class="railfoot" data-testid="global-run-status"><b>2 running</b> · 1 queued<br>2 need you<br>updated 09:41:12 · <span class="ac">refresh</span></div>
+  <div class="nav" data-testid="nav-projects"><span>Projects</span><span class="n">3</span></div><div class="nav" data-testid="nav-templates"><span>Templates</span><span class="n">4</span></div>
+  <div class="railfoot" data-testid="global-run-status"><b>2 running</b> · 2 queued<br>2 need you<br>updated 09:41:12 · <span class="ac">refresh</span></div>
 </nav>
   <div class="main">
-    <div class="bar"><h1>New workflow</h1><span class="count">dev-loop v3 · a run is one working branch, one repository, one spec folder</span></div>
-    <div class="form" style="display:grid;grid-template-columns:1fr 360px;gap:32px;max-width:none">
+    <div class="bar"><h1>New workflow</h1><span class="count">initiative v1 · a run is one initiative: its epics, their branches, their stories · the plan is fixed at start</span></div>
+    <div class="form" style="display:grid;grid-template-columns:1fr 420px;gap:32px;max-width:none">
       <div>
-        <div class="f"><label>Template</label><div><div class="in sel">dev-loop · v3 — implement every story in stories.yaml, auto mode</div><div class="hint">Latest version. The run pins this version; later edits never change a run under way.</div></div></div>
+        <div class="f"><label>Template</label><div><div class="in sel">initiative · v1 — plan every epic in epics.yaml, then every story</div><div class="hint">Latest version, pre-selected. Also offered: <b>epic</b>, <b>repo-init</b>. <b>story</b> is not offered — it is called by epic. The run pins this version; later edits never change a run under way.</div></div></div>
         <div class="f"><label>Project</label><div><div class="in sel">Fullstack App</div></div></div>
-        <div class="f"><label>Repository</label><div><div class="in sel">optimai/fullstack-app</div><div class="hint">quality_gate_command declared: <b>pnpm run check</b> · one repository per run in v1</div></div></div>
+        <div class="f"><label>Repository</label><div><div class="in sel">optimai/fullstack-app</div><div class="hint">quality_gate_command <b>pnpm run check</b> · test_globs <b>tests/**, **/*.test.*, **/*.spec.*</b> · method <b>6.11.0</b> · one repository per run</div></div></div>
         <div class="f"><label>Base branch</label><div><div class="in">main</div></div></div>
-        <div class="f"><label>Working branch</label><div><div class="in">feat/notifications-mm</div><div class="hint">Created from the base branch if it does not exist; checked out if it does.</div></div></div>
-        <div class="f"><label>Spec folder</label><div><div class="in">specs/notifications/</div><div class="hint">Artifact destination. Agents write only here and in the code they change. Path relative to the repository root.</div></div></div>
-        <div class="f"><label>Epics file</label><div><div class="in">specs/notifications/epics.md</div><div class="hint">Optional. Passed to agents as planning context.</div></div></div>
-        <div class="f"><label>Stories file</label><div><div class="in">specs/notifications/stories.yaml</div><div class="hint">Required. Execution order is the list order. <b>spec_checkpoint</b> / <b>done_checkpoint</b> entries pause the run for you.</div></div></div>
-        <div class="f"><label>Harness</label><div><div class="seg"><span class="on">claude</span><span>codex</span><span>local</span></div><div class="hint">All three route through LiteLLM and trace to Langfuse under this run's id.</div></div></div>
+        <div class="f"><label>Initiative folder</label><div><div class="in">specs/notifications-mm/</div><div class="hint">Declared by <b>initiative</b>. Holds <b>epics.yaml</b>: each epic names its branch and spec folder. Choosing <b>epic</b> asks working branch + spec folder here instead.</div></div></div>
+        <div class="f"><label>Harness</label><div><div class="hrl" data-testid="newwf-harness-claude"><span class="rd on"></span><span class="nm">claude</span><span class="t2">enabled</span><span class="t3">readiness 09-02 08:14 · <a>re-run</a></span></div><div class="hrl" data-testid="newwf-harness-codex"><span class="rd"></span><span class="nm">codex</span><span class="t2">enabled</span><span class="t3">readiness 09-02 08:14 · <a>re-run</a></span></div><div class="hrl dis" data-testid="newwf-harness-local"><span class="rd dis"></span><span class="nm">local</span><span class="t2">disabled: trace not found</span><span class="t3">readiness 09-02 08:15 · <a>re-run</a></span></div><div class="hint">Readiness list. A disabled harness cannot be selected; <b>re-run</b> starts a readiness run on the board.</div></div></div>
         <div class="f"><label>Model</label><div><div class="in sel ph">harness default</div></div></div>
-        <div class="f"><label>Budget</label><div><div class="in" style="width:140px">$ 40.00</div><div class="hint">Per run. Breach halts the run and puts it in Needs you.</div></div></div>
+        <div class="f"><label>Budget</label><div><div class="in" style="width:140px">$ 40.00</div><div class="hint">Per run. Breach stops the run: <b>budget $spent / $budget</b> in Needs you.</div></div></div>
+        <div class="f"><label>Re-review done stories</label><div><div class="seg"><span class="on">OFF</span><span>ON</span></div><div class="hint">Off: a story whose file already reads <b>done</b> is planned as <b>skipped · already done</b>.</div></div></div>
         <div class="f"><label>Manual estimate</label><div><div class="in ph" style="width:140px">hours, optional</div><div class="hint">Writing this yourself, how long? Captured before any token is spent — it cannot be added later.</div></div></div>
         <div class="actions">
           <span class="btn pri" data-testid="newwf-start">Start run</span>
           <span class="btn">Cancel</span>
-          <span class="note">Starts immediately if the repository is free, otherwise queues behind the run holding it.</span>
+          <span class="note">Starts immediately if the repository is free, otherwise queues behind <b>feat/saved-views</b>.</span>
         </div>
       </div>
       <div>
         <div class="sec-h">Pre-flight <span class="spacer"></span><span class="t3" style="letter-spacing:0;text-transform:none">re-checks on every field change</span></div>
-        <div class="check"><span class="g">ok</span><span>origin reachable · token valid</span><span class="t3">0.8s</span></div>
+        <div class="check"><span class="g">ok</span><span>origin reachable</span><span class="t3">0.8s</span></div>
         <div class="check"><span class="g">ok</span><span>base branch <span class="ac">main</span> exists</span><span class="t3"></span></div>
-        <div class="check"><span class="n">—</span><span>working branch does not exist · will be created</span><span class="t3"></span></div>
-        <div class="check"><span class="g">ok</span><span>stories.yaml parsed · 8 stories · ids prefix-free</span><span class="t3"></span></div>
-        <div class="check"><span class="w">!</span><span>story <span class="ac">4-2</span> has spec_checkpoint · run pauses for your review before implementing it</span><span class="t3"></span></div>
-        <div class="check"><span class="g">ok</span><span>SPEC.md found · 3 companions</span><span class="t3"></span></div>
-        <div class="check"><span class="g">ok</span><span>epics.md found</span><span class="t3"></span></div>
-        <div class="check"><span class="g">ok</span><span>harness <span class="ac">claude</span> available · litellm key for Fullstack App</span><span class="t3"></span></div>
-        <div class="hint" style="margin-top:14px">A red line disables <b>Start run</b> and states the fix. A warning never blocks.</div>
-        <div class="sec-h" style="margin-top:30px">What will run</div>
-        <div class="tree" style="font-size:12px">
-          <div><span class="t3">01</span> checkout · git.worktree</div>
-          <div><span class="t3">02</span> baseline · shell · pnpm run check</div>
-          <div><span class="t3">03</span> for each of 8 stories</div>
-          <div class="d1"><span class="t3">a</span> build · agent · bmad-build-auto</div>
-          <div class="d1"><span class="t3">b</span> verify · shell · pnpm run check</div>
-          <div class="d1"><span class="t3">c</span> commit · git</div>
-          <div><span class="t3">04</span> push · git · open PR link</div>
-        </div>
+        <div class="check"><span class="g">ok</span><span>epics.yaml parses · 2 epics · notifications, saved-views · spec folders found</span><span class="t3"></span></div>
+        <div class="check"><span class="n">—</span><span>branch <span class="ac">feat/notifications</span> does not exist · will be created</span><span class="t3"></span></div>
+        <div class="check"><span class="n">—</span><span>branch <span class="ac">feat/saved-views</span> exists · held by run feat/saved-views · queues behind it</span><span class="t3"></span></div>
+        <div class="check"><span class="g">ok</span><span>every stories.yaml parses · 8 stories · ids prefix-free</span><span class="t3"></span></div>
+        <div class="check"><span class="w">!</span><span>story <span class="ac">4-2</span> declares spec_checkpoint · run pauses for your review before implementing it</span><span class="t3"></span></div>
+        <div class="check"><span class="g">ok</span><span>SPEC.md in every spec folder</span><span class="t3"></span></div>
+        <div class="check"><span class="g">ok</span><span>harness <span class="ac">claude</span> enabled</span><span class="t3">08:14</span></div>
+        <div class="check"><span class="g">ok</span><span>_bmad/ 6.11.0 = image</span><span class="t3"></span></div>
+        <div class="check"><span class="g">ok</span><span>existing story files · 1 done (4-3) · planned as skipped</span><span class="t3"></span></div>
+        <div class="check"><span class="g">ok</span><span>clone check ok · 09-01</span><span class="t3"></span></div>
+        <div class="hint" style="margin-top:12px">A red line disables <b>Start run</b> and states the fix (<b>_bmad/</b> outdated: run Initialise repository and merge its branch). A warning never blocks.</div>
+        <div class="sec-h" style="margin-top:26px">What will run <span class="spacer"></span><span class="t3" style="letter-spacing:0;text-transform:none">41 rows · 2 epics · 8 stories</span></div>
+        <table class="rec dense" data-testid="newwf-plan"><thead><tr><th style="width:180px">path</th><th style="width:82px">kind</th><th>gate</th></tr></thead>
+        <tbody><tr><td class="t2">plan</td><td>plan.check</td><td>deterministic</td></tr><tr><td class="t2">epics[0].checkout</td><td>git.worktree</td><td>deterministic</td></tr><tr><td class="t2">epics[0].baseline</td><td>shell</td><td>deterministic</td></tr><tr><td class="t2">epics[0].stories[0].sync</td><td>git.sync</td><td>deterministic</td></tr><tr><td class="t2">epics[0].stories[0].build</td><td>agent</td><td>liveness</td></tr><tr><td class="t2">epics[0].stories[0].verify</td><td>shell</td><td>deterministic</td></tr><tr><td class="t2">epics[0].stories[0].commit</td><td>git.commit</td><td>unvalidated</td></tr><tr><td class="t2">epics[0].stories[1..4] · 16 rows</td><td>…</td><td>…</td></tr><tr><td class="t2">epics[0].push</td><td>git.push</td><td>deterministic</td></tr><tr><td class="t2">epics[0].link</td><td>pr.link</td><td>liveness</td></tr><tr><td class="t2">epics[1].checkout</td><td>git.worktree</td><td>deterministic</td></tr><tr><td class="t2">epics[1].baseline</td><td>shell</td><td>deterministic</td></tr><tr><td class="t2">epics[1].stories[0] · 4 rows</td><td>…</td><td>…</td></tr><tr><td class="t2">epics[1].stories[1].build</td><td>agent</td><td>liveness</td></tr><tr><td class="t2">epics[1].stories[1].checkpoint</td><td>human</td><td>human</td></tr><tr><td class="t2">epics[1].stories[2].build</td><td>agent</td><td><span class="t3">skipped · already done</span></td></tr><tr><td class="t2">epics[1].push</td><td>git.push</td><td>deterministic</td></tr><tr><td class="t2">epics[1].link</td><td>pr.link</td><td>liveness</td></tr></tbody></table>
       </div>
     </div>
   </div>

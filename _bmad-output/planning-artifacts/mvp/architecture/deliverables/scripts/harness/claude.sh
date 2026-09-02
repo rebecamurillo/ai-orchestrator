@@ -3,6 +3,9 @@
 # Verified against Claude Code docs 2026-09-02 (research/tracing.md, research/backend.md). Re-verify flags when CLAUDE_CODE_VERSION changes.
 HARNESS_NAME=claude
 source "$(dirname "$0")/_common.sh"
+
+# AD-10: harness-native names env_for(attempt) derives from HARNESS_ENV_CONTRACT for claude (name=source).
+HARNESS_ENV_ALIASES=(ANTHROPIC_AUTH_TOKEN=LITELLM_API_KEY ANTHROPIC_CUSTOM_HEADERS=derived)
 : "${CLAUDE_CODE_VERSION:=2.1.258}"
 
 install() {

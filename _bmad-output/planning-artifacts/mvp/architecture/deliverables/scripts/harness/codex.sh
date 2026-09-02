@@ -3,6 +3,9 @@
 # Verified against Codex docs 2026-09-02 (research/tracing.md, research/backend.md). TRACEPARENT honouring is source-verified only: day-1 check.
 HARNESS_NAME=codex
 source "$(dirname "$0")/_common.sh"
+
+# AD-10: codex reads the contract names directly through env_http_headers and env_key; no aliases.
+HARNESS_ENV_ALIASES=()
 : "${CODEX_VERSION:=0.152.1}"
 export CODEX_HOME="${CODEX_HOME:-${AGENT_HOME}/.codex}"
 

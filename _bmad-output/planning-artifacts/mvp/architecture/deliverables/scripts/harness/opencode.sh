@@ -4,6 +4,9 @@
 # No inbound TRACEPARENT exists: correlation is by Langfuse session/user id only (AD-11).
 HARNESS_NAME=opencode
 source "$(dirname "$0")/_common.sh"
+
+# AD-10: harness-native names env_for(attempt) derives from HARNESS_ENV_CONTRACT for opencode (name=source).
+HARNESS_ENV_ALIASES=(LANGFUSE_BASEURL=LANGFUSE_BASE_URL LANGFUSE_USER_ID=ORCH_RUN_ID)
 : "${OPENCODE_VERSION:=1.18.26}"
 : "${LOCAL_MODELS:=local-coder,local-general}"
 : "${LANGFUSE_OPENCODE_PLUGIN_VERSION:=0.3.0}"

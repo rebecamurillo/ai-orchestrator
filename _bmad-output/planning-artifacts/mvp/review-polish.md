@@ -1,130 +1,123 @@
-# Polish review — `prd.md` and `addendum.md`
+# Polish review — 2026-09-02 pass, prd.md
 
-Lenses: `structure` then `prose` (bmad-review, editorial lenses). Reader type: humans (operator-builder, architect, story writer); style baseline: Microsoft Writing Style Guide (American English, serial comma, sentence-case headings). Content is sacrosanct — every row below changes organization or wording only; nothing adds, removes, or re-scopes a requirement. Fixes are quoted as `original` → `replacement` so they can be applied by search-and-replace. Rows marked *Consider:* are judgement calls for the author.
+Lenses: structure, prose (bmad-review). Findings only; no edits made; no semantic changes to requirements proposed. Reader type: humans. Style baseline: Microsoft Writing Style Guide, with the document's own British spelling kept.
 
-**Read:** these documents exist to let one operator-builder, `bmad-architecture`, and `bmad-create-epics-and-stories` build the one-week MVP from an unambiguous contract. **Structure model:** Strategic/Context (pyramid) for the PRD; Reference/Database for the addendum.
+Purpose read: this document exists to help the operator-builder and `bmad-create-epics-and-stories` build the MVP dev loop from one settled, testable contract. Structure model: Reference/Database (numbered FRs with an identical Statement → Consequences schema), with a short Strategic/Context head (§0–§2) and a Glossary as the shared index. Word count 11,979 (word_metrics); §3 Glossary 1,130; §2.3 journeys 494.
 
-**Word metrics** (exact, `word_metrics.py`): `prd.md` 7,169 words; `addendum.md` 1,478 words.
-
-**Counts:** structure 21 · prose 27 · total 48.
+Each list is ranked most-valuable first. "Replacement" gives the exact text where one applies.
 
 ---
 
-## Structure (21)
+## Structure
 
-1. **[structure]** prd.md §10 Cross-cutting NFRs — NFR-8 is listed before NFR-7; numbering out of order in a numbered list. — *Fix:* MOVE the `- **NFR-7 Build size:** …` bullet above the `- **NFR-8 Voice:** …` bullet (swap the last two bullets). Word impact: 0.
+**S-1. Glossary — `Gate record` and `Status` entries; §4.6 table.** The Stop-kind list exists three times and the two Glossary copies have drifted: both omit `plan_stale`, which the §4.6 table (declared "the only list of Stops") carries. Tag: CONDENSE (~40 words).
+- Replacement, `Gate record`: "Events are the Stop kinds of the §4.6 table, the Signals (see **Signal**), and the Run transitions (`start | done | failed | cancelled`)."
+- Replacement, `Status`: "…with `needs-you` rendered as `CHK` for the `checkpoint` Stop and `BLK` for every other Stop kind of the §4.6 table;"
 
-2. **[structure]** addendum.md headings — sections run A, B, C, D, E, F, **H**, **G**; §G (Day-1 verification queue) sits after §H. — *Fix:* MOVE §G above §H, or re-letter `## H. Corrections surfaced at Finalize (for bmad-architecture)` → `## G. Corrections surfaced at Finalize (for bmad-architecture)` and `## G. Day-1 verification queue` → `## H. Day-1 verification queue`. Word impact: 0.
+**S-2. Glossary entries carrying FR rules that the FRs restate.** Several entries define a term and then repeat a rule owned by an FR; one has drifted. Tag: CONDENSE (~80 words). Specifically:
+- `Protected path` (line 74) lists the paths and says "when the Attempt started"; FR-31 owns the list and says "when the **Story's first Attempt** started". Replacement: "**Protected path** — a file an agent must not modify during a Run; the list and the check are FR-31."
+- `Harness` (line 69) "A Harness is offered only after its **readiness run** passed (FR-33)" is restated verbatim in FR-14 (line 239, first sentence), in FR-8 pre-flight, and in FR-33's statement. Replacement: cut the first sentence of the FR-14 bullet at line 239 so it reads "A Harness exit caused by the Harness's own budget cap (…) is routed as a budget halt (FR-17), never as a retry."; keep the Glossary pointer.
+- `Attempt` (line 78) "the Steps table shows the latest and counts the rest" and "Harness fields are empty on Attempts of non-agent Steps" restate FR-23 (line 355) and FR-25 (line 383). Replacement: end the entry after "(template retry, re-dispatch after an Answer or a verify failure, re-run after interruption)."
+- `Worktree` (line 83) "A Run records every Worktree it created" restates FR-9 (line 183). Replacement: cut the sentence.
+- `Signal` (line 73) and §4.6 description (line 288) both state validation-against-Status + gate-record write (AD-13). Replacement, Glossary: "Every Signal is validated and recorded as §4.6 states (AD-13)."
 
-3. **[structure]** prd.md §9 Assumptions index — entries are not in document order (FR-21 precedes FR-18; the two §4.4 description-level assumptions come last, after §4.9), so a reader cannot walk the index against §4. — *Fix:* MOVE to document order: `§4.1 FR-1`, `§4.2 FR-4`, `§4.4` (Spec folder), `§4.4` (one Repository per Run), `§4.4 FR-9`, `§4.4 FR-10`, `§4.6 FR-18`, `§4.6 FR-21`, `§4.7 FR-22`, `§4.9 FR-27`. Word impact: 0.
+**S-3. FR-3 vs FR-4 vs UJ-1 — save refused or save stored?** FR-3: "The default branch must exist on the remote (checked by FR-4) or the save is refused with the reason." FR-4: "A failing check does not block the save: the Repository is stored with status `failed`…" (and UJ-1: "The Project is saved anyway"). Default-branch existence is one of FR-4's three checks, so the two sentences read as contradictory. Tag: QUESTION — for the author to reconcile; no replacement proposed (content is settled).
 
-4. **[structure]** prd.md §3 Glossary "Question" vs §4.5 FR-16 consequence 3 vs addendum.md §D "Story-file evaluation" — three definitions of what is shown as the Question, and they differ: Glossary says `the \`Blocking condition\` line(s) of the Story file's \`## Auto Run Result\``; FR-16 says `the whole \`## Auto Run Result\` section (status, blocking condition, and any listed questions and evidence) shown as the Question`; addendum §D says `the \`## Auto Run Result\` block yields \`Status:\` and \`Blocking condition:\` lines shown as the Question`. An engineer building FR-16 from the Glossary or the addendum ships less than FR-16 specifies. — *Fix:* QUESTION — confirm FR-16 is the intended contract, then MERGE the other two to it: Glossary → `- **Question** — the text shown to the Operator for a \`blocked\` Story: the Story file's whole \`## Auto Run Result\` section (FR-16), attributed to Harness, model, and time.`; addendum §D → `…parse YAML frontmatter; route on \`status\`; the whole \`## Auto Run Result\` block is shown as the Question (FR-16).` Word impact: −6.
+**S-4. Glossary — `Signal` and `Gate record` list the same nine Signal tokens twice** (lines 73 and 80). Tag: MERGE (~20 words). Covered by the S-1 replacement for `Gate record` ("the Signals (see **Signal**)").
 
-5. **[structure]** prd.md §3 Glossary "Needs you" vs §4.6 description — the list of stops is duplicated and has drifted: Glossary lists `agent \`blocked\`, Checkpoint, verify failed twice, budget halt, Step timeout.`; §4.6 adds `push rejected, and the configuration failures listed in FR-16`. — *Fix:* MERGE to one source of truth; Glossary entry → `- **Needs you** — the Run Status column and rail count grouping every Run whose next action is the Operator's (the stops listed in §4.6).` Word impact: −8.
+**S-5. FR-14 (line 235, parenthetical) and §8 Resolved (line 468) state the same `--bare` finding twice**, including the version number and the flag list. Tag: CONDENSE (~45 words). Replacement for the FR-14 parenthetical: "*(Why: `--bare` hides the subagent tool and `Write` — §8, resolved. The Claude adapter therefore uses default discovery with an explicit allowlist.)*"
 
-6. **[structure]** prd.md §3 Glossary "Answer" vs §4.6 FR-18 (intro and consequence 2) — the archive-and-redispatch mechanism is stated three times in near-identical words. The Glossary should define, FR-18 should specify. — *Fix:* CONDENSE Glossary → `- **Answer** — Operator text resolving a \`blocked\` Story; the mechanism (archive the blocked Story file, re-dispatch with the Answer as planning context) is FR-18.` Word impact: −22.
+**S-6. FR-28 restates FR-17.** FR-28 bullet 1 "Run cost = sum of Attempt costs" and bullet 2 "Gateway spend logs are the authoritative figure; harness-reported usage is shown as provisional until the Gateway figure for the Attempt is available" repeat FR-17 bullets 1–2. Tag: CONDENSE (~25 words). Replacement, FR-28 bullet 2: "Spend source and provisional figures: FR-17."
 
-7. **[structure]** prd.md §4.4 FR-13 consequence 1 vs addendum.md §D "Repository lock" — the rationale `because a parked workflow still occupies its queue partition and because two Runs must never share a Repository's worktrees.` mixes the DBOS mechanism (which the addendum owns, per its own preamble) into the PRD, and §D repeats it. — *Fix:* CONDENSE the PRD clause → `because two Runs must never share a Repository's worktrees (mechanism: addendum §D).` Word impact: −6.
+**S-7. Glossary — `Question` (line 77) and FR-16 routing bullet (line 256) repeat the same parenthetical definition verbatim.** Tag: CONDENSE (~12 words). Replacement, FR-16: "`blocked` → Step `blocked`, Run `needs-you`, the Question shown (§3);"
 
-8. **[structure]** prd.md §4.7 description vs §10 NFR-6 — `Colour is signal only: green running, amber needs you, red failed; nothing else is coloured.` restates NFR-6's colour rule. — *Fix:* CONDENSE → `Colour rules: NFR-6.` Word impact: −12.
+**S-8. §5 Non-goals overlaps §6.2 Out of scope, §2.2, §11 and FR consequences.** Pairs: §5 b1 ↔ §6.2 b1 (spec generation) and §2.2 b3; §5 b3 ↔ §11 Safety (never merges / default branch / force-push); §5 b4 ↔ FR-7 b3 (diagram read-only); §5 b5 ↔ §2.2 b1 and §6.2 b5 (notifications); §5 b8 ↔ FR-30 b1 (skill folders never committed, AD-16). Tag: MERGE §5 into §6.2 as its opening "is-not" bullets, keeping one statement per fact (~60 words). Suggested surviving order in §6.2: the §5 sentences that have no FR home (b2 tests/oracle, b6 not a harness, b7 no session replay) first, then the current deferred list.
 
-9. **[structure]** prd.md §4.5 FR-14 consequence 5, §4.9 FR-26 consequence 1, §10 NFR-3 — "no direct provider key" is stated three times. NFR-3 is the cross-cutting home; FR-14 owns the credential rule. — *Fix:* CONDENSE FR-26 consequence 1 → `- A Harness process with the Gateway unreachable fails its Step with \`error\` (credential rule: FR-14, NFR-3).` Word impact: −6.
+**S-9. §12 Platform duplicates NFR-7 and §0's pointer to `addendum.md`/the spine.** Two containers + Postgres + host services appear in both. Tag: MERGE §12 into NFR-7 (~40 words). Replacement for NFR-7's first clause: "the whole MVP is one Docker Compose file on the Mac mini — web-client, backend-api (with every Harness and the method pre-installed, running as one operator's desktop-first web app), Postgres — with LiteLLM, Langfuse, and the model server on the host (Docker on macOS has no GPU);" then delete §12.
 
-10. **[structure]** prd.md §11 Constraints "Privacy" vs §4.2 FR-2 consequence 4 — same switch stated twice; unlike the Safety and Cost bullets, Privacy does not cite its FR. — *Fix:* `enabling content logging is a per-Project switch that puts source code in Langfuse.` → `enabling content logging is a per-Project switch (\`log_prompt_content\`, FR-2) that puts source code in Langfuse.` Word impact: +2.
+**S-10. FR-10 bullet 1 restates FR-8.** "The Story list is read once, at planning, and never re-read during the Run; the rows exist before the first Step starts" = FR-8 bullets 5–6 and the Glossary `Run` entry. Tag: CUT (~25 words), or replace with "Rows and list files are fixed at the plan commit (FR-8)."
 
-11. **[structure]** prd.md §6.1 "Slips first" vs addendum.md §F "Slips first" — the same ordered list appears in both files with different names for the same items (`the \`local\` adapter` / `OpenCode adapter`; `in-browser Template editing` / `Templates editing`; `Runs history pagination` / `Runs pagination`). — *Fix:* MERGE — addendum §F: `Slips first: OpenCode adapter, Templates editing, Runs pagination, cancel rollback.` → `Slips first: as PRD §6.1.` Word impact: −6.
+**S-11. Terms used in §1–§2.3 before §3 defines them** (`Clone check`, `Pre-flight`, spec checkpoint, `BLK`, **Needs you**, compare link, worktree, re-dispatch, "intent gap" — the last is never defined anywhere). The narrative-first order serves human readers. Tag: PRESERVE the order; add one pointer line under the §2.3 heading. Replacement: "*Capitalised terms and tokens are defined in §3.*"
 
-12. **[structure]** addendum.md §H "Worktree retention" and "PR link" — both items restate PRD FR-9 consequence 5 and FR-11 consequence 4 verbatim and add no correction for the architect; every other §H item adds a mechanism or a delta. — *Fix:* CUT both bullets, or CONDENSE to one pointer bullet: `- **Worktree retention, PR link:** as PRD FR-9 and FR-11; no change to architecture-v1.` Word impact: −20.
+**S-12. Glossary ordering.** `Attempt` (line 78) sits between `Question` and `Answer` although `Step` (line 63) and `Harness` (line 69) already depend on it; `Stop` (line 84) is last although `Needs you` (line 76) depends on it. Tag: MOVE `Attempt` to directly after `Step`; MOVE `Stop` to directly after `Signal`. 0 words.
 
-13. **[structure]** prd.md §6.1 In scope, second paragraph — a 201-word paragraph carries three bolded topics (`**Definition of done for the MVP.**`, `**Tiers.**`, `**Slips first, in order:**`). — *Fix:* CONDENSE by format only: break into three paragraphs (or three bullets) at each bold lead-in. Word impact: 0.
+**S-13. Glossary bold convention.** Bold marks both a headword and a cross-reference (**Working branch**, **Spec folder**, **Harness**, **Status** inside `Run`; **Clone check**, **Repository initialisation** inside `Repository`; **Attempt** inside `Step`; **Callee Version** inside `Template`; **Session id**, **readiness run** inside `Harness`; **Initiative folder** inside `Initiative`), so a reader cannot tell where a term is defined. Two are bold-as-defined but have no entry: **Working branch** and **Story step** (the latter is acceptably defined inline). Tag: CONDENSE the convention — bold only at an entry's own headword; plain text for cross-references — and add an entry drawn from FR-9/§1: "**Working branch** — the branch a Run commits an epic's Stories to: named by the epic in `epics.yaml` (`initiative`) or given as an Input (`epic`); created from the base branch when it does not exist (FR-9)." (+35 words)
 
-14. **[structure]** prd.md §6.1 Tiers, MUST list — `FR-26..FR-28, FR-1 without lockout.` puts FR-1 last, out of numeric order with the rest of the list. — *Fix:* MOVE: `MUST: FR-2, FR-3, FR-4 (on save),` → `MUST: FR-1 (without lockout), FR-2, FR-3, FR-4 (on save),` and delete `, FR-1 without lockout` at the end. Word impact: 0.
+**S-14. FR numbering placement.** FR-30 sits between FR-4 and FR-5; FR-31 and FR-33 between FR-17 and FR-18; FR-29 between FR-24 and FR-25; FR-32 after FR-28. Grouping by feature is right (§0 says so) and the numbers are stable ids referenced by §6.1 tiers. Tag: PRESERVE; make the convention explicit in §0. Replacement (append to "features are grouped in §4 with globally numbered FRs"): "— FR numbers are stable identifiers, not reading order; FR-29..FR-33 were added after the first numbering."
 
-15. **[structure]** prd.md §4.5 FR-14 consequences — the per-Harness bullets (`For \`claude\``, `For \`codex\``, `For \`local\``) are interrupted by the readiness-check bullet (`Every shipped Harness completes one trivial Story…`). — *Fix:* MOVE that bullet below the `For \`local\`:` bullet so the three adapter bullets are contiguous. Word impact: 0.
+**S-15. FR-11 says "no pull request" twice** (line 207 `[NON-GOAL for MVP: creating the pull request]` and line 208 "— links, because no pull request is ever created"). Tag: CUT the line-208 tail (~8 words). Replacement: "Run Status becomes `done`; the card shows `n/n epics · m/m stories · k links`."
 
-16. **[structure]** prd.md §4.4 FR-8 consequence 1 — one 100-word bullet enumerates ten pre-flight checks in running prose; a story writer will mine it for acceptance criteria. — *Fix:* CONDENSE by format: keep the lead `Pre-flight reports:` and turn each check into a nested sub-bullet (origin reachable · base branch exists · Working branch exists/will create · `stories.yaml` parses with N Stories and prefix-free ids · declared Checkpoints (warning) · `SPEC.md` found · epics file found if given · Harness available with a Gateway key · `render_skill.py` and the skill directory present on the Working branch · existing `stories/*.md` listed with statuses). Word impact: 0.
+**S-16. FR-20 bullet 1 tail "Skip is not offered on a budget halt" restates the §4.6 table note and has drifted** (the note also excludes `plan_stale`). Tag: CUT (~7 words).
 
-17. **[structure]** prd.md §4.5 FR-16 consequence 3 — four routing rules chained with `→` and periods in one bullet. — *Fix:* CONDENSE by format: one nested sub-bullet per frontmatter status (`done`, `blocked`, `ready-for-dev` with `spec_checkpoint`, any other status / exit ≠ 0 with a `done` file). Word impact: 0.
+**S-17. FR-16 bullet "Every stop above maps to one Stop kind of the §4.6 table; there is no other list of stops."** — the second clause repeats §4.6's own "This table is the only list of Stops". Tag: CONDENSE. Replacement: "Every stop above maps to one Stop kind of the §4.6 table."
 
-18. **[structure]** prd.md §4.4 FR-10 consequence 5 (Step timeouts) — the rule applies to every Step type (`shell`, `git.*`, Story steps) but lives under "Story loop"; §6.1 and addendum §H cite it as FR-10. — *Fix:* QUESTION — either leave it (and keep the FR-10 citations) or MOVE it to the §4.4 description as a Run-wide rule and update the two citations. Word impact: 0.
+**S-18. §9 Assumptions index order.** "§4.4 FR-12" (line 489) precedes "§4.4 FR-10" (line 490). Tag: MOVE the FR-10 line above the FR-12 line. 0 words.
 
-19. **[structure]** prd.md section order §7–§12 — requirements-bearing sections (§10 NFRs, §11 Constraints, §12 Platform) come after the two appendix-like sections (§8 Open questions, §9 Assumptions index), so the build contract's last requirements sit behind its index. — *Fix:* QUESTION — the pyramid order would be §7 Success metrics → NFRs → Constraints → Platform → Open questions → Assumptions index. Renumbering touches four cross-references (`§9` in §0; `Open questions 2 and 4` in §6.1; `PRD §8` in addendum §G; the `§4.x` prefixes in the index are unaffected). Only worth doing before downstream documents cite section numbers. Word impact: 0.
+**S-19. §6.1 "Tiers" paragraph (line 434, ~140 words in one paragraph).** Four tiers in one run of text resist scanning. Tag: CONDENSE into four labelled bullets — MUST / SHOULD / COULD / Out of scope — text unchanged. 0 words.
 
-20. **[structure]** addendum.md §E FR lineage — 91 words of `a..b → c..d` mappings in a single paragraph, while §A and §C use tables. — *Fix:* CONDENSE by format: a two-column table (`2026-08-24 PRD` | `this PRD`) with one row per mapping and a final "Dropped for MVP" row. Word impact: 0.
+**S-20. FR-19's second bullet (inline Spec-folder editing while parked) is not about "Continue at a Checkpoint"**; it is a general `needs-you` capability referenced as "FR-19 inline edit" in §6.1. The number is anchored, so moving is not worth it. Tag: PRESERVE; retitle. Replacement: "#### FR-19: Continue at a Checkpoint; edit the Spec folder while parked".
 
-21. **[structure]** prd.md §3 Glossary — PRESERVE the dependency order (Operator → Project → Repository → … → Worktree) rather than alphabetizing; every entry uses only terms defined above it, which serves first-time readers of a contract better than random access. No change.
+**S-21. `[NOTE FOR PM]` and `[NON-GOAL for MVP: …]` tags are used (§6.2, FR-11) but §0 introduces only `[ASSUMPTION]`.** Tag: QUESTION — either introduce them in §0's last sentence ("…inferences are tagged `[ASSUMPTION]` inline and indexed in §9; `[NOTE FOR PM]` marks a scope remark, `[NON-GOAL …]` an explicit exclusion.") or fold the two `[NOTE FOR PM]` remarks into plain bullet text.
 
----
-
-## Prose (27)
-
-22. **[prose]** prd.md §4.4 FR-10 intro — `a Story step (FR-14), a verify Step, a commit Step.` — "commit Step" reads as the Template's `git.commit` Step type; everywhere else (§4.4 description, FR-10 consequence 4, FR-15, FR-19, FR-20, Glossary "Checkpoint") the Step is `commit-guard`. — *Fix:* `a verify Step, a commit Step.` → `a verify Step, a commit-guard Step.`
-
-23. **[prose]** prd.md §10 NFR-8 — the voice example `("appended to …, status reset to draft, story re-dispatched")` describes a mechanism FR-18 does not use (the file is archived, not reset to draft; addendum §D explicitly rejects the reset). As an example of product copy it teaches the wrong mechanism. — *Fix:* `("appended to …, status reset to draft, story re-dispatched")` → `("archived to stories/.answers/…, story re-dispatched")`.
-
-24. **[prose]** prd.md §4.2 FR-2 consequence 2 — `is never returned by any API response after save (masked to its last four characters)` — "never returned" and "masked" contradict on first read. — *Fix:* → `is returned by API responses after save only masked to its last four characters`.
-
-25. **[prose]** prd.md §4.7 FR-23 intro — `an alert banner when the Run needs them or failed` — "them" has no antecedent (the Operator is singular; the subject is "The Operator"). — *Fix:* → `an alert banner when the Run is \`needs-you\` or \`failed\``.
-
-26. **[prose]** prd.md §4.6 FR-20 consequence 1 — `if that is red the Run stays \`needs-you\`` — "red" is colour-as-status, which NFR-2/NFR-6 forbid on screen and which no other consequence uses; FR-9/FR-10 say "non-zero" / "exit ≠ 0". — *Fix:* → `if that exits non-zero the Run stays \`needs-you\``.
-
-27. **[prose]** prd.md §4.4 FR-11 consequence 1 — `Push uses the Project token per command` — "Project token" is not a Glossary term (FR-2, FR-14, NFR-3 say "GitHub token") and "per command" is ambiguous. — *Fix:* → `Push supplies the Project's GitHub token to each git command individually`. *Consider:* confirm "per command" means per-invocation injection rather than an exported variable; the second half of the bullet already says it never appears in an agent's environment.
-
-28. **[prose]** prd.md §9 Assumptions index, FR-21 entry vs §4.6 FR-21 inline tag — index says `resume-by-terminal detection is by polling the Story file in the Worktree`; inline tag says `file-change detection by polling the Worktree`; the consequence itself polls both the Story file and `git status`. — *Fix:* align the index to the inline tag: `- §4.6 FR-21 — resume-by-terminal detection is by polling the Worktree (Story file and \`git status\`).` and the inline tag → `\`[ASSUMPTION: resume-by-terminal detection by polling the Worktree]\``.
-
-29. **[prose]** prd.md §9 Assumptions index, FR-27 entry vs §4.9 FR-27 inline tag — index adds `session id is the guaranteed correlation`, which the inline tag `[ASSUMPTION: span parenting differs per Harness]` does not say. — *Fix:* *Consider:* either trim the index entry to `- §4.9 FR-27 — span parenting differs per Harness.` or extend the inline tag to match; the two should be identical.
-
-30. **[prose]** prd.md — Glossary-term capitalization drift in §3–§11 (one row, all locations). — *Fix:* Glossary "Project": `Scopes secrets and the gateway key.` → `Scopes secrets and the Gateway key.`; Glossary "Trace": `harness/gateway generations` → `Harness/Gateway generations`; Glossary "Step": `inside the story loop` → `inside the Story loop`; FR-12 c2: `as a new attempt with a new Session id` → `as a new Attempt with a new Session id`; FR-17 c1: `After every Story step attempt` → `After every Story step Attempt`; FR-14 c5: `the harness's own configuration` → `the Harness's own configuration`; FR-27 c2: `harness spans are children` → `Harness spans are children`; FR-18 c4 / FR-19 c3 / FR-23 intro: `gate record` → `Gate record` (three occurrences); §6.1: `checkpoints, blocked-answer` → `Checkpoints, blocked-answer`; SM-C1: `**SM-C1: Verify steps \`skipped\`**` → `**SM-C1: Verify Steps \`skipped\`**`.
-
-31. **[prose]** prd.md §4 headings — `### 4.2 Projects and repositories` and `### 4.5 Story steps and harnesses` leave Glossary terms lowercase while `### 4.7 Board and Run detail` capitalizes them. — *Fix:* → `### 4.2 Projects and Repositories`; → `### 4.5 Story steps and Harnesses`.
-
-32. **[prose]** prd.md and addendum.md — mixed British/American spelling against an American baseline (`Realizes`, `optimize`, `serialization`, `Finalize` are American). — *Fix:* §4.4 description: `finalises` → `finalizes`; §4.7 description and NFR-6: `Colour` → `Color`, `coloured` → `colored`, `colour` → `color` (three occurrences); NFR-8: `apologises` → `apologizes`. Leave the status token `cancelled` unchanged (it is code).
-
-33. **[prose]** prd.md §1 Vision, paragraph 1 — comma splice in a 60-word sentence: `the agent plans, implements, reviews and commits, the orchestrator verifies the committed result` — *Fix:* → `the agent plans, implements, reviews, and commits; the orchestrator verifies the committed result`.
-
-34. **[prose]** prd.md and addendum.md — serial comma missing in lists of three or more (one row). — *Fix:* FR-3 intro: `\`install_command\`, \`quality_gate_command\` and \`unit_test_command\`` → `\`install_command\`, \`quality_gate_command\`, and \`unit_test_command\``; Glossary "Question": `Harness, model and time` → `Harness, model, and time`; FR-21 c3: `Answer, Continue, Skip and Retry are disabled` → `Answer, Continue, Skip, and Retry are disabled`.
-
-35. **[prose]** prd.md §4.4 FR-10 consequence 3 — one 75-word sentence chains the verify command, the failure append, the status reset, the re-dispatch, and the second-failure outcome. — *Fix:* split at the semicolon and after "once": `verify runs \`quality_gate_command\` in the Worktree on the tree the agent committed. On exit ≠ 0 the orchestrator appends a \`## Verify Failure\` section (command, exit code, last 200 lines) to the Story file, sets its status to \`in-progress\` (which routes the agent straight to implementation), and re-dispatches once. A second failure sets the Run to \`needs-you\` with reason \`verify failed 2/2\`.`
-
-36. **[prose]** prd.md §4.5 FR-16 consequence 1 — 70 words, uses `=` for "means", and the parenthetical `(Step \`done\` only if the status routes on)` is unclear. — *Fix:* `Exactly one matching file with parseable frontmatter = liveness satisfied (Step \`done\` only if the status routes on); zero or several files, or unparseable frontmatter = Step \`error\`,` → `Exactly one matching file with parseable frontmatter satisfies liveness; the Step is \`done\` only when its status routes forward (next bullet). Zero or several files, or unparseable frontmatter, is Step \`error\`,`. *Consider:* confirm "routes on" means "status is `done`".
-
-37. **[prose]** prd.md §4.6 FR-18 consequence 2 — an 80-word bullet with three semicolon clauses and an inline assumption. — *Fix:* split into three sentences at the semicolons: `…(so no \`stories/{id}-*.md\` remains and the re-dispatch is a first dispatch). The re-dispatch prompt carries \`Answer from the operator to the blocking condition "{condition}": {answer}\` as planning context. The Story step re-runs on the same Harness.`
-
-38. **[prose]** prd.md §4.6 FR-21 consequence 4 — nested parentheticals make the polling cadence and the resume condition hard to separate. — *Fix:* `If the Story file reads \`done\` and the Worktree is clean (\`git status --porcelain\` empty, no \`.git/index.lock\`) on two consecutive server-side polls (every 30 s while a terminal session is in progress) while the Run is \`needs-you\`, the Run resumes at verify without an Answer.` → `While a terminal session is in progress and the Run is \`needs-you\`, the server polls the Worktree every 30 s. When two consecutive polls find the Story file \`done\` and the Worktree clean (\`git status --porcelain\` empty, no \`.git/index.lock\`), the Run resumes at verify without an Answer.`
-
-39. **[prose]** prd.md §4.6 description — `every stop offers the same small set of actions on the Run detail` names no actions; FR-18..FR-20 do. — *Fix:* → `every stop offers the same small set of actions on the Run detail (Answer, Continue, Skip, Retry, Cancel; FR-18..FR-20)`.
-
-40. **[prose]** prd.md §4.2 FR-4 — intro `reports per check` and consequence 3 `a failure flips the Repository's status` are vague. — *Fix:* `and reports per check.` → `and reports the result of each check.`; *Consider:* name the status the failure sets (`sets the Repository's status to failed`?) — the target status is not stated anywhere.
-
-41. **[prose]** prd.md §4.4 FR-8 consequence 1 — `prefix-free ids` is undefined jargon; an engineer may read it as "ids without a prefix". — *Fix:* *Consider:* → `ids of which none is a prefix of another (so \`{id}-*\` globs are unambiguous)`.
-
-42. **[prose]** prd.md §4.4 FR-10 consequence 4 — `(Spec folder first)` is ambiguous about what "first" orders. — *Fix:* *Consider:* → `(the Spec folder staged before the rest of the tree)`.
-
-43. **[prose]** prd.md — "wall-clock" used as a noun in three places. — *Fix:* FR-10 c5: `maximum wall-clock, declarable` → `maximum wall-clock time, declarable`; FR-14 c6: `exit code, wall-clock, tokens in/out, cost` → `exit code, wall-clock time, tokens in/out, cost`; FR-23 c4: `tokens in/out, wall-clock, active Operator time` → `tokens in/out, wall-clock time, active Operator time`.
-
-44. **[prose]** prd.md §0 — `used from day eight` spells out a day number that everywhere else is a numeral (`day 4`, `day 3`, `Day 1`). — *Fix:* → `used from day 8`.
-
-45. **[prose]** prd.md §7 — SM-3 comma splice `no target, this is the comparison` → `no target; this is the comparison`; SM-2 `Validates FR-23, FR-18.` → `Validates FR-18, FR-23.` (every other entry lists FRs ascending).
-
-46. **[prose]** prd.md §4.6 FR-20 consequence 3 — `Cancel requires a confirm;` — "confirm" as a noun. — *Fix:* → `Cancel requires a confirmation;`.
-
-47. **[prose]** prd.md §6.1 — `in the instrument-dark system` names the visual system without a pointer; it is defined only in `DESIGN.md`. — *Fix:* *Consider:* → `in the instrument-dark visual system (\`DESIGN.md\`)`.
-
-48. **[prose]** addendum.md §H — bullet lead-ins mix four punctuation styles (`**The agent commits.**`, `**Worktree retention**:`, `**Verify failure re-dispatch:**`, `**PR link** is`). — *Fix:* normalize to bold label plus colon inside the bold, as §D does: `**The agent commits.**` → `**The agent commits:**`; `**Dirty-tree pre-dispatch rule.**` → `**Dirty-tree pre-dispatch rule:**`; `**Step timeouts.**` → `**Step timeouts:**`; `**Done checkpoint mechanism.**` → `**Done checkpoint mechanism:**`; `**Budget check timing.**` → `**Budget check timing:**`; `**Daily Clone check.**` → `**Daily Clone check:**`; `**Worktree retention**:` → `**Worktree retention:**`; `**PR link** is the compare URL only` → `**PR link:** the compare URL only`; `**Gate record** is a first-class entity` → `**Gate record:** a first-class entity`.
-
-49. **[prose]** addendum.md §H — open-question references use two forms in the same section: `**Open questions 1 and 2**` and `(OQ5)`, `(OQ1)`; PRD §6.1 uses `Open questions 2 and 4`. — *Fix:* use one form; shortest consistent choice: `(OQ5)` → `(Open question 5)`, `(OQ1)` → `(Open question 1)`.
-
-50. **[prose]** addendum.md §B — `since the 08-24 addendum` is an undefined reference (the PRD names only the 2026-08-24 PRD). — *Fix:* → `since the 2026-08-24 PRD's addendum`.
-
-51. **[prose]** addendum.md §D "Answer (revised at Finalize)" and §H heading "Corrections surfaced at Finalize" — "Finalize" is a PRD-workflow step name that an architect reading the addendum cold will not recognize. — *Fix:* *Consider:* `(revised at Finalize)` → `(revised at PRD finalization)`; `## H. Corrections surfaced at Finalize (for bmad-architecture)` → `## H. Corrections surfaced at PRD finalization (for bmad-architecture)`.
-
-*3 further minor items, not listed as rows:* "Mac Mini" → "Mac mini" (Apple's spelling; §10 NFR-7, §8 OQ4, §12); §4.9 description is the only §4.x description without a `Realizes …` line (it realizes the second job in §2.1, not a UJ); §12 Platform's last sentence repeats §0's pointer to `addendum.md` and `architecture-v1.md`.
+Summary: 21 structure recommendations (1 QUESTION on content, 3 PRESERVE). If all cuts/condenses are accepted: about 380 words removed, ~35 added (S-13) — net ≈ 345 words, ≈ 3% of 11,979. No length target was given. Comprehension trade-offs: S-8 and S-9 remove two short self-contained sections that some readers use as quick "what it is not / what it runs on" summaries; S-11 and S-14 deliberately keep structure that looks cuttable.
 
 ---
 
-## Summary
+## Prose
 
-- 48 recommendations (21 structure, 27 prose). No content or scope changes proposed; no length target was provided.
-- Estimated reduction if all structure rows are accepted: about −84 words on `prd.md` (−1.2% of 7,169) and −26 words on `addendum.md` (−1.8% of 1,478). Format-only splits (rows 13, 16, 17, 20) and the prose splits are word-neutral.
-- Comprehension trade-offs: rows 5, 6, 7, 8, 9, 11, 12 replace restatements with cross-references; a reader of that section alone must follow one pointer. Row 21 explicitly preserves the Glossary's non-alphabetical order.
-- Structural items that should be settled before downstream documents cite section numbers: rows 1, 2, 19.
+**P-1. British spelling — "Realizes" (×8: §4.1, §4.2, §4.3, §4.4, §4.5, §4.6, §4.7, §4.8 descriptions) and "optimize" (§7 "Counter-metrics (do not optimize)").** The document is otherwise British (initialise, colour, honours, apologises, finalises, labelled, cancelled). Replacement: "Realises UJ-…" ×8; "**Counter-metrics (do not optimise)**".
+
+**P-2. UJ-3 card text contradicts the FR-11/FR-22 copy.** UJ-3: "`2/2 epics · 8/8 stories · 2 PRs`"; FR-11 and FR-22: "`n/n epics · m/m stories · k links`" (and FR-11: no pull request is ever created). Replacement: "By evening the card is in **Done** with `2/2 epics · 8/8 stories · 2 links`."
+
+**P-3. Signal verbs capitalised inconsistently within one sentence.** FR-8 line 177: "the Operator cancels and starts a new Run, or Continues on the recorded plan". The document's convention capitalises Signal verbs (Retries, Continues, Skips, Cancel). Replacement: "the Operator Cancels and starts a new Run, or Continues on the recorded plan".
+
+**P-4. Glossary-term capitalisation slips** (the document capitalises Glossary terms in use). One row, all locations:
+- "verify step" → "verify Step": §2.2 b2 ("every verify step is `skipped`"), SM-C1 heading ("Verify steps `skipped`" → "Verify Steps `skipped`"). Keep the UI string `verify step will be skipped` (FR-3) as is.
+- "worktrees"/"worktree" → "Worktrees"/"Worktree": FR-13 b1 ("a Repository's worktrees"), FR-13 b2 ("one worktree per Run").
+- "spec folders" → "Spec folders": §5 b8.
+- "Step path" → "Step Path": Glossary `Gate record` ("time, Step path, event"); FR-29 already uses "Step Paths".
+- "Harness-reported" (FR-17 b2) vs "harness-reported" (FR-28 b2) → "Harness-reported" in both; "harness spans" (FR-27 b2) vs "Harness spans" (FR-33 b2) → "Harness spans".
+- "the Run trace" (FR-27 b2) → "the Run's Trace".
+- UJ-1 and UJ-2 mix cases: "Rebeca, the sole operator", "creates project *Website*", "two repositories", "per repository", "second repository", "that repository", "both repositories", "The clone check runs", "picks template `initiative` v1", "harness `claude`", "From the board", "opens the board" — while "Project", "Run", and "Pre-flight" in the same paragraphs are capitalised. Replacement: Operator, Project, Repository/Repositories, Clone check, Template, Harness, Board in those spots (or, if the journeys are meant to read as plain narrative, lowercase "Project"/"Run" there too — pick one).
+- §12: "one operator" → "one Operator".
+
+**P-5. Glossary `Run` entry — nested parenthetical with an em-dash aside is hard to parse.** Original: "bound to Inputs (Project, Repository, base branch, the folders and branch the Template declares — Initiative folder for `initiative`; **Working branch** and **Spec folder** for `epic` — **Harness**, model, budget, `re_review_done`)". Replacement: "bound to Inputs: Project, Repository, base branch, the folders and branch the Template declares (Initiative folder for `initiative`; Working branch and Spec folder for `epic`), Harness, model, budget, and `re_review_done`."
+
+**P-6. FR-31 b1 — dangling "that existed".** Original: "every `AGENTS.md` that existed, and every file matching the Repository's `test_globs` that existed when the **Story's first Attempt** started." Replacement: "every `AGENTS.md` and every file matching the Repository's `test_globs` that existed when the **Story's first Attempt** started."
+
+**P-7. FR-31 b3 — "either … or … , or" with three options.** Original: "The Operator either *Accepts* the change (…) or reverts on the branch and Retries, or Skips the Story." Replacement: "The Operator *Accepts* the change (…), reverts on the branch and Retries, or Skips the Story."
+
+**P-8. Run-on bullets / single-sentence inventories** (split; text otherwise unchanged):
+- FR-16 routing, "any other status…" (line 258, ~95 words): split after "Step `error`;" into a sub-bullet beginning "before parking, the Template's `expect` + `retry {max, prompt}` on the Step applies: …" and a second sub-bullet "when exhausted, Run `needs-you` with reason …".
+- §4.6 table note (line 303, four clauses joined by semicolons): render as four bullets, one clause each.
+- FR-5 statement (line 135, ~80-word parenthetical): move the parenthetical after a colon — "The system accepts Templates conforming to the DSL v1 and rejects anything else. DSL v1: Inputs of type …; a Step is …; kinds …; one `for_each` construct over a YAML list file; `{{variable}}` substitution only. The full key table is the spine's "Template DSL v1 keys"."
+- FR-8 statement (line 160) and FR-23 statement (line 352): Consider: end the sentence after "…create a Run" / "…diagram view (FR-29)" and list the fields as a bulleted inventory?
+- FR-14 b5 (line 239): two unrelated sentences in one bullet — resolved by S-2 (cut the first sentence).
+
+**P-9. Serial comma dropped in two lists** (the document otherwise uses it). FR-14 b6: "the Run, Attempt, Story, Harness and Project identifiers" → "the Run, Attempt, Story, Harness, and Project identifiers". §4.6 description: "FR-16, FR-17, FR-31 and the glossary refer to it" → "FR-16, FR-17, FR-31, and the glossary refer to it".
+
+**P-10. §11 Cost — garden-path clause.** Original: "an agent that calls the Gateway without the attribution headers its Harness config sets spends outside the halt". Replacement: "an agent that calls the Gateway without the attribution headers set by its Harness config spends outside the halt".
+
+**P-11. FR-2 b2 — misplaced "only".** Original: "returned by API responses after save only masked to their last four characters". Replacement: "returned by API responses after save masked to their last four characters only".
+
+**P-12. FR-10 sync bullet — "then Retries: Retry fetches again".** Replacement: "…never in the Worktree, then Retries; the Retry fetches again and fast-forwards."
+
+**P-13. "intent gap" used as a concept but never defined** (UJ-3 card text — fine as the agent's own blocking-condition text — and the FR-18 assumption "resolves the intent gap on re-planning"; §9 line 491 repeats it). Replacement in FR-18 and §9: "resolves the blocking condition on re-planning".
+
+**P-14. `retry` key set abbreviated inconsistently.** FR-5 declares "`retry {max, prompt, resume_session}`"; FR-16 writes "`retry {max, prompt}`" and then describes session resumption in prose. Consider: "`retry {max, prompt, resume_session}`" in FR-16 so the key that governs "resuming the same session where the Harness allows it" is visible?
+
+**P-15. Column-name markup varies.** UJs bold the columns (**Running**, **Queued**, **Needs you**, **Done**); FR-22 backticks them (`Queued · Running · Needs you · Done · Failed`) and then writes "under Failed" plain. Replacement: pick one — bold, as in the journeys and the Glossary headword `Needs you` — and use it in FR-22 ("Columns **Queued · Running · Needs you · Done · Failed** always render…; `cancelled` Runs appear under **Failed**").
+
+**P-16. Capital after a tag.** §6.2: "`[NOTE FOR PM]` this is the first thing…" → "`[NOTE FOR PM]` This is the first thing…"; "`[NOTE FOR PM]` cheap to add…" → "`[NOTE FOR PM]` Cheap to add…".
+
+**P-17. Product and format names.** NFR-7 "one docker-compose file" → "one Docker Compose file" (the file is `docker-compose.yml`, but the product name is Docker Compose; FR-21 already uses `docker compose exec`). FR-32 b2 "a JSON-lines download" → "a JSON Lines download". §6.2 b3 "front-end and back-end" → "frontend and backend" (matches "backend container", "backend-api" elsewhere).
+
+**P-18. FR-14 b1 — "HALTs" as a verb.** Consider: "`bmad-build-auto` halts with `blocked · no subagents` without the first"?
+
+**P-19. FR-27 statement — "session id" is the Langfuse session here, not the Glossary `Session id`.** Consider: "join by the Run's trace context or Langfuse session id"?
+
+**P-20. §6.1 Tiers — unclear phrase.** Original: "Template `initiative` (FR-29's initiative root with it)". Replacement: "Template `initiative` (and, with it, the initiative root node of FR-29)".
+
+**P-21. Consider:** FR-8 first mention of *re-review done Stories* could bridge to the Input key the Glossary names — "*re-review done Stories* (`re_review_done`)" — so the label and the key are linked once?
+
+Summary: 21 prose rows (4 phrased as Consider). Applying P-1..P-4 and P-9 alone resolves every spelling and token inconsistency found; the remainder are sentence-level clarity fixes within the existing structure.

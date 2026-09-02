@@ -32,7 +32,7 @@ a{color:#7FD4C1;text-decoration:none} a:hover{color:#DDE3E5}
 .filters span{border-right:1px solid #21272A;color:#5C686C;font-size:11px;padding:3px 9px;letter-spacing:.08em;white-space:nowrap}
 .filters span:last-child{border-right:0}
 .filters span.on{background:#171B1D;color:#DDE3E5}
-.search{background:#0A0C0D;border:1px solid #21272A;color:#5C686C;font-size:11.5px;padding:3px 8px;width:190px}
+.search{background:#0A0C0D;border:1px solid #21272A;color:#5C686C;font-size:11.5px;padding:3px 8px;width:110px}
 .btn{display:inline-block;background:transparent;border:1px solid #2C3438;color:#8B979B;font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;white-space:nowrap}
 .btn.pri{border-color:#7FD4C1;color:#7FD4C1}
 .btn.des{border-color:#E05252;color:#E05252}
@@ -45,6 +45,7 @@ a{color:#7FD4C1;text-decoration:none} a:hover{color:#DDE3E5}
 .s-que{color:#5C686C}.s-que i{border:1px solid #5C686C}
 .s-don{color:#8B979B}.s-don i{border:1px solid #8B979B}
 .s-skp{color:#5C686C}.s-skp i{border:1px dashed #5C686C}
+.s-can{color:#5C686C}.s-can i{border:1px solid #5C686C;background:#21272A}
 .t1{color:#DDE3E5}.t2{color:#8B979B}.t3{color:#5C686C}.ac{color:#7FD4C1}
 .amber{color:#E4B33C}.red{color:#E05252}.green{color:#4FB477}
 .sec{margin:0 0 30px}
@@ -59,6 +60,8 @@ table.rec{width:100%;border-collapse:collapse;table-layout:fixed}
 .rec td{padding:7px 10px;border-bottom:1px solid #21272A;font-size:12px;color:#8B979B;vertical-align:top;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rec td.r,.rec th.r{text-align:right}
 .rec tr.cur td{color:#DDE3E5}
+.rec.dense th{padding:5px 8px}
+.rec.dense td{padding:4px 8px;font-size:11.5px}
 .board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));flex:1;min-height:0}
 .col{border-right:1px solid #21272A;display:flex;flex-direction:column;min-width:0}
 .col:last-child{border-right:0}
@@ -66,10 +69,13 @@ table.rec{width:100%;border-collapse:collapse;table-layout:fixed}
 .colh.att{color:#E4B33C}
 .colh.run{color:#4FB477}
 .cards{padding:10px;display:flex;flex-direction:column;gap:8px;overflow:auto}
-.card{background:#111416;border:1px solid #21272A;padding:10px;display:flex;flex-direction:column;gap:5px}
+.card{background:#111416;border:1px solid #21272A;padding:10px 8px;display:flex;flex-direction:column;gap:5px}
+.card.att{box-shadow:inset 2px 0 0 #E4B33C}
+.card.err{box-shadow:inset 2px 0 0 #E05252}
 .card .ttl{font-size:12.5px;color:#DDE3E5;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card .meta{font-size:11.5px;color:#5C686C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card .step{font-size:11.5px;color:#8B979B;line-height:1.5}
+.card .step{font-size:11px;color:#8B979B;line-height:1.5}
+.card .prog{font-size:11px;color:#5C686C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card .foot{display:flex;justify-content:space-between;font-size:11.5px;color:#5C686C}
 .card .foot .old{color:#E4B33C}
 .empty{color:#5C686C;font-size:11.5px;padding:18px 0 0;text-align:center}
@@ -86,10 +92,17 @@ table.rec{width:100%;border-collapse:collapse;table-layout:fixed}
 .seg span{padding:4px 12px;font-size:11px;letter-spacing:.1em;color:#5C686C;border-right:1px solid #21272A;text-transform:uppercase}
 .seg span:last-child{border-right:0}
 .seg span.on{background:#171B1D;color:#DDE3E5}
-.actions{display:flex;gap:8px;padding-top:16px;border-top:1px solid #21272A;margin-top:8px;align-items:center}
+.hrl{display:grid;grid-template-columns:16px 64px 1fr auto;gap:0 12px;align-items:baseline;font-size:12px;padding:4px 0}
+.hrl .rd{width:9px;height:9px;border:1px solid #5C686C;display:inline-block;border-radius:50%}
+.hrl .rd.on{border-color:#DDE3E5;box-shadow:inset 0 0 0 2px #0A0C0D;background:#DDE3E5}
+.hrl .rd.dis{border-style:dashed}
+.hrl .nm{color:#DDE3E5}
+.hrl.dis .nm{color:#5C686C}
+.actions{display:flex;gap:8px;padding-top:16px;border-top:1px solid #21272A;margin-top:8px;align-items:center;flex-wrap:wrap}
 .actions .note{color:#5C686C;font-size:11px;margin-left:6px}
 .banner{background:#171B1D;border-left:2px solid #E4B33C;padding:14px 18px;display:flex;gap:16px;align-items:baseline;font-size:12.5px}
 .banner.err{border-left-color:#E05252}
+.banner.grey{border-left-color:#2C3438}
 .banner .msg{color:#DDE3E5}
 .banner .go{margin-left:auto}
 .dhead{padding:16px 28px 14px;border-bottom:1px solid #21272A;flex:none}
@@ -104,21 +117,22 @@ table.rec{width:100%;border-collapse:collapse;table-layout:fixed}
 .cmd .cbar{display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid #21272A;color:#5C686C;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase}
 .cmd pre{margin:0;padding:12px 14px;font-size:13px;color:#DDE3E5;overflow-x:auto;line-height:1.7;white-space:pre}
 .cmd .p{color:#5C686C}.cmd .fl{color:#7FD4C1}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:26px}
 .tree{font-size:12.5px;line-height:1.7;color:#8B979B}
 .tree div{display:flex;gap:10px;align-items:center}
 .tree .d1{padding-left:14px;border-left:1px solid #21272A;margin-left:4px}
 .tree .d2{padding-left:28px;border-left:1px solid #21272A;margin-left:4px}
 .tree .new{width:7px;height:7px;background:#7FD4C1;display:inline-block;flex:none}
-.tree .ts{margin-left:auto;color:#5C686C;font-size:11px}
+.tree .ts{margin-left:auto;color:#5C686C;font-size:11px;white-space:nowrap}
 .strip{display:flex;gap:4px}
 .strip span{flex:1;height:14px;border:1px solid #2C3438;font-size:9px;letter-spacing:.06em;color:#5C686C;display:flex;align-items:center;justify-content:center}
 .strip span.d{background:#171B1D;color:#8B979B}
 .strip span.b{border-color:#E4B33C;color:#E4B33C}
 .strip span.r{border-color:#4FB477;color:#4FB477}
+.strip span.s{border-style:dashed;text-decoration:line-through}
 .check{display:grid;grid-template-columns:22px 1fr auto;gap:8px 10px;font-size:12px;line-height:1.6;padding:6px 0;border-bottom:1px solid #21272A}
 .check .g{color:#8B979B}.check .w{color:#E4B33C}.check .x{color:#E05252}.check .n{color:#5C686C}
-.check .out{grid-column:2/4;background:#08090A;border:1px solid #21272A;color:#8B979B;font-size:11.5px;padding:8px 10px;white-space:pre;overflow:hidden}
+.check .out{grid-column:2/4;background:#08090A;border:1px solid #21272A;color:#8B979B;font-size:11.5px;padding:8px 10px;white-space:pre-wrap;overflow:hidden}
 .two{display:grid;grid-template-columns:300px 1fr;flex:1;min-height:0}
 .list{border-right:1px solid #21272A;overflow:auto}
 .li{padding:10px 14px;border-bottom:1px solid #21272A;display:flex;flex-direction:column;gap:3px}
@@ -129,80 +143,94 @@ table.rec{width:100%;border-collapse:collapse;table-layout:fixed}
 .code div{display:grid;grid-template-columns:38px 1fr;white-space:pre}
 .code div::before{counter-increment:ln;content:counter(ln);color:#5C686C;text-align:right;padding-right:12px;font-size:11px}
 .code .k{color:#8B979B}.code .v{color:#DDE3E5}.code .c{color:#5C686C}.code .s{color:#7FD4C1}
-.code div.hl{background:#171B1D}
+.code div.hl{background:#171B1D;display:grid}
+.code.ed{border:1px solid #21272A;border-right:1px solid #21272A;font-size:11.5px;padding:6px 0;line-height:1.6}
+.code.ed div{grid-template-columns:30px 1fr;white-space:pre-wrap}
 .diag{padding:16px 18px;overflow:auto}
-.node{border:1px solid #2C3438;background:#111416;padding:6px 10px;font-size:11.5px;color:#DDE3E5;display:flex;gap:10px;align-items:baseline;width:250px}
-.node .ty{color:#5C686C;font-size:10px;letter-spacing:.14em;text-transform:uppercase;width:70px;flex:none}
-.node .gt{margin-left:auto;color:#5C686C;font-size:10px}
-.node.ag{border-color:#7FD4C1}
-.node.hu{border-color:#E4B33C}
-.edge{width:1px;height:14px;background:#2C3438;margin-left:125px}
-.loop{border:1px dashed #2C3438;padding:10px 12px 12px;margin:0 0 0 0;width:274px;position:relative}
+.ltr{display:flex;align-items:center}
+.ltr .e{width:14px;height:1px;background:#2C3438;flex:none}
+.tn{width:112px;flex:none;border:1px solid #21272A;background:#111416;padding:5px 8px;display:flex;flex-direction:column;gap:2px}
+.tn .ty{color:#5C686C;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase}
+.tn .nm{color:#DDE3E5;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tn .gt{color:#5C686C;font-size:10px}
+.tn.ag{border-color:#7FD4C1}
+.tn.hu{border-color:#2C3438}
+.tn.on{background:#171B1D}
+.loop{border:1px dashed #2C3438;padding:12px 10px 8px;position:relative;flex:none}
+.loop .lbl{position:absolute;top:-8px;left:8px;background:#0B0D0E;padding:0 6px;color:#5C686C;font-size:10px;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
 
-.tree{display:flex;align-items:center;padding:26px 28px 10px;overflow:auto;flex:1;min-height:0}
+.dtree{display:flex;align-items:center;padding:8px 28px 6px;overflow:auto;flex:1;min-height:0}
 .row{display:flex;align-items:center}
-.kids{display:flex;flex-direction:column;gap:6px;padding-left:30px;position:relative}
-.kids::before{content:"";position:absolute;left:15px;top:18px;bottom:18px;width:1px;background:#2C3438}
+.kids{display:flex;flex-direction:column;gap:4px;padding-left:30px;position:relative}
+.kids::before{content:"";position:absolute;left:15px;top:16px;bottom:16px;width:1px;background:#2C3438}
 .kids::after{content:"";position:absolute;left:0;top:50%;width:15px;height:1px;background:#2C3438}
 .kid{position:relative}
 .kid::before{content:"";position:absolute;left:-15px;top:50%;width:15px;height:1px;background:#2C3438}
-.nd{border:1px solid #21272A;background:#111416;padding:6px 10px;display:flex;flex-direction:column;gap:3px;min-width:170px;max-width:230px}
+.nd{border:1px solid #21272A;background:#111416;padding:4px 10px;display:flex;flex-direction:column;gap:1px;min-width:170px;max-width:272px}
 .nd .l1{display:flex;gap:10px;align-items:center;justify-content:space-between;font-size:12px;color:#8B979B;white-space:nowrap}
 .nd .l1 .nm{overflow:hidden;text-overflow:ellipsis}
-.nd .l2{font-size:10.5px;color:#5C686C;white-space:nowrap}
+.nd .l2{font-size:10.5px;color:#5C686C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nd.cur{border-color:#2C3438}
 .nd.cur .l1{color:#DDE3E5}
 .nd .now{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#5C686C}
-.nd .sub{display:flex;gap:10px;font-size:10px;letter-spacing:.06em;color:#5C686C;margin-top:2px}
+.nd .sub{display:flex;gap:6px;font-size:9px;letter-spacing:0;color:#5C686C;margin-top:1px;overflow:hidden}
 .nd .sub span{white-space:nowrap}
 .nd .sub span.on{color:#8B979B}
-.root{min-width:200px;padding:10px 12px}
+.nd.sm{min-width:150px;padding:3px 10px}
+.nd.xs{min-width:150px;max-width:190px;padding:2px 10px;gap:0}
+.nd.xs .l1{font-size:11.5px}
+.root{min-width:236px;max-width:none;padding:8px 12px}
 .root .l1{font-size:12.5px;color:#DDE3E5}
-.heads{display:grid;grid-template-columns:230px 260px 260px 1fr;padding:10px 28px 0;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5C686C}
-.treefoot{padding:10px 28px 14px;border-top:1px solid #21272A;font-size:11.5px;color:#5C686C;display:flex;gap:18px}
+.heads{display:grid;grid-template-columns:266px 300px 302px 1fr;padding:10px 28px 0;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5C686C}
+.treefoot{padding:8px 28px 10px;border-top:1px solid #21272A;font-size:11.5px;color:#5C686C;display:flex;gap:18px}
 .treefoot b{color:#8B979B;font-weight:400}
-.loop .lbl{position:absolute;top:-8px;left:10px;background:#0B0D0E;padding:0 6px;color:#5C686C;font-size:10px;letter-spacing:.14em;text-transform:uppercase}
 </style>
 </helmet>
 
 <div class="app" data-testid="newproject-root">
   <nav class="rail" data-testid="nav-rail">
   <div class="brand" data-testid="nav-brand">AI Orchestrator<span>v1 · dev loop · single operator</span></div>
-  <div class="nav" data-testid="nav-workflows"><span>Workflows</span><span class="n att">7 · <span class="amber">2 need you</span></span></div><div class="nav" data-testid="nav-runs"><span>Runs</span><span class="n">31</span></div>
+  <div class="nav" data-testid="nav-workflows"><span>Workflows</span><span class="n att">9 · <span class="amber">2 need you</span></span></div><div class="nav" data-testid="nav-runs"><span>Runs</span><span class="n">34</span></div>
   <div class="grp">Configure</div>
-  <div class="nav on" data-testid="nav-projects"><span>Projects</span><span class="n">3</span></div><div class="nav" data-testid="nav-templates"><span>Templates</span><span class="n">3</span></div>
-  <div class="railfoot" data-testid="global-run-status"><b>2 running</b> · 1 queued<br>2 need you<br>updated 09:41:12 · <span class="ac">refresh</span></div>
+  <div class="nav on" data-testid="nav-projects"><span>Projects</span><span class="n">3</span></div><div class="nav" data-testid="nav-templates"><span>Templates</span><span class="n">4</span></div>
+  <div class="railfoot" data-testid="global-run-status"><b>2 running</b> · 2 queued<br>2 need you<br>updated 09:41:12 · <span class="ac">refresh</span></div>
 </nav>
   <div class="main">
     <div class="bar"><h1>New project</h1><span class="count">saving runs the clone check on every repository</span></div>
-    <div class="form" style="display:grid;grid-template-columns:1fr 380px;gap:32px;max-width:none">
+    <div class="form" style="display:grid;grid-template-columns:1fr 400px;gap:32px;max-width:none">
       <div>
         <div class="f"><label>Name</label><div><div class="in">Website</div></div></div>
-        <div class="f"><label>Context</label><div><div class="in ta">Marketing site, Astro + Tailwind, deployed on Cloudflare Pages. Copy lives in content/*.mdx; never edit generated i18n files. Strategy: SEO first, no client JS unless a story asks for it.</div><div class="hint">What every agent reads before planning. Business intent, architecture, hard rules. Plain text; reference files in the repository by path.</div></div></div>
+        <div class="f"><label>Context</label><div><div class="in ta">Marketing site, Astro + Tailwind, deployed on Cloudflare Pages. Copy lives in content/*.mdx; never edit generated i18n files. Strategy: SEO first, no client JS unless a story asks for it.</div><div class="hint">What every agent reads before planning. Business intent, architecture, hard rules. Written to <b>project-context.md</b> for every story.</div></div></div>
         <div class="f"><label>Context files</label><div><div class="in">docs/architecture.md, docs/glossary.md</div><div class="hint">Optional. Paths inside the repository, read at run time.</div></div></div>
-        <div class="f"><label>GitHub token</label><div><div class="in" style="letter-spacing:.2em">••••••••••••••••</div><div class="hint">Fine-grained token, <b>repo</b> scope on the repositories below only. Used for clone, push and PR link. Never handed to the agent process.</div></div></div>
         <div class="f"><label>Agent env vars</label><div><div class="in ta" style="min-height:44px">NODE_OPTIONS=--max-old-space-size=4096
-PLAYWRIGHT_BROWSERS_PATH=0</div><div class="hint">Exported into every agent and shell step for this project.</div></div></div>
+PLAYWRIGHT_BROWSERS_PATH=0</div><div class="hint">Exported into every agent and shell step for this project. Masked after save.</div></div></div>
+        <div class="f"><label>log_prompt_content</label><div><div class="seg"><span class="on">OFF</span><span>ON</span></div><div class="hint">On: every prompt and completion, including the source code the agent reads, is sent to Langfuse. Off: metadata and cost only.</div></div></div>
+        <div class="f"><label>Credentials</label><div><div class="t2" style="font-size:12px;padding-top:6px">credentials are instance settings (.env)</div></div></div>
         <div class="sec-h" style="margin-top:26px">Repositories</div>
         <div style="border:1px solid #21272A;padding:4px 14px 12px;margin-bottom:10px">
           <div class="f"><label>URL</label><div><div class="in">https://github.com/optimai/website</div></div></div>
           <div class="f"><label>Default branch</label><div><div class="in" style="width:200px">main</div></div></div>
           <div class="f"><label>Package manager</label><div><div class="seg"><span>npm</span><span class="on">pnpm</span><span>yarn</span><span>uv</span><span>other</span></div></div></div>
+          <div class="f"><label>test_globs</label><div><div class="in">tests/**, **/*.test.*, **/*.spec.*</div><div class="hint">Default pre-filled. An agent change under these paths stops the run: <b>protected path modified</b>.</div></div></div>
+          <div class="f"><label>install_command</label><div><div class="in">pnpm install --frozen-lockfile</div><div class="hint">Runs once per worktree before the baseline.</div></div></div>
           <div class="f"><label>quality_gate_command</label><div><div class="in">pnpm run check</div><div class="hint">Runs after every story as the deterministic gate. Optional — when absent the verify step is <b>skipped</b>, never green.</div></div></div>
           <div class="f"><label>unit_test_command</label><div><div class="in ph">optional</div></div></div>
         </div>
         <span class="btn">+ Another repository</span>
-        <div class="actions"><span class="btn pri" data-testid="project-save">Save project</span><span class="btn">Cancel</span><span class="note">The form keeps every value on a failed check.</span></div>
+        <div class="actions"><span class="btn pri" data-testid="project-save">Save project</span><span class="btn">Cancel</span><span class="note">The form keeps every value. A failing repository does not block save.</span></div>
       </div>
       <div>
         <div class="sec-h">Clone check</div>
         <div class="check"><span class="g">ok</span><span>optimai/website · ls-remote · 12 branches</span><span class="t3">0.6s</span></div>
         <div class="check"><span class="g">ok</span><span>optimai/website · shallow clone · 41 MB</span><span class="t3">3.4s</span></div>
         <div class="check"><span class="g">ok</span><span>default branch <span class="ac">main</span> exists</span><span class="t3"></span></div>
-        <div class="check"><span class="x">fail</span><span class="t1">optimai/website-cms · clone failed</span><span class="t3">1.9s</span><div class="out">remote: Repository not found.
+        <div class="check"><span class="g">ok</span><span>method 6.11.0 · _bmad/</span><span class="t3"></span></div>
+        <div class="check"><span class="g">ok</span><span>optimai/website-docs · ls-remote · shallow clone · 6 MB</span><span class="t3">1.2s</span></div>
+        <div class="check"><span class="n">—</span><span>method missing → run Initialise repository after save</span><span class="t3"></span></div>
+        <div class="check"><span class="x">fail</span><span class="t1">optimai/website-cms · failed · new runs blocked</span><span class="t3">1.9s</span><div class="out">remote: Repository not found.
 fatal: Authentication failed for 'https://github.com/optimai/website-cms/'
-→ token has no access to this repository. Grant it under GitHub → token → repository access.</div></div>
-        <div class="hint" style="margin-top:14px">One failing repository blocks <b>Save project</b> until fixed or removed. The command output is shown verbatim, never summarised.</div>
+→ the instance's GitHub token has no access to this repository</div></div>
+        <div class="hint" style="margin-top:14px">The project saves anyway; the failing repository reads <b>failed · new runs blocked</b> until <b>re-run check</b> passes. The command output is shown verbatim, never summarised.</div>
       </div>
     </div>
   </div>

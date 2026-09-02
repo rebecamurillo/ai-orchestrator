@@ -125,11 +125,6 @@ steps:
     with: { base: "{{base_branch}}", branch: "{{branch}}" }
     gate: deterministic
 
-  - id: install
-    run: shell
-    with: { command: "{{repository.install_command}}" }
-    gate: deterministic
-
   - id: baseline
     run: shell
     with: { command: "{{repository.quality_gate_command}}" }
@@ -227,7 +222,7 @@ steps:
 - **Push and PR move from Run-end to epic-end.** A Run ends with one compare URL per epic; the card reads `n/n epics · m/m stories · k PRs`.
 - **Diagrams.** FR-7 renders a Template file with `template` calls as collapsed nodes (expand on click, read-only). FR-29's run tree gains the initiative as its root: initiative → epics → stories → story sub-steps — the level removed on 2026-08-28 returns as the root of one Run, still within one repository.
 - **Tracing and cost roll up.** Spans nest by path; cost per epic and per initiative are sums, no new instrumentation.
-- **Standalone use.** `epic` and `story` remain startable directly from *New workflow* — the dev-loop of PRD UJ-2 is exactly `epic@1`. `initiative` is the new top level.
+- **Standalone use.** `epic` remains startable directly from *New workflow* — the dev-loop of PRD UJ-2 is exactly `epic@1`; `story` is a callee only (it has no checkout), and the harness readiness run uses `epic@1` (spine AD-10, 2026-09-02). `initiative` is the new top level. `install_command` runs inside `git.worktree`, so `epic@1` has no separate install step (spine kinds table).
 
 ## 5. PRD deltas to apply
 
