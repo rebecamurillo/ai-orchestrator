@@ -37,3 +37,11 @@ Findings surfaced by review that are real but belong to a later story. Append-on
 - source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-01-foundation/stories/1-1-repository-constitution-and-backend-api-skeleton-with-layering-gates.md`
   summary: The flake8-bandit (`S`) rule family is not selected, so security rules including the `0.0.0.0` bind and every `subprocess.run` call go unchecked.
   evidence: Enabling `S` requires a per-file ignore for `S101` (assert) across `tests/`, which the story's standing rules forbid adding without approval. Story 1.7 owns the CI gate configuration and is the right place to decide it.
+
+- source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-01-foundation/stories/1-3-generated-contract-and-web-client-skeleton.md`
+  summary: The proxy answers an unreachable backend-api with Astro's default 500 rather than an RFC 9457 problem document.
+  evidence: `src/api/server.ts::forward` lets a `fetch` rejection propagate out of `src/pages/api/[...path].ts`. Every other error the browser sees is `application/problem+json` (Consistency Conventions), and FR-24's failed-fetch readout parses `detail`. No story yet owns the proxy's own error shape; 1.5 touches the same route for the session guard.
+
+- source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-01-foundation/stories/1-3-generated-contract-and-web-client-skeleton.md`
+  summary: The proxy flattens repeated upstream response headers, so several `Set-Cookie` headers would arrive as one comma-joined value.
+  evidence: `src/pages/api/[...path].ts` copies headers with `Headers.forEach` + `set`, which cannot represent a repeated header. Inert today — AD-1 states backend-api sets no cookies and sends no CORS headers — and it becomes real only if a later story gives backend-api a repeated response header.

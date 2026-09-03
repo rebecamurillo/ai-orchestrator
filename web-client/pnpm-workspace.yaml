@@ -1,0 +1,14 @@
+# pnpm settings that belong to the package rather than to a machine (pnpm 11).
+#
+# allowBuilds: pnpm 11 refuses to run a dependency's install scripts until the package
+# says so. esbuild — pulled in by vite, and so by astro and vitest — verifies its
+# platform binary in a postinstall step; without this, `pnpm build` and `pnpm test`
+# fail on a fresh clone with a missing binary.
+allowBuilds:
+  esbuild: true
+
+# pnpm 11 holds back releases younger than its default cooldown. This one was pinned
+# from the Stack table on the day it was published, so the cooldown is waived for it
+# explicitly rather than globally.
+minimumReleaseAgeExclude:
+  - '@types/react-dom@19.2.7'

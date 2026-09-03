@@ -3,38 +3,50 @@
 # so no gate ever passes silently.
 
 UV ?= uv
+PNPM ?= pnpm
 BACKEND := backend-api
+WEB := web-client
 # --locked: a gate must never silently re-resolve the committed uv.lock
 PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
+# --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
+NODE_RUN := $(PNPM) --dir $(WEB) run
 
 .PHONY: lint test e2e-api e2e-ui openapi up down
 
 ## lint — ruff · mypy (strict on domain/ and application/) · import-linter · env-contract check
+##        · contract drift · eslint · prettier --check · tsc --noEmit · astro check
 lint:
 	$(PYTHON_RUN) ruff check . ../scripts
 	$(PYTHON_RUN) ruff format --check . ../scripts
 	$(PYTHON_RUN) mypy src/orchestrator/domain src/orchestrator/application
 	$(PYTHON_RUN) lint-imports
 	$(PYTHON_RUN) python ../scripts/check_env_contract.py
+	$(NODE_RUN) gen:api -- --check
+	$(NODE_RUN) lint
 
-## test — backend unit tests (no Postgres, no network)
+## test — backend unit tests (pytest) + web-client unit tests (vitest); no Postgres, no network
 test:
 	$(PYTHON_RUN) pytest tests/unit -q
+	$(NODE_RUN) test
 
 ## e2e-api — httpx scenarios + schemathesis against the running stack
 ## needs: docker compose up -d postgres, the app running, and BACKEND_API_URL + ORCHESTRATOR_TOKEN exported
 e2e-api:
 	$(PYTHON_RUN) pytest tests/e2e -q
 
-## e2e-ui — playwright against astro preview
+## e2e-ui — playwright against the built web-client
+## needs: pnpm --dir web-client exec playwright install chromium, once per machine
+## the build comes first: the credential spec greps dist/ for the token
 e2e-ui:
-	@echo "not available until story 1.3" >&2
-	@exit 1
+	$(NODE_RUN) build
+	$(NODE_RUN) e2e
 
-## openapi — export contracts/openapi.json, then regenerate the web-client types
+## openapi — export contracts/openapi.json, then regenerate the web-client types (AD-3)
+## the exporter writes through a temporary file: `> contracts/openapi.json` would empty the
+## committed contract before the export ran, and leave it empty when the export failed
 openapi:
-	@echo "not available until story 1.3" >&2
-	@exit 1
+	$(PYTHON_RUN) python -m orchestrator.tools.export_openapi --output ../contracts/openapi.json
+	$(NODE_RUN) gen:api
 
 ## up — docker compose up: web-client, backend-api, postgres
 up:

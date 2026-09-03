@@ -47,11 +47,11 @@ whose story has not landed yet exits non-zero with `not available until story <i
 silently passing:
 
 ```bash
-make lint        # ruff · mypy · import-linter · env-contract check   (story 1.1 — works)
-make test        # backend unit tests (pytest)                        (story 1.1 — works)
+make lint        # ruff · mypy · import-linter · env-contract · eslint · prettier · tsc · astro check
+make test        # backend unit tests (pytest) + web-client unit tests (vitest)
 make e2e-api     # httpx scenarios + schemathesis against the stack   (story 1.2 — works)
-make openapi     # export contracts/openapi.json, regenerate types    (story 1.3)
-make e2e-ui      # playwright against astro preview                   (story 1.3)
+make openapi     # export contracts/openapi.json, regenerate types    (story 1.3 — works)
+make e2e-ui      # playwright against the built web-client            (story 1.3 — works)
 make up / down   # docker compose: web-client, backend-api, postgres  (story 1.6)
 ```
 
@@ -68,6 +68,26 @@ set -a; . ./.env; set +a
 export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
 BACKEND_API_URL=http://127.0.0.1:8000 make e2e-api
 ```
+
+### The web-client half
+
+`make lint`, `make test`, `make openapi` and `make e2e-ui` all run web-client tooling, so they
+need Node 24 and pnpm 11.25.0 (pnpm comes from corepack; the first call downloads it). Two
+one-time steps per machine:
+
+```bash
+pnpm --dir web-client install --frozen-lockfile
+pnpm --dir web-client exec playwright install chromium     # ~95 MB, for make e2e-ui only
+```
+
+`make openapi` needs neither `.env` nor the database: it builds the application with dummy
+settings, writes `contracts/openapi.json`, and regenerates `web-client/src/api/schema.d.ts`
+from it. Both files are committed, and `make lint` fails when either is out of date — the
+TypeScript types for an API payload are generated, never written by hand (AD-3).
+
+`make e2e-ui` builds web-client and runs Playwright against the built server on
+`127.0.0.1:4321`, with a stub backend-api on `127.0.0.1:8788`. It needs no database and no
+running backend; `E2E_BACKEND=real` points the same specs at a real one instead.
 
 ## Setting up the BMAD method on a new machine
 
