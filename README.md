@@ -11,6 +11,30 @@ The product is specified, not yet built. Everything that decides what gets built
 | Epics and stories (8 epics, 66 stories) | `mvp/epics/epics.md`, `mvp/epics/epics.yaml`, one folder per epic |
 | UX experience and visual system | `ux-designs/ux-v1-dev-loop-2026-08-26/`, `ux-designs/ux-ai-orchestrator-2026-08-25/DESIGN.md` |
 
+## Running it
+
+Configuration is the environment (AD-20): `.env.example` is the contract, `make lint` fails when a
+setting exists in one place and not the other. Copy it once, fill it in, and never commit the result.
+
+```bash
+cp .env.example .env        # then fill in the tokens and keys
+```
+
+Bringing the stack up (`make up`) arrives with the container images in story 1.6.
+
+The gates that decide whether work is done. Epic 1 is being built story by story, so a target
+whose story has not landed yet exits non-zero with `not available until story <id>` rather than
+silently passing — today only `lint` and `test` do real work:
+
+```bash
+make lint        # ruff · mypy · import-linter · env-contract check   (story 1.1 — works)
+make test        # backend unit tests (pytest)                        (story 1.1 — works)
+make e2e-api     # httpx scenarios + schemathesis against the stack   (story 1.2)
+make openapi     # export contracts/openapi.json, regenerate types    (story 1.3)
+make e2e-ui      # playwright against astro preview                   (story 1.3)
+make up / down   # docker compose: web-client, backend-api, postgres  (story 1.6)
+```
+
 ## Setting up the BMAD method on a new machine
 
 The repository commits the method itself (`_bmad/`: config, scripts, manifests, modules) so every clone carries the same version, **6.11.0**. Two things are per machine and git-ignored: the skill stubs Claude Code loads (`.claude/skills/bmad-*`, `.agents/skills/bmad-*`) and your personal install answers (`_bmad/config.user.toml`). Reinstall them once per machine with the steps below.
