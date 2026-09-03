@@ -1,0 +1,101 @@
+# Epic 5 — built unattended by Sonnet-class agents through bmad-build-auto (folder+id dispatch).
+- id: "5-1"
+  title: Harness port, environment contract, and the Claude adapter
+  description: >-
+    The Harness protocol, env_for(attempt) derived from the scripts' declared lists, and the Claude Code
+    adapter with pre-assigned session, allowlist, budget cap, resume, and resume command (SPEC CAP-1, FR-14).
+  spec_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/briefs/5-1-harness-port-and-claude-adapter.md
+    before planning. It is this story's complete requirements: scope, binding rules, acceptance criteria,
+    and implementation notes. Do not read the other briefs.
+- id: "5-2"
+  title: Tracer port and the Langfuse adapter
+  description: >-
+    One trace per Run seeded from its id, a span per Step, a child span per Attempt exporting TRACEPARENT,
+    attempt_observed, the content-logging switch, and the trace link (SPEC CAP-2, FR-27).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/briefs/5-2-tracer-port-and-langfuse-adapter.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "5-3"
+  title: Gateway spend adapter and the budget rule
+  description: >-
+    Gateway.spend_for_attempt over /spend/logs/v2 with the spend key, the provisional fallback, attempt
+    cost fields, run.spend_usd, and rules/budget.py (SPEC CAP-3, FR-26, FR-28).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/briefs/5-3-gateway-spend-and-budget-rule.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "5-4"
+  title: Agent executor — prepare and dispatch
+  description: >-
+    steps/agent.py first half: WIP commit, project-context.md, prepare commit, start_sha, compose_prompt,
+    dispatch through the Harness port, mark_started and mark_finished, timeout park (SPEC CAP-4, FR-12,
+    FR-14, FR-15).
+  spec_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/briefs/5-4-agent-executor-prepare-and-dispatch.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "5-5"
+  title: Agent executor — contract evaluation and routing
+  description: >-
+    rules/routing.py and the executor's tail: story-file liveness, configuration failures, the FR-16
+    routing table, expect and retry with session resume, and the verify redispatch that appends
+    Verify Failure (SPEC CAP-5, FR-16, FR-10).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/briefs/5-5-agent-executor-routing.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "5-6"
+  title: Protected paths
+  description: >-
+    rules/protected_paths.py with the frozen test set at the frame's first attempt, agent-range checks
+    in the agent executor and the commit-guard, accepted_paths, and the protected_path park (SPEC CAP-6,
+    FR-31).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/briefs/5-6-protected-paths.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "5-7"
+  title: Budget halt in the loop
+  description: >-
+    Spend read after every agent attempt before verify, the budget park that keeps the row's routed
+    status, the double gate record, and the Claude cap exit routed as a budget park (SPEC CAP-7, FR-17).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/briefs/5-7-budget-halt.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "5-8"
+  title: Harness readiness
+  description: >-
+    The built-in Project readiness with its fixture repository, use_cases/harness_readiness start,
+    evaluate, and sync_pins, the endpoints, the walker's finish hook, and the New workflow re-run line
+    (SPEC CAP-8, FR-33).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/briefs/5-8-harness-readiness.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "5-9"
+  title: Trajectory record
+  description: >-
+    The trajectory table and record_trajectory writing one append-only row when a story's build is done
+    and its verify is done or skipped (SPEC CAP-9, FR-32).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/briefs/5-9-trajectory-record.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "5-10"
+  title: Run detail additions for story steps
+  description: >-
+    The Question block for blocked stories, misconfigured bodies without an Answer box, Stories strip
+    states, cost figures with provisional and the trace link, harness and cost columns (SPEC CAP-10,
+    FR-23).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/briefs/5-10-run-detail-story-additions.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "5-11"
+  title: Claude readiness passes end to end
+  description: >-
+    Run the claude readiness Run against the real host services, resolve the day-1 verifications
+    (allowlist, skill discovery, header coexistence, two keys), and record the invocation in the addendum
+    (SPEC CAP-11, PRD §8).
+  spec_checkpoint: true
+  done_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/briefs/5-11-claude-readiness-end-to-end.md
+    before planning. It is this story's complete requirements. Do not read the other briefs. This story
+    needs the host LiteLLM and Langfuse reachable; halt blocked with the reason if they are not.

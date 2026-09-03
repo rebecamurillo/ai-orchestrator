@@ -1,0 +1,51 @@
+# Epic 8 — built unattended by Sonnet-class agents through bmad-build-auto (folder+id dispatch).
+- id: "8-1"
+  title: Run diagram view
+  description: >-
+    The DIAGRAM toggle on the Run detail rendering GET /runs/{id}/graph through the shared Diagram island
+    with tokens, groups, the now marker, the footer readout, and click-to-row (SPEC CAP-1, FR-29).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-08-readouts/briefs/8-1-run-diagram-view.md
+    before planning. It is this story's complete requirements: scope, binding rules, acceptance criteria,
+    and implementation notes. Do not read the other briefs.
+- id: "8-2"
+  title: Active Operator time
+  description: >-
+    POST /runs/{id}/activity batched from the focused Run detail tab, run.active_seconds kept on the
+    server, and the your-active-time figure in the cost block (SPEC CAP-2, FR-23, SM-2).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-08-readouts/briefs/8-2-active-operator-time.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "8-3"
+  title: Changed-since-last-opened marks
+  description: >-
+    run.last_opened_at set on detail reads, changed files computed against it, and the accent chip and
+    promotion in the artifacts tree (SPEC CAP-3, FR-23).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-08-readouts/briefs/8-3-changed-since-last-opened.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "8-4"
+  title: Board LIST view
+  description: >-
+    The LIST toggle rendering the board data as record rows, persisted in the query string
+    (SPEC CAP-4, FR-22).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-08-readouts/briefs/8-4-board-list-view.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "8-5"
+  title: Login lockout
+  description: >-
+    The attempts counter and the fifteen-minute refusal after five failures, with the rejection lines
+    (SPEC CAP-5, FR-1 lockout).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-08-readouts/briefs/8-5-login-lockout.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "8-6"
+  title: Per-Project monthly spend
+  description: >-
+    The monthly spend figure on the Project read model and meta line, and the amber or red count on the
+    Projects list rows (SPEC CAP-6, FR-28).
+  done_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-08-readouts/briefs/8-6-project-monthly-spend.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.

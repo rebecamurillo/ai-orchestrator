@@ -1,0 +1,44 @@
+# Initiative list file for the ai-orchestrator MVP (PRD §3 "Initiative"; spine AD-7).
+# Read by the `initiative` Template: one entry per epic, in execution order. All epics stack on one branch.
+# Each spec_folder holds SPEC.md, stories.yaml, briefs/ (one file per story, referenced from invoke_dev_with)
+# and an empty stories/ where bmad-build-auto writes its own story specs.
+- id: "1"
+  title: Repository foundation, quality gates, and Operator login
+  branch: feat/mvp
+  spec_folder: epic-01-foundation
+  done_checkpoint: true
+- id: "2"
+  title: Projects and Repositories with the Clone check
+  branch: feat/mvp
+  spec_folder: epic-02-projects
+  done_checkpoint: true
+- id: "3"
+  title: Templates — validated DSL, versions, and the rendered diagram
+  branch: feat/mvp
+  spec_folder: epic-03-templates
+  done_checkpoint: true
+- id: "4"
+  title: Plan, start, and durably execute a Run — repo-init end to end
+  branch: feat/mvp
+  spec_folder: epic-04-runs
+  done_checkpoint: true
+- id: "5"
+  title: The unattended dev loop through Claude Code
+  branch: feat/mvp
+  spec_folder: epic-05-dev-loop
+  done_checkpoint: true
+- id: "6"
+  title: Human gates — answer, continue, skip, retry, accept, terminal
+  branch: feat/mvp
+  spec_folder: epic-06-human-gates
+  done_checkpoint: true
+- id: "7"
+  title: Codex and local harnesses, cost and time per Story
+  branch: feat/mvp
+  spec_folder: epic-07-harnesses
+  done_checkpoint: true
+- id: "8"
+  title: Run diagram and readout completions
+  branch: feat/mvp
+  spec_folder: epic-08-readouts
+  done_checkpoint: true

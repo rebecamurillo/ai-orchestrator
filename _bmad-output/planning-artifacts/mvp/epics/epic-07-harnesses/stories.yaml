@@ -1,0 +1,63 @@
+# Epic 7 — built unattended by Sonnet-class agents through bmad-build-auto (folder+id dispatch),
+# except the two readiness proofs, which need the host services and pause for the operator.
+- id: "7-1"
+  title: Codex adapter and script
+  description: >-
+    infrastructure/harness/codex/adapter.py over the Harness port: codex exec with JSON events, session
+    id captured from the thread event, danger-full-access, headers by env name, the contract test, and
+    the resume command (SPEC CAP-1, FR-14 codex).
+  spec_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-07-harnesses/briefs/7-1-codex-adapter.md
+    before planning. It is this story's complete requirements: scope, binding rules, acceptance criteria,
+    and implementation notes. Do not read the other briefs.
+- id: "7-2"
+  title: Codex readiness passes end to end
+  description: >-
+    Run the codex readiness Run against the host services, settle TRACEPARENT honouring or apply the
+    documented fallback, and record the verified invocation in the addendum (SPEC CAP-2, FR-33, PRD §8
+    item 2).
+  spec_checkpoint: true
+  done_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-07-harnesses/briefs/7-2-codex-readiness-end-to-end.md
+    before planning. It is this story's complete requirements. Do not read the other briefs. This story
+    needs the host LiteLLM and Langfuse reachable; halt blocked with the reason if they are not.
+- id: "7-3"
+  title: OpenCode adapter and script for local models
+  description: >-
+    infrastructure/harness/opencode/adapter.py: opencode run with JSON output, session id from events
+    or the session store, the Langfuse plugin keyed by the Run id, attempt_observed by user id, LOCAL_MODELS,
+    cost recorded as zero with tokens (SPEC CAP-3, FR-14 local, FR-27).
+  spec_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-07-harnesses/briefs/7-3-opencode-adapter.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "7-4"
+  title: OpenCode readiness passes end to end with host model serving
+  description: >-
+    Configure the host LiteLLM for the local model server, run the local readiness Run, record the
+    setup and results, or record the documented fallback (SPEC CAP-4, FR-33, PRD §8 items 7–8).
+  spec_checkpoint: true
+  done_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-07-harnesses/briefs/7-4-opencode-readiness-end-to-end.md
+    before planning. It is this story's complete requirements. Do not read the other briefs. This story
+    needs the host LiteLLM, Langfuse, and the local model server reachable; halt blocked with the reason if
+    they are not.
+- id: "7-5"
+  title: Runs history
+  description: >-
+    GET /steps paginated by cursor with project and status filters, one row per attempt, and the HISTORY
+    table on the Runs screen linking to the Run detail at the path (SPEC CAP-5, FR-25 history).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-07-harnesses/briefs/7-5-runs-history.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "7-6"
+  title: Trajectory export
+  description: >-
+    GET /projects/{id}/trajectories.jsonl newest first and the Export trajectories action on the Project
+    screen with its hint (SPEC CAP-6, FR-32 export).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-07-harnesses/briefs/7-6-trajectory-export.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.

@@ -1,0 +1,73 @@
+# Epic 6 — built unattended by Sonnet-class agents through bmad-build-auto (folder+id dispatch).
+- id: "6-1"
+  title: Answer a blocked story, with a scripted test harness
+  description: >-
+    The answer signal's worktree effect in the agent executor (archive with Human Answer, re-dispatch with
+    the Answer suffix), the Answer box and Resume with answer, and a test-mode fake harness that writes
+    scripted story files so the loop can be tested end to end (SPEC CAP-1, FR-18).
+  spec_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-06-human-gates/briefs/6-1-answer-and-test-harness.md
+    before planning. It is this story's complete requirements: scope, binding rules, acceptance criteria,
+    and implementation notes. Do not read the other briefs.
+- id: "6-2"
+  title: Continue and Reject at checkpoints
+  description: >-
+    Continue on an agent row at a spec checkpoint (re-dispatch without the halt suffix), Reject with a
+    reason as the Answer signal, and the spec and done checkpoint bodies (SPEC CAP-2, FR-19).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-06-human-gates/briefs/6-2-continue-and-reject-at-checkpoints.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "6-3"
+  title: Inline spec editing while parked
+  description: >-
+    GET and PUT /runs/{id}/files with the spec-folder scope, the commit and gate record per save, the
+    read-only list files, and the artifacts tree with viewer and editor on the Run detail (SPEC CAP-3,
+    FR-19, FR-23).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-06-human-gates/briefs/6-3-inline-spec-editing.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "6-4"
+  title: Skip story with the re-baseline
+  description: >-
+    The skip_story effects: skipped rows, verify as re-baseline, commit-guard message, the
+    re-baseline-failed park, the button and the summary listing (SPEC CAP-4, FR-20).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-06-human-gates/briefs/6-4-skip-story.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "6-5"
+  title: Skip epic
+  description: >-
+    The skip_epic effects over the remaining story frames, the push and compare link that still run, the
+    push-rejected variant, the button and summary (SPEC CAP-5, FR-20).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-06-human-gates/briefs/6-5-skip-epic.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "6-6"
+  title: Raise budget and Accept a protected-path change
+  description: >-
+    budget_raise resuming at the routed status and its body with the new-budget field; continue on
+    protected_path recording accepted files, its body with the file list and diff links, and the accept
+    line (SPEC CAP-6, FR-17, FR-31).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-06-human-gates/briefs/6-6-raise-budget-and-accept.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "6-7"
+  title: Terminal resume command, session flag, and poll
+  description: >-
+    The resume command in the read model, the command block with copy, terminal_start and
+    terminal_release, the disabled-actions line, and the terminal_poll job sending terminal_resume after
+    two clean done polls (SPEC CAP-7, FR-21).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-06-human-gates/briefs/6-7-terminal-resume.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "6-8"
+  title: UJ-3 proven end to end
+  description: >-
+    End-to-end scenarios on the fake harness in the compose stack: blocked then answer then done, spec
+    checkpoint then continue, verify failed twice then skip story, cancel while parked (SPEC CAP-8, UJ-3,
+    SM-2).
+  done_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-06-human-gates/briefs/6-8-uj3-end-to-end.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
