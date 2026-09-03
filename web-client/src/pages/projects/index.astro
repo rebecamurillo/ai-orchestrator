@@ -1,0 +1,21 @@
+---
+/**
+ * Projects — the list and the detail pane. A project is what binds repositories, context,
+ * and environment variables to the runs started against them; the entity arrives in epic 2.
+ */
+import EmptyState from '../../components/EmptyState.astro';
+import Shell from '../../layouts/Shell.astro';
+
+export const prerender = false;
+---
+
+<Shell active="projects" title="PROJECTS" count="0 projects">
+  <EmptyState
+    testId="projects-empty"
+    headline="NO PROJECTS"
+    lines={[
+      'No project is registered.',
+      'A project holds the repositories a run works in, the context written to project-context.md, and the environment the harness receives.',
+    ]}
+  />
+</Shell>

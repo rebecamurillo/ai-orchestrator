@@ -1,0 +1,50 @@
+---
+/**
+ * The darkest element in the product, on `surface-inset` inside a `line-strong` frame: the
+ * one thing on screen that is not part of the app but a quotation from the operator's own
+ * shell. An eyebrow bar names it; the body is the literal command.
+ *
+ * It is horizontally scrollable and never soft-wrapped, because a wrapped command is a
+ * command that breaks when it is pasted. This is the static half — the Copy control needs
+ * the clipboard and arrives with the island that owns it.
+ */
+interface Props {
+  label: string;
+  command: string;
+  testId?: string;
+}
+
+const { label, command, testId } = Astro.props;
+---
+
+<figure class="block" data-testid={testId}>
+  <figcaption class="eyebrow">{label}</figcaption>
+  <pre class="command">{command}</pre>
+</figure>
+
+<style>
+  .block {
+    background: var(--color-surface-inset);
+    border: 1px solid var(--color-line-strong);
+  }
+
+  .eyebrow {
+    padding: var(--space-3) var(--space-5);
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-eyebrow);
+    letter-spacing: var(--type-eyebrow-tracking);
+    text-transform: var(--type-eyebrow-transform);
+  }
+
+  .command {
+    margin: 0;
+    padding: var(--space-5);
+    overflow-x: auto;
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: var(--type-command);
+    line-height: var(--type-command-line);
+    white-space: pre;
+  }
+</style>

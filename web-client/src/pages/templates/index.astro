@@ -1,0 +1,21 @@
+---
+/**
+ * Templates — the versions list, the YAML editor, and the diagram rendered from the backend
+ * graph. The shipped templates are seeded in epic 3; nothing is stored yet.
+ */
+import EmptyState from '../../components/EmptyState.astro';
+import Shell from '../../layouts/Shell.astro';
+
+export const prerender = false;
+---
+
+<Shell active="templates" title="TEMPLATES" count="0 versions">
+  <EmptyState
+    testId="templates-empty"
+    headline="NO TEMPLATES"
+    lines={[
+      'No template version is stored.',
+      'A template declares the steps a run executes, the gates between them, and the inputs bound when it starts.',
+    ]}
+  />
+</Shell>

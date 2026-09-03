@@ -1,0 +1,78 @@
+---
+/**
+ * One shell wraps every route (UX-DR3): a fixed rail on the left, a surface bar over the
+ * body, a footer readout under it. This is the only module that imports the stylesheets, so
+ * the token set reaches a screen exactly once and no page can render outside it.
+ *
+ * The four footer figures default to zero and an em dash. Nothing in this story has data to
+ * put there; the readout still states what it measured and when, which is the difference
+ * between a screen that is empty and a screen that is stale.
+ */
+import AppRail, { type RailItem } from '../components/AppRail.astro';
+import FooterReadout from '../components/FooterReadout.astro';
+import SurfaceBar from '../components/SurfaceBar.astro';
+import '../styles/tokens.css';
+import '../styles/base.css';
+
+interface Props {
+  active: RailItem;
+  title: string;
+  count?: string;
+  workflows?: number;
+  runs?: number;
+  needsYou?: number;
+  running?: number;
+  queued?: number;
+  updated?: string;
+}
+
+const {
+  active,
+  title,
+  count,
+  workflows = 0,
+  runs = 0,
+  needsYou = 0,
+  running = 0,
+  queued = 0,
+  updated = '—',
+} = Astro.props;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>{title} · ai-orchestrator</title>
+  </head>
+  <body>
+    <div class="shell">
+      <AppRail active={active} workflows={workflows} runs={runs} needsYou={needsYou} />
+      <div class="surface">
+        <SurfaceBar title={title} count={count} />
+        <main class="body"><slot /></main>
+        <FooterReadout running={running} queued={queued} needsYou={needsYou} updated={updated} />
+      </div>
+    </div>
+  </body>
+</html>
+
+<style>
+  .shell {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  .surface {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .body {
+    flex: 1;
+    width: 100%;
+    max-width: var(--page-max);
+  }
+</style>

@@ -1,0 +1,156 @@
+---
+/**
+ * The fixed 172px rail (UX-DR3). It never collapses: this is a desktop surface for one
+ * operator at a desk, and a rail that hides is a rail that has to be found again.
+ *
+ * Counts are plain figures in tertiary grey — never a red pill or an unread dot, which
+ * would imply someone is waiting on a reply rather than a machine waiting on a decision.
+ * The one exception is the amber `n need you`, and it is not rendered at all when n is 0.
+ * That is what makes "an empty screen has no amber pixel" true by construction (NFR-6).
+ */
+export type RailItem = 'workflows' | 'runs' | 'projects' | 'templates';
+
+interface Props {
+  active: RailItem;
+  workflows?: number;
+  runs?: number;
+  needsYou?: number;
+}
+
+const { active, workflows = 0, runs = 0, needsYou = 0 } = Astro.props;
+
+const items: { id: RailItem; label: string; href: string; count: number }[] = [
+  { id: 'workflows', label: 'Workflows', href: '/', count: workflows },
+  { id: 'runs', label: 'Runs', href: '/runs', count: runs },
+];
+
+const configure: { id: RailItem; label: string; href: string }[] = [
+  { id: 'projects', label: 'Projects', href: '/projects' },
+  { id: 'templates', label: 'Templates', href: '/templates' },
+];
+---
+
+<nav class="rail" aria-label="Surfaces">
+  <div class="brand">
+    <span class="name">ai-orchestrator</span>
+    <span class="subtitle">MVP · single operator</span>
+  </div>
+
+  <ul class="group">
+    {
+      items.map((item) => (
+        <li>
+          <a
+            class="item"
+            href={item.href}
+            data-testid={`nav-${item.id}`}
+            aria-current={active === item.id ? 'page' : undefined}
+          >
+            <span class="label">{item.label}</span>
+            {item.count > 0 && <span class="count">{item.count}</span>}
+          </a>
+          {item.id === 'workflows' && needsYou > 0 && (
+            <span class="needs-you" data-testid="nav-needs-you" data-signal="needs-you">
+              {needsYou} need you
+            </span>
+          )}
+        </li>
+      ))
+    }
+  </ul>
+
+  <p class="group-label">CONFIGURE</p>
+  <ul class="group">
+    {
+      configure.map((item) => (
+        <li>
+          <a
+            class="item"
+            href={item.href}
+            data-testid={`nav-${item.id}`}
+            aria-current={active === item.id ? 'page' : undefined}
+          >
+            <span class="label">{item.label}</span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</nav>
+
+<style>
+  .rail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    width: var(--rail-width);
+    min-width: var(--rail-width);
+    padding: var(--space-8) 0;
+    background: var(--color-surface-rail);
+    border-right: 1px solid var(--color-line);
+  }
+
+  .brand {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: 0 var(--space-6) var(--space-6);
+  }
+
+  .name {
+    color: var(--color-text);
+    font-size: var(--type-row-title);
+    line-height: var(--type-row-title-line);
+  }
+
+  .subtitle {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-micro);
+    line-height: var(--type-micro-line);
+  }
+
+  .group-label {
+    padding: var(--space-6) var(--space-6) var(--space-2);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-column-head);
+    letter-spacing: var(--type-column-head-tracking);
+    text-transform: var(--type-column-head-transform);
+  }
+
+  .item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-6);
+    color: var(--color-text-secondary);
+    font-size: var(--type-body);
+    line-height: var(--type-body-line);
+    text-decoration: none;
+  }
+
+  .item:hover {
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  /* the one box-shadow in the system: an inset marker, structurally a border, not elevation */
+  .item[aria-current='page'] {
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    box-shadow: inset 2px 0 0 var(--color-accent);
+  }
+
+  .count {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-meta);
+  }
+
+  .needs-you {
+    display: block;
+    padding: 0 var(--space-6) var(--space-2);
+    color: var(--color-signal-needs-you);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+</style>

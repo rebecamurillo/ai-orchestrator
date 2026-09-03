@@ -1,0 +1,88 @@
+/*
+ * The ground every component sits on: a reset that removes the browser's own visual
+ * grammar, the page plane, the one type family, and the focus ring.
+ *
+ * The reset is opinionated on purpose. `border-radius: 0` and `font-weight: 400` are set
+ * globally rather than per component, so a rounded corner or a bold heading cannot arrive
+ * by inheriting a user-agent default — the two rules the design calls absolute are absolute
+ * by construction, and `tests/unit/stylesheets.test.ts` keeps them that way.
+ */
+
+:root {
+  /* dark-first, and there is no light theme: telling the browser so is what makes the
+     scrollbars, the text-field interiors and the form controls it draws itself sit on the
+     same ground as the app instead of arriving white in the middle of an instrument */
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  border-radius: 0;
+  font-weight: 400;
+}
+
+html {
+  /* below roughly 1024px the app scrolls horizontally rather than reflowing: a wide layout
+     is more honest than one that silently drops columns from the fixed record grid */
+  min-width: 1024px;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+  line-height: var(--type-body-line);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+figure {
+  margin: 0;
+  padding: 0;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* UX-DR19: a 1px accent outline at 1px offset on every focusable element. It is never
+   removed and never replaced by a background change; no rule in this product sets
+   `outline: none`, which is what `tests/unit/stylesheets.test.ts` asserts. */
+:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}

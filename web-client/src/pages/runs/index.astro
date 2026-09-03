@@ -1,0 +1,21 @@
+---
+/**
+ * Runs — every attempt: the engine queue on top, the history below. Both read models arrive
+ * in epic 4; before the first run there is no queue and no history to print.
+ */
+import EmptyState from '../../components/EmptyState.astro';
+import Shell from '../../layouts/Shell.astro';
+
+export const prerender = false;
+---
+
+<Shell active="runs" title="RUNS" count="0 attempts">
+  <EmptyState
+    testId="runs-empty"
+    headline="NO RUNS"
+    lines={[
+      'No run has been started, so the engine queue is empty.',
+      'Every attempt is recorded here once a run exists: one row per step, newest first.',
+    ]}
+  />
+</Shell>

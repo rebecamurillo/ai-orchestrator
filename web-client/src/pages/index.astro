@@ -1,16 +1,23 @@
 ---
-// Placeholder. Story 1.4 replaces this with the Board inside the instrument-dark shell;
-// until then the route exists so the smoke test has something to assert about (AD-18).
+/**
+ * Workflows — the home surface. The board of runs by status arrives with the read models in
+ * epic 4; until a project exists there is nothing to run, so the readout says so and names
+ * the two surfaces that change it.
+ */
+import EmptyState from '../components/EmptyState.astro';
+import Shell from '../layouts/Shell.astro';
+
 export const prerender = false;
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>ai-orchestrator</title>
-  </head>
-  <body>
-    <main>web-client up</main>
-  </body>
-</html>
+<Shell active="workflows" title="WORKFLOWS" count="0 runs">
+  <EmptyState
+    testId="board-empty"
+    headline="NOTHING REGISTERED"
+    lines={[
+      'No project is registered, so no run can be started.',
+      'A project binds the repositories a run works in; register one on /projects.',
+      'A run is then started from a template on /workflows/new.',
+    ]}
+  />
+</Shell>

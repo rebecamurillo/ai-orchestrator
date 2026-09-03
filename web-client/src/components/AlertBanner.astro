@@ -1,0 +1,41 @@
+---
+/**
+ * The one place a signal colour extends beyond a 7px chip: a 2px left rule on a raised
+ * ground, at the top of a detail when something has stopped. It is a rule, not a fill —
+ * the ground stays `surface-raised` and the text stays primary, so the banner is legible
+ * as text rather than read as a coloured area.
+ *
+ * Two levels, because v1 has two things that stop a run: it needs you, or it failed. The
+ * text carries the reason in words; the colour only says which of the two it is.
+ */
+export type Level = 'needs-you' | 'failed';
+
+interface Props {
+  level: Level;
+  text: string;
+  testId?: string;
+}
+
+const { level, text, testId } = Astro.props;
+---
+
+<aside class="banner" data-signal={level} data-testid={testId} role="status">{text}</aside>
+
+<style>
+  .banner {
+    padding: var(--space-5) var(--space-6);
+    background: var(--color-surface-raised);
+    border-left: 2px solid var(--color-line-strong);
+    color: var(--color-text);
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+  }
+
+  .banner[data-signal='needs-you'] {
+    border-left-color: var(--color-signal-needs-you);
+  }
+
+  .banner[data-signal='failed'] {
+    border-left-color: var(--color-signal-failed);
+  }
+</style>

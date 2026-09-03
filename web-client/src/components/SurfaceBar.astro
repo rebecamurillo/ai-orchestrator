@@ -1,0 +1,48 @@
+---
+/**
+ * Every surface opens with one of these and never with a hero (UX-DR3): the surface name,
+ * a count readout beside it, then whatever filters the surface offers, right-aligned, over
+ * a hairline. The bar states where you are and how much is here — nothing else.
+ */
+interface Props {
+  title: string;
+  count?: string;
+}
+
+const { title, count } = Astro.props;
+---
+
+<header class="bar">
+  <h1 class="title" data-testid="surface-title">{title}</h1>
+  {count && <span class="count">{count}</span>}
+  <div class="filters"><slot name="filters" /></div>
+</header>
+
+<style>
+  .bar {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-6);
+    padding: var(--space-7) var(--space-8);
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  .title {
+    color: var(--color-text);
+    font-size: var(--type-surface-title);
+    letter-spacing: var(--type-surface-title-tracking);
+    text-transform: var(--type-surface-title-transform);
+  }
+
+  .count {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+
+  .filters {
+    display: flex;
+    gap: var(--space-4);
+    margin-left: auto;
+  }
+</style>

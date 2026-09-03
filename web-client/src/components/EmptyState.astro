@@ -1,0 +1,50 @@
+---
+/**
+ * An empty state in this product is a readout too (NFR-8): an uppercase headline, then the
+ * lines that say what is happening instead. Never an illustration, never a mascot, never a
+ * congratulation, and never a call-to-action as the only content.
+ */
+interface Props {
+  testId: string;
+  headline: string;
+  lines: string[];
+}
+
+const { testId, headline, lines } = Astro.props;
+---
+
+<section class="empty" data-testid={testId}>
+  <p class="headline">{headline}</p>
+  <ul class="lines">
+    {lines.map((line) => <li>{line}</li>)}
+  </ul>
+</section>
+
+<style>
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-6);
+    padding: var(--section-gap) var(--space-8);
+    text-align: center;
+  }
+
+  .headline {
+    color: var(--color-text);
+    font-size: var(--type-surface-title);
+    letter-spacing: var(--type-surface-title-tracking);
+    text-transform: var(--type-surface-title-transform);
+  }
+
+  .lines {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    color: var(--color-text-secondary);
+    font-size: var(--type-meta);
+    /* the one place meta is set looser than its role: DESIGN.md sets the empty-state body
+       at 1.9 so a three-line readout reads as a list of facts, not as a paragraph */
+    line-height: 1.9;
+  }
+</style>
