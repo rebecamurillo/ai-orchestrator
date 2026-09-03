@@ -4,9 +4,12 @@ version = "0.1.0"
 description = "ai-orchestrator backend-api — plans, executes, and parks BMAD dev-loop Runs"
 requires-python = "==3.14.*"
 dependencies = [
+    "alembic==1.19.1",
     "fastapi==0.141.1",
+    "psycopg[binary]==3.3.5",
     "pydantic==2.13.5",
     "pydantic-settings==2.15.0",
+    "sqlalchemy==2.0.52",
     "structlog==26.1.0",
     "uvicorn==0.52.4",
 ]
@@ -20,6 +23,7 @@ dev = [
     "ruff==0.16.5",
     "mypy==2.3.1",
     "import-linter==2.14",
+    "schemathesis==4.25.2",
 ]
 
 [build-system]

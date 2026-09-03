@@ -22,9 +22,9 @@ test:
 	$(PYTHON_RUN) pytest tests/unit -q
 
 ## e2e-api — httpx scenarios + schemathesis against the running stack
+## needs: docker compose up -d postgres, the app running, and BACKEND_API_URL + ORCHESTRATOR_TOKEN exported
 e2e-api:
-	@echo "not available until story 1.2" >&2
-	@exit 1
+	$(PYTHON_RUN) pytest tests/e2e -q
 
 ## e2e-ui — playwright against astro preview
 e2e-ui:

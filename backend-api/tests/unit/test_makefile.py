@@ -23,7 +23,6 @@ pytestmark = pytest.mark.skipif(shutil.which("make") is None, reason="make not o
 
 # target -> the story that makes it real
 PENDING_TARGETS = {
-    "e2e-api": "1.2",
     "e2e-ui": "1.3",
     "openapi": "1.3",
     "up": "1.6",

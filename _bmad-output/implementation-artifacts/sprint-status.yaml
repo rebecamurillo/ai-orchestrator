@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-03-2026 09:16
-last_updated: 09-03-2026 13:34
+last_updated: 09-03-2026 20:40
 project: ai-orchestrator
 project_key: NOKEY
 tracking_system: file-system
@@ -37,7 +37,7 @@ story_location: _bmad-output/implementation-artifacts
 development_status:
   epic-1: in-progress
   1-1-repository-constitution-and-backend-api-skeleton-with-layeri: review
-  1-2-database-migrations-bearer-auth-and-api-conventions: backlog
+  1-2-database-migrations-bearer-auth-and-api-conventions: review
   1-3-generated-contract-and-web-client-skeleton: backlog
   1-4-design-tokens-and-the-instrument-dark-shell: backlog
   1-5-operator-token-login: backlog

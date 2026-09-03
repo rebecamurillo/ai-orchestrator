@@ -20,19 +20,53 @@ setting exists in one place and not the other. Copy it once, fill it in, and nev
 cp .env.example .env        # then fill in the tokens and keys
 ```
 
-Bringing the stack up (`make up`) arrives with the container images in story 1.6.
+Bringing the whole stack up (`make up`) arrives with the container images in story 1.6. Until
+then the database runs in compose and backend-api runs on the host.
+
+`DATABASE_URL` in the contract names the compose service (`@postgres:5432`), because that is
+what the containers will use. It does not resolve from a shell on this machine, so a host run
+overrides it — without that line the process dies in the migration step:
+
+```bash
+set -a; . ./.env; set +a                       # the contract both components read
+docker compose up -d postgres                  # postgres:18, published on 127.0.0.1:5432
+
+export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
+uv run --locked --directory backend-api python -m orchestrator.main
+```
+
+The process logs one `migrations applied` line carrying the Alembic revision and then binds —
+it never serves a half-migrated schema. Check the schema with:
+
+```bash
+docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'select * from alembic_version'
+```
 
 The gates that decide whether work is done. Epic 1 is being built story by story, so a target
 whose story has not landed yet exits non-zero with `not available until story <id>` rather than
-silently passing — today only `lint` and `test` do real work:
+silently passing:
 
 ```bash
 make lint        # ruff · mypy · import-linter · env-contract check   (story 1.1 — works)
 make test        # backend unit tests (pytest)                        (story 1.1 — works)
-make e2e-api     # httpx scenarios + schemathesis against the stack   (story 1.2)
+make e2e-api     # httpx scenarios + schemathesis against the stack   (story 1.2 — works)
 make openapi     # export contracts/openapi.json, regenerate types    (story 1.3)
 make e2e-ui      # playwright against astro preview                   (story 1.3)
 make up / down   # docker compose: web-client, backend-api, postgres  (story 1.6)
+```
+
+`make e2e-api` needs the database and the application running (above). It reads three
+variables from the environment: `ORCHESTRATOR_TOKEN`, which `.env` supplies, and
+`BACKEND_API_URL` and `DATABASE_URL`, which a host run overrides — the first because the
+contract names the compose service, the second for the same reason the application run
+overrides it. The migration scenarios open their own connection, so leaving `DATABASE_URL`
+at its contract value fails the gate with `failed to resolve host 'postgres'`. It waits up
+to 30 seconds for `/healthz`; it never skips.
+
+```bash
+set -a; . ./.env; set +a
+export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
+BACKEND_API_URL=http://127.0.0.1:8000 make e2e-api
 ```
 
 ## Setting up the BMAD method on a new machine
