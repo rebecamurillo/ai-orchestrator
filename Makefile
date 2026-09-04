@@ -15,7 +15,7 @@ PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
 # --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
 NODE_RUN := $(PNPM) --dir $(WEB) run
 
-.PHONY: lint test coverage e2e-api e2e-ui images openapi up down logs
+.PHONY: lint test coverage e2e-api e2e-ui images openapi up down logs host-up host-down host-logs host-doctor host-env-sync
 
 ## lint — ruff · mypy (strict on domain/ and application/) · import-linter · env-contract check
 ##        · test pairs · contract drift · eslint · prettier --check · tsc --noEmit · astro check
@@ -81,6 +81,36 @@ up:
 ## `docker compose down -v` would delete all three; that is a deliberate act, not a target
 down:
 	docker compose down
+
+## ── the host stack: LiteLLM and Langfuse (host/docker-compose.yml) ──────────
+## Separate from the product stack on purpose: different lifecycle, its own data, and it
+## stays up across a `make down`. See host/README.md.
+HOST_COMPOSE := docker compose -f host/docker-compose.yml --env-file host/.env
+
+## host-up — generate host/.env if absent, then start LiteLLM and Langfuse and wait
+host-up:
+	./host/generate-env.sh
+	$(HOST_COMPOSE) up -d --wait
+
+## host-down — stop the host stack, keeping its volumes
+## `$(HOST_COMPOSE) down -v` would drop Langfuse's traces and re-run the database init
+host-down:
+	$(HOST_COMPOSE) down
+
+## host-logs — follow the host stack's output
+host-logs:
+	$(HOST_COMPOSE) logs -f
+
+## host-env-sync — point the root .env at the running host stack (mints the harness key)
+host-env-sync:
+	./host/sync-env.sh
+
+## host-doctor — every harness checks its gateway and its skills, inside the backend image
+## this is the half of the doctor contract that needs a reachable gateway to prove
+host-doctor:
+	docker compose exec -T backend-api scripts/harness/claude.sh doctor
+	docker compose exec -T backend-api scripts/harness/codex.sh doctor
+	docker compose exec -T backend-api scripts/harness/opencode.sh doctor
 
 ## logs — follow every service's output
 logs:

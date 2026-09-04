@@ -1,0 +1,240 @@
+# The host stack — LiteLLM and Langfuse, the two services the orchestrator talks to but does
+# not own. `host/README.md` describes what they are for; this file is how they run on one
+# machine.
+#
+# Deliberately a separate compose project from the repository root's. The root file is the
+# product: three services, one network, asserted by `backend-api/tests/unit/test_compose.py`.
+# This one is local infrastructure — different lifecycle, different data, and it must be able
+# to stay up across a `make down`. The orchestrator reaches it through `host.docker.internal`
+# exactly as it would reach a LiteLLM running anywhere else, so nothing here is a special case
+# the production path does not have.
+#
+#   make host-up        generate host/.env if absent, start everything, wait for health
+#   make host-down      stop, keeping the volumes
+#   make host-doctor    run all three harness doctors against it
+#
+# Every port is published on 127.0.0.1. Every credential comes from `host/.env`, which
+# `host/generate-env.sh` writes and git ignores; none is spelled in this file (hard rule 5).
+
+name: ai-orchestrator-host
+
+services:
+  # ── Langfuse's transactional store, and LiteLLM's key and spend tables ──────
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${HOST_POSTGRES_USER:?set it in host/.env — run make host-up}
+      POSTGRES_PASSWORD: ${HOST_POSTGRES_PASSWORD:?set it in host/.env — run make host-up}
+      POSTGRES_DB: langfuse
+    # `10-create-databases.sh` adds the `litellm` database beside `langfuse`; one server, two
+    # databases, because LiteLLM's virtual keys and spend logs need their own schema
+    volumes:
+      - host-pgdata:/var/lib/postgresql
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      - '127.0.0.1:${HOST_POSTGRES_PORT:-5433}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${HOST_POSTGRES_USER} -d langfuse']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ── Langfuse's analytics store: traces, observations, scores ────────────────
+  # 25.12 is the oldest that parses Langfuse 4.27.0's migration 39, which declares a
+  # full-text index as `TYPE text(tokenizer = splitByNonAlpha)`. Every version through 25.9
+  # wants that tokenizer as a quoted literal and fails the migration with
+  # `Code: 80 ... Expected literal`, leaving `schema_migrations` dirty. Raising this pin is
+  # fine; lowering it below 25.12 is not.
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.12
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set it in host/.env — run make host-up}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set it in host/.env — run make host-up}
+      CLICKHOUSE_DB: default
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    volumes:
+      - host-clickhouse-data:/var/lib/clickhouse
+      - host-clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ['CMD-SHELL', 'clickhouse-client --user $${CLICKHOUSE_USER} --password $${CLICKHOUSE_PASSWORD} --query "SELECT 1" || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # ── Langfuse's queue ───────────────────────────────────────────────────────
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--maxmemory-policy', 'noeviction']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ── S3-compatible storage for Langfuse's event and media uploads ───────────
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set it in host/.env — run make host-up}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set it in host/.env — run make host-up}
+    volumes:
+      - host-minio:/data
+    ports:
+      # published because Langfuse hands the browser presigned URLs against this address
+      - '127.0.0.1:${MINIO_API_PORT:-9000}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9091}:9001'
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # `langfuse-web` refuses to start without its bucket; creating it is a job, not a service
+  minio-init:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    depends_on:
+      minio: { condition: service_healthy }
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing local/langfuse
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    restart: 'no'
+
+  # Starts after the web, not beside it. The web image applies the Prisma migrations that
+  # create the tables the worker queries, and both images attempt the ClickHouse migration —
+  # two of them racing on an empty database leave `schema_migrations` dirty, after which
+  # every start fails with "Dirty database version N". One migrator, then the other.
+  langfuse-worker:
+    image: langfuse/langfuse-worker:4.27.0
+    restart: unless-stopped
+    depends_on:
+      langfuse-web: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    environment: &langfuse-env
+      DATABASE_URL: postgresql://${HOST_POSTGRES_USER}:${HOST_POSTGRES_PASSWORD}@postgres:5432/langfuse
+      SALT: ${LANGFUSE_SALT:?set it in host/.env — run make host-up}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?set it in host/.env — run make host-up}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set it in host/.env — run make host-up}
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_PORT:-3000}
+      TELEMETRY_ENABLED: 'false'
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: 'false'
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_CLUSTER_ENABLED: 'false'
+      REDIS_CONNECTION_STRING: redis://redis:6379
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: 'true'
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: 'true'
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+    healthcheck:
+      # next-server binds this container's eth0 address, not 0.0.0.0 — 127.0.0.1 is refused
+      test: ['CMD-SHELL', 'wget -qO- "http://$$(hostname -i):3030/api/health" >/dev/null || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  langfuse-web:
+    image: langfuse/langfuse:4.27.0
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    environment:
+      <<: *langfuse-env
+      # provisioned on first start, so the keys the orchestrator already holds are valid
+      # immediately and no one has to click through a sign-up form
+      LANGFUSE_INIT_ORG_ID: optimai
+      LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME:-OptimAI}
+      LANGFUSE_INIT_PROJECT_ID: ai-orchestrator
+      LANGFUSE_INIT_PROJECT_NAME: ${LANGFUSE_INIT_PROJECT_NAME:-ai-orchestrator}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:?set it in host/.env — run make host-up}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:?set it in host/.env — run make host-up}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-operator@example.com}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-Operator}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:?set it in host/.env — run make host-up}
+    ports:
+      - '127.0.0.1:${LANGFUSE_PORT:-3000}:3000'
+    healthcheck:
+      # next-server binds this container's eth0 address, not 0.0.0.0 — 127.0.0.1 is refused
+      test: ['CMD-SHELL', 'wget -qO- "http://$$(hostname -i):3000/api/public/health" >/dev/null || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  # ── The Gateway ────────────────────────────────────────────────────────────
+  # The `-database` image is the one that runs the Prisma migration, which is what makes
+  # `/key/generate` and `/spend/logs/v2` work — the two routes AD-5 splits across two keys.
+  litellm:
+    image: ghcr.io/berriai/litellm-database:v1.99.0
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      langfuse-web: { condition: service_healthy }
+    command: ['--config', '/app/config.yaml', '--port', '4000']
+    volumes:
+      # the committed configuration, unchanged: this stack runs what the README documents
+      - ./litellm.config.yaml:/app/config.yaml:ro
+    environment:
+      DATABASE_URL: postgresql://${HOST_POSTGRES_USER}:${HOST_POSTGRES_PASSWORD}@postgres:5432/litellm
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set it in host/.env — run make host-up}
+      STORE_MODEL_IN_DB: 'False'
+      # required by the langfuse_otel callback: the v1 exporter drops the langfuse_* and
+      # x-litellm-* headers the adapters attribute spend and traces with (AD-11)
+      LITELLM_OTEL_V2: 'true'
+      LANGFUSE_HOST: http://langfuse-web:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-not-set}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-not-set}
+      # oMLX is a host process; a container reaches it through the gateway, not localhost
+      OMLX_BASE_URL: ${OMLX_BASE_URL:-http://host.docker.internal:8000/v1}
+      OMLX_API_KEY: ${OMLX_API_KEY:-not-set}
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '127.0.0.1:${LITELLM_PORT:-4000}:4000'
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request, sys; sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:4000/health/liveliness").status == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  host-pgdata:
+  host-clickhouse-data:
+  host-clickhouse-logs:
+  host-minio:
