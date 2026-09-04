@@ -206,6 +206,15 @@ adds a full smoke for `/` plus four more routes. This is a deviation to be ratif
 precedent: no other existing test file is touched, and `backend-api/tests/unit/test_makefile.py`
 comes out byte-identical.
 
+**Ratified by the operator on 2026-09-04, commit `055e228`.** Hard rule 1 now carries a second
+named exception covering exactly this case: a test that names a later story as the thing that
+replaces what it asserts may have that assertion revised by that story, and only if the same
+commit adds coverage that strictly exceeds it. The same amendment says not to write such an
+assertion in the first place — a test covering a placeholder asserts that the route is served,
+not the placeholder's copy. The verification that made the conflict undeniable: restoring 1.3's
+file and running the gate gives `1 failed, 22 passed`, `make e2e-ui` exit 2, with
+`Expected: "web-client up"` against a `main` that reads `NOTHING REGISTERED…`.
+
 ## Design Notes
 
 `data-signal` is what makes the signal rule checkable from both ends. `StatusToken` maps the eight
