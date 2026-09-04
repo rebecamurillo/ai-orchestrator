@@ -129,8 +129,9 @@ once: with the stack up, Playwright refuses with `127.0.0.1:4321 is already used
 
 ## Contributing
 
-The four gates decide whether work is done, and they run in one order — `lint`, then `test`,
-then `e2e-api`, then `e2e-ui`. A failing gate stops the ones after it, locally and in CI:
+The five gates decide whether work is done, and they run in one order — `lint`, then `test`,
+then `e2e-api`, then `e2e-ui`, then `images`. A failing gate stops the ones after it, locally
+and in CI:
 
 ```bash
 make lint        # ruff · mypy · import-linter · env contract · test pairs · contract drift · eslint · prettier · tsc · astro check
@@ -139,9 +140,10 @@ make coverage    # changed lines >= 90 %, against the branch this work forks fro
 make e2e-api     # httpx scenarios + schemathesis against a running stack
 make e2e-ui      # playwright against the built web-client and a stubbed backend
 make openapi     # re-export the contract; CI then fails on any diff (AD-3)
+make images      # build both container images without starting anything
 ```
 
-`.github/workflows/ci.yml` runs those same targets as four jobs chained by `needs:`, one run
+`.github/workflows/ci.yml` runs those same targets as five jobs chained by `needs:`, one run
 per ref. The lint job also re-exports the contract and refuses any diff, so a hand-edited
 `contracts/openapi.json` fails there rather than reaching the browser as a type that lies. It calls no command the Makefile does not hold, and it carries no credential: the
 e2e job copies `.env.example` to `.env` and runs on the committed placeholders.
@@ -159,6 +161,11 @@ Two rules are enforced rather than asked for:
   fails with the path of the module that is not. `__init__.py`, `main.py`, generated and
   ambient declarations, and `.astro` page routes are exempt — everything else has a test
   module of its own.
+
+`make images` is last because it is the slowest and the only one that needs a Docker
+daemon. It is also the only gate that proves a Dockerfile still builds: every gate before it
+runs from source, so without it `backend-api/Dockerfile` or `web-client/Dockerfile` could
+break and no pipeline would notice until someone ran `make up`.
 
 Before opening a change: `make lint && make test && make coverage`, then `make e2e-api` and
 `make e2e-ui`. The last two cannot run at the same time as `make up`; both bind

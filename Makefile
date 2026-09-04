@@ -15,7 +15,7 @@ PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
 # --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
 NODE_RUN := $(PNPM) --dir $(WEB) run
 
-.PHONY: lint test coverage e2e-api e2e-ui openapi up down logs
+.PHONY: lint test coverage e2e-api e2e-ui images openapi up down logs
 
 ## lint — ruff · mypy (strict on domain/ and application/) · import-linter · env-contract check
 ##        · test pairs · contract drift · eslint · prettier --check · tsc --noEmit · astro check
@@ -57,6 +57,12 @@ e2e-api:
 e2e-ui:
 	$(NODE_RUN) build
 	$(NODE_RUN) e2e
+
+## images — build both container images without starting anything
+## `make up` builds them too, but only as a side effect of running the stack; this is the
+## gate that proves a Dockerfile still builds, on a runner with no ports to bind
+images:
+	docker compose build
 
 ## openapi — export contracts/openapi.json, then regenerate the web-client types (AD-3)
 ## the exporter writes through a temporary file: `> contracts/openapi.json` would empty the

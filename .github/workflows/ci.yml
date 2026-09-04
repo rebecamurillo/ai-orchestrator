@@ -169,3 +169,18 @@ jobs:
         # `make e2e-ui` builds first, then runs Playwright against the built server and a
         # stubbed backend-api — no database and no backend process are needed here
         run: make e2e-ui
+
+  images:
+    needs: e2e-ui
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Fill the environment contract with its committed placeholders
+        # `docker compose build` interpolates the file before it reads the build stanzas,
+        # and the `${VAR:?}` guards refuse an unset variable (hard rule 7)
+        run: cp .env.example .env
+      - name: Gate
+        # The only gate that proves a Dockerfile still builds. `make up` builds them too,
+        # but nothing before this job runs it: every earlier gate runs from source.
+        run: make images

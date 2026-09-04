@@ -1,7 +1,7 @@
 """The pipeline, read as a document rather than trusted as prose.
 
 Nothing in this repository can run GitHub Actions, so the workflow is asserted here: the
-four gates in AD-18's fixed order, each one a `make` target that exists, chained by `needs:`
+five gates in AD-18's fixed order, each one a `make` target that exists, chained by `needs:`
 so a red gate stops the ones after it. What local execution proves is that those targets
 pass on this machine; what this module proves is that CI runs those targets and no others,
 in that order, with no credential of its own.
@@ -22,8 +22,14 @@ MAKEFILE = REPO_ROOT / "Makefile"
 README = REPO_ROOT / "README.md"
 
 #: AD-18, in order. The value is the `make` target the job must run.
-GATES = ("lint", "unit", "e2e-api", "e2e-ui")
-GATE_TARGETS = {"lint": "lint", "unit": "test", "e2e-api": "e2e-api", "e2e-ui": "e2e-ui"}
+GATES = ("lint", "unit", "e2e-api", "e2e-ui", "images")
+GATE_TARGETS = {
+    "lint": "lint",
+    "unit": "test",
+    "e2e-api": "e2e-api",
+    "e2e-ui": "e2e-ui",
+    "images": "images",
+}
 
 #: `owner/repo@<full commit sha>` — a moving tag is not a pin.
 PINNED_ACTION = re.compile(r"^[\w.-]+/[\w.-]+(/[\w.-]+)*@[0-9a-f]{40}$")
@@ -77,7 +83,7 @@ def test_the_pipeline_reads_the_repository_and_writes_nothing(workflow: dict[str
     assert workflow["permissions"] == {"contents": "read"}
 
 
-def test_the_four_gates_are_the_four_jobs(jobs: dict[str, Any]) -> None:
+def test_the_gates_are_the_jobs(jobs: dict[str, Any]) -> None:
     assert tuple(jobs) == GATES
 
 
