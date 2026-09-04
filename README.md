@@ -11,6 +11,166 @@ The product is specified, not yet built. Everything that decides what gets built
 | Epics and stories (8 epics, 66 stories) | `mvp/epics/epics.md`, `mvp/epics/epics.yaml`, one folder per epic |
 | UX experience and visual system | `ux-designs/ux-v1-dev-loop-2026-08-26/`, `ux-designs/ux-ai-orchestrator-2026-08-25/DESIGN.md` |
 
+## Running it
+
+Configuration is the environment (AD-20): `.env.example` is the contract, `make lint` fails when a
+setting exists in one place and not the other. Copy it once, fill it in, and never commit the result.
+
+```bash
+cp .env.example .env        # then fill in the tokens and keys
+make up                     # build the images and start web-client, backend-api, postgres
+```
+
+`make up` is `docker compose up -d --build`. The first run builds both images, which takes
+minutes: the backend image installs Node 24, the three harness CLIs at their pinned versions,
+and the BMAD skill stubs. When it returns, `docker compose ps` shows three services and every
+one of them reaches `healthy` — the backend after `alembic upgrade head`, the web-client after
+`/login` answers.
+
+```bash
+curl -fs http://127.0.0.1:8000/healthz     # {"status":"ok", …}
+open http://127.0.0.1:4321/login           # the token from .env logs in
+```
+
+Both ports are published on `127.0.0.1` only, like the database: one operator at one machine.
+Reaching the stack from another host is a host-level decision (a tunnel), not a compose one.
+The addresses are written as `127.0.0.1` rather than `localhost` for the same reason
+`astro.config.mjs` pins it: `localhost` also resolves to `::1`, which nothing here listens on.
+
+The model gateway (LiteLLM), the tracing server (Langfuse) and the model server run on the host
+rather than in compose, and `backend-api` reaches them through `host.docker.internal`. Setting
+them up — the two Gateway keys, the `langfuse_otel` callback, the egress allowlist and the
+nightly `pg_dump` — is `host/README.md`, with `host/litellm.config.yaml` as the starting config.
+
+```bash
+make logs                                # follow every service
+make down                                # stop the stack; pgdata, work and agent-home survive
+docker compose down -v                   # the deliberate act that also deletes them
+```
+
+Inside the backend container everything an agent needs is already there, as the non-root user
+`agent`:
+
+```bash
+docker compose exec backend-api sh -c 'id -un; claude --version; codex --version; opencode --version'
+docker compose exec backend-api scripts/harness/claude.sh doctor   # version · skills · gateway
+```
+
+### Running backend-api from a shell instead
+
+`DATABASE_URL` in the contract names the compose service (`@postgres:5432`), because that is
+what the containers use. It does not resolve from a shell on this machine, so a host run
+overrides it — without that line the process dies in the migration step:
+
+```bash
+set -a; . ./.env; set +a                       # the contract both components read
+docker compose up -d postgres                  # postgres:18, published on 127.0.0.1:5432
+
+export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
+uv run --locked --directory backend-api python -m orchestrator.main
+```
+
+The process logs one `migrations applied` line carrying the Alembic revision and then binds —
+it never serves a half-migrated schema. Check the schema with:
+
+```bash
+docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'select * from alembic_version'
+```
+
+The gates that decide whether work is done. Every one of them runs; a target whose tooling a
+later story still brings would exit non-zero with `not available until story <id>` rather than
+pass silently, and none is in that state:
+
+```bash
+make lint        # ruff · mypy · import-linter · env-contract · eslint · prettier · tsc · astro check
+make test        # backend unit tests (pytest) + web-client unit tests (vitest)
+make e2e-api     # httpx scenarios + schemathesis against the stack   (story 1.2)
+make openapi     # export contracts/openapi.json, regenerate types    (story 1.3)
+make e2e-ui      # playwright against the built web-client            (story 1.3)
+make up / down   # docker compose: web-client, backend-api, postgres  (story 1.6)
+```
+
+`make e2e-api` runs against a stack that is already up, and never skips: it waits up to 30
+seconds for `/healthz` and then fails, naming the address it tried. It reads three variables.
+`ORCHESTRATOR_TOKEN` comes from `.env` as it is. `BACKEND_API_URL` and `DATABASE_URL` both name
+the compose service in the contract, which is what the containers resolve and a shell does not,
+so a run from this machine overrides them — the migration scenarios open their own connection,
+and leaving `DATABASE_URL` alone fails the gate with `failed to resolve host 'postgres'`.
+
+```bash
+set -a; . ./.env; set +a
+export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
+BACKEND_API_URL=http://127.0.0.1:8000 make e2e-api      # against `make up`, or against a host run
+```
+
+### The web-client half
+
+`make lint`, `make test`, `make openapi` and `make e2e-ui` all run web-client tooling, so they
+need Node 24 and pnpm 11.25.0 (pnpm comes from corepack; the first call downloads it). Two
+one-time steps per machine:
+
+```bash
+pnpm --dir web-client install --frozen-lockfile
+pnpm --dir web-client exec playwright install chromium     # ~95 MB, for make e2e-ui only
+```
+
+`make openapi` needs neither `.env` nor the database: it builds the application with dummy
+settings, writes `contracts/openapi.json`, and regenerates `web-client/src/api/schema.d.ts`
+from it. Both files are committed, and `make lint` fails when either is out of date — the
+TypeScript types for an API payload are generated, never written by hand (AD-3).
+
+`make e2e-ui` builds web-client and runs Playwright against the built server on
+`127.0.0.1:4321`, with a stub backend-api on `127.0.0.1:8788`. It needs no database and no
+running backend; `E2E_BACKEND=real` points the same specs at a real one instead.
+
+That is the same address `make up` publishes the web-client on, so the two cannot run at
+once: with the stack up, Playwright refuses with `127.0.0.1:4321 is already used`. Run
+`make down` first, or give the container a different `WEB_CLIENT_PORT` in `.env`.
+
+## Contributing
+
+The five gates decide whether work is done, and they run in one order — `lint`, then `test`,
+then `e2e-api`, then `e2e-ui`, then `images`. A failing gate stops the ones after it, locally
+and in CI:
+
+```bash
+make lint        # ruff · mypy · import-linter · env contract · test pairs · contract drift · eslint · prettier · tsc · astro check
+make test        # backend unit tests + web-client unit tests, both with coverage
+make coverage    # changed lines >= 90 %, against the branch this work forks from
+make e2e-api     # httpx scenarios + schemathesis against a running stack
+make e2e-ui      # playwright against the built web-client and a stubbed backend
+make openapi     # re-export the contract; CI then fails on any diff (AD-3)
+make images      # build both container images without starting anything
+```
+
+`.github/workflows/ci.yml` runs those same targets as five jobs chained by `needs:`, one run
+per ref. The lint job also re-exports the contract and refuses any diff, so a hand-edited
+`contracts/openapi.json` fails there rather than reaching the browser as a type that lies. It calls no command the Makefile does not hold, and it carries no credential: the
+e2e job copies `.env.example` to `.env` and runs on the committed placeholders.
+
+Two rules are enforced rather than asked for:
+
+- **Coverage.** `orchestrator.domain` and `orchestrator.application` are at 100 % branch
+  coverage — `make test` re-reports over those two packages with `--fail-under=100` after the
+  suite runs — and `web-client/src/lib/**` and `src/stores/**` at 90 % lines. Changed lines
+  must be 90 % covered (`make coverage`). Raise a number by writing a test; a threshold that
+  is lowered, a file that is excluded, or a `pragma: no cover` added to reach it is the
+  failure the gate exists to catch.
+- **Test pairs.** Every module under `backend-api/src/` is imported by a module under
+  `tests/unit/`, and every module under `web-client/src/` is named by one, or `make lint`
+  fails with the path of the module that is not. `__init__.py`, `main.py`, generated and
+  ambient declarations, and `.astro` page routes are exempt — everything else has a test
+  module of its own.
+
+`make images` is last because it is the slowest and the only one that needs a Docker
+daemon. It is also the only gate that proves a Dockerfile still builds: every gate before it
+runs from source, so without it `backend-api/Dockerfile` or `web-client/Dockerfile` could
+break and no pipeline would notice until someone ran `make up`.
+
+Before opening a change: `make lint && make test && make coverage`, then `make e2e-api` and
+`make e2e-ui`. The last two cannot run at the same time as `make up`; both bind
+`127.0.0.1:4321`.
+
 ## Setting up the BMAD method on a new machine
 
 The repository commits the method itself (`_bmad/`: config, scripts, manifests, modules) so every clone carries the same version, **6.11.0**. Two things are per machine and git-ignored: the skill stubs Claude Code loads (`.claude/skills/bmad-*`, `.agents/skills/bmad-*`) and your personal install answers (`_bmad/config.user.toml`). Reinstall them once per machine with the steps below.

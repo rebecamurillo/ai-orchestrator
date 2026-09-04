@@ -7,3 +7,39 @@ _bmad/config.user.toml
 .claude/skills/bmad-*
 # macOS
 .DS_Store
+
+# ── Environment (AD-20) ─────────────────────────────────────────
+# .env.example is the committed contract; a filled .env never is.
+.env
+.env.*
+!.env.example
+
+# ── Python (backend-api) ────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.import_linter_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.egg-info/
+
+# ── Host side (AD-20, Operations) ───────────────────────────────
+# the nightly pg_dump lands here; the directory is tracked, its contents never are
+host/backups/*
+!host/backups/.gitkeep
+
+# ── Node (web-client) ───────────────────────────────────────────
+node_modules/
+.astro/
+dist/
+.pnpm-store/
+# playwright run output; the specs are committed, their artefacts are not
+test-results/
+playwright-report/
+# vitest coverage output; the backend's `.coverage`/`coverage.xml` are above
+coverage/

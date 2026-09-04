@@ -1,0 +1,47 @@
+{
+  "name": "web-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ai-orchestrator web-client — the only origin the Operator's browser talks to (AD-1)",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "node ./dist/server/entry.mjs",
+    "gen:api": "node scripts/gen-api.mjs",
+    "lint": "astro sync && astro check && tsc --noEmit && eslint . && prettier --check . && node scripts/check-test-pairs.mjs",
+    "test": "vitest run --coverage",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@astrojs/node": "11.1.5",
+    "@astrojs/react": "6.0.5",
+    "@nanostores/react": "1.1.0",
+    "astro": "7.2.10",
+    "nanostores": "1.5.2",
+    "openapi-fetch": "0.17.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.1",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@vitest/coverage-v8": "4.1.11",
+    "astro-eslint-parser": "3.1.0",
+    "eslint": "10.9.1",
+    "openapi-typescript": "7.13.0",
+    "prettier": "3.9.6",
+    "prettier-plugin-astro": "0.14.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.69.0",
+    "vitest": "4.1.11"
+  }
+}

@@ -1,0 +1,52 @@
+# The build context for backend-api/Dockerfile, which is the repository root: the image
+# needs `backend-api/` and `scripts/harness/` and nothing else.
+#
+# `.env` is the first line for a reason: a filled contract in the context would be copied
+# into a layer by any `COPY`, and an image layer is not a place a credential can be removed
+# from (hard rule 5).
+.env
+.env.*
+!.env.example
+
+# version control and the method's own trees
+.git
+.gitignore
+.github
+_bmad
+_bmad-output
+.claude
+.agents
+
+# generated trees — rebuilt inside the image, never copied into it
+node_modules
+dist
+.astro
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.import_linter_cache
+.hypothesis
+htmlcov
+.coverage
+.coverage.*
+coverage.xml
+test-results
+playwright-report
+
+# not part of either image
+web-client
+host
+templates
+contracts
+Makefile
+README.md
+GUIDELINES.md
+AGENTS.md
+CLAUDE.md
+idea.md
+temp
+docker-compose.yml
+.DS_Store

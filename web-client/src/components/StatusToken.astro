@@ -1,0 +1,69 @@
+---
+/**
+ * Status, encoded three times over: a fixed three-letter word, its position in the leftmost
+ * column of a row, and a 7px chip beside it. Read on a bad monitor, in sunlight, or by
+ * someone colour-blind, the word still carries the state on its own (UX-DR2).
+ *
+ * v1 narrows the palette to three hues. `data-signal` is the mapping, and it is what both
+ * the unit test and the stylesheet below read, so the colour a token gets cannot drift from
+ * the colour it is asserted to have. `skipped` and `cancelled` are grey: never green.
+ */
+export type Token = 'QUE' | 'RUN' | 'BLK' | 'CHK' | 'DON' | 'ERR' | 'CAN' | 'SKP';
+export type Signal = 'run' | 'needs-you' | 'failed' | 'neutral';
+
+const SIGNALS: Record<Token, Signal> = {
+  QUE: 'neutral',
+  RUN: 'run',
+  BLK: 'needs-you',
+  CHK: 'needs-you',
+  DON: 'neutral',
+  ERR: 'failed',
+  CAN: 'neutral',
+  SKP: 'neutral',
+};
+
+interface Props {
+  token: Token;
+}
+
+const { token } = Astro.props;
+const signal = SIGNALS[token] ?? 'neutral';
+---
+
+<span class="status" data-token={token} data-signal={signal}
+  ><span class="chip"></span><span class="label">{token}</span></span
+>
+
+<style>
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-size: var(--type-status-token);
+    letter-spacing: var(--type-status-token-tracking);
+  }
+
+  /* a 7px square, not a dot: a circle reads as a bullet or an avatar, a square reads as an
+     indicator lamp. `currentColor` is what keeps the chip and the token one colour. */
+  .chip {
+    width: 7px;
+    height: 7px;
+    background: currentColor;
+  }
+
+  .status[data-signal='run'] {
+    color: var(--color-signal-run);
+  }
+
+  .status[data-signal='needs-you'] {
+    color: var(--color-signal-needs-you);
+  }
+
+  .status[data-signal='failed'] {
+    color: var(--color-signal-failed);
+  }
+
+  .status[data-signal='neutral'] {
+    color: var(--color-text-tertiary);
+  }
+</style>

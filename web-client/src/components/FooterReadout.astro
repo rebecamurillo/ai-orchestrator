@@ -1,0 +1,31 @@
+---
+/**
+ * The footer readout (UX-DR3): what the engine is doing, what is waiting for the operator,
+ * and when the figures were last taken. It is a readout, not a status bar — the update time
+ * is stated so a stale screen says so rather than looking current.
+ *
+ * `updated` is a string because before the first poll there is no time to print; the shell
+ * passes an em dash and the line still reads as a measurement that has not been taken.
+ */
+interface Props {
+  running: number;
+  queued: number;
+  needsYou: number;
+  updated: string;
+}
+
+const { running, queued, needsYou, updated } = Astro.props;
+const readout = `${running} running · ${queued} queued / ${needsYou} need you / updated ${updated}`;
+---
+
+<footer class="readout" data-testid="footer-readout">{readout}</footer>
+
+<style>
+  .readout {
+    padding: var(--space-4) var(--space-8);
+    border-top: 1px solid var(--color-line);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+</style>

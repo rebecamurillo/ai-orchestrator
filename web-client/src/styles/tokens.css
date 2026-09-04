@@ -1,0 +1,130 @@
+/*
+ * The visual system (UX-DR1, DESIGN.md). Every colour, type role, spacing step and layout
+ * figure in the product is decided here and nowhere else; `tests/unit/tokens.test.ts` holds
+ * this file to the exact values, and `tests/unit/stylesheets.test.ts` refuses a hex literal
+ * anywhere but here.
+ *
+ * The register is instrumental: four near-black grounds, two hairline weights, three greys
+ * of text, three signal hues, one accent. Colour is signal and nothing else — anything
+ * filling an area larger than a 7px chip has gone wrong.
+ */
+:root {
+  /* Ground — four tonal planes, near-black and slightly green-cool, never warmed or tinted.
+     `surface-inset` is darker than the page and is reserved for the command block: the one
+     element that is a quotation from the operator's shell rather than part of the app. */
+  --color-bg: #0b0d0e;
+  --color-surface: #111416;
+  --color-surface-raised: #171b1d;
+  --color-surface-rail: #0e1113;
+  --color-surface-inset: #08090a;
+
+  /* Hairlines — structure comes from these two values, not from shadow and not from fill.
+     `line` divides; `line-strong` frames a self-contained thing. */
+  --color-line: #21272a;
+  --color-line-strong: #2c3438;
+
+  /* Text — three weights of legibility. Emphasis is text against text-secondary, never a
+     font weight. Nothing below tertiary exists. */
+  --color-text: #dde3e5;
+  --color-text-secondary: #8b979b;
+  --color-text-tertiary: #5c686c;
+
+  /* Signal — three hues, one rule: a row or card carries exactly one of them, on the 7px
+     chip and its three-letter token. Green is running, amber is "needs you", red failed. */
+  --color-signal-run: #4fb477;
+  --color-signal-needs-you: #e4b33c;
+  --color-signal-failed: #e05252;
+
+  /* Accent — interaction and identifier literals only. Pale teal sits outside the three
+     signal hues, so it can never be misread as a status. */
+  --color-accent: #7fd4c1;
+
+  /* One family, no second face, no weight above 400. Monospace is what makes ids, paths,
+     hashes, commands and timestamps align without effort — the product is made of those. */
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* The type ramp — fourteen roles between 10px and 19px. A role carries a line height, a
+     tracking or an uppercase transform only where the design states one; the tracking
+     widens as the size drops, which is what keeps a 10px all-caps head legible.
+     Uppercase is the labelling device: anything uppercase is a label, never content. */
+  --type-detail-title: 19px;
+  --type-detail-title-line: 1.3;
+  --type-detail-title-tracking: -0.01em;
+
+  --type-question: 14px;
+  --type-question-line: 1.7;
+
+  --type-command: 13px;
+  --type-command-line: 1.7;
+
+  --type-body: 13px;
+  --type-body-line: 1.45;
+
+  --type-surface-title: 13px;
+  --type-surface-title-tracking: 0.18em;
+  --type-surface-title-transform: uppercase;
+
+  --type-row-title: 12.5px;
+  --type-row-title-line: 1.4;
+
+  --type-row-body: 12.5px;
+  --type-row-body-line: 1.55;
+
+  --type-meta: 11.5px;
+  --type-meta-line: 1.45;
+
+  --type-micro: 11px;
+  --type-micro-line: 1.6;
+
+  --type-status-token: 11px;
+  --type-status-token-tracking: 0.1em;
+
+  --type-control: 11px;
+  --type-control-tracking: 0.12em;
+  --type-control-transform: uppercase;
+
+  --type-eyebrow: 10.5px;
+  --type-eyebrow-tracking: 0.16em;
+  --type-eyebrow-transform: uppercase;
+
+  --type-column-head: 10px;
+  --type-column-head-tracking: 0.18em;
+  --type-column-head-transform: uppercase;
+
+  --type-section-head: 10px;
+  --type-section-head-tracking: 0.22em;
+  --type-section-head-transform: uppercase;
+
+  /* Spacing — a 2px base. Dense contexts use 1–6, detail contexts 8–16; the 2px step is
+     what produces the odd intermediates the direction file names (5 = 10px, 7 = 14px). */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-9: 18px;
+  --space-10: 20px;
+  --space-11: 22px;
+  --space-12: 24px;
+  --space-13: 26px;
+  --space-14: 28px;
+  --space-15: 30px;
+  --space-16: 32px;
+
+  /* Layout — the rail never collapses; this is a desktop surface for one operator at a
+     desk. A detail body is narrower than a page because a 19px/1.7 question set at 1180px
+     is unreadable. `section-gap` is the largest vertical interval in the product. */
+  --rail-width: 172px;
+  --page-max: 1180px;
+  --detail-max: 940px;
+  --section-gap: 34px;
+
+  /* The record grid — type · project · repository · what · age. Fixed across the whole
+     product so the eye learns one horizontal position per field. A row that needs a sixth
+     field does not get one. */
+  --record-grid: 52px 128px 210px 1fr 74px;
+}

@@ -1,0 +1,47 @@
+---
+/**
+ * Label left in tertiary, value right-aligned in primary, a hairline between rows. Used for
+ * structured output, cost and gate results.
+ *
+ * Values that are ratios are printed as ratios — `$4.18 / $15.00`, `2/2`, `14/14` — never
+ * as a bar, a ring or a percentage. The caller formats them; this component only aligns.
+ */
+interface Props {
+  rows: { label: string; value: string }[];
+}
+
+const { rows } = Astro.props;
+---
+
+<table class="kv">
+  <tbody>
+    {
+      rows.map((row) => (
+        <tr>
+          <th scope="row">{row.label}</th>
+          <td>{row.value}</td>
+        </tr>
+      ))
+    }
+  </tbody>
+</table>
+
+<style>
+  .kv th,
+  .kv td {
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--color-line);
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+  }
+
+  .kv th {
+    color: var(--color-text-tertiary);
+    text-align: left;
+  }
+
+  .kv td {
+    color: var(--color-text);
+    text-align: right;
+  }
+</style>

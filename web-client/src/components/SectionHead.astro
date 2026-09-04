@@ -1,0 +1,26 @@
+---
+/**
+ * A section heading inside a detail page: the smallest, widest-tracked label in the ramp,
+ * in tertiary grey with a hairline under it. Sections are separated by `--section-gap`,
+ * which is the largest vertical interval in the product and the thing that makes a detail
+ * page read unhurried against the compression of a list.
+ */
+interface Props {
+  label: string;
+}
+
+const { label } = Astro.props;
+---
+
+<h2 class="head">{label}</h2>
+
+<style>
+  .head {
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-section-head);
+    letter-spacing: var(--type-section-head-tracking);
+    text-transform: var(--type-section-head-transform);
+  }
+</style>

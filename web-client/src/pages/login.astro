@@ -1,0 +1,148 @@
+---
+/**
+ * The only screen reachable without a session (UX-DR6), and the only page that renders
+ * outside the shell: a rail to four surfaces you cannot open yet would be furniture.
+ * A centred 400px panel on the page ground, and nothing else.
+ *
+ * The form is an Astro Action posting to this page as `?_action=login`, so a rejection
+ * re-renders here with no redirect and no toast, and the screen works with no JavaScript at
+ * all. On success the Action has already written the cookie, and this page is what turns
+ * that into the redirect to the Board.
+ *
+ * The hint states the mechanism rather than reassuring anyone (NFR-8): where the token
+ * comes from, and how long the session it buys will last.
+ */
+import { actions } from 'astro:actions';
+
+import Button from '../components/Button.astro';
+import '../styles/tokens.css';
+import '../styles/base.css';
+
+export const prerender = false;
+
+const result = Astro.getActionResult(actions.login);
+if (result && !result.error) return Astro.redirect('/');
+
+const rejected = Boolean(result?.error);
+
+// Astro maps the Action's `UNAUTHORIZED` onto a 401 for this render. That would describe a
+// whole HTML screen as an error document, and this product answers errors as
+// `application/problem+json`; 401 is reserved for the proxy refusing an API call, and 302
+// for "go and log in". The page itself rendered — it is the login attempt that failed, and
+// the screen says so in the line the Operator can read.
+if (rejected) Astro.response.status = 200;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>LOGIN · ai-orchestrator</title>
+  </head>
+  <body>
+    <main class="screen">
+      <section class="panel">
+        <div class="brand">
+          <span class="name">ai-orchestrator</span>
+          <span class="subtitle">MVP · single operator</span>
+        </div>
+
+        <form class="form" method="POST" action={actions.login}>
+          <label class="label" for="login-token">ACCESS TOKEN</label>
+          <input
+            class="input"
+            id="login-token"
+            data-testid="login-token"
+            type="password"
+            name="token"
+            autocomplete="off"
+            autofocus
+          />
+          <Button label="ENTER" variant="primary" type="submit" testId="login-submit" />
+        </form>
+
+        {
+          rejected ? (
+            <p class="rejected" data-testid="login-rejected">
+              token rejected
+            </p>
+          ) : (
+            <p class="hint" data-testid="login-hint">
+              the token is ORCHESTRATOR_TOKEN in the instance .env · session cookie lasts 30 days
+            </p>
+          )
+        }
+      </section>
+    </main>
+  </body>
+</html>
+
+<style>
+  .screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+
+  /* the one fixed width in the product that is not a token: nothing else is a 400px panel */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+    width: 400px;
+  }
+
+  .brand {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .name {
+    color: var(--color-text);
+    font-size: var(--type-body);
+  }
+
+  .subtitle {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-micro);
+  }
+
+  .form {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+
+  .label {
+    color: var(--color-text-secondary);
+    font-size: var(--type-eyebrow);
+    letter-spacing: var(--type-eyebrow-tracking);
+    text-transform: var(--type-eyebrow-transform);
+  }
+
+  .input {
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-line-strong);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: var(--type-body);
+  }
+
+  .hint {
+    color: var(--color-text-secondary);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+
+  /* the only signal colour this screen can ever paint, and only after a rejection */
+  .rejected {
+    color: var(--color-signal-failed);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+</style>

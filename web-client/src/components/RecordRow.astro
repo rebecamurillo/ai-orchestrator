@@ -1,0 +1,86 @@
+---
+/**
+ * The record row (UX-DR5). Five fixed columns — type · project · repository · what · age —
+ * the same on every surface in the product, so the eye learns one horizontal position per
+ * field and never re-scans. The grid is a contract, not a suggestion: a row that needs a
+ * sixth field does not get one.
+ *
+ * The whole row is one link target. Hover lifts the ground one plane and does nothing else:
+ * no border change, no transform, no shadow. Cells truncate rather than wrap — the fixed
+ * grid is worth more than the tail of a string.
+ */
+import StatusToken, { type Token } from './StatusToken.astro';
+
+interface Props {
+  token: Token;
+  project: string;
+  repository: string;
+  title: string;
+  hint: string;
+  age: string;
+  href: string;
+}
+
+const { token, project, repository, title, hint, age, href } = Astro.props;
+---
+
+<a class="row" href={href}>
+  <span class="cell"><StatusToken token={token} /></span>
+  <span class="cell secondary">{project}</span>
+  <span class="cell secondary">{repository}</span>
+  <span class="what">
+    <span class="cell title">{title}</span>
+    <span class="cell hint">{hint}</span>
+  </span>
+  <span class="cell age">{age}</span>
+</a>
+
+<style>
+  .row {
+    display: grid;
+    grid-template-columns: var(--record-grid);
+    align-items: baseline;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-6);
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+  }
+
+  .row:hover {
+    background: var(--color-surface-raised);
+    text-decoration: none;
+  }
+
+  .cell {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+  }
+
+  .what {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .title {
+    color: var(--color-text);
+    font-size: var(--type-row-title);
+    line-height: var(--type-row-title-line);
+  }
+
+  /* the hint carries *why this row is here* — the question asked, the failing spec */
+  .hint,
+  .age {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+
+  .age {
+    text-align: right;
+  }
+</style>

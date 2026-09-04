@@ -1,0 +1,26 @@
+# The build context for web-client/Dockerfile, which is `web-client/` itself.
+#
+# `.env` is listed first: the component reads its configuration from the process
+# environment through `astro:env` (AD-20), and a contract file in the context could be
+# copied into a layer (hard rule 5).
+.env
+.env.*
+
+# installed and generated trees — rebuilt inside the image
+node_modules
+dist
+.astro
+test-results
+playwright-report
+
+# tooling that is not part of the served application
+tests
+playwright.config.ts
+vitest.config.ts
+eslint.config.js
+.prettierrc.json
+.prettierignore
+AGENTS.md
+Dockerfile
+.dockerignore
+.DS_Store
