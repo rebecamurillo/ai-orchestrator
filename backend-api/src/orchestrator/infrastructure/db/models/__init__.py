@@ -8,5 +8,6 @@ exactly that reason: a model nothing imported would be invisible to `alembic
 from __future__ import annotations
 
 from orchestrator.infrastructure.db.models.project import ProjectRow
+from orchestrator.infrastructure.db.models.repository import RepositoryRow
 
-__all__ = ["ProjectRow"]
+__all__ = ["ProjectRow", "RepositoryRow"]

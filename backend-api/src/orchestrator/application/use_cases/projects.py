@@ -41,11 +41,19 @@ from orchestrator.domain.entities.project import (
     numbered_slug,
     slugify,
 )
+from orchestrator.domain.entities.repository import (
+    DEFAULT_PACKAGE_MANAGER,
+    CloneCheck,
+    PackageManager,
+    Repository,
+    merge_test_globs,
+    repo_slug,
+)
 from orchestrator.domain.errors import Conflict, Invalid, NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.crypto import Crypto
-from orchestrator.domain.ports.repositories import ProjectRepository
+from orchestrator.domain.ports.repositories import ProjectRepository, RepositoryRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 
 #: The first suffix a colliding slug is given: `my-website`, then `my-website-2`.
@@ -67,6 +75,10 @@ class ProjectPorts:
     projects: ProjectRepository
     crypto: Crypto
     clock: Clock
+    #: `None` only for the frozen Project-only tests that construct `ProjectPorts` without
+    #: it; `api/providers.py` always supplies a real adapter, so only a `ProjectPorts` built
+    #: outside the router path can ever reach a repository use case without one.
+    repositories: RepositoryRepository | None = None
 
 
 @dataclass(frozen=True)
@@ -213,3 +225,150 @@ def _plaintexts(stored: Iterable[EncryptedEnvVar], crypto: Crypto) -> dict[str, 
 def _masked(project: Project, crypto: Crypto) -> ProjectView:
     """The read model. The plaintexts are decrypted, masked, and dropped on the same line."""
     return project.view(_plaintexts(project.env_vars_enc, crypto))
+
+
+# ── repository ───────────────────────────────────────────────────────────────
+#
+# Register the git repositories a Run works in. `POST` and `PUT` share one rule each: the
+# `test_globs` merge always applies, `clone_check` is never written here, and the slug is
+# derived once and never recomputed. A duplicate `url` is a `Conflict` scoped to the
+# Project it was posted under — the same `url` under another Project is unremarkable.
+
+
+@dataclass(frozen=True)
+class RepositoryDraft:
+    """What the Operator asked for, with the shape rules already applied by the API."""
+
+    url: str
+    default_branch: str
+    install_command: str = ""
+    quality_gate_command: str = ""
+    unit_test_command: str = ""
+    #: Globs the Operator asked to add, on top of `DEFAULT_TEST_GLOBS`.
+    test_globs: tuple[str, ...] = ()
+    package_manager: PackageManager = DEFAULT_PACKAGE_MANAGER
+
+
+def add_repository(ports: ProjectPorts, project_id: UUID, draft: RepositoryDraft) -> Repository:
+    """Register a Repository under a Project, its `clone_check` starting `pending`."""
+    repositories = _repos(ports)
+    _require(ports.projects, project_id)
+    siblings = repositories.list_by_project(project_id)
+    _refuse_duplicate_url(siblings, draft.url)
+    now = ports.clock.now()
+    repository = Repository(
+        id=new_id(),
+        project_id=project_id,
+        slug=_free_repo_slug(siblings, draft.url),
+        url=draft.url,
+        default_branch=draft.default_branch,
+        install_command=draft.install_command,
+        quality_gate_command=draft.quality_gate_command,
+        unit_test_command=draft.unit_test_command,
+        test_globs=merge_test_globs(draft.test_globs),
+        package_manager=draft.package_manager,
+        clone_check=CloneCheck.pending(),
+        created_at=now,
+        updated_at=now,
+    )
+    repositories.add(repository)
+    ports.uow.commit()
+    return repository
+
+
+def get_repository(ports: ProjectPorts, repository_id: UUID) -> Repository:
+    """One stored Repository."""
+    return _require_repository(_repos(ports), repository_id)
+
+
+def list_repositories_by_project(ports: ProjectPorts, project_id: UUID) -> list[Repository]:
+    """Every Repository stored under this Project, in the order they were created."""
+    _require(ports.projects, project_id)
+    return _repos(ports).list_by_project(project_id)
+
+
+def embedded_repositories(ports: ProjectPorts, project_id: UUID) -> list[Repository]:
+    """The Repositories `ProjectRead` embeds — `[]` when no repository store is attached.
+
+    Every route that renders a `ProjectRead` (create, read, update, list) calls this rather
+    than `list_repositories_by_project`: a `ProjectPorts` with `repositories is None` is the
+    frozen Project-only test harnesses that predate this port (see `ProjectPorts`'s
+    docstring), not a wiring bug, and a Project genuinely has no Repository to show them.
+    `api/providers.py` always supplies a real adapter, so a production read still queries
+    truthfully — this never silently substitutes an empty list where a real one exists.
+    """
+    if ports.repositories is None:
+        return []
+    return ports.repositories.list_by_project(project_id)
+
+
+def update_repository(
+    ports: ProjectPorts, repository_id: UUID, draft: RepositoryDraft
+) -> Repository:
+    """Replace a Repository's editable fields. Its `clone_check` and slug are untouched."""
+    repositories = _repos(ports)
+    stored = _require_repository(repositories, repository_id)
+    siblings = repositories.list_by_project(stored.project_id)
+    _refuse_duplicate_url(siblings, draft.url, excluding=stored.id)
+    updated = stored.model_copy(
+        update={
+            "url": draft.url,
+            "default_branch": draft.default_branch,
+            "install_command": draft.install_command,
+            "quality_gate_command": draft.quality_gate_command,
+            "unit_test_command": draft.unit_test_command,
+            "test_globs": merge_test_globs(draft.test_globs),
+            "package_manager": draft.package_manager,
+            "updated_at": ports.clock.now(),
+        }
+    )
+    repositories.update(updated)
+    ports.uow.commit()
+    return updated
+
+
+def _repos(ports: ProjectPorts) -> RepositoryRepository:
+    """Type-narrow `ports.repositories` for mypy strict.
+
+    `api/providers.py` always builds a `ProjectPorts` with a real adapter; a `None` here
+    means a repository use case was reached through a `ProjectPorts` some other caller
+    built without one — a wiring bug, reported loudly rather than as a `None` deref.
+    """
+    if ports.repositories is None:
+        raise RuntimeError("ProjectPorts.repositories is not set: a repository use case needs it")
+    return ports.repositories
+
+
+def _require_repository(repositories: RepositoryRepository, repository_id: UUID) -> Repository:
+    stored = repositories.get(repository_id)
+    if stored is None:
+        raise NotFound(f"no repository with id {repository_id}")
+    return stored
+
+
+def _refuse_duplicate_url(
+    siblings: list[Repository],
+    url: str,
+    *,
+    excluding: UUID | None = None,
+) -> None:
+    """A `url` identifies a Repository within its Project; the same one twice is a conflict.
+
+    The same `url` under a different Project is unremarkable — a monorepo the whole team
+    clones under two Projects, say — so the caller passes only that Project's Repositories.
+    """
+    for repository in siblings:
+        if repository.url == url and repository.id != excluding:
+            raise Conflict(f"a repository with url {url!r} already exists in this project")
+
+
+def _free_repo_slug(siblings: list[Repository], url: str) -> str:
+    """The URL's slug, numbered until it is one no Repository in this Project holds."""
+    base = repo_slug(url)
+    taken = {repository.slug for repository in siblings}
+    if base not in taken:
+        return base
+    number = FIRST_SLUG_SUFFIX
+    while numbered_slug(base, number) in taken:
+        number += 1
+    return numbered_slug(base, number)

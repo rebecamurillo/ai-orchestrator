@@ -32,7 +32,7 @@ export interface paths {
         };
         /**
          * List every Project
-         * @description Every Project, ordered by name, each with its variables masked.
+         * @description Every Project, ordered by name, each with its variables masked and Repositories embedded.
          *
          *     One page: the whole list is small enough that a cursor would be ceremony. The envelope
          *     is the same one every list in this API uses, so paging can arrive without a break.
@@ -58,8 +58,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read one Project
-         * @description One Project, with every variable masked. An unknown id is a 404 problem document.
+         * Read one Project, with its Repositories
+         * @description One Project, with every variable masked and its Repositories embedded, in creation
+         *     order. An unknown id is a 404 problem document.
          */
         get: operations["get_project_api_v1_projects__project_id__get"];
         /**
@@ -69,9 +70,58 @@ export interface paths {
          *     A variable sent without a value keeps the ciphertext already stored, which is how a
          *     form that was never given the secret can send the set back without losing it. An
          *     omitted `log_prompt_content` keeps the stored switch for the same reason; no instance
-         *     default is read here, so this route takes no settings.
+         *     default is read here, so this route takes no settings. Its Repositories are untouched
+         *     by this route and are re-read, not carried over from before the call.
          */
         put: operations["update_project_api_v1_projects__project_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a Project's Repositories
+         * @description Every Repository stored under this Project, in the order they were created.
+         */
+        get: operations["list_repositories_api_v1_projects__project_id__repositories_get"];
+        put?: never;
+        /**
+         * Register a Repository under a Project
+         * @description Store a Repository, its `clone_check` starting `pending` (2.3 is what runs one).
+         */
+        post: operations["add_repository_api_v1_projects__project_id__repositories_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repository_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one Repository
+         * @description One stored Repository. An unknown id is a 404 problem document.
+         */
+        get: operations["get_repository_api_v1_repositories__repository_id__get"];
+        /**
+         * Update a Repository
+         * @description Replace a Repository's editable fields. Its `clone_check` and slug are untouched.
+         */
+        put: operations["update_repository_api_v1_repositories__repository_id__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -100,6 +150,20 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * CloneCheckOut
+         * @description `clone_check` as every read returns it. `"pending"` until 2.3's `run_clone_check`.
+         */
+        CloneCheckOut: {
+            /** At */
+            at: string | null;
+            /** Bmad Version */
+            bmad_version: string | null;
+            /** Output */
+            output: string;
+            /** Status */
+            status: string;
+        };
         /**
          * EnvVarCreate
          * @description One requested variable on a create, where there is nothing to keep.
@@ -144,6 +208,13 @@ export interface components {
         Page_ProjectRead_: {
             /** Items */
             items: components["schemas"]["ProjectRead"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[RepositoryOut] */
+        Page_RepositoryOut_: {
+            /** Items */
+            items: components["schemas"]["RepositoryOut"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -216,7 +287,12 @@ export interface components {
         };
         /**
          * ProjectRead
-         * @description A Project as every read returns it. There is no field here that could hold a value.
+         * @description A Project as every read returns it, its Repositories embedded.
+         *
+         *     Every read answers the same shape (POST's 201, PUT's 200, both GETs) — a Repository
+         *     added between two reads is exactly the kind of state change the Operator relies on the
+         *     next read to show, and a narrower shape for the list or the create response would have
+         *     to justify why *that* read is allowed to lie about what is stored.
          */
         ProjectRead: {
             /** Context Paths */
@@ -236,6 +312,8 @@ export interface components {
             log_prompt_content: boolean;
             /** Name */
             name: string;
+            /** Repositories */
+            repositories: components["schemas"]["RepositoryOut"][];
             /** Slug */
             slug: string;
             /** Updated At */
@@ -259,6 +337,111 @@ export interface components {
             log_prompt_content?: boolean | null;
             /** Name */
             name: string;
+        };
+        /**
+         * RepositoryCreate
+         * @description `POST /projects/{project_id}/repositories`.
+         */
+        RepositoryCreate: {
+            /** Default Branch */
+            default_branch: string;
+            /**
+             * Install Command
+             * @default
+             */
+            install_command: string;
+            /**
+             * Package Manager
+             * @default other
+             * @enum {string}
+             */
+            package_manager: "uv" | "pnpm" | "npm" | "yarn" | "pip" | "cargo" | "go" | "other";
+            /**
+             * Quality Gate Command
+             * @default
+             */
+            quality_gate_command: string;
+            /** Test Globs */
+            test_globs?: string[];
+            /**
+             * Unit Test Command
+             * @default
+             */
+            unit_test_command: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * RepositoryOut
+         * @description A Repository as every read returns it.
+         */
+        RepositoryOut: {
+            clone_check: components["schemas"]["CloneCheckOut"];
+            /** Created At */
+            created_at: string;
+            /** Default Branch */
+            default_branch: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Install Command */
+            install_command: string;
+            /** Package Manager */
+            package_manager: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Quality Gate Command */
+            quality_gate_command: string;
+            /** Slug */
+            slug: string;
+            /** Test Globs */
+            test_globs: string[];
+            /** Unit Test Command */
+            unit_test_command: string;
+            /** Updated At */
+            updated_at: string;
+            /** Url */
+            url: string;
+            /** Verify Skipped */
+            verify_skipped: boolean;
+        };
+        /**
+         * RepositoryUpdate
+         * @description `PUT /repositories/{repository_id}`.
+         */
+        RepositoryUpdate: {
+            /** Default Branch */
+            default_branch: string;
+            /**
+             * Install Command
+             * @default
+             */
+            install_command: string;
+            /**
+             * Package Manager
+             * @default other
+             * @enum {string}
+             */
+            package_manager: "uv" | "pnpm" | "npm" | "yarn" | "pip" | "cargo" | "go" | "other";
+            /**
+             * Quality Gate Command
+             * @default
+             */
+            quality_gate_command: string;
+            /** Test Globs */
+            test_globs?: string[];
+            /**
+             * Unit Test Command
+             * @default
+             */
+            unit_test_command: string;
+            /** Url */
+            url: string;
         };
     };
     responses: never;
@@ -480,6 +663,242 @@ export interface operations {
                 };
             };
             /** @description Another Project already holds that name. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_repositories_api_v1_projects__project_id__repositories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_RepositoryOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project or Repository has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    add_repository_api_v1_projects__project_id__repositories_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepositoryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepositoryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project or Repository has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Another Repository in this Project already holds that url. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_repository_api_v1_repositories__repository_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repository_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepositoryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project or Repository has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    update_repository_api_v1_repositories__repository_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repository_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepositoryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepositoryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project or Repository has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Another Repository in this Project already holds that url. */
             409: {
                 headers: {
                     [name: string]: unknown;

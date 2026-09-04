@@ -14,6 +14,10 @@ One rule does surface here, and only because it is configuration: a create that 
 object is the only place that value exists, and a use case may not read the environment. An
 update omitting the same field keeps what is stored, so `PUT` reads no setting at all.
 
+Every operation renders `ProjectRead`, which embeds `repositories`: each one calls
+`use_cases.embedded_repositories` after its own use case, so the answer is never a stale
+snapshot from before the Repository router's last write.
+
 Each operation declares every refusal it can answer, and no other. A route taking a path
 parameter or a body would otherwise have FastAPI publish a 422 of its own shape, putting
 `HTTPValidationError` in the contract the browser generates from (AD-3) while the server
@@ -42,6 +46,7 @@ from orchestrator.api.schemas.common import Page
 from orchestrator.api.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
 from orchestrator.application.use_cases import projects as use_cases
 from orchestrator.application.use_cases.projects import ProjectPorts
+from orchestrator.domain.entities.project import ProjectView
 from orchestrator.infrastructure.settings import Settings
 
 router = APIRouter(tags=["projects"])
@@ -73,18 +78,23 @@ Ports = Annotated[ProjectPorts, Depends(project_ports)]
 Config = Annotated[Settings, Depends(get_settings)]
 
 
+def _read(ports: ProjectPorts, view: ProjectView) -> ProjectRead:
+    """`ProjectRead.of`, given the Repositories this Project actually has right now."""
+    return ProjectRead.of(view, use_cases.embedded_repositories(ports, view.id))
+
+
 @router.get(
     "/projects",
     response_model=Page[ProjectRead],
     summary="List every Project",
 )
 def list_projects(ports: Ports) -> Page[ProjectRead]:
-    """Every Project, ordered by name, each with its variables masked.
+    """Every Project, ordered by name, each with its variables masked and Repositories embedded.
 
     One page: the whole list is small enough that a cursor would be ceremony. The envelope
     is the same one every list in this API uses, so paging can arrive without a break.
     """
-    items = [ProjectRead.of(view) for view in use_cases.list_projects(ports)]
+    items = [_read(ports, view) for view in use_cases.list_projects(ports)]
     return Page[ProjectRead](items=items, next_cursor=None)
 
 
@@ -97,24 +107,24 @@ def list_projects(ports: Ports) -> Page[ProjectRead]:
 )
 def create_project(payload: ProjectCreate, ports: Ports, settings: Config) -> ProjectRead:
     """Store a Project. Every variable value is encrypted before it is written (AD-5)."""
-    return ProjectRead.of(
-        use_cases.create_project(
-            ports,
-            payload.as_draft(),
-            log_prompt_content_default=settings.log_prompt_content_default,
-        )
+    view = use_cases.create_project(
+        ports,
+        payload.as_draft(),
+        log_prompt_content_default=settings.log_prompt_content_default,
     )
+    return _read(ports, view)
 
 
 @router.get(
     "/projects/{project_id}",
     response_model=ProjectRead,
-    summary="Read one Project",
+    summary="Read one Project, with its Repositories",
     responses=READ_REFUSALS,
 )
 def get_project(project_id: UUID, ports: Ports) -> ProjectRead:
-    """One Project, with every variable masked. An unknown id is a 404 problem document."""
-    return ProjectRead.of(use_cases.get_project(ports, project_id))
+    """One Project, with every variable masked and its Repositories embedded, in creation
+    order. An unknown id is a 404 problem document."""
+    return _read(ports, use_cases.get_project(ports, project_id))
 
 
 @router.put(
@@ -129,6 +139,7 @@ def update_project(project_id: UUID, payload: ProjectUpdate, ports: Ports) -> Pr
     A variable sent without a value keeps the ciphertext already stored, which is how a
     form that was never given the secret can send the set back without losing it. An
     omitted `log_prompt_content` keeps the stored switch for the same reason; no instance
-    default is read here, so this route takes no settings.
+    default is read here, so this route takes no settings. Its Repositories are untouched
+    by this route and are re-read, not carried over from before the call.
     """
-    return ProjectRead.of(use_cases.update_project(ports, project_id, payload.as_draft()))
+    return _read(ports, use_cases.update_project(ports, project_id, payload.as_draft()))

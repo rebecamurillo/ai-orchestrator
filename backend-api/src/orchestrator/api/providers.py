@@ -34,7 +34,11 @@ from fastapi import Request
 
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.infrastructure.clock import SystemClock
-from orchestrator.infrastructure.db import SQLAlchemyProjectRepository, SQLAlchemyUnitOfWork
+from orchestrator.infrastructure.db import (
+    SQLAlchemyProjectRepository,
+    SQLAlchemyRepositoryRepository,
+    SQLAlchemyUnitOfWork,
+)
 
 #: The attributes `create_app` stores its adapters under.
 SESSION_FACTORY = "session_factory"
@@ -60,6 +64,7 @@ def project_ports(request: Request) -> Iterator[ProjectPorts]:
         yield ProjectPorts(
             uow=uow,
             projects=SQLAlchemyProjectRepository(uow.session),
+            repositories=SQLAlchemyRepositoryRepository(uow.session),
             crypto=crypto(),
             clock=SystemClock(),
         )

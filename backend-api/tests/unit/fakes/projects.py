@@ -12,6 +12,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from orchestrator.domain.entities.project import Project
+from orchestrator.domain.entities.repository import Repository
 
 
 class FakeProjectRepository:
@@ -42,3 +43,31 @@ class FakeProjectRepository:
         if project.id not in self.projects:
             raise ValueError(f"no project with id {project.id} is stored")
         self.projects[project.id] = project
+
+
+class FakeRepositoryRepository:
+    """Stored Repositories in a dictionary, keyed by id."""
+
+    def __init__(self, repositories: list[Repository] | None = None) -> None:
+        self.repositories: dict[UUID, Repository] = {}
+        for repository in repositories or []:
+            self.add(repository)
+
+    def add(self, repository: Repository) -> None:
+        if repository.id in self.repositories:
+            raise ValueError(f"a repository with id {repository.id} is already stored")
+        self.repositories[repository.id] = repository
+
+    def get(self, repository_id: UUID) -> Repository | None:
+        return self.repositories.get(repository_id)
+
+    def list_by_project(self, project_id: UUID) -> list[Repository]:
+        return sorted(
+            (r for r in self.repositories.values() if r.project_id == project_id),
+            key=lambda repository: repository.created_at,
+        )
+
+    def update(self, repository: Repository) -> None:
+        if repository.id not in self.repositories:
+            raise ValueError(f"no repository with id {repository.id} is stored")
+        self.repositories[repository.id] = repository

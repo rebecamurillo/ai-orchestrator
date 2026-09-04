@@ -15,6 +15,7 @@ from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from orchestrator.domain.entities.project import Project
+from orchestrator.domain.entities.repository import Repository
 
 
 @runtime_checkable
@@ -39,4 +40,25 @@ class ProjectRepository(Protocol):
 
     def update(self, project: Project) -> None:
         """Replace the stored Project with this one, matched on its id."""
+        ...
+
+
+@runtime_checkable
+class RepositoryRepository(Protocol):
+    """Stored Repositories, each scoped to the Project it is nested under."""
+
+    def add(self, repository: Repository) -> None:
+        """Store a Repository that does not exist yet."""
+        ...
+
+    def get(self, repository_id: UUID) -> Repository | None:
+        """The Repository with this id, or `None`."""
+        ...
+
+    def list_by_project(self, project_id: UUID) -> list[Repository]:
+        """Every Repository stored under this Project, ordered by creation time."""
+        ...
+
+    def update(self, repository: Repository) -> None:
+        """Replace the stored Repository with this one, matched on its id."""
         ...

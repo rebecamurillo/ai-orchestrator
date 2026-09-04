@@ -37,7 +37,7 @@ from sqlalchemy.orm import Session
 
 from orchestrator.api.deps import require_bearer
 from orchestrator.api.errors import UNAUTHORIZED_RESPONSE, install_error_handlers
-from orchestrator.api.routers import ping, projects
+from orchestrator.api.routers import ping, projects, repositories
 from orchestrator.domain.ports.crypto import Crypto
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db import create_engine_from, create_session_factory
@@ -144,6 +144,12 @@ def create_app(
     )
     app.include_router(
         projects.router,
+        prefix=API_PREFIX,
+        dependencies=[Depends(require_bearer)],
+        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
+    )
+    app.include_router(
+        repositories.router,
         prefix=API_PREFIX,
         dependencies=[Depends(require_bearer)],
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},

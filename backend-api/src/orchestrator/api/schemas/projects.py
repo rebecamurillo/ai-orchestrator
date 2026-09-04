@@ -29,7 +29,11 @@ from uuid import UUID
 from pydantic import AfterValidator, BaseModel, Field
 
 from orchestrator.api.schemas.common import StorableText, UtcTimestamp
-from orchestrator.application.use_cases.projects import EnvVarInput, ProjectDraft
+from orchestrator.application.use_cases.projects import (
+    EnvVarInput,
+    ProjectDraft,
+    RepositoryDraft,
+)
 from orchestrator.domain.entities.project import (
     ENV_NAME_REASON,
     RESERVED_ENV_REASON,
@@ -37,6 +41,12 @@ from orchestrator.domain.entities.project import (
     is_reserved_env_name,
     is_valid_env_name,
 )
+from orchestrator.domain.entities.repository import (
+    DEFAULT_PACKAGE_MANAGER,
+    PackageManager,
+    Repository,
+)
+from orchestrator.domain.rules.globs import GLOB_REASON, is_valid_glob
 
 #: Said back to the Operator when one payload names the same variable twice.
 DUPLICATE_ENV_REASON = "duplicate variable name"
@@ -112,8 +122,67 @@ class MaskedEnvVarOut(BaseModel):
     masked: str
 
 
+class CloneCheckOut(BaseModel):
+    """`clone_check` as every read returns it. `"pending"` until 2.3's `run_clone_check`."""
+
+    status: str
+    at: UtcTimestamp | None
+    output: str
+    bmad_version: str | None
+
+
+class RepositoryOut(BaseModel):
+    """A Repository as every read returns it."""
+
+    id: UUID
+    project_id: UUID
+    slug: str
+    url: str
+    default_branch: str
+    install_command: str
+    quality_gate_command: str
+    unit_test_command: str
+    test_globs: list[str]
+    package_manager: str
+    clone_check: CloneCheckOut
+    verify_skipped: bool
+    created_at: UtcTimestamp
+    updated_at: UtcTimestamp
+
+    @classmethod
+    def of(cls, repository: Repository) -> RepositoryOut:
+        """Render the stored entity. `verify_skipped` is derived, never a stored column."""
+        return cls(
+            id=repository.id,
+            project_id=repository.project_id,
+            slug=repository.slug,
+            url=repository.url,
+            default_branch=repository.default_branch,
+            install_command=repository.install_command,
+            quality_gate_command=repository.quality_gate_command,
+            unit_test_command=repository.unit_test_command,
+            test_globs=list(repository.test_globs),
+            package_manager=repository.package_manager,
+            clone_check=CloneCheckOut(
+                status=repository.clone_check.status,
+                at=repository.clone_check.at,
+                output=repository.clone_check.output,
+                bmad_version=repository.clone_check.bmad_version,
+            ),
+            verify_skipped=repository.verify_skipped,
+            created_at=repository.created_at,
+            updated_at=repository.updated_at,
+        )
+
+
 class ProjectRead(BaseModel):
-    """A Project as every read returns it. There is no field here that could hold a value."""
+    """A Project as every read returns it, its Repositories embedded.
+
+    Every read answers the same shape (POST's 201, PUT's 200, both GETs) — a Repository
+    added between two reads is exactly the kind of state change the Operator relies on the
+    next read to show, and a narrower shape for the list or the create response would have
+    to justify why *that* read is allowed to lie about what is stored.
+    """
 
     id: UUID
     slug: str
@@ -122,13 +191,23 @@ class ProjectRead(BaseModel):
     context_paths: list[str]
     env_vars: list[MaskedEnvVarOut]
     log_prompt_content: bool
+    repositories: list[RepositoryOut]
     created_at: UtcTimestamp
     updated_at: UtcTimestamp
 
     @classmethod
-    def of(cls, view: ProjectView) -> ProjectRead:
-        """Render the use case's masked read model. The only way a Project leaves."""
-        return cls.model_validate(view.model_dump())
+    def of(cls, view: ProjectView, repositories: list[Repository] | None = None) -> ProjectRead:
+        """Render the use case's masked read model plus its Repositories, freshly queried.
+
+        `repositories` defaults to none stored: the frozen `test_project_schemas.py` calls
+        this with only a view, from before a Project could have any.
+        """
+        return cls.model_validate(
+            {
+                **view.model_dump(),
+                "repositories": [RepositoryOut.of(r) for r in repositories or []],
+            }
+        )
 
 
 class ProjectWrite(BaseModel):
@@ -176,3 +255,53 @@ class ProjectUpdate(ProjectWrite):
 
     def as_draft(self) -> ProjectDraft:
         return self._draft(self.env_vars)
+
+
+# ── repository ───────────────────────────────────────────────────────────────
+
+
+def _valid_glob(glob: str) -> str:
+    """The one rule a `test_globs` entry must satisfy — `domain/rules/globs.py`'s original."""
+    if not is_valid_glob(glob):
+        raise ValueError(GLOB_REASON)
+    return glob
+
+
+TestGlob = Annotated[StorableText, AfterValidator(_valid_glob)]
+
+
+class RepositoryWrite(BaseModel):
+    """What both `POST` and `PUT` require of a Repository.
+
+    `test_globs` here is only what the Operator asked to *add*: `merge_test_globs` in the
+    use case is what always keeps `DEFAULT_TEST_GLOBS` in the stored set, on both writes.
+    Neither `clone_check` nor the slug is a field here — nothing this story ships writes
+    the first, and the second never changes once derived.
+    """
+
+    url: Annotated[StorableText, Field(min_length=1)]
+    default_branch: Annotated[StorableText, Field(min_length=1)]
+    install_command: StorableText = ""
+    quality_gate_command: StorableText = ""
+    unit_test_command: StorableText = ""
+    test_globs: list[TestGlob] = Field(default_factory=list)
+    package_manager: PackageManager = DEFAULT_PACKAGE_MANAGER
+
+    def as_draft(self) -> RepositoryDraft:
+        return RepositoryDraft(
+            url=self.url,
+            default_branch=self.default_branch,
+            install_command=self.install_command,
+            quality_gate_command=self.quality_gate_command,
+            unit_test_command=self.unit_test_command,
+            test_globs=tuple(self.test_globs),
+            package_manager=self.package_manager,
+        )
+
+
+class RepositoryCreate(RepositoryWrite):
+    """`POST /projects/{project_id}/repositories`."""
+
+
+class RepositoryUpdate(RepositoryWrite):
+    """`PUT /repositories/{repository_id}`."""
