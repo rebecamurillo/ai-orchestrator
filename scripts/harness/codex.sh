@@ -40,6 +40,8 @@ metrics_exporter = "none"
 [otel.span_attributes]
 "service.name" = "codex-cli"
 TOML
+  # No key material today; held to the same mode so the three cannot drift apart.
+  chmod 600 "${CODEX_HOME}/config.toml"
   log "wrote ${CODEX_HOME}/config.toml"
 }
 

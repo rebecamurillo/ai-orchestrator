@@ -35,6 +35,9 @@ configure() {
   }
 }
 JSON
+  # Langfuse OTLP authenticates with HTTP Basic, so this file necessarily carries
+  # LANGFUSE_SECRET_KEY in reversible base64, and `agent-home` outlives `make down`.
+  chmod 600 "${AGENT_HOME}/.claude/settings.json"
   log "wrote ${AGENT_HOME}/.claude/settings.json"
 }
 

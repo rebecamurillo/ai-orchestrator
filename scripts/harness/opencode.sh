@@ -42,6 +42,8 @@ configure() {
   "permission": { "edit": "allow", "bash": "allow", "webfetch": "deny" }
 }
 JSON
+  # No key material today; held to the same mode so the three cannot drift apart.
+  chmod 600 "${OPENCODE_CONFIG_DIR}/opencode.json"
   log "wrote ${OPENCODE_CONFIG_DIR}/opencode.json"
 }
 
