@@ -8,21 +8,39 @@ the one bearer dependency (AD-4).
 `alembic upgrade head` in as the application's start-up step. Why it is done that way, and
 what it guarantees, is stated once in
 `orchestrator.infrastructure.db.migrations`; this module is where it is wired.
+
+The adapters follow the same split. `main()` builds the engine and the session factory —
+neither opens a connection — and stores them on `app.state` for `api/providers.py` to read
+per request. The `Crypto` adapter is passed as a *factory* rather than as an instance,
+because `FernetCrypto` validates `ORCHESTRATOR_SECRET_KEY` strictly and the contract's
+placeholder is not a Fernet key: `tests/unit/test_logging.py` and
+`tests/unit/test_migrations.py` call `main()` with exactly those placeholders. Deferring
+the construction means a misconfigured instance still starts and still answers `/healthz`.
+What it does not do is serve `/api/v1/projects`: `api/providers.py` builds the adapter for
+every request that needs a Project port, so a *read* fails as surely as a write, and it
+fails the same way — a bare `internal server error` problem document, with the message
+naming `ORCHESTRATOR_SECRET_KEY` in the log and nothing of it in the body. The operator
+sees a 500 and finds the reason in `docker compose logs backend-api`.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from functools import cache
 from importlib.metadata import PackageNotFoundError, version
 
 import uvicorn
 from fastapi import Depends, FastAPI
 from pydantic import BaseModel, ValidationError
+from sqlalchemy.orm import Session
 
 from orchestrator.api.deps import require_bearer
 from orchestrator.api.errors import UNAUTHORIZED_RESPONSE, install_error_handlers
-from orchestrator.api.routers import ping
+from orchestrator.api.routers import ping, projects
+from orchestrator.domain.ports.crypto import Crypto
+from orchestrator.infrastructure.crypto import FernetCrypto
+from orchestrator.infrastructure.db import create_engine_from, create_session_factory
 from orchestrator.infrastructure.db.migrations import run_migrations
 from orchestrator.infrastructure.logging import configure_logging
 from orchestrator.infrastructure.settings import Settings
@@ -34,6 +52,10 @@ PACKAGE = "orchestrator"
 
 #: What FastAPI accepts as `lifespan`: a callable taking the app and yielding once.
 Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
+
+#: How a request reaches a database session, and how it reaches the instance key.
+SessionFactory = Callable[[], Session]
+CryptoFactory = Callable[[], Crypto]
 
 
 def package_version() -> str:
@@ -66,11 +88,35 @@ def migrating_lifespan(settings: Settings) -> Lifespan:
     return lifespan
 
 
-def create_app(settings: Settings, *, lifespan: Lifespan | None = None) -> FastAPI:
+def crypto_factory(settings: Settings) -> CryptoFactory:
+    """A `Crypto` that is built on first use, and then once.
+
+    Constructing it here would refuse the `.env.example` placeholder at start-up, which is
+    the value `main()` is called with in two unit tests. The adapter still validates its
+    key strictly; the refusal simply moves from import time to the first request that needs
+    a Project port — any of the four, read or write — where it becomes a 500.
+    """
+
+    @cache
+    def build() -> Crypto:
+        return FernetCrypto(settings.orchestrator_secret_key.get_secret_value())
+
+    return build
+
+
+def create_app(
+    settings: Settings,
+    *,
+    lifespan: Lifespan | None = None,
+    session_factory: SessionFactory | None = None,
+    crypto: CryptoFactory | None = None,
+) -> FastAPI:
     """Build the ASGI application. Adapters are constructed here and nowhere else.
 
     Without a `lifespan` the application performs no I/O at any point in its life — the
-    shape every unit test builds.
+    shape every unit test builds. The two ports are optional for the same reason: the
+    contract exporter builds this application from `Settings.model_construct()` and only
+    reads its routes, and a unit test overrides them through `dependency_overrides`.
     """
     app = FastAPI(
         title="ai-orchestrator backend-api",
@@ -79,6 +125,9 @@ def create_app(settings: Settings, *, lifespan: Lifespan | None = None) -> FastA
     )
     # the settings object dependencies read; nothing else re-reads the environment (AD-20)
     app.state.settings = settings
+    # the adapters `api/providers.py` builds each request's ports from
+    app.state.session_factory = session_factory
+    app.state.crypto = crypto
     install_error_handlers(app)
 
     @app.get("/healthz", tags=["health"], response_model=Health)
@@ -89,6 +138,12 @@ def create_app(settings: Settings, *, lifespan: Lifespan | None = None) -> FastA
     # inherits the bearer check — and its declared 401 — instead of having to remember them
     app.include_router(
         ping.router,
+        prefix=API_PREFIX,
+        dependencies=[Depends(require_bearer)],
+        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
+    )
+    app.include_router(
+        projects.router,
         prefix=API_PREFIX,
         dependencies=[Depends(require_bearer)],
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
@@ -104,10 +159,17 @@ def main() -> None:
         raise SystemExit(f"configuration error (AD-20): .env is incomplete\n{error}") from error
 
     configure_logging(settings.log_level)
+    # neither call opens a connection, so this stays inside the "no I/O before start-up" rule
+    session_factory = create_session_factory(create_engine_from(settings))
     uvicorn.run(
         # the migration is the application's start-up step: uvicorn awaits it before it
         # binds, so the process never serves a half-migrated schema
-        create_app(settings, lifespan=migrating_lifespan(settings)),
+        create_app(
+            settings,
+            lifespan=migrating_lifespan(settings),
+            session_factory=session_factory,
+            crypto=crypto_factory(settings),
+        ),
         # binds every interface: reached from the compose network, not from the host
         host="0.0.0.0",
         port=settings.backend_api_port,

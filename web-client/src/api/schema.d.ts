@@ -23,6 +23,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every Project
+         * @description Every Project, ordered by name, each with its variables masked.
+         *
+         *     One page: the whole list is small enough that a cursor would be ceremony. The envelope
+         *     is the same one every list in this API uses, so paging can arrive without a break.
+         */
+        get: operations["list_projects_api_v1_projects_get"];
+        put?: never;
+        /**
+         * Create a Project
+         * @description Store a Project. Every variable value is encrypted before it is written (AD-5).
+         */
+        post: operations["create_project_api_v1_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one Project
+         * @description One Project, with every variable masked. An unknown id is a 404 problem document.
+         */
+        get: operations["get_project_api_v1_projects__project_id__get"];
+        /**
+         * Update a Project
+         * @description Replace a Project's editable fields, and with them its whole variable set.
+         *
+         *     A variable sent without a value keeps the ciphertext already stored, which is how a
+         *     form that was never given the secret can send the set back without losing it. An
+         *     omitted `log_prompt_content` keeps the stored switch for the same reason; no instance
+         *     default is read here, so this route takes no settings.
+         */
+        put: operations["update_project_api_v1_projects__project_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -45,6 +101,26 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * EnvVarCreate
+         * @description One requested variable on a create, where there is nothing to keep.
+         */
+        EnvVarCreate: {
+            /** Name */
+            name: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * EnvVarIn
+         * @description One requested variable. Without a `value`, the stored ciphertext is kept.
+         */
+        EnvVarIn: {
+            /** Name */
+            name: string;
+            /** Value */
+            value?: string | null;
+        };
+        /**
          * Health
          * @description The `/healthz` payload. Typed so the generated contract carries a real schema (AD-3).
          */
@@ -53,6 +129,23 @@ export interface components {
             status: string;
             /** Version */
             version: string;
+        };
+        /**
+         * MaskedEnvVarOut
+         * @description One stored variable as it leaves this API: the name, and four characters of the value.
+         */
+        MaskedEnvVarOut: {
+            /** Masked */
+            masked: string;
+            /** Name */
+            name: string;
+        };
+        /** Page[ProjectRead] */
+        Page_ProjectRead_: {
+            /** Items */
+            items: components["schemas"]["ProjectRead"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /**
          * Pong
@@ -102,6 +195,71 @@ export interface components {
             /** Version */
             version?: string | null;
         };
+        /**
+         * ProjectCreate
+         * @description `POST /projects`. Every variable carries its value.
+         */
+        ProjectCreate: {
+            /** Context Paths */
+            context_paths?: string[];
+            /**
+             * Context Text
+             * @default
+             */
+            context_text: string;
+            /** Env Vars */
+            env_vars?: components["schemas"]["EnvVarCreate"][];
+            /** Log Prompt Content */
+            log_prompt_content?: boolean | null;
+            /** Name */
+            name: string;
+        };
+        /**
+         * ProjectRead
+         * @description A Project as every read returns it. There is no field here that could hold a value.
+         */
+        ProjectRead: {
+            /** Context Paths */
+            context_paths: string[];
+            /** Context Text */
+            context_text: string;
+            /** Created At */
+            created_at: string;
+            /** Env Vars */
+            env_vars: components["schemas"]["MaskedEnvVarOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Log Prompt Content */
+            log_prompt_content: boolean;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * ProjectUpdate
+         * @description `PUT /projects/{id}`. A variable without a value keeps the one already stored.
+         */
+        ProjectUpdate: {
+            /** Context Paths */
+            context_paths?: string[];
+            /**
+             * Context Text
+             * @default
+             */
+            context_text: string;
+            /** Env Vars */
+            env_vars?: components["schemas"]["EnvVarIn"][];
+            /** Log Prompt Content */
+            log_prompt_content?: boolean | null;
+            /** Name */
+            name: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -131,6 +289,208 @@ export interface operations {
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_projects_api_v1_projects_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ProjectRead_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    create_project_api_v1_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRead"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Another Project already holds that name. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_project_api_v1_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRead"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    update_project_api_v1_projects__project_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRead"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Another Project already holds that name. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

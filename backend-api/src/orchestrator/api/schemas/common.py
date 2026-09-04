@@ -1,6 +1,6 @@
 """The conventions every payload of this API inherits (Consistency Conventions).
 
-Three decisions live here so no endpoint re-takes them:
+Four decisions live here so no endpoint re-takes them:
 
 - **Lists** are `{items, next_cursor}` and nothing else. There is no envelope anywhere else.
 - **Money** is USD, `numeric(12,6)` in the database, and a decimal *string* in JSON. A JSON
@@ -8,6 +8,10 @@ Three decisions live here so no endpoint re-takes them:
   that loses digits there.
 - **Timestamps** are ISO 8601 UTC ending in `Z`. A naive datetime is refused rather than
   guessed at, because the guess would be the server's local zone.
+- **Text this API stores** is text PostgreSQL can hold. JSON can carry a NUL character and
+  an unpaired surrogate; a `text` column can hold neither, and psycopg raises on both. The
+  refusal belongs at the edge, as a 422 naming the field, rather than deep in a driver as
+  a 500 — which is exactly the shape the Schemathesis gate exists to catch.
 
 The generated contract (AD-3) is derived from these types, so the browser sees the same
 rules without anyone restating them in TypeScript.
@@ -20,6 +24,11 @@ from decimal import Decimal
 from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, PlainSerializer
+
+#: The character a `text` column cannot hold, whatever the encoding.
+NUL = "\x00"
+#: The encoding the database connection speaks; a string that cannot be encoded cannot be sent.
+DATABASE_ENCODING = "utf-8"
 
 #: `numeric(12,6)`: at most 12 significant digits, exactly 6 of them after the point.
 MONEY_SCALE = Decimal("0.000001")
@@ -55,6 +64,24 @@ def _money_string(value: Decimal) -> str:
     return f"{value:.6f}"
 
 
+def _as_storable(value: str) -> str:
+    """Refuse text no `text` column can hold, at the edge and with the field named.
+
+    Both cases are reachable from a JSON body — an escaped NUL and a lone high surrogate are
+    both valid JSON and both decode to a valid Python `str` — and both raise inside psycopg,
+    long after the request could still be answered as a validation failure.
+    """
+    if NUL in value:
+        raise ValueError("text must not contain a NUL character, which a text column cannot hold")
+    try:
+        value.encode(DATABASE_ENCODING)
+    except UnicodeEncodeError as error:
+        raise ValueError(
+            "text must be encodable as UTF-8; it contains an unpaired surrogate"
+        ) from error
+    return value
+
+
 def _as_utc(value: datetime) -> datetime:
     """Refuse a naive datetime; convert an offset one to UTC."""
     if value.tzinfo is None or value.utcoffset() is None:
@@ -66,6 +93,8 @@ def _iso_z(value: datetime) -> str:
     """`2026-09-03T12:00:30+00:00` -> `2026-09-03T12:00:30Z`, the form the UI parses."""
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
+
+StorableText = Annotated[str, AfterValidator(_as_storable)]
 
 MoneyStr = Annotated[
     Decimal,
