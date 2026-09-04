@@ -13,8 +13,8 @@
     "build": "astro build",
     "preview": "node ./dist/server/entry.mjs",
     "gen:api": "node scripts/gen-api.mjs",
-    "lint": "astro sync && astro check && tsc --noEmit && eslint . && prettier --check .",
-    "test": "vitest run",
+    "lint": "astro sync && astro check && tsc --noEmit && eslint . && prettier --check . && node scripts/check-test-pairs.mjs",
+    "test": "vitest run --coverage",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -34,6 +34,7 @@
     "@types/node": "24.13.3",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
+    "@vitest/coverage-v8": "4.1.11",
     "astro-eslint-parser": "3.1.0",
     "eslint": "10.9.1",
     "openapi-typescript": "7.13.0",

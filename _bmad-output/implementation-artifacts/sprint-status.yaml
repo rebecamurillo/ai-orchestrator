@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-03-2026 09:16
-last_updated: 09-04-2026 07:47
+last_updated: 09-04-2026 09:00
 project: ai-orchestrator
 project_key: NOKEY
 tracking_system: file-system
@@ -42,7 +42,7 @@ development_status:
   1-4-design-tokens-and-the-instrument-dark-shell: review
   1-5-operator-token-login: review
   1-6-container-images-and-the-compose-stack: review
-  1-7-ci-pipeline-and-coverage-gates: backlog
+  1-7-ci-pipeline-and-coverage-gates: review
   epic-1-retrospective: optional
 
   epic-2: backlog

@@ -127,6 +127,43 @@ That is the same address `make up` publishes the web-client on, so the two canno
 once: with the stack up, Playwright refuses with `127.0.0.1:4321 is already used`. Run
 `make down` first, or give the container a different `WEB_CLIENT_PORT` in `.env`.
 
+## Contributing
+
+The four gates decide whether work is done, and they run in one order — `lint`, then `test`,
+then `e2e-api`, then `e2e-ui`. A failing gate stops the ones after it, locally and in CI:
+
+```bash
+make lint        # ruff · mypy · import-linter · env contract · test pairs · contract drift · eslint · prettier · tsc · astro check
+make test        # backend unit tests + web-client unit tests, both with coverage
+make coverage    # changed lines >= 90 %, against the branch this work forks from
+make e2e-api     # httpx scenarios + schemathesis against a running stack
+make e2e-ui      # playwright against the built web-client and a stubbed backend
+make openapi     # re-export the contract; CI then fails on any diff (AD-3)
+```
+
+`.github/workflows/ci.yml` runs those same targets as four jobs chained by `needs:`, one run
+per ref. The lint job also re-exports the contract and refuses any diff, so a hand-edited
+`contracts/openapi.json` fails there rather than reaching the browser as a type that lies. It calls no command the Makefile does not hold, and it carries no credential: the
+e2e job copies `.env.example` to `.env` and runs on the committed placeholders.
+
+Two rules are enforced rather than asked for:
+
+- **Coverage.** `orchestrator.domain` and `orchestrator.application` are at 100 % branch
+  coverage — `make test` re-reports over those two packages with `--fail-under=100` after the
+  suite runs — and `web-client/src/lib/**` and `src/stores/**` at 90 % lines. Changed lines
+  must be 90 % covered (`make coverage`). Raise a number by writing a test; a threshold that
+  is lowered, a file that is excluded, or a `pragma: no cover` added to reach it is the
+  failure the gate exists to catch.
+- **Test pairs.** Every module under `backend-api/src/` is imported by a module under
+  `tests/unit/`, and every module under `web-client/src/` is named by one, or `make lint`
+  fails with the path of the module that is not. `__init__.py`, `main.py`, generated and
+  ambient declarations, and `.astro` page routes are exempt — everything else has a test
+  module of its own.
+
+Before opening a change: `make lint && make test && make coverage`, then `make e2e-api` and
+`make e2e-ui`. The last two cannot run at the same time as `make up`; both bind
+`127.0.0.1:4321`.
+
 ## Setting up the BMAD method on a new machine
 
 The repository commits the method itself (`_bmad/`: config, scripts, manifests, modules) so every clone carries the same version, **6.11.0**. Two things are per machine and git-ignored: the skill stubs Claude Code loads (`.claude/skills/bmad-*`, `.agents/skills/bmad-*`) and your personal install answers (`_bmad/config.user.toml`). Reinstall them once per machine with the steps below.

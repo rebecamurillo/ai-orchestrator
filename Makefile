@@ -4,6 +4,10 @@
 
 UV ?= uv
 PNPM ?= pnpm
+# the test-pair gate imports nothing outside the standard library, so it runs on the system
+# interpreter: `backend-api/tests/unit/test_makefile.py` is frozen and pins how many `uv`
+# invocations the lint recipe may hold
+PYTHON ?= python3
 BACKEND := backend-api
 WEB := web-client
 # --locked: a gate must never silently re-resolve the committed uv.lock
@@ -11,23 +15,36 @@ PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
 # --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
 NODE_RUN := $(PNPM) --dir $(WEB) run
 
-.PHONY: lint test e2e-api e2e-ui openapi up down logs
+.PHONY: lint test coverage e2e-api e2e-ui openapi up down logs
 
 ## lint — ruff · mypy (strict on domain/ and application/) · import-linter · env-contract check
-##        · contract drift · eslint · prettier --check · tsc --noEmit · astro check
+##        · test pairs · contract drift · eslint · prettier --check · tsc --noEmit · astro check
+## the web-client half of the test-pair check runs inside `pnpm lint`
 lint:
 	$(PYTHON_RUN) ruff check . ../scripts
 	$(PYTHON_RUN) ruff format --check . ../scripts
 	$(PYTHON_RUN) mypy src/orchestrator/domain src/orchestrator/application
 	$(PYTHON_RUN) lint-imports
 	$(PYTHON_RUN) python ../scripts/check_env_contract.py
+	$(PYTHON) scripts/check_test_pairs.py
 	$(NODE_RUN) gen:api -- --check
 	$(NODE_RUN) lint
 
 ## test — backend unit tests (pytest) + web-client unit tests (vitest); no Postgres, no network
+## coverage is measured in the same run (AD-18): the second line re-reports over the two rule
+## packages alone, where 100 % branch coverage is the gate. `coverage.xml` is what `make
+## coverage` reads; both it and `.coverage` are git-ignored.
 test:
-	$(PYTHON_RUN) pytest tests/unit -q
+	$(PYTHON_RUN) pytest tests/unit -q --cov --cov-report=term-missing:skip-covered --cov-report=xml
+	$(PYTHON_RUN) coverage report --include='src/orchestrator/domain/*,src/orchestrator/application/*' --fail-under=100
 	$(NODE_RUN) test
+
+## coverage — changed lines >= 90 % (AD-18), against the branch this work forks from.
+## Reads the `coverage.xml` that `make test` wrote, so it runs after it, and needs the base
+## branch present: `git fetch origin main` locally, `fetch-depth: 0` in CI.
+DIFF_COVER_BASE ?= origin/main
+coverage:
+	$(PYTHON_RUN) diff-cover coverage.xml --compare-branch=$(DIFF_COVER_BASE) --fail-under=90
 
 ## e2e-api — httpx scenarios + schemathesis against the running stack
 ## needs: docker compose up -d postgres, the app running, and BACKEND_API_URL + ORCHESTRATOR_TOKEN exported

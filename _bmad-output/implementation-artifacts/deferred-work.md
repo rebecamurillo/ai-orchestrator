@@ -49,3 +49,11 @@ Findings surfaced by review that are real but belong to a later story. Append-on
 - source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-01-foundation/stories/1-6-container-images-and-the-compose-stack.md`
   summary: No gate builds the two container images; `backend-api/tests/unit/test_dockerfiles.py` asserts their text, and only a human running `make up` proves they build and run.
   evidence: Building takes minutes and network, so `make test` cannot do it. Story 1.6's brief assigns the image build to CI in 1.7 ("CI builds the images in 1.7"); until that lands, a Dockerfile change that still satisfies every text assertion can break `make up` with no gate failing.
+
+- source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-01-foundation/stories/1-7-ci-pipeline-and-coverage-gates.md`
+  summary: CI still does not build the two container images; 1.7 landed the four gate jobs its brief names and no image-build job.
+  evidence: The 1.6 deferral above expects 1.7 to build them, but 1.7's brief fixes the pipeline at four jobs — `lint`, `unit`, `e2e-api` "with the postgres service and the backend started from source", `e2e-ui` "with the built web-client and a stubbed backend" — and lists no image build in its In scope. `backend-api/tests/unit/test_ci_workflow.py::test_the_four_gates_are_the_four_jobs` now pins that shape, so adding the build is a deliberate change to both the workflow and that test.
+
+- source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-01-foundation/stories/1-7-ci-pipeline-and-coverage-gates.md`
+  summary: `web-client/src/api/server.ts` — the module that holds the bearer — has no unit test that imports it; it satisfies the new pairing rule only by being named as a file path.
+  evidence: `web-client/tests/unit/lint.test.ts:56` names `src/api/server.ts` as a virtual file path for an eslint run, which asserts the AD-1 exemption rather than the module's behaviour. `pnpm test --coverage` measures it at 95 % lines because `client.test.ts` and the proxy test reach it indirectly; nothing asserts `forward` attaches the bearer, and `src/api/**` is outside the 90 % threshold globs the brief names.

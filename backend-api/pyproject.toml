@@ -24,6 +24,10 @@ dev = [
     "mypy==2.3.1",
     "import-linter==2.14",
     "schemathesis==4.25.2",
+    # the changed-lines half of the AD-18 coverage rule; `make coverage` runs it
+    "diff-cover==10.5.1",
+    # `tests/unit/test_ci_workflow.py` reads the workflow as a document, not as text
+    "pyyaml==6.0.3",
 ]
 
 [build-system]
@@ -110,3 +114,19 @@ forbidden_modules = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+# ── coverage — AD-18 "the gates are checkable" ───────────────────────────────
+# Branch coverage over the whole package, measured in one run: `make test` prints the
+# whole-package report, writes `coverage.xml` for `make coverage` (diff-cover, changed
+# lines >= 90 %), and then re-reports over `domain/` + `application/` alone with
+# `--fail-under=100`. The 100 % lives on that command rather than here because a
+# repository-wide `fail_under` would also fire on the informational whole-package report;
+# `tests/unit/test_coverage_gates.py` asserts the recipe so it cannot be lowered silently.
+[tool.coverage.run]
+branch = true
+source = ["src/orchestrator"]
+
+[tool.coverage.report]
+show_missing = true
+# no `exclude_also`: the rule packages reach 100 % because they are tested, not because
+# lines were carved out of the measurement

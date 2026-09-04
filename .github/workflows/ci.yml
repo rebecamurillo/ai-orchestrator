@@ -1,0 +1,171 @@
+# ai-orchestrator — the gates of AGENTS.md "Commands", run on every push.
+#
+# AD-18 fixes the order: lint → unit → e2e-api → e2e-ui, chained by `needs:` so a red gate
+# stops the ones after it instead of burning runners on a build that is already refused.
+# Every job's gate is a `make` target — the same line the Operator types — so a pipeline that
+# passes and a shell that fails is a contradiction, not a configuration difference.
+#
+# The pipeline holds no credential. `cp .env.example .env` gives the e2e job the committed
+# placeholders, which is all a stack with no gateway and no repository to clone needs; a
+# secret would have to be added here to be leaked here, and none is (AD-5).
+#
+# Actions are pinned to a commit: a tag can be moved under the pipeline, a commit cannot.
+# `backend-api/tests/unit/test_ci_workflow.py` asserts the job graph, the pins and the
+# targets, because nothing in the repository can run this file locally.
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# a second push to the same branch supersedes the first; the gates are all-or-nothing
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # corepack materialises the pnpm version pinned in web-client/package.json; on a runner
+  # there is no one to answer its download prompt
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend-api/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Locate the pnpm store
+        id: pnpm
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('web-client/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - name: Install web-client dependencies
+        run: pnpm --dir web-client install --frozen-lockfile
+      - name: Gate
+        run: make lint
+      - name: Contract drift
+        # `make lint` proves schema.d.ts matches contracts/openapi.json; only re-exporting
+        # from the Pydantic source proves the contract itself is current (AD-3)
+        run: |
+          make openapi
+          git diff --exit-code contracts web-client/src/api/schema.d.ts
+
+  unit:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # diff-cover compares against the base branch; a shallow clone has no base branch
+          # and would report a diff of nothing at all
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend-api/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Locate the pnpm store
+        id: pnpm
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('web-client/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - name: Install web-client dependencies
+        run: pnpm --dir web-client install --frozen-lockfile
+      - name: Gate
+        run: make test
+      - name: Changed lines
+        # `make test` wrote backend-api/coverage.xml; this reads it
+        run: make coverage DIFF_COVER_BASE=origin/${{ github.base_ref || github.event.repository.default_branch }}
+
+  e2e-api:
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend-api/uv.lock
+      - name: Fill the environment contract with its committed placeholders
+        run: cp .env.example .env
+      - name: Start postgres
+        run: docker compose up -d --wait postgres
+      - name: Start backend-api from source
+        # DATABASE_URL in the contract names the compose service, which only resolves inside
+        # the network; a run on the runner itself takes the published port instead
+        run: |
+          set -a; . ./.env; set +a
+          export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
+          uv run --locked --directory backend-api python -m orchestrator.main > backend-api.log 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:8000/healthz && exit 0
+            sleep 1
+          done
+          echo "backend-api never answered /healthz on 127.0.0.1:8000" >&2
+          cat backend-api.log >&2
+          exit 1
+      - name: Gate
+        run: |
+          set -a; . ./.env; set +a
+          export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
+          export BACKEND_API_URL=http://127.0.0.1:8000
+          make e2e-api
+      - name: Backend log
+        if: failure()
+        run: cat backend-api.log
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v
+
+  e2e-ui:
+    needs: e2e-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Locate the pnpm store
+        id: pnpm
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.pnpm.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('web-client/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - name: Install web-client dependencies
+        run: pnpm --dir web-client install --frozen-lockfile
+      - name: Install the browser the specs drive
+        run: pnpm --dir web-client exec playwright install --with-deps chromium
+      - name: Gate
+        # `make e2e-ui` builds first, then runs Playwright against the built server and a
+        # stubbed backend-api — no database and no backend process are needed here
+        run: make e2e-ui

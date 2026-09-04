@@ -41,3 +41,5 @@ dist/
 # playwright run output; the specs are committed, their artefacts are not
 test-results/
 playwright-report/
+# vitest coverage output; the backend's `.coverage`/`coverage.xml` are above
+coverage/
