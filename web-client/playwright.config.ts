@@ -8,6 +8,7 @@ import {
   STUB_BACKEND_PORT,
   USE_REAL_BACKEND,
 } from './tests/e2e/config';
+import { authenticatedStorageState } from './tests/e2e/session';
 
 /**
  * The `e2e-ui` gate. `make e2e-ui` is `pnpm build && pnpm e2e`, so `dist/` is on disk
@@ -16,6 +17,11 @@ import {
  * The preview server is given the environment `astro:env/server` declares. Those values
  * are placeholders (`tests/e2e/config.ts`), which is what makes "the token appears in no
  * response header, HTML, or client bundle" a checkable claim rather than a hope.
+ *
+ * Since 1.5 every route is behind the session guard, so the run carries a valid
+ * `orch_session` by default (`tests/e2e/session.ts`) — the state the product is in whenever
+ * anyone is looking at it. A spec whose subject is the guard itself opts out with
+ * `test.use({ storageState: NO_SESSION })`.
  */
 const stubBackend = {
   command: 'node tests/e2e/stub-backend.mjs',
@@ -45,6 +51,6 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   reporter: [['list']],
-  use: { baseURL: PREVIEW_URL },
+  use: { baseURL: PREVIEW_URL, storageState: authenticatedStorageState() },
   webServer: USE_REAL_BACKEND ? [preview] : [stubBackend, preview],
 });

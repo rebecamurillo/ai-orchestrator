@@ -1,8 +1,10 @@
 ---
 /**
  * One shell wraps every route (UX-DR3): a fixed rail on the left, a surface bar over the
- * body, a footer readout under it. This is the only module that imports the stylesheets, so
- * the token set reaches a screen exactly once and no page can render outside it.
+ * body, a footer readout under it. It imports the stylesheets, so the token set reaches a
+ * guarded screen exactly once; `src/pages/login.astro` is the only page that renders outside
+ * this shell — there is nothing to navigate to before a session exists — and it is therefore
+ * the only other module that imports them.
  *
  * The four footer figures default to zero and an em dash. Nothing in this story has data to
  * put there; the readout still states what it measured and when, which is the difference

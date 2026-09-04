@@ -7,15 +7,20 @@
  *
  * Rendered as an `<a>` when it navigates and a `<button>` when it acts, so the keyboard and
  * the screen reader are told which of the two it is.
+ *
+ * `type` defaults to `button`, which is the safe default everywhere except inside a form:
+ * a `type="button"` control does not submit, so the one control that ends a form asks for
+ * `type="submit"` explicitly rather than relying on the browser's own default.
  */
 interface Props {
   label: string;
   href?: string;
   variant?: 'default' | 'primary' | 'destructive';
+  type?: 'button' | 'submit';
   testId?: string;
 }
 
-const { label, href, variant = 'default', testId } = Astro.props;
+const { label, href, variant = 'default', type = 'button', testId } = Astro.props;
 ---
 
 {
@@ -24,7 +29,7 @@ const { label, href, variant = 'default', testId } = Astro.props;
       {label}
     </a>
   ) : (
-    <button class="button" data-variant={variant} data-testid={testId} type="button">
+    <button class="button" data-variant={variant} data-testid={testId} type={type}>
       {label}
     </button>
   )

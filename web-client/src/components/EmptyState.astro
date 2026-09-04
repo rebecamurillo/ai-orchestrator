@@ -3,14 +3,19 @@
  * An empty state in this product is a readout too (NFR-8): an uppercase headline, then the
  * lines that say what is happening instead. Never an illustration, never a mascot, never a
  * congratulation, and never a call-to-action as the only content.
+ *
+ * `action` is the optional last line: the one surface that changes what the readout says,
+ * named as a link. It comes after the lines, never instead of them — a readout that is only
+ * a link has stopped stating what is happening.
  */
 interface Props {
   testId: string;
   headline: string;
   lines: string[];
+  action?: { label: string; href: string };
 }
 
-const { testId, headline, lines } = Astro.props;
+const { testId, headline, lines, action } = Astro.props;
 ---
 
 <section class="empty" data-testid={testId}>
@@ -18,6 +23,13 @@ const { testId, headline, lines } = Astro.props;
   <ul class="lines">
     {lines.map((line) => <li>{line}</li>)}
   </ul>
+  {
+    action && (
+      <p class="action">
+        <a href={action.href}>{action.label}</a>
+      </p>
+    )
+  }
 </section>
 
 <style>
@@ -46,5 +58,10 @@ const { testId, headline, lines } = Astro.props;
     /* the one place meta is set looser than its role: DESIGN.md sets the empty-state body
        at 1.9 so a three-line readout reads as a list of facts, not as a paragraph */
     line-height: 1.9;
+  }
+
+  .action {
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
   }
 </style>
