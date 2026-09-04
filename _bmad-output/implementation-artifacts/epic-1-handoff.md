@@ -76,8 +76,8 @@ CI depends on it.
 
 **Anchors are read-only** (hard rule 1): `SPEC.md`, `stories.yaml`, `epics.yaml`, any
 `AGENTS.md`, and every existing test file. Add new test files; never modify or delete one.
-Epic 1 hit this three times and it was never worked around silently — each time the operator
-decided. Two narrow exceptions now exist because of that:
+Epic 1 hit this four times and it was never worked around silently — each time the operator
+decided. Three narrow exceptions now exist because of that:
 
 1. *The pending-gate registry.* The story landing a gate may retire that gate's entry, only if
    the same commit adds a test proving the gate now runs. Now moot — the registry is empty.
@@ -86,6 +86,21 @@ decided. Two narrow exceptions now exist because of that:
    coverage that strictly exceeds it. This exists because 1.3 wrote a Playwright test asserting
    the literal text `web-client up` while its own docstring said 1.4 would replace the page —
    which made 1.4's acceptance criteria and `make e2e-ui` mutually unsatisfiable.
+3. *A nondeterministic assertion.* Where an existing test asserts on a third-party tool's
+   output and that output is not deterministic across runs or releases, the assertion may be
+   narrowed to the part that is, only if the same commit adds a test covering deterministically
+   what the narrowed assertion stops covering. This exists because `test_compose.py` asserted
+   that `docker compose config` with an empty env file names a `POSTGRES_` variable. Story 1.1
+   wrote it when postgres was the only service; 1.6 added two more, so ten variables are
+   missing at once and compose names one of them in Go map iteration order — random per
+   process. It failed roughly one CI run in four. `test_compose_fails_closed.py` replaced it
+   by removing exactly one variable from the contract at a time, which admits exactly one
+   error, and it covers all ten rather than the three the old line implied.
+
+**Do not assert on which item a tool picks out of a set.** How many interpolation errors
+compose prints is not stable even across patch releases — v5.4.0 printed all of them, v5.5.0
+printed one, v5.5.1 printed all of them again — so "pin a version that behaves" was not a fix
+available here. Construct the input so only one answer is possible instead.
 
 **The lesson is written into hard rule 1: do not write the assertion that needs the second
 exception.** A test covering a placeholder asserts that the route is served, not what it says.
@@ -102,10 +117,12 @@ not a standing rule — do not cite it as precedent.
 
 ## 4. Known gaps, honestly
 
-- **CI has run zero times.** Everything in `.github/workflows/ci.yml` was proven by running
-  the same `make` targets locally and by asserting the file as a parsed document. The job
-  graph, runner setup, caches and the start-and-wait shell have never executed. Local
-  verification was arm64 macOS; the runners are x86-64 Linux.
+- **CI now runs; all five jobs are green on x86-64 Linux.** The one thing it caught that no
+  local run could was the compose flake above: the runner's compose reports a single
+  interpolation error where Docker Desktop's reports all of them, so a test that passed every
+  time on a developer machine failed about one run in four on a runner. Expect more of that
+  shape — a green local gate is evidence about arm64 macOS and Docker Desktop, not about the
+  runner.
 - **`web-client/src/api/server.ts` satisfies the pairing gate by being named as a *file path
   string* in `lint.test.ts`, not by a real import.** Its coverage is genuinely fine (95 %
   statements, 100 % branches, via `proxy.test.ts`'s dynamic import of the route), but the

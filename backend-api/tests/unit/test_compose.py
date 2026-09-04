@@ -185,6 +185,11 @@ def test_the_project_refuses_to_start_with_nothing_configured(tmp_path: Path) ->
     Scrubbing the environment is not enough — compose also auto-loads `./.env`, which every
     machine that can actually run the stack has. Pointing `--env-file` at an empty file is
     what makes this deterministic rather than a test that only passes before setup.
+
+    The output is read for "required variable" and not for a variable's name: with every
+    variable missing at once, which one compose names is Go map iteration order, and how
+    many it names varies by release. `test_compose_fails_closed.py` removes exactly one at
+    a time, which admits exactly one error, and asserts that compose names that one.
     """
     empty_env = tmp_path / "empty.env"
     empty_env.write_text("")
@@ -199,4 +204,4 @@ def test_the_project_refuses_to_start_with_nothing_configured(tmp_path: Path) ->
     )
 
     assert result.returncode != 0
-    assert "POSTGRES_" in result.stdout + result.stderr
+    assert "required variable" in result.stdout + result.stderr
