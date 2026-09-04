@@ -23,8 +23,7 @@ pytestmark = pytest.mark.skipif(shutil.which("make") is None, reason="make not o
 
 # target -> the story that makes it real
 PENDING_TARGETS = {
-    "up": "1.6",
-    "down": "1.6",
+    # empty since 1.6: every target the constitution names now has its tooling
 }
 
 DECLARED_TARGETS = ("lint", "test", "e2e-api", "e2e-ui", "openapi", "up", "down")

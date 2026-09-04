@@ -11,7 +11,7 @@ PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
 # --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
 NODE_RUN := $(PNPM) --dir $(WEB) run
 
-.PHONY: lint test e2e-api e2e-ui openapi up down
+.PHONY: lint test e2e-api e2e-ui openapi up down logs
 
 ## lint — ruff · mypy (strict on domain/ and application/) · import-linter · env-contract check
 ##        · contract drift · eslint · prettier --check · tsc --noEmit · astro check
@@ -49,11 +49,16 @@ openapi:
 	$(NODE_RUN) gen:api
 
 ## up — docker compose up: web-client, backend-api, postgres
+## needs: cp .env.example .env, filled in. --build so an edited Dockerfile is never ignored;
+## -d so the acceptance commands (curl, e2e-api, compose exec) can follow it
 up:
-	@echo "not available until story 1.6" >&2
-	@exit 1
+	docker compose up -d --build
 
-## down — stop the compose stack
+## down — stop the compose stack, keeping pgdata, work and agent-home
+## `docker compose down -v` would delete all three; that is a deliberate act, not a target
 down:
-	@echo "not available until story 1.6" >&2
-	@exit 1
+	docker compose down
+
+## logs — follow every service's output
+logs:
+	docker compose logs -f

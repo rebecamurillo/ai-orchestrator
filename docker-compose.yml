@@ -1,18 +1,23 @@
 # ai-orchestrator — the compose stack.
 #
-# Story 1.2 lands the database only. `web-client` and `backend-api` need images that do not
-# exist yet; story 1.6 adds them together with their Dockerfiles, and `make up` refuses
-# until then rather than half-working.
+# The whole MVP: `web-client`, `backend-api` and `postgres`, with the Gateway (LiteLLM),
+# the tracing server (Langfuse) and the model server running on the host outside compose
+# and documented in `host/README.md` (AD-20, NFR-7).
 #
 # Configuration is the environment (AD-20): every value below comes from `.env`, which is
 # a copy of the committed `.env.example` contract. No credential is written into this file.
 #
 # Every reference uses the `${VAR:?...}` form. Bare `${VAR}` interpolates to an empty
-# string when the variable is unset, and postgres would start misconfigured rather than
+# string when the variable is unset, and a service would start misconfigured rather than
 # refusing — a gate that fails open (hard rule 7).
 #
+# Credentials stop at the process that needs them (AD-5): `backend-api` is handed the whole
+# contract through `env_file`, and `web-client` is handed four named variables. Nothing
+# gives the browser's origin the git token, the spend key or the database URL.
+#
 #   cp .env.example .env          # once, then fill it in
-#   docker compose up -d postgres
+#   make up                       # build and start all three services
+#   make down                     # stop them; the named volumes survive
 
 services:
   postgres:
@@ -39,5 +44,92 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  backend-api:
+    build:
+      # the repository root: the image needs `backend-api/` and the shared `scripts/harness/`
+      context: .
+      dockerfile: backend-api/Dockerfile
+    env_file:
+      # the one process that holds every credential (AD-5). `required: false` so that
+      # `docker compose config` still validates on a machine that has not been set up —
+      # a missing contract is then reported by the application, naming the fields.
+      - path: .env
+        required: false
+    extra_hosts:
+      # LiteLLM, Langfuse and the model server run on the host, not in compose (AD-11)
+      - "host.docker.internal:host-gateway"
+    ports:
+      # loopback only: the API is reached from the compose network and from this machine's
+      # own tooling (`make e2e-api`, `curl`), never from another host
+      - "127.0.0.1:${BACKEND_API_PORT:?set it in .env, copied from .env.example}:${BACKEND_API_PORT:?set it in .env, copied from .env.example}"
+    volumes:
+      # base clones, worktrees and step logs
+      - work:${WORK_DIR:?set it in .env, copied from .env.example}
+      # ~/.claude ~/.codex ~/.config/opencode: the harness configs and the BMAD skill stubs
+      - agent-home:${AGENT_HOME:?set it in .env, copied from .env.example}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # the worktrees and the harness configs are written at run time (NFR-3)
+    read_only: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # $$ defers the expansion to the container's shell, which has the contract
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${BACKEND_API_PORT}/healthz >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      # the first start runs `alembic upgrade head` before the socket is bound
+      start_period: 60s
+    restart: unless-stopped
+
+  web-client:
+    build:
+      # its own context: the component needs nothing from the rest of the repository
+      context: ./web-client
+      dockerfile: Dockerfile
+    environment:
+      # exactly four (AD-5) — the one credential, the cookie signing key, where the backend
+      # is, and the port. Never GITHUB_TOKEN, never LITELLM_SPEND_KEY, never DATABASE_URL.
+      ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN:?set it in .env, copied from .env.example}
+      ORCHESTRATOR_SESSION_SECRET: ${ORCHESTRATOR_SESSION_SECRET:?set it in .env, copied from .env.example}
+      BACKEND_API_URL: ${BACKEND_API_URL:?set it in .env, copied from .env.example}
+      WEB_CLIENT_PORT: ${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}
+    ports:
+      # loopback only: one operator at one machine (PRD §12); reaching it from elsewhere is
+      # a host concern, the same posture NFR-4 takes for egress
+      - "127.0.0.1:${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}:${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Astro writes its session store under the working directory
+    read_only: false
+    depends_on:
+      backend-api:
+        condition: service_healthy
+    healthcheck:
+      # node, not curl: the slim base carries no HTTP client, and adding one to probe a
+      # server that is already node would be a package installed for a single request.
+      # `/login` is the one route that answers without a session (1.5).
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:' + (process.env.WEB_CLIENT_PORT || 4321) + '/login').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  # /work — base clones, worktrees, logs (AD-14)
+  work:
+  # the agent's home — harness configs and the BMAD skill stubs (AD-16). Seeded from the
+  # backend image the first time it is created, and not backed up (spine Operations).
+  agent-home:

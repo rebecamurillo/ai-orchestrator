@@ -18,13 +18,48 @@ setting exists in one place and not the other. Copy it once, fill it in, and nev
 
 ```bash
 cp .env.example .env        # then fill in the tokens and keys
+make up                     # build the images and start web-client, backend-api, postgres
 ```
 
-Bringing the whole stack up (`make up`) arrives with the container images in story 1.6. Until
-then the database runs in compose and backend-api runs on the host.
+`make up` is `docker compose up -d --build`. The first run builds both images, which takes
+minutes: the backend image installs Node 24, the three harness CLIs at their pinned versions,
+and the BMAD skill stubs. When it returns, `docker compose ps` shows three services and every
+one of them reaches `healthy` — the backend after `alembic upgrade head`, the web-client after
+`/login` answers.
+
+```bash
+curl -fs http://127.0.0.1:8000/healthz     # {"status":"ok", …}
+open http://127.0.0.1:4321/login           # the token from .env logs in
+```
+
+Both ports are published on `127.0.0.1` only, like the database: one operator at one machine.
+Reaching the stack from another host is a host-level decision (a tunnel), not a compose one.
+The addresses are written as `127.0.0.1` rather than `localhost` for the same reason
+`astro.config.mjs` pins it: `localhost` also resolves to `::1`, which nothing here listens on.
+
+The model gateway (LiteLLM), the tracing server (Langfuse) and the model server run on the host
+rather than in compose, and `backend-api` reaches them through `host.docker.internal`. Setting
+them up — the two Gateway keys, the `langfuse_otel` callback, the egress allowlist and the
+nightly `pg_dump` — is `host/README.md`, with `host/litellm.config.yaml` as the starting config.
+
+```bash
+make logs                                # follow every service
+make down                                # stop the stack; pgdata, work and agent-home survive
+docker compose down -v                   # the deliberate act that also deletes them
+```
+
+Inside the backend container everything an agent needs is already there, as the non-root user
+`agent`:
+
+```bash
+docker compose exec backend-api sh -c 'id -un; claude --version; codex --version; opencode --version'
+docker compose exec backend-api scripts/harness/claude.sh doctor   # version · skills · gateway
+```
+
+### Running backend-api from a shell instead
 
 `DATABASE_URL` in the contract names the compose service (`@postgres:5432`), because that is
-what the containers will use. It does not resolve from a shell on this machine, so a host run
+what the containers use. It does not resolve from a shell on this machine, so a host run
 overrides it — without that line the process dies in the migration step:
 
 ```bash
@@ -42,31 +77,30 @@ it never serves a half-migrated schema. Check the schema with:
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'select * from alembic_version'
 ```
 
-The gates that decide whether work is done. Epic 1 is being built story by story, so a target
-whose story has not landed yet exits non-zero with `not available until story <id>` rather than
-silently passing:
+The gates that decide whether work is done. Every one of them runs; a target whose tooling a
+later story still brings would exit non-zero with `not available until story <id>` rather than
+pass silently, and none is in that state:
 
 ```bash
 make lint        # ruff · mypy · import-linter · env-contract · eslint · prettier · tsc · astro check
 make test        # backend unit tests (pytest) + web-client unit tests (vitest)
-make e2e-api     # httpx scenarios + schemathesis against the stack   (story 1.2 — works)
-make openapi     # export contracts/openapi.json, regenerate types    (story 1.3 — works)
-make e2e-ui      # playwright against the built web-client            (story 1.3 — works)
+make e2e-api     # httpx scenarios + schemathesis against the stack   (story 1.2)
+make openapi     # export contracts/openapi.json, regenerate types    (story 1.3)
+make e2e-ui      # playwright against the built web-client            (story 1.3)
 make up / down   # docker compose: web-client, backend-api, postgres  (story 1.6)
 ```
 
-`make e2e-api` needs the database and the application running (above). It reads three
-variables from the environment: `ORCHESTRATOR_TOKEN`, which `.env` supplies, and
-`BACKEND_API_URL` and `DATABASE_URL`, which a host run overrides — the first because the
-contract names the compose service, the second for the same reason the application run
-overrides it. The migration scenarios open their own connection, so leaving `DATABASE_URL`
-at its contract value fails the gate with `failed to resolve host 'postgres'`. It waits up
-to 30 seconds for `/healthz`; it never skips.
+`make e2e-api` runs against a stack that is already up, and never skips: it waits up to 30
+seconds for `/healthz` and then fails, naming the address it tried. It reads three variables.
+`ORCHESTRATOR_TOKEN` comes from `.env` as it is. `BACKEND_API_URL` and `DATABASE_URL` both name
+the compose service in the contract, which is what the containers resolve and a shell does not,
+so a run from this machine overrides them — the migration scenarios open their own connection,
+and leaving `DATABASE_URL` alone fails the gate with `failed to resolve host 'postgres'`.
 
 ```bash
 set -a; . ./.env; set +a
 export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
-BACKEND_API_URL=http://127.0.0.1:8000 make e2e-api
+BACKEND_API_URL=http://127.0.0.1:8000 make e2e-api      # against `make up`, or against a host run
 ```
 
 ### The web-client half
@@ -88,6 +122,10 @@ TypeScript types for an API payload are generated, never written by hand (AD-3).
 `make e2e-ui` builds web-client and runs Playwright against the built server on
 `127.0.0.1:4321`, with a stub backend-api on `127.0.0.1:8788`. It needs no database and no
 running backend; `E2E_BACKEND=real` points the same specs at a real one instead.
+
+That is the same address `make up` publishes the web-client on, so the two cannot run at
+once: with the stack up, Playwright refuses with `127.0.0.1:4321 is already used`. Run
+`make down` first, or give the container a different `WEB_CLIENT_PORT` in `.env`.
 
 ## Setting up the BMAD method on a new machine
 

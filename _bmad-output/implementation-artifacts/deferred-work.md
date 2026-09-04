@@ -45,3 +45,7 @@ Findings surfaced by review that are real but belong to a later story. Append-on
 - source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-01-foundation/stories/1-3-generated-contract-and-web-client-skeleton.md`
   summary: The proxy flattens repeated upstream response headers, so several `Set-Cookie` headers would arrive as one comma-joined value.
   evidence: `src/pages/api/[...path].ts` copies headers with `Headers.forEach` + `set`, which cannot represent a repeated header. Inert today — AD-1 states backend-api sets no cookies and sends no CORS headers — and it becomes real only if a later story gives backend-api a repeated response header.
+
+- source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-01-foundation/stories/1-6-container-images-and-the-compose-stack.md`
+  summary: No gate builds the two container images; `backend-api/tests/unit/test_dockerfiles.py` asserts their text, and only a human running `make up` proves they build and run.
+  evidence: Building takes minutes and network, so `make test` cannot do it. Story 1.6's brief assigns the image build to CI in 1.7 ("CI builds the images in 1.7"); until that lands, a Dockerfile change that still satisfies every text assertion can break `make up` with no gate failing.
