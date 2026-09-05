@@ -5,6 +5,8 @@ description = "ai-orchestrator backend-api — plans, executes, and parks BMAD d
 requires-python = "==3.14.*"
 dependencies = [
     "alembic==1.19.1",
+    # Fernet, for the Project env vars encrypted at rest with ORCHESTRATOR_SECRET_KEY (AD-5)
+    "cryptography==50.0.1",
     "fastapi==0.141.1",
     "psycopg[binary]==3.3.5",
     "pydantic==2.13.5",
@@ -92,6 +94,9 @@ forbidden_modules = [
     "httpx",
     "langfuse",
     "git",
+    # AD-5: the rules encrypt through the `Crypto` port and hold no key; only
+    # `infrastructure/crypto/` imports the library that has one
+    "cryptography",
 ]
 
 [[tool.importlinter.contracts]]
@@ -108,6 +113,9 @@ forbidden_modules = [
     "httpx",
     "langfuse",
     "git",
+    # AD-5: the rules encrypt through the `Crypto` port and hold no key; only
+    # `infrastructure/crypto/` imports the library that has one
+    "cryptography",
 ]
 
 # ── pytest ───────────────────────────────────────────────────────────────────

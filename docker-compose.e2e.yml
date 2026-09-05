@@ -1,0 +1,34 @@
+# ai-orchestrator — the overlay that makes the e2e gate a stack of its own.
+#
+# `make e2e` merges this over `docker-compose.yml` under the project name `aio-e2e`, so the
+# gate gets its own containers, its own `pgdata`, `work` and `agent-home` volumes and its own
+# database, and ends with `docker compose down -v`. The Projects the suite never deletes, the
+# bare fixture repositories it makes and the base clones the backend cuts from them all die
+# with the run; none of it can reach `aio-dev`.
+#
+# Two things have to be said here rather than in `.env.e2e`, because `docker-compose.yml`
+# writes them literally and a frozen test pins them there:
+#
+#   - postgres publishes `127.0.0.1:5432:5432`, so a second project refuses to start while
+#     the dev stack holds the port. `E2E_POSTGRES_PORT` moves the published half; the
+#     container half stays 5432, which is what `DATABASE_URL` names inside the network.
+#   - backend-api reads `env_file: .env` — the dev environment. The gate's stack must read
+#     `.env.e2e`, or it would reach the dev database with the dev credentials and the whole
+#     point of this file would be lost. `required: true`: a missing `.env.e2e` refuses rather
+#     than starting a container configured from nothing (hard rule 7).
+#
+# `!override` replaces the list it is written on. Without it compose *appends*, both port
+# lines would be published and the collision this file exists to remove would come back.
+#
+# The two application ports need nothing here: `docker-compose.yml` already publishes
+# `${BACKEND_API_PORT}` and `${WEB_CLIENT_PORT}`, and `.env.e2e` gives them values of their own.
+
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:${E2E_POSTGRES_PORT:-55432}:5432"
+
+  backend-api:
+    env_file: !override
+      - path: .env.e2e
+        required: true

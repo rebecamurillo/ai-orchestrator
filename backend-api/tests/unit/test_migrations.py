@@ -273,7 +273,7 @@ def test_run_migrations_upgrades_to_head_and_returns_the_revision(
     head = run_migrations(Settings())
 
     assert upgrades == ["head"]
-    assert head == BASELINE_REVISION
+    assert head == ScriptDirectory.from_config(alembic_config(Settings())).get_heads()[0]
 
 
 def test_run_migrations_logs_the_line_the_operator_looks_for(
@@ -286,7 +286,7 @@ def test_run_migrations_logs_the_line_the_operator_looks_for(
 
     out = capsys.readouterr().out
     assert "migrations applied" in out
-    assert BASELINE_REVISION in out
+    assert ScriptDirectory.from_config(alembic_config(Settings())).get_heads()[0] in out
 
 
 def test_a_failed_upgrade_aborts_rather_than_serving_a_half_migrated_schema(

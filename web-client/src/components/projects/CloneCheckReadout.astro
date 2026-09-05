@@ -1,0 +1,154 @@
+---
+/**
+ * The **CLONE CHECK** column (2.5, UX-DR13): one block per Repository, read straight off
+ * `RepositoryOut` — the backend already ran the check as part of the save that stored these
+ * rows (2.3), so this component derives nothing and calls nothing; it only lays out fields
+ * that already exist.
+ *
+ * The four named lines (`ls-remote`, `clone`, `default branch`, `method version`) are fixed,
+ * ordered constants on the backend (`domain/entities/repository.py`'s `LINE_*`), not
+ * something this component infers: a failed check stops after the line that failed, so
+ * `clone_check_lines` can hold fewer than four entries, and this renders exactly the ones
+ * that ran, in that same order.
+ */
+import type { components } from '../../api/schema';
+import CommandBlock from '../CommandBlock.astro';
+
+type RepositoryOut = components['schemas']['RepositoryOut'];
+
+interface Props {
+  repositories: RepositoryOut[];
+}
+
+const { repositories } = Astro.props;
+
+const LINE_ORDER = ['ls-remote', 'clone', 'default branch', 'method version'] as const;
+
+function lineWord(status: 'ok' | 'failed'): string {
+  return status;
+}
+
+/** `pending · save to check` is the exact copy `RepositoriesTable.astro` (2.4) already
+ * ships for this same state — restated here, not reinvented, so the product says the same
+ * thing about an unchecked Repository everywhere it appears. */
+function overallLine(repository: RepositoryOut): string {
+  if (repository.clone_check.status === 'failed') return 'failed · new runs blocked';
+  if (repository.clone_check.status === 'pending') return 'pending · save to check';
+  return 'ok';
+}
+
+function methodVersionNeedsInit(repository: RepositoryOut): boolean {
+  const version = repository.clone_check.bmad_version;
+  return version === 'missing' || version === 'outdated';
+}
+---
+
+{
+  repositories.length === 0 ? (
+    <p class="empty" data-testid="clone-check-empty">
+      save to run the clone check
+    </p>
+  ) : (
+    repositories.map((repository) => (
+      <section class="block" data-testid={`projects-clone-check-${repository.slug}`}>
+        <h3 class="slug">{repository.slug}</h3>
+
+        <ul class="lines">
+          {LINE_ORDER.map((name) => {
+            const line = repository.clone_check_lines.find((candidate) => candidate.name === name);
+            if (!line) return null;
+            // the `clone` line carries the byte-count text `run_clone_check` (2.3) already
+            // put in its own `output` — nothing here recomputes or re-derives a byte figure
+            const suffix = name === 'clone' ? ` (${line.output} · ${line.seconds}s)` : '';
+            return (
+              <li>
+                <span class="line-name">{name}</span>{' '}
+                <span data-signal={line.status === 'failed' ? 'failed' : undefined}>
+                  {lineWord(line.status)}
+                </span>
+                {suffix}
+              </li>
+            );
+          })}
+        </ul>
+
+        {repository.clone_check.status === 'failed' && (
+          <div class="failed-detail">
+            <CommandBlock label="clone check output" command={repository.clone_check.output} />
+            {repository.clone_check_hint && <p class="hint">{repository.clone_check_hint}</p>}
+          </div>
+        )}
+
+        {methodVersionNeedsInit(repository) && (
+          <p class="extra-line">run Initialise repository after save</p>
+        )}
+
+        {repository.verify_skipped && <p class="extra-line">verify step will be skipped</p>}
+
+        <p
+          class="overall"
+          data-signal={repository.clone_check.status === 'failed' ? 'failed' : undefined}
+        >
+          {overallLine(repository)}
+        </p>
+      </section>
+    ))
+  )
+}
+
+<style>
+  .empty {
+    color: var(--color-text-secondary);
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+  }
+
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: var(--space-6) 0;
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  .slug {
+    color: var(--color-text);
+    font-size: var(--type-row-title);
+    line-height: var(--type-row-title-line);
+  }
+
+  .lines {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--color-text-secondary);
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+  }
+
+  .line-name {
+    color: var(--color-text-tertiary);
+  }
+
+  /* the only coloured text in the block (Signal rule): a failed line's status word, or the
+     overall line when the whole check failed — nothing else here is coloured */
+  [data-signal='failed'] {
+    color: var(--color-signal-failed);
+  }
+
+  .hint,
+  .extra-line {
+    color: var(--color-text-secondary);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+
+  .overall {
+    color: var(--color-text);
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+  }
+</style>

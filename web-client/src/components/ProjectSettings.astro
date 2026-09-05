@@ -1,0 +1,33 @@
+---
+/**
+ * The Project's SETTINGS section (2.4): what the harness receives beyond the repositories
+ * themselves. Two rows on `KvTable` — the environment variables, masked as the API already
+ * masks them, and where the two remaining instance-wide credentials live. Neither the
+ * GitHub token nor the LiteLLM key is a Project setting (AD-5); this row says so rather than
+ * pretending a control for them belongs here.
+ */
+import KvTable from './KvTable.astro';
+
+interface EnvVar {
+  name: string;
+  masked: string;
+}
+
+interface Props {
+  envVars: EnvVar[];
+}
+
+const { envVars } = Astro.props;
+
+const envVarsValue =
+  envVars.length > 0
+    ? `${envVars.length} · ${envVars.map((variable) => `${variable.name} ${variable.masked}`).join(', ')}`
+    : '0 · none set';
+
+const rows = [
+  { label: 'env vars', value: envVarsValue },
+  { label: 'GitHub token and gateway key', value: 'instance settings' },
+];
+---
+
+<KvTable rows={rows} />

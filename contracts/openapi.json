@@ -1,6 +1,192 @@
 {
   "components": {
     "schemas": {
+      "CloneCheckLineOut": {
+        "description": "One command the check ran: what it was, how it went, how long, and what it said.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output": {
+            "title": "Output",
+            "type": "string"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "seconds",
+          "output"
+        ],
+        "title": "CloneCheckLineOut",
+        "type": "object"
+      },
+      "CloneCheckOut": {
+        "description": "The summary of a Repository's last clone check. `pending` until one has run.\n\nExactly four keys, and it stays that way. The lines a finished check ran, and the hint it\nderives, are published beside this object as `clone_check_lines` and `clone_check_hint`,\nand together as one object on the clone-check operations.",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "bmad_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bmad Version"
+          },
+          "output": {
+            "title": "Output",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "ok",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "at",
+          "output",
+          "bmad_version"
+        ],
+        "title": "CloneCheckOut",
+        "type": "object"
+      },
+      "CloneCheckResultOut": {
+        "description": "The result of checking that a Repository can be reached and cloned.\n\n`lines` holds one entry per command the check ran, in the order they ran. `hint` is what\nthe Operator can do about a failure, or empty when nothing is known. Until a check has\nrun, `status` is `pending`, `at` is null and `lines` is empty.",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "bmad_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bmad Version"
+          },
+          "hint": {
+            "title": "Hint",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/CloneCheckLineOut"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "output": {
+            "title": "Output",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "ok",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "at",
+          "output",
+          "bmad_version",
+          "lines",
+          "hint"
+        ],
+        "title": "CloneCheckResultOut",
+        "type": "object"
+      },
+      "EnvVarCreate": {
+        "description": "One requested variable on a create, where there is nothing to keep.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "title": "EnvVarCreate",
+        "type": "object"
+      },
+      "EnvVarIn": {
+        "description": "One requested variable. Without a `value`, the stored ciphertext is kept.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "EnvVarIn",
+        "type": "object"
+      },
       "Health": {
         "description": "The `/healthz` payload. Typed so the generated contract carries a real schema (AD-3).",
         "properties": {
@@ -18,6 +204,79 @@
           "version"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "MaskedEnvVarOut": {
+        "description": "One stored variable as it leaves this API: the name, and four characters of the value.",
+        "properties": {
+          "masked": {
+            "title": "Masked",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "masked"
+        ],
+        "title": "MaskedEnvVarOut",
+        "type": "object"
+      },
+      "Page_ProjectRead_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[ProjectRead]",
+        "type": "object"
+      },
+      "Page_RepositoryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RepositoryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[RepositoryOut]",
         "type": "object"
       },
       "Pong": {
@@ -151,6 +410,379 @@
         ],
         "title": "ProblemError",
         "type": "object"
+      },
+      "ProjectCreate": {
+        "description": "`POST /projects`. Every variable carries its value.",
+        "properties": {
+          "context_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Context Paths",
+            "type": "array"
+          },
+          "context_text": {
+            "default": "",
+            "title": "Context Text",
+            "type": "string"
+          },
+          "env_vars": {
+            "items": {
+              "$ref": "#/components/schemas/EnvVarCreate"
+            },
+            "title": "Env Vars",
+            "type": "array"
+          },
+          "log_prompt_content": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Prompt Content"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProjectCreate",
+        "type": "object"
+      },
+      "ProjectRead": {
+        "description": "A Project as every read returns it, its Repositories embedded.\n\nEvery read answers the same shape (POST's 201, PUT's 200, both GETs) \u2014 a Repository\nadded between two reads is exactly the kind of state change the Operator relies on the\nnext read to show, and a narrower shape for the list or the create response would have\nto justify why *that* read is allowed to lie about what is stored.",
+        "properties": {
+          "context_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Context Paths",
+            "type": "array"
+          },
+          "context_text": {
+            "title": "Context Text",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "env_vars": {
+            "items": {
+              "$ref": "#/components/schemas/MaskedEnvVarOut"
+            },
+            "title": "Env Vars",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "log_prompt_content": {
+            "title": "Log Prompt Content",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "repositories": {
+            "items": {
+              "$ref": "#/components/schemas/RepositoryOut"
+            },
+            "title": "Repositories",
+            "type": "array"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "context_text",
+          "context_paths",
+          "env_vars",
+          "log_prompt_content",
+          "repositories",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProjectRead",
+        "type": "object"
+      },
+      "ProjectUpdate": {
+        "description": "`PUT /projects/{id}`. A variable without a value keeps the one already stored.",
+        "properties": {
+          "context_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Context Paths",
+            "type": "array"
+          },
+          "context_text": {
+            "default": "",
+            "title": "Context Text",
+            "type": "string"
+          },
+          "env_vars": {
+            "items": {
+              "$ref": "#/components/schemas/EnvVarIn"
+            },
+            "title": "Env Vars",
+            "type": "array"
+          },
+          "log_prompt_content": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Prompt Content"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProjectUpdate",
+        "type": "object"
+      },
+      "RepositoryCreate": {
+        "description": "`POST /projects/{project_id}/repositories`.",
+        "properties": {
+          "default_branch": {
+            "minLength": 1,
+            "title": "Default Branch",
+            "type": "string"
+          },
+          "install_command": {
+            "default": "",
+            "title": "Install Command",
+            "type": "string"
+          },
+          "package_manager": {
+            "default": "other",
+            "enum": [
+              "uv",
+              "pnpm",
+              "npm",
+              "yarn",
+              "pip",
+              "cargo",
+              "go",
+              "other"
+            ],
+            "title": "Package Manager",
+            "type": "string"
+          },
+          "quality_gate_command": {
+            "default": "",
+            "title": "Quality Gate Command",
+            "type": "string"
+          },
+          "test_globs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Test Globs",
+            "type": "array"
+          },
+          "unit_test_command": {
+            "default": "",
+            "title": "Unit Test Command",
+            "type": "string"
+          },
+          "url": {
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "default_branch"
+        ],
+        "title": "RepositoryCreate",
+        "type": "object"
+      },
+      "RepositoryOut": {
+        "description": "A Repository as every read returns it.",
+        "properties": {
+          "clone_check": {
+            "$ref": "#/components/schemas/CloneCheckOut"
+          },
+          "clone_check_hint": {
+            "title": "Clone Check Hint",
+            "type": "string"
+          },
+          "clone_check_lines": {
+            "items": {
+              "$ref": "#/components/schemas/CloneCheckLineOut"
+            },
+            "title": "Clone Check Lines",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "default_branch": {
+            "title": "Default Branch",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "install_command": {
+            "title": "Install Command",
+            "type": "string"
+          },
+          "package_manager": {
+            "title": "Package Manager",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "quality_gate_command": {
+            "title": "Quality Gate Command",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "test_globs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Test Globs",
+            "type": "array"
+          },
+          "unit_test_command": {
+            "title": "Unit Test Command",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "verify_skipped": {
+            "title": "Verify Skipped",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "slug",
+          "url",
+          "default_branch",
+          "install_command",
+          "quality_gate_command",
+          "unit_test_command",
+          "test_globs",
+          "package_manager",
+          "clone_check",
+          "clone_check_lines",
+          "clone_check_hint",
+          "verify_skipped",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RepositoryOut",
+        "type": "object"
+      },
+      "RepositoryUpdate": {
+        "description": "`PUT /repositories/{repository_id}`.",
+        "properties": {
+          "default_branch": {
+            "minLength": 1,
+            "title": "Default Branch",
+            "type": "string"
+          },
+          "install_command": {
+            "default": "",
+            "title": "Install Command",
+            "type": "string"
+          },
+          "package_manager": {
+            "default": "other",
+            "enum": [
+              "uv",
+              "pnpm",
+              "npm",
+              "yarn",
+              "pip",
+              "cargo",
+              "go",
+              "other"
+            ],
+            "title": "Package Manager",
+            "type": "string"
+          },
+          "quality_gate_command": {
+            "default": "",
+            "title": "Quality Gate Command",
+            "type": "string"
+          },
+          "test_globs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Test Globs",
+            "type": "array"
+          },
+          "unit_test_command": {
+            "default": "",
+            "title": "Unit Test Command",
+            "type": "string"
+          },
+          "url": {
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "default_branch"
+        ],
+        "title": "RepositoryUpdate",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -205,6 +837,867 @@
         "summary": "Confirm the bearer token is accepted",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/api/v1/projects": {
+      "get": {
+        "description": "Every Project, ordered by name, each with its variables masked and Repositories embedded.\n\nOne page: the whole list is small enough that a cursor would be ceremony. The envelope\nis the same one every list in this API uses, so paging can arrive without a break.",
+        "operationId": "list_projects_api_v1_projects_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ProjectRead_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List every Project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Store a Project. Every variable value is encrypted before it is written (AD-5).",
+        "operationId": "create_project_api_v1_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Another Project already holds that name."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create a Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}": {
+      "get": {
+        "description": "One Project, with every variable masked and its Repositories embedded, in creation\norder. An unknown id is a 404 problem document.",
+        "operationId": "get_project_api_v1_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one Project, with its Repositories",
+        "tags": [
+          "projects"
+        ]
+      },
+      "put": {
+        "description": "Replace a Project's editable fields, and with them its whole variable set.\n\nA variable sent without a value keeps the ciphertext already stored, which is how a\nform that was never given the secret can send the set back without losing it. An\nomitted `log_prompt_content` keeps the stored switch for the same reason: no instance\ndefault is resolved here. The two settings this route does read are `WORK_DIR` and\n`BMAD_VERSION`, for the clone check that follows the save. Its Repositories are\nuntouched by this route and are re-read, not carried over from before the call.",
+        "operationId": "update_project_api_v1_projects__project_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Another Project already holds that name."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update a Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/repositories": {
+      "get": {
+        "description": "Every Repository stored under this Project, in the order they were created.",
+        "operationId": "list_repositories_api_v1_projects__project_id__repositories_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_RepositoryOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project or Repository has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List a Project's Repositories",
+        "tags": [
+          "repositories"
+        ]
+      },
+      "post": {
+        "description": "Store a Repository. Its `clone_check` starts `pending` until a check is run.",
+        "operationId": "add_repository_api_v1_projects__project_id__repositories_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project or Repository has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Another Repository in this Project already holds that url."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Register a Repository under a Project",
+        "tags": [
+          "repositories"
+        ]
+      }
+    },
+    "/api/v1/repositories/{repository_id}": {
+      "get": {
+        "description": "One stored Repository. An unknown id is a 404 problem document.",
+        "operationId": "get_repository_api_v1_repositories__repository_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project or Repository has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one Repository",
+        "tags": [
+          "repositories"
+        ]
+      },
+      "put": {
+        "description": "Replace a Repository's editable fields. Its `clone_check` and slug are untouched.",
+        "operationId": "update_repository_api_v1_repositories__repository_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project or Repository has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Another Repository in this Project already holds that url."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update a Repository",
+        "tags": [
+          "repositories"
+        ]
+      }
+    },
+    "/api/v1/repositories/{repository_id}/clone-check": {
+      "get": {
+        "description": "The stored result, and no git command. `pending` until a check has run.",
+        "operationId": "read_clone_check_api_v1_repositories__repository_id__clone_check_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloneCheckResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Repository has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read this Repository's last clone check",
+        "tags": [
+          "repositories"
+        ]
+      },
+      "post": {
+        "description": "Reach the remote, make or refresh the base clone, and store what happened.\n\n`WORK_DIR` and `BMAD_VERSION` reach the use case as arguments, because nothing under\n`application/` reads the environment (AD-20).",
+        "operationId": "run_clone_check_api_v1_repositories__repository_id__clone_check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloneCheckResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Repository has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Run this Repository's clone check",
+        "tags": [
+          "repositories"
         ]
       }
     },

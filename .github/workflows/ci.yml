@@ -112,15 +112,35 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend-api/uv.lock
       - name: Fill the environment contract with its committed placeholders
-        run: cp .env.example .env
+        # Two values cannot be the committed ones. ORCHESTRATOR_SECRET_KEY must be a valid
+        # Fernet key, and `change-me-fernet-key` is not one: the Projects API builds a Fernet
+        # per request (api/providers.py), so with the placeholder every write answers 500 and
+        # the suite tests nothing. Mint one for this run — random, never leaves the runner,
+        # torn down with the volume afterwards.
+        #
+        # POSTGRES_DB names the database the gate may write to. `tests/e2e` creates Projects,
+        # fixture repositories and base clones and removes none of them, so
+        # `scripts/check_e2e_target.sh` refuses any database whose name does not end in
+        # `_e2e` — here and on a developer's machine alike. This runner's postgres is as
+        # disposable as `make e2e`'s, and says so in its name.
+        run: |
+          cp .env.example .env
+          key=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
+          sed -i "s|^ORCHESTRATOR_SECRET_KEY=.*|ORCHESTRATOR_SECRET_KEY=$key|" .env
+          sed -i "s|^POSTGRES_DB=.*|POSTGRES_DB=orchestrator_e2e|" .env
       - name: Start postgres
         run: docker compose up -d --wait postgres
       - name: Start backend-api from source
-        # DATABASE_URL in the contract names the compose service, which only resolves inside
-        # the network; a run on the runner itself takes the published port instead
+        # Two contract values name things that exist only inside the compose network, and a
+        # run on the runner itself has neither. DATABASE_URL names the postgres service, so
+        # the published port stands in for it; WORK_DIR is `/work`, a named volume the
+        # runner has no root to create, so a directory under RUNNER_TEMP stands in for it —
+        # the clone check writes base clones there.
         run: |
           set -a; . ./.env; set +a
           export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
+          export WORK_DIR="${RUNNER_TEMP:-/tmp}/work"
+          mkdir -p "$WORK_DIR"
           uv run --locked --directory backend-api python -m orchestrator.main > backend-api.log 2>&1 &
           for _ in $(seq 1 60); do
             curl -fsS http://127.0.0.1:8000/healthz && exit 0
@@ -130,9 +150,13 @@ jobs:
           cat backend-api.log >&2
           exit 1
       - name: Gate
+        # The same two stand-ins as the step above: the suite reads WORK_DIR through
+        # `Settings()` to write its own fixture repositories where the backend can clone them
         run: |
           set -a; . ./.env; set +a
           export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
+          export WORK_DIR="${RUNNER_TEMP:-/tmp}/work"
+          mkdir -p "$WORK_DIR"
           export BACKEND_API_URL=http://127.0.0.1:8000
           make e2e-api
       - name: Backend log
