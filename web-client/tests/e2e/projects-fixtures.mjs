@@ -1,0 +1,228 @@
+/**
+ * The `ProjectRead` fixtures `stub-backend.mjs` and `projects.spec.ts` share (2.4).
+ *
+ * Plain JS, not TypeScript: it is imported by the `.mjs` stub server, which runs outside
+ * Astro's Vite pipeline and cannot resolve a `.ts` module. `tsconfig.json` already includes
+ * `*.mjs`, so `projects.spec.ts` can import the same file with full type-checking.
+ *
+ * Three Projects cover every row of the intent contract's I/O matrix in one place:
+ *
+ * - `MIXED` carries one Repository per `clone_check.status` combination the matrix names —
+ *   `ok` with a version and a quality gate, `failed` with a hint and output, `ok` with the
+ *   `missing` version string and no quality gate, and `pending` with no check run yet — plus
+ *   a fifth, `orchestrator-recheck`, that exists solely as the stub's `POST clone-check`
+ *   target, so the mutating recheck test never shares a repository with the read-only
+ *   assertions the same describe block makes about the others.
+ * - `CLEAN` has only `ok` Repositories, for the colour-scan AC.
+ * - `NO_REPOS` has none, for the empty-repositories message.
+ */
+export const MIXED_ID = '00000000-0000-4000-8000-0000000000a1';
+export const CLEAN_ID = '00000000-0000-4000-8000-0000000000b1';
+export const NO_REPOS_ID = '00000000-0000-4000-8000-0000000000c1';
+export const UNKNOWN_ID = '00000000-0000-4000-8000-000000009999';
+
+export const MIXED_OK_REPO_ID = '00000000-0000-4000-8000-0000000000a2';
+export const MIXED_FAILED_REPO_ID = '00000000-0000-4000-8000-0000000000a3';
+export const MIXED_MISSING_REPO_ID = '00000000-0000-4000-8000-0000000000a4';
+export const MIXED_PENDING_REPO_ID = '00000000-0000-4000-8000-0000000000a5';
+export const MIXED_RECHECK_REPO_ID = '00000000-0000-4000-8000-0000000000a6';
+
+/**
+ * The repository the stub's `POST clone-check` route flips from `failed` to `ok` — its own,
+ * dedicated fixture (`orchestrator-recheck`), never shared with `MIXED_FAILED_REPO_ID`
+ * (`orchestrator-web`). `projects.spec.ts` runs under `fullyParallel: true`, and two other
+ * tests in the same describe block read `orchestrator-web` expecting it to stay `failed`; if
+ * the mutating recheck test and those read-only ones targeted the same repository, their
+ * outcome would depend on worker scheduling. Submitting a recheck for `orchestrator-web`
+ * itself is still exercised — deliberately, as the "backend refuses the id" case — because it
+ * is no longer this constant, so the stub 404s it without mutating anything.
+ */
+export const RECHECK_REPOSITORY_ID = MIXED_RECHECK_REPO_ID;
+
+const CREATED_AT = '2026-01-05T09:00:00Z';
+const UPDATED_AT = '2026-01-06T10:00:00Z';
+
+function repository(overrides) {
+  return {
+    id: 'repository-id-not-set',
+    project_id: 'project-id-not-set',
+    slug: 'repo',
+    url: 'https://github.com/example/repo.git',
+    default_branch: 'main',
+    install_command: 'pnpm install',
+    quality_gate_command: 'pnpm lint && pnpm test',
+    unit_test_command: 'pnpm test',
+    test_globs: ['tests/**/*.test.ts'],
+    package_manager: 'pnpm',
+    clone_check: { status: 'pending', at: null, output: '', bmad_version: null },
+    clone_check_lines: [],
+    clone_check_hint: '',
+    verify_skipped: false,
+    created_at: CREATED_AT,
+    updated_at: UPDATED_AT,
+    ...overrides,
+  };
+}
+
+function project(overrides) {
+  return {
+    id: 'project-id-not-set',
+    slug: 'project',
+    name: 'Project',
+    context_text: '',
+    context_paths: [],
+    env_vars: [],
+    log_prompt_content: false,
+    repositories: [],
+    created_at: CREATED_AT,
+    updated_at: UPDATED_AT,
+    ...overrides,
+  };
+}
+
+const okRepository = repository({
+  id: MIXED_OK_REPO_ID,
+  project_id: MIXED_ID,
+  slug: 'orchestrator-api',
+  quality_gate_command: 'make lint && make test',
+  clone_check: {
+    status: 'ok',
+    at: '2026-09-04T12:00:00Z',
+    output: 'cloned ok',
+    bmad_version: '6.11.0',
+  },
+  clone_check_lines: [
+    { name: 'clone', status: 'ok', seconds: 4, output: 'Cloning into base...' },
+    { name: 'install', status: 'ok', seconds: 11, output: 'added 214 packages' },
+  ],
+  verify_skipped: false,
+});
+
+const failedRepository = repository({
+  id: MIXED_FAILED_REPO_ID,
+  project_id: MIXED_ID,
+  slug: 'orchestrator-web',
+  clone_check: {
+    status: 'failed',
+    at: '2026-09-04T12:05:00Z',
+    output: 'fatal: could not read Username for https://github.com: terminal prompts disabled',
+    bmad_version: null,
+  },
+  clone_check_lines: [
+    { name: 'clone', status: 'failed', seconds: 2, output: 'fatal: could not read Username' },
+  ],
+  clone_check_hint: 'add a deploy key or a GITHUB_TOKEN with access to this repository',
+  verify_skipped: false,
+});
+
+const missingMethodRepository = repository({
+  id: MIXED_MISSING_REPO_ID,
+  project_id: MIXED_ID,
+  slug: 'orchestrator-docs',
+  quality_gate_command: '',
+  test_globs: [],
+  clone_check: {
+    status: 'ok',
+    at: '2026-09-04T12:10:00Z',
+    output: 'cloned ok',
+    bmad_version: 'missing',
+  },
+  clone_check_lines: [{ name: 'clone', status: 'ok', seconds: 3, output: 'Cloning into base...' }],
+  verify_skipped: true,
+});
+
+const pendingRepository = repository({
+  id: MIXED_PENDING_REPO_ID,
+  project_id: MIXED_ID,
+  slug: 'orchestrator-infra',
+  clone_check: { status: 'pending', at: null, output: '', bmad_version: null },
+  clone_check_lines: [],
+  verify_skipped: false,
+});
+
+/** The sole target of the stub's `POST clone-check` route — see `RECHECK_REPOSITORY_ID`. */
+const recheckTargetRepository = repository({
+  id: MIXED_RECHECK_REPO_ID,
+  project_id: MIXED_ID,
+  slug: 'orchestrator-recheck',
+  clone_check: {
+    status: 'failed',
+    at: '2026-09-04T12:06:00Z',
+    output: 'fatal: authentication failed for https://github.com/example/repo.git',
+    bmad_version: null,
+  },
+  clone_check_lines: [
+    { name: 'clone', status: 'failed', seconds: 1, output: 'fatal: authentication failed' },
+  ],
+  // deliberately distinct from `failedRepository`'s hint text: a Playwright locator by text
+  // must resolve to exactly one element, and the two fixtures render on the same page
+  clone_check_hint: 'rotate the deploy key configured for this repository',
+  verify_skipped: false,
+});
+
+export const MIXED = project({
+  id: MIXED_ID,
+  slug: 'mixed-signals',
+  name: 'Mixed Signals',
+  context_text: 'A BMAD workflow repository and the docs site that tracks it.',
+  context_paths: ['docs/architecture.md'],
+  env_vars: [{ name: 'NODE_ENV', masked: '****ion' }],
+  log_prompt_content: true,
+  repositories: [
+    okRepository,
+    failedRepository,
+    missingMethodRepository,
+    pendingRepository,
+    recheckTargetRepository,
+  ],
+  created_at: CREATED_AT,
+  updated_at: UPDATED_AT,
+});
+
+export const CLEAN = project({
+  id: CLEAN_ID,
+  slug: 'clean-project',
+  name: 'Clean Project',
+  context_text: 'Nothing here has ever failed a clone check.',
+  log_prompt_content: false,
+  repositories: [
+    repository({
+      id: '00000000-0000-4000-8000-0000000000b2',
+      project_id: CLEAN_ID,
+      slug: 'clean-api',
+      clone_check: {
+        status: 'ok',
+        at: '2026-09-04T12:00:00Z',
+        output: 'cloned ok',
+        bmad_version: '6.11.0',
+      },
+      clone_check_lines: [{ name: 'clone', status: 'ok', seconds: 5, output: 'ok' }],
+    }),
+    repository({
+      id: '00000000-0000-4000-8000-0000000000b3',
+      project_id: CLEAN_ID,
+      slug: 'clean-web',
+      clone_check: {
+        status: 'ok',
+        at: '2026-09-04T12:00:00Z',
+        output: 'cloned ok',
+        bmad_version: '6.11.0',
+      },
+      clone_check_lines: [{ name: 'clone', status: 'ok', seconds: 6, output: 'ok' }],
+    }),
+  ],
+});
+
+export const NO_REPOS = project({
+  id: NO_REPOS_ID,
+  slug: 'no-repos',
+  name: 'No Repositories Yet',
+  context_text: '',
+  repositories: [],
+});
+
+export const PROJECTS_BY_ID = {
+  [MIXED_ID]: MIXED,
+  [CLEAN_ID]: CLEAN,
+  [NO_REPOS_ID]: NO_REPOS,
+};

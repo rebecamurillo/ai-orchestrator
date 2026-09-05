@@ -9,6 +9,11 @@
  * The four footer figures default to zero and an em dash. Nothing in this story has data to
  * put there; the readout still states what it measured and when, which is the difference
  * between a screen that is empty and a screen that is stale.
+ *
+ * A page's own `filters` named slot is forwarded straight through to `SurfaceBar`'s: the bar
+ * is owned by the shell, so a page cannot render into it directly, and a bare `<slot>` with a
+ * matching `slot` attribute is Astro's way of relaying one named slot into a child component
+ * (story 2.4, the first screen with filters to offer).
  */
 import AppRail, { type RailItem } from '../components/AppRail.astro';
 import FooterReadout from '../components/FooterReadout.astro';
@@ -51,7 +56,9 @@ const {
     <div class="shell">
       <AppRail active={active} workflows={workflows} runs={runs} needsYou={needsYou} />
       <div class="surface">
-        <SurfaceBar title={title} count={count} />
+        <SurfaceBar title={title} count={count}>
+          <slot name="filters" slot="filters" />
+        </SurfaceBar>
         <main class="body"><slot /></main>
         <FooterReadout running={running} queued={queued} needsYou={needsYou} updated={updated} />
       </div>

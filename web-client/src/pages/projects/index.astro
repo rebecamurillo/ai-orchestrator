@@ -1,21 +1,184 @@
 ---
 /**
  * Projects — the list and the detail pane. A project is what binds repositories, context,
- * and environment variables to the runs started against them; the entity arrives in epic 2.
+ * and environment variables to the runs started against them.
+ *
+ * Two-pane SSR: the list from `GET /api/v1/projects`, the detail from a *separate*
+ * `GET /api/v1/projects/{id}` keyed by `?id=` — never derived by scanning the list, so a
+ * 404'd id is never silently masked by a stale list item. Re-running a failed Repository's
+ * clone check posts to `repositories.recheck` and lands back here with no island: this
+ * frontmatter re-fetches the detail on every render, so the next natural render already
+ * shows the new result.
  */
+import type { components } from '../../api/schema';
+import Button from '../../components/Button.astro';
 import EmptyState from '../../components/EmptyState.astro';
+import ProjectListRow from '../../components/ProjectListRow.astro';
+import ProjectSettings from '../../components/ProjectSettings.astro';
+import RepositoriesTable from '../../components/RepositoriesTable.astro';
+import type { RepositoryRow } from '../../components/repository-row';
+import SectionHead from '../../components/SectionHead.astro';
 import Shell from '../../layouts/Shell.astro';
+import { backend } from '../../api/server';
 
 export const prerender = false;
+
+type ProjectListItem = components['schemas']['ProjectRead'];
+
+const selectedId = Astro.url.searchParams.get('id');
+
+/**
+ * A resolved `error` (401/422/…) and a rejected promise (the fetch itself failing) both mean
+ * the list could not be read — neither is "zero Projects registered". Collapsing either into
+ * an empty array would tell the Operator `NO PROJECTS` when the true state is "couldn't ask",
+ * so the two are kept apart: `listUnavailable` picks the distinct readout below, and
+ * `projects` only ever holds a list this request actually saw.
+ */
+let projects: ProjectListItem[] = [];
+let listUnavailable = false;
+try {
+  const { data, error } = await backend().GET('/api/v1/projects');
+  if (error) {
+    listUnavailable = true;
+  } else {
+    projects = data?.items ?? [];
+  }
+} catch {
+  listUnavailable = true;
+}
+
+let project: ProjectListItem | null = null;
+if (selectedId) {
+  const { data, error } = await backend().GET('/api/v1/projects/{project_id}', {
+    params: { path: { project_id: selectedId } },
+  });
+  // a 404 (or any other error) renders as "nothing selected", never a crash
+  if (!error) project = data ?? null;
+}
+
+function repositoryRow(repository: components['schemas']['RepositoryOut']): RepositoryRow {
+  return {
+    id: repository.id,
+    slug: repository.slug,
+    defaultBranch: repository.default_branch,
+    method: repository.clone_check.bmad_version ?? '—',
+    qualityGateCommand: repository.quality_gate_command,
+    testGlobs: repository.test_globs,
+    status: repository.clone_check.status,
+    seconds: repository.clone_check_lines.reduce((total, line) => total + line.seconds, 0),
+    output: repository.clone_check.output,
+    hint: repository.clone_check_hint,
+    verifySkipped: repository.verify_skipped,
+  };
+}
+
+const repositoryRows = project ? project.repositories.map(repositoryRow) : [];
+
+function failedCount(entry: ProjectListItem): number {
+  return entry.repositories.filter((repository) => repository.clone_check.status === 'failed')
+    .length;
+}
+
+function pluralize(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
 ---
 
-<Shell active="projects" title="PROJECTS" count="0 projects">
-  <EmptyState
-    testId="projects-empty"
-    headline="NO PROJECTS"
-    lines={[
-      'No project is registered.',
-      'A project holds the repositories a run works in, the context written to project-context.md, and the environment the harness receives.',
-    ]}
-  />
+<Shell
+  active="projects"
+  title="PROJECTS"
+  count={listUnavailable ? undefined : pluralize(projects.length, 'project')}
+>
+  <Fragment slot="filters">
+    <Button label="+ New project" href="/projects/new" testId="projects-new" />
+    {
+      project && (
+        <Button label="Edit" href={`/projects/${project.id}/edit`} testId="projects-edit" />
+      )
+    }
+  </Fragment>
+
+  {
+    listUnavailable ? (
+      <EmptyState
+        testId="projects-list-error"
+        headline="PROJECTS UNAVAILABLE"
+        lines={[
+          'The list could not be read from backend-api.',
+          'Reload the page once the connection is restored.',
+        ]}
+      />
+    ) : projects.length === 0 ? (
+      <EmptyState
+        testId="projects-empty"
+        headline="NO PROJECTS"
+        lines={[
+          'No project is registered.',
+          'A project holds the repositories a run works in, the context written to project-context.md, and the environment the harness receives.',
+        ]}
+        action={{ label: 'register a project to start', href: '/projects/new' }}
+      />
+    ) : (
+      <section data-testid="projects-list">
+        {projects.map((entry) => (
+          <ProjectListRow
+            id={entry.id}
+            slug={entry.slug}
+            name={entry.name}
+            repositoryCount={entry.repositories.length}
+            failedCount={failedCount(entry)}
+            selected={entry.id === selectedId}
+            href={`/projects?id=${entry.id}`}
+          />
+        ))}
+      </section>
+    )
+  }
+
+  {
+    project && (
+      <section data-testid="projects-detail">
+        <h2 class="title">{project.name}</h2>
+        <p class="meta">
+          {project.slug} · created {project.created_at.slice(0, 10)} · log_prompt_content{' '}
+          {project.log_prompt_content ? 'on' : 'off'}
+        </p>
+
+        <SectionHead label="CONTEXT" />
+        <p class="hint">written to project-context.md in the spec folder before every story</p>
+        <p class="context">{project.context_text}</p>
+
+        <SectionHead label="REPOSITORIES" />
+        <RepositoriesTable projectId={project.id} repositories={repositoryRows} />
+
+        <SectionHead label="SETTINGS" />
+        <ProjectSettings envVars={project.env_vars} />
+
+        <SectionHead label="RUNS ON THIS PROJECT" />
+        <p class="hint">no runs yet</p>
+      </section>
+    )
+  }
 </Shell>
+
+<style>
+  .title {
+    color: var(--color-text);
+    font-size: var(--type-surface-title);
+  }
+
+  .meta,
+  .hint {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+
+  .context {
+    color: var(--color-text-secondary);
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+    white-space: pre-wrap;
+    margin-bottom: var(--section-gap);
+  }
+</style>

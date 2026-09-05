@@ -1,0 +1,11 @@
+---
+/**
+ * `/projects/{id}` names a Project everywhere else in the product (a run's project, a
+ * repository's project), but the detail pane lives at `/projects?id=` beside the list it is
+ * selected from. This route exists so that reference still resolves, by redirecting rather
+ * than duplicating the page — pattern copied from `src/pages/login.astro`'s `Astro.redirect`.
+ */
+export const prerender = false;
+
+return Astro.redirect(`/projects?id=${Astro.params.id}`);
+---

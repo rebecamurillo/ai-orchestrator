@@ -1,0 +1,67 @@
+---
+/**
+ * One row of the Project list (2.4). Not `RecordRow`: that grid has five fixed columns for a
+ * run-shaped record (type · project · repository · what · age) and none of them fit a
+ * Project, whose row states its own repository count and failed count instead. The
+ * one-link-target and hover conventions are the same as `RecordRow`'s.
+ *
+ * The failed count is the only colour this row can carry, and it is absent — not zero — when
+ * there is nothing failed: NFR-6 keeps a healthy list free of amber or red pixels.
+ */
+interface Props {
+  id: string;
+  slug: string;
+  name: string;
+  repositoryCount: number;
+  failedCount: number;
+  selected: boolean;
+  href: string;
+}
+
+const { slug, name, repositoryCount, failedCount, selected, href } = Astro.props;
+---
+
+<a class="row" data-testid={`projects-row-${slug}`} data-selected={String(selected)} href={href}>
+  <span class="name">{name}</span>
+  <span class="meta">
+    {repositoryCount} repositories · 0 runs{
+      failedCount > 0 && <span class="failed"> · {failedCount} failed</span>
+    }
+  </span>
+</a>
+
+<style>
+  .row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-6);
+    border-bottom: 1px solid var(--color-line);
+    text-decoration: none;
+  }
+
+  .row:hover {
+    background: var(--color-surface-raised);
+    text-decoration: none;
+  }
+
+  .row[data-selected='true'] {
+    background: var(--color-surface-raised);
+  }
+
+  .name {
+    color: var(--color-text);
+    font-size: var(--type-row-title);
+    line-height: var(--type-row-title-line);
+  }
+
+  .meta {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+
+  .failed {
+    color: var(--color-signal-failed);
+  }
+</style>

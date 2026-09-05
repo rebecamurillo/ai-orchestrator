@@ -1,0 +1,144 @@
+---
+/**
+ * The Repositories table on a Project's detail pane (2.4). Its own `<table>` rather than
+ * `DenseTable`, because `DenseTable`'s cells are plain strings with no hook for the failed
+ * row's colour, its inset `CommandBlock`, or the *re-run check* form beside it — all three
+ * live only here.
+ *
+ * Every value arrives pre-computed: `index.astro` reads the Project's Repositories from
+ * `GET /api/v1/projects/{id}` and reduces each one to the row shape below, including the
+ * `seconds` figure (`CloneCheckResultOut` carries no duration of its own — this is the sum
+ * of `clone_check_lines[].seconds`). This component only lays the row out and colours the
+ * one cell the signal rule allows.
+ */
+import { actions } from 'astro:actions';
+
+import Button from './Button.astro';
+import CommandBlock from './CommandBlock.astro';
+import type { RepositoryRow } from './repository-row';
+
+interface Props {
+  projectId: string;
+  repositories: RepositoryRow[];
+}
+
+const { projectId, repositories } = Astro.props;
+
+const NONE_DECLARED = '— none declared';
+
+/**
+ * `actions.repositories.recheck` alone stringifies to `?_action=repositories.recheck` — a
+ * query-only relative reference, which replaces a base URL's *whole* query string rather than
+ * adding to it. Posted from `/projects?id=…` that would silently drop `id`, so `index.astro`
+ * would find nothing selected on the very re-render meant to show the new result. Prefixing
+ * `id` here keeps it: the two query params combine into one reference that still carries both.
+ */
+const recheckAction = `?id=${projectId}&${actions.repositories.recheck.toString().slice(1)}`;
+
+function cloneCheckText(row: RepositoryRow): string {
+  if (row.status === 'ok') return `ok · ${row.seconds}s`;
+  if (row.status === 'failed') return 'failed · new runs blocked';
+  return 'pending · save to check';
+}
+
+function outputBlock(row: RepositoryRow): string {
+  return row.hint ? `${row.output}\n\n${row.hint}` : row.output;
+}
+---
+
+{
+  repositories.length === 0 ? (
+    <p class="empty">no repositories · edit the project to add one</p>
+  ) : (
+    <table class="repositories">
+      <thead>
+        <tr>
+          <th scope="col">repository</th>
+          <th scope="col">default</th>
+          <th scope="col">method</th>
+          <th scope="col">quality gate</th>
+          <th scope="col">test globs</th>
+          <th scope="col">clone check</th>
+          <th scope="col">status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {repositories.flatMap((row) => {
+          const cells = (
+            <tr data-testid={`projects-repo-${row.slug}`}>
+              <td>{row.slug}</td>
+              <td>{row.defaultBranch}</td>
+              <td>{row.method}</td>
+              <td>{row.qualityGateCommand || NONE_DECLARED}</td>
+              <td>{row.testGlobs.length > 0 ? row.testGlobs.join(', ') : NONE_DECLARED}</td>
+              <td data-signal={row.status === 'failed' ? 'failed' : undefined}>
+                {cloneCheckText(row)}
+              </td>
+              <td>{row.verifySkipped ? 'verify step will be skipped' : 'ready'}</td>
+            </tr>
+          );
+
+          if (row.status !== 'failed') return [cells];
+
+          return [
+            cells,
+            <tr class="inset-row">
+              <td colspan={7}>
+                <CommandBlock label="clone check output" command={outputBlock(row)} />
+                <form method="POST" action={recheckAction}>
+                  <input type="hidden" name="repositoryId" value={row.id} />
+                  <Button
+                    label="re-run check"
+                    type="submit"
+                    testId={`projects-recheck-${row.slug}`}
+                  />
+                </form>
+              </td>
+            </tr>,
+          ];
+        })}
+      </tbody>
+    </table>
+  )
+}
+
+<style>
+  .empty {
+    color: var(--color-text-secondary);
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+  }
+
+  .repositories th {
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface-rail);
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-column-head);
+    letter-spacing: var(--type-column-head-tracking);
+    text-transform: var(--type-column-head-transform);
+    text-align: left;
+  }
+
+  .repositories td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-text-secondary);
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+  }
+
+  /* the only coloured cell in the table (Signal rule): red text, no fill */
+  .repositories td[data-signal='failed'] {
+    color: var(--color-signal-failed);
+  }
+
+  .inset-row td {
+    padding: var(--space-4);
+    background: var(--color-surface);
+  }
+
+  .inset-row form {
+    margin-top: var(--space-4);
+  }
+</style>
