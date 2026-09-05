@@ -11,5 +11,12 @@ from orchestrator.infrastructure.db.repositories.projects import SQLAlchemyProje
 from orchestrator.infrastructure.db.repositories.repository import (
     SQLAlchemyRepositoryRepository,
 )
+from orchestrator.infrastructure.db.repositories.templates import (
+    SQLAlchemyTemplateVersionRepository,
+)
 
-__all__ = ["SQLAlchemyProjectRepository", "SQLAlchemyRepositoryRepository"]
+__all__ = [
+    "SQLAlchemyProjectRepository",
+    "SQLAlchemyRepositoryRepository",
+    "SQLAlchemyTemplateVersionRepository",
+]

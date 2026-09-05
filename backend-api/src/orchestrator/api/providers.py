@@ -33,11 +33,13 @@ from typing import Any
 from fastapi import Request
 
 from orchestrator.application.use_cases.projects import ProjectPorts
+from orchestrator.application.use_cases.templates import TemplatePorts
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
+    SQLAlchemyTemplateVersionRepository,
     SQLAlchemyUnitOfWork,
 )
 
@@ -82,4 +84,15 @@ def project_ports(request: Request) -> Iterator[ProjectPorts]:
             crypto=crypto(),
             clock=SystemClock(),
             git=git_adapter(request),
+        )
+
+
+def template_ports(request: Request) -> Iterator[TemplatePorts]:
+    """The ports a Template use case runs on, inside one transaction."""
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield TemplatePorts(
+            uow=uow,
+            templates=SQLAlchemyTemplateVersionRepository(uow.session),
+            clock=SystemClock(),
         )

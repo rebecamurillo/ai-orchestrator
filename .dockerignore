@@ -1,5 +1,6 @@
 # The build context for backend-api/Dockerfile, which is the repository root: the image
-# needs `backend-api/` and `scripts/harness/` and nothing else.
+# needs `backend-api/`, `scripts/harness/` and `templates/` (SPEC CAP-3: the shipped
+# Templates `seed_shipped` reads from `TEMPLATES_DIR` at start-up) and nothing else.
 #
 # `.env` is the first line for a reason: a filled contract in the context would be copied
 # into a layer by any `COPY`, and an image layer is not a place a credential can be removed
@@ -39,7 +40,6 @@ playwright-report
 # not part of either image
 web-client
 host
-templates
 contracts
 Makefile
 README.md

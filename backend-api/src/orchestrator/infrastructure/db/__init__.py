@@ -12,10 +12,16 @@ from orchestrator.infrastructure.db.engine import create_engine_from
 
 # imported for its side effect as much as for the name: declaring the model is what puts the
 # table in `Base.metadata`, which is what `alembic --autogenerate` compares against
-from orchestrator.infrastructure.db.models import ProjectRow, RepositoryRow
+from orchestrator.infrastructure.db.models import (
+    ProjectRow,
+    RepositoryRow,
+    TemplateRow,
+    TemplateVersionRow,
+)
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
+    SQLAlchemyTemplateVersionRepository,
 )
 from orchestrator.infrastructure.db.session import create_session_factory
 from orchestrator.infrastructure.db.unit_of_work import SQLAlchemyUnitOfWork
@@ -27,7 +33,10 @@ __all__ = [
     "RepositoryRow",
     "SQLAlchemyProjectRepository",
     "SQLAlchemyRepositoryRepository",
+    "SQLAlchemyTemplateVersionRepository",
     "SQLAlchemyUnitOfWork",
+    "TemplateRow",
+    "TemplateVersionRow",
     "create_engine_from",
     "create_session_factory",
 ]

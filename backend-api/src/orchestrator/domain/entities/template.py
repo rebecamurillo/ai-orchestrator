@@ -13,9 +13,22 @@ copy that drifts:
 `hash` is the digest of `yaml`; computing it needs no rule, so it is carried rather than
 derived here. `yaml` is the exact text the Operator saved, newlines and comments included:
 line numbers in a `ValidationError` refer to it.
+
+`id` and `created_at` default to `None` because 3.1's fixtures build a `TemplateVersion`
+without either — they describe rows a fake never persists. 3.3's use cases (`save_version`,
+`seed_shipped`) always fill both before a version reaches a repository: `id` is a fresh
+UUIDv7 (`domain/ids.py`), `created_at` the instant `Clock.now()` returned. Only
+`infrastructure/` reads a clock (`test_source_limits.py`), so neither is computed here.
+
+`TemplateSummary` is the read model `GET /templates` renders: one row per stored name, the
+version numbers it holds, and the description of its latest version — denormalised onto the
+`template` table at save time so a list read never re-parses every version's YAML.
 """
 
 from __future__ import annotations
+
+from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
@@ -34,12 +47,30 @@ class TemplateVersion(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    #: The `template_version` row's primary key. `None` only in a fixture that never
+    #: stores this object — a real save always sets it before calling `add_version`.
+    id: UUID | None = None
     name: str
     version: int
     yaml: str
     hash: str
     calls: tuple[TemplateRef, ...] = ()
+    #: `None` only in a fixture; a real save always sets it (see the module docstring).
+    created_at: datetime | None = None
 
     def ref(self) -> TemplateRef:
         """This version as a reference — what a caller's `calls` entry holds."""
         return TemplateRef(name=self.name, version=self.version)
+
+
+class TemplateSummary(BaseModel):
+    """One row of `GET /templates`: a name, its description, and the versions it holds."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    #: The latest version's parsed `description:`, or `None` if it declared none.
+    description: str | None = None
+    latest_version: int
+    #: Every stored version number of this name, ascending.
+    versions: tuple[int, ...] = ()

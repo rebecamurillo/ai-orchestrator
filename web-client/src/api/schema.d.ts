@@ -157,6 +157,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every Template
+         * @description Every stored Template name, its versions, and its latest description.
+         */
+        get: operations["list_templates_api_v1_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/templates/{name}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Validate the latest stored Version
+         * @description Re-runs `validate()` over the latest stored version. Never writes anything.
+         */
+        get: operations["validate_latest_api_v1_templates__name__validate_get"];
+        put?: never;
+        /**
+         * Validate posted YAML without storing it
+         * @description A validation problem is data in this response, never a 422 (NFR-2).
+         */
+        post: operations["validate_text_api_v1_templates__name__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/templates/{name}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a Template's stored version numbers
+         * @description Ascending version numbers. An unknown name is a 404, not an empty page.
+         */
+        get: operations["list_versions_api_v1_templates__name__versions_get"];
+        put?: never;
+        /**
+         * Save the next Template Version
+         * @description `version` must be `max(existing) + 1`; a saved version can never be changed (AD-15).
+         */
+        post: operations["save_version_api_v1_templates__name__versions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/templates/{name}/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one Template Version
+         * @description `calls`, `called_by` and `inputs` alongside the stored text. `pinned_by` is always 0.
+         */
+        get: operations["get_version_api_v1_templates__name___version__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -272,6 +360,22 @@ export interface components {
             version: string;
         };
         /**
+         * InputDeclOut
+         * @description One entry of the Template's `inputs:` map, for the screen's inputs table.
+         */
+        InputDeclOut: {
+            /** Default */
+            default: string | number | boolean | null;
+            /** Name */
+            name: string;
+            /** Required */
+            required: boolean;
+            /** Type */
+            type: string;
+            /** Values */
+            values: string[];
+        };
+        /**
          * MaskedEnvVarOut
          * @description One stored variable as it leaves this API: the name, and four characters of the value.
          */
@@ -292,6 +396,20 @@ export interface components {
         Page_RepositoryOut_: {
             /** Items */
             items: components["schemas"]["RepositoryOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[TemplateSummaryOut] */
+        Page_TemplateSummaryOut_: {
+            /** Items */
+            items: components["schemas"]["TemplateSummaryOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[int] */
+        Page_int_: {
+            /** Items */
+            items: number[];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -523,6 +641,86 @@ export interface components {
             unit_test_command: string;
             /** Url */
             url: string;
+        };
+        /**
+         * SaveVersionIn
+         * @description `POST /templates/{name}/versions`. Same one field; a distinct name for a distinct route.
+         */
+        SaveVersionIn: {
+            /** Yaml */
+            yaml: string;
+        };
+        /**
+         * TemplateRefOut
+         * @description One `(name, version)` reference, as `calls` and `called_by` each list them.
+         */
+        TemplateRefOut: {
+            /** Name */
+            name: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * TemplateSummaryOut
+         * @description One row of `GET /templates`.
+         */
+        TemplateSummaryOut: {
+            /** Description */
+            description: string | null;
+            /** Latest Version */
+            latest_version: number;
+            /** Name */
+            name: string;
+            /** Versions */
+            versions: number[];
+        };
+        /**
+         * TemplateVersionOut
+         * @description `GET /templates/{name}/{version}`, and the 201 body a save answers with.
+         */
+        TemplateVersionOut: {
+            /** Called By */
+            called_by: components["schemas"]["TemplateRefOut"][];
+            /** Calls */
+            calls: components["schemas"]["TemplateRefOut"][];
+            /** Created At */
+            created_at: string | null;
+            /**
+             * Hash
+             * @description sha256 hex digest of `yaml`, byte for byte.
+             */
+            hash: string;
+            /** Inputs */
+            inputs: components["schemas"]["InputDeclOut"][];
+            /** Name */
+            name: string;
+            /**
+             * Pinned By
+             * @description Always 0 in this release: counting a Template Version's active Runs is Epic 4's write, not this story's.
+             */
+            pinned_by: number;
+            /** Version */
+            version: number;
+            /** Yaml */
+            yaml: string;
+        };
+        /**
+         * ValidateIn
+         * @description `POST /templates/{name}/validate`.
+         */
+        ValidateIn: {
+            /** Yaml */
+            yaml: string;
+        };
+        /**
+         * ValidateOut
+         * @description `200` from either `/validate` route: problems are data, never a refusal (NFR-2).
+         */
+        ValidateOut: {
+            /** Errors */
+            errors: components["schemas"]["ProblemError"][];
+            /** Unvalidated */
+            unvalidated: string[];
         };
     };
     responses: never;
@@ -1094,6 +1292,295 @@ export interface operations {
                 };
             };
             /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_templates_api_v1_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_TemplateSummaryOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    validate_latest_api_v1_templates__name__validate_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidateOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Template has that name, or no version has that number. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The posted YAML failed validation; `errors[]` names each problem by line. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    validate_text_api_v1_templates__name__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValidateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidateOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The posted YAML failed validation; `errors[]` names each problem by line. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_versions_api_v1_templates__name__versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_int_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Template has that name, or no version has that number. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The posted YAML failed validation; `errors[]` names each problem by line. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    save_version_api_v1_templates__name__versions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveVersionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateVersionOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Template has that name, or no version has that number. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The posted YAML failed validation; `errors[]` names each problem by line. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_version_api_v1_templates__name___version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateVersionOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Template has that name, or no version has that number. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The posted YAML failed validation; `errors[]` names each problem by line. */
             422: {
                 headers: {
                     [name: string]: unknown;
