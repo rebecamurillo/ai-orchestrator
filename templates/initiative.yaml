@@ -12,6 +12,7 @@ steps:
   - id: epics
     for_each: "{{initiative_folder}}/epics.yaml"
     as: epic
+    pause_after_item_when: "epic.done_checkpoint"
     # parallel: reserved; sequential in the MVP, list order is the dependency
     steps:
       - id: epic

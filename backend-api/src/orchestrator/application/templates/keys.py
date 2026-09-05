@@ -183,6 +183,30 @@ def _check_ids(walked: list[tuple[LinedMap, LinedMap | None]]) -> list[Validatio
     return errors
 
 
+#: What each `for_each` pause key plans a checkpoint row at, as the row's last segment
+#: (AD-7: `…stories[n].before` / `…stories[n].after`). Declaring the key reserves the word.
+ITEM_CHECKPOINT_IDS: dict[str, str] = {
+    "pause_before_item_when": "before",
+    "pause_after_item_when": "after",
+}
+
+
+def _reserved_item_ids(node: LinedMap) -> list[ValidationError]:
+    """An inner step may not take the path a pause key already plans a row at.
+
+    `pause_after_item_when` plans `{loop}.after`, which is the path an inner step with id
+    `after` would also occupy — one path, two rows, and the graph's node ids stop being the
+    unique key `unvalidated` joins to (AD-15). That is exactly what two steps sharing an id
+    does, so it reports the same reason rather than minting a nineteenth.
+    """
+    reserved = {word for key, word in ITEM_CHECKPOINT_IDS.items() if key in node}
+    return [
+        problem(key_line(child, "id", child.line), DUPLICATE_STEP_ID)
+        for child in child_steps(node)
+        if child.get("id") in reserved
+    ]
+
+
 def _check_for_each(
     node: LinedMap, parent: LinedMap | None, *, seen_for_each: bool
 ) -> list[ValidationError]:
@@ -199,7 +223,7 @@ def _check_for_each(
         errors.append(problem(key_line(node, AS_KEY, node.line), INVALID_SLUG))
     if not child_steps(node):
         errors.append(problem(key_line(node, STEPS_KEY, node.line), EMPTY_STEPS))
-    return errors + _entries_that_are_not_steps(node)
+    return errors + _reserved_item_ids(node) + _entries_that_are_not_steps(node)
 
 
 # --- one step -----------------------------------------------------------------------------

@@ -46,7 +46,14 @@ from sqlalchemy.orm import Session
 
 from orchestrator.api.deps import require_bearer
 from orchestrator.api.errors import UNAUTHORIZED_RESPONSE, install_error_handlers
-from orchestrator.api.routers import clone_check, ping, projects, repositories, templates
+from orchestrator.api.routers import (
+    clone_check,
+    graph,
+    ping,
+    projects,
+    repositories,
+    templates,
+)
 from orchestrator.application.use_cases.templates import SeedResult, TemplatePorts, seed_shipped
 from orchestrator.domain.ports.crypto import Crypto
 from orchestrator.domain.ports.git import Git
@@ -234,6 +241,12 @@ def create_app(
     )
     app.include_router(
         templates.router,
+        prefix=API_PREFIX,
+        dependencies=[Depends(require_bearer)],
+        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
+    )
+    app.include_router(
+        graph.router,
         prefix=API_PREFIX,
         dependencies=[Depends(require_bearer)],
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},

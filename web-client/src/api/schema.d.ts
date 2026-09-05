@@ -245,6 +245,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/templates/{name}/{version}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one Template Version's graph
+         * @description `{nodes, edges, groups}` from the one validator (AD-15). A call is one node.
+         */
+        get: operations["template_graph_api_v1_templates__name___version__graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -330,6 +350,16 @@ export interface components {
             status: "pending" | "ok" | "failed";
         };
         /**
+         * EdgeOut
+         * @description One arrow, keyed `from` and `to` — the names `from_id`/`to_id` stand in for.
+         */
+        EdgeOut: {
+            /** From */
+            from: string;
+            /** To */
+            to: string;
+        };
+        /**
          * EnvVarCreate
          * @description One requested variable on a create, where there is nothing to keep.
          */
@@ -348,6 +378,36 @@ export interface components {
             name: string;
             /** Value */
             value?: string | null;
+        };
+        /**
+         * GraphOut
+         * @description `GET /templates/{name}/{version}/graph`. Three lists, never `null`.
+         */
+        GraphOut: {
+            /** Edges */
+            edges: components["schemas"]["EdgeOut"][];
+            /** Groups */
+            groups: components["schemas"]["GroupOut"][];
+            /** Nodes */
+            nodes: components["schemas"]["NodeOut"][];
+        };
+        /**
+         * GroupOut
+         * @description One `for_each`, and the ordered node ids drawn inside its box.
+         */
+        GroupOut: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @description The construct the group draws. One value in this release.
+             * @constant
+             */
+            kind: "for_each";
+            /** Label */
+            label: string;
+            /** Members */
+            members: string[];
         };
         /**
          * Health
@@ -384,6 +444,41 @@ export interface components {
             masked: string;
             /** Name */
             name: string;
+        };
+        /**
+         * NodeCallOut
+         * @description The callee a collapsed `uses: template` node names.
+         */
+        NodeCallOut: {
+            /** Name */
+            name: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * NodeOut
+         * @description One step of the Template, as one box of the diagram.
+         */
+        NodeOut: {
+            /** Agent */
+            agent: boolean;
+            call: components["schemas"]["NodeCallOut"] | null;
+            /**
+             * Gate
+             * @description What the Template declared. `unvalidated` where it declared nothing (NFR-2); `null` on a template call, which has no gate of its own.
+             */
+            gate: ("liveness" | "deterministic" | "human") | "unvalidated" | null;
+            /** Human */
+            human: boolean;
+            /**
+             * Id
+             * @description The template-relative dotted path, index-free: `{step}`, `{loop}.{step}`, or `{loop}.before` / `{loop}.after` for an item checkpoint. The same string `/validate` reports in `unvalidated`.
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
         };
         /** Page[ProjectRead] */
         Page_ProjectRead_: {
@@ -1582,6 +1677,69 @@ export interface operations {
             };
             /** @description The posted YAML failed validation; `errors[]` names each problem by line. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    template_graph_api_v1_templates__name___version__graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Template has that name, or no version has that number. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The version in the path is not a version number. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The stored Template no longer validates; `detail` names the first line and reason. */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

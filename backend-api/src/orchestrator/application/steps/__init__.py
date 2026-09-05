@@ -78,3 +78,8 @@ TEMPLATE_CALL_KIND = "template"
 
 #: The kind whose step dispatches a harness, and the only one carrying the agent extras.
 AGENT_KIND = "agent"
+
+#: The kind whose step is a stop for a person. Named here because `application/graph.py`
+#: marks its node `human` by kind rather than by gate, and AD-9 says a kind is named here
+#: or nowhere.
+CHECKPOINT_KIND = "checkpoint"

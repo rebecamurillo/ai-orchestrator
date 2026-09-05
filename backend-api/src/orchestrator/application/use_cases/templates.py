@@ -1,6 +1,6 @@
 """Reading, validating, saving and seeding Template Versions (SPEC CAP-3, FR-6, AD-15).
 
-Six operations, and each is exactly one rule:
+Seven operations, and each is exactly one rule:
 
 - **`list_templates`** answers `GET /templates` — a straight read, no rule of its own.
 - **`list_versions`** answers `GET /templates/{name}/versions`: a name nothing has ever
@@ -18,6 +18,12 @@ Six operations, and each is exactly one rule:
   `TemplateValidationFailed` carries the validator's own errors so the router can answer
   422 with `errors[]` — this module never imports `fastapi` (AD-2), so it cannot raise a
   `Problem` itself.
+- **`template_graph`** answers `GET /templates/{name}/{version}/graph`: the stored text
+  through the same one validator, and its tree through `build_template_graph`. There is no
+  second parser and no second shaping, which is what keeps the diagram and the validator
+  from disagreeing (AD-15). `StoredTemplateInvalid` is the case storage is meant to make
+  impossible — only validated text is ever saved — carried rather than assumed away, so the
+  router has a line and a reason to render instead of a traceback.
 - **`seed_shipped`** is `main.py`'s start-up step: every shipped file, validated against
   whatever this repository already holds, inserted only when its hash is new. Files are
   read off disk by `infrastructure/templates_loader.py` — this module performs no I/O of
@@ -37,6 +43,7 @@ import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from orchestrator.application.graph import Graph, build_template_graph
 from orchestrator.application.templates.model import (
     ForEach,
     InputDecl,
@@ -91,6 +98,23 @@ class TemplateValidationFailed(Exception):
         self.errors = errors
 
 
+class StoredTemplateInvalid(RuntimeError):
+    """A stored Template Version no longer validates, so no graph can be built from it.
+
+    Storage only ever accepts text `validate()` passed, so reaching this is a defect rather
+    than a request the caller got wrong — which is why it is a 500 and not a 422. It carries
+    the validator's own errors, the way `TemplateValidationFailed` does, so the refusal names
+    the line and the reason instead of saying only that something went wrong.
+    """
+
+    def __init__(self, name: str, version: int, errors: tuple[ValidationError, ...]) -> None:
+        problems = "; ".join(f"line {error.line}: {error.reason}" for error in errors)
+        super().__init__(f"stored template {name}@{version} is invalid: {problems}")
+        self.name = name
+        self.version = version
+        self.errors = errors
+
+
 #: One still-failing file's name and the validator's errors against it.
 ShippedFailure = tuple[str, tuple[ValidationError, ...]]
 
@@ -134,6 +158,19 @@ def get_version(ports: TemplatePorts, name: str, version: int) -> TemplateVersio
     inputs = result.template.inputs if result.template is not None else ()
     called_by = tuple(ports.templates.callers_of(name, version))
     return TemplateVersionDetail(template=stored, called_by=called_by, inputs=inputs)
+
+
+def template_graph(ports: TemplatePorts, name: str, version: int) -> Graph:
+    """One stored version's shape: nodes, edges and loop groups. Unknown is 404."""
+    stored = ports.templates.get(name, version)
+    if stored is None:
+        raise NotFound(f"no template {name!r} version {version}")
+    result = validate(stored.yaml, templates=ports.templates)
+    if result.errors:
+        raise StoredTemplateInvalid(name, version, result.errors)
+    parsed = result.template
+    assert parsed is not None  # validate() never leaves both empty
+    return build_template_graph(parsed)
 
 
 def validate_text(ports: TemplatePorts, yaml_text: str) -> ValidationResult:

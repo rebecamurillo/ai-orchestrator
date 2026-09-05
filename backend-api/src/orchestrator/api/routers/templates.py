@@ -29,7 +29,7 @@ from orchestrator.api.errors import (
     ProblemDetail,
 )
 from orchestrator.api.providers import template_ports
-from orchestrator.api.schemas.common import Page
+from orchestrator.api.schemas.common import MAX_VERSION, Page
 from orchestrator.api.schemas.templates import (
     SaveVersionIn,
     TemplateSummaryOut,
@@ -54,12 +54,6 @@ def _refusal(description: str) -> dict[str, object]:
         "content": {PROBLEM_MEDIA_TYPE: {"schema": PROBLEM_SCHEMA_REF}},
     }
 
-
-#: Postgres `integer`'s upper bound: `template_version.version` is that column's type, and
-#: a number schemathesis can otherwise generate above it reaches the database as an
-#: out-of-range parameter — an unhandled `psycopg` error, not the 404 an unknown version
-#: means to answer. Refusing it at the path keeps that failure a 422, never a 500.
-MAX_VERSION = 2_147_483_647
 
 NOT_FOUND_RESPONSE = _refusal("No Template has that name, or no version has that number.")
 VALIDATION_RESPONSE = _refusal(

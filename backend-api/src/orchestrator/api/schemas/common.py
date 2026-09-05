@@ -30,6 +30,12 @@ NUL = "\x00"
 #: The encoding the database connection speaks; a string that cannot be encoded cannot be sent.
 DATABASE_ENCODING = "utf-8"
 
+#: Postgres `integer`'s upper bound, and so the largest `template_version.version` there
+#: can be. A path parameter above it reaches the database as an out-of-range value — an
+#: unhandled driver error, not the 404 an unknown version means to answer — so every route
+#: that takes a version bounds it here rather than each keeping its own copy.
+MAX_VERSION = 2_147_483_647
+
 #: `numeric(12,6)`: at most 12 significant digits, exactly 6 of them after the point.
 MONEY_SCALE = Decimal("0.000001")
 MONEY_DIGITS = 12

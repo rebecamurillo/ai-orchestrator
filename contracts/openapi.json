@@ -143,6 +143,25 @@
         "title": "CloneCheckResultOut",
         "type": "object"
       },
+      "EdgeOut": {
+        "description": "One arrow, keyed `from` and `to` \u2014 the names `from_id`/`to_id` stand in for.",
+        "properties": {
+          "from": {
+            "title": "From",
+            "type": "string"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "title": "EdgeOut",
+        "type": "object"
+      },
       "EnvVarCreate": {
         "description": "One requested variable on a create, where there is nothing to keep.",
         "properties": {
@@ -185,6 +204,73 @@
           "name"
         ],
         "title": "EnvVarIn",
+        "type": "object"
+      },
+      "GraphOut": {
+        "description": "`GET /templates/{name}/{version}/graph`. Three lists, never `null`.",
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/EdgeOut"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges",
+          "groups"
+        ],
+        "title": "GraphOut",
+        "type": "object"
+      },
+      "GroupOut": {
+        "description": "One `for_each`, and the ordered node ids drawn inside its box.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "for_each",
+            "description": "The construct the group draws. One value in this release.",
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "members"
+        ],
+        "title": "GroupOut",
         "type": "object"
       },
       "Health": {
@@ -276,6 +362,93 @@
           "masked"
         ],
         "title": "MaskedEnvVarOut",
+        "type": "object"
+      },
+      "NodeCallOut": {
+        "description": "The callee a collapsed `uses: template` node names.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "NodeCallOut",
+        "type": "object"
+      },
+      "NodeOut": {
+        "description": "One step of the Template, as one box of the diagram.",
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "boolean"
+          },
+          "call": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeCallOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "enum": [
+                  "liveness",
+                  "deterministic",
+                  "human"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "unvalidated",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the Template declared. `unvalidated` where it declared nothing (NFR-2); `null` on a template call, which has no gate of its own.",
+            "title": "Gate"
+          },
+          "human": {
+            "title": "Human",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The template-relative dotted path, index-free: `{step}`, `{loop}.{step}`, or `{loop}.before` / `{loop}.after` for an item checkpoint. The same string `/validate` reports in `unvalidated`.",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "gate",
+          "agent",
+          "human",
+          "call"
+        ],
+        "title": "NodeOut",
         "type": "object"
       },
       "Page_ProjectRead_": {
@@ -2457,6 +2630,115 @@
           }
         ],
         "summary": "Read one Template Version",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/templates/{name}/{version}/graph": {
+      "get": {
+        "description": "`{nodes, edges, groups}` from the one validator (AD-15). A call is one node.",
+        "operationId": "template_graph_api_v1_templates__name___version__graph_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647,
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Template has that name, or no version has that number."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The version in the path is not a version number."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The stored Template no longer validates; `detail` names the first line and reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one Template Version's graph",
         "tags": [
           "templates"
         ]
