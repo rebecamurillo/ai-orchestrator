@@ -3,7 +3,14 @@
  * Projects — the list and the detail pane. A project is what binds repositories, context,
  * and environment variables to the runs started against them.
  *
- * Two-pane SSR: the list from `GET /api/v1/projects`, the detail from a *separate*
+ * Clicking a row opens that Project's edit page. It used to set `?id=` instead, selecting
+ * the detail pane below — but that pane renders after the whole list, so on a populated list
+ * it opens hundreds of rows below the fold and the click reads as a bare reload. The edit
+ * page already shows the same Project's context, env vars, repositories and clone check, so
+ * the row goes straight there. `?id=` still selects the detail pane for anything that links
+ * to it, `/projects/{id}` included.
+ *
+ * The list comes from `GET /api/v1/projects`, the detail from a *separate*
  * `GET /api/v1/projects/{id}` keyed by `?id=` — never derived by scanning the list, so a
  * 404'd id is never silently masked by a stale list item. Re-running a failed Repository's
  * clone check posts to `repositories.recheck` and lands back here with no island: this
@@ -128,7 +135,7 @@ function pluralize(count: number, noun: string): string {
             repositoryCount={entry.repositories.length}
             failedCount={failedCount(entry)}
             selected={entry.id === selectedId}
-            href={`/projects?id=${entry.id}`}
+            href={`/projects/${entry.id}/edit`}
           />
         ))}
       </section>
