@@ -12,6 +12,7 @@ from orchestrator.application.templates.model import (
     BAD_DEFAULT,
     INPUT_TYPES,
     INVALID_INPUT_TYPE,
+    INVALID_VALUE,
     MISSING_KEY,
     UNKNOWN_KEY,
     ValidationError,
@@ -96,7 +97,7 @@ def _check_values(decl: LinedMap, declared: str, line: int) -> list[ValidationEr
         return [problem(values_line, MISSING_KEY)]
     for value in listed:
         if not isinstance(value, str):
-            return [problem(values_line, MISSING_KEY)]
+            return [problem(values_line, INVALID_VALUE)]
     return []
 
 

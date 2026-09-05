@@ -14,6 +14,7 @@ from __future__ import annotations
 from orchestrator.application.templates.lines import LinedMap, as_map, as_seq, key_line
 from orchestrator.application.templates.model import (
     INVALID_STATUS_TOKEN,
+    INVALID_VALUE,
     MISSING_KEY,
     STATUS_TOKENS,
     ValidationError,
@@ -68,7 +69,7 @@ def _check_expect_files(node: LinedMap) -> list[ValidationError]:
     errors: list[ValidationError] = []
     for glob in globs:
         if not isinstance(glob, str):
-            errors.append(problem(line, MISSING_KEY))
+            errors.append(problem(line, INVALID_VALUE))
     return errors
 
 
@@ -79,7 +80,7 @@ def _check_retry_shapes(node: LinedMap) -> list[ValidationError]:
     errors: list[ValidationError] = []
     for key, kind in RETRY_SHAPES:
         if key in retry and not _is_exactly(retry[key], kind):
-            errors.append(problem(key_line(retry, key, retry.line), MISSING_KEY))
+            errors.append(problem(key_line(retry, key, retry.line), INVALID_VALUE))
     return errors
 
 

@@ -26,16 +26,19 @@ from orchestrator.application.templates.model import (
     ValidationResult,
 )
 
-#: Every reason string the story fixes: FR-5's thirteen, the brief's five, and nine more.
+#: Every reason string the story fixes: FR-5's thirteen, the brief's five, nine more, and
+#: `invalid value`, added after the fact so a malformed-but-present value stops being
+#: reported as `missing key`.
 REASONS = (
     "UNKNOWN_KEY UNBOUND_VARIABLE UNKNOWN_KIND USES_AND_RUN NESTED_FOR_EACH SECOND_FOR_EACH "
     "EXPRESSION_SYNTAX NON_LITERAL_VERSION CALL_CYCLE CALL_DEPTH CALLEE_INPUT_MISMATCH "
     "PARALLEL_RESERVED CALL_TIMING UNKNOWN_FIELD DUPLICATE_STEP_ID BAD_REDISPATCH "
     "INVALID_ON_FAIL INVALID_GATE INVALID_YAML CALLEE_NOT_FOUND MISSING_KEY INVALID_SLUG "
-    "INVALID_INPUT_TYPE BAD_DEFAULT EMPTY_STEPS INVALID_TIMEOUT INVALID_STATUS_TOKEN"
+    "INVALID_INPUT_TYPE BAD_DEFAULT EMPTY_STEPS INVALID_TIMEOUT INVALID_STATUS_TOKEN "
+    "INVALID_VALUE"
 ).split()
 
-EXPECTED_REASON_COUNT = 27
+EXPECTED_REASON_COUNT = 28
 
 
 def a_step(**overrides: object) -> Step:

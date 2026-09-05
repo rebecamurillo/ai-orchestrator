@@ -25,6 +25,7 @@ from orchestrator.application.templates.model import (
     INVALID_SLUG,
     INVALID_STATUS_TOKEN,
     INVALID_TIMEOUT,
+    INVALID_VALUE,
     MISSING_KEY,
     NESTED_FOR_EACH,
     NON_LITERAL_VERSION,
@@ -337,34 +338,34 @@ def test_a_run_that_is_not_a_command_is_missing_a_key(written: str) -> None:
     "written",
     ["    retry:\n      max: two\n", "    retry:\n      max: true\n"],
 )
-def test_a_retry_count_that_is_not_an_integer_is_missing_a_key(written: str) -> None:
-    assert check(HEAD + AGENT + written)[0] == [MISSING_KEY]
+def test_a_retry_count_that_is_not_an_integer_is_an_invalid_value(written: str) -> None:
+    assert check(HEAD + AGENT + written)[0] == [INVALID_VALUE]
 
 
-def test_a_retry_prompt_that_is_not_text_is_missing_a_key() -> None:
-    assert check(HEAD + AGENT + "    retry:\n      prompt: [a]\n")[0] == [MISSING_KEY]
+def test_a_retry_prompt_that_is_not_text_is_an_invalid_value() -> None:
+    assert check(HEAD + AGENT + "    retry:\n      prompt: [a]\n")[0] == [INVALID_VALUE]
 
 
-def test_a_resume_session_that_is_not_a_flag_is_missing_a_key() -> None:
-    assert check(HEAD + AGENT + "    retry:\n      resume_session: maybe\n")[0] == [MISSING_KEY]
+def test_a_resume_session_that_is_not_a_flag_is_an_invalid_value() -> None:
+    assert check(HEAD + AGENT + "    retry:\n      resume_session: maybe\n")[0] == [INVALID_VALUE]
 
 
 def test_a_retry_that_says_nothing_of_a_sub_key_leaves_it_alone() -> None:
     assert check(HEAD + AGENT + "    retry:\n      prompt: again\n")[0] == []
 
 
-def test_an_expect_glob_that_is_not_text_is_missing_a_key() -> None:
-    assert check(HEAD + AGENT + "    expect:\n      files: [3]\n")[0] == [MISSING_KEY]
+def test_an_expect_glob_that_is_not_text_is_an_invalid_value() -> None:
+    assert check(HEAD + AGENT + "    expect:\n      files: [3]\n")[0] == [INVALID_VALUE]
 
 
 def test_an_expect_files_that_is_not_a_list_is_left_to_the_shape_rules() -> None:
     assert check(HEAD + AGENT + "    expect:\n      files: one\n")[0] == []
 
 
-def test_an_enum_value_that_is_not_text_is_missing_a_key() -> None:
+def test_an_enum_value_that_is_not_text_is_an_invalid_value() -> None:
     text = HEAD + "inputs:\n  h:\n    type: enum\n    values: [1, 2]\n" + GATED
 
-    assert check(text)[0] == [MISSING_KEY]
+    assert check(text)[0] == [INVALID_VALUE]
 
 
 @pytest.mark.parametrize("written", ["0", "-1", "true", "many"])

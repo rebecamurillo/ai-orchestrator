@@ -10,7 +10,10 @@ malformed YAML is a record with `reason = "invalid yaml"` like any other problem
 
 The reason strings are fixed here, in one place, because they are the contract: FR-5 names
 thirteen, the story brief adds five, and the nine below them cover rules those eighteen
-cannot name. A rule that needs a new reason adds it here first.
+cannot name. A rule that needs a new reason adds it here first. The 28th, `invalid value`,
+was added after the fact to stop `missing key` from describing a value that is present but
+malformed — inside `expect`, inside `retry`, or an enum's `values` entries — instead of a
+key that is genuinely absent.
 """
 
 from __future__ import annotations
@@ -76,6 +79,12 @@ BAD_DEFAULT = "default does not match type"
 EMPTY_STEPS = "empty steps"
 INVALID_TIMEOUT = "invalid timeout_min"
 INVALID_STATUS_TOKEN = "invalid status_in token"
+
+#: The 28th: a value that is present but the wrong shape, where `missing key` would
+#: misdescribe a key that is there. Only three contexts get no deeper type check than this
+#: (an `expect` scalar, a `retry` scalar, an enum's `values` entries); everywhere else a
+#: malformed value already has its own reason.
+INVALID_VALUE = "invalid value"
 
 # --- the tree ---------------------------------------------------------------------------
 
