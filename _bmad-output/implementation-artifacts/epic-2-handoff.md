@@ -145,13 +145,30 @@ the test process, so every contract variable must be present, and `DATABASE_URL`
 `127.0.0.1:5432` rather than the compose hostname `postgres`, which does not resolve from the
 host. `set -a; . ./.env; set +a` then rewrite the host.
 
-**A real `ORCHESTRATOR_SECRET_KEY` is now required to use the Projects API.** `.env.example`
-still ships the `change-me-fernet-key` placeholder, which is not a valid Fernet key.
-`create_app` therefore dereferences no settings field — the `Crypto` adapter is passed as a
-*factory* and built per request in `api/providers.py` — so a misconfigured instance still
-starts and still answers `/healthz`, and fails only on `/api/v1/projects`, as a 500 whose log
-line names the variable and whose body carries nothing of it. `make openapi` depends on this:
-it builds the app with `Settings.model_construct()`.
+**A real `ORCHESTRATOR_SECRET_KEY` is now required to use the Projects API, and this cost a
+CI run to learn.** `.env.example` ships `change-me-fernet-key`, which `cryptography` refuses:
+`Fernet key must be 32 url-safe base64-encoded bytes`. `create_app` dereferences no settings
+field — the `Crypto` adapter is passed as a *factory* and built per request in
+`api/providers.py` — so a misconfigured instance still starts and still answers `/healthz`,
+and fails only on `/api/v1/projects`, as a 500 whose log line names the variable and whose
+body carries nothing of it. `make openapi` depends on that laziness: it builds the app with
+`Settings.model_construct()`.
+
+The consequence is a trap with a delay on it. Every gate passed locally and `e2e-api` then
+failed on the runner with 25 of 48 tests at `assert 500 == 201`, because CI runs
+`cp .env.example .env` and therefore ran on the placeholder, while every developer machine
+that has ever used the Projects API has a real key in its own `.env` and cannot reproduce it.
+Fixed in `07d60b1`: the `e2e-api` job mints a random key into `.env` after the copy — no
+repository secret, nothing that outlives the job, and `test_ci_workflow.py`'s AD-5 assertions
+still hold because `ORCHESTRATOR_SECRET_KEY` is not among the three names they forbid.
+
+**The general lesson, which is not about Fernet.** A placeholder in `.env.example` is a
+promise that the contract is complete and runnable. This one was syntactically fine and
+semantically unusable, so nothing checked it and the failure surfaced two layers away, as a
+500 in an unrelated suite. If you add a setting whose placeholder cannot actually be used,
+either make the placeholder work or make something fail loudly at start-up — do not leave the
+first real request to discover it. `.env.example` and the README now say so at both places
+someone reads before running anything.
 
 **Never push and never open a PR** unless the operator says so in that session. Epic 2 was
 pushed at the operator's explicit request at its end.

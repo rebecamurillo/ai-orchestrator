@@ -21,6 +21,17 @@ cp .env.example .env        # then fill in the tokens and keys
 make up                     # build the images and start web-client, backend-api, postgres
 ```
 
+One of those values is not a placeholder you can leave alone. `ORCHESTRATOR_SECRET_KEY` must be
+a real Fernet key — `change-me-fernet-key` is not one, and `cryptography` refuses it with
+`Fernet key must be 32 url-safe base64-encoded bytes`. The backend builds a Fernet per request,
+so with the committed value the stack starts, `/healthz` answers, and every write to
+`/api/v1/projects` answers 500 with the reason only in `docker compose logs backend-api`. Mint
+one before you use the Projects API, or run `make e2e-api`:
+
+```bash
+python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
+```
+
 `make up` is `docker compose up -d --build`. The first run builds both images, which takes
 minutes: the backend image installs Node 24, the three harness CLIs at their pinned versions,
 and the BMAD skill stubs. When it returns, `docker compose ps` shows three services and every
@@ -146,7 +157,22 @@ make images      # build both container images without starting anything
 `.github/workflows/ci.yml` runs those same targets as five jobs chained by `needs:`, one run
 per ref. The lint job also re-exports the contract and refuses any diff, so a hand-edited
 `contracts/openapi.json` fails there rather than reaching the browser as a type that lies. It calls no command the Makefile does not hold, and it carries no credential: the
-e2e job copies `.env.example` to `.env` and runs on the committed placeholders.
+e2e job copies `.env.example` to `.env` and runs on the committed placeholders, with one
+exception it mints itself — `ORCHESTRATOR_SECRET_KEY`, because the committed placeholder is not
+a valid Fernet key and every write would answer 500 without it. The key is generated on the
+runner, read from no repository secret, and dies with the job.
+
+`make e2e-api` is the one gate that needs more than the Makefile gives it. It constructs
+`Settings` in the test process, so the *whole* contract must be exported, not the two variables
+its own conftest names; and `DATABASE_URL` must point at `127.0.0.1:5432`, since the compose
+hostname `postgres` does not resolve from the host:
+
+```bash
+make up
+set -a; . ./.env; set +a
+export DATABASE_URL="${DATABASE_URL/@postgres:/@127.0.0.1:}" BACKEND_API_URL=http://127.0.0.1:8000
+make e2e-api
+```
 
 Two rules are enforced rather than asked for:
 
