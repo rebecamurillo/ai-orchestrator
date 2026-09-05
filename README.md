@@ -17,16 +17,23 @@ Configuration is the environment (AD-20): `.env.example` is the contract, `make 
 setting exists in one place and not the other. Copy it once, fill it in, and never commit the result.
 
 ```bash
-cp .env.example .env        # then fill in the tokens and keys
+make env                    # write .env (and .env.e2e), then fill in the tokens and keys
 make up                     # build the images and start web-client, backend-api, postgres
 ```
+
+`make env` is `cp .env.example .env` plus the one line that is not an application setting:
+`COMPOSE_PROJECT_NAME=aio-dev`, which names this stack's containers and volumes. There are two
+local environments and they share nothing — `aio-dev` is the one you develop in, `aio-e2e` is
+the one `make e2e` builds and destroys around the gate. Without the name compose falls back to
+the checkout's directory name, so a second clone would silently be a third project with empty
+volumes.
 
 One of those values is not a placeholder you can leave alone. `ORCHESTRATOR_SECRET_KEY` must be
 a real Fernet key — `change-me-fernet-key` is not one, and `cryptography` refuses it with
 `Fernet key must be 32 url-safe base64-encoded bytes`. The backend builds a Fernet per request,
 so with the committed value the stack starts, `/healthz` answers, and every write to
 `/api/v1/projects` answers 500 with the reason only in `docker compose logs backend-api`. Mint
-one before you use the Projects API, or run `make e2e-api`:
+one before you use the Projects API (`.env.e2e` gets one of its own, generated):
 
 ```bash
 python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
@@ -101,17 +108,35 @@ make e2e-ui      # playwright against the built web-client            (story 1.3
 make up / down   # docker compose: web-client, backend-api, postgres  (story 1.6)
 ```
 
-`make e2e-api` runs against a stack that is already up, and never skips: it waits up to 30
-seconds for `/healthz` and then fails, naming the address it tried. It reads three variables.
-`ORCHESTRATOR_TOKEN` comes from `.env` as it is. `BACKEND_API_URL` and `DATABASE_URL` both name
-the compose service in the contract, which is what the containers resolve and a shell does not,
-so a run from this machine overrides them — the migration scenarios open their own connection,
-and leaving `DATABASE_URL` alone fails the gate with `failed to resolve host 'postgres'`.
+`make e2e` is the whole gate, and the target to type:
+
+```bash
+make e2e        # build the aio-e2e stack, run the suite in it, destroy it — dev stack untouched
+```
+
+The suite writes and cleans up nothing. `tests/e2e/test_projects.py` says so in its own
+docstring — there is no `DELETE` in the API yet, so it makes its names unique per run instead —
+`test_schemathesis.py` drives every published operation with generated input while
+authenticated, and `test_clone_check.py` leaves bare fixture repositories and base clones under
+`WORK_DIR`. That is right for a suite that has to pass twice against the same stack, and ruinous
+against the stack you develop in: a few runs and the Projects list is mostly generated noise.
+
+So the gate gets a stack of its own. `make e2e` brings up compose project `aio-e2e` from
+`docker-compose.yml` plus `docker-compose.e2e.yml`, with its own database (`orchestrator_e2e`),
+its own `pgdata`, `work` and `agent-home` volumes, its own ports (`55432`, `8020`, `4341`) so it
+runs beside `make up` rather than instead of it, and `down -v` in a trap so a failed run cleans
+up as thoroughly as a green one. `.env.e2e` is generated on first use and holds no real
+credential: the git and gateway values are the committed placeholders, exactly as CI runs them.
+
+`make e2e-api` is the gate itself — what CI invokes, and what `make e2e` invokes once the stack
+is up. Run directly it attaches to whatever `DATABASE_URL` names, so
+`scripts/check_e2e_target.sh` refuses any database whose name does not end in `_e2e`, before
+pytest opens a connection. To point it at a stack you keep anyway, say so:
 
 ```bash
 set -a; . ./.env; set +a
-export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
-BACKEND_API_URL=http://127.0.0.1:8000 make e2e-api      # against `make up`, or against a host run
+export DATABASE_URL="${DATABASE_URL/@postgres:/@127.0.0.1:}" BACKEND_API_URL=http://127.0.0.1:8000
+E2E_ALLOW_SHARED_STACK=1 make e2e-api                   # and keep what it leaves behind
 ```
 
 ### The web-client half
@@ -148,6 +173,7 @@ and in CI:
 make lint        # ruff · mypy · import-linter · env contract · test pairs · contract drift · eslint · prettier · tsc · astro check
 make test        # backend unit tests + web-client unit tests, both with coverage
 make coverage    # changed lines >= 90 %, against the branch this work forks from
+make e2e         # the e2e-api gate in a stack of its own, created and destroyed around it
 make e2e-api     # httpx scenarios + schemathesis against a running stack
 make e2e-ui      # playwright against the built web-client and a stubbed backend
 make openapi     # re-export the contract; CI then fails on any diff (AD-3)
@@ -157,21 +183,19 @@ make images      # build both container images without starting anything
 `.github/workflows/ci.yml` runs those same targets as five jobs chained by `needs:`, one run
 per ref. The lint job also re-exports the contract and refuses any diff, so a hand-edited
 `contracts/openapi.json` fails there rather than reaching the browser as a type that lies. It calls no command the Makefile does not hold, and it carries no credential: the
-e2e job copies `.env.example` to `.env` and runs on the committed placeholders, with one
-exception it mints itself — `ORCHESTRATOR_SECRET_KEY`, because the committed placeholder is not
-a valid Fernet key and every write would answer 500 without it. The key is generated on the
-runner, read from no repository secret, and dies with the job.
+e2e job copies `.env.example` to `.env` and runs on the committed placeholders, with two
+exceptions it writes itself — `ORCHESTRATOR_SECRET_KEY`, because the committed placeholder is
+not a valid Fernet key and every write would answer 500 without it, and `POSTGRES_DB`, which it
+names `orchestrator_e2e` so the same guard that protects a developer's stack also passes there.
+The key is generated on the runner, read from no repository secret, and dies with the job.
 
-`make e2e-api` is the one gate that needs more than the Makefile gives it. It constructs
-`Settings` in the test process, so the *whole* contract must be exported, not the two variables
-its own conftest names; and `DATABASE_URL` must point at `127.0.0.1:5432`, since the compose
-hostname `postgres` does not resolve from the host:
+`make e2e-api` is the one gate that needs more than the Makefile gives it: it constructs
+`Settings` in the test process, so the *whole* contract must be exported, and `DATABASE_URL`
+must name an address this machine can reach rather than the compose hostname `postgres`. `make
+e2e` does all of that around it, against a stack built for the purpose:
 
 ```bash
-make up
-set -a; . ./.env; set +a
-export DATABASE_URL="${DATABASE_URL/@postgres:/@127.0.0.1:}" BACKEND_API_URL=http://127.0.0.1:8000
-make e2e-api
+make e2e
 ```
 
 Two rules are enforced rather than asked for:
@@ -193,9 +217,10 @@ daemon. It is also the only gate that proves a Dockerfile still builds: every ga
 runs from source, so without it `backend-api/Dockerfile` or `web-client/Dockerfile` could
 break and no pipeline would notice until someone ran `make up`.
 
-Before opening a change: `make lint && make test && make coverage`, then `make e2e-api` and
-`make e2e-ui`. The last two cannot run at the same time as `make up`; both bind
-`127.0.0.1:4321`.
+Before opening a change: `make lint && make test && make coverage`, then `make e2e` and
+`make e2e-ui`. `make e2e` runs beside `make up` — it publishes its own ports. `make e2e-ui`
+still does not: it binds `127.0.0.1:4321`, which is where `make up` publishes the web-client,
+so run `make down` first or give the dev container a different `WEB_CLIENT_PORT`.
 
 ## Setting up the BMAD method on a new machine
 

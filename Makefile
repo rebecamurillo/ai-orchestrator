@@ -15,7 +15,7 @@ PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
 # --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
 NODE_RUN := $(PNPM) --dir $(WEB) run
 
-.PHONY: lint test coverage e2e-api e2e-ui images openapi up down logs host-up host-down host-logs host-doctor host-env-sync
+.PHONY: lint test coverage e2e e2e-api e2e-ui images openapi env up down logs host-up host-down host-logs host-doctor host-env-sync
 
 ## lint — ruff · mypy (strict on domain/ and application/) · import-linter · env-contract check
 ##        · test pairs · contract drift · eslint · prettier --check · tsc --noEmit · astro check
@@ -46,9 +46,42 @@ DIFF_COVER_BASE ?= origin/main
 coverage:
 	$(PYTHON_RUN) diff-cover coverage.xml --compare-branch=$(DIFF_COVER_BASE) --fail-under=90
 
+## e2e — the whole gate: build the aio-e2e stack, run e2e-api in it, destroy it
+## This is the target to type. `make e2e-api` alone is the gate itself, and attaches to
+## whatever stack is already configured — which is how the suite's Projects, fixture
+## repositories and base clones end up in the database you develop against. The suite is
+## right to leave them (it must pass twice against the same stack); the stack is what has to
+## be disposable, so this target owns one: its own project, its own volumes, its own ports,
+## and `down -v` in a trap so a failed run cleans up as thoroughly as a green one.
+## `--build`, so the gate never runs yesterday's image; the layer cache makes repeats cheap.
+E2E_ENV := .env.e2e
+E2E_FILES := -f docker-compose.yml -f docker-compose.e2e.yml
+E2E_COMPOSE := docker compose -p aio-e2e --env-file $(E2E_ENV) $(E2E_FILES)
+# The gate is defined once, in `e2e-api`, and reached from here by recursion — not copied,
+# which is how the two would drift. Written `$(SUBMAKE)` rather than `$(MAKE)`: make executes
+# any recipe line holding the literal `$(MAKE)` even under `-n`, so a dry run of this target
+# would start containers instead of printing what it would do.
+SUBMAKE := $(MAKE)
+e2e:
+	./scripts/generate-env.sh e2e
+	set -e; \
+	set -a; . ./$(E2E_ENV); set +a; \
+	trap '$(E2E_COMPOSE) down -v' EXIT; \
+	$(E2E_COMPOSE) up -d --build --wait backend-api; \
+	COMPOSE_PROJECT_NAME=aio-e2e; \
+	COMPOSE_FILE=docker-compose.yml:docker-compose.e2e.yml; \
+	COMPOSE_ENV_FILE=$(E2E_ENV); \
+	export COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_ENV_FILE; \
+	export BACKEND_API_URL="http://127.0.0.1:$$BACKEND_API_PORT"; \
+	export DATABASE_URL="postgresql+psycopg://$$POSTGRES_USER:$$POSTGRES_PASSWORD@127.0.0.1:$$E2E_POSTGRES_PORT/$$POSTGRES_DB"; \
+	$(SUBMAKE) e2e-api
+
 ## e2e-api — httpx scenarios + schemathesis against the running stack
-## needs: docker compose up -d postgres, the app running, and BACKEND_API_URL + ORCHESTRATOR_TOKEN exported
+## needs: a stack up, and the whole contract exported with DATABASE_URL and BACKEND_API_URL
+## reachable from this machine. `make e2e` does all of that; running this target directly is
+## the sharp edge it exists to blunt, so the guard refuses any database but the gate's own.
 e2e-api:
+	./scripts/check_e2e_target.sh
 	$(PYTHON_RUN) pytest tests/e2e -q
 
 ## e2e-ui — playwright against the built web-client
@@ -70,6 +103,12 @@ images:
 openapi:
 	$(PYTHON_RUN) python -m orchestrator.tools.export_openapi --output ../contracts/openapi.json
 	$(NODE_RUN) gen:api
+
+## env — write the environment file of each local environment (AD-20)
+## `.env` is aio-dev, the stack you develop against; `.env.e2e` is aio-e2e, which `make e2e`
+## creates and destroys. Neither is ever rewritten once it exists.
+env:
+	./scripts/generate-env.sh
 
 ## up — docker compose up: web-client, backend-api, postgres
 ## needs: cp .env.example .env, filled in. --build so an edited Dockerfile is never ignored;
