@@ -14,8 +14,12 @@ drifts:
   `merge_test_globs` is why a `POST`/`PUT` payload can only add to the set, never replace
   it.
 
-`clone_check` starts `pending` and stays that way until 2.3's `run_clone_check` writes a
-result; nothing in this module executes a clone.
+`clone_check` starts `pending` and stays that way until `run_clone_check` writes a result;
+nothing in this module executes a clone. A finished check carries one `CloneCheckLine` per
+command it ran, and a `hint` — the third rule that lives here, because the API and the UI
+both restate it. `hint` is derived rather than stored: it is a pure function of the status,
+the summary output and the lines, so it needs no column of its own and cannot go stale
+against the result it describes.
 """
 
 from __future__ import annotations
@@ -34,9 +38,46 @@ from orchestrator.domain.entities.project import slugify
 PackageManager = Literal["uv", "pnpm", "npm", "yarn", "pip", "cargo", "go", "other"]
 DEFAULT_PACKAGE_MANAGER: PackageManager = "other"
 
-#: What `clone_check.status` can be. Only `run_clone_check` (2.3) ever writes `"ok"` or
-#: `"failed"`; every Repository this story creates starts, and stays, `"pending"`.
+#: What `clone_check.status` can be. Only `run_clone_check` ever writes `"ok"` or
+#: `"failed"`; a Repository that has never been checked reads, and stays, `"pending"`.
 CloneCheckStatus = Literal["pending", "ok", "failed"]
+
+#: What one checked command can be. A line is a command that ran, so it is never `pending`.
+CloneCheckLineStatus = Literal["ok", "failed"]
+
+#: The four commands a check reports, in the order it runs them. Named here so the use case,
+#: the API and the UI cannot each spell them differently.
+LINE_LS_REMOTE = "ls-remote"
+LINE_CLONE = "clone"
+LINE_DEFAULT_BRANCH = "default branch"
+LINE_METHOD_VERSION = "method version"
+
+#: What `bmad_version` says when the repository carries no readable `installation.version`,
+#: and when it carries one that is not the version this instance runs (FR-30).
+MISSING_VERSION = "missing"
+OUTDATED_VERSION = "outdated"
+
+#: The failures that have an answer, and the answer. `output` is git's sentence; these are
+#: what the Operator can act on.
+AUTH_HINT = "the instance's GitHub token has no access to this repository"
+NOT_FOUND_HINT = "repository not found: check the URL"
+
+#: What git says when the credential was refused, and when nothing answered to the URL.
+#: The auth patterns are checked first: they mean the credential failed and nothing else,
+#: while `Repository not found` is also what a private repository answers a valid token.
+#: Two not-found patterns because two transports word it differently — an https remote says
+#: `Repository not found`, a local or `file://` one says the path is not a repository — and
+#: the Operator's next step is the same either way: look at the URL.
+AUTH_PATTERNS = ("Authentication failed", "could not read Username")
+NOT_FOUND_PATTERNS = (
+    "Repository not found",
+    "does not appear to be a git repository",
+)
+
+#: What the default-branch line says when the origin does not hold the branch. The line's
+#: own words are the hint, so the branch name reaches the Operator without being stored
+#: twice; a branch line that failed for any other reason is not a missing branch.
+MISSING_BRANCH_PATTERN = "does not exist on origin"
 
 #: Every Repository protects at least these, whatever the Operator asked for.
 DEFAULT_TEST_GLOBS: tuple[str, ...] = ("tests/**", "**/*.test.*", "**/*.spec.*")
@@ -45,8 +86,19 @@ DEFAULT_TEST_GLOBS: tuple[str, ...] = ("tests/**", "**/*.test.*", "**/*.spec.*")
 GIT_SUFFIX = ".git"
 
 
+class CloneCheckLine(BaseModel):
+    """One command the check ran, how long it took, and what it said."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    status: CloneCheckLineStatus
+    seconds: float
+    output: str
+
+
 class CloneCheck(BaseModel):
-    """The result of the last attempt to clone and install this Repository (2.3)."""
+    """The result of the last attempt to reach and clone this Repository."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -54,11 +106,36 @@ class CloneCheck(BaseModel):
     at: datetime | None
     output: str
     bmad_version: str | None
+    #: One entry per command that ran, in the order they ran. Defaulted, so a check written
+    #: before lines existed — and every row already stored — reads back unchanged.
+    lines: tuple[CloneCheckLine, ...] = ()
 
     @classmethod
     def pending(cls) -> CloneCheck:
         """The value every new Repository starts with: no attempt has run yet."""
         return cls(status="pending", at=None, output="", bmad_version=None)
+
+    @property
+    def hint(self) -> str:
+        """What the Operator can do about this failure, or `""` when nothing is known.
+
+        Derived from what the check already holds, so it cannot disagree with it. Order
+        matters: a refused credential says so unambiguously, while `Repository not found` is
+        what a private repository answers a token that cannot see it as well as what any
+        remote answers a name that is not there.
+        """
+        if self.status != "failed":
+            return ""
+        failed = [line for line in self.lines if line.status == "failed"]
+        said = "\n".join([self.output, *(line.output for line in failed)])
+        if any(pattern in said for pattern in AUTH_PATTERNS):
+            return AUTH_HINT
+        if any(pattern in said for pattern in NOT_FOUND_PATTERNS):
+            return NOT_FOUND_HINT
+        for line in failed:
+            if line.name == LINE_DEFAULT_BRANCH and MISSING_BRANCH_PATTERN in line.output:
+                return line.output
+        return ""
 
 
 class Repository(BaseModel):

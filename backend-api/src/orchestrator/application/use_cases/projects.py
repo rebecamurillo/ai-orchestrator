@@ -53,6 +53,7 @@ from orchestrator.domain.errors import Conflict, Invalid, NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.crypto import Crypto
+from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.repositories import ProjectRepository, RepositoryRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 
@@ -79,6 +80,10 @@ class ProjectPorts:
     #: it; `api/providers.py` always supplies a real adapter, so only a `ProjectPorts` built
     #: outside the router path can ever reach a repository use case without one.
     repositories: RepositoryRepository | None = None
+    #: `None` for the same reason as `repositories`: a `ProjectPorts` built outside the
+    #: router path has no git adapter. `api/providers.py` always supplies one, so only the
+    #: clone check ever reads it, and it says so rather than silently checking nothing.
+    git: Git | None = None
 
 
 @dataclass(frozen=True)

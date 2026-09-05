@@ -1,8 +1,41 @@
 {
   "components": {
     "schemas": {
+      "CloneCheckLineOut": {
+        "description": "One command the check ran: what it was, how it went, how long, and what it said.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output": {
+            "title": "Output",
+            "type": "string"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "seconds",
+          "output"
+        ],
+        "title": "CloneCheckLineOut",
+        "type": "object"
+      },
       "CloneCheckOut": {
-        "description": "`clone_check` as every read returns it. `\"pending\"` until 2.3's `run_clone_check`.",
+        "description": "The summary of a Repository's last clone check. `pending` until one has run.\n\nExactly four keys, and it stays that way. The lines a finished check ran, and the hint it\nderives, are published beside this object as `clone_check_lines` and `clone_check_hint`,\nand together as one object on the clone-check operations.",
         "properties": {
           "at": {
             "anyOf": [
@@ -31,6 +64,11 @@
             "type": "string"
           },
           "status": {
+            "enum": [
+              "pending",
+              "ok",
+              "failed"
+            ],
             "title": "Status",
             "type": "string"
           }
@@ -42,6 +80,67 @@
           "bmad_version"
         ],
         "title": "CloneCheckOut",
+        "type": "object"
+      },
+      "CloneCheckResultOut": {
+        "description": "The result of checking that a Repository can be reached and cloned.\n\n`lines` holds one entry per command the check ran, in the order they ran. `hint` is what\nthe Operator can do about a failure, or empty when nothing is known. Until a check has\nrun, `status` is `pending`, `at` is null and `lines` is empty.",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "bmad_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bmad Version"
+          },
+          "hint": {
+            "title": "Hint",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/CloneCheckLineOut"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "output": {
+            "title": "Output",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "ok",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "at",
+          "output",
+          "bmad_version",
+          "lines",
+          "hint"
+        ],
+        "title": "CloneCheckResultOut",
         "type": "object"
       },
       "EnvVarCreate": {
@@ -537,6 +636,17 @@
           "clone_check": {
             "$ref": "#/components/schemas/CloneCheckOut"
           },
+          "clone_check_hint": {
+            "title": "Clone Check Hint",
+            "type": "string"
+          },
+          "clone_check_lines": {
+            "items": {
+              "$ref": "#/components/schemas/CloneCheckLineOut"
+            },
+            "title": "Clone Check Lines",
+            "type": "array"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
@@ -607,6 +717,8 @@
           "test_globs",
           "package_manager",
           "clone_check",
+          "clone_check_lines",
+          "clone_check_hint",
           "verify_skipped",
           "created_at",
           "updated_at"
@@ -934,7 +1046,7 @@
         ]
       },
       "put": {
-        "description": "Replace a Project's editable fields, and with them its whole variable set.\n\nA variable sent without a value keeps the ciphertext already stored, which is how a\nform that was never given the secret can send the set back without losing it. An\nomitted `log_prompt_content` keeps the stored switch for the same reason; no instance\ndefault is read here, so this route takes no settings. Its Repositories are untouched\nby this route and are re-read, not carried over from before the call.",
+        "description": "Replace a Project's editable fields, and with them its whole variable set.\n\nA variable sent without a value keeps the ciphertext already stored, which is how a\nform that was never given the secret can send the set back without losing it. An\nomitted `log_prompt_content` keeps the stored switch for the same reason: no instance\ndefault is resolved here. The two settings this route does read are `WORK_DIR` and\n`BMAD_VERSION`, for the clone check that follows the save. Its Repositories are\nuntouched by this route and are re-read, not carried over from before the call.",
         "operationId": "update_project_api_v1_projects__project_id__put",
         "parameters": [
           {
@@ -1125,7 +1237,7 @@
         ]
       },
       "post": {
-        "description": "Store a Repository, its `clone_check` starting `pending` (2.3 is what runs one).",
+        "description": "Store a Repository. Its `clone_check` starts `pending` until a check is run.",
         "operationId": "add_repository_api_v1_projects__project_id__repositories_post",
         "parameters": [
           {
@@ -1418,6 +1530,172 @@
           }
         ],
         "summary": "Update a Repository",
+        "tags": [
+          "repositories"
+        ]
+      }
+    },
+    "/api/v1/repositories/{repository_id}/clone-check": {
+      "get": {
+        "description": "The stored result, and no git command. `pending` until a check has run.",
+        "operationId": "read_clone_check_api_v1_repositories__repository_id__clone_check_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloneCheckResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Repository has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read this Repository's last clone check",
+        "tags": [
+          "repositories"
+        ]
+      },
+      "post": {
+        "description": "Reach the remote, make or refresh the base clone, and store what happened.\n\n`WORK_DIR` and `BMAD_VERSION` reach the use case as arguments, because nothing under\n`application/` reads the environment (AD-20).",
+        "operationId": "run_clone_check_api_v1_repositories__repository_id__clone_check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloneCheckResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Repository has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Run this Repository's clone check",
         "tags": [
           "repositories"
         ]

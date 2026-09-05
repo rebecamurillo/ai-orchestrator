@@ -33,6 +33,7 @@ from typing import Any
 from fastapi import Request
 
 from orchestrator.application.use_cases.projects import ProjectPorts
+from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
     SQLAlchemyProjectRepository,
@@ -43,6 +44,7 @@ from orchestrator.infrastructure.db import (
 #: The attributes `create_app` stores its adapters under.
 SESSION_FACTORY = "session_factory"
 CRYPTO = "crypto"
+GIT = "git"
 
 
 def from_state(request: Request, attribute: str) -> Any:
@@ -56,6 +58,18 @@ def from_state(request: Request, attribute: str) -> Any:
     return value
 
 
+def git_adapter(request: Request) -> Git | None:
+    """The git adapter, read tolerantly rather than through `from_state`.
+
+    Every other adapter here is required, because no route can answer without it. This one
+    is not: an application built without it still serves every Project and Repository
+    operation, and only the clone check needs it — which then refuses loudly, naming the
+    port, rather than this dependency refusing a read that never touches git.
+    """
+    adapter: Git | None = getattr(request.app.state, GIT, None)
+    return adapter
+
+
 def project_ports(request: Request) -> Iterator[ProjectPorts]:
     """The ports a Project use case runs on, inside one transaction."""
     session_factory = from_state(request, SESSION_FACTORY)
@@ -67,4 +81,5 @@ def project_ports(request: Request) -> Iterator[ProjectPorts]:
             repositories=SQLAlchemyRepositoryRepository(uow.session),
             crypto=crypto(),
             clock=SystemClock(),
+            git=git_adapter(request),
         )

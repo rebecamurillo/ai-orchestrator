@@ -18,6 +18,13 @@ Every operation renders `ProjectRead`, which embeds `repositories`: each one cal
 `use_cases.embedded_repositories` after its own use case, so the answer is never a stale
 snapshot from before the Repository router's last write.
 
+Both writes run each Repository's clone check *after* the use case has committed (FR-4), and
+the order is the rule. A wrong URL, a token without access or a default branch that is not on
+the origin is something the Operator should learn at the save rather than hours into a Run
+(SM-5) — but it is not a reason to refuse the save. The Project and its Repositories are
+already stored by the time git runs, so a failing check arrives as a `clone_check` on the
+Repository it describes, never as a failed `PUT`.
+
 Each operation declares every refusal it can answer, and no other. A route taking a path
 parameter or a body would otherwise have FastAPI publish a 422 of its own shape, putting
 `HTTPValidationError` in the contract the browser generates from (AD-3) while the server
@@ -44,6 +51,7 @@ from orchestrator.api.errors import (
 from orchestrator.api.providers import project_ports
 from orchestrator.api.schemas.common import Page
 from orchestrator.api.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
+from orchestrator.application.use_cases import clone_check as clone_check_use_cases
 from orchestrator.application.use_cases import projects as use_cases
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.domain.entities.project import ProjectView
@@ -83,6 +91,13 @@ def _read(ports: ProjectPorts, view: ProjectView) -> ProjectRead:
     return ProjectRead.of(view, use_cases.embedded_repositories(ports, view.id))
 
 
+def _check_repositories(ports: ProjectPorts, view: ProjectView, settings: Settings) -> None:
+    """Run each Repository's clone check, after the save that stored them committed."""
+    clone_check_use_cases.run_clone_checks_for_project(
+        ports, view.id, work_dir=settings.work_dir, bmad_version=settings.bmad_version
+    )
+
+
 @router.get(
     "/projects",
     response_model=Page[ProjectRead],
@@ -112,6 +127,7 @@ def create_project(payload: ProjectCreate, ports: Ports, settings: Config) -> Pr
         payload.as_draft(),
         log_prompt_content_default=settings.log_prompt_content_default,
     )
+    _check_repositories(ports, view, settings)
     return _read(ports, view)
 
 
@@ -133,13 +149,18 @@ def get_project(project_id: UUID, ports: Ports) -> ProjectRead:
     summary="Update a Project",
     responses=UPDATE_REFUSALS,
 )
-def update_project(project_id: UUID, payload: ProjectUpdate, ports: Ports) -> ProjectRead:
+def update_project(
+    project_id: UUID, payload: ProjectUpdate, ports: Ports, settings: Config
+) -> ProjectRead:
     """Replace a Project's editable fields, and with them its whole variable set.
 
     A variable sent without a value keeps the ciphertext already stored, which is how a
     form that was never given the secret can send the set back without losing it. An
-    omitted `log_prompt_content` keeps the stored switch for the same reason; no instance
-    default is read here, so this route takes no settings. Its Repositories are untouched
-    by this route and are re-read, not carried over from before the call.
+    omitted `log_prompt_content` keeps the stored switch for the same reason: no instance
+    default is resolved here. The two settings this route does read are `WORK_DIR` and
+    `BMAD_VERSION`, for the clone check that follows the save. Its Repositories are
+    untouched by this route and are re-read, not carried over from before the call.
     """
-    return _read(ports, use_cases.update_project(ports, project_id, payload.as_draft()))
+    view = use_cases.update_project(ports, project_id, payload.as_draft())
+    _check_repositories(ports, view, settings)
+    return _read(ports, view)

@@ -16,7 +16,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from orchestrator.domain.entities.repository import CloneCheck, Repository
+from orchestrator.domain.entities.repository import CloneCheck, CloneCheckLine, Repository
 from orchestrator.infrastructure.db.models.repository import RepositoryRow
 
 if TYPE_CHECKING:  # pragma: no cover — typing only
@@ -27,6 +27,11 @@ STATUS_KEY = "status"
 AT_KEY = "at"
 OUTPUT_KEY = "output"
 BMAD_VERSION_KEY = "bmad_version"
+#: The lines a finished check ran, inside the same value rather than in a column of their
+#: own: a check has no meaning without its result, and the two would have to be written
+#: together anyway. Written only when there are any, and read back with a default, so a row
+#: stored before a check ever ran — and every row 2.2 wrote — needs no migration.
+LINES_KEY = "lines"
 
 #: The fields `update` writes back. `id`, `project_id`, `slug` and `created_at` are not
 #: among them: none of them is editable once the Repository is stored.
@@ -42,13 +47,20 @@ MUTABLE_FIELDS = (
 
 
 def clone_check_json(clone_check: CloneCheck) -> dict[str, Any]:
-    """`clone_check` as the `jsonb` column holds it. `at` is `None` until 2.3 writes one."""
-    return {
+    """`clone_check` as the `jsonb` column holds it.
+
+    `at` is `None` until a check has run, and `lines` is absent until one has: a pending
+    check serialises to exactly the four keys the first migration's rows already carry.
+    """
+    stored: dict[str, Any] = {
         STATUS_KEY: clone_check.status,
         AT_KEY: clone_check.at.isoformat() if clone_check.at is not None else None,
         OUTPUT_KEY: clone_check.output,
         BMAD_VERSION_KEY: clone_check.bmad_version,
     }
+    if clone_check.lines:
+        stored[LINES_KEY] = [line.model_dump() for line in clone_check.lines]
+    return stored
 
 
 def clone_check_from_entity(data: dict[str, Any]) -> CloneCheck:
@@ -62,6 +74,7 @@ def clone_check_from_entity(data: dict[str, Any]) -> CloneCheck:
         at=data[AT_KEY],
         output=data[OUTPUT_KEY],
         bmad_version=data[BMAD_VERSION_KEY],
+        lines=tuple(CloneCheckLine(**line) for line in data.get(LINES_KEY, ())),
     )
 
 

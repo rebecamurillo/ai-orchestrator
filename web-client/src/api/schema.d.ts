@@ -69,9 +69,10 @@ export interface paths {
          *
          *     A variable sent without a value keeps the ciphertext already stored, which is how a
          *     form that was never given the secret can send the set back without losing it. An
-         *     omitted `log_prompt_content` keeps the stored switch for the same reason; no instance
-         *     default is read here, so this route takes no settings. Its Repositories are untouched
-         *     by this route and are re-read, not carried over from before the call.
+         *     omitted `log_prompt_content` keeps the stored switch for the same reason: no instance
+         *     default is resolved here. The two settings this route does read are `WORK_DIR` and
+         *     `BMAD_VERSION`, for the clone check that follows the save. Its Repositories are
+         *     untouched by this route and are re-read, not carried over from before the call.
          */
         put: operations["update_project_api_v1_projects__project_id__put"];
         post?: never;
@@ -96,7 +97,7 @@ export interface paths {
         put?: never;
         /**
          * Register a Repository under a Project
-         * @description Store a Repository, its `clone_check` starting `pending` (2.3 is what runs one).
+         * @description Store a Repository. Its `clone_check` starts `pending` until a check is run.
          */
         post: operations["add_repository_api_v1_projects__project_id__repositories_post"];
         delete?: never;
@@ -129,6 +130,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repository_id}/clone-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read this Repository's last clone check
+         * @description The stored result, and no git command. `pending` until a check has run.
+         */
+        get: operations["read_clone_check_api_v1_repositories__repository_id__clone_check_get"];
+        put?: never;
+        /**
+         * Run this Repository's clone check
+         * @description Reach the remote, make or refresh the base clone, and store what happened.
+         *
+         *     `WORK_DIR` and `BMAD_VERSION` reach the use case as arguments, because nothing under
+         *     `application/` reads the environment (AD-20).
+         */
+        post: operations["run_clone_check_api_v1_repositories__repository_id__clone_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -151,8 +179,29 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * CloneCheckLineOut
+         * @description One command the check ran: what it was, how it went, how long, and what it said.
+         */
+        CloneCheckLineOut: {
+            /** Name */
+            name: string;
+            /** Output */
+            output: string;
+            /** Seconds */
+            seconds: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "failed";
+        };
+        /**
          * CloneCheckOut
-         * @description `clone_check` as every read returns it. `"pending"` until 2.3's `run_clone_check`.
+         * @description The summary of a Repository's last clone check. `pending` until one has run.
+         *
+         *     Exactly four keys, and it stays that way. The lines a finished check ran, and the hint it
+         *     derives, are published beside this object as `clone_check_lines` and `clone_check_hint`,
+         *     and together as one object on the clone-check operations.
          */
         CloneCheckOut: {
             /** At */
@@ -161,8 +210,36 @@ export interface components {
             bmad_version: string | null;
             /** Output */
             output: string;
-            /** Status */
-            status: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "ok" | "failed";
+        };
+        /**
+         * CloneCheckResultOut
+         * @description The result of checking that a Repository can be reached and cloned.
+         *
+         *     `lines` holds one entry per command the check ran, in the order they ran. `hint` is what
+         *     the Operator can do about a failure, or empty when nothing is known. Until a check has
+         *     run, `status` is `pending`, `at` is null and `lines` is empty.
+         */
+        CloneCheckResultOut: {
+            /** At */
+            at: string | null;
+            /** Bmad Version */
+            bmad_version: string | null;
+            /** Hint */
+            hint: string;
+            /** Lines */
+            lines: components["schemas"]["CloneCheckLineOut"][];
+            /** Output */
+            output: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "ok" | "failed";
         };
         /**
          * EnvVarCreate
@@ -377,6 +454,10 @@ export interface components {
          */
         RepositoryOut: {
             clone_check: components["schemas"]["CloneCheckOut"];
+            /** Clone Check Hint */
+            clone_check_hint: string;
+            /** Clone Check Lines */
+            clone_check_lines: components["schemas"]["CloneCheckLineOut"][];
             /** Created At */
             created_at: string;
             /** Default Branch */
@@ -900,6 +981,110 @@ export interface operations {
             };
             /** @description Another Repository in this Project already holds that url. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_clone_check_api_v1_repositories__repository_id__clone_check_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repository_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloneCheckResultOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Repository has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    run_clone_check_api_v1_repositories__repository_id__clone_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repository_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloneCheckResultOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Repository has that id. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

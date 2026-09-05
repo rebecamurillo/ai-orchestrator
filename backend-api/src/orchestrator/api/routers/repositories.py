@@ -72,7 +72,7 @@ Ports = Annotated[ProjectPorts, Depends(project_ports)]
     responses=CREATE_REFUSALS,
 )
 def add_repository(project_id: UUID, payload: RepositoryCreate, ports: Ports) -> RepositoryOut:
-    """Store a Repository, its `clone_check` starting `pending` (2.3 is what runs one)."""
+    """Store a Repository. Its `clone_check` starts `pending` until a check is run."""
     return RepositoryOut.of(use_cases.add_repository(ports, project_id, payload.as_draft()))
 
 

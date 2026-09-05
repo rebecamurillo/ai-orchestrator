@@ -37,11 +37,13 @@ from sqlalchemy.orm import Session
 
 from orchestrator.api.deps import require_bearer
 from orchestrator.api.errors import UNAUTHORIZED_RESPONSE, install_error_handlers
-from orchestrator.api.routers import ping, projects, repositories
+from orchestrator.api.routers import clone_check, ping, projects, repositories
 from orchestrator.domain.ports.crypto import Crypto
+from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db import create_engine_from, create_session_factory
 from orchestrator.infrastructure.db.migrations import run_migrations
+from orchestrator.infrastructure.git import SubprocessGit
 from orchestrator.infrastructure.logging import configure_logging
 from orchestrator.infrastructure.settings import Settings
 
@@ -110,6 +112,7 @@ def create_app(
     lifespan: Lifespan | None = None,
     session_factory: SessionFactory | None = None,
     crypto: CryptoFactory | None = None,
+    git: Git | None = None,
 ) -> FastAPI:
     """Build the ASGI application. Adapters are constructed here and nowhere else.
 
@@ -128,6 +131,7 @@ def create_app(
     # the adapters `api/providers.py` builds each request's ports from
     app.state.session_factory = session_factory
     app.state.crypto = crypto
+    app.state.git = git
     install_error_handlers(app)
 
     @app.get("/healthz", tags=["health"], response_model=Health)
@@ -154,6 +158,12 @@ def create_app(
         dependencies=[Depends(require_bearer)],
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
     )
+    app.include_router(
+        clone_check.router,
+        prefix=API_PREFIX,
+        dependencies=[Depends(require_bearer)],
+        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
+    )
 
     return app
 
@@ -175,6 +185,9 @@ def main() -> None:
             lifespan=migrating_lifespan(settings),
             session_factory=session_factory,
             crypto=crypto_factory(settings),
+            # the one place the git adapter is named. It holds GITHUB_TOKEN for the
+            # subprocess environments it builds itself, and puts it nowhere else (AD-5)
+            git=SubprocessGit(settings.github_token.get_secret_value()),
         ),
         # binds every interface: reached from the compose network, not from the host
         host="0.0.0.0",

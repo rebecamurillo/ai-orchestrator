@@ -48,7 +48,7 @@ development_status:
   epic-2: in-progress
   2-1-project-entity-api-and-encrypted-environment-variables: done
   2-2-repository-registration-with-commands-and-test-globs: done
-  2-3-git-port-base-clone-layout-and-the-clone-check: backlog
+  2-3-git-port-base-clone-layout-and-the-clone-check: done
   2-4-projects-list-and-detail-screens: backlog
   2-5-new-project-and-edit-form-with-the-live-clone-check-readout: backlog
   epic-2-retrospective: optional

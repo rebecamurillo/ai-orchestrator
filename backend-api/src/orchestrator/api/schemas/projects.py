@@ -28,6 +28,7 @@ from uuid import UUID
 
 from pydantic import AfterValidator, BaseModel, Field
 
+from orchestrator.api.schemas.clone_check import CloneCheckLineOut
 from orchestrator.api.schemas.common import StorableText, UtcTimestamp
 from orchestrator.application.use_cases.projects import (
     EnvVarInput,
@@ -43,6 +44,7 @@ from orchestrator.domain.entities.project import (
 )
 from orchestrator.domain.entities.repository import (
     DEFAULT_PACKAGE_MANAGER,
+    CloneCheckStatus,
     PackageManager,
     Repository,
 )
@@ -123,9 +125,14 @@ class MaskedEnvVarOut(BaseModel):
 
 
 class CloneCheckOut(BaseModel):
-    """`clone_check` as every read returns it. `"pending"` until 2.3's `run_clone_check`."""
+    """The summary of a Repository's last clone check. `pending` until one has run.
 
-    status: str
+    Exactly four keys, and it stays that way. The lines a finished check ran, and the hint it
+    derives, are published beside this object as `clone_check_lines` and `clone_check_hint`,
+    and together as one object on the clone-check operations.
+    """
+
+    status: CloneCheckStatus
     at: UtcTimestamp | None
     output: str
     bmad_version: str | None
@@ -145,6 +152,10 @@ class RepositoryOut(BaseModel):
     test_globs: list[str]
     package_manager: str
     clone_check: CloneCheckOut
+    #: Siblings of `clone_check`, not keys inside it — see `CloneCheckOut`. Empty and `""`
+    #: for a Repository whose check has never run.
+    clone_check_lines: list[CloneCheckLineOut]
+    clone_check_hint: str
     verify_skipped: bool
     created_at: UtcTimestamp
     updated_at: UtcTimestamp
@@ -169,6 +180,8 @@ class RepositoryOut(BaseModel):
                 output=repository.clone_check.output,
                 bmad_version=repository.clone_check.bmad_version,
             ),
+            clone_check_lines=[CloneCheckLineOut.of(line) for line in repository.clone_check.lines],
+            clone_check_hint=repository.clone_check.hint,
             verify_skipped=repository.verify_skipped,
             created_at=repository.created_at,
             updated_at=repository.updated_at,
