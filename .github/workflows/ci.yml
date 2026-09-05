@@ -112,7 +112,15 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend-api/uv.lock
       - name: Fill the environment contract with its committed placeholders
-        run: cp .env.example .env
+        # One placeholder cannot stand in for itself: ORCHESTRATOR_SECRET_KEY must be a
+        # valid Fernet key, and `change-me-fernet-key` is not one. The Projects API builds
+        # a Fernet per request (api/providers.py), so with the committed value every write
+        # answers 500 and the suite tests nothing. Mint one for this run: it is random, it
+        # never leaves the runner, and postgres is torn down with its volume afterwards.
+        run: |
+          cp .env.example .env
+          key=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
+          sed -i "s|^ORCHESTRATOR_SECRET_KEY=.*|ORCHESTRATOR_SECRET_KEY=$key|" .env
       - name: Start postgres
         run: docker compose up -d --wait postgres
       - name: Start backend-api from source
