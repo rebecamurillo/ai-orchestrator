@@ -1,0 +1,84 @@
+/*
+ * The TemplateEditor island (3.5). CodeMirror's own theme (`src/lib/editor/yamlEditor.ts`)
+ * covers everything inside the editor; this file covers the toolbar around it and the
+ * error list under it. Signal rule: the only coloured element anywhere here is
+ * `.template-editor-readout[data-signal='failed']` — `unvalidated` and `read-only` stay
+ * plain words (NFR-6), which is why `.template-editor-error-row` carries no colour.
+ */
+
+.template-editor-banner {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.template-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) 0;
+}
+
+.template-editor-button[disabled] {
+  color: var(--color-text-tertiary);
+  border-color: var(--color-line);
+}
+
+.template-editor-readout {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.template-editor-readout[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.template-editor-actions {
+  display: flex;
+  gap: var(--space-4);
+  margin-left: auto;
+}
+
+/* Outline-only control, same shape as `Button.astro` — no filled button exists anywhere in
+   this product, and the island cannot reuse the `.astro` component directly. */
+.template-editor-button {
+  padding: var(--space-3) var(--space-6);
+  border: 1px solid var(--color-line-strong);
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.template-editor-button:hover {
+  color: var(--color-text);
+}
+
+.template-editor-button[data-variant='primary'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.template-editor-mount {
+  border: 1px solid var(--color-line);
+}
+
+.template-editor-mount .cm-editor {
+  height: 100%;
+}
+
+.template-editor-errors {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5) 0;
+}
+
+.template-editor-error-row {
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}

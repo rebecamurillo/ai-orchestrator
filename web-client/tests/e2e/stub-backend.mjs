@@ -23,10 +23,11 @@
  * *other* static fixture id still 404ing that route — `STATIC_REPOSITORY_IDS` is the
  * snapshot that keeps the two behaviours apart.
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 
 import { PROJECTS_BY_ID, RECHECK_REPOSITORY_ID } from './projects-fixtures.mjs';
+import { TEMPLATES } from './templates-fixtures.mjs';
 
 const PORT = Number(process.env.STUB_BACKEND_PORT ?? 8788);
 const TOKEN = process.env.ORCHESTRATOR_TOKEN ?? '';
@@ -41,6 +42,10 @@ const JSON_TYPE = 'application/json';
  * JSON-safe.
  */
 const projects = JSON.parse(JSON.stringify(PROJECTS_BY_ID));
+
+/** Same reasoning as `projects` above: a save (3.5) mutates this in place, so it must be a
+ * fresh copy per process rather than the fixture module's own object. */
+const templates = JSON.parse(JSON.stringify(TEMPLATES));
 
 /** Every Repository, static fixtures and 2.5's newly created ones alike, keyed by id — the
  * one index `PUT /repositories/{id}` and the clone-check simulation both need, since a
@@ -263,6 +268,122 @@ function rerunCloneCheck(repositoryId) {
   return null;
 }
 
+/** 3.5's own routes below — every route the four `/templates` endpoints `templates.spec.ts`
+ * needs, added without touching any branch above. */
+
+function sha256Hex(text) {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+/** A stand-in for the real validator (AD-15 lives in backend-api, never reimplemented here):
+ * `parallel:` is treated as reserved wherever it appears, and a step (a `- id:` line) with
+ * no `gate:` anywhere in its own block is reported `unvalidated · steps.{id}` — exactly the
+ * two facts the story's AC2 needs, computed the same way `src/lib/editor/yamlEditor.ts`
+ * finds a step's own range: a line-and-indentation scan, never a YAML parse. */
+function validateYamlText(text) {
+  const lines = text.split('\n');
+  const errors = [];
+  lines.forEach((line, index) => {
+    if (/^\s*parallel:/.test(line)) {
+      errors.push({
+        line: index + 1,
+        path: null,
+        template: null,
+        version: null,
+        reason: 'parallel is reserved',
+      });
+    }
+  });
+
+  const unvalidated = [];
+  const stepStarts = [];
+  lines.forEach((line, index) => {
+    const match = line.match(/^(\s*)-\s+id:\s*(\S+)/);
+    if (match) stepStarts.push({ index, indent: match[1].length, id: match[2] });
+  });
+  stepStarts.forEach((step) => {
+    let end = lines.length;
+    for (let i = step.index + 1; i < lines.length; i++) {
+      const candidate = lines[i];
+      if (candidate.trim().length === 0) continue;
+      const spaces = candidate.match(/^ */)[0].length;
+      if (spaces <= step.indent) {
+        end = i;
+        break;
+      }
+    }
+    const block = lines.slice(step.index, end).join('\n');
+    if (!/\bgate:\s*\S/.test(block)) unvalidated.push(`steps.${step.id}`);
+  });
+
+  return { errors, unvalidated };
+}
+
+/** `version` must read `max(existing) + 1` (AD-15) — the same rule the real backend applies,
+ * so `rewriteVersionLine` (`src/lib/editor/yamlEditor.ts`) is exercised against a stub that
+ * actually checks its work rather than accepting anything posted. */
+function saveTemplateVersion(name, yamlText) {
+  const template = templates[name];
+  if (!template)
+    return {
+      status: 404,
+      body: { type: 'about:blank', title: 'no Template has that name', status: 404 },
+    };
+
+  const { errors } = validateYamlText(yamlText);
+  if (errors.length > 0) {
+    return {
+      status: 422,
+      body: {
+        type: 'about:blank',
+        title: 'invalid template',
+        status: 422,
+        detail: 'validation failed',
+        errors,
+      },
+    };
+  }
+
+  const versionNumbers = Object.keys(template.versions).map(Number);
+  const maxVersion = Math.max(...versionNumbers);
+  const versionMatch = yamlText.match(/^version:\s*(\d+)/m);
+  const declaredVersion = versionMatch ? Number(versionMatch[1]) : null;
+  if (declaredVersion !== maxVersion + 1) {
+    return {
+      status: 422,
+      body: {
+        type: 'about:blank',
+        title: 'invalid template',
+        status: 422,
+        detail: 'version must be the next one',
+        errors: [
+          {
+            line: null,
+            path: 'yaml',
+            template: name,
+            version: declaredVersion,
+            reason: `version must be ${maxVersion + 1}`,
+          },
+        ],
+      },
+    };
+  }
+
+  const saved = {
+    name,
+    version: declaredVersion,
+    yaml: yamlText,
+    hash: sha256Hex(yamlText),
+    calls: [],
+    called_by: [],
+    pinned_by: 0,
+    inputs: template.versions[maxVersion].inputs,
+    created_at: new Date().toISOString(),
+  };
+  template.versions[declaredVersion] = saved;
+  return { status: 201, body: saved };
+}
+
 createServer(async (request, response) => {
   const authorized = request.headers.authorization === `Bearer ${TOKEN}`;
   const { pathname } = new URL(request.url, `http://127.0.0.1:${PORT}`);
@@ -335,6 +456,49 @@ createServer(async (request, response) => {
       return notFound(response, 'no Repository has that id');
     }
     send(response, 200, JSON_TYPE, JSON.stringify(simulateCloneCheck(repository)));
+    return;
+  }
+  if (pathname === '/api/v1/templates' && request.method === 'GET') {
+    // forced empty unconditionally (3.5's Design Notes): the frozen `shell.spec.ts` asserts
+    // `NO TEMPLATES` at bare `/templates` against this same, `fullyParallel` stub
+    send(response, 200, JSON_TYPE, JSON.stringify({ items: [], next_cursor: null }));
+    return;
+  }
+  const templateVersionsMatch = pathname.match(/^\/api\/v1\/templates\/([^/]+)\/versions$/);
+  if (templateVersionsMatch && request.method === 'GET') {
+    const template = templates[templateVersionsMatch[1]];
+    if (!template) return notFound(response, 'no Template has that name');
+    const versionNumbers = Object.keys(template.versions)
+      .map(Number)
+      .sort((a, b) => a - b);
+    send(response, 200, JSON_TYPE, JSON.stringify({ items: versionNumbers, next_cursor: null }));
+    return;
+  }
+  if (templateVersionsMatch && request.method === 'POST') {
+    const body = await readJsonBody(request);
+    const result = saveTemplateVersion(templateVersionsMatch[1], body.yaml ?? '');
+    send(
+      response,
+      result.status,
+      result.status >= 400 ? PROBLEM : JSON_TYPE,
+      JSON.stringify(result.body),
+    );
+    return;
+  }
+  const templateValidateMatch = pathname.match(/^\/api\/v1\/templates\/([^/]+)\/validate$/);
+  if (templateValidateMatch && request.method === 'POST') {
+    const body = await readJsonBody(request);
+    send(response, 200, JSON_TYPE, JSON.stringify(validateYamlText(body.yaml ?? '')));
+    return;
+  }
+  const templateVersionMatch = pathname.match(/^\/api\/v1\/templates\/([^/]+)\/(\d+)$/);
+  if (templateVersionMatch && request.method === 'GET') {
+    const template = templates[templateVersionMatch[1]];
+    const version = template?.versions[Number(templateVersionMatch[2])];
+    if (!version) {
+      return notFound(response, 'no Template has that name, or no version has that number');
+    }
+    send(response, 200, JSON_TYPE, JSON.stringify(version));
     return;
   }
   send(response, 404, PROBLEM, JSON.stringify({ title: 'not found', status: 404 }));

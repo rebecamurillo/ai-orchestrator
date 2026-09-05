@@ -1,0 +1,122 @@
+---
+/**
+ * The VERSIONS column (3.5, UX-DR15): one record row per Template version, name and number
+ * first, then two facts that never change what colour the screen paints — every version is
+ * `pinned by 0 runs` (`TemplateVersionOut.pinned_by` is always 0 this release, so the row
+ * states the fact outright rather than reading a field that can only ever hold it) and, when
+ * any Template calls this exact version, `called by {name}@{version}, …`.
+ *
+ * `[name]/[version].astro` assembles `rows` from three sources: `GET /api/v1/templates`
+ * (every Template, best effort — forced empty by the shared e2e stub, per the story's Design
+ * Notes), `GET /api/v1/templates/{name}/versions` (this Template's own version numbers,
+ * unconstrained by that stub, so AC3's "shows v1 and v2" is provable live), and the loaded
+ * version's own `called_by` for its one row. A sibling version of *another* Template, or a
+ * sibling version of *this* Template that is not the one loaded, carries no `called_by` the
+ * page has fetched — `calledBy: []` for those is the accurate "not known here", not a claim
+ * that nothing calls it. The full multi-Template panel with every row's real callers is
+ * proven directly against this component with fixture props (`templates-components.test.ts`),
+ * not end to end.
+ */
+import type { CalledByRef, VersionRow } from './version-row';
+
+interface Props {
+  rows: VersionRow[];
+}
+
+const { rows } = Astro.props;
+
+function calledByText(calledBy: CalledByRef[]): string | null {
+  if (calledBy.length === 0) return null;
+  return `called by ${calledBy.map((ref) => `${ref.name}@${ref.version}`).join(', ')}`;
+}
+---
+
+<section data-testid="templates-versions">
+  <p class="hint">
+    a saved version never changes; a version pinned by a run, directly or as a callee, is frozen
+  </p>
+  {
+    rows.length === 0 ? (
+      <p class="empty">no template version is stored</p>
+    ) : (
+      <ul class="rows">
+        {rows.map((row) => (
+          <li>
+            <a
+              class="row"
+              data-testid={`templates-version-${row.name}-${row.version}`}
+              data-selected={String(row.active)}
+              href={row.href}
+            >
+              <span class="title">
+                {row.name} v{row.version}
+              </span>
+              <span class="meta">
+                pinned by 0 runs
+                {calledByText(row.calledBy) && <> · {calledByText(row.calledBy)}</>}
+              </span>
+              <span class="readonly">read-only</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</section>
+
+<style>
+  .hint {
+    padding: var(--space-4) var(--space-6);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-micro);
+    line-height: var(--type-micro-line);
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  .empty {
+    padding: var(--space-6);
+    color: var(--color-text-secondary);
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+  }
+
+  .rows {
+    list-style: none;
+  }
+
+  .row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-6);
+    border-bottom: 1px solid var(--color-line);
+    text-decoration: none;
+  }
+
+  .row:hover {
+    background: var(--color-surface-raised);
+    text-decoration: none;
+  }
+
+  .row[data-selected='true'] {
+    background: var(--color-surface-raised);
+  }
+
+  .title {
+    color: var(--color-text);
+    font-size: var(--type-row-title);
+    line-height: var(--type-row-title-line);
+  }
+
+  .meta {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+
+  .readonly {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-micro);
+    line-height: var(--type-micro-line);
+  }
+</style>

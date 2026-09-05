@@ -1,21 +1,63 @@
 ---
 /**
- * Templates — the versions list, the YAML editor, and the diagram rendered from the backend
- * graph. The shipped templates are seeded in epic 3; nothing is stored yet.
+ * Templates — bare `/templates` redirects to the latest version of the first Template by
+ * name (AC1); the versions list, editor, diagram and inputs table all live at
+ * `[name]/[version].astro`, this route's only job is to pick which one to open.
+ *
+ * `GET /api/v1/templates` answers unconditionally empty in the shared e2e stub — the same
+ * reasoning `stub-backend.mjs` documents for `/api/v1/projects` — so the redirect this file
+ * performs is proven only at the unit layer (`tests/unit/templates-index-logic.test.ts`);
+ * `shell.spec.ts` (frozen) is what proves the empty state below end to end.
+ *
+ * A resolved `error` and a rejected promise both mean the list could not be read, neither is
+ * "no Template is stored" — collapsing them would tell the Operator `NO TEMPLATES` when the
+ * true state is "couldn't ask" (precedent: `src/pages/projects/index.astro`).
  */
 import EmptyState from '../../components/EmptyState.astro';
 import Shell from '../../layouts/Shell.astro';
+import { backend } from '../../api/server';
+import { selectRedirectTarget } from '../../lib/templates/index-logic';
 
 export const prerender = false;
+
+let listUnavailable = false;
+let target: ReturnType<typeof selectRedirectTarget> = null;
+try {
+  const { data, error } = await backend().GET('/api/v1/templates');
+  if (error) {
+    listUnavailable = true;
+  } else {
+    target = selectRedirectTarget(data?.items ?? []);
+  }
+} catch {
+  listUnavailable = true;
+}
+
+if (target) {
+  return Astro.redirect(`/templates/${encodeURIComponent(target.name)}/${target.version}`);
+}
 ---
 
-<Shell active="templates" title="TEMPLATES" count="0 versions">
-  <EmptyState
-    testId="templates-empty"
-    headline="NO TEMPLATES"
-    lines={[
-      'No template version is stored.',
-      'A template declares the steps a run executes, the gates between them, and the inputs bound when it starts.',
-    ]}
-  />
+<Shell active="templates" title="TEMPLATES" count={listUnavailable ? undefined : '0 versions'}>
+  {
+    listUnavailable ? (
+      <EmptyState
+        testId="templates-list-error"
+        headline="TEMPLATES UNAVAILABLE"
+        lines={[
+          'The list could not be read from backend-api.',
+          'Reload the page once the connection is restored.',
+        ]}
+      />
+    ) : (
+      <EmptyState
+        testId="templates-empty"
+        headline="NO TEMPLATES"
+        lines={[
+          'No template version is stored.',
+          'A template declares the steps a run executes, the gates between them, and the inputs bound when it starts.',
+        ]}
+      />
+    )
+  }
 </Shell>

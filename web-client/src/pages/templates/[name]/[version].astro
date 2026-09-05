@@ -1,0 +1,175 @@
+---
+/**
+ * One Template Version: the VERSIONS / YAML / DIAGRAM+INPUTS columns (3.5, UX-DR15). The
+ * diagram slot renders the literal placeholder line — 3.6 fills it in; nothing here parses
+ * the YAML itself (`web-client/AGENTS.md`).
+ *
+ * Three reads build the page. `GET /templates/{name}/{version}` is the one that matters: its
+ * failure (including an unparsable `version` segment) is this page's own distinct
+ * unavailable readout, never a crash and never a versions list rendered as if it were empty.
+ * `GET /templates/{name}/versions` and `GET /templates` are both best effort — a failure of
+ * either narrows what the VERSIONS column can show without taking the whole page down, since
+ * neither carries information the editor, the inputs table, or the Save flow depends on.
+ *
+ * `GET /api/v1/templates` answers unconditionally empty in the shared e2e stub (the story's
+ * Design Notes), so the cross-Template rows this page *would* add from it are untestable end
+ * to end; `GET /templates/{name}/versions` is what keeps this Template's own rows (AC3's
+ * "shows v1 and v2") provable live. A sibling row this page cannot fetch full detail for
+ * (another Template's version, or a version of this one that is not the one loaded) carries
+ * `calledBy: []` — "not known here", never a claim that nothing calls it; the full panel with
+ * every row's real callers is proven directly against `VersionsList.astro` with fixture
+ * props (`templates-components.test.ts`).
+ *
+ * `errorsInitial` comes from a server-side `POST /templates/{name}/validate` over the stored
+ * text, so the readout shows a real state the moment the page renders rather than flashing
+ * empty until the island's own first Validate. A failure of that best-effort call leaves the
+ * readout at zero errors — the island's own Validate (800 ms after the first keystroke, or a
+ * manual click) supersedes it either way.
+ */
+import EmptyState from '../../../components/EmptyState.astro';
+import InputsTable from '../../../components/templates/InputsTable.astro';
+import VersionsList from '../../../components/templates/VersionsList.astro';
+import type { VersionRow } from '../../../components/templates/version-row';
+import Shell from '../../../layouts/Shell.astro';
+import { backend } from '../../../api/server';
+import TemplateEditor, { type ValidateResult } from '../../../islands/TemplateEditor';
+import type { components } from '../../../api/schema';
+import { buildVersionRows } from '../../../lib/templates/version-rows';
+
+export const prerender = false;
+
+type TemplateVersion = components['schemas']['TemplateVersionOut'];
+type TemplateSummary = components['schemas']['TemplateSummaryOut'];
+
+const name = Astro.params.name!;
+const versionParam = Astro.params.version!;
+const versionNumber = Number(versionParam);
+
+let detail: TemplateVersion | null = null;
+if (Number.isInteger(versionNumber) && versionNumber >= 1) {
+  try {
+    const { data, error } = await backend().GET('/api/v1/templates/{name}/{version}', {
+      params: { path: { name, version: versionNumber } },
+    });
+    if (!error && data) detail = data;
+  } catch {
+    detail = null;
+  }
+}
+
+let rows: VersionRow[] = [];
+let errorsInitial: ValidateResult = {
+  errors: [],
+  unvalidated: [],
+  validatedAt: new Date().toISOString(),
+};
+
+if (detail) {
+  let ownVersions = [versionNumber];
+  try {
+    const { data, error } = await backend().GET('/api/v1/templates/{name}/versions', {
+      params: { path: { name } },
+    });
+    if (!error && data) ownVersions = data.items;
+  } catch {
+    // best effort — the loaded version's own row still renders below
+  }
+
+  let summaryItems: TemplateSummary[] = [];
+  try {
+    const { data, error } = await backend().GET('/api/v1/templates');
+    if (!error && data) summaryItems = data.items;
+  } catch {
+    // best effort — see the module doc: forced empty by the shared e2e stub regardless
+  }
+
+  rows = buildVersionRows({
+    name,
+    versionNumber,
+    summaryItems,
+    ownVersions,
+    calledByLoaded: detail.called_by,
+  });
+
+  try {
+    const { data, error } = await backend().POST('/api/v1/templates/{name}/validate', {
+      params: { path: { name } },
+      body: { yaml: detail.yaml },
+    });
+    if (!error && data) {
+      errorsInitial = {
+        errors: data.errors,
+        unvalidated: data.unvalidated,
+        validatedAt: new Date().toISOString(),
+      };
+    }
+  } catch {
+    // best effort — the island's own Validate supersedes this the moment it runs
+  }
+}
+---
+
+{
+  /* this Template's own version count, not the merged cross-Template row total — the
+   latter happens to equal it today only because the shared e2e stub forces `GET
+   /api/v1/templates` empty (Review Triage Log, story 3.5, finding 4) */
+}
+<Shell
+  active="templates"
+  title="TEMPLATES"
+  count={detail ? `${rows.filter((row) => row.name === name).length} versions` : undefined}
+>
+  {
+    !detail ? (
+      <EmptyState
+        testId="templates-version-unavailable"
+        headline="TEMPLATE UNAVAILABLE"
+        lines={[
+          `${name} v${versionParam} could not be read from backend-api.`,
+          'Reload the page once the connection is restored, or pick another version.',
+        ]}
+      />
+    ) : (
+      <div class="columns">
+        <div class="col-versions">
+          <VersionsList rows={rows} />
+        </div>
+        <div class="col-editor">
+          <TemplateEditor
+            client:load
+            name={name}
+            version={versionNumber}
+            yaml={detail.yaml}
+            inputs={detail.inputs}
+            errorsInitial={errorsInitial}
+          />
+        </div>
+        <div class="col-side">
+          <div class="diagram-slot" data-testid="templates-diagram">
+            diagram arrives with the next story
+          </div>
+          <InputsTable inputs={detail.inputs} />
+        </div>
+      </div>
+    )
+  }
+</Shell>
+
+<style>
+  .columns {
+    display: grid;
+    grid-template-columns: 260px 1fr 300px;
+    align-items: start;
+    gap: var(--space-8);
+  }
+
+  .diagram-slot {
+    padding: var(--space-8);
+    margin-bottom: var(--space-8);
+    border: 1px solid var(--color-line);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+    text-align: center;
+  }
+</style>
