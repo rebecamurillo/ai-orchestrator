@@ -1,0 +1,133 @@
+/**
+ * Styling for `ProjectForm.tsx` and its two pages (2.5). A plain stylesheet rather than
+ * component-scoped `<style>` blocks: the form is a React island, and React does not offer
+ * Astro's scoped `<style>` — every rule below is scoped by hand under `.project-form` so it
+ * cannot leak onto another screen. Tokens only, no inline styles (web-client AGENTS.md).
+ */
+
+.project-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  max-width: var(--detail-max);
+}
+
+.project-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.project-form .field-label {
+  color: var(--color-text-secondary);
+  font-size: var(--type-eyebrow);
+  letter-spacing: var(--type-eyebrow-tracking);
+  text-transform: var(--type-eyebrow-transform);
+}
+
+.project-form .field-input,
+.project-form input[type='text'],
+.project-form textarea,
+.project-form select {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+}
+
+.project-form textarea {
+  min-height: 4.5em;
+  resize: vertical;
+}
+
+.project-form .field-error {
+  color: var(--color-signal-failed);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.project-form .secondary-line {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.project-form .switch-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+}
+
+.project-form .rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-line);
+}
+
+.project-form .rows-title {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-section-head);
+  letter-spacing: var(--type-section-head-tracking);
+  text-transform: var(--type-section-head-transform);
+}
+
+.project-form .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-6);
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.project-form .repo-row {
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.project-form .masked-value {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+}
+
+.project-form .link-button,
+.project-form .add-row {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  cursor: pointer;
+}
+
+.project-form .save-button {
+  align-self: flex-start;
+  padding: var(--space-3) var(--space-8);
+  border: 1px solid var(--color-accent);
+  background: none;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  cursor: pointer;
+}
+
+.project-form-error {
+  color: var(--color-signal-failed);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}

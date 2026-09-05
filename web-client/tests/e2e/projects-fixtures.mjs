@@ -226,3 +226,13 @@ export const PROJECTS_BY_ID = {
   [CLEAN_ID]: CLEAN,
   [NO_REPOS_ID]: NO_REPOS,
 };
+
+/**
+ * `project-form.spec.ts` (2.5) creates and edits real Projects through the live form, so it
+ * needs no stored `ProjectRead` of its own — only the two row values its scenarios name in
+ * the story's I/O matrix. `stub-backend.mjs`'s `POST .../clone-check` simulation keys off
+ * `UNREACHABLE_REPOSITORY_URL` specifically, matching by substring, to answer `ls-remote
+ * failed` for exactly the row that asked for it and `ok` for every other one it creates.
+ */
+export const UNREACHABLE_REPOSITORY_URL = 'https://github.com/example/unreachable-repo.git';
+export const NO_QUALITY_COMMAND_REPOSITORY_URL = 'https://github.com/example/no-quality-gate.git';

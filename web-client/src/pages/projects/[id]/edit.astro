@@ -1,0 +1,151 @@
+---
+/**
+ * Edit project (2.5). `mode="edit"`: `initial` comes from a fresh `GET /api/v1/projects/{id}`
+ * unless a just-failed save handed back a kept draft instead — the same choice
+ * `new.astro` makes, mirroring `login.astro`'s redirect/re-render split.
+ *
+ * The readout column always reads the freshly fetched Project's Repositories, not the
+ * failed draft: a save that fails partway through (Design Notes) may still have written
+ * some Repositories, and their real, current clone-check result is what the Operator needs
+ * to see, independent of which fields the retry still has wrong.
+ *
+ * `/projects/[id].astro` (2.4) is a different, shallower route (`/projects/{id}`, redirecting
+ * to `?id=`); this nested route answers `/projects/{id}/edit` and coexists with it.
+ */
+import { actions } from 'astro:actions';
+
+import { backend } from '../../../api/server';
+import type { components } from '../../../api/schema';
+import { draftToInitial, type SaveFailure } from '../../../actions/projects';
+import CloneCheckReadout from '../../../components/projects/CloneCheckReadout.astro';
+import EmptyState from '../../../components/EmptyState.astro';
+import ProjectForm from '../../../islands/ProjectForm';
+import type { ProjectFormInitial } from '../../../islands/project-form-logic';
+import Shell from '../../../layouts/Shell.astro';
+import '../../../styles/project-form.css';
+
+export const prerender = false;
+
+type ProjectRead = components['schemas']['ProjectRead'];
+type RepositoryOut = components['schemas']['RepositoryOut'];
+
+const projectId = Astro.params.id as string;
+
+const result = Astro.getActionResult(actions.projects.save);
+if (result && !result.error) {
+  return Astro.redirect(`/projects/${result.data.id}/edit?saved=1`);
+}
+
+const { data: project } = await backend().GET('/api/v1/projects/{project_id}', {
+  params: { path: { project_id: projectId } },
+});
+
+function repositoryToInitial(repository: RepositoryOut) {
+  return {
+    id: repository.id,
+    url: repository.url,
+    defaultBranch: repository.default_branch,
+    packageManager: repository.package_manager,
+    testGlobs: repository.test_globs.join('\n'),
+    installCommand: repository.install_command,
+    qualityGateCommand: repository.quality_gate_command,
+    unitTestCommand: repository.unit_test_command,
+  };
+}
+
+function projectToInitial(read: ProjectRead): ProjectFormInitial {
+  return {
+    projectId: read.id,
+    name: read.name,
+    contextText: read.context_text,
+    contextPaths: read.context_paths.join('\n'),
+    logPromptContent: read.log_prompt_content,
+    envVars: read.env_vars.map((row) => ({ name: row.name, masked: row.masked })),
+    repositories: read.repositories.map(repositoryToInitial),
+  };
+}
+
+let initial: ProjectFormInitial | null = project ? projectToInitial(project) : null;
+let errors: SaveFailure['errors'];
+let detail: string | undefined;
+
+if (result?.error) {
+  Astro.response.status = 200;
+  try {
+    const failure = JSON.parse(result.error.message) as SaveFailure;
+    initial = draftToInitial(failure.draft);
+    errors = failure.errors;
+    detail = failure.detail;
+  } catch {
+    detail = result.error.message;
+  }
+}
+
+const saved = Astro.url.searchParams.get('saved') === '1';
+---
+
+<Shell active="projects" title="EDIT PROJECT">
+  {
+    initial ? (
+      <div class="project-form-page">
+        <section class="form-pane">
+          {detail && (
+            <p class="project-form-error" data-testid="project-form-error">
+              {detail}
+            </p>
+          )}
+          {saved && !detail && (
+            <p class="saved-line" data-testid="project-form-saved">
+              saved
+            </p>
+          )}
+          <ProjectForm client:load initial={initial} errors={errors ?? []} mode="edit" />
+        </section>
+        <section class="readout-pane">
+          <h2 class="readout-title">CLONE CHECK</h2>
+          <CloneCheckReadout repositories={project?.repositories ?? []} />
+        </section>
+      </div>
+    ) : (
+      <EmptyState
+        testId="project-edit-missing"
+        headline="PROJECT NOT FOUND"
+        lines={[`No Project has id ${projectId}.`]}
+      />
+    )
+  }
+</Shell>
+
+<style>
+  .project-form-page {
+    display: flex;
+    gap: var(--section-gap);
+    align-items: flex-start;
+  }
+
+  .form-pane {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .readout-pane {
+    width: 320px;
+    flex-shrink: 0;
+  }
+
+  .readout-title {
+    padding-bottom: var(--space-3);
+    margin-bottom: var(--space-6);
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-section-head);
+    letter-spacing: var(--type-section-head-tracking);
+    text-transform: var(--type-section-head-transform);
+  }
+
+  .saved-line {
+    color: var(--color-text-secondary);
+    font-size: var(--type-row-body);
+    line-height: var(--type-row-body-line);
+  }
+</style>

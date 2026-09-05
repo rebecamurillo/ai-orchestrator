@@ -1,0 +1,98 @@
+---
+/**
+ * New project (2.5). `mode="create"`: nothing is stored yet, so the readout column always
+ * reads "save to run the clone check" here — a create that fails leaves nothing behind
+ * (`src/actions/projects.ts`'s pre-flight checks), and a create that succeeds redirects
+ * straight to the edit page before this page ever has a real Repository to show.
+ *
+ * Structurally this is `src/pages/login.astro`'s own pattern: `Astro.getActionResult`
+ * decides between a redirect and a same-page re-render, and a rejection never redirects.
+ */
+import { actions } from 'astro:actions';
+
+import { draftToInitial, type SaveFailure } from '../../actions/projects';
+import CloneCheckReadout from '../../components/projects/CloneCheckReadout.astro';
+import ProjectForm from '../../islands/ProjectForm';
+import type { ProjectFormInitial } from '../../islands/project-form-logic';
+import Shell from '../../layouts/Shell.astro';
+import '../../styles/project-form.css';
+
+export const prerender = false;
+
+const result = Astro.getActionResult(actions.projects.save);
+if (result && !result.error) {
+  return Astro.redirect(`/projects/${result.data.id}/edit?saved=1`);
+}
+
+let initial: ProjectFormInitial = {
+  name: '',
+  contextText: '',
+  contextPaths: '',
+  logPromptContent: false,
+  envVars: [],
+  repositories: [],
+};
+let errors: SaveFailure['errors'];
+let detail: string | undefined;
+
+if (result?.error) {
+  // the Action rejected this attempt; the page renders it in place, exactly as
+  // `login.astro` renders a rejected login — no redirect, no toast
+  Astro.response.status = 200;
+  try {
+    const failure = JSON.parse(result.error.message) as SaveFailure;
+    initial = draftToInitial(failure.draft);
+    errors = failure.errors;
+    detail = failure.detail;
+  } catch {
+    detail = result.error.message;
+  }
+}
+---
+
+<Shell active="projects" title="NEW PROJECT">
+  <div class="project-form-page">
+    <section class="form-pane">
+      {
+        detail && (
+          <p class="project-form-error" data-testid="project-form-error">
+            {detail}
+          </p>
+        )
+      }
+      <ProjectForm client:load initial={initial} errors={errors ?? []} mode="create" />
+    </section>
+    <section class="readout-pane">
+      <h2 class="readout-title">CLONE CHECK</h2>
+      <CloneCheckReadout repositories={[]} />
+    </section>
+  </div>
+</Shell>
+
+<style>
+  .project-form-page {
+    display: flex;
+    gap: var(--section-gap);
+    align-items: flex-start;
+  }
+
+  .form-pane {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .readout-pane {
+    width: 320px;
+    flex-shrink: 0;
+  }
+
+  .readout-title {
+    padding-bottom: var(--space-3);
+    margin-bottom: var(--space-6);
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-section-head);
+    letter-spacing: var(--type-section-head-tracking);
+    text-transform: var(--type-section-head-transform);
+  }
+</style>

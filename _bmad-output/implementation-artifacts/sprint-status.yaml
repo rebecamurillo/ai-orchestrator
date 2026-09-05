@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-03-2026 09:16
-last_updated: 09-05-2026 10:58
+last_updated: 09-05-2026 12:04
 project: ai-orchestrator
 project_key: NOKEY
 tracking_system: file-system
@@ -45,12 +45,12 @@ development_status:
   1-7-ci-pipeline-and-coverage-gates: review
   epic-1-retrospective: optional
 
-  epic-2: in-progress
+  epic-2: done
   2-1-project-entity-api-and-encrypted-environment-variables: done
   2-2-repository-registration-with-commands-and-test-globs: done
   2-3-git-port-base-clone-layout-and-the-clone-check: done
   2-4-projects-list-and-detail-screens: done
-  2-5-new-project-and-edit-form-with-the-live-clone-check-readout: backlog
+  2-5-new-project-and-edit-form-with-the-live-clone-check-readout: done
   epic-2-retrospective: optional
 
   epic-3: backlog
