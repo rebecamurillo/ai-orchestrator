@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,12 @@ from check_env_contract import (
 from tests.unit.conftest import ENV_EXAMPLE, REPO_ROOT
 
 SCRIPT = REPO_ROOT / "scripts" / "check_env_contract.py"
+
+#: The success line's exact shape (`main()`'s `sys.stdout.write` format), captured so a
+#: test can check the reported numbers rather than merely that some text is present.
+SUCCESS_LINE = re.compile(
+    r"^env contract: (\d+) settings fields and (\d+) \S+ variables agree \((\d+) allowlisted\)$"
+)
 
 
 def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
@@ -56,8 +63,41 @@ def test_the_check_passes_as_a_command() -> None:
 def test_the_success_line_reports_both_sides() -> None:
     result = _run_script()
 
-    assert "25" in result.stdout
-    assert "31" in result.stdout
+    assert f"{len(settings_variables())} settings fields" in result.stdout
+    assert f"{len(env_example_variables())} {ENV_EXAMPLE.name} variables" in result.stdout
+
+
+def test_the_success_line_counts_are_exact_and_derived_not_hardcoded() -> None:
+    """A substring check tolerates drift a literal wouldn't catch either: `"25" in "125
+    settings..."` is still true. This pins the full line's three numbers exactly against
+    fresh calls to `settings_variables()`, `env_example_variables()` and
+    `COMPOSE_ONLY_VARIABLES`, so a later story that adds one more setting changes this
+    test's expectation along with the implementation instead of breaking it."""
+    result = _run_script()
+
+    match = SUCCESS_LINE.match(result.stdout.strip())
+    assert match is not None, result.stdout
+    fields_count, contract_count, allowlisted_count = (int(group) for group in match.groups())
+
+    assert fields_count == len(settings_variables())
+    assert contract_count == len(env_example_variables())
+    assert allowlisted_count == len(COMPOSE_ONLY_VARIABLES)
+
+
+def test_the_reported_field_count_shrinks_when_the_contract_does(tmp_path: Path) -> None:
+    """Proof the count comes from reading the file, not from some cached figure: parsing a
+    trimmed copy of the committed contract directly (bypassing the script's own strict
+    agreement check, which a merely-trimmed file would otherwise fail) must report one
+    fewer contract variable than the committed file does."""
+    trimmed = tmp_path / ".env.example"
+    kept = [
+        line
+        for line in ENV_EXAMPLE.read_text().splitlines(keepends=True)
+        if not line.startswith("LOG_LEVEL=")
+    ]
+    trimmed.write_text("".join(kept))
+
+    assert len(env_example_variables(trimmed)) == len(env_example_variables()) - 1
 
 
 # ── drift, in both directions ────────────────────────────────────────────────

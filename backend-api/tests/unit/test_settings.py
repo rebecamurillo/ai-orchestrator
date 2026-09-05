@@ -5,38 +5,19 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from check_env_contract import COMPOSE_ONLY_VARIABLES, env_example_variables
 from pydantic import SecretStr, ValidationError
 
 from orchestrator.infrastructure.settings import Settings
+from tests.unit.conftest import ENV_EXAMPLE
 
-# Every variable of the spine's variable table that belongs to backend-api.
-BACKEND_VARIABLES = {
-    "ORCHESTRATOR_TOKEN",
-    "ORCHESTRATOR_SECRET_KEY",
-    "DATABASE_URL",
-    "DBOS_APPLICATION_VERSION",
-    "GITHUB_TOKEN",
-    "LITELLM_BASE_URL",
-    "LITELLM_API_KEY",
-    "LITELLM_SPEND_KEY",
-    "LOCAL_MODELS",
-    "MAX_ACTIVE_RUNS",
-    "LANGFUSE_BASE_URL",
-    "LANGFUSE_PUBLIC_KEY",
-    "LANGFUSE_SECRET_KEY",
-    "LANGFUSE_ENVIRONMENT",
-    "BMAD_VERSION",
-    "CLAUDE_CODE_VERSION",
-    "CODEX_VERSION",
-    "OPENCODE_VERSION",
-    "LANGFUSE_OPENCODE_PLUGIN_VERSION",
-    "CLAUDE_ALLOWED_TOOLS",
-    "WORK_DIR",
-    "AGENT_HOME",
-    "LOG_PROMPT_CONTENT_DEFAULT",
-    "LOG_LEVEL",
-    "BACKEND_API_PORT",
-}
+# Every variable of the committed `.env.example` contract that is not compose- or
+# web-client-only (AD-20) -- derived from the contract file itself via the same reader
+# `scripts/check_env_contract.py` uses, never hand-maintained here. Deriving this from
+# `Settings.model_fields` instead would turn the check below into `fields == fields`: the
+# whole point of this module is to cross-check the *code* against the *committed contract*,
+# and only the contract file can play the other side of that comparison.
+BACKEND_VARIABLES = env_example_variables() - COMPOSE_ONLY_VARIABLES
 
 # `DATABASE_URL` belongs here because the committed contract embeds POSTGRES_PASSWORD in it.
 CREDENTIAL_VARIABLES = {
@@ -57,6 +38,49 @@ EXPECTED_DBOS_APPLICATION_VERSION = 1
 def test_every_backend_variable_is_a_typed_field(env: dict[str, str]) -> None:
     fields = {name.upper() for name in Settings.model_fields}
     assert fields == BACKEND_VARIABLES
+
+
+# ── proving `BACKEND_VARIABLES` is derived, not a second hand-maintained list ────────────────
+
+
+def test_backend_variables_moves_with_the_contract_file_it_is_derived_from(
+    tmp_path: Path,
+) -> None:
+    """A hardcoded set cannot fail this way: trim one line from the contract and the
+    derived set shrinks to match, because it is read from the file on every call rather
+    than copied once by hand."""
+    trimmed = tmp_path / ".env.example"
+    kept = [
+        line
+        for line in ENV_EXAMPLE.read_text().splitlines(keepends=True)
+        if not line.startswith("LOG_LEVEL=")
+    ]
+    trimmed.write_text("".join(kept))
+
+    derived = env_example_variables(trimmed) - COMPOSE_ONLY_VARIABLES
+
+    assert "LOG_LEVEL" not in derived
+    assert derived == BACKEND_VARIABLES - {"LOG_LEVEL"}
+
+
+def test_a_settings_field_the_contract_does_not_declare_fails_the_check(
+    env: dict[str, str],
+) -> None:
+    """The direction a hardcoded set could not have told you was untested: a field with
+    no line in `.env.example` must not agree with the derived set."""
+    fields = {name.upper() for name in Settings.model_fields} | {"GHOST_FIELD"}
+
+    assert fields != BACKEND_VARIABLES
+
+
+def test_a_contract_variable_with_no_settings_field_fails_the_check(
+    env: dict[str, str],
+) -> None:
+    """The other direction: a `Settings` field set missing a committed, non-allowlisted
+    contract variable must not agree either."""
+    fields = {name.upper() for name in Settings.model_fields} - {"BACKEND_API_PORT"}
+
+    assert fields != BACKEND_VARIABLES
 
 
 def test_settings_parses_the_env_example_contract(env: dict[str, str]) -> None:
