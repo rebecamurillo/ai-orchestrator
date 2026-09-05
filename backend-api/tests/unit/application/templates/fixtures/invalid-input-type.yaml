@@ -1,0 +1,9 @@
+name: typed
+version: 1
+inputs:
+  branch:
+    type: colour
+steps:
+  - id: verify
+    uses: git.sync
+    gate: deterministic

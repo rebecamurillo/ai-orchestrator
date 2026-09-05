@@ -1,0 +1,5 @@
+name: broken
+version: 1
+steps:
+  - id: verify
+   uses: shell

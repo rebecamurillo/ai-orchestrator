@@ -1,0 +1,12 @@
+name: fields
+version: 1
+inputs:
+  repository:
+    type: repository
+    required: true
+steps:
+  - id: verify
+    uses: shell
+    with:
+      command: "{{repository.secret}}"
+    gate: deterministic

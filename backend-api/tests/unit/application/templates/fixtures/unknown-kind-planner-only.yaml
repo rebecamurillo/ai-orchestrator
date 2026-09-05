@@ -1,0 +1,6 @@
+name: planner
+version: 1
+steps:
+  - id: stale
+    uses: plan.check
+    gate: deterministic

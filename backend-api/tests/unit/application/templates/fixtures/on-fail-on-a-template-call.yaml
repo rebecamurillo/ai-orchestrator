@@ -1,0 +1,10 @@
+name: failing-call
+version: 1
+steps:
+  - id: story
+    uses: template
+    on_fail: fail
+    with:
+      name: story
+      version: 1
+      inputs: {}

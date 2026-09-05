@@ -1,0 +1,8 @@
+name: caller
+version: 1
+steps:
+  - id: story
+    uses: template
+    with:
+      name: story
+      version: 1

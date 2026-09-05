@@ -1,0 +1,90 @@
+name: epic
+version: 2
+description: all stories of one epic on one branch
+inputs:
+  project:
+    type: project
+    required: true
+  repository:
+    type: repository
+    required: true
+  branch:
+    type: string
+    required: true
+  spec_folder:
+    type: path
+    required: true
+  attempts:
+    type: number
+    default: 2
+  harness:
+    type: enum
+    values: [claude, codex]
+    default: claude
+  epic:
+    type: item
+steps:
+  - id: checkout
+    uses: git.worktree
+    with:
+      base: main
+      branch: "{{branch}}"
+    gate: deterministic
+
+  - id: baseline
+    run: "{{repository.quality_gate_command}}"
+    on_fail: fail
+    gate: deterministic
+
+  - id: build
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{project.name}}"
+      skill: bmad-build-auto
+      args:
+        spec_folder: "{{spec_folder}}"
+        globs: [tests, docs]
+      prompt_extra: "{{epic.title}}"
+    expect:
+      files: ["{{spec_folder}}/SPEC.md"]
+      status_in: [done, blocked]
+    retry:
+      max: 2
+      prompt: finish the story or say why not
+      resume_session: false
+    escalate_when: "output.status == blocked"
+    pause_when: "epic.spec_checkpoint"
+    timeout_min: 90
+    gate: liveness
+
+  - id: verify
+    uses: shell
+    with:
+      command: "{{repository.unit_test_command}}"
+    on_fail:
+      redispatch: build
+      max: 1
+    gate: deterministic
+
+  - id: stories
+    for_each: "{{spec_folder}}/stories.yaml"
+    as: story
+    pause_after_item_when: "story.done_checkpoint"
+    steps:
+      - id: story
+        uses: template
+        with:
+          name: story
+          version: 2
+          inputs:
+            repository: "{{repository}}"
+            spec_folder: "{{spec_folder}}"
+            story: "{{story}}"
+            attempts: 3
+
+  - id: push
+    uses: git.push
+    with:
+      branch: "{{branch}}"
+    gate: deterministic

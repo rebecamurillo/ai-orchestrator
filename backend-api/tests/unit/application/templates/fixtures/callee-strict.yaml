@@ -1,0 +1,10 @@
+name: strict
+version: 1
+inputs:
+  spec_folder:
+    type: path
+    required: true
+steps:
+  - id: sync
+    uses: git.sync
+    gate: deterministic

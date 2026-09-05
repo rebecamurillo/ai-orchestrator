@@ -1,0 +1,6 @@
+name: sugar
+version: 1
+steps:
+  - id: verify
+    run: make test
+    gate: deterministic

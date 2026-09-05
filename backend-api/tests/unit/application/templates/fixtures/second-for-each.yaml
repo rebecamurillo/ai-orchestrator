@@ -1,0 +1,21 @@
+name: twice
+version: 1
+inputs:
+  spec_folder:
+    type: path
+    required: true
+steps:
+  - id: first
+    for_each: "{{spec_folder}}/a.yaml"
+    as: one
+    steps:
+      - id: sync-one
+        uses: git.sync
+        gate: deterministic
+  - id: second
+    for_each: "{{spec_folder}}/b.yaml"
+    as: two
+    steps:
+      - id: sync-two
+        uses: git.sync
+        gate: deterministic

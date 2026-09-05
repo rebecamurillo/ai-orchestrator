@@ -1,0 +1,12 @@
+name: filtered
+version: 1
+inputs:
+  story:
+    type: item
+    required: true
+steps:
+  - id: commit
+    uses: git.commit
+    with:
+      message: "{{story.title | upper}}"
+    gate: deterministic

@@ -1,0 +1,13 @@
+name: initiative
+version: 1
+inputs:
+  spec_folder:
+    type: path
+    required: true
+steps:
+  - id: epic
+    uses: template
+    with:
+      name: epic
+      version: 1
+      inputs: {}

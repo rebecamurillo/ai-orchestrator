@@ -1,0 +1,6 @@
+name: rocketry
+version: 1
+steps:
+  - id: launch
+    uses: rocket
+    gate: deterministic

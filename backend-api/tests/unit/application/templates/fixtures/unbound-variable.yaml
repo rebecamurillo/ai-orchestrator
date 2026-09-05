@@ -1,0 +1,8 @@
+name: unbound
+version: 1
+steps:
+  - id: verify
+    uses: shell
+    with:
+      command: "{{missing}}"
+    gate: deterministic

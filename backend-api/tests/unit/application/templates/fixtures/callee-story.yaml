@@ -1,0 +1,9 @@
+name: story
+version: 1
+inputs:
+  spec_folder:
+    type: path
+steps:
+  - id: sync
+    uses: git.sync
+    gate: deterministic

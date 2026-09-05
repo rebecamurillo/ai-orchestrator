@@ -1,0 +1,8 @@
+name: Not_A_Slug
+version: 1
+steps:
+  - id: verify
+    uses: shell
+    with:
+      command: make test
+    gate: deterministic

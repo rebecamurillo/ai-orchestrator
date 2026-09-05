@@ -1,0 +1,9 @@
+name: twins
+version: 1
+steps:
+  - id: verify
+    uses: git.sync
+    gate: deterministic
+  - id: verify
+    uses: git.sync
+    gate: deterministic

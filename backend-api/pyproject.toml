@@ -10,6 +10,10 @@ dependencies = [
     "fastapi==0.141.1",
     "psycopg[binary]==3.3.5",
     "pydantic==2.13.5",
+    # AD-15: `application/templates/lines.py` loads Template YAML, so PyYAML is a runtime
+    # dependency, not only the test helper it started as. It stays in the dev group too:
+    # `tests/unit/test_coverage_gates.py` is frozen and asserts it is pinned there.
+    "pyyaml==6.0.3",
     "pydantic-settings==2.15.0",
     "sqlalchemy==2.0.52",
     "structlog==26.1.0",
@@ -30,6 +34,8 @@ dev = [
     "diff-cover==10.5.1",
     # `tests/unit/test_ci_workflow.py` reads the workflow as a document, not as text
     "pyyaml==6.0.3",
+    # PyYAML ships no inline types; `mypy --strict` covers `application/templates/lines.py`
+    "types-pyyaml==6.0.12.20250915",
 ]
 
 [build-system]

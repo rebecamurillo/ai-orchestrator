@@ -1,0 +1,11 @@
+name: caller
+version: 1
+steps:
+  - id: story
+    uses: template
+    with:
+      name: story
+      version: 1
+      inputs:
+        spec_folder: docs/spec
+        wrong_name: anything

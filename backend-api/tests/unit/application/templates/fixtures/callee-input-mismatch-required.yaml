@@ -1,0 +1,9 @@
+name: caller
+version: 1
+steps:
+  - id: strict
+    uses: template
+    with:
+      name: strict
+      version: 1
+      inputs: {}

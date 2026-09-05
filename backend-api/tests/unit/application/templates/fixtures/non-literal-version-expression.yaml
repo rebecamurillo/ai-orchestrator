@@ -1,0 +1,8 @@
+name: interpolated
+version: "{{v}}"
+steps:
+  - id: verify
+    uses: shell
+    with:
+      command: make test
+    gate: deterministic

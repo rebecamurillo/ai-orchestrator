@@ -1,0 +1,8 @@
+name: mixed
+version: 1
+schedule: nightly
+steps:
+  - id: verify
+    uses: shell
+    with:
+      command: make test
