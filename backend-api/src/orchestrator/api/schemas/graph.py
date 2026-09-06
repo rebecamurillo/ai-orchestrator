@@ -13,6 +13,11 @@ from the Python names.
 Epic 4's run graph extends this schema rather than replacing it: a Run's rows are these
 nodes with a status beside them, and the endpoint that serves them is the second route on
 `api/routers/graph.py`.
+
+`GraphTextIn` (3.6) is the one *input* here: the YAML `POST /templates/{name}/graph` draws
+from. It subclasses `ValidateIn` for the reason `SaveVersionIn` does — the same one field,
+under the same length cap, with a distinct name for a distinct route, so the generated
+TypeScript names the body a caller actually posts rather than reusing another route's.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from orchestrator.api.schemas.templates import ValidateIn
 from orchestrator.application.graph import Edge, Graph, Group, Node, NodeCall, NodeGate
 
 
@@ -119,3 +125,7 @@ class GraphOut(BaseModel):
             edges=[EdgeOut.of(edge) for edge in graph.edges],
             groups=[GroupOut.of(group) for group in graph.groups],
         )
+
+
+class GraphTextIn(ValidateIn):
+    """`POST /templates/{name}/graph`. Same one field; a distinct name for a distinct route."""

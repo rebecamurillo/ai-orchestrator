@@ -1,8 +1,8 @@
 ---
 /**
  * One Template Version: the VERSIONS / YAML / DIAGRAM+INPUTS columns (3.5, UX-DR15). The
- * diagram slot renders the literal placeholder line — 3.6 fills it in; nothing here parses
- * the YAML itself (`web-client/AGENTS.md`).
+ * diagram slot holds `TemplateDiagram` (3.6); nothing here parses the YAML itself
+ * (`web-client/AGENTS.md`) — every node, edge and group comes from the API (AD-15).
  *
  * Three reads build the page. `GET /templates/{name}/{version}` is the one that matters: its
  * failure (including an unparsable `version` segment) is this page's own distinct
@@ -25,6 +25,13 @@
  * empty until the island's own first Validate. A failure of that best-effort call leaves the
  * readout at zero errors — the island's own Validate (800 ms after the first keystroke, or a
  * manual click) supersedes it either way.
+ *
+ * `graphInitial` is the same idea for the third column, and it is read for *this* version
+ * rather than for the latest one: the page is open at `{version}`, and
+ * `GET /templates/{name}/{version}/graph` is the route that answers that version's shape.
+ * (`GET /templates/{name}/graph` answers the latest, which is what the island's own `POST`
+ * supersedes it with the moment the editor validates.) Best effort as well: a failure leaves
+ * the empty graph, which draws an SVG with no node rather than taking the page down.
  */
 import EmptyState from '../../../components/EmptyState.astro';
 import InputsTable from '../../../components/templates/InputsTable.astro';
@@ -33,13 +40,16 @@ import type { VersionRow } from '../../../components/templates/version-row';
 import Shell from '../../../layouts/Shell.astro';
 import { backend } from '../../../api/server';
 import TemplateEditor, { type ValidateResult } from '../../../islands/TemplateEditor';
+import TemplateDiagram from '../../../islands/TemplateDiagram';
 import type { components } from '../../../api/schema';
+import { EMPTY_GRAPH } from '../../../lib/diagram/diagram-state';
 import { buildVersionRows } from '../../../lib/templates/version-rows';
 
 export const prerender = false;
 
 type TemplateVersion = components['schemas']['TemplateVersionOut'];
 type TemplateSummary = components['schemas']['TemplateSummaryOut'];
+type Graph = components['schemas']['GraphOut'];
 
 const name = Astro.params.name!;
 const versionParam = Astro.params.version!;
@@ -58,6 +68,7 @@ if (Number.isInteger(versionNumber) && versionNumber >= 1) {
 }
 
 let rows: VersionRow[] = [];
+let graphInitial: Graph = EMPTY_GRAPH;
 let errorsInitial: ValidateResult = {
   errors: [],
   unvalidated: [],
@@ -90,6 +101,16 @@ if (detail) {
     ownVersions,
     calledByLoaded: detail.called_by,
   });
+
+  try {
+    const { data, error } = await backend().GET('/api/v1/templates/{name}/{version}/graph', {
+      params: { path: { name, version: versionNumber } },
+    });
+    if (!error && data) graphInitial = data;
+  } catch {
+    // best effort — the empty graph draws an empty picture, and the island's own first
+    // successful Validate replaces it
+  }
 
   try {
     const { data, error } = await backend().POST('/api/v1/templates/{name}/validate', {
@@ -145,9 +166,7 @@ if (detail) {
           />
         </div>
         <div class="col-side">
-          <div class="diagram-slot" data-testid="templates-diagram">
-            diagram arrives with the next story
-          </div>
+          <TemplateDiagram client:load name={name} version={versionNumber} graph={graphInitial} />
           <InputsTable inputs={detail.inputs} />
         </div>
       </div>
@@ -161,15 +180,5 @@ if (detail) {
     grid-template-columns: 260px 1fr 300px;
     align-items: start;
     gap: var(--space-8);
-  }
-
-  .diagram-slot {
-    padding: var(--space-8);
-    margin-bottom: var(--space-8);
-    border: 1px solid var(--color-line);
-    color: var(--color-text-tertiary);
-    font-size: var(--type-meta);
-    line-height: var(--type-meta-line);
-    text-align: center;
   }
 </style>

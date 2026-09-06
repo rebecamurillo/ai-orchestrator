@@ -85,9 +85,9 @@ test.describe('/templates/{name}/{version}', () => {
     await expect(inputs).toContainText('project');
     await expect(inputs).toContainText('yes');
 
-    await expect(page.getByTestId('templates-diagram')).toContainText(
-      'diagram arrives with the next story',
-    );
+    await expect(
+      page.getByTestId('templates-diagram').getByTestId('diagram-node-checkout'),
+    ).toBeVisible();
     await expect(page.getByTestId('templates-readout')).toContainText('valid ·');
     // Review Triage Log, story 3.5, finding 8: the brief's exact banner line
     await expect(page.getByText('editing as v2')).toBeVisible();

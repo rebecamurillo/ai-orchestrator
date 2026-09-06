@@ -92,3 +92,146 @@ export const TEMPLATES = {
     },
   },
 };
+
+/* 3.6's own fixtures below — added without changing any value above. */
+
+/**
+ * The text `template-diagram.spec.ts` retypes into the editor to prove a redraw. Valid by the
+ * stub's validator (no `parallel:`), and shaped to carry every feature the diagram draws:
+ * a step that dispatches a harness, a step the file gates with nothing, and a `for_each` with
+ * a collapsed call and an item checkpoint inside it.
+ */
+export const DIAGRAM_EDIT = [
+  'name: demo',
+  'version: 1',
+  'description: two steps for the templates screen fixtures',
+  'inputs:',
+  '  project: { type: project, required: true }',
+  'steps:',
+  '  - id: checkout',
+  '    uses: git.worktree',
+  '    with: { base: "main", branch: "chore/demo" }',
+  '    gate: deterministic',
+  '',
+  '  - id: build',
+  '    uses: agent',
+  '    with: { harness: claude }',
+  '    gate: liveness',
+  '',
+  '  - id: draft',
+  '    run: "make docs"',
+  '',
+  '  - id: stories',
+  '    for_each: "specs/stories.yaml"',
+  '    as: story',
+  '    pause_after_item_when: "story.done"',
+  '    steps:',
+  '      - id: story',
+  '        uses: template',
+  '        with: { name: helper, version: 1 }',
+  '',
+].join('\n');
+
+/** The node ids `DIAGRAM_EDIT` draws, in file order. */
+export const DIAGRAM_EDIT_NODE_IDS = [
+  'checkout',
+  'build',
+  'draft',
+  'stories.story',
+  'stories.after',
+];
+
+/**
+ * Text that does not validate, and that names entirely different steps: what the diagram
+ * holds after this is the previous graph's node ids, not this one's.
+ */
+export const DIAGRAM_INVALID_EDIT = [
+  'name: demo',
+  'version: 1',
+  'parallel: 2',
+  'steps:',
+  '  - id: nothing-like-the-last-one',
+  '    uses: git.sync',
+  '    gate: deterministic',
+  '',
+].join('\n');
+
+/**
+ * The shipped `epic@1`, verbatim from `templates/epic.yaml`, so the browser can be shown the
+ * one Template the story's first acceptance criterion names. It is the only shipped file with
+ * every feature at once — steps before and after a loop, a collapsed call, and an item
+ * checkpoint — and `backend-api/tests/e2e/test_template_graph.py` pins the graph the real
+ * backend answers for it.
+ *
+ * Added as a second entry under `EPIC_NAME`, not into `TEMPLATES` above: `GET /api/v1/templates`
+ * stays unconditionally empty in the stub (the frozen `shell.spec.ts`), so nothing that reads
+ * the list can see this, and `templates.spec.ts` reads `demo` and `helper` only.
+ */
+export const EPIC_NAME = 'epic';
+
+export const EPIC_V1_YAML = [
+  'name: epic',
+  'version: 1',
+  'description: all stories of one epic on one branch, pushed',
+  'inputs:',
+  '  branch: { type: string, required: true }',
+  'steps:',
+  '  - id: checkout',
+  '    uses: git.worktree',
+  '    with: { base: "main", branch: "{{branch}}" }',
+  '    gate: deterministic',
+  '',
+  '  - id: baseline',
+  '    run: "make test"',
+  '    gate: deterministic',
+  '',
+  '  - id: stories',
+  '    for_each: "specs/stories.yaml"',
+  '    as: story',
+  '    pause_after_item_when: "story.done_checkpoint"',
+  '    steps:',
+  '      - id: story',
+  '        uses: template',
+  '        with:',
+  '          name: story',
+  '          version: 1',
+  '',
+  '  - id: push',
+  '    uses: git.push',
+  '    with: { branch: "{{branch}}" }',
+  '    gate: deterministic',
+  '',
+  '  - id: link',
+  '    uses: pr.link',
+  '    with: { branch: "{{branch}}" }',
+  '    gate: liveness',
+  '',
+].join('\n');
+
+/** `epic@1`'s node ids, in file order — the story's first acceptance criterion, as a list. */
+export const EPIC_NODE_IDS = [
+  'checkout',
+  'baseline',
+  'stories.story',
+  'stories.after',
+  'push',
+  'link',
+];
+
+TEMPLATES[EPIC_NAME] = {
+  description: 'all stories of one epic on one branch, pushed',
+  versions: {
+    1: {
+      id: '01a06887-79ab-759b-97a0-71c32ad939e0',
+      name: EPIC_NAME,
+      version: 1,
+      yaml: EPIC_V1_YAML,
+      hash: 'e'.repeat(64),
+      calls: [],
+      called_by: [],
+      pinned_by: 0,
+      created_at: '2026-09-01T09:00:00Z',
+      inputs: [{ name: 'branch', type: 'string', required: true, default: null, values: [] }],
+    },
+  },
+};

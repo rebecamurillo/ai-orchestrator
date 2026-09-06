@@ -1,6 +1,6 @@
 """Reading, validating, saving and seeding Template Versions (SPEC CAP-3, FR-6, AD-15).
 
-Seven operations, and each is exactly one rule:
+Ten operations under eight rules, and each rule is exactly one rule:
 
 - **`list_templates`** answers `GET /templates` — a straight read, no rule of its own.
 - **`list_versions`** answers `GET /templates/{name}/versions`: a name nothing has ever
@@ -24,6 +24,15 @@ Seven operations, and each is exactly one rule:
   from disagreeing (AD-15). `StoredTemplateInvalid` is the case storage is meant to make
   impossible — only validated text is ever saved — carried rather than assumed away, so the
   router has a line and a reason to render instead of a traceback.
+- **`graph_text`** / **`graph_latest`** answer the two `/templates/{name}/graph` routes
+  (3.6): the posted YAML's shape, and the latest stored version's. `graph_text` is the one
+  operation the Templates screen's diagram needs, because the editor holds text that is not
+  stored yet and a picture one save behind the editor is the wrong picture. It refuses
+  rather than reporting — `TemplateValidationFailed`, the exception `save_version` already
+  raises with the validator's own errors — because text that does not validate has no
+  graph at all; that is the whole difference from `validate_text`, where a problem is data
+  (NFR-2). `graph_latest` is `validate_latest`'s `list_versions` -> `max` in front of
+  `template_graph`, so the stored-invalid case keeps exactly one statement.
 - **`seed_shipped`** is `main.py`'s start-up step: every shipped file, validated against
   whatever this repository already holds, inserted only when its hash is new. Files are
   read off disk by `infrastructure/templates_loader.py` — this module performs no I/O of
@@ -171,6 +180,24 @@ def template_graph(ports: TemplatePorts, name: str, version: int) -> Graph:
     parsed = result.template
     assert parsed is not None  # validate() never leaves both empty
     return build_template_graph(parsed)
+
+
+def graph_text(ports: TemplatePorts, yaml_text: str) -> Graph:
+    """The posted YAML's shape, validated but never stored. Invalid text has no graph."""
+    result = validate(yaml_text, templates=ports.templates)
+    if result.errors:
+        raise TemplateValidationFailed(result.errors)
+    parsed = result.template
+    assert parsed is not None  # validate() never leaves both empty
+    return build_template_graph(parsed)
+
+
+def graph_latest(ports: TemplatePorts, name: str) -> Graph:
+    """The latest stored version's shape. Unknown to this store is 404."""
+    versions = ports.templates.list_versions(name)
+    if not versions:
+        raise NotFound(f"no template named {name!r}")
+    return template_graph(ports, name, max(versions))
 
 
 def validate_text(ports: TemplatePorts, yaml_text: str) -> ValidationResult:

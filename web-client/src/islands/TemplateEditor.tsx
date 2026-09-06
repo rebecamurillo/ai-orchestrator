@@ -19,6 +19,12 @@
  * debounce (or a stray Validate racing a Save) cannot do without it — an older response
  * landing after a newer one would otherwise overwrite the screen with a stale result (Review
  * Triage Log, story 3.5, finding 3).
+ *
+ * 3.6 adds one line to `validate()`: the outcome is also published to
+ * `src/stores/template-validation.ts`, which is how the diagram column — a second island, in
+ * a second grid cell, with no React state in common — learns that this text validated and
+ * can ask for its graph. What is published is text and validity, never a graph: this island
+ * validates, and the column that draws the picture is the one that fetches it.
  */
 import { useEffect, useRef, useState } from 'react';
 import { EditorView } from '@codemirror/view';
@@ -26,6 +32,7 @@ import { EditorView } from '@codemirror/view';
 import type { components } from '../api/schema';
 import { api } from '../api/client';
 import { buildYamlExtensions, rewriteVersionLine } from '../lib/editor/yamlEditor';
+import { publishValidation } from '../stores/template-validation';
 import '../styles/template-editor.css';
 
 type ProblemError = components['schemas']['ProblemError'];
@@ -100,21 +107,35 @@ export default function TemplateEditor({ name, version, yaml, errorsInitial }: P
 
   async function validate(): Promise<void> {
     const seq = ++requestSeqRef.current;
+    // captured before the request so that what is published is the text that was validated,
+    // not whatever has been typed by the time the response lands
+    const validated = textRef.current;
     setValidating(true);
     try {
       const { data, error } = await api.POST('/templates/{name}/validate', {
         params: { path: { name } },
-        body: { yaml: textRef.current },
+        body: { yaml: validated },
       });
       if (seq !== requestSeqRef.current) return; // superseded by a newer Validate or Save
-      if (error || !data) return; // an HTTP-level Validate failure keeps the prior readout
+      if (error || !data) {
+        // the readout keeps its prior value (3.5), but the diagram must not: this text was
+        // never validated, so the picture beside it is the last valid one and says so
+        publishValidation({ yaml: validated, ok: false });
+        return;
+      }
       setResult({
         errors: data.errors,
         unvalidated: data.unvalidated,
         validatedAt: new Date().toISOString(),
       });
+      // the hand-off to the diagram column: `unvalidated` paths are not errors (NFR-2), so
+      // a file with an ungated step is still text a graph can be drawn from
+      publishValidation({ yaml: validated, ok: data.errors.length === 0 });
     } catch {
-      if (seq === requestSeqRef.current) setResult(genericFailureResult());
+      if (seq === requestSeqRef.current) {
+        setResult(genericFailureResult());
+        publishValidation({ yaml: validated, ok: false });
+      }
     } finally {
       if (seq === requestSeqRef.current) setValidating(false);
     }

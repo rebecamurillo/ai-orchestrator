@@ -49,6 +49,7 @@ from orchestrator.api.errors import UNAUTHORIZED_RESPONSE, install_error_handler
 from orchestrator.api.routers import (
     clone_check,
     graph,
+    graph_text,
     ping,
     projects,
     repositories,
@@ -235,6 +236,16 @@ def create_app(
     )
     app.include_router(
         clone_check.router,
+        prefix=API_PREFIX,
+        dependencies=[Depends(require_bearer)],
+        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
+    )
+    # before `templates.router`, and that is load-bearing: Starlette matches in registration
+    # order and `templates.router` registers `GET /templates/{name}/{version}` last, so a
+    # three-segment `GET /templates/{name}/graph` mounted after it would be swallowed as
+    # `version="graph"` and answered 422 instead of reaching this operation at all
+    app.include_router(
+        graph_text.router,
         prefix=API_PREFIX,
         dependencies=[Depends(require_bearer)],
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},

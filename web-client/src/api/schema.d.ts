@@ -177,6 +177,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/templates/{name}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the latest stored Version's graph
+         * @description The latest stored version's shape, and no write. An unknown name is a 404.
+         */
+        get: operations["graph_latest_api_v1_templates__name__graph_get"];
+        put?: never;
+        /**
+         * Build the graph of posted Template YAML
+         * @description `{nodes, edges, groups}` from the one validator (AD-15). Nothing is stored.
+         *
+         *     `name` is the path segment the Templates screen is open at. It is not checked against
+         *     the posted text's own `name:`, because the editor is free to hold a rename in progress
+         *     and a diagram of what is on screen is exactly what this route is for; the save route is
+         *     where that rule belongs, and it already carries it.
+         */
+        post: operations["graph_text_api_v1_templates__name__graph_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/templates/{name}/validate": {
         parameters: {
             query?: never;
@@ -390,6 +419,14 @@ export interface components {
             groups: components["schemas"]["GroupOut"][];
             /** Nodes */
             nodes: components["schemas"]["NodeOut"][];
+        };
+        /**
+         * GraphTextIn
+         * @description `POST /templates/{name}/graph`. Same one field; a distinct name for a distinct route.
+         */
+        GraphTextIn: {
+            /** Yaml */
+            yaml: string;
         };
         /**
          * GroupOut
@@ -1418,6 +1455,114 @@ export interface operations {
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    graph_latest_api_v1_templates__name__graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Template has that name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The name in the path is not a Template name. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The stored Template no longer validates; `detail` names the first line and reason. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    graph_text_api_v1_templates__name__graph_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphTextIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The posted YAML has no graph; `errors[]` names each problem by line. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

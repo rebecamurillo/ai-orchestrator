@@ -384,6 +384,118 @@ function saveTemplateVersion(name, yamlText) {
   return { status: 201, body: saved };
 }
 
+/** 3.6's own routes below — the two `/graph` endpoints the Templates screen's diagram needs,
+ * added without touching any branch above. */
+
+/** The block a `- id:` line owns: every following line indented deeper than it is. */
+function stepBlock(lines, step) {
+  let end = lines.length;
+  for (let i = step.index + 1; i < lines.length; i++) {
+    if (lines[i].trim().length === 0) continue;
+    if (lines[i].match(/^ */)[0].length <= step.indent) {
+      end = i;
+      break;
+    }
+  }
+  return { end, text: lines.slice(step.index, end).join('\n') };
+}
+
+/** One step as one node, the way `application/graph.py` shapes it (never re-derived: this
+ * stub stands in for the backend, and the shapes it answers are that module's, restated
+ * lexically for the fixtures this suite types in). */
+function nodeFromStep(id, block) {
+  const uses = block.match(/^\s+uses:\s*(\S+)/m);
+  // `run:` is sugar for the `shell` kind, and a step declares one of the two
+  const kind = uses ? uses[1] : 'shell';
+  if (kind === 'template') {
+    const name = block.match(/name:\s*([\w.-]+)/);
+    const version = block.match(/version:\s*(\d+)/);
+    const callee = { name: name ? name[1] : 'unknown', version: version ? Number(version[1]) : 1 };
+    return {
+      id,
+      kind: 'template',
+      label: `${callee.name}@${callee.version}`,
+      gate: null,
+      agent: false,
+      human: false,
+      call: callee,
+    };
+  }
+  const declared = block.match(/^\s+gate:\s*(\S+)/m);
+  const gate = declared ? declared[1] : 'unvalidated';
+  return {
+    id,
+    kind,
+    label: id.split('.').pop(),
+    gate,
+    agent: kind === 'agent',
+    human: gate === 'human' || kind === 'checkpoint',
+    call: null,
+  };
+}
+
+/** The synthetic stop a `pause_*_item_when` declares: one per item, inside the loop's box. */
+function itemCheckpoint(loopId, position) {
+  return {
+    id: `${loopId}.${position}`,
+    kind: 'checkpoint',
+    label: position,
+    gate: 'human',
+    agent: false,
+    human: true,
+    call: null,
+  };
+}
+
+/** `{nodes, edges, groups}` from Template text, by the same line-and-indentation scan
+ * `validateYamlText` uses — never a YAML parse, and never in the browser (AD-15: the real
+ * shaping is `application/graph.py`, which this stub stands in for). */
+function graphFromYaml(text) {
+  const lines = text.split('\n');
+  const steps = [];
+  lines.forEach((line, index) => {
+    const match = line.match(/^(\s*)-\s+id:\s*(\S+)/);
+    if (match) steps.push({ index, indent: match[1].length, id: match[2] });
+  });
+  if (steps.length === 0) return { nodes: [], edges: [], groups: [] };
+
+  const top = Math.min(...steps.map((step) => step.indent));
+  const nodes = [];
+  const edges = [];
+  const groups = [];
+  let previous = null;
+
+  for (const step of steps.filter((candidate) => candidate.indent === top)) {
+    const { end, text: block } = stepBlock(lines, step);
+    const frame = [];
+    if (/^\s+for_each:/m.test(block)) {
+      if (/^\s+pause_before_item_when:/m.test(block)) frame.push(itemCheckpoint(step.id, 'before'));
+      for (const inner of steps.filter(
+        (candidate) =>
+          candidate.index > step.index && candidate.index < end && candidate.indent > top,
+      )) {
+        frame.push(nodeFromStep(`${step.id}.${inner.id}`, stepBlock(lines, inner).text));
+      }
+      if (/^\s+pause_after_item_when:/m.test(block)) frame.push(itemCheckpoint(step.id, 'after'));
+      groups.push({
+        id: step.id,
+        label: step.id,
+        kind: 'for_each',
+        members: frame.map((node) => node.id),
+      });
+    } else {
+      frame.push(nodeFromStep(step.id, block));
+    }
+    if (frame.length === 0) continue;
+    if (previous !== null) edges.push({ from: previous, to: frame[0].id });
+    for (let i = 1; i < frame.length; i++) edges.push({ from: frame[i - 1].id, to: frame[i].id });
+    nodes.push(...frame);
+    previous = frame[frame.length - 1].id;
+  }
+
+  return { nodes, edges, groups };
+}
+
 createServer(async (request, response) => {
   const authorized = request.headers.authorization === `Bearer ${TOKEN}`;
   const { pathname } = new URL(request.url, `http://127.0.0.1:${PORT}`);
@@ -499,6 +611,39 @@ createServer(async (request, response) => {
       return notFound(response, 'no Template has that name, or no version has that number');
     }
     send(response, 200, JSON_TYPE, JSON.stringify(version));
+    return;
+  }
+  const versionGraphMatch = pathname.match(/^\/api\/v1\/templates\/([^/]+)\/(\d+)\/graph$/);
+  if (versionGraphMatch && request.method === 'GET') {
+    const template = templates[versionGraphMatch[1]];
+    const version = template?.versions[Number(versionGraphMatch[2])];
+    if (!version) {
+      return notFound(response, 'no Template has that name, or no version has that number');
+    }
+    send(response, 200, JSON_TYPE, JSON.stringify(graphFromYaml(version.yaml)));
+    return;
+  }
+  const textGraphMatch = pathname.match(/^\/api\/v1\/templates\/([^/]+)\/graph$/);
+  if (textGraphMatch && request.method === 'POST') {
+    const body = await readJsonBody(request);
+    const yamlText = body.yaml ?? '';
+    const { errors } = validateYamlText(yamlText);
+    if (errors.length > 0) {
+      send(
+        response,
+        422,
+        PROBLEM,
+        JSON.stringify({
+          type: 'about:blank',
+          title: 'invalid template',
+          status: 422,
+          detail: `line ${errors[0].line}: ${errors[0].reason}`,
+          errors,
+        }),
+      );
+      return;
+    }
+    send(response, 200, JSON_TYPE, JSON.stringify(graphFromYaml(yamlText)));
     return;
   }
   send(response, 404, PROBLEM, JSON.stringify({ title: 'not found', status: 404 }));
