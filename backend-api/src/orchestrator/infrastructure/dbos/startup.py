@@ -31,11 +31,18 @@ from contextlib import contextmanager
 from functools import partial
 
 from orchestrator.application.steps import StepPorts
+from orchestrator.application.steps import bmad_install as _bmad_install  # noqa: F401
 from orchestrator.application.steps import checkpoint as _checkpoint  # noqa: F401
+from orchestrator.application.steps import git_commit as _git_commit  # noqa: F401
+from orchestrator.application.steps import git_push as _git_push  # noqa: F401
+from orchestrator.application.steps import git_sync as _git_sync  # noqa: F401
+from orchestrator.application.steps import git_worktree as _git_worktree  # noqa: F401
 from orchestrator.application.steps import plan_check as _plan_check  # noqa: F401
+from orchestrator.application.steps import pr_link as _pr_link  # noqa: F401
 from orchestrator.application.steps import shell as _shell  # noqa: F401
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
+from orchestrator.infrastructure.db.environment import read_run_environment
 from orchestrator.infrastructure.db.writers import SessionFactory, open_writer_ports
 from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
 from orchestrator.infrastructure.dbos.config import engine_config
@@ -59,7 +66,8 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
     object and nowhere else. `workspace=FsWorkspace` passes the class itself, not an
     instance: `StepPorts.workspace` is a factory a row calls with its own `cwd`
     (`application/steps/context.py`'s own docstring says why one static `Workspace` cannot
-    be right for every Run).
+    be right for every Run). `read_environment` is bound to the session factory and to
+    `BMAD_VERSION` the same way, and opens nothing until a step calls it (4.8).
     """
     return WalkerDeps(
         open_ports=partial(open_writer_ports, session_factory),
@@ -71,6 +79,7 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
             workspace=FsWorkspace,
         ),
         human_wait_seconds=settings.human_wait_seconds,
+        read_environment=partial(read_run_environment, session_factory, settings.bmad_version),
     )
 
 

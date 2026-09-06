@@ -44,6 +44,40 @@ class Redispatch(BaseModel):
     max: int
 
 
+class Worktree(BaseModel):
+    """One worktree a Run created, and what happened to the branch in it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    branch: str
+    path: str
+    #: True when this Run created the branch rather than checking out an existing one.
+    created_branch: bool
+    #: True once `git.push` has landed it on the origin.
+    pushed: bool
+
+
+class RunUpdates(BaseModel):
+    """The Run's own columns a result asks `apply_step_result` to write (AD-8, AD-14).
+
+    Three kinds have a side effect on the Run itself rather than only on their row —
+    `git.worktree` sets `worktree_path` and appends to `worktrees[]`, `git.push` marks the
+    entry `pushed`, `pr.link` appends to `compare_urls[]` — and AD-8 gives an executor no way
+    to write one. It returns this instead, and the writer applies it inside the unit of work
+    it already opened, so the next row reads a committed value.
+
+    Every field is `None` for "this result says nothing about that column", which is not the
+    same as an empty tuple: a `pr.link` on a host with no compare URL leaves the list alone
+    rather than replacing it with nothing.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    worktree_path: str | None = None
+    worktrees: tuple[Worktree, ...] | None = None
+    compare_urls: tuple[str, ...] | None = None
+
+
 class StepResult(BaseModel):
     """What a `StepExecutor` returns: the status the row reached and what came with it."""
 
@@ -61,6 +95,8 @@ class StepResult(BaseModel):
     redispatch: Redispatch | None = None
     #: The sentence the Operator reads on the row.
     reason: str | None = None
+    #: The Run's own columns this result asks the writer to set; `None` when it asks for none.
+    run_updates: RunUpdates | None = None
 
 
 class Signal(BaseModel):
@@ -91,16 +127,3 @@ class PlannedRow(BaseModel):
     #: The innermost `…stories[n]` / `epics[n]` prefix of `path`, or `None` outside a frame.
     frame: str | None
     story_id: str | None
-
-
-class Worktree(BaseModel):
-    """One worktree a Run created, and what happened to the branch in it."""
-
-    model_config = ConfigDict(frozen=True)
-
-    branch: str
-    path: str
-    #: True when this Run created the branch rather than checking out an existing one.
-    created_branch: bool
-    #: True once `git.push` has landed it on the origin.
-    pushed: bool

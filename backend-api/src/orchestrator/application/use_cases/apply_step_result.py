@@ -4,6 +4,11 @@ The walker calls this with whatever the executor returned, and this module decid
 means for the Attempt, the row, the successor and the Run — the executor decides nothing.
 The order is AD-8's and it matters, because each step can change what the next one sees:
 
+0. **Apply the result's `run_updates`.** `git.worktree`, `git.push` and `pr.link` change the
+   Run itself — `worktree_path`, `worktrees[]`, `compare_urls[]` (AD-14) — and AD-8 gives an
+   executor no way to write one. It returns the values and they are written here, first, in
+   the same unit of work: the next row's environment is read after this commits, and
+   `cancel` needs the worktree recorded even when the row that made it then failed.
 1. **Close the Attempt.** `ended_at`, the status the row reached through it, `output_ref`.
    `exit_code`, `session_id` and the usage columns are not written here: `StepResult` carries
    none of them, and AD-8 has the `agent` executor record them through
@@ -70,7 +75,7 @@ from orchestrator.domain.statuses import (
     run_transition,
     step_transition,
 )
-from orchestrator.domain.values import Park, Redispatch, StepResult
+from orchestrator.domain.values import Park, Redispatch, RunUpdates, StepResult
 
 log = structlog.get_logger(__name__)
 
@@ -125,6 +130,7 @@ def apply_step_result(
         if run.status != RUNNING:
             log.info(LATE_RESULT, run_id=str(run_id), seq=seq, status=run.status)
             return
+        run = _apply_run_updates(ports, run, result)
         row = require_row(ports, run_id, seq)
         attempt = _close_attempt(ports, row, result)
         row = set_row(
@@ -137,6 +143,24 @@ def apply_step_result(
         if after_route is not None:
             after_route(run, row, result)
         ports.uow.commit()
+
+
+def _apply_run_updates(ports: WriterPorts, run: Run, result: StepResult) -> Run:
+    """The Run's own columns a result asked for, and only the ones it named (AD-8, AD-14).
+
+    `getattr` over the fields rather than `model_dump`: the values are entities the Run
+    stores as entities (`Worktree`), and dumping them here would write dictionaries into a
+    `model_copy` that does not validate them back.
+    """
+    updates = result.run_updates
+    if updates is None:
+        return run
+    named = {
+        field: getattr(updates, field)
+        for field in RunUpdates.model_fields
+        if getattr(updates, field) is not None
+    }
+    return set_run(ports, run, **named)
 
 
 def _event(status: StepStatus) -> StepEvent:

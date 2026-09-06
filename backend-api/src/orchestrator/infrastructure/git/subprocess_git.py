@@ -39,6 +39,7 @@ from pathlib import Path
 
 from orchestrator.domain.ports.git import CloneResult, GitError, RemoteRef
 from orchestrator.infrastructure.git.redact import redact
+from orchestrator.infrastructure.git.worktrees import WorktreeCommands
 
 #: How long any one git command may take before it is a failed line.
 TIMEOUT_SECONDS = 120
@@ -119,8 +120,13 @@ def discard_partial_clone(dest: Path, *, existed: bool) -> None:
     shutil.rmtree(dest, ignore_errors=True)
 
 
-class SubprocessGit:
-    """The `Git` port over `git(1)`."""
+class SubprocessGit(WorktreeCommands):
+    """The `Git` port over `git(1)`.
+
+    The worktree, staging, commit and push half lives in `WorktreeCommands` — one adapter
+    split across two modules for the 400-line cap, sharing this class's `_run`, `_attempt`
+    and `_remote`, and with them the whole AD-5 credential path described above.
+    """
 
     def __init__(self, token: str, timeout_seconds: int = TIMEOUT_SECONDS) -> None:
         self._token = token

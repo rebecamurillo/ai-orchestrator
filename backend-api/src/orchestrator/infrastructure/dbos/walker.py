@@ -39,13 +39,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 from uuid import UUID
 
 import structlog
 
 from orchestrator.application.steps import StepPorts
+from orchestrator.application.steps.context import RunEnvironment
 from orchestrator.application.use_cases import walk
 from orchestrator.application.use_cases.walk import WalkPorts
 from orchestrator.application.use_cases.writers import WriterPorts
@@ -58,6 +59,10 @@ log = structlog.get_logger(__name__)
 
 #: How a step reaches its own `WriterPorts`: one session, opened and closed per step.
 OpenPorts = Callable[[], AbstractContextManager[WriterPorts]]
+
+#: How a step reaches one Run's environment (4.8). Resolved here, before the executor runs,
+#: so an executor is handed a value and never a repository (AD-8, AD-9).
+ReadEnvironment = Callable[[UUID], RunEnvironment | None]
 
 #: The status that means the walk goes on. Every other status a result can leave ends it.
 RUNNING = "running"
@@ -86,6 +91,9 @@ class WalkerDeps:
     open_ports: OpenPorts
     step_ports: StepPorts
     human_wait_seconds: int
+    #: `None` in a process that resolves no environment — every unit test whose executors
+    #: need none. The git kinds refuse with a wiring error rather than guessing (4.8).
+    read_environment: ReadEnvironment | None = None
 
 
 def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]:
@@ -145,9 +153,18 @@ def _walk(engine: DurableEngine, deps: WalkerDeps, steps: _Steps) -> Callable[[s
     return run_walk
 
 
-def _walk_ports(deps: WalkerDeps, ports: WriterPorts) -> WalkPorts:
-    """One step's writers, paired with the executors' ports the composition root built."""
-    return WalkPorts(writers=ports, step=deps.step_ports)
+def _walk_ports(deps: WalkerDeps, ports: WriterPorts, run_id: str | None = None) -> WalkPorts:
+    """One step's writers, paired with the executors' ports the composition root built.
+
+    `run_id` is passed only by the step that runs an executor. That is the one step whose
+    ports must carry this Run's own environment, and resolving it here — rather than in
+    `application/use_cases/walk.py` — is what keeps the executor reading a frozen value
+    instead of a repository (AD-8).
+    """
+    step = deps.step_ports
+    if run_id is not None and deps.read_environment is not None:
+        step = replace(step, run_env=deps.read_environment(UUID(run_id)))
+    return WalkPorts(writers=ports, step=step)
 
 
 def _next_row(deps: WalkerDeps) -> Callable[[str], int | None]:
@@ -165,7 +182,7 @@ def _attempt_row(
         reference = {WORKFLOW_ID: run_id, STEP_ID: engine.step_id()}
         with deps.open_ports() as ports:
             result = walk.attempt_row(
-                _walk_ports(deps, ports), UUID(run_id), seq, reference, _event(resume)
+                _walk_ports(deps, ports, run_id), UUID(run_id), seq, reference, _event(resume)
             )
         return result.model_dump(mode="json")
 

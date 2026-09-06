@@ -18,6 +18,12 @@ double would pass here and fail against a real process:
   advances the `FakeClock` it is given by `seconds` on every call. Without that a line's
   `seconds` would be zero for every scenario and nothing would be asserting them.
 
+4.8 completed the port, so the worktree half is scripted the same way: `worktree_add`,
+`sync`, `status`, `stage`, `commit`, `diff_names`, `push`, `head_sha`, `remove_worktree` and
+`delete_branch` each take a list, an entry that is an exception is raised, and every call is
+logged with its arguments — which is what lets "the spec folder was staged before everything
+else" and "no push command ran" be assertions rather than hopes.
+
 The planner asks the same three questions of many refs and paths, and "which answer came
 back" matters more to it than "how many answers were scripted", so three of the methods
 also take a **mapping**: `refs` (branch -> sha), `files` (`(ref, path)` -> text) and
@@ -55,6 +61,16 @@ class FakeGit:
         branch_exists: list[Any] | None = None,
         read_file: list[Any] | None = None,
         list_files: list[Any] | None = None,
+        worktree_add: list[Any] | None = None,
+        sync: list[Any] | None = None,
+        status: list[Any] | None = None,
+        stage: list[Any] | None = None,
+        commit: list[Any] | None = None,
+        diff_names: list[Any] | None = None,
+        push: list[Any] | None = None,
+        head_sha: list[Any] | None = None,
+        remove_worktree: list[Any] | None = None,
+        delete_branch: list[Any] | None = None,
         refs: dict[str, str] | None = None,
         files: dict[tuple[str, str], str] | None = None,
         listings: dict[tuple[str, str], list[str]] | None = None,
@@ -73,6 +89,16 @@ class FakeGit:
             "branch_exists": branch_exists or [True],
             "read_file": read_file or [None],
             "list_files": list_files or [()],
+            "worktree_add": worktree_add or [""],
+            "sync": sync or [""],
+            "status": status or [""],
+            "stage": stage or [None],
+            "commit": commit or [DEFAULT_SHA],
+            "diff_names": diff_names or [()],
+            "push": push or [""],
+            "head_sha": head_sha or [DEFAULT_SHA],
+            "remove_worktree": remove_worktree or [None],
+            "delete_branch": delete_branch or [None],
         }
         self._used: dict[str, int] = dict.fromkeys(self._scripts, 0)
 
@@ -113,6 +139,45 @@ class FakeGit:
             return tuple(self.listings.get((ref, prefix), ()))
         answer: tuple[str, ...] = self._answer("list_files", (dest, ref, prefix))
         return answer
+
+    # ── the worktree half (4.8) ──────────────────────────────────────────────
+
+    def worktree_add(self, base: Path, path: Path, branch: str, start_point: str | None) -> str:
+        answer: str = self._answer("worktree_add", (base, path, branch, start_point))
+        return answer
+
+    def sync(self, worktree: Path, branch: str) -> str | None:
+        answer: str | None = self._answer("sync", (worktree, branch))
+        return answer
+
+    def status(self, worktree: Path) -> str:
+        answer: str = self._answer("status", (worktree,))
+        return answer
+
+    def stage(self, worktree: Path, pathspec: str | None = None) -> None:
+        self._answer("stage", (worktree, pathspec))
+
+    def commit(self, worktree: Path, message: str) -> str:
+        answer: str = self._answer("commit", (worktree, message))
+        return answer
+
+    def diff_names(self, worktree: Path, from_sha: str) -> tuple[str, ...]:
+        answer: tuple[str, ...] = self._answer("diff_names", (worktree, from_sha))
+        return answer
+
+    def push(self, worktree: Path, branch: str, set_upstream: bool) -> str:
+        answer: str = self._answer("push", (worktree, branch, set_upstream))
+        return answer
+
+    def head_sha(self, path: Path) -> str | None:
+        answer: str | None = self._answer("head_sha", (path,))
+        return answer
+
+    def remove_worktree(self, base: Path, path: Path) -> None:
+        self._answer("remove_worktree", (base, path))
+
+    def delete_branch(self, base: Path, branch: str) -> None:
+        self._answer("delete_branch", (base, branch))
 
     # ── the script ───────────────────────────────────────────────────────────
 
