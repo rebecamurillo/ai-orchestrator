@@ -1,0 +1,9 @@
+name: a
+version: 1
+steps:
+  - id: call-back
+    uses: template
+    with:
+      name: cycle-b
+      version: 1
+      inputs: {}

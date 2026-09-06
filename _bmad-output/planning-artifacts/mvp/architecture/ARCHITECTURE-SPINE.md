@@ -425,7 +425,7 @@ ai-orchestrator/
 | `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_ENVIRONMENT` | backend-api, harness env (OpenCode plugin spells it `LANGFUSE_BASEURL`) | tracing (AD-11) |
 | `BMAD_VERSION`, `CLAUDE_CODE_VERSION`, `CODEX_VERSION`, `OPENCODE_VERSION`, `LANGFUSE_OPENCODE_PLUGIN_VERSION` | image, pre-flight | pins (AD-16) |
 | `CLAUDE_ALLOWED_TOOLS` | claude adapter | PRD §8 Q1 |
-| `WORK_DIR` (`/work`), `AGENT_HOME` | backend-api | volumes |
+| `WORK_DIR` (`/work`), `AGENT_HOME`, `TEMPLATES_DIR` (`../templates` dev, `/app/templates` image) | backend-api | volumes |
 | `LOG_PROMPT_CONTENT_DEFAULT`, `LOG_LEVEL` | backend-api | FR-2 default, logging |
 | `LITELLM_OTEL_V2=true`, `LANGFUSE_*` | host LiteLLM | `langfuse_otel` callback (host/README.md) |
 

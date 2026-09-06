@@ -1,0 +1,11 @@
+name: statuses
+version: 1
+steps:
+  - id: build
+    uses: agent
+    with:
+      harness: claude
+      skill: bmad-build-auto
+    expect:
+      status_in: [shipped]
+    gate: liveness

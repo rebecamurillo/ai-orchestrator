@@ -1,0 +1,9 @@
+name: a
+version: 1
+steps:
+  - id: call-b
+    uses: template
+    with:
+      name: b
+      version: 1
+      inputs: {}

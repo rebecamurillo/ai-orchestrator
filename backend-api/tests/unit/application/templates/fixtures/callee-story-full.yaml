@@ -1,0 +1,18 @@
+name: story
+version: 2
+inputs:
+  repository:
+    type: repository
+    required: true
+  spec_folder:
+    type: path
+    required: true
+  story:
+    type: item
+    required: true
+  attempts:
+    type: number
+steps:
+  - id: sync
+    uses: git.sync
+    gate: deterministic

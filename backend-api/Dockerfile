@@ -106,6 +106,10 @@ RUN uv sync --locked --no-dev
 COPY --chown=agent:agent scripts/harness /app/scripts/harness
 COPY --chown=agent:agent backend-api/docker-entrypoint.sh /app/docker-entrypoint.sh
 
+# The shipped Templates (SPEC CAP-3): `seed_shipped` reads this path at start-up
+# (`TEMPLATES_DIR=/app/templates`, story 3.3). Repository-root, like `scripts/harness` above.
+COPY --chown=agent:agent templates /app/templates
+
 WORKDIR /app
 
 # Each harness installs its CLI at its pinned version and copies the BMAD skill stubs into

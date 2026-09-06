@@ -1,0 +1,17 @@
+name: redispatching
+version: 1
+steps:
+  - id: verify
+    uses: shell
+    with:
+      command: make test
+    on_fail:
+      redispatch: build
+      max: 1
+    gate: deterministic
+  - id: build
+    uses: agent
+    with:
+      harness: claude
+      skill: bmad-build-auto
+    gate: liveness

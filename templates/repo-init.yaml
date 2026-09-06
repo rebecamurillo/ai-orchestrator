@@ -1,0 +1,32 @@
+name: repo-init
+version: 1
+description: bootstrap the BMAD method into a repository, opened as a pull request
+inputs:
+  project:     { type: project,    required: true }
+  repository:  { type: repository, required: true }
+  base_branch: { type: string,     required: true }
+steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "chore/bmad-init" }
+    gate: deterministic
+
+  - id: install
+    uses: bmad.install
+    timeout_min: 30
+    gate: deterministic
+
+  - id: commit
+    uses: git.commit
+    with: { message: "chore: initialise BMAD method (orchestrator)" }
+    gate: deterministic
+
+  - id: push
+    uses: git.push
+    with: { branch: "chore/bmad-init" }
+    gate: deterministic
+
+  - id: link
+    uses: pr.link
+    with: { branch: "chore/bmad-init" }
+    gate: liveness

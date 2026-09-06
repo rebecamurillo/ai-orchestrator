@@ -1,0 +1,9 @@
+name: extra
+version: 1
+schedule: nightly
+steps:
+  - id: verify
+    uses: shell
+    with:
+      command: make test
+    gate: deterministic

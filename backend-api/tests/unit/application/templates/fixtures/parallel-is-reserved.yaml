@@ -1,0 +1,15 @@
+name: concurrent
+version: 1
+inputs:
+  spec_folder:
+    type: path
+    required: true
+steps:
+  - id: epics
+    for_each: "{{spec_folder}}/epics.yaml"
+    as: epic
+    parallel: 2
+    steps:
+      - id: sync
+        uses: git.sync
+        gate: deterministic

@@ -143,6 +143,25 @@
         "title": "CloneCheckResultOut",
         "type": "object"
       },
+      "EdgeOut": {
+        "description": "One arrow, keyed `from` and `to` \u2014 the names `from_id`/`to_id` stand in for.",
+        "properties": {
+          "from": {
+            "title": "From",
+            "type": "string"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "title": "EdgeOut",
+        "type": "object"
+      },
       "EnvVarCreate": {
         "description": "One requested variable on a create, where there is nothing to keep.",
         "properties": {
@@ -187,6 +206,88 @@
         "title": "EnvVarIn",
         "type": "object"
       },
+      "GraphOut": {
+        "description": "`GET /templates/{name}/{version}/graph`. Three lists, never `null`.",
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/EdgeOut"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges",
+          "groups"
+        ],
+        "title": "GraphOut",
+        "type": "object"
+      },
+      "GraphTextIn": {
+        "description": "`POST /templates/{name}/graph`. Same one field; a distinct name for a distinct route.",
+        "properties": {
+          "yaml": {
+            "maxLength": 200000,
+            "title": "Yaml",
+            "type": "string"
+          }
+        },
+        "required": [
+          "yaml"
+        ],
+        "title": "GraphTextIn",
+        "type": "object"
+      },
+      "GroupOut": {
+        "description": "One `for_each`, and the ordered node ids drawn inside its box.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "for_each",
+            "description": "The construct the group draws. One value in this release.",
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "members"
+        ],
+        "title": "GroupOut",
+        "type": "object"
+      },
       "Health": {
         "description": "The `/healthz` payload. Typed so the generated contract carries a real schema (AD-3).",
         "properties": {
@@ -206,6 +307,59 @@
         "title": "Health",
         "type": "object"
       },
+      "InputDeclOut": {
+        "description": "One entry of the Template's `inputs:` map, for the screen's inputs table.",
+        "properties": {
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "required",
+          "default",
+          "values"
+        ],
+        "title": "InputDeclOut",
+        "type": "object"
+      },
       "MaskedEnvVarOut": {
         "description": "One stored variable as it leaves this API: the name, and four characters of the value.",
         "properties": {
@@ -223,6 +377,93 @@
           "masked"
         ],
         "title": "MaskedEnvVarOut",
+        "type": "object"
+      },
+      "NodeCallOut": {
+        "description": "The callee a collapsed `uses: template` node names.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "NodeCallOut",
+        "type": "object"
+      },
+      "NodeOut": {
+        "description": "One step of the Template, as one box of the diagram.",
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "boolean"
+          },
+          "call": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeCallOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "enum": [
+                  "liveness",
+                  "deterministic",
+                  "human"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "unvalidated",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the Template declared. `unvalidated` where it declared nothing (NFR-2); `null` on a template call, which has no gate of its own.",
+            "title": "Gate"
+          },
+          "human": {
+            "title": "Human",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The template-relative dotted path, index-free: `{step}`, `{loop}.{step}`, or `{loop}.before` / `{loop}.after` for an item checkpoint. The same string `/validate` reports in `unvalidated`.",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "gate",
+          "agent",
+          "human",
+          "call"
+        ],
+        "title": "NodeOut",
         "type": "object"
       },
       "Page_ProjectRead_": {
@@ -277,6 +518,60 @@
           "items"
         ],
         "title": "Page[RepositoryOut]",
+        "type": "object"
+      },
+      "Page_TemplateSummaryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[TemplateSummaryOut]",
+        "type": "object"
+      },
+      "Page_int_": {
+        "properties": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[int]",
         "type": "object"
       },
       "Pong": {
@@ -782,6 +1077,191 @@
           "default_branch"
         ],
         "title": "RepositoryUpdate",
+        "type": "object"
+      },
+      "SaveVersionIn": {
+        "description": "`POST /templates/{name}/versions`. Same one field; a distinct name for a distinct route.",
+        "properties": {
+          "yaml": {
+            "maxLength": 200000,
+            "title": "Yaml",
+            "type": "string"
+          }
+        },
+        "required": [
+          "yaml"
+        ],
+        "title": "SaveVersionIn",
+        "type": "object"
+      },
+      "TemplateRefOut": {
+        "description": "One `(name, version)` reference, as `calls` and `called_by` each list them.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "TemplateRefOut",
+        "type": "object"
+      },
+      "TemplateSummaryOut": {
+        "description": "One row of `GET /templates`.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "latest_version": {
+            "title": "Latest Version",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "latest_version",
+          "versions"
+        ],
+        "title": "TemplateSummaryOut",
+        "type": "object"
+      },
+      "TemplateVersionOut": {
+        "description": "`GET /templates/{name}/{version}`, and the 201 body a save answers with.",
+        "properties": {
+          "called_by": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateRefOut"
+            },
+            "title": "Called By",
+            "type": "array"
+          },
+          "calls": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateRefOut"
+            },
+            "title": "Calls",
+            "type": "array"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "hash": {
+            "description": "sha256 hex digest of `yaml`, byte for byte.",
+            "title": "Hash",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/InputDeclOut"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pinned_by": {
+            "description": "Always 0 in this release: counting a Template Version's active Runs is Epic 4's write, not this story's.",
+            "title": "Pinned By",
+            "type": "integer"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "yaml": {
+            "title": "Yaml",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "yaml",
+          "hash",
+          "calls",
+          "called_by",
+          "pinned_by",
+          "created_at",
+          "inputs"
+        ],
+        "title": "TemplateVersionOut",
+        "type": "object"
+      },
+      "ValidateIn": {
+        "description": "`POST /templates/{name}/validate`.",
+        "properties": {
+          "yaml": {
+            "maxLength": 200000,
+            "title": "Yaml",
+            "type": "string"
+          }
+        },
+        "required": [
+          "yaml"
+        ],
+        "title": "ValidateIn",
+        "type": "object"
+      },
+      "ValidateOut": {
+        "description": "`200` from either `/validate` route: problems are data, never a refusal (NFR-2).",
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ProblemError"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "unvalidated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unvalidated",
+            "type": "array"
+          }
+        },
+        "required": [
+          "errors",
+          "unvalidated"
+        ],
+        "title": "ValidateOut",
         "type": "object"
       }
     },
@@ -1698,6 +2178,758 @@
         "summary": "Run this Repository's clone check",
         "tags": [
           "repositories"
+        ]
+      }
+    },
+    "/api/v1/templates": {
+      "get": {
+        "description": "Every stored Template name, its versions, and its latest description.",
+        "operationId": "list_templates_api_v1_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_TemplateSummaryOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List every Template",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/templates/{name}/graph": {
+      "get": {
+        "description": "The latest stored version's shape, and no write. An unknown name is a 404.",
+        "operationId": "graph_latest_api_v1_templates__name__graph_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Template has that name."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The framework's own request-validation refusal, in the shape this API sends."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The stored Template no longer validates; `detail` names the first line and reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read the latest stored Version's graph",
+        "tags": [
+          "templates"
+        ]
+      },
+      "post": {
+        "description": "`{nodes, edges, groups}` from the one validator (AD-15). Nothing is stored.\n\n`name` is the path segment the Templates screen is open at. It is not checked against\nthe posted text's own `name:`, because the editor is free to hold a rename in progress\nand a diagram of what is on screen is exactly what this route is for; the save route is\nwhere that rule belongs, and it already carries it.",
+        "operationId": "graph_text_api_v1_templates__name__graph_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphTextIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The posted YAML has no graph; `errors[]` names each problem by line."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Build the graph of posted Template YAML",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/templates/{name}/validate": {
+      "get": {
+        "description": "Re-runs `validate()` over the latest stored version. Never writes anything.",
+        "operationId": "validate_latest_api_v1_templates__name__validate_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Template has that name, or no version has that number."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The posted YAML failed validation; `errors[]` names each problem by line."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Validate the latest stored Version",
+        "tags": [
+          "templates"
+        ]
+      },
+      "post": {
+        "description": "A validation problem is data in this response, never a 422 (NFR-2).",
+        "operationId": "validate_text_api_v1_templates__name__validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The posted YAML failed validation; `errors[]` names each problem by line."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Validate posted YAML without storing it",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/templates/{name}/versions": {
+      "get": {
+        "description": "Ascending version numbers. An unknown name is a 404, not an empty page.",
+        "operationId": "list_versions_api_v1_templates__name__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_int_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Template has that name, or no version has that number."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The posted YAML failed validation; `errors[]` names each problem by line."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List a Template's stored version numbers",
+        "tags": [
+          "templates"
+        ]
+      },
+      "post": {
+        "description": "`version` must be `max(existing) + 1`; a saved version can never be changed (AD-15).",
+        "operationId": "save_version_api_v1_templates__name__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveVersionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateVersionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Template has that name, or no version has that number."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The posted YAML failed validation; `errors[]` names each problem by line."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Save the next Template Version",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/templates/{name}/{version}": {
+      "get": {
+        "description": "`calls`, `called_by` and `inputs` alongside the stored text. `pinned_by` is always 0.",
+        "operationId": "get_version_api_v1_templates__name___version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647,
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateVersionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Template has that name, or no version has that number."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The posted YAML failed validation; `errors[]` names each problem by line."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one Template Version",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/templates/{name}/{version}/graph": {
+      "get": {
+        "description": "`{nodes, edges, groups}` from the one validator (AD-15). A call is one node.",
+        "operationId": "template_graph_api_v1_templates__name___version__graph_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "maximum": 2147483647,
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Template has that name, or no version has that number."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The version in the path is not a version number."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The stored Template no longer validates; `detail` names the first line and reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one Template Version's graph",
+        "tags": [
+          "templates"
         ]
       }
     },

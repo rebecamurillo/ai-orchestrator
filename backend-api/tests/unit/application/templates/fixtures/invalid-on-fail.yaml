@@ -1,0 +1,9 @@
+name: failing
+version: 1
+steps:
+  - id: verify
+    uses: shell
+    with:
+      command: make test
+    on_fail: retreat
+    gate: deterministic

@@ -1,0 +1,108 @@
+/*
+ * The Template diagram (3.6, UX-DR1). Instrument-dark, and the whole point of the register:
+ * a Template has no status, so nothing here is amber, red or green. Only the two hairlines,
+ * the three greys, two grounds and the accent — and the accent marks exactly one thing, the
+ * step that dispatches a harness.
+ *
+ * Every value is a token. `tests/unit/stylesheets.test.ts` refuses a hex literal here, and
+ * the SVG carries no inline `style`: a colour set on an element would be invisible to that
+ * gate and to a reader looking for where the diagram's palette is decided.
+ *
+ * Square boxes, hairline strokes, no shadow. The dashed rectangle is the one dash in the
+ * product and it says the same thing the word `for_each` does: what is inside runs per item.
+ */
+
+.diagram {
+  overflow-x: auto;
+  margin-bottom: var(--space-6);
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+  background: var(--color-bg);
+}
+
+.diagram-svg {
+  display: block;
+  font-family: var(--font-mono);
+}
+
+/* ── a step ─────────────────────────────────────────────────────────────── */
+
+/* the brief's own words: square nodes on `surface` with a `line` border, radius 0 */
+.diagram-node-box {
+  fill: var(--color-surface);
+  stroke: var(--color-line);
+  stroke-width: 1;
+}
+
+/* the one accent in the picture: this step hands the work to a coding agent */
+.diagram-node[data-agent='true'] .diagram-node-box {
+  stroke: var(--color-accent);
+}
+
+.diagram-node-eyebrow {
+  fill: var(--color-text-tertiary);
+  font-size: var(--type-eyebrow);
+  letter-spacing: var(--type-eyebrow-tracking);
+  text-transform: var(--type-eyebrow-transform);
+}
+
+.diagram-node-title {
+  fill: var(--color-text);
+  font-size: var(--type-row-title);
+}
+
+/* `unvalidated` and `human` are plain words here, in the same grey as `deterministic` */
+.diagram-node-gate {
+  fill: var(--color-text-secondary);
+  font-size: var(--type-meta);
+}
+
+/* under the word `human`, and under nothing else */
+.diagram-node-hairline {
+  stroke: var(--color-line-strong);
+  stroke-width: 1;
+}
+
+/* ── a for_each ─────────────────────────────────────────────────────────── */
+
+.diagram-group-box {
+  fill: none;
+  stroke: var(--color-line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+/* the loop's id, in the role the brief names for it: a column head */
+.diagram-group-label {
+  fill: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  text-transform: var(--type-column-head-transform);
+}
+
+/* ── an edge ────────────────────────────────────────────────────────────── */
+
+.diagram-edge-line {
+  fill: none;
+  stroke: var(--color-line-strong);
+  stroke-width: 1;
+}
+
+.diagram-edge-head {
+  fill: var(--color-line-strong);
+}
+
+/* ── the column around it ───────────────────────────────────────────────── */
+
+.template-diagram {
+  margin-bottom: var(--space-8);
+}
+
+/* states a fact, and nothing more (NFR-8): the picture is older than the text on screen.
+   It sits above the picture, so the caveat is read before the thing it qualifies. */
+.template-diagram-stale {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-micro);
+  line-height: var(--type-micro-line);
+}

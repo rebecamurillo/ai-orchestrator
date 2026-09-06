@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     work_dir: Path
     agent_home: Path
 
+    # ── Templates (AD-15) ────────────────────────────────────────────────────
+    #: `../templates` in development, `/app/templates` in the image; never validated
+    #: absolute like `work_dir`/`agent_home` because the development value is relative.
+    templates_dir: Path
+
     # ── This process ─────────────────────────────────────────────────────────
     log_prompt_content_default: bool
     log_level: LogLevel

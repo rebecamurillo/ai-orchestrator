@@ -1,0 +1,10 @@
+name: defaults
+version: 1
+inputs:
+  attempts:
+    type: number
+    default: often
+steps:
+  - id: verify
+    uses: git.sync
+    gate: deterministic

@@ -1,0 +1,10 @@
+name: timed-call
+version: 1
+steps:
+  - id: story
+    uses: template
+    timeout_min: 30
+    with:
+      name: story
+      version: 1
+      inputs: {}

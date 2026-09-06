@@ -1,0 +1,7 @@
+name: both
+version: 1
+steps:
+  - id: verify
+    uses: shell
+    run: make test
+    gate: deterministic

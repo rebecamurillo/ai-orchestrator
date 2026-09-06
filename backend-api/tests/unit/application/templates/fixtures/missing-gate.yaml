@@ -1,0 +1,10 @@
+name: gateless
+version: 1
+steps:
+  - id: sync
+    uses: git.sync
+    gate: deterministic
+  - id: verify
+    uses: shell
+    with:
+      command: make test

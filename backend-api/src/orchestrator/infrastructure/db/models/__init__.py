@@ -9,5 +9,6 @@ from __future__ import annotations
 
 from orchestrator.infrastructure.db.models.project import ProjectRow
 from orchestrator.infrastructure.db.models.repository import RepositoryRow
+from orchestrator.infrastructure.db.models.template import TemplateRow, TemplateVersionRow
 
-__all__ = ["ProjectRow", "RepositoryRow"]
+__all__ = ["ProjectRow", "RepositoryRow", "TemplateRow", "TemplateVersionRow"]

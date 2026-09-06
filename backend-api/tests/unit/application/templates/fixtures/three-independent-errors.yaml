@@ -1,0 +1,12 @@
+name: three
+version: 1
+schedule: nightly
+steps:
+  - id: launch
+    uses: rocket
+    gate: deterministic
+  - id: verify
+    uses: shell
+    with:
+      command: make test
+    gate: green
