@@ -83,6 +83,15 @@ UNREADABLE = "unreadable resume message"
 WALK_STARTED = "walk started"
 WALK_ENDED = "walk ended"
 
+#: The status `deps.run_finished` reacts to (4.10) — `failed` and `cancelled` leave a
+#: Repository's clone check exactly as informative as it already was.
+DONE = "done"
+
+#: What the walker logs when the completion hook itself raises — a best-effort refresh of a
+#: Repository's clone check, never a reason to jeopardise a status transition that is
+#: already durable by the time this call is made.
+RUN_FINISHED_HOOK_FAILED = "run finished hook failed"
+
 
 @dataclass(frozen=True)
 class WalkerDeps:
@@ -94,6 +103,10 @@ class WalkerDeps:
     #: `None` in a process that resolves no environment — every unit test whose executors
     #: need none. The git kinds refuse with a wiring error rather than guessing (4.8).
     read_environment: ReadEnvironment | None = None
+    #: The completion hook (4.10): called with a Run's id whenever a step of this walk
+    #: leaves it `done`. `None` in every process that wires no such effect — every unit test
+    #: among them, and any process built before this hook existed.
+    run_finished: Callable[[UUID], None] | None = None
 
 
 def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]:
@@ -193,7 +206,9 @@ def _apply_result(deps: WalkerDeps) -> Callable[[str, int, dict[str, Any]], str]
     def apply_result(run_id: str, seq: int, result: dict[str, Any]) -> str:
         with deps.open_ports() as ports:
             applied = StepResult.model_validate(result)
-            return walk.apply_result(_walk_ports(deps, ports), UUID(run_id), seq, applied)
+            status = walk.apply_result(_walk_ports(deps, ports), UUID(run_id), seq, applied)
+        _finish(deps, run_id, status)
+        return status
 
     return apply_result
 
@@ -201,9 +216,29 @@ def _apply_result(deps: WalkerDeps) -> Callable[[str, int, dict[str, Any]], str]
 def _close_run(deps: WalkerDeps) -> Callable[[str], str]:
     def close_run(run_id: str) -> str:
         with deps.open_ports() as ports:
-            return walk.close_run(_walk_ports(deps, ports), UUID(run_id))
+            status = walk.close_run(_walk_ports(deps, ports), UUID(run_id))
+        _finish(deps, run_id, status)
+        return status
 
     return close_run
+
+
+def _finish(deps: WalkerDeps, run_id: str, status: str) -> None:
+    """The completion hook (4.10), run from inside the step that just reached `done`.
+
+    Not a sixth declared step of its own: `test_dbos_walker.py::
+    test_the_walk_declares_five_steps_and_one_workflow` pins the walk at exactly five, and
+    that test is frozen (hard rule 1). A best-effort call — its own failure is logged and
+    swallowed rather than raised, because by the time it runs the Run's own status is already
+    durable, and retrying the step that reached `done` over a hook that only refreshes a
+    Repository's clone check would risk re-applying a transition that already happened.
+    """
+    if status != DONE or deps.run_finished is None:
+        return
+    try:
+        deps.run_finished(UUID(run_id))
+    except Exception:
+        log.exception(RUN_FINISHED_HOOK_FAILED, run_id=run_id)
 
 
 def _expire(deps: WalkerDeps) -> Callable[[str], str]:

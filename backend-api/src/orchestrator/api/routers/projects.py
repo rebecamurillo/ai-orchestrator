@@ -52,6 +52,7 @@ from orchestrator.api.providers import project_ports
 from orchestrator.api.schemas.common import Page
 from orchestrator.api.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
 from orchestrator.application.use_cases import clone_check as clone_check_use_cases
+from orchestrator.application.use_cases import project_runs
 from orchestrator.application.use_cases import projects as use_cases
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.domain.entities.project import ProjectView
@@ -87,8 +88,12 @@ Config = Annotated[Settings, Depends(get_settings)]
 
 
 def _read(ports: ProjectPorts, view: ProjectView) -> ProjectRead:
-    """`ProjectRead.of`, given the Repositories this Project actually has right now."""
-    return ProjectRead.of(view, use_cases.embedded_repositories(ports, view.id))
+    """`ProjectRead.of`, given the Repositories and the Runs this Project has right now."""
+    return ProjectRead.of(
+        view,
+        use_cases.embedded_repositories(ports, view.id),
+        project_runs.embedded_runs(ports.runs, ports.steps, view.id),
+    )
 
 
 def _check_repositories(ports: ProjectPorts, view: ProjectView, settings: Settings) -> None:

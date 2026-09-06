@@ -99,6 +99,8 @@ def project_ports(request: Request) -> Iterator[ProjectPorts]:
             crypto=crypto(),
             clock=SystemClock(),
             git=git_adapter(request),
+            runs=SQLAlchemyRunRepository(uow.session),
+            steps=SQLAlchemyStepRunRepository(uow.session),
         )
 
 

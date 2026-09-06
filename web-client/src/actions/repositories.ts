@@ -38,3 +38,34 @@ export const recheck = defineAction({
     return data;
   },
 });
+
+/**
+ * *Initialise repository* (4.10, UX-DR12): starts a `repo-init@1` Run on the Repository's
+ * `default_branch`. The same no-island, no-client-JS shape as `recheck` above — the row's
+ * next render reads the new Run off `GET /projects/{id}`'s own embedded list.
+ */
+export const init = defineAction({
+  accept: 'form',
+  handler: async (form: FormData) => {
+    const repositoryId = form.get('repositoryId');
+    if (typeof repositoryId !== 'string' || repositoryId.length === 0) {
+      throw new ActionError({ code: 'BAD_REQUEST', message: 'repositoryId is required' });
+    }
+
+    const { data, error } = await backend().POST('/api/v1/repositories/{repository_id}/init', {
+      params: { path: { repository_id: repositoryId } },
+    });
+
+    if (error) {
+      const code =
+        error.status === 404
+          ? 'NOT_FOUND'
+          : error.status === 409
+            ? 'CONFLICT'
+            : 'INTERNAL_SERVER_ERROR';
+      throw new ActionError({ code, message: error.detail ?? 'initialisation failed' });
+    }
+
+    return data;
+  },
+});

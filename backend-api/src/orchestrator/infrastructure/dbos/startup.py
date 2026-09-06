@@ -43,6 +43,7 @@ from orchestrator.application.steps import shell as _shell  # noqa: F401
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db.environment import read_run_environment
+from orchestrator.infrastructure.db.run_finished import run_finished_hook
 from orchestrator.infrastructure.db.writers import SessionFactory, open_writer_ports
 from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
 from orchestrator.infrastructure.dbos.config import engine_config
@@ -80,6 +81,9 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
         ),
         human_wait_seconds=settings.human_wait_seconds,
         read_environment=partial(read_run_environment, session_factory, settings.bmad_version),
+        run_finished=partial(
+            run_finished_hook, session_factory, git, settings.work_dir, settings.bmad_version
+        ),
     )
 
 

@@ -30,6 +30,7 @@ from pydantic import AfterValidator, BaseModel, Field
 
 from orchestrator.api.schemas.clone_check import CloneCheckLineOut
 from orchestrator.api.schemas.common import StorableText, UtcTimestamp
+from orchestrator.application.use_cases.project_runs import ProjectRunSummary
 from orchestrator.application.use_cases.projects import (
     EnvVarInput,
     ProjectDraft,
@@ -188,8 +189,46 @@ class RepositoryOut(BaseModel):
         )
 
 
+class ProjectRunOut(BaseModel):
+    """One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the
+    record row's own fields, plus what a Repository row's `Initialise repository` control
+    reads about the Run it started."""
+
+    id: UUID
+    #: The UI status token `StatusToken.astro` renders (`QUE RUN BLK CHK DON ERR CAN`).
+    token: str
+    #: `"repo-init@1"` — the Template name and the pinned version it ran.
+    template: str
+    branch: str
+    repository_id: UUID
+    #: The row the Operator would point at right now, or the last one this Run touched.
+    current_step_label: str
+    #: The sentence a `failed` or `cancelled` Run's row states beside its token; `""` for
+    #: every Run whose reason a signal or an error row has not already given a home.
+    reason: str
+    #: `run.compare_urls`, whole — a `repo-init` Run carries at most one, and the Repository
+    #: row's own `Initialise repository` control is what reads it (UX-DR12's `link`).
+    compare_urls: list[str]
+    created_at: UtcTimestamp
+
+    @classmethod
+    def of(cls, summary: ProjectRunSummary) -> ProjectRunOut:
+        run = summary.run
+        return cls(
+            id=run.id,
+            token=summary.token,
+            template=f"{run.template_name}@{run.template_version}",
+            branch=str(run.inputs.get("base_branch", "")),
+            repository_id=run.repository_id,
+            current_step_label=summary.current_step_label,
+            reason=summary.reason,
+            compare_urls=list(run.compare_urls),
+            created_at=run.created_at,
+        )
+
+
 class ProjectRead(BaseModel):
-    """A Project as every read returns it, its Repositories embedded.
+    """A Project as every read returns it, its Repositories and its Runs embedded.
 
     Every read answers the same shape (POST's 201, PUT's 200, both GETs) — a Repository
     added between two reads is exactly the kind of state change the Operator relies on the
@@ -205,20 +244,28 @@ class ProjectRead(BaseModel):
     env_vars: list[MaskedEnvVarOut]
     log_prompt_content: bool
     repositories: list[RepositoryOut]
+    runs: list[ProjectRunOut]
     created_at: UtcTimestamp
     updated_at: UtcTimestamp
 
     @classmethod
-    def of(cls, view: ProjectView, repositories: list[Repository] | None = None) -> ProjectRead:
-        """Render the use case's masked read model plus its Repositories, freshly queried.
+    def of(
+        cls,
+        view: ProjectView,
+        repositories: list[Repository] | None = None,
+        runs: list[ProjectRunSummary] | None = None,
+    ) -> ProjectRead:
+        """Render the use case's masked read model plus its Repositories and Runs, freshly
+        queried.
 
-        `repositories` defaults to none stored: the frozen `test_project_schemas.py` calls
-        this with only a view, from before a Project could have any.
+        `repositories` and `runs` default to none stored: the frozen `test_project_schemas.py`
+        calls this with only a view, from before a Project could have either.
         """
         return cls.model_validate(
             {
                 **view.model_dump(),
                 "repositories": [RepositoryOut.of(r) for r in repositories or []],
+                "runs": [ProjectRunOut.of(r) for r in runs or []],
             }
         )
 

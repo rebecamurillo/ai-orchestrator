@@ -177,6 +177,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repository_id}/init": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the Repository this path initialises
+         * @description The same read `GET /repositories/{id}` gives, published under this path too (4.10).
+         */
+        get: operations["get_init_api_v1_repositories__repository_id__init_get"];
+        put?: never;
+        /**
+         * Initialise this Repository for the method
+         * @description Start a `repo-init@1` Run on `repository.default_branch`, with no harness.
+         */
+        post: operations["init_api_v1_repositories__repository_id__init_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs": {
         parameters: {
             query?: never;
@@ -881,7 +905,7 @@ export interface components {
         };
         /**
          * ProjectRead
-         * @description A Project as every read returns it, its Repositories embedded.
+         * @description A Project as every read returns it, its Repositories and its Runs embedded.
          *
          *     Every read answers the same shape (POST's 201, PUT's 200, both GETs) — a Repository
          *     added between two reads is exactly the kind of state change the Operator relies on the
@@ -908,10 +932,44 @@ export interface components {
             name: string;
             /** Repositories */
             repositories: components["schemas"]["RepositoryOut"][];
+            /** Runs */
+            runs: components["schemas"]["ProjectRunOut"][];
             /** Slug */
             slug: string;
             /** Updated At */
             updated_at: string;
+        };
+        /**
+         * ProjectRunOut
+         * @description One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the
+         *     record row's own fields, plus what a Repository row's `Initialise repository` control
+         *     reads about the Run it started.
+         */
+        ProjectRunOut: {
+            /** Branch */
+            branch: string;
+            /** Compare Urls */
+            compare_urls: string[];
+            /** Created At */
+            created_at: string;
+            /** Current Step Label */
+            current_step_label: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Repository Id
+             * Format: uuid
+             */
+            repository_id: string;
+            /** Template */
+            template: string;
+            /** Token */
+            token: string;
         };
         /**
          * ProjectUpdate
@@ -1808,6 +1866,120 @@ export interface operations {
             };
             /** @description No Repository has that id. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_init_api_v1_repositories__repository_id__init_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repository_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepositoryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Repository has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    init_api_v1_repositories__repository_id__init_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repository_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateRunOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Repository has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The clone check has failed, or a repo-init Run is already running on this Repository. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

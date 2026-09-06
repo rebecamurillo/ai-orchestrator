@@ -44,7 +44,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 import structlog
 import uvicorn
-from fastapi import Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
@@ -58,6 +58,7 @@ from orchestrator.api.routers import (
     ping,
     projects,
     repositories,
+    repository_init,
     run,
     runs,
     signals,
@@ -272,34 +273,15 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
 
     # one dependency for the whole versioned surface: a feature router added later
     # inherits the bearer check — and its declared 401 — instead of having to remember them
-    app.include_router(
-        ping.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
-    app.include_router(
-        projects.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
-    app.include_router(
-        repositories.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
-    app.include_router(
-        clone_check.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
+    for router in (ping.router, projects.router, repositories.router, clone_check.router):
+        _mount(app, router)
+    _mount(app, repository_init.router)
     # before `templates.router`, and that is load-bearing: Starlette matches in registration
     # order and `templates.router` registers `GET /templates/{name}/{version}` last, so a
     # three-segment `GET /templates/{name}/graph` mounted after it would be swallowed as
-    # `version="graph"` and answered 422 instead of reaching this operation at all
+    # `version="graph"` and answered 422 instead of reaching this operation at all.
+    # `test_graph_text_router.py` reads this pair's own literal source, so unlike every
+    # other router above and below, neither goes through the `_mount` helper.
     app.include_router(
         graph_text.router,
         prefix=API_PREFIX,
@@ -312,42 +294,26 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         dependencies=[Depends(require_bearer)],
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
     )
-    app.include_router(
-        graph.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
-    app.include_router(
-        runs.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
+    for router in (graph.router, runs.router):
+        _mount(app, router)
     # after `runs.router`, and that is load-bearing the same way `graph_text.router` before
     # `templates.router` is: `GET /runs/{run_id}` and `GET /runs/preflight` are the same
     # shape to Starlette, which matches registration order, so the literal path has to be
     # checked first (`api/routers/run.py`'s own docstring; `test_run_router.py` pins it)
-    app.include_router(
-        run.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
-    app.include_router(
-        signals.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
-    app.include_router(
-        harnesses.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
+    for router in (run.router, signals.router, harnesses.router):
+        _mount(app, router)
 
     return app
+
+
+def _mount(app: FastAPI, router: APIRouter) -> None:
+    """One feature router, on the versioned prefix, behind the one bearer dependency (AD-4)."""
+    app.include_router(
+        router,
+        prefix=API_PREFIX,
+        dependencies=[Depends(require_bearer)],
+        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
+    )
 
 
 def main() -> None:

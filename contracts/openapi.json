@@ -1244,7 +1244,7 @@
         "type": "object"
       },
       "ProjectRead": {
-        "description": "A Project as every read returns it, its Repositories embedded.\n\nEvery read answers the same shape (POST's 201, PUT's 200, both GETs) \u2014 a Repository\nadded between two reads is exactly the kind of state change the Operator relies on the\nnext read to show, and a narrower shape for the list or the create response would have\nto justify why *that* read is allowed to lie about what is stored.",
+        "description": "A Project as every read returns it, its Repositories and its Runs embedded.\n\nEvery read answers the same shape (POST's 201, PUT's 200, both GETs) \u2014 a Repository\nadded between two reads is exactly the kind of state change the Operator relies on the\nnext read to show, and a narrower shape for the list or the create response would have\nto justify why *that* read is allowed to lie about what is stored.",
         "properties": {
           "context_paths": {
             "items": {
@@ -1288,6 +1288,13 @@
             "title": "Repositories",
             "type": "array"
           },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRunOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -1306,10 +1313,70 @@
           "env_vars",
           "log_prompt_content",
           "repositories",
+          "runs",
           "created_at",
           "updated_at"
         ],
         "title": "ProjectRead",
+        "type": "object"
+      },
+      "ProjectRunOut": {
+        "description": "One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the\nrecord row's own fields, plus what a Repository row's `Initialise repository` control\nreads about the Run it started.",
+        "properties": {
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "compare_urls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Compare Urls",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_step_label": {
+            "title": "Current Step Label",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "repository_id": {
+            "format": "uuid",
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "token",
+          "template",
+          "branch",
+          "repository_id",
+          "current_step_label",
+          "reason",
+          "compare_urls",
+          "created_at"
+        ],
+        "title": "ProjectRunOut",
         "type": "object"
       },
       "ProjectUpdate": {
@@ -2941,6 +3008,187 @@
           }
         ],
         "summary": "Run this Repository's clone check",
+        "tags": [
+          "repositories"
+        ]
+      }
+    },
+    "/api/v1/repositories/{repository_id}/init": {
+      "get": {
+        "description": "The same read `GET /repositories/{id}` gives, published under this path too (4.10).",
+        "operationId": "get_init_api_v1_repositories__repository_id__init_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Repository has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read the Repository this path initialises",
+        "tags": [
+          "repositories"
+        ]
+      },
+      "post": {
+        "description": "Start a `repo-init@1` Run on `repository.default_branch`, with no harness.",
+        "operationId": "init_api_v1_repositories__repository_id__init_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Repository has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The clone check has failed, or a repo-init Run is already running on this Repository."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Initialise this Repository for the method",
         "tags": [
           "repositories"
         ]

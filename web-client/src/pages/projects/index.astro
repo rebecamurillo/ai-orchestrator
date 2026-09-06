@@ -22,11 +22,14 @@ import Button from '../../components/Button.astro';
 import EmptyState from '../../components/EmptyState.astro';
 import ProjectListRow from '../../components/ProjectListRow.astro';
 import ProjectSettings from '../../components/ProjectSettings.astro';
+import RecordRow from '../../components/RecordRow.astro';
 import RepositoriesTable from '../../components/RepositoriesTable.astro';
-import type { RepositoryRow } from '../../components/repository-row';
+import type { RepositoryRow, RepositoryRun } from '../../components/repository-row';
 import SectionHead from '../../components/SectionHead.astro';
+import type { Token } from '../../components/StatusToken.astro';
 import Shell from '../../layouts/Shell.astro';
 import { backend } from '../../api/server';
+import { ageText, latestRepoInitRun } from '../../lib/projects/runs';
 
 export const prerender = false;
 
@@ -63,7 +66,31 @@ if (selectedId) {
   if (!error) project = data ?? null;
 }
 
-function repositoryRow(repository: components['schemas']['RepositoryOut']): RepositoryRow {
+//: `Repository.clone_check.bmad_version`'s own two "not installed yet" tokens (FR-30) —
+//: the row's own `Initialise repository` control shows itself for exactly these two.
+const NEEDS_INIT_METHODS = new Set(['missing', 'outdated']);
+const VALID_TOKENS: readonly Token[] = ['QUE', 'RUN', 'BLK', 'CHK', 'DON', 'ERR', 'CAN', 'SKP'];
+
+//: `ProjectRunOut.token` is a plain `string` in the generated contract (AD-3); a Run this
+//: screen did not itself create could in principle carry an unrecognised one, so this reads
+//: it defensively rather than asserting the API's own vocabulary a second time.
+function asToken(value: string): Token {
+  return (VALID_TOKENS as readonly string[]).includes(value) ? (value as Token) : 'QUE';
+}
+
+function repositoryRow(
+  repository: components['schemas']['RepositoryOut'],
+  runs: components['schemas']['ProjectRunOut'][],
+): RepositoryRow {
+  const latest = latestRepoInitRun(runs, repository.id);
+  const run: RepositoryRun | null = latest
+    ? {
+        id: latest.id,
+        token: asToken(latest.token),
+        reason: latest.reason,
+        compareUrl: latest.compare_urls[0] ?? null,
+      }
+    : null;
   return {
     id: repository.id,
     slug: repository.slug,
@@ -76,10 +103,30 @@ function repositoryRow(repository: components['schemas']['RepositoryOut']): Repo
     output: repository.clone_check.output,
     hint: repository.clone_check_hint,
     verifySkipped: repository.verify_skipped,
+    methodNeedsInit: NEEDS_INIT_METHODS.has(repository.clone_check.bmad_version ?? ''),
+    run,
   };
 }
 
-const repositoryRows = project ? project.repositories.map(repositoryRow) : [];
+const runs = project?.runs ?? [];
+const repositoryRows = project ? project.repositories.map((r) => repositoryRow(r, runs)) : [];
+
+/** The **RUNS ON THIS PROJECT** list (4.10): each Run as a `RecordRow`, its own five-column
+ * grid holding `token · template@v · branch · current step label · age`, newest first —
+ * `runs` already arrives that way (`GET /projects/{id}`'s own contract). */
+const now = new Date();
+function runRow(run: components['schemas']['ProjectRunOut']) {
+  return {
+    id: run.id,
+    token: asToken(run.token),
+    template: run.template,
+    branch: run.branch,
+    currentStepLabel: run.current_step_label,
+    reason: run.reason,
+    age: ageText(run.created_at, now),
+  };
+}
+const runRows = runs.map(runRow);
 
 function failedCount(entry: ProjectListItem): number {
   return entry.repositories.filter((repository) => repository.clone_check.status === 'failed')
@@ -162,7 +209,23 @@ function pluralize(count: number, noun: string): string {
         <ProjectSettings envVars={project.env_vars} />
 
         <SectionHead label="RUNS ON THIS PROJECT" />
-        <p class="hint">no runs yet</p>
+        {runRows.length === 0 ? (
+          <p class="hint">no runs yet</p>
+        ) : (
+          <section data-testid="projects-runs">
+            {runRows.map((row) => (
+              <RecordRow
+                token={row.token}
+                project={row.template}
+                repository={row.branch}
+                title={row.currentStepLabel}
+                hint={row.reason}
+                age={row.age}
+                href={`/workflows/${row.id}`}
+              />
+            ))}
+          </section>
+        )}
       </section>
     )
   }
