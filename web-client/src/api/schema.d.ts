@@ -1505,7 +1505,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description The name in the path is not a Template name. */
+            /** @description The framework's own request-validation refusal, in the shape this API sends. */
             422: {
                 headers: {
                     [name: string]: unknown;
