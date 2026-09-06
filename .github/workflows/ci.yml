@@ -46,7 +46,20 @@ jobs:
         with:
           node-version: '24'
       - name: Enable pnpm
-        run: corepack enable
+        run: |
+          set -euo pipefail
+          corepack enable
+          # The pnpm pin lives in web-client/package.json. corepack resolves
+          # `packageManager` from the working directory, and this repository has no root
+          # package.json, so at the workspace root corepack activates its own bundled
+          # default instead -- which `pnpm --dir web-client` then rejects as
+          # ERR_PNPM_BAD_PM_VERSION the moment corepack's default drifts past the pin.
+          # Activate the pinned version explicitly, read from the pin itself so this
+          # never becomes a second copy to drift.
+          version="$(node -p "require('$GITHUB_WORKSPACE/web-client/package.json').packageManager.split('@')[1]")"
+          test -n "$version"
+          corepack prepare "pnpm@$version" --activate
+          pnpm --version
       - name: Locate the pnpm store
         id: pnpm
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
@@ -84,7 +97,20 @@ jobs:
         with:
           node-version: '24'
       - name: Enable pnpm
-        run: corepack enable
+        run: |
+          set -euo pipefail
+          corepack enable
+          # The pnpm pin lives in web-client/package.json. corepack resolves
+          # `packageManager` from the working directory, and this repository has no root
+          # package.json, so at the workspace root corepack activates its own bundled
+          # default instead -- which `pnpm --dir web-client` then rejects as
+          # ERR_PNPM_BAD_PM_VERSION the moment corepack's default drifts past the pin.
+          # Activate the pinned version explicitly, read from the pin itself so this
+          # never becomes a second copy to drift.
+          version="$(node -p "require('$GITHUB_WORKSPACE/web-client/package.json').packageManager.split('@')[1]")"
+          test -n "$version"
+          corepack prepare "pnpm@$version" --activate
+          pnpm --version
       - name: Locate the pnpm store
         id: pnpm
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
@@ -176,7 +202,20 @@ jobs:
         with:
           node-version: '24'
       - name: Enable pnpm
-        run: corepack enable
+        run: |
+          set -euo pipefail
+          corepack enable
+          # The pnpm pin lives in web-client/package.json. corepack resolves
+          # `packageManager` from the working directory, and this repository has no root
+          # package.json, so at the workspace root corepack activates its own bundled
+          # default instead -- which `pnpm --dir web-client` then rejects as
+          # ERR_PNPM_BAD_PM_VERSION the moment corepack's default drifts past the pin.
+          # Activate the pinned version explicitly, read from the pin itself so this
+          # never becomes a second copy to drift.
+          version="$(node -p "require('$GITHUB_WORKSPACE/web-client/package.json').packageManager.split('@')[1]")"
+          test -n "$version"
+          corepack prepare "pnpm@$version" --activate
+          pnpm --version
       - name: Locate the pnpm store
         id: pnpm
         run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
