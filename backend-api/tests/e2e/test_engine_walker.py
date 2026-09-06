@@ -6,20 +6,28 @@ stack settles is that there *is* an engine: that the image carries the library, 
 enqueues onto it, and that the workflow this process registered picks the Run up and drives
 it through the same writers a unit test drives by hand.
 
-What it asserts is deliberately what stays true as the executors arrive. No kind can run
-yet, so today the walk stops on the first row; from 4.7 the same Run will get further and
-from 4.8 it will finish. Everything below is a property of *having been walked* rather than
-of where the walk stopped — the Run left `queued`, the first row has an Attempt carrying the
-workflow it ran under, the gate record opens with `start`, and no row was reached out of
-`seq` order — so no later story has to come back and edit an expectation here.
+**This module's own Template is one `checkpoint` step, deliberately.** 4.7 registered
+`plan.check`, `shell` and `checkpoint`; a Template built only from `shell` (as
+`test_run_creation.py::LEAF` is) now runs straight to `done`, which is correct — the whole
+point of landing those executors — but would leave nothing here parked to test AD-12
+against. `checkpoint` always stops for the Operator on its first execution
+(`application/steps/checkpoint.py`), so `CHECKPOINT_TEMPLATE` is what keeps this module
+able to prove the property its own tests are about: a Run in `needs_you` holds its slot and
+its Repository partition, and a second Run on the same Repository stays `queued` behind it.
 
-**This module runs first among the Run-creating suites, and it leaves a Run parked.** No
-executor exists, so the walk stops for the Operator, and a parked Run holds its slot and its
-Repository partition for the rest of the stack's life (AD-12). There is no signals endpoint
-until 4.9, so nothing can release it: `make e2e` builds and destroys a stack of its own for
-exactly this reason. Running the gate twice against one stack is not possible while a Run
-cannot be cancelled, and that is recorded as a deferred item on this story rather than
-worked around here.
+**This module runs first among the Run-creating suites, and it leaves a Run parked.** The
+Run reaches `needs_you` on its `pause` row, which holds its slot and its Repository
+partition for the rest of the stack's life (AD-12). There is no signals endpoint until 4.9,
+so nothing can release it: `make e2e` builds and destroys a stack of its own for exactly
+this reason. Running the gate twice against one stack is not possible while a Run cannot be
+cancelled, and that is recorded as a deferred item on this story rather than worked around
+here.
+
+*(One-off note, story 4.7: the operator authorised editing this file on 2026-09-06 to
+replace `LEAF` with `CHECKPOINT_TEMPLATE` for exactly this fixture — the root cause was this
+test's own precondition depending on an executor being missing, which stopped being true the
+moment `plan.check` and `shell` were registered. That authorisation is about this file, this
+once; it is not a standing rule and no later story may cite it on its own to edit an anchor.)*
 """
 
 from __future__ import annotations
@@ -44,12 +52,12 @@ from orchestrator.infrastructure.settings import Settings
 from tests.e2e.test_clone_check import Fixtures, manifest_stating
 from tests.e2e.test_run_creation import (
     RUNS,
+    TEMPLATES,
     clone_check,
     create_project,
     create_repository,
     project_id_of,
     run_payload,
-    save_template,
 )
 
 HTTP_CREATED = 201
@@ -62,6 +70,33 @@ POLL_INTERVAL_SECONDS = 0.5
 
 #: The statuses a walked Run can be in: anything but the one it was created in.
 QUEUED = "queued"
+#: What a Run parked on `checkpoint` reaches (AD-13), and the `park_kind` it reaches it with.
+NEEDS_YOU = "needs_you"
+CHECKPOINT_PARK_KIND = "checkpoint"
+
+#: This module's own Template — one `checkpoint` step — so its first Run genuinely parks
+#: rather than running straight to `done` the way `test_run_creation.py::LEAF` now does
+#: once `shell` is registered (4.7). See the module docstring.
+CHECKPOINT_TEMPLATE = (
+    "name: {name}\nversion: 1\ndescription: e2e walker checkpoint\n"
+    "inputs:\n"
+    "  project:     {{ type: project,    required: true }}\n"
+    "  repository:  {{ type: repository, required: true }}\n"
+    "  base_branch: {{ type: string,     required: true }}\n"
+    "steps:\n"
+    "  - id: pause\n"
+    "    uses: checkpoint\n"
+    "    gate: human\n"
+)
+
+
+def save_checkpoint_template(client: httpx.Client, name: str) -> dict[str, object]:
+    response = client.post(
+        f"{TEMPLATES}/{name}/versions", json={"yaml": CHECKPOINT_TEMPLATE.format(name=name)}
+    )
+    assert response.status_code == HTTP_CREATED, response.text
+    body: dict[str, object] = response.json()
+    return body
 
 
 #: The suite's own client timeout, matching `tests/e2e/conftest.py`.
@@ -106,7 +141,7 @@ def repository_id(api: httpx.Client, fixtures: Fixtures, settings: Settings) -> 
 
 def start_run(client: httpx.Client, repository: str) -> dict[str, Any]:
     name = f"e2e-walker-{uuid4().hex}"
-    save_template(client, name)
+    save_checkpoint_template(client, name)
     payload = run_payload(name, repository, project_id=project_id_of(client, repository))
     response = client.post(RUNS, json=payload)
     assert response.status_code == HTTP_CREATED, response.text
@@ -137,7 +172,7 @@ def wait_until_walked(client: httpx.Client, run_id: str) -> str:
 
 @pytest.fixture(scope="module")
 def walked(api: httpx.Client, repository_id: str) -> dict[str, Any]:
-    """The first Run: created, enqueued, walked, and parked on its first row."""
+    """The first Run: created, enqueued, walked past `plan.check`, and parked on `pause`."""
     created = start_run(api, repository_id)
     run_id = str(created["run"]["id"])
     return {"id": run_id, "status": wait_until_walked(api, run_id), "body": created}
@@ -145,7 +180,7 @@ def walked(api: httpx.Client, repository_id: str) -> dict[str, Any]:
 
 def test_the_engine_picks_the_run_up_and_walks_it(walked: dict[str, Any]) -> None:
     """The whole chain in one assertion: launched engine, queue, workflow, writers."""
-    assert walked["status"] != QUEUED
+    assert walked["status"] == NEEDS_YOU
 
 
 def test_the_run_carries_the_workflow_the_adapter_started_it_as(
@@ -160,13 +195,15 @@ def test_the_run_carries_the_workflow_the_adapter_started_it_as(
 
 
 def test_a_run_that_stopped_says_where_and_why(walked: dict[str, Any], sessions: Any) -> None:
-    """Whatever stops a Run, the three park fields are written together or not at all (AD-8)."""
+    """The three park fields are written together (AD-8), naming the `pause` row and the
+    `checkpoint` kind that stopped it."""
     with sessions() as session:
         run = SQLAlchemyRunRepository(session).get(UUID(walked["id"]))
 
     assert run is not None
-    parked = (run.park_kind, run.park_path, run.park_reason)
-    assert all(field is None for field in parked) or all(field for field in parked)
+    assert run.park_kind == CHECKPOINT_PARK_KIND
+    assert run.park_path == "pause"
+    assert run.park_reason
 
 
 def test_the_first_row_ran_once_and_recorded_one_attempt(

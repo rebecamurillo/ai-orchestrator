@@ -2,7 +2,7 @@
 title: 'Process runner, workspace, and the plan.check, shell, checkpoint kinds'
 type: 'feature'
 created: '2026-09-06'
-status: 'blocked'
+status: 'done'
 review_loop_iteration: 0
 context:
   - '_bmad-output/planning-artifacts/mvp/epics/epic-04-runs/briefs/4-7-process-runner-workspace-and-basic-kinds.md'
@@ -11,17 +11,34 @@ warnings: []
 baseline_revision: '8195e5b'
 ---
 
+## Spec Change Log
+
+**`backend-api/tests/e2e/test_engine_walker.py` — operator-authorised, one-off, 2026-09-06.**
+The story landed `blocked` on this file: `test_a_second_run_on_the_same_repository_does_not_
+run_while_the_first_holds_it` failed because the module's `walked` fixture used
+`test_run_creation.py::LEAF` (`plan.check` + one `shell` step), and once `shell` was
+registered that Run correctly ran to `done` instead of parking — the test's precondition
+(a Run in `needs_you` holding the Repository partition) depended on an executor being
+*missing*, which stopped being true the moment this story registered one. The operator
+authorised, in scope and in writing: replacing `LEAF` with a new fixture Template of this
+module's own, `CHECKPOINT_TEMPLATE` (one `checkpoint` step), so the first Run genuinely
+parks again; strengthening `test_the_engine_picks_the_run_up_and_walks_it` (now asserts
+`== NEEDS_YOU`, not merely `!= QUEUED`) and `test_a_run_that_stopped_says_where_and_why`
+(now asserts the exact `park_kind`/`park_path`, not merely "all set or all `None`") now that
+a real park makes both meaningful; and the module docstring, updated to state what is true
+today rather than what was true before 4.7. `test_a_second_run_on_the_same_repository_does_
+not_run_while_the_first_holds_it`'s own assertions — including `assert second["starts_now"]
+is False`, the one the operator named as never to be weakened — were not edited; they are
+true again because the precondition is real again. Coverage strictly exceeds what the file
+proved before: every assertion that passed by accident (nothing parked, so "all `None`" and
+"not `queued`" were vacuously true) now proves the specific AD-12 property its own docstring
+states. `test_run_creation.py` (`LEAF` included) was not touched. **This authorisation is
+about this file, this once — not a standing rule, and not a precedent a later story may cite
+on its own to edit an anchor.**
+
 ## Auto Run Result
 
-Status: **blocked**
-
-**Blocking condition.** `make e2e` fails on one pre-existing anchor test —
-`backend-api/tests/e2e/test_engine_walker.py::test_a_second_run_on_the_same_repository_does_not_run_while_the_first_holds_it`
-— as a direct, deterministic, unavoidable consequence of this story doing exactly what it
-was scoped to do. The story's implementation, unit tests (100% branch over `domain/` +
-`application/`), and every other gate are complete and green; this one e2e assertion is the
-sole open item, and hard rule 1 forbids fixing it myself. See **Design Notes** for the full
-analysis and **what the operator needs to decide**.
+Status: **done**
 
 **What was implemented.**
 
@@ -49,6 +66,7 @@ analysis and **what the operator needs to decide**.
   `plan_check` and `shell` to run their `register(...)` calls (see Design Notes on why here
   and not in `application/steps/__init__.py`).
 - Ten new unit test modules, two new shared fakes.
+- `tests/e2e/test_engine_walker.py` — see **Spec Change Log** above.
 
 **Files changed**
 
@@ -170,12 +188,13 @@ alternative implementation of this story's own scope that keeps that Run parked.
 gives no exception that fits (not a pending-gate registry, not a placeholder assertion, not
 a nondeterministic third-party output), so the anchor was not touched.
 
-**What the operator needs to decide.** Whether to accept this as a known, tracked residual
-of landing 4.7 correctly (the same category the hazard note already accepted for the named
-test) and authorise a narrow fix to `test_engine_walker.py` under a hard-rule-1 exception, or
-to give `LEAF` (in `test_run_creation.py`) a `git.worktree` step so the fixture keeps parking
-until 4.8 as originally assumed, or some other resolution. Both files are anchors; either
-fix is outside what I may do unilaterally.
+**Resolved.** The operator authorised, on 2026-09-06, editing `test_engine_walker.py` alone
+(never `test_run_creation.py`/`LEAF`) to give the module its own `checkpoint`-kind fixture
+Template, so its first Run parks on a real, executable stop rather than one that only
+existed because a kind was unregistered. See **Spec Change Log** for exactly what changed
+and the binding condition (coverage strictly exceeds what the file proved before). This was
+a decision only the operator could make — both files are anchors — and is recorded as a
+one-off, not a precedent.
 
 ## Verification
 
@@ -187,13 +206,20 @@ make test   # exit 0 — backend 3621 passed / 23 skipped; domain/+application/ 
             #   (--fail-under=100, 0 missed); web-client 722 passed
 make openapi   # exit 0 — no drift (this story publishes no route)
 PATH="$HOME/.docker/bin:$PATH" make e2e
-            # exit 1 — 123 passed, 27 subtests passed, 1 failed:
-            #   test_engine_walker.py::test_a_second_run_on_the_same_repository_does_not_run_while_the_first_holds_it
-            #   (see Design Notes: an anchor-test conflict, not a code defect)
+            # exit 0 — 124 passed, 27 subtests passed. Run twice, back to back, to settle
+            #   re-runnability: both runs identical (124 passed, 27 subtests passed).
 make e2e-ui    # not run: no hand-written web-client file changed in this story, and
                # 127.0.0.1:4321 is held by the operator's own dev stack (recorded, not
                # skipped silently — same call 4.6 made)
 ```
 
 **`tests/e2e/test_run_creation.py::test_get_reads_back_the_created_run`** — the hazard the
-operator flagged before this story ran — passed. It was not among the run's failures.
+operator flagged before this story ran — passed throughout, including both `make e2e` runs
+above. It was never among this story's failures.
+
+**History.** The first `make e2e` pass (before the anchor fix below) failed exactly one
+test, deterministically:
+`test_engine_walker.py::test_a_second_run_on_the_same_repository_does_not_run_while_the_first_holds_it`
+(`assert second["starts_now"] is False` → got `True`), for the reason recorded in the
+**Spec Change Log**. The operator authorised the narrow fix on 2026-09-06; both `make e2e`
+runs above are after it.
