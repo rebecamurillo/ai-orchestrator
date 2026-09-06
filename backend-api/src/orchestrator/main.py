@@ -1,6 +1,9 @@
 """Composition root: the only module that wires adapters into ports.
 
-`DBOS.launch()` belongs here too, from Epic 4 on. Until then this process is a FastAPI
+The durable engine is launched here too (Operations): `main()` builds it — no connection —
+names it as the engine this process serves with, and `run_migrations` launches it after the
+schema and the seeds, before uvicorn binds. `infrastructure/dbos/startup.py` says why the
+launch lives inside that one name and not beside it. Everything else is a FastAPI
 application: the public `/healthz`, and every feature router mounted under `/api/v1` behind
 the one bearer dependency (AD-4).
 
@@ -33,6 +36,7 @@ the one statement of *when the schema migrates*; this module only orders the two
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from functools import cache
@@ -74,7 +78,7 @@ from orchestrator.infrastructure.db import (
     create_session_factory,
 )
 from orchestrator.infrastructure.db import migrations as db_migrations
-from orchestrator.infrastructure.engine import LocalWorkflowEngine
+from orchestrator.infrastructure.dbos import build_engine, launch_engine, serving
 from orchestrator.infrastructure.git import SubprocessGit
 from orchestrator.infrastructure.logging import configure_logging
 from orchestrator.infrastructure.settings import Settings
@@ -181,16 +185,22 @@ def run_migrations(settings: Settings) -> str:
     table seeded.
 
     Combined under this one name for the reason the module docstring gives: every test that
-    replaces `main.run_migrations` takes exactly one argument, `settings`.
+    replaces `main.run_migrations` takes exactly one argument, `settings`. The durable
+    engine's launch is the fourth step for the same reason and one of its own (AD-6, FR-12):
+    recovery of the Runs an earlier container was walking begins at that call, and it must
+    not begin against a schema that has not been migrated.
     """
     head = db_migrations.run_migrations(settings)
     seed_shipped_templates(settings)
     seed_harness_table(settings)
+    # last, and inside this function: see `infrastructure/dbos/startup.py`. A process that
+    # is not serving — every unit test — has no engine registered and launches nothing.
+    launch_engine()
     return head
 
 
 def migrating_lifespan(settings: Settings) -> Lifespan:
-    """The start-up step that brings the schema to head before the socket is bound.
+    """The start-up step that migrates, seeds and launches before the socket is bound.
 
     Built here rather than inside `create_app` so that the only application that migrates
     is the one this module hands to uvicorn. See `infrastructure/db/migrations.py`.
@@ -198,7 +208,12 @@ def migrating_lifespan(settings: Settings) -> Lifespan:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        run_migrations(settings)
+        # off the event loop, and not as an optimisation: the whole start-up step is
+        # blocking I/O — alembic, the two seeds, and the durable engine's own launch — and
+        # the engine refuses to register its queue from a thread that is running a loop,
+        # because that registration writes to the database. uvicorn still waits for all of
+        # it before it binds, which is the guarantee this lifespan exists to give.
+        await asyncio.to_thread(run_migrations, settings)
         yield
 
     return lifespan
@@ -335,8 +350,23 @@ def main() -> None:
         raise SystemExit(f"configuration error (AD-20): .env is incomplete\n{error}") from error
 
     configure_logging(settings.log_level)
-    # neither call opens a connection, so this stays inside the "no I/O before start-up" rule
+    # none of these opens a connection, so this stays inside the "no I/O before start-up" rule
     session_factory = create_session_factory(create_engine_from(settings))
+    # the one place the git adapter is named. It holds GITHUB_TOKEN for the subprocess
+    # environments it builds itself, and puts it nowhere else (AD-5)
+    git = SubprocessGit(settings.github_token.get_secret_value())
+    engine = build_engine(settings, session_factory, git)
+    with serving(engine):
+        _serve(settings, session_factory, git, engine)
+
+
+def _serve(
+    settings: Settings,
+    session_factory: SessionFactory,
+    git: Git,
+    engine: WorkflowEngine,
+) -> None:
+    """Hand uvicorn the application whose start-up step migrates, seeds and launches."""
     uvicorn.run(
         # the migration is the application's start-up step: uvicorn awaits it before it
         # binds, so the process never serves a half-migrated schema
@@ -345,13 +375,10 @@ def main() -> None:
             lifespan=migrating_lifespan(settings),
             session_factory=session_factory,
             crypto=crypto_factory(settings),
-            # the one place the git adapter is named. It holds GITHUB_TOKEN for the
-            # subprocess environments it builds itself, and puts it nowhere else (AD-5)
-            git=SubprocessGit(settings.github_token.get_secret_value()),
-            # the placeholder `WorkflowEngine` (4.4) — 4.6 replaces this with the durable,
-            # DBOS-backed adapter; see `infrastructure/engine/local.py` for what it does not
-            # yet do
-            engine=LocalWorkflowEngine(),
+            git=git,
+            # the durable engine (AD-6): `POST /runs` enqueues through it, and the walker it
+            # registered is what executes the Run
+            engine=engine,
         ),
         # binds every interface: reached from the compose network, not from the host
         host="0.0.0.0",

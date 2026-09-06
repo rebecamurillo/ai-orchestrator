@@ -14,7 +14,11 @@ The order is AD-8's and it matters, because each step can change what the next o
    the step's success is judged.
 3. **Route.** A redispatch goes back (bounded, AD-9); a `park` stops the Run for the
    Operator; a finished row queues its successor, or ends the Run when it has none; an
-   `error` on a row whose Template said `on_fail: fail` ends the Run `failed`.
+   `error` row is routed by its own `on_fail` — `fail` ends the Run `failed`, `continue`
+   queues the successor exactly as a finished row does, and `escalate` (the action the DSL
+   gives a row that declared none) writes nothing here, because an executor that escalates
+   returns the `Park` that says why. A Run left with no runnable row is the walker's own
+   `close_run` to report (`use_cases/walk.py`), not a silent stall.
 
 Two rules are worth stating on their own:
 
@@ -48,6 +52,7 @@ from orchestrator.application.use_cases.writers import (
     Entry,
     WriterPorts,
     finish_run,
+    park_run,
     queue_row,
     record,
     require_row,
@@ -77,6 +82,11 @@ RUNNING = "running"
 
 #: The `on_fail` action that ends the Run rather than parking it (FR-9).
 FAIL = "fail"
+
+#: The `on_fail` action that carries on to the successor as though the row had passed
+#: (AD-9). The row keeps its `error` status and its reason: what `continue` decides is
+#: where the Run goes next, not whether the step succeeded.
+CONTINUE = "continue"
 
 #: The line a result arriving after `cancel` leaves, and nothing else (AD-8, FR-20).
 LATE_RESULT = "late result ignored"
@@ -175,8 +185,18 @@ def _route(
         return run
     if row.status in FINISHED:
         return _advance(ports, run, row)
-    if row.status == "error" and row.with_resolved.get(ON_FAIL_KEY) == FAIL:
+    if row.status == "error":
+        return _on_fail(ports, run, row, result)
+    return run
+
+
+def _on_fail(ports: WriterPorts, run: Run, row: StepRun, result: StepResult) -> Run:
+    """An errored row's own routing (AD-9), read off the row the planner resolved."""
+    action = row.with_resolved.get(ON_FAIL_KEY)
+    if action == FAIL:
         return _fail(ports, run, row, result)
+    if action == CONTINUE:
+        return _advance(ports, run, row)
     return run
 
 
@@ -217,28 +237,9 @@ def _redispatch(
 
 
 def _park(ports: WriterPorts, run: Run, row: StepRun, park: Park, attempt: Attempt | None) -> Run:
-    """Stop the Run for the Operator: the three park fields and one record, together."""
-    path = park.path or row.path
-    parked = set_run(
-        ports,
-        run,
-        status=run_transition(run.status, "park"),
-        park_kind=park.kind,
-        park_path=path,
-        park_reason=park.reason,
-    )
-    record(
-        ports,
-        parked,
-        Entry(
-            event=park.kind,
-            actor="machine",
-            path=path,
-            text=park.reason,
-            attempt_n=attempt.n if attempt is not None else None,
-        ),
-    )
-    return parked
+    """Stop the Run for the Operator, on this row when the park named none of its own."""
+    on_row = park if park.path is not None else park.model_copy(update={"path": row.path})
+    return park_run(ports, run, on_row, attempt.n if attempt is not None else None)
 
 
 def _advance(ports: WriterPorts, run: Run, row: StepRun) -> Run:

@@ -39,6 +39,7 @@ from orchestrator.domain.statuses import (
     run_transition,
     step_transition,
 )
+from orchestrator.domain.values import Park
 
 #: How a row in each status is put back on the queue. A row in any other status has no way
 #: to `queued` in AD-8's diagram, so `step_transition` refuses it by name rather than this
@@ -55,6 +56,12 @@ FINISHED: frozenset[StepStatus] = frozenset({"done", "skipped"})
 #: What the gate record says when a Run starts and when it ends of its own accord.
 RUN_STARTED = "run started"
 RUN_DONE = "every planned step is done or skipped"
+
+#: What the gate record says when the `recv` a parked Run waits in reaches its deadline.
+#: AD-13 applies the expiry as Run `failed`, and `failed` is the event the alphabet has:
+#: `expired` is not a `GateEvent` (`domain/statuses.py` says so in as many words), so the
+#: sentence carries the thirty days and the event stays the lifecycle one.
+RUN_EXPIRED = "parked 30 days"
 
 
 @dataclass(frozen=True)
@@ -148,6 +155,54 @@ def clear_park(now: datetime | None = None) -> dict[str, Any]:
     if now is not None:
         cleared["ended_at"] = now
     return cleared
+
+
+def park_run(ports: WriterPorts, run: Run, park: Park, attempt_n: int | None = None) -> Run:
+    """Stop a Run for the Operator: the three park fields and one record, together.
+
+    The only way `run.park_kind`, `run.park_path` and `run.park_reason` are written, so a
+    parked Run always carries the three of them and the record that says the same thing.
+    `path` is the park's own when it names one and the caller's row otherwise.
+    """
+    parked = set_run(
+        ports,
+        run,
+        status=run_transition(run.status, "park"),
+        park_kind=park.kind,
+        park_path=park.path,
+        park_reason=park.reason,
+    )
+    record(
+        ports,
+        parked,
+        Entry(
+            event=park.kind,
+            actor="machine",
+            path=park.path,
+            text=park.reason,
+            attempt_n=attempt_n,
+        ),
+    )
+    return parked
+
+
+def expire_run(ports: WriterPorts, run: Run) -> Run:
+    """End a Run nobody answered: `needs_you → failed`, `ended_at`, one `failed` record.
+
+    The walker calls this when its single `recv` reaches `HUMAN_WAIT_SECONDS` (AD-13). The
+    park fields are cleared with the status for the reason `clear_park` exists: a Run
+    outside `needs_you` carries none of them, and the sentence the Operator reads is on the
+    record, which is append-only, rather than on a field the next write would overwrite.
+    """
+    now = ports.clock.now()
+    expired = set_run(
+        ports,
+        run,
+        status=run_transition(run.status, "expire"),
+        **clear_park(now),
+    )
+    record(ports, expired, Entry(event="failed", actor="machine", text=RUN_EXPIRED))
+    return expired
 
 
 def finish_run(ports: WriterPorts, run: Run) -> Run:

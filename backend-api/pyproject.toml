@@ -5,6 +5,9 @@ description = "ai-orchestrator backend-api — plans, executes, and parks BMAD d
 requires-python = "==3.14.*"
 dependencies = [
     "alembic==1.19.1",
+    # AD-6: the durable engine. Imported only under `infrastructure/dbos/`, which the
+    # forbidden contract below makes checkable rather than a review note.
+    "dbos==2.31.0",
     # Fernet, for the Project env vars encrypted at rest with ORCHESTRATOR_SECRET_KEY (AD-5)
     "cryptography==50.0.1",
     "fastapi==0.141.1",
@@ -123,6 +126,18 @@ forbidden_modules = [
     # `infrastructure/crypto/` imports the library that has one
     "cryptography",
 ]
+
+[[tool.importlinter.contracts]]
+# AD-6: the durable engine is a port, and the library that implements it is named once.
+# `allow_indirect_imports` is what makes this the rule it says it is: `main.py` may reach the
+# adapter package (it wires it), and this contract is about which module writes `import dbos`.
+# The one exception is listed, so adding a second `import dbos` anywhere fails `make lint`.
+name = "AD-6 forbidden: only infrastructure/dbos/facade.py imports dbos"
+type = "forbidden"
+source_modules = ["orchestrator"]
+forbidden_modules = ["dbos"]
+allow_indirect_imports = true
+ignore_imports = ["orchestrator.infrastructure.dbos.facade -> dbos"]
 
 # ── pytest ───────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]

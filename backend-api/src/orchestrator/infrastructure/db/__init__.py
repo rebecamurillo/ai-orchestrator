@@ -35,6 +35,7 @@ from orchestrator.infrastructure.db.repositories import (
 )
 from orchestrator.infrastructure.db.session import create_session_factory
 from orchestrator.infrastructure.db.unit_of_work import SQLAlchemyUnitOfWork
+from orchestrator.infrastructure.db.writers import SessionUnitOfWork, open_writer_ports
 
 __all__ = [
     "NAMING_CONVENTION",
@@ -54,9 +55,11 @@ __all__ = [
     "SQLAlchemyStepRunRepository",
     "SQLAlchemyTemplateVersionRepository",
     "SQLAlchemyUnitOfWork",
+    "SessionUnitOfWork",
     "StepRunRow",
     "TemplateRow",
     "TemplateVersionRow",
     "create_engine_from",
     "create_session_factory",
+    "open_writer_ports",
 ]

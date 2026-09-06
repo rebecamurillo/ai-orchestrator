@@ -18,6 +18,14 @@ Three things happen, in this order, and nothing else:
    second start on the same row while one is stored is a stored refusal, not a silent
    overwrite.
 
+**A row that is already `running` is the interrupted one** (FR-12, AD-6). The walker runs
+the start and the execution inside one durable step, so a backend killed mid-step re-executes
+that step whole after the restart: the row is found `running` with an Attempt that never
+ended. Step 2 is skipped — `running` has no `start` event and inventing one would be a
+transition AD-8 does not have — the open Attempt is closed `error`, and the new one is
+numbered after it. That is what makes the interrupted row's second run *Attempt 2* rather
+than a silent continuation of Attempt 1.
+
 `engine_ref` is opaque JSON the engine adapter owns (AD-6): it is passed through to the
 Attempt and never read here.
 """
@@ -26,6 +34,8 @@ from __future__ import annotations
 
 from typing import Any
 from uuid import UUID
+
+import structlog
 
 from orchestrator.application.use_cases.writers import (
     RUN_STARTED,
@@ -39,11 +49,18 @@ from orchestrator.application.use_cases.writers import (
 )
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
+from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.statuses import run_transition, step_transition
 
-#: The status a Run is already in when a row that is not its first starts.
+log = structlog.get_logger(__name__)
+
+#: The status a Run is already in when a row that is not its first starts, and the status a
+#: row is in when the attempt that was running it was interrupted.
 RUNNING = "running"
+
+#: The line a recovered, never-ended Attempt leaves when it is closed.
+INTERRUPTED = "attempt interrupted"
 
 
 def start_attempt(
@@ -58,8 +75,7 @@ def start_attempt(
         run = require_run(ports, run_id)
         row = require_row(ports, run_id, seq)
         _start_run(ports, run)
-        set_row(ports, row, status=step_transition(row.status, "start"))
-        previous = ports.attempts.get_latest(row.id)
+        previous = _open_the_row(ports, row)
         attempt = Attempt(
             id=new_id(),
             run_id=run.id,
@@ -72,6 +88,20 @@ def start_attempt(
         ports.attempts.add(attempt)
         ports.uow.commit()
     return attempt
+
+
+def _open_the_row(ports: WriterPorts, row: StepRun) -> Attempt | None:
+    """Move the row to `running`, or close the Attempt the restart interrupted."""
+    previous = ports.attempts.get_latest(row.id)
+    if row.status == RUNNING:
+        if previous is not None and previous.ended_at is None:
+            log.info(INTERRUPTED, path=row.path, attempt=previous.n)
+            ports.attempts.mark_finished(
+                previous.model_copy(update={"status": "error", "ended_at": ports.clock.now()})
+            )
+        return previous
+    set_row(ports, row, status=step_transition(row.status, "start"))
+    return previous
 
 
 def _start_run(ports: WriterPorts, run: Run) -> None:

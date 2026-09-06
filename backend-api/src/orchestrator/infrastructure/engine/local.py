@@ -1,5 +1,11 @@
 """A process-local `WorkflowEngine` (AD-6) — every method of the port, none of it durable.
 
+**Nothing wires this any more.** 4.6 landed `infrastructure/dbos/`, and `main.py` names that
+adapter; this class is kept because `tests/unit/test_local_workflow_engine.py` is an anchor
+and anchors are read-only, not because anything depends on it. Do not build on it: its
+`enqueue` starts no walk, its queue is a dictionary, and a restart loses all of it.
+
+
 4.4's own scope is the interface and `create_run`'s one call to `enqueue`; the durable
 engine behind `WorkflowEngine` — DBOS, surviving a restart, serialising two Runs on one
 Repository — is 4.6's walker, not this story's. `POST /runs` still has to answer for real

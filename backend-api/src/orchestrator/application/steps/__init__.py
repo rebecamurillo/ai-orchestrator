@@ -7,9 +7,10 @@ graph reads the same table. `if kind == ...` outside this package is the smell t
 exists to remove.
 
 Epic 4 adds one `steps/<kind>.py` per executable kind implementing `StepExecutor` and
-registers it here beside its metadata. Until then the table is metadata only — no
-behaviour, so nothing has to change when the executors arrive except the rows gaining a
-callable.
+registers it through `registry.register` beside its metadata. The registry is the walker's
+only way in: `execute(ctx)` looks the kind up here and reports a kind nothing implements as
+a `misconfigured` park rather than as a skip (`steps/registry.py`). `KIND_META` stays the
+answer to *what a kind is*; the registry answers *what runs it*.
 
 Three of the columns carry a rule:
 
@@ -27,6 +28,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal, get_args
+
+from orchestrator.application.steps.context import StepContext, StepExecutor, StepPorts
+from orchestrator.application.steps.registry import (
+    EXECUTORS,
+    execute,
+    executor_for,
+    register,
+)
 
 #: How a step's success is decided (AD-9). A Template declares one per step.
 Gate = Literal["liveness", "deterministic", "human"]
@@ -110,3 +119,32 @@ COMMIT_MESSAGE_KEY = "message"
 #: push itself is the stop (AD-13), so they are named here rather than spelled in the rule.
 PUSH_KIND = "git.push"
 LINK_KIND = "pr.link"
+
+
+#: What this package is: the metadata table above, and the registry the walker dispatches
+#: through. Re-exported so a caller writes `from orchestrator.application.steps import …`
+#: whichever half it needs (AD-9: "the registry in `application/steps/__init__.py`").
+__all__ = [
+    "AGENT_KIND",
+    "CHECKPOINT_KIND",
+    "COMMIT_KIND",
+    "COMMIT_MESSAGE_KEY",
+    "EXECUTORS",
+    "GATES",
+    "KIND_META",
+    "LINK_KIND",
+    "PLAN_KIND",
+    "PUSH_KIND",
+    "SHELL_KIND",
+    "TEMPLATE_CALL_KIND",
+    "TEMPLATE_KINDS",
+    "WORKTREE_KIND",
+    "Gate",
+    "KindMeta",
+    "StepContext",
+    "StepExecutor",
+    "StepPorts",
+    "execute",
+    "executor_for",
+    "register",
+]
