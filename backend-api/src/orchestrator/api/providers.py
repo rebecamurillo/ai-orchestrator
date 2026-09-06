@@ -32,10 +32,12 @@ from typing import Any
 
 from fastapi import Request
 
+from orchestrator.application.use_cases.create_run import CreateRunPorts, RunReadPorts
 from orchestrator.application.use_cases.harnesses import HarnessPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.templates import TemplatePorts
+from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
@@ -43,6 +45,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
     SQLAlchemyRunRepository,
+    SQLAlchemyStepRunRepository,
     SQLAlchemyTemplateVersionRepository,
     SQLAlchemyUnitOfWork,
 )
@@ -51,6 +54,7 @@ from orchestrator.infrastructure.db import (
 SESSION_FACTORY = "session_factory"
 CRYPTO = "crypto"
 GIT = "git"
+ENGINE = "engine"
 SETTINGS = "settings"
 
 
@@ -110,26 +114,59 @@ def harness_ports(request: Request) -> Iterator[HarnessPorts]:
         yield HarnessPorts(uow=uow, harnesses=SQLAlchemyHarnessRepository(uow.session))
 
 
+def _required_git(request: Request, needed_by: str) -> Git:
+    """`git_adapter`, refusing loudly by name — pre-flight and `create_run` both need it."""
+    git = git_adapter(request)
+    if git is None:
+        raise RuntimeError(
+            f"app.state.git is not set: this application was built without it, "
+            f"and {needed_by} needs a git port"
+        )
+    return git
+
+
+def _preflight_ports(request: Request, uow: SQLAlchemyUnitOfWork, needed_by: str) -> PreflightPorts:
+    """The `PreflightPorts` pre-flight and `create_run` (4.4) both run on, over one session
+    — `create_run` reuses pre-flight's own resolution rather than building a second one."""
+    settings = from_state(request, SETTINGS)
+    return PreflightPorts(
+        git=_required_git(request, needed_by),
+        templates=SQLAlchemyTemplateVersionRepository(uow.session),
+        runs=SQLAlchemyRunRepository(uow.session),
+        harnesses=SQLAlchemyHarnessRepository(uow.session),
+        repositories=SQLAlchemyRepositoryRepository(uow.session),
+        projects=SQLAlchemyProjectRepository(uow.session),
+        bmad_version=settings.bmad_version,
+        max_active_runs=settings.max_active_runs,
+        work_dir=settings.work_dir,
+    )
+
+
 def preflight_ports(request: Request) -> Iterator[PreflightPorts]:
     """The ports pre-flight runs on. Writes nothing, but still opens one transaction, the
     way `template_ports` does for its own read-only routes."""
     session_factory = from_state(request, SESSION_FACTORY)
-    settings = from_state(request, SETTINGS)
-    git = git_adapter(request)
-    if git is None:
-        raise RuntimeError(
-            "app.state.git is not set: this application was built without it, "
-            "and pre-flight needs a git port"
-        )
     with SQLAlchemyUnitOfWork(session_factory) as uow:
-        yield PreflightPorts(
-            git=git,
-            templates=SQLAlchemyTemplateVersionRepository(uow.session),
-            runs=SQLAlchemyRunRepository(uow.session),
-            harnesses=SQLAlchemyHarnessRepository(uow.session),
-            repositories=SQLAlchemyRepositoryRepository(uow.session),
-            projects=SQLAlchemyProjectRepository(uow.session),
-            bmad_version=settings.bmad_version,
-            max_active_runs=settings.max_active_runs,
-            work_dir=settings.work_dir,
+        yield _preflight_ports(request, uow, "pre-flight")
+
+
+def create_run_ports(request: Request) -> Iterator[CreateRunPorts]:
+    """The ports `create_run` (4.4) runs on: pre-flight's own, plus what only creation
+    writes (`steps`, `engine`)."""
+    session_factory = from_state(request, SESSION_FACTORY)
+    engine: WorkflowEngine = from_state(request, ENGINE)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield CreateRunPorts(
+            preflight=_preflight_ports(request, uow, "create_run"),
+            engine=engine,
+            steps=SQLAlchemyStepRunRepository(uow.session),
+            uow=uow,
+            clock=SystemClock(),
         )
+
+
+def run_read_ports(request: Request) -> Iterator[RunReadPorts]:
+    """The ports `GET /runs/{id}` reads through. Writes nothing."""
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield RunReadPorts(runs=SQLAlchemyRunRepository(uow.session))

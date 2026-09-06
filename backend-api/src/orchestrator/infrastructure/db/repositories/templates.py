@@ -9,15 +9,20 @@ large enough yet for the difference to matter, and a plain scan is what
 
 The session is the one the unit of work opened, passed in rather than looked up — see
 `infrastructure/db/repositories/projects.py`'s docstring for why.
+
+`pinned_by` (4.4) is the exception to the plain-scan rule above: it counts across the `run`
+table, not this one, so it is a real `jsonb` containment query (`@>`) rather than a Python
+filter over rows already in hand.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from orchestrator.domain.entities.template import TemplateRef, TemplateSummary, TemplateVersion
+from orchestrator.infrastructure.db.models.run import RunRow
 from orchestrator.infrastructure.db.models.template import TemplateRow, TemplateVersionRow
 
 if TYPE_CHECKING:  # pragma: no cover — typing only
@@ -121,3 +126,12 @@ class SQLAlchemyTemplateVersionRepository:
         ]
         callers.sort(key=lambda ref: (ref.name, ref.version))
         return callers
+
+    def pinned_by(self, name: str, version: int) -> int:
+        """A `jsonb` containment query (4.4): every `run.pinned_versions` that holds this
+        exact `{name, version}` pair, root or callee, whatever the Run's status."""
+        target = [{CALL_NAME_KEY: name, CALL_VERSION_KEY: version}]
+        count = self._session.scalars(
+            select(func.count()).select_from(RunRow).where(RunRow.pinned_versions.contains(target))
+        ).first()
+        return count or 0

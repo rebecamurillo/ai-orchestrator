@@ -8,8 +8,8 @@ Ten operations under eight rules, and each rule is exactly one rule:
   Operator who typed the name wrong.
 - **`get_version`** answers `GET /templates/{name}/{version}`: a stored version re-run
   through `validate()` for its `inputs` (never re-derived by hand, so the screen's table and
-  the validator can never disagree) plus `callers_of` for `called_by`. `pinned_by` is always
-  `0` here — Epic 4 is the only writer of a pin.
+  the validator can never disagree) plus `callers_of` for `called_by` and `pinned_by` for
+  how many Runs (4.4, AD-15) pin this exact Version.
 - **`validate_text`** / **`validate_latest`** answer the two `/validate` routes: the posted
   YAML, or the latest stored version's, run through the one parser and handed back exactly
   as it came out — a validation problem is data, not a refusal (NFR-2).
@@ -84,11 +84,18 @@ class TemplatePorts:
 
 @dataclass(frozen=True)
 class TemplateVersionDetail:
-    """The read model `GET /templates/{name}/{version}` renders (`pinned_by` is Epic 4's)."""
+    """The read model `GET /templates/{name}/{version}` renders.
+
+    `pinned_by` defaults to `0` so a fixture built before 4.4 (3.1's own, and this file's
+    `test_template_version_out_of_a_detail_hardcodes_pinned_by_zero`) still constructs one
+    without naming it; `get_version` below is the only caller that fills it with a real
+    count.
+    """
 
     template: TemplateVersion
     called_by: tuple[TemplateRef, ...]
     inputs: tuple[InputDecl, ...]
+    pinned_by: int = 0
 
 
 @dataclass(frozen=True)
@@ -159,14 +166,18 @@ def list_versions(ports: TemplatePorts, name: str) -> list[int]:
 
 
 def get_version(ports: TemplatePorts, name: str, version: int) -> TemplateVersionDetail:
-    """One stored version, its `inputs` re-derived and its callers looked up."""
+    """One stored version, its `inputs` re-derived, its callers looked up, and its `pinned_by`
+    counted (AD-15, 4.4)."""
     stored = ports.templates.get(name, version)
     if stored is None:
         raise NotFound(f"no template {name!r} version {version}")
     result = validate(stored.yaml, templates=ports.templates)
     inputs = result.template.inputs if result.template is not None else ()
     called_by = tuple(ports.templates.callers_of(name, version))
-    return TemplateVersionDetail(template=stored, called_by=called_by, inputs=inputs)
+    pinned_by = ports.templates.pinned_by(name, version)
+    return TemplateVersionDetail(
+        template=stored, called_by=called_by, inputs=inputs, pinned_by=pinned_by
+    )
 
 
 def template_graph(ports: TemplatePorts, name: str, version: int) -> Graph:

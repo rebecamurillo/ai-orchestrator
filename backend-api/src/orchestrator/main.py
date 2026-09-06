@@ -54,6 +54,7 @@ from orchestrator.api.routers import (
     ping,
     projects,
     repositories,
+    run,
     runs,
     templates,
 )
@@ -61,6 +62,7 @@ from orchestrator.application.use_cases.harnesses import HarnessPorts, seed_harn
 from orchestrator.application.use_cases.templates import SeedResult, TemplatePorts, seed_shipped
 from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.ports.crypto import Crypto
+from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
@@ -72,6 +74,7 @@ from orchestrator.infrastructure.db import (
     create_session_factory,
 )
 from orchestrator.infrastructure.db import migrations as db_migrations
+from orchestrator.infrastructure.engine import LocalWorkflowEngine
 from orchestrator.infrastructure.git import SubprocessGit
 from orchestrator.infrastructure.logging import configure_logging
 from orchestrator.infrastructure.settings import Settings
@@ -217,20 +220,21 @@ def crypto_factory(settings: Settings) -> CryptoFactory:
     return build
 
 
-def create_app(
+def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s own precedent
     settings: Settings,
     *,
     lifespan: Lifespan | None = None,
     session_factory: SessionFactory | None = None,
     crypto: CryptoFactory | None = None,
     git: Git | None = None,
+    engine: WorkflowEngine | None = None,
 ) -> FastAPI:
     """Build the ASGI application. Adapters are constructed here and nowhere else.
 
     Without a `lifespan` the application performs no I/O at any point in its life — the
-    shape every unit test builds. The two ports are optional for the same reason: the
-    contract exporter builds this application from `Settings.model_construct()` and only
-    reads its routes, and a unit test overrides them through `dependency_overrides`.
+    shape every unit test builds. The ports are optional for the same reason: the contract
+    exporter builds this application from `Settings.model_construct()` and only reads its
+    routes, and a unit test overrides them through `dependency_overrides`.
     """
     app = FastAPI(
         title="ai-orchestrator backend-api",
@@ -243,6 +247,7 @@ def create_app(
     app.state.session_factory = session_factory
     app.state.crypto = crypto
     app.state.git = git
+    app.state.engine = engine
     install_error_handlers(app)
 
     @app.get("/healthz", tags=["health"], response_model=Health)
@@ -303,6 +308,16 @@ def create_app(
         dependencies=[Depends(require_bearer)],
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
     )
+    # after `runs.router`, and that is load-bearing the same way `graph_text.router` before
+    # `templates.router` is: `GET /runs/{run_id}` and `GET /runs/preflight` are the same
+    # shape to Starlette, which matches registration order, so the literal path has to be
+    # checked first (`api/routers/run.py`'s own docstring; `test_run_router.py` pins it)
+    app.include_router(
+        run.router,
+        prefix=API_PREFIX,
+        dependencies=[Depends(require_bearer)],
+        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
+    )
     app.include_router(
         harnesses.router,
         prefix=API_PREFIX,
@@ -333,6 +348,10 @@ def main() -> None:
             # the one place the git adapter is named. It holds GITHUB_TOKEN for the
             # subprocess environments it builds itself, and puts it nowhere else (AD-5)
             git=SubprocessGit(settings.github_token.get_secret_value()),
+            # the placeholder `WorkflowEngine` (4.4) — 4.6 replaces this with the durable,
+            # DBOS-backed adapter; see `infrastructure/engine/local.py` for what it does not
+            # yet do
+            engine=LocalWorkflowEngine(),
         ),
         # binds every interface: reached from the compose network, not from the host
         host="0.0.0.0",

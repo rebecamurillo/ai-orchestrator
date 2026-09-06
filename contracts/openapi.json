@@ -143,6 +143,29 @@
         "title": "CloneCheckResultOut",
         "type": "object"
       },
+      "CreateRunOut": {
+        "description": "`POST /runs`'s 201 body: the Run, and where it stands in the queue.",
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/RunSummaryOut"
+          },
+          "starts_now": {
+            "title": "Starts Now",
+            "type": "boolean"
+          },
+          "waiting": {
+            "title": "Waiting",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run",
+          "starts_now",
+          "waiting"
+        ],
+        "title": "CreateRunOut",
+        "type": "object"
+      },
       "EdgeOut": {
         "description": "One arrow, keyed `from` and `to` \u2014 the names `from_id`/`to_id` stand in for.",
         "properties": {
@@ -634,6 +657,33 @@
           "items"
         ],
         "title": "Page[RepositoryOut]",
+        "type": "object"
+      },
+      "Page_RunSummaryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[RunSummaryOut]",
         "type": "object"
       },
       "Page_TemplateSummaryOut_": {
@@ -1520,6 +1570,187 @@
         "title": "RepositoryUpdate",
         "type": "object"
       },
+      "RunIn": {
+        "description": "`POST /runs`'s body: what *Start run* submits once every field is filled in.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "budget_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "gt": 0,
+            "title": "Budget Usd"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "manual_estimate_h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Estimate H"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "re_review_done": {
+            "default": false,
+            "title": "Re Review Done",
+            "type": "boolean"
+          },
+          "repository_id": {
+            "format": "uuid",
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "template_name": {
+            "title": "Template Name",
+            "type": "string"
+          },
+          "template_version": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 2147483647.0,
+            "title": "Template Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "template_name",
+          "template_version",
+          "project_id",
+          "repository_id",
+          "base_branch",
+          "budget_usd"
+        ],
+        "title": "RunIn",
+        "type": "object"
+      },
+      "RunSummaryOut": {
+        "description": "The minimal Run read model (4.12 replaces this with the full one).",
+        "properties": {
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "budget_usd": {
+            "title": "Budget Usd",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "plan_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Ref"
+          },
+          "project": {
+            "format": "uuid",
+            "title": "Project",
+            "type": "string"
+          },
+          "repository": {
+            "format": "uuid",
+            "title": "Repository",
+            "type": "string"
+          },
+          "spend_usd": {
+            "title": "Spend Usd",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "needs_you",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "template",
+          "version",
+          "project",
+          "repository",
+          "branch",
+          "budget_usd",
+          "spend_usd",
+          "plan_ref",
+          "created_at"
+        ],
+        "title": "RunSummaryOut",
+        "type": "object"
+      },
       "SaveVersionIn": {
         "description": "`POST /templates/{name}/versions`. Same one field; a distinct name for a distinct route.",
         "properties": {
@@ -1638,7 +1869,7 @@
             "type": "string"
           },
           "pinned_by": {
-            "description": "Always 0 in this release: counting a Template Version's active Runs is Epic 4's write, not this story's.",
+            "description": "How many Runs, of any status, pin this exact Version \u2014 root or callee (AD-15, SPEC CAP-4).",
             "title": "Pinned By",
             "type": "integer"
           },
@@ -2664,6 +2895,143 @@
         ]
       }
     },
+    "/api/v1/runs": {
+      "get": {
+        "description": "Every stored Run, newest first \u2014 the minimal summary; the Board is CAP-12's.",
+        "operationId": "list_runs_api_v1_runs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_RunSummaryOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List every Run",
+        "tags": [
+          "runs"
+        ]
+      },
+      "post": {
+        "description": "Re-runs pre-flight; a `fail` line is 409, an unbuildable plan is 422 (AD-7).",
+        "operationId": "create_api_v1_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Pre-flight failed at least one line; `detail` names them."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The Template tree could not be planned; see `errors[]`."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create and enqueue a Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
     "/api/v1/runs/preflight": {
       "get": {
         "description": "The same computation over an entirely empty request \u2014 every line `skip`.",
@@ -2766,6 +3134,90 @@
           }
         ],
         "summary": "Pre-flight a Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}": {
+      "get": {
+        "description": "The minimal Run read model; `GET /runs/{run_id}` gains the full one in 4.12.",
+        "operationId": "get_api_v1_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`run_id` does not parse as a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one Run",
         "tags": [
           "runs"
         ]
@@ -3322,7 +3774,7 @@
     },
     "/api/v1/templates/{name}/{version}": {
       "get": {
-        "description": "`calls`, `called_by` and `inputs` alongside the stored text. `pinned_by` is always 0.",
+        "description": "`calls`, `called_by`, `inputs` and `pinned_by` (4.4) alongside the stored text.",
         "operationId": "get_version_api_v1_templates__name___version__get",
         "parameters": [
           {

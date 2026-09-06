@@ -151,5 +151,5 @@ def validate_text(name: str, payload: ValidateIn, ports: Ports) -> ValidateOut:
 def get_version(
     name: str, version: Annotated[int, Path(gt=0, le=MAX_VERSION)], ports: Ports
 ) -> TemplateVersionOut:
-    """`calls`, `called_by` and `inputs` alongside the stored text. `pinned_by` is always 0."""
+    """`calls`, `called_by`, `inputs` and `pinned_by` (4.4) alongside the stored text."""
     return TemplateVersionOut.of(use_cases.get_version(ports, name, version))

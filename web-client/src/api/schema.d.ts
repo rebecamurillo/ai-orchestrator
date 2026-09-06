@@ -177,6 +177,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every Run
+         * @description Every stored Run, newest first — the minimal summary; the Board is CAP-12's.
+         */
+        get: operations["list_runs_api_v1_runs_get"];
+        put?: never;
+        /**
+         * Create and enqueue a Run
+         * @description Re-runs pre-flight; a `fail` line is 409, an unbuildable plan is 422 (AD-7).
+         */
+        post: operations["create_api_v1_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/preflight": {
         parameters: {
             query?: never;
@@ -195,6 +219,26 @@ export interface paths {
          * @description Every FR-8 line, `start_allowed`, the queue note, and the rows the plan would persist.
          */
         post: operations["preflight_api_v1_runs_preflight_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one Run
+         * @description The minimal Run read model; `GET /runs/{run_id}` gains the full one in 4.12.
+         */
+        get: operations["get_api_v1_runs__run_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -307,7 +351,7 @@ export interface paths {
         };
         /**
          * Read one Template Version
-         * @description `calls`, `called_by` and `inputs` alongside the stored text. `pinned_by` is always 0.
+         * @description `calls`, `called_by`, `inputs` and `pinned_by` (4.4) alongside the stored text.
          */
         get: operations["get_version_api_v1_templates__name___version__get"];
         put?: never;
@@ -421,6 +465,17 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "ok" | "failed";
+        };
+        /**
+         * CreateRunOut
+         * @description `POST /runs`'s 201 body: the Run, and where it stands in the queue.
+         */
+        CreateRunOut: {
+            run: components["schemas"]["RunSummaryOut"];
+            /** Starts Now */
+            starts_now: boolean;
+            /** Waiting */
+            waiting: string;
         };
         /**
          * EdgeOut
@@ -612,6 +667,13 @@ export interface components {
         Page_RepositoryOut_: {
             /** Items */
             items: components["schemas"]["RepositoryOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[RunSummaryOut] */
+        Page_RunSummaryOut_: {
+            /** Items */
+            items: components["schemas"]["RunSummaryOut"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -956,6 +1018,85 @@ export interface components {
             url: string;
         };
         /**
+         * RunIn
+         * @description `POST /runs`'s body: what *Start run* submits once every field is filled in.
+         */
+        RunIn: {
+            /** Base Branch */
+            base_branch: string;
+            /** Budget Usd */
+            budget_usd: number | string;
+            /** Harness */
+            harness?: string | null;
+            /** Inputs */
+            inputs?: {
+                [key: string]: unknown;
+            };
+            /** Manual Estimate H */
+            manual_estimate_h?: number | string | null;
+            /** Model */
+            model?: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Re Review Done
+             * @default false
+             */
+            re_review_done: boolean;
+            /**
+             * Repository Id
+             * Format: uuid
+             */
+            repository_id: string;
+            /** Template Name */
+            template_name: string;
+            /** Template Version */
+            template_version: number;
+        };
+        /**
+         * RunSummaryOut
+         * @description The minimal Run read model (4.12 replaces this with the full one).
+         */
+        RunSummaryOut: {
+            /** Branch */
+            branch: string;
+            /** Budget Usd */
+            budget_usd: string;
+            /** Created At */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Plan Ref */
+            plan_ref: string | null;
+            /**
+             * Project
+             * Format: uuid
+             */
+            project: string;
+            /**
+             * Repository
+             * Format: uuid
+             */
+            repository: string;
+            /** Spend Usd */
+            spend_usd: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
+            /** Template */
+            template: string;
+            /** Version */
+            version: number;
+        };
+        /**
          * SaveVersionIn
          * @description `POST /templates/{name}/versions`. Same one field; a distinct name for a distinct route.
          */
@@ -1009,7 +1150,7 @@ export interface components {
             name: string;
             /**
              * Pinned By
-             * @description Always 0 in this release: counting a Template Version's active Runs is Epic 4's write, not this story's.
+             * @description How many Runs, of any status, pin this exact Version — root or callee (AD-15, SPEC CAP-4).
              */
             pinned_by: number;
             /** Version */
@@ -1646,6 +1787,100 @@ export interface operations {
             };
         };
     };
+    list_runs_api_v1_runs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_RunSummaryOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    create_api_v1_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateRunOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Pre-flight failed at least one line; `detail` names them. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The Template tree could not be planned; see `errors[]`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     preflight_empty_api_v1_runs_preflight_get: {
         parameters: {
             query?: never;
@@ -1709,6 +1944,58 @@ export interface operations {
                 };
             };
             /** @description The posted body does not match the shape below. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_api_v1_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummaryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `run_id` does not parse as a UUID. */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -68,8 +68,25 @@ class _Resolved:
     tree_error: PlanError | None
 
 
-def run_preflight(ports: PreflightPorts, req: PreflightRequest) -> PreflightResult:
-    """Every FR-8 line, `start_allowed`, the queue note, and the rows the plan would persist."""
+@dataclass(frozen=True)
+class Preflighted:
+    """One resolution pass (SPEC CAP-3/CAP-4): pre-flight's own answer, plus the pieces only
+    `create_run` (4.4) needs from it. A second, independent pass over the same request could
+    in principle disagree with the first — a callee saved between the two calls, say — so
+    `create_run` reuses this one rather than calling `resolve`/`build_plan` itself; that is
+    also what keeps every branch below reachable, instead of guarding against a divergence
+    that a second pass could invent but a single one cannot.
+    """
+
+    resolved: _Resolved
+    plan: Plan | None
+    plan_error: PlanError | None
+    result: PreflightResult
+
+
+def preflight_and_plan(ports: PreflightPorts, req: PreflightRequest) -> Preflighted:
+    """Resolve, plan, and answer every FR-8 line — the one pass `run_preflight` below is a
+    thin projection of, and the one `create_run` (4.4) persists from."""
     resolved = _resolve(ports, req)
     plan, plan_error = _build_plan(ports, req, resolved)
     ctx = Context(
@@ -93,13 +110,19 @@ def run_preflight(ports: PreflightPorts, req: PreflightRequest) -> PreflightResu
         plan is not None and plan_error is None and not any(line.status == "fail" for line in lines)
     )
     rows = plan.rows if plan is not None else None
-    return PreflightResult(
+    result = PreflightResult(
         lines=tuple(lines),
         start_allowed=start_allowed,
         queue_note=checks.queue_note(ctx),
         rows=rows,
         plan_error=plan_error,
     )
+    return Preflighted(resolved=resolved, plan=plan, plan_error=plan_error, result=result)
+
+
+def run_preflight(ports: PreflightPorts, req: PreflightRequest) -> PreflightResult:
+    """Every FR-8 line, `start_allowed`, the queue note, and the rows the plan would persist."""
+    return preflight_and_plan(ports, req).result
 
 
 def _resolve(ports: PreflightPorts, req: PreflightRequest) -> _Resolved:
