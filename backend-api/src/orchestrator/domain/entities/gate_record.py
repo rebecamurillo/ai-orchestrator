@@ -8,9 +8,10 @@ sentence is what a person reads.
 
 `event` spans the three alphabets AD-8 names — a `ParkKind` for a machine stop, a
 `SignalKind` for an operator action, and `start | done | failed | cancelled` for the Run's
-own beginning and ends — which is exactly `GateEvent`. `actor` says which of them: `machine`
-for a park the walker wrote, `operator` for a signal, `terminal` for the resume path where a
-person drove the harness directly.
+own beginning and ends — plus the two bounded re-executions AD-9 records without any Run
+transition (`redispatch`, `retry_auto`), which together are `GateEvent`. `actor` says which
+of them: `machine` for a park or a redispatch the walker wrote, `operator` for a signal,
+`terminal` for the resume path where a person drove the harness directly.
 
 `path` is the row the record is about, `None` for a record about the Run itself; `payload`
 carries whatever the event needs kept — the files a `continue` accepted, the budget a

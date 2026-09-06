@@ -97,3 +97,16 @@ PLAN_KIND = "plan.check"
 #: plan is read at (AD-7); `git.push` and `pr.link` name a branch too, so the question is
 #: which kind names it, not which step mentions it first.
 WORKTREE_KIND = "git.worktree"
+
+#: The kind whose step commits the working tree. Named here because `signal_run` re-resolves
+#: a skipped Story's commit message on this row (AD-13) and AD-9 says a kind is named in this
+#: table or nowhere.
+COMMIT_KIND = "git.commit"
+
+#: The `with` key `git.commit` carries its message under — the one `skip_story` rewrites.
+COMMIT_MESSAGE_KEY = "message"
+
+#: The two kinds that end an epic on the remote. `skip_epic` marks them `skipped` when the
+#: push itself is the stop (AD-13), so they are named here rather than spelled in the rule.
+PUSH_KIND = "git.push"
+LINK_KIND = "pr.link"

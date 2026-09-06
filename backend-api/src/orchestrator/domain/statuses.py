@@ -80,10 +80,27 @@ ACTORS: tuple[Actor, ...] = get_args(Actor)
 LifecycleEvent = Literal["start", "done", "failed", "cancelled"]
 LIFECYCLE_EVENTS: tuple[LifecycleEvent, ...] = get_args(LifecycleEvent)
 
-#: What a `gate_record.event` can be (AD-8): a park kind, a signal kind, or a lifecycle
-#: event. The three sets are disjoint, so the concatenation below is also the full set.
-GateEvent = ParkKind | SignalKind | LifecycleEvent
-GATE_EVENTS: tuple[GateEvent, ...] = (*PARK_KINDS, *SIGNAL_KINDS, *LIFECYCLE_EVENTS)
+#: The bounded re-executions AD-9 records without a Run transition of their own:
+#: `redispatch` when a verify failure sends a Run back to an earlier row (4.5),
+#: `retry_auto` when a Template's own `retry {max, prompt}` fires (Epic 5). `expired` is
+#: not here: AD-13 applies the 30-day `recv` expiry as Run `failed`, which is a lifecycle
+#: event the Run already has.
+MachineEvent = Literal["redispatch", "retry_auto"]
+MACHINE_EVENTS: tuple[MachineEvent, ...] = get_args(MachineEvent)
+
+#: AD-8's own three alphabets, concatenated: what a `gate_record.event` carries for a Run
+#: *transition*. The three sets are disjoint, so this is also the full set of them.
+GATE_EVENTS: tuple[ParkKind | SignalKind | LifecycleEvent, ...] = (
+    *PARK_KINDS,
+    *SIGNAL_KINDS,
+    *LIFECYCLE_EVENTS,
+)
+
+#: What a `gate_record.event` can be: one of AD-8's three, or one of AD-9's two bounded
+#: re-executions, which are recorded (AD-9: "each is a recorded `attempt` + `gate_record`")
+#: without the Run's status moving at all.
+GateEvent = ParkKind | SignalKind | LifecycleEvent | MachineEvent
+ALL_GATE_EVENTS: tuple[GateEvent, ...] = (*GATE_EVENTS, *MACHINE_EVENTS)
 
 #: What can happen to a Run. `park`, `expire`, `finish` and `fail` are the machine's own
 #: words; the rest are the signal kinds that resume or cancel a parked Run.
