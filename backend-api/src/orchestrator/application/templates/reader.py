@@ -15,6 +15,13 @@ for them would be a call per Story rather than a call per Run.
 `record` is deliberately not part of `read`: `Run.plan_refs` holds the commit each *list
 file* was read at, so a plan can be called stale, and a story file — read at its frame's
 ref, never the thing that makes a plan stale — records nothing.
+
+**`plan_branches` is `record`'s second half, for 4.7's `plan.check`.** A commit alone does
+not say which branch to ask for a fresh one: `frame.branch` at the moment a list file was
+read is what `read_list` already knows and `plan.check` cannot otherwise recover, since it
+runs before any row has told it. `None` means the file was read straight off the frame's own
+ref rather than a branch fallback — which is exactly what a `Template` naming no branch, or
+naming one the remote does not hold yet, resolves to (`plan_ref`'s own base-branch fallback).
 """
 
 from __future__ import annotations
@@ -33,6 +40,8 @@ class PlanReader:
         self._url = url
         #: `{path: sha}` — what `Plan.plan_refs` is built from.
         self.plan_refs: dict[str, str] = {}
+        #: `{path: branch | None}` — which branch each recorded file came from (4.7).
+        self.plan_branches: dict[str, str | None] = {}
         self._shas: dict[str, str | None] = {}
         self._files: dict[tuple[str, str], str | None] = {}
         self._listings: dict[tuple[str, str], tuple[str, ...]] = {}
@@ -58,6 +67,11 @@ class PlanReader:
             self._listings[key] = self._git.list_files(self._base, ref, prefix)
         return self._listings[key]
 
-    def record(self, path: str, sha: str) -> None:
-        """Remember which commit a list file was read at (`Run.plan_refs`)."""
+    def record(self, path: str, sha: str, *, branch: str | None = None) -> None:
+        """Remember which commit — and which branch — a list file was read at.
+
+        `branch` defaults to `None` so every existing caller (`Run.plan_refs` alone, no
+        `plan.check` yet) keeps recording exactly what it did before 4.7.
+        """
         self.plan_refs[path] = sha
+        self.plan_branches[path] = branch

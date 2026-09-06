@@ -120,6 +120,13 @@ COMMIT_MESSAGE_KEY = "message"
 PUSH_KIND = "git.push"
 LINK_KIND = "pr.link"
 
+# Every `steps/<kind>.py` module reads `KIND_META` and friends back from *this* package, so
+# this module cannot import them at module level without a cycle — `checkpoint.py` and
+# `shell.py` need constants from `application/templates/`, whose own modules import this
+# package for `KIND_META`. Nothing here needs any kind's module to run, so nothing here
+# imports one: `infrastructure/dbos/startup.py` imports `checkpoint`, `plan_check` and
+# `shell` directly, once this package has fully finished, which is what actually runs each
+# one's own `register(...)` call (AD-9: "each by calling `register` beside its module").
 
 #: What this package is: the metadata table above, and the registry the walker dispatches
 #: through. Re-exported so a caller writes `from orchestrator.application.steps import …`

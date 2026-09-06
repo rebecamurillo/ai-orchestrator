@@ -111,7 +111,7 @@ def read_list(
     entries = _entries(text)
     if entries is None:
         raise _refuse(frame, LIST_FILE_NOT_A_LIST, path, line)
-    reader.record(path, ref_used)
+    reader.record(path, ref_used, branch=frame.branch)
     return entries, ref_used
 
 

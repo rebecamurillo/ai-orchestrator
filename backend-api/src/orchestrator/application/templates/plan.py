@@ -30,6 +30,13 @@ from typing import Any
 
 from orchestrator.application.dto import RunInputs
 from orchestrator.application.steps import KIND_META, PLAN_KIND
+from orchestrator.application.steps.plan_check import (
+    BASE_BRANCH_KEY,
+    BASE_DIR_KEY,
+    LIST_BRANCHES_KEY,
+    PLAN_REFS_KEY,
+    URL_KEY,
+)
 from orchestrator.application.templates.model import ParsedTemplate
 from orchestrator.application.templates.plan_model import (
     BASE_BRANCH_NOT_FOUND,
@@ -83,7 +90,18 @@ def plan_run(
     ref = plan_ref(reader, branch, inputs.base_branch)
     frame = Frame(prefix="", labels=(), ref=ref, scope=scope, template=tree.root, branch=branch)
     context = Context(tree=tree, inputs=inputs, reader=reader, bmad_version=bmad_version)
-    rows = [plan_check_row(), *expand(tree.root.steps, frame, context)]
+    # `expand` runs first so `reader.plan_refs`/`plan_branches` are populated by the time
+    # `plan_check_row` reads them — row 1 carries a copy of what the rest of the walk
+    # recorded, because `plan.check` runs before any other row and cannot re-derive it.
+    expanded = expand(tree.root.steps, frame, context)
+    check = plan_check_row(
+        base_dir=base_dir,
+        url=inputs.repository.url,
+        base_branch=inputs.base_branch,
+        plan_refs=dict(reader.plan_refs),
+        list_branches=dict(reader.plan_branches),
+    )
+    rows = [check, *expanded]
     return Plan(plan_ref=ref, plan_refs=dict(reader.plan_refs), rows=numbered(rows, tree.root))
 
 
@@ -183,8 +201,19 @@ def _routed(row: PlannedRow, seqs: dict[str, int]) -> dict[str, Any]:
     }
 
 
-def plan_check_row() -> PlannedRow:
-    """Row 1 of every plan: the check that the branch still is what was planned (AD-7)."""
+def plan_check_row(
+    *,
+    base_dir: Path,
+    url: str,
+    base_branch: str,
+    plan_refs: dict[str, str],
+    list_branches: dict[str, str | None],
+) -> PlannedRow:
+    """Row 1 of every plan: the check that the branch still is what was planned (AD-7).
+
+    Everything `plan.check` needs to ask `Git` again — its own copy, since the row runs
+    before any other and cannot read the Run it will become part of.
+    """
     timeout = KIND_META[PLAN_KIND].timeout_default_min
     return PlannedRow(
         seq=FIRST_SEQ,
@@ -194,7 +223,14 @@ def plan_check_row() -> PlannedRow:
         gate=INSERTED_GATE[PLAN_KIND],
         status=PLANNED,
         reason=None,
-        with_resolved={TIMEOUT_KEY: timeout},
+        with_resolved={
+            TIMEOUT_KEY: timeout,
+            BASE_DIR_KEY: str(base_dir),
+            URL_KEY: url,
+            BASE_BRANCH_KEY: base_branch,
+            PLAN_REFS_KEY: plan_refs,
+            LIST_BRANCHES_KEY: list_branches,
+        },
         frame=None,
         story_id=None,
     )
