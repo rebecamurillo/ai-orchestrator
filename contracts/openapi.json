@@ -1672,6 +1672,25 @@
       "RunSummaryOut": {
         "description": "The minimal Run read model (4.12 replaces this with the full one).",
         "properties": {
+          "admitted_signals": {
+            "items": {
+              "enum": [
+                "answer",
+                "continue",
+                "retry",
+                "skip_story",
+                "skip_epic",
+                "budget_raise",
+                "cancel",
+                "terminal_start",
+                "terminal_release",
+                "terminal_resume"
+              ],
+              "type": "string"
+            },
+            "title": "Admitted Signals",
+            "type": "array"
+          },
           "branch": {
             "title": "Branch",
             "type": "string"
@@ -1746,7 +1765,8 @@
           "budget_usd",
           "spend_usd",
           "plan_ref",
-          "created_at"
+          "created_at",
+          "admitted_signals"
         ],
         "title": "RunSummaryOut",
         "type": "object"
@@ -1764,6 +1784,37 @@
           "yaml"
         ],
         "title": "SaveVersionIn",
+        "type": "object"
+      },
+      "SignalIn": {
+        "description": "`POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "answer",
+              "continue",
+              "retry",
+              "skip_story",
+              "skip_epic",
+              "budget_raise",
+              "cancel",
+              "terminal_start",
+              "terminal_release",
+              "terminal_resume"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "SignalIn",
         "type": "object"
       },
       "TemplateRefOut": {
@@ -3218,6 +3269,197 @@
           }
         ],
         "summary": "Read one Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/signals": {
+      "get": {
+        "description": "The same read `GET /runs/{run_id}` gives, published under this path too (4.9).",
+        "operationId": "get_signals_api_v1_runs__run_id__signals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`run_id` does not parse as a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read the Run this path signals, and what it currently admits",
+        "tags": [
+          "runs"
+        ]
+      },
+      "post": {
+        "description": "Validate against AD-13, refuse a kind this epic does not apply yet, then apply it.",
+        "operationId": "post_signal_api_v1_runs__run_id__signals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignalIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The signal does not apply to this Run's status or park, or is not available yet."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The posted body does not match the shape below."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Signal a Run: cancel, retry, or continue",
         "tags": [
           "runs"
         ]

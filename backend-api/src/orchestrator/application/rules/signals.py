@@ -28,7 +28,7 @@ spend, a skip has to have a frame to act on, and the terminal kinds turn on
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -250,6 +250,30 @@ def admitted_signals(park_kind: ParkKind, row_kind: str) -> tuple[SignalKind, ..
         and park_kind in rule.park_kinds
         and (rule.row_kinds is None or row_kind in rule.row_kinds)
     )
+
+
+def row_at(rows: Sequence[StepRun], path: str | None) -> StepRun | None:
+    """The row `path` names, or `None` — a Run that is not parked on one names none."""
+    return next((row for row in rows if row.path == path), None)
+
+
+def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKind, ...]:
+    """One Run's own *Signals admitted*, for the read model 4.9 adds to `RunSummaryOut`.
+
+    `admitted_signals(park_kind, row_kind)` answers "what does this stop admit"; a Run
+    detail asks a wider question — what does *this Run*, right now, offer the Operator —
+    which also has to answer for a Run that is not parked at all: `[cancel]` while it runs
+    (AD-13: `cancel` applies to every non-terminal status), and nothing once it is terminal.
+    `park_row_kind` is the parked row's `kind`, or `None` when the caller has not looked it
+    up (`RunSummaryOut`'s list view does not, and answers conservatively without it).
+    """
+    if run.status in TERMINAL_RUN:
+        return ()
+    if run.status != "needs_you":
+        return ("cancel",)
+    if run.park_kind is None:
+        return ()
+    return admitted_signals(run.park_kind, park_row_kind or "")
 
 
 def record_text(rule: Rule, payload: dict[str, Any]) -> str:

@@ -245,6 +245,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the Run this path signals, and what it currently admits
+         * @description The same read `GET /runs/{run_id}` gives, published under this path too (4.9).
+         */
+        get: operations["get_signals_api_v1_runs__run_id__signals_get"];
+        put?: never;
+        /**
+         * Signal a Run: cancel, retry, or continue
+         * @description Validate against AD-13, refuse a kind this epic does not apply yet, then apply it.
+         */
+        post: operations["post_signal_api_v1_runs__run_id__signals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/templates": {
         parameters: {
             query?: never;
@@ -1061,6 +1085,8 @@ export interface components {
          * @description The minimal Run read model (4.12 replaces this with the full one).
          */
         RunSummaryOut: {
+            /** Admitted Signals */
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume")[];
             /** Branch */
             branch: string;
             /** Budget Usd */
@@ -1103,6 +1129,21 @@ export interface components {
         SaveVersionIn: {
             /** Yaml */
             yaml: string;
+        };
+        /**
+         * SignalIn
+         * @description `POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.
+         */
+        SignalIn: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume";
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
         };
         /**
          * TemplateRefOut
@@ -1996,6 +2037,124 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_signals_api_v1_runs__run_id__signals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummaryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_signal_api_v1_runs__run_id__signals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummaryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The signal does not apply to this Run's status or park, or is not available yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The posted body does not match the shape below. */
             422: {
                 headers: {
                     [name: string]: unknown;

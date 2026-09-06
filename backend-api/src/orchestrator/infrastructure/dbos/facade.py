@@ -30,6 +30,11 @@ from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from dbos import DBOS, DBOSConfig, SetEnqueueOptions, SetWorkflowID
 
+# No public re-export exists for this one (`dbos/__init__.py` does not name it); the
+# library's own internal modules (`_sys_db.py`, `_core.py`, `_client.py`) all reach it the
+# same way. See `RealEngine.send`/`.cancel` for why this module catches it.
+from dbos._error import DBOSNonExistentWorkflowError
+
 #: A durable function keeps the signature it was declared with.
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -138,13 +143,29 @@ class RealEngine:
             DBOS.enqueue_workflow(queue, workflow, run_id)
 
     def send(self, workflow_id: str, message: Any, topic: str) -> None:
-        DBOS.send(workflow_id, message, topic)
+        """Deliver one message, or do nothing when there is no workflow left to receive it.
+
+        A workflow this instance never truly launched — most concretely, a Run whose
+        `engine_ref` a persistence fixture wrote by hand rather than `enqueue` — has no row
+        in the library's own `workflow_status`, and `DBOS.send`'s insert is foreign-keyed to
+        it. AD-13 treats every `cancel` effect as idempotent (a process group, a worktree, a
+        branch already gone are none of them a failure); a workflow that was never really
+        there is the same fact, not a reason to answer the caller with a 500.
+        """
+        try:
+            DBOS.send(workflow_id, message, topic)
+        except DBOSNonExistentWorkflowError:
+            pass
 
     def recv(self, topic: str, timeout_seconds: int) -> Any:
         return DBOS.recv(topic, timeout_seconds)
 
     def cancel(self, workflow_id: str) -> None:
-        DBOS.cancel_workflow(workflow_id)
+        """Stop the workflow, or do nothing when the library has no record of it at all."""
+        try:
+            DBOS.cancel_workflow(workflow_id)
+        except DBOSNonExistentWorkflowError:
+            pass
 
     def queued(self, queue: str) -> list[QueuedWorkflow]:
         held = DBOS.list_workflows(queue_name=queue, status=[ENQUEUED, PENDING], load_input=False)

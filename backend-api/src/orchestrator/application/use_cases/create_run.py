@@ -43,6 +43,7 @@ from orchestrator.application.preflight.model import (
     Line,
     PreflightRequest,
 )
+from orchestrator.application.rules.signals import row_at
 from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -185,6 +186,10 @@ class RunReadPorts:
     """What `GET /runs/{id}` reads through — nothing this route writes."""
 
     runs: RunRepository
+    #: `None` for a caller that only ever reads a Run — `test_run_router.py` (4.4)
+    #: constructs `RunReadPorts(runs=...)` alone. Set, a reader can also look up the parked
+    #: row's own `kind` for `RunSummaryOut.admitted_signals` (4.9).
+    steps: StepRunRepository | None = None
 
 
 def get_run(ports: RunReadPorts, run_id: UUID) -> Run:
@@ -193,6 +198,19 @@ def get_run(ports: RunReadPorts, run_id: UUID) -> Run:
     if run is None:
         raise NotFound(f"no run {run_id}")
     return run
+
+
+def park_row_kind_of(ports: RunReadPorts, run: Run) -> str | None:
+    """The parked row's `kind`, for `RunSummaryOut.of(run, park_row_kind=...)` (4.9).
+
+    `None` whenever there is nothing useful to look up: the Run is not `needs_you`, no
+    `StepRunRepository` was wired (4.4's own read ports), or — a stored Run should never
+    reach this, but a read model does not assert it — the row `park_path` names is gone.
+    """
+    if run.status != "needs_you" or ports.steps is None:
+        return None
+    row = row_at(ports.steps.list_for_run(run.id), run.park_path)
+    return row.kind if row is not None else None
 
 
 def _inputs_dict(req: CreateRunRequest) -> dict[str, Any]:

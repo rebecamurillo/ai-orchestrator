@@ -60,6 +60,7 @@ from orchestrator.api.routers import (
     repositories,
     run,
     runs,
+    signals,
     templates,
 )
 from orchestrator.application.use_cases.harnesses import HarnessPorts, seed_harnesses
@@ -329,6 +330,12 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
     # checked first (`api/routers/run.py`'s own docstring; `test_run_router.py` pins it)
     app.include_router(
         run.router,
+        prefix=API_PREFIX,
+        dependencies=[Depends(require_bearer)],
+        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
+    )
+    app.include_router(
+        signals.router,
         prefix=API_PREFIX,
         dependencies=[Depends(require_bearer)],
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},

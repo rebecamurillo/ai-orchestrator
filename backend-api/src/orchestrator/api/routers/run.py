@@ -45,6 +45,7 @@ from orchestrator.application.use_cases.create_run import (
     RunReadPorts,
     create_run,
     get_run,
+    park_row_kind_of,
 )
 
 router = APIRouter(tags=["runs"])
@@ -116,4 +117,5 @@ def list_runs(ports: ReadPorts) -> Page[RunSummaryOut]:
 )
 def get(run_id: UUID, ports: ReadPorts) -> RunSummaryOut:
     """The minimal Run read model; `GET /runs/{run_id}` gains the full one in 4.12."""
-    return RunSummaryOut.of(get_run(ports, run_id))
+    run = get_run(ports, run_id)
+    return RunSummaryOut.of(run, park_row_kind=park_row_kind_of(ports, run))
