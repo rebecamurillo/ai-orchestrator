@@ -31,10 +31,14 @@ from orchestrator.application.templates.plan_model import (
     REASON_ALREADY_DONE,
     REASON_NO_COMMAND,
     REASON_NO_QUALITY_GATE,
+    REDISPATCH_MAX,
+    REDISPATCH_TARGET_SEQ,
     Plan,
     PlanError,
+    Redispatched,
 )
 from orchestrator.domain.errors import Invalid
+from orchestrator.domain.values import Redispatch
 from tests.unit.application.templates import plan_fixtures as fixtures
 
 
@@ -155,3 +159,28 @@ def test_a_plan_is_frozen() -> None:
 
     with pytest.raises(AttributeError):
         plan.plan_ref = "other"  # type: ignore[misc]
+
+
+# --- the route the walker finds before the plan is numbered ---------------------------------
+
+
+def test_a_found_redispatch_carries_the_target_as_a_path_and_its_own_provenance() -> None:
+    """`seq` does not exist until the walk is over, so the walker records the path."""
+    found = Redispatched(
+        target_path="stories[0].build", max=1, template="story", version=1, line=42
+    )
+
+    assert (found.target_path, found.max) == ("stories[0].build", 1)
+    assert (found.template, found.version, found.line) == ("story", 1, 42)
+
+
+def test_a_found_redispatch_is_frozen() -> None:
+    found = Redispatched(target_path="a", max=1, template="t", version=1, line=1)
+
+    with pytest.raises(AttributeError):
+        found.target_path = "b"  # type: ignore[misc]
+
+
+def test_the_resolved_keys_are_the_field_names_the_executor_constructs_from() -> None:
+    """4.7 builds `Redispatch(**with_resolved["on_fail"])`, so the keys are its fields."""
+    assert {REDISPATCH_TARGET_SEQ, REDISPATCH_MAX} == set(Redispatch.model_fields)

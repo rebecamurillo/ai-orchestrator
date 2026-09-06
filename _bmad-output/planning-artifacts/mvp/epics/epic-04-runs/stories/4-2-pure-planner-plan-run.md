@@ -11,21 +11,6 @@ context:
 warnings: ['oversized']
 deferred:
   - summary: >-
-      A step's `on_fail`, `redispatch`/`redispatch_max` and an agent's `escalate_when` are
-      parsed but never reach the row, so a walker reading `with_resolved` cannot route a
-      failure the Template already decided.
-    evidence: |-
-      `templates/epic.yaml` declares `on_fail: fail` on `baseline` and `templates/story.yaml`
-      declares `on_fail: {redispatch: build, max: 1}` on `verify` and `escalate_when` on
-      `build`. `rows._resolved` carries only `params`, the resolved `timeout_min` and the
-      agent extras. AD-7 forbids re-reading the Template at execution time, so 4.5/4.6 have
-      no other source. The 4.2 brief and dispatch prompt enumerate the row's contents
-      (seq, path, label, kind, gate, status, reason, with_resolved) and name none of these,
-      so closing it needs the consuming story's rule, not a guess here.
-    location: >-
-      backend-api/src/orchestrator/application/templates/rows.py:_resolved
-    severity: medium
-  - summary: >-
       A Template input's declared `default:` is dropped: neither the root scope nor a callee
       scope applies it, so any input with a default other than `harness`/`model` resolves to
       the empty string.
@@ -359,6 +344,39 @@ Read these before writing; they are the shape every new file copies.
 
 ## Spec Change Log
 
+### 2026-09-06 — `on_fail` and `escalate_when` reach the row
+
+**Triggering finding.** The `deferred` item this story recorded — a step's `on_fail`,
+`redispatch`/`redispatch_max` and an agent's `escalate_when` are parsed but reach no row — was not
+open after all. The coordinator relayed the binding half of brief 4-7 (the executor story), which is
+an anchor this story may not read: the `shell` executor switches on `with_resolved.on_fail` and must
+build `Redispatch{target_seq, max}` from the row **and no other input**, because AD-7 forbids
+re-reading the Template at execution time and an executor sees one row and never the plan.
+
+**What was amended.** The requirement was implemented rather than deferred:
+
+- `with_resolved["on_fail"]` is the word the file wrote (`fail` / `continue` / `escalate`), or
+  `{"target_seq": int, "max": int}` for the redispatch form. A row that declared nothing carries no
+  key, which the executor reads as the DSL's own default, `escalate`.
+- The target is resolved **inside the row's own frame**, so `stories[3].verify` goes back to
+  `stories[3].build` and never to another Story's, and to a `seq` rather than to an id.
+- `with_resolved["escalate_when"]` is carried verbatim on every agent row (`None` when undeclared).
+  Nothing in this epic reads it; Epic 5 has no other source.
+- A target the frame does not hold is `PlanError{reason: "redispatch target is not a row of this
+  frame", item: <the path looked for>}`.
+
+**Known-bad state avoided.** Two. Resolving the target to a **step id** would have left 4-7 unable to
+build a `Redispatch` without the plan. Resolving it **globally** rather than per frame would have sent
+one Story's failed verify back to a different Story's build — silently, and only under retry.
+
+**KEEP.** The two-shape pipeline is deliberate and must survive re-derivation: the walker records a
+`Redispatched` value object holding the target **path** plus its declaring Template, because `seq` is a
+property of the finished list and does not exist mid-walk; `plan.numbered` is the single place where
+both facts exist at once, and it assigns `seq` and resolves the route in one pass. Keep the refusal
+named from the route's own Template — the frame that declared it is gone by numbering time, so a root-
+named error would point at the wrong file for a step written in a callee. Keep `working_branch` in
+`plan_model.py`: it moved there to hold `rows.py` under the 400-line limit.
+
 ## Review Triage Log
 
 ### 2026-09-06 — Review pass
@@ -502,13 +520,21 @@ no loopback. Follow-up review recommended: `true` — a high-severity finding wa
 - `make e2e-ui` — not run; it changes no web-client file and 4.1 recorded that port 4321 is held by
   the operator's own dev stack.
 
+**Follow-up commit (relayed 4-7 requirement).** `with_resolved.on_fail` and `with_resolved.
+escalate_when` now carry a row's routing, with the redispatch target resolved to a `seq` inside the
+row's own frame; an unresolvable target is a `PlanError`. See the Spec Change Log entry above. The
+`deferred` item covering this is closed; the other two stand.
+
 **Residual risks.**
 - Three readings had to be chosen where the brief's prose and its anchors disagree, each flagged in
   **Design Notes**: `base_dir` added to the signature the brief fixes; `timeout_min` written into
   `with_resolved` because `PlannedRow` has no field for it; and `commit-guard` with a hyphen, since
   `templates/story.yaml` declares that id and the brief's row lists spell it `commit_guard`.
-- The eight `deferred` entries are the honest list of what a later story must decide. The first —
-  `on_fail`, `redispatch` and `escalate_when` never reaching the row — is the one 4.5/4.6 will hit
-  first, because AD-7 forbids re-reading the Template at execution time.
+- The seven remaining `deferred` entries are the honest list of what a later story must decide. The
+  two that matter are the dropped Template input `default:` values and the partly-resolved command,
+  both of which the brief's own wording currently licenses.
+- The validator's earlier-agent set is flat over a whole file, so it accepts a redispatch from inside
+  a loop to a step outside it. The planner refuses that at plan time rather than guessing; if a
+  Template ever legitimately needs it, the rule to change is `rows._routing`, not the validator.
 - `Context.bmad_version` is carried and read by no rule yet. It is the brief's own signature; the
   first consumer is an executor.

@@ -20,12 +20,13 @@ from orchestrator.application.templates.plan_model import (
     AMBIGUOUS_STORY_FILE,
     ENTRY_MISSING_FIELDS,
     ID_NOT_PREFIX_FREE,
+    ON_FAIL_KEY,
     REASON_ALREADY_DONE,
     REASON_NO_QUALITY_GATE,
     Plan,
     PlanError,
 )
-from orchestrator.domain.values import PlannedRow
+from orchestrator.domain.values import PlannedRow, Redispatch
 from tests.unit.application.templates import plan_fixtures as fixtures
 from tests.unit.fakes.git import FakeGit
 
@@ -33,6 +34,9 @@ from tests.unit.fakes.git import FakeGit
 #: Initiative of two epics reads.
 INSTALL_TIMEOUT_MIN = 30
 INITIATIVE_LIST_FILES = 3
+
+#: How many Stories `plan_fixtures.EPIC_STORIES` holds.
+STORY_COUNT = 3
 
 
 def plan(name: str, run_inputs: RunInputs, git: FakeGit) -> Plan:
@@ -463,3 +467,62 @@ def test_the_pinned_versions_of_an_initiative_are_its_whole_call_tree() -> None:
     pinned = fixtures.tree("initiative").pinned_versions()
 
     assert [ref.name for ref in pinned] == ["initiative", "epic", "story"]
+
+
+# --- how a failed row is routed: what 4.7's executors read off the row -------------------------
+
+
+def test_a_row_that_declares_no_on_fail_carries_none(epic: Plan) -> None:
+    """Absent is the DSL's own default, `escalate`; a row does not restate it."""
+    assert ON_FAIL_KEY not in row(epic, "checkout").with_resolved
+
+
+def test_a_plain_on_fail_is_the_word_the_template_wrote(epic: Plan) -> None:
+    """`templates/epic.yaml` declares `on_fail: fail` on `baseline`."""
+    assert row(epic, "baseline").with_resolved[ON_FAIL_KEY] == "fail"
+
+
+def test_a_redispatch_is_resolved_to_the_seq_of_the_row_it_goes_back_to(epic: Plan) -> None:
+    """`templates/story.yaml` declares `on_fail: {redispatch: build, max: 1}` on `verify`."""
+    routed = row(epic, "stories[0].verify").with_resolved[ON_FAIL_KEY]
+
+    assert routed == {"target_seq": row(epic, "stories[0].build").seq, "max": 1}
+
+
+def test_the_executor_can_build_its_redispatch_from_the_row_and_nothing_else(epic: Plan) -> None:
+    """The binding constraint: `Redispatch(**with_resolved["on_fail"])` and no other input."""
+    routed = row(epic, "stories[1].verify").with_resolved[ON_FAIL_KEY]
+
+    assert Redispatch(**routed) == Redispatch(target_seq=row(epic, "stories[1].build").seq, max=1)
+
+
+def test_each_story_redispatches_inside_its_own_frame_and_never_into_another(epic: Plan) -> None:
+    """Three Stories, three different targets — the first Story's build is not the third's."""
+    targets = [
+        row(epic, f"stories[{index}].verify").with_resolved[ON_FAIL_KEY]["target_seq"]
+        for index in range(STORY_COUNT)
+    ]
+
+    assert targets == [row(epic, f"stories[{index}].build").seq for index in range(STORY_COUNT)]
+
+
+def test_a_redispatch_inside_a_nested_frame_resolves_within_that_frame(initiative: Plan) -> None:
+    """`epics[1].stories[0].verify` goes back to its own epic's Story, not to `epics[0]`'s."""
+    routed = row(initiative, "epics[1].stories[0].verify").with_resolved[ON_FAIL_KEY]
+
+    assert routed["target_seq"] == row(initiative, "epics[1].stories[0].build").seq
+    assert routed["target_seq"] > row(initiative, "epics[0].stories[3].build").seq
+
+
+def test_a_redispatch_always_points_backwards(initiative: Plan) -> None:
+    for entry in initiative.rows:
+        routed = entry.with_resolved.get(ON_FAIL_KEY)
+        if isinstance(routed, dict):
+            assert routed["target_seq"] < entry.seq, entry.path
+
+
+def test_an_agent_rows_escalate_when_is_carried_verbatim(epic: Plan) -> None:
+    """No consumer in this epic; Epic 5 needs a source and the plan is the only one (AD-7)."""
+    assert row(epic, "stories[0].build").with_resolved["escalate_when"] == (
+        "output.status == blocked"
+    )

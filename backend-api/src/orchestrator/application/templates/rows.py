@@ -32,7 +32,7 @@ from typing import Any
 
 from orchestrator.application.dto import RunInputs
 from orchestrator.application.graph import UNVALIDATED
-from orchestrator.application.steps import CHECKPOINT_KIND, SHELL_KIND, WORKTREE_KIND
+from orchestrator.application.steps import CHECKPOINT_KIND, SHELL_KIND
 from orchestrator.application.templates.agent_row import (
     PROMPT_EXTRA_KEY,
     agent_extras,
@@ -61,12 +61,15 @@ from orchestrator.application.templates.plan_model import (
     CALLEE_NOT_RESOLVED,
     INSERTED_GATE,
     LABEL_SEPARATOR,
+    ON_FAIL_KEY,
     PATH_SEPARATOR,
     REASON_ALREADY_DONE,
     REASON_NO_COMMAND,
     REASON_NO_QUALITY_GATE,
     PlanError,
+    Redispatched,
     ResolvedTree,
+    working_branch,
 )
 from orchestrator.application.templates.reader import PlanReader
 from orchestrator.application.templates.substitute import names_field, paused, resolve
@@ -80,9 +83,8 @@ SKIPPED: StepStatus = "skipped"
 #: What a row's `seq` reads until `plan_run` numbers the whole list densely from 1.
 UNNUMBERED = 0
 
-#: The `with` key a `run:` desugars into, and the one a `git.*` step names its branch in.
+#: The `with` key a `run:` desugars into.
 COMMAND_KEY = "command"
-BRANCH_KEY = "branch"
 
 #: The key the planner writes onto every timed row's `with_resolved`. The `agent` keys
 #: are `agent_row`'s, because only that kind has them.
@@ -266,22 +268,6 @@ def row_status(
     return PLANNED, None
 
 
-def working_branch(template: ParsedTemplate, scope: Mapping[str, Any]) -> str | None:
-    """The branch a Run of this Template works on: the one its worktree checks out.
-
-    The kind is named in the one place kinds are named (AD-9). It has to be the kind rather
-    than the first step that mentions a `branch`, because `git.push` and `pr.link` name one
-    too and a Template that pushed somewhere else would move the whole plan's commit. A
-    Template that checks nothing out itself — `initiative@1`, whose worktree is inside the
-    epic frame — works from the base branch instead.
-    """
-    for entry in template.steps:
-        if isinstance(entry, ForEach) or entry.uses != WORKTREE_KIND:
-            continue
-        return _branch_name(resolve(dict(entry.params).get(BRANCH_KEY), scope))
-    return None
-
-
 # --- one item of a loop ---------------------------------------------------------------------
 
 
@@ -354,10 +340,34 @@ def _resolved(step: Step, frame: Frame) -> dict[str, Any]:
     timeout = step.timeout_min if step.timeout_min is not None else step.meta.timeout_default_min
     if timeout is not None:
         resolved[TIMEOUT_KEY] = timeout
+    routing = _routing(step, frame)
+    if routing is not None:
+        resolved[ON_FAIL_KEY] = routing
     if step.agent is not None:
         resolved.update(agent_extras(step.agent, frame))
         resolved[PROMPT_EXTRA_KEY] = prompt_extra(resolved, frame)
     return resolved
+
+
+def _routing(step: Step, frame: Frame) -> str | Redispatched | None:
+    """How this row's failure is routed, in the form 4.7's executors read (AD-9).
+
+    A plain action is the word the file wrote. A redispatch is the one form that needs
+    work: the file names a step id and the executor needs a `seq`, so the target is
+    resolved **inside this row's own frame** — `stories[3].verify` goes back to
+    `stories[3].build` and never to another Story's — and `plan_run` numbers it once the
+    walk is done. A step that declared nothing is left out entirely, which the executor
+    reads as the DSL's own default, `escalate`.
+    """
+    if step.redispatch is None:
+        return step.on_fail
+    return Redispatched(
+        target_path=_joined(frame.prefix, step.redispatch),
+        max=step.redispatch_max,
+        template=frame.template.name,
+        version=frame.template.version,
+        line=step.line,
+    )
 
 
 def _empty_command_reason(step: Step) -> str:
@@ -365,11 +375,6 @@ def _empty_command_reason(step: Step) -> str:
     declared = dict(step.params).get(COMMAND_KEY)
     asked = names_field(declared, QUALITY_GATE_ENTITY, QUALITY_GATE_FIELD)
     return REASON_NO_QUALITY_GATE if asked else REASON_NO_COMMAND
-
-
-def _branch_name(value: Any) -> str | None:
-    """A branch a Run could actually check out, or `None` for one nobody named."""
-    return value if isinstance(value, str) and value else None
 
 
 def _joined(prefix: str, segment: str) -> str:

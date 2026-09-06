@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from orchestrator.application.templates.agent_row import (
+    ESCALATE_WHEN_KEY,
     EXPECT_KEY,
     PROMPT_EXTRA_KEY,
     RETRY_KEY,
@@ -243,3 +244,23 @@ def test_an_agent_row_carries_the_model_the_run_chose() -> None:
 def test_a_run_that_chose_no_model_says_so_with_nothing_rather_than_with_none() -> None:
     """`{{model}}` unbound is `""`; the four characters `None` would reach a harness."""
     assert build_row()["model"] == ""
+
+
+# --- what Epic 5 will need and this epic does not read ---------------------------------------
+
+
+def test_an_agent_row_carries_the_escalate_when_its_template_declared() -> None:
+    plan = plan_run(
+        fixtures.tree("epic"),
+        fixtures.epic_inputs(),
+        git=fixtures.epic_git(),
+        base_dir=fixtures.BASE,
+        bmad_version=fixtures.BMAD_VERSION,
+    )
+
+    assert resolved(plan, "stories[0].build")[ESCALATE_WHEN_KEY] == "output.status == blocked"
+
+
+def test_an_agent_step_that_declared_no_escalate_when_carries_nothing_for_it() -> None:
+    """The key is always there, so a reader never has to tell absent from undeclared."""
+    assert resolved(planned(IN_LOOP), "things[0].work")[ESCALATE_WHEN_KEY] is None

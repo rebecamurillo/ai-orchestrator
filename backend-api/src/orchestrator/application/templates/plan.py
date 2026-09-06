@@ -35,10 +35,16 @@ from orchestrator.application.templates.plan_model import (
     BASE_BRANCH_NOT_FOUND,
     DUPLICATE_ROW_PATH,
     INSERTED_GATE,
+    ON_FAIL_KEY,
     PLAN_PATH,
+    REDISPATCH_MAX,
+    REDISPATCH_TARGET_NOT_PLANNED,
+    REDISPATCH_TARGET_SEQ,
     Plan,
     PlanError,
+    Redispatched,
     ResolvedTree,
+    working_branch,
 )
 from orchestrator.application.templates.reader import PlanReader
 from orchestrator.application.templates.rows import (
@@ -47,7 +53,6 @@ from orchestrator.application.templates.rows import (
     Context,
     Frame,
     expand,
-    working_branch,
 )
 from orchestrator.domain.ports.git import Git
 from orchestrator.domain.values import PlannedRow
@@ -79,14 +84,7 @@ def plan_run(
     frame = Frame(prefix="", labels=(), ref=ref, scope=scope, template=tree.root, branch=branch)
     context = Context(tree=tree, inputs=inputs, reader=reader, bmad_version=bmad_version)
     rows = [plan_check_row(), *expand(tree.root.steps, frame, context)]
-    _each_row_named_once(rows, tree.root)
-    return Plan(
-        plan_ref=ref,
-        plan_refs=dict(reader.plan_refs),
-        rows=tuple(
-            row.model_copy(update={"seq": seq}) for seq, row in enumerate(rows, start=FIRST_SEQ)
-        ),
-    )
+    return Plan(plan_ref=ref, plan_refs=dict(reader.plan_refs), rows=numbered(rows, tree.root))
 
 
 def root_scope(inputs: RunInputs) -> dict[str, Any]:
@@ -120,8 +118,23 @@ def plan_ref(reader: PlanReader, branch: str | None, base_branch: str) -> str:
     return base
 
 
-def _each_row_named_once(rows: list[PlannedRow], root: ParsedTemplate) -> None:
-    """Refuse a plan two of whose rows would answer to one path.
+def numbered(rows: list[PlannedRow], root: ParsedTemplate) -> tuple[PlannedRow, ...]:
+    """`seq` dense from 1, and every backwards route resolved to the row it goes back to.
+
+    The two happen together because they need the same thing. `seq` is a property of the
+    finished list, so a row that redispatches cannot know its target's number while the walk
+    is still running — and 4.7's executor may not go looking for it afterwards, since it sees
+    one row and never the plan (AD-7). This is the one place both facts exist at once.
+    """
+    seqs = _each_row_named_once(rows, root)
+    return tuple(
+        row.model_copy(update={"seq": seq, "with_resolved": _routed(row, seqs)})
+        for seq, row in enumerate(rows, start=FIRST_SEQ)
+    )
+
+
+def _each_row_named_once(rows: list[PlannedRow], root: ParsedTemplate) -> dict[str, int]:
+    """Every row's `seq` by its path, refusing a plan two of whose rows share one.
 
     `step_run` is stored with a unique `(run_id, path)` (4.1), so a collision that reached
     persistence would be a 500 on a Run the Operator could have been told about here. The
@@ -129,9 +142,9 @@ def _each_row_named_once(rows: list[PlannedRow], root: ParsedTemplate) -> None:
     `plan`, because the plan check is a row no Template can see, so a top-level step called
     `plan` is the way a valid file still reaches this.
     """
-    seen: set[str] = set()
-    for row in rows:
-        if row.path in seen:
+    seqs: dict[str, int] = {}
+    for seq, row in enumerate(rows, start=FIRST_SEQ):
+        if row.path in seqs:
             raise PlanError(
                 reason=DUPLICATE_ROW_PATH,
                 template=root.name,
@@ -139,7 +152,35 @@ def _each_row_named_once(rows: list[PlannedRow], root: ParsedTemplate) -> None:
                 line=root.line,
                 item=row.path,
             )
-        seen.add(row.path)
+        seqs[row.path] = seq
+    return seqs
+
+
+def _routed(row: PlannedRow, seqs: dict[str, int]) -> dict[str, Any]:
+    """One row's `with_resolved`, with a redispatch target turned into that row's `seq`.
+
+    A target the frame does not hold is a refusal rather than a wider search: the validator
+    keeps one flat set of earlier `agent` steps for the whole file, so a step inside a loop
+    may legally name one outside it — and going back to another frame's row is not a thing
+    a Run can do. The refusal is named from the route's own Template, because the frame that
+    declared it is gone by the time the plan is numbered.
+    """
+    route = row.with_resolved.get(ON_FAIL_KEY)
+    if not isinstance(route, Redispatched):
+        return row.with_resolved
+    target = seqs.get(route.target_path)
+    if target is None:
+        raise PlanError(
+            reason=REDISPATCH_TARGET_NOT_PLANNED,
+            template=route.template,
+            version=route.version,
+            line=route.line,
+            item=route.target_path,
+        )
+    return {
+        **row.with_resolved,
+        ON_FAIL_KEY: {REDISPATCH_TARGET_SEQ: target, REDISPATCH_MAX: route.max},
+    }
 
 
 def plan_check_row() -> PlannedRow:

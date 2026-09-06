@@ -24,8 +24,10 @@ from orchestrator.application.templates.plan import plan_run
 from orchestrator.application.templates.plan_model import (
     CALLEE_NOT_RESOLVED,
     DUPLICATE_ROW_PATH,
+    ON_FAIL_KEY,
     REASON_NO_COMMAND,
     REASON_NO_QUALITY_GATE,
+    REDISPATCH_TARGET_NOT_PLANNED,
     Plan,
     PlanError,
     ResolvedTree,
@@ -126,6 +128,14 @@ COMMANDS = (
   - id: spaces
     run: "{{extra}} "
     gate: deterministic
+  - id: soft
+    run: "echo hi"
+    on_fail: continue
+    gate: deterministic
+  - id: loud
+    run: "echo hi"
+    on_fail: escalate
+    gate: deterministic
 """
 )
 
@@ -156,6 +166,26 @@ COLLIDING = (
     + """  - id: plan
     uses: git.sync
     gate: deterministic
+"""
+)
+
+#: A redispatch the validator accepts and no frame can honour: `keys.py` keeps one flat set
+#: of earlier `agent` steps for the whole file, so a step inside the loop may name one
+#: outside it — and `things[0].build` is not a row.
+CROSS_FRAME = (
+    HEADER.format(name="cross-frame")
+    + """  - id: build
+    uses: agent
+    with: { harness: "{{harness}}" }
+    gate: liveness
+  - id: things
+    for_each: "{{spec_folder}}/things.yaml"
+    as: thing
+    steps:
+      - id: verify
+        run: "echo hi"
+        on_fail: { redispatch: build, max: 1 }
+        gate: deterministic
 """
 )
 
@@ -528,3 +558,36 @@ def test_a_run_value_cannot_replace_the_repository_the_run_was_created_from() ->
     entry = row(planned(COMMANDS, values={"repository": "nonsense"}), "baseline")
 
     assert entry.with_resolved["command"] == fixtures.REPOSITORY.quality_gate_command
+
+
+# --- how a failed row is routed ------------------------------------------------------------------
+
+
+def test_a_continue_is_carried_as_the_word_the_template_wrote() -> None:
+    assert row(planned(COMMANDS), "soft").with_resolved[ON_FAIL_KEY] == "continue"
+
+
+def test_an_escalate_is_carried_even_though_it_is_the_default() -> None:
+    """A file that said it means it; the executor never has to ask which of the two it is."""
+    assert row(planned(COMMANDS), "loud").with_resolved[ON_FAIL_KEY] == "escalate"
+
+
+def test_a_row_that_declared_no_routing_carries_none() -> None:
+    assert ON_FAIL_KEY not in row(planned(COMMANDS), "timed").with_resolved
+
+
+def test_a_redispatch_the_frame_cannot_honour_stops_the_plan() -> None:
+    """The validator accepts this file: its earlier-agent set is flat over the whole file."""
+    with pytest.raises(PlanError) as raised:
+        planned(CROSS_FRAME, git=things_git())
+
+    assert raised.value.reason == REDISPATCH_TARGET_NOT_PLANNED
+    assert raised.value.item == "things[0].build"
+
+
+def test_the_refusal_names_the_template_that_declared_the_route() -> None:
+    with pytest.raises(PlanError) as raised:
+        planned(CROSS_FRAME, git=things_git())
+
+    assert (raised.value.template, raised.value.version) == ("cross-frame", 1)
+    assert raised.value.line is not None

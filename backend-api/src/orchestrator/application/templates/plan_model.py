@@ -21,10 +21,13 @@ and not one per file read; a story file is read at its frame's ref and adds noth
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
-from orchestrator.application.steps import KIND_META
-from orchestrator.application.templates.model import ParsedTemplate
+from orchestrator.application.steps import KIND_META, WORKTREE_KIND
+from orchestrator.application.templates.model import ForEach, ParsedTemplate
+from orchestrator.application.templates.substitute import resolve
 from orchestrator.domain.entities.template import TemplateRef
 from orchestrator.domain.errors import Invalid
 from orchestrator.domain.statuses import Gate
@@ -48,10 +51,53 @@ AMBIGUOUS_STORY_FILE = "ambiguous story file"
 CALLEE_NOT_RESOLVED = "callee not resolved"
 #: The Run has no commit to plan from: the remote holds no such base branch.
 BASE_BRANCH_NOT_FOUND = "base branch not found"
+#: A row routes its failure back to a step that is not a row of its own frame. The
+#: validator only checks that the target is an earlier `agent` step *somewhere in the file*
+#: (`keys.py` keeps one flat set), so a step inside a loop may name one outside it — and
+#: there is no such row to go back to.
+REDISPATCH_TARGET_NOT_PLANNED = "redispatch target is not a row of this frame"
 #: Two rows expanded to one path, so neither the walker nor `step_run`'s unique
 #: `(run_id, path)` index could tell them apart. A step id that collides with an inserted
 #: row's — `plan`, `before`, `after` — is the way a Template reaches this.
 DUPLICATE_ROW_PATH = "duplicate row path"
+
+# --- how a row's failure is routed (4.7 reads exactly this) ------------------------------
+
+#: Where a row's routing lives in `with_resolved`. Absent on a row that declared none,
+#: which the executor reads as `escalate` — the default the DSL gives it.
+ON_FAIL_KEY = "on_fail"
+
+#: The two keys a resolved redispatch carries. They are `domain.values.Redispatch`'s own
+#: field names on purpose: the executor builds one with `Redispatch(**on_fail)` and needs
+#: nothing else, which is what makes the row a complete instruction (AD-7).
+REDISPATCH_TARGET_SEQ = "target_seq"
+REDISPATCH_MAX = "max"
+
+
+@dataclass(frozen=True)
+class Redispatched:
+    """A backwards route the walker found and `plan_run` has not numbered yet.
+
+    The target is a **path** here because `seq` is dense over the finished plan: a row that
+    routes backwards cannot know its target's number until the walk is over. `plan_run`
+    replaces this object with `{target_seq, max}` before any caller sees a `Plan`, so the
+    two shapes never both exist outside one function.
+
+    The provenance fields are carried because the refusal happens after the walk, by which
+    point the frame that declared the route is gone; without them a plan error would name
+    the root Template for a step written in a callee.
+
+    `max` is `int | None` only because `Step.redispatch_max` is: the key table requires
+    `max` alongside `redispatch`, so a `None` here means a tree that never went through
+    `validate()`.
+    """
+
+    target_path: str
+    max: int | None
+    template: str
+    version: int
+    line: int
+
 
 # --- what a plan can skip, and say why -------------------------------------------------------
 
@@ -77,6 +123,31 @@ AFTER_ITEM = "after"
 #: What an `after` checkpoint is called on screen. The `before` one is called `before`,
 #: because a stop before the item has nothing to be done with yet.
 AFTER_LABEL = "done checkpoint"
+
+#: The `with` key a `git.*` step names its branch in.
+BRANCH_KEY = "branch"
+
+
+def working_branch(template: ParsedTemplate, scope: Mapping[str, Any]) -> str | None:
+    """The branch a Run of this Template works on: the one its worktree checks out.
+
+    The kind is named in the one place kinds are named (AD-9). It has to be the kind rather
+    than the first step that mentions a `branch`, because `git.push` and `pr.link` name one
+    too and a Template that pushed somewhere else would move the whole plan's commit. A
+    Template that checks nothing out itself — `initiative@1`, whose worktree is inside the
+    epic frame — works from the base branch instead.
+    """
+    for entry in template.steps:
+        if isinstance(entry, ForEach) or entry.uses != WORKTREE_KIND:
+            continue
+        return _branch_name(resolve(dict(entry.params).get(BRANCH_KEY), scope))
+    return None
+
+
+def _branch_name(value: Any) -> str | None:
+    """A branch a Run could actually check out, or `None` for one nobody named."""
+    return value if isinstance(value, str) and value else None
+
 
 #: The gate a row the *planner* inserted carries: its kind's own, never `unvalidated`.
 #: Derived from the one enumeration of kinds (AD-9); a kind with no gate of its own — the

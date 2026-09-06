@@ -48,6 +48,11 @@ SPEC_CHECKPOINT_KEY = "spec_checkpoint"
 #: The `expect` and `retry` contracts, flattened by the parser and re-nested for the row.
 EXPECT_KEY = "expect"
 RETRY_KEY = "retry"
+#: `escalate_when`, carried verbatim. Its grammar is `output.status == <token>` — a question
+#: about what the harness reported, not about anything a Run could substitute — so there is
+#: nothing to resolve. No executor in this epic reads it; it is on the row because AD-7 says
+#: the plan decides, and a Template that declared it must not have it dropped on the way.
+ESCALATE_WHEN_KEY = "escalate_when"
 
 #: The list-file field an entry tells a dispatch what to read first in.
 INVOKE_DEV_WITH = "invoke_dev_with"
@@ -61,6 +66,7 @@ def agent_extras(agent: AgentExtras, frame: Frame) -> dict[str, Any]:
         STORY_ID_KEY: frame.story_id,
         SPEC_FOLDER_KEY: frame.scope.get(SPEC_FOLDER_KEY),
         SPEC_CHECKPOINT_KEY: paused(agent.pause_when, frame.scope),
+        ESCALATE_WHEN_KEY: agent.escalate_when,
         EXPECT_KEY: {
             "files": [resolve(glob, frame.scope) for glob in agent.expect_files],
             "status_in": list(agent.expect_status_in),
