@@ -157,16 +157,22 @@ jobs:
       - name: Start postgres
         run: docker compose up -d --wait postgres
       - name: Start backend-api from source
-        # Two contract values name things that exist only inside the compose network, and a
-        # run on the runner itself has neither. DATABASE_URL names the postgres service, so
-        # the published port stands in for it; WORK_DIR is `/work`, a named volume the
-        # runner has no root to create, so a directory under RUNNER_TEMP stands in for it —
-        # the clone check writes base clones there.
+        # Three contract values name things that exist only inside the compose network, and
+        # a run on the runner itself has none of them. DATABASE_URL names the postgres
+        # service, so the published port stands in for it; WORK_DIR is `/work`, a named
+        # volume the runner has no root to create, so a directory under RUNNER_TEMP stands in
+        # for it — the clone check writes base clones there; TEMPLATES_DIR is
+        # `/app/templates`, where the Dockerfile copies the shipped Templates, so the
+        # repository's own `templates/` stands in for it. Without that last stand-in, seeding
+        # reads an absent directory, finds nothing, and every shipped Template answers 404
+        # while start-up still reports success.
         run: |
           set -a; . ./.env; set +a
           export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
           export WORK_DIR="${RUNNER_TEMP:-/tmp}/work"
           mkdir -p "$WORK_DIR"
+          export TEMPLATES_DIR="$GITHUB_WORKSPACE/templates"
+          test -d "$TEMPLATES_DIR"
           uv run --locked --directory backend-api python -m orchestrator.main > backend-api.log 2>&1 &
           for _ in $(seq 1 60); do
             curl -fsS http://127.0.0.1:8000/healthz && exit 0
@@ -176,13 +182,15 @@ jobs:
           cat backend-api.log >&2
           exit 1
       - name: Gate
-        # The same two stand-ins as the step above: the suite reads WORK_DIR through
+        # The same three stand-ins as the step above: the suite reads WORK_DIR through
         # `Settings()` to write its own fixture repositories where the backend can clone them
         run: |
           set -a; . ./.env; set +a
           export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
           export WORK_DIR="${RUNNER_TEMP:-/tmp}/work"
           mkdir -p "$WORK_DIR"
+          export TEMPLATES_DIR="$GITHUB_WORKSPACE/templates"
+          test -d "$TEMPLATES_DIR"
           export BACKEND_API_URL=http://127.0.0.1:8000
           make e2e-api
       - name: Backend log
