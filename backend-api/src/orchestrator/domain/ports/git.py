@@ -96,3 +96,12 @@ class Git(Protocol):
     def read_file(self, dest: Path, ref: str, path: str) -> str | None:
         """One file's text out of the base clone at a ref, or `None` when it is not there."""
         ...
+
+    def list_files(self, dest: Path, ref: str, prefix: str) -> tuple[str, ...]:
+        """Every repository-relative path under `prefix` at a ref, in the tree's own order.
+
+        A ref the clone does not hold and a prefix with nothing under it are both `()`, per
+        the second convention above: a folder that is not there is an ordinary answer, and
+        the planner reads it as "this Story has written no file yet".
+        """
+        ...

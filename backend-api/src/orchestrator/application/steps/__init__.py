@@ -83,3 +83,17 @@ AGENT_KIND = "agent"
 #: marks its node `human` by kind rather than by gate, and AD-9 says a kind is named here
 #: or nowhere.
 CHECKPOINT_KIND = "checkpoint"
+
+#: The kind whose step runs a command. Named here because the planner skips a row of this
+#: kind whose command resolved to nothing, and that test is a test about the kind.
+SHELL_KIND = "shell"
+
+#: The kind of the first row of every plan (AD-7). The planner inserts it; a Template that
+#: writes it is `unknown kind`, which is what `planner_only` above says.
+PLAN_KIND = "plan.check"
+
+#: The kind whose step creates the worktree a Run works in, and so the one that names the
+#: branch the Run works on. The planner reads that branch to decide which commit the whole
+#: plan is read at (AD-7); `git.push` and `pr.link` name a branch too, so the question is
+#: which kind names it, not which step mentions it first.
+WORKTREE_KIND = "git.worktree"

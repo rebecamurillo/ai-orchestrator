@@ -142,6 +142,22 @@ def as_seq(value: object) -> LinedSeq | None:
     return value if isinstance(value, LinedSeq) else None
 
 
+def load_sequence(text: str) -> LinedSeq | None:
+    """Load one YAML document whose root is a sequence, or `None` for anything else.
+
+    A `stories.yaml` is data the Operator's repository holds, not a Template — but it is
+    still YAML, and `yaml` is imported here and nowhere else (AD-2). Like `load_with_lines`
+    this never raises: text that does not parse, an empty text and a root that is not a
+    sequence are all "no list", which the planner reports as `list file is not a list`.
+    """
+    try:
+        # `LineLoader` subclasses `SafeLoader`: no arbitrary object is ever constructed.
+        document = yaml.load(text, Loader=LineLoader)
+    except yaml.YAMLError:
+        return None
+    return as_seq(document)
+
+
 def line_of(node: object, default: int) -> int:
     """The line a mapping or sequence began on, or `default` for anything else."""
     return int(getattr(node, "line", default))

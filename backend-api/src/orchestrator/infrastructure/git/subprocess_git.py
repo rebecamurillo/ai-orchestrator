@@ -74,6 +74,9 @@ FALLBACK_PATH = "/usr/local/bin:/usr/bin:/bin"
 #: What a clone leaves behind, and what `base_exists` looks for.
 GIT_DIRECTORY = ".git"
 
+#: What `-z` separates paths with, so that a path never has to be unquoted to be used.
+NUL = "\0"
+
 
 def command_environment(askpass: Path, home: Path, token: str) -> dict[str, str]:
     """The whole environment a git command runs in. Nothing here is inherited but `PATH`.
@@ -223,6 +226,37 @@ class SubprocessGit:
             if text is not None:
                 return text
         return None
+
+    def list_files(self, dest: Path, ref: str, prefix: str) -> tuple[str, ...]:
+        """Every path under `prefix` at a ref; `()` when the ref or the prefix is not there.
+
+        `ls-tree -r` over the same two candidates `read_file` prefers, for the same reason:
+        a base clone is never checked out. A prefix the tree does not hold is an empty
+        answer with exit 0, and a ref it does not hold is a refusal `_attempt` turns into
+        "not there" — so the two absences reach the caller as the same `()`. `prefix` is
+        composed from a Template's own values, so it goes after `--`.
+
+        **`-z`, not newlines.** Without it git *quotes* any path holding a non-ASCII byte —
+        `"docs/4-3-caf\303\251.md"`, octal-escaped and wrapped in quotes — and the caller
+        matching `{id}-*.md` against that would decide a finished Story had written no file
+        and dispatch it again. `-z` writes each path raw, separated by NUL, so what comes
+        back is the path the tree actually holds.
+        """
+        for candidate in (self._remote(ref), ref):
+            listing = self._attempt(
+                "-C",
+                str(dest),
+                "ls-tree",
+                "-r",
+                "-z",
+                "--name-only",
+                candidate,
+                END_OF_OPTIONS,
+                prefix,
+            )
+            if listing is not None:
+                return tuple(path for path in listing.split(NUL) if path)
+        return ()
 
     # ── running one command ──────────────────────────────────────────────────
 

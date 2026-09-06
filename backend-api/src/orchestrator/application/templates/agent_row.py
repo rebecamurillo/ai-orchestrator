@@ -1,0 +1,101 @@
+"""What an `agent` row carries beyond its `with`, resolved once at plan time.
+
+An `agent` step is the only kind whose row needs more than the Template wrote next to it:
+the harness is dispatched into a Spec folder, on one entry of a list file, with the
+entry's own instructions, and with the `expect` and `retry` contract the Template declared
+as siblings of `with` rather than inside it. AD-7 says the plan decides all of that before
+anything starts, so it is decided here and never at dispatch time — a `retry` prompt naming
+`{{story.id}}` would otherwise be filled in from a branch that had moved on.
+
+**The entry is never found by the name `story`.** Two shapes bind one: a `for_each` in the
+same file binds it under the loop's `as` name, and a callee — which is how `epic@1` reaches
+`story@1` — is handed it as the input it declared `item` (AD-15). Either way the Template
+chose the name, so neither is guessed. A Template with no entry at all is not a broken row:
+an `agent` step outside every loop is a dispatch with no Story behind it, and the three keys
+that describe one read `None`.
+
+**`prompt_extra` prefers what the Template bound.** `story@1` binds
+`{{story.invoke_dev_with}}` itself, so the two agree; a Template that binds something else
+means it, and one that binds nothing still gets the entry's own `invoke_dev_with`, because
+that is the field the method uses to tell a dispatch what to read first (FR-14).
+
+`pause_when` is the one agent extra that is *not* a row: a stop declared on the step is how
+the step behaves, not a stop before or after it, so it stays the flag 4.6 reads (AD-7).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
+
+from orchestrator.application.templates.expressions import ITEM_TYPE
+from orchestrator.application.templates.model import AgentExtras
+from orchestrator.application.templates.substitute import paused, resolve
+
+if TYPE_CHECKING:  # a frame is the walker's; naming it here would be a second one
+    from orchestrator.application.templates.rows import Frame
+
+#: The list entry this row works on, whole — what a harness reads `id` and `title` off.
+STORY_KEY = "story"
+#: The entry's id, beside `PlannedRow.story_id`, so a dispatch needs only the row's `with`.
+STORY_ID_KEY = "story_id"
+#: The folder holding `SPEC.md`, `stories.yaml` and `stories/` — where a dispatch happens.
+SPEC_FOLDER_KEY = "spec_folder"
+#: What is appended to the harness prompt (FR-14).
+PROMPT_EXTRA_KEY = "prompt_extra"
+#: `pause_when`, resolved: whether this Story stops for a spec review after planning.
+SPEC_CHECKPOINT_KEY = "spec_checkpoint"
+#: The `expect` and `retry` contracts, flattened by the parser and re-nested for the row.
+EXPECT_KEY = "expect"
+RETRY_KEY = "retry"
+
+#: The list-file field an entry tells a dispatch what to read first in.
+INVOKE_DEV_WITH = "invoke_dev_with"
+
+
+def agent_extras(agent: AgentExtras, frame: Frame) -> dict[str, Any]:
+    """Everything an `agent` row carries beside the `with` its Template wrote."""
+    entry = item(frame)
+    return {
+        STORY_KEY: entry,
+        STORY_ID_KEY: frame.story_id,
+        SPEC_FOLDER_KEY: frame.scope.get(SPEC_FOLDER_KEY),
+        SPEC_CHECKPOINT_KEY: paused(agent.pause_when, frame.scope),
+        EXPECT_KEY: {
+            "files": [resolve(glob, frame.scope) for glob in agent.expect_files],
+            "status_in": list(agent.expect_status_in),
+        },
+        RETRY_KEY: {
+            "max": agent.retry_max,
+            "prompt": resolve(agent.retry_prompt, frame.scope),
+            "resume_session": agent.retry_resume_session,
+        },
+    }
+
+
+def prompt_extra(resolved: Mapping[str, Any], frame: Frame) -> str:
+    """What the Template bound, or the entry's own `invoke_dev_with`, or nothing at all."""
+    return str(resolved.get(PROMPT_EXTRA_KEY) or field(frame, INVOKE_DEV_WITH) or "")
+
+
+def item(frame: Frame) -> Mapping[str, Any] | None:
+    """The list entry this row works on, from whichever of the two shapes bound it.
+
+    A `for_each` in the same file binds its entry under the loop's `as` name; a callee —
+    which is how `epic@1` reaches `story@1` — sees only what the call passed it, and says
+    which of its inputs is the entry by declaring that input `item` (AD-15).
+    """
+    bound = frame.scope.get(frame.item_name) if frame.item_name else _declared(frame)
+    return bound if isinstance(bound, Mapping) else None
+
+
+def _declared(frame: Frame) -> Any:
+    """What this Template's `item` input holds, where it declared one."""
+    names = [decl.name for decl in frame.template.inputs if decl.type == ITEM_TYPE]
+    return frame.scope.get(names[0]) if names else None
+
+
+def field(frame: Frame, name: str) -> Any:
+    """One field of the bound entry, or `None` when there is no entry to read it off."""
+    entry = item(frame)
+    return None if entry is None else entry.get(name)
