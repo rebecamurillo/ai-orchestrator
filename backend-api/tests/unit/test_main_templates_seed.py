@@ -57,6 +57,13 @@ class FakeUow:
 def test_run_migrations_migrates_then_seeds_and_returns_the_head(
     env: dict[str, str], monkeypatch: pytest.MonkeyPatch, recorder: _Recorder
 ) -> None:
+    """Pins all three start-up collaborators, in order (SPEC CAP-3, story 4.3 adds the
+    harness seed beside the template one). `Settings()` here still carries the real,
+    unreachable `.env.example` `DATABASE_URL` (AD-20) — a fourth collaborator added to
+    `run_migrations` without a matching `monkeypatch.setattr` here would reach it for real
+    and raise, failing this test outright rather than letting `recorder.order` pass quietly
+    short of the truth."""
+
     def fake_migrate(settings: Settings) -> str:
         recorder.order.append("migrate")
         return "0004_template"
@@ -65,12 +72,17 @@ def test_run_migrations_migrates_then_seeds_and_returns_the_head(
         recorder.order.append("seed")
         return []
 
+    def fake_harness_seed(settings: Settings) -> list[Any]:
+        recorder.order.append("harness")
+        return []
+
     monkeypatch.setattr(main_module.db_migrations, "run_migrations", fake_migrate)
     monkeypatch.setattr(main_module, "seed_shipped_templates", fake_seed)
+    monkeypatch.setattr(main_module, "seed_harness_table", fake_harness_seed)
 
     head = main_module.run_migrations(Settings())
 
-    assert recorder.order == ["migrate", "seed"]
+    assert recorder.order == ["migrate", "seed", "harness"]
     assert head == "0004_template"
 
 

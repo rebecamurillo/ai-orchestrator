@@ -32,13 +32,17 @@ from typing import Any
 
 from fastapi import Request
 
+from orchestrator.application.use_cases.harnesses import HarnessPorts
+from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.templates import TemplatePorts
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
+    SQLAlchemyHarnessRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
+    SQLAlchemyRunRepository,
     SQLAlchemyTemplateVersionRepository,
     SQLAlchemyUnitOfWork,
 )
@@ -47,6 +51,7 @@ from orchestrator.infrastructure.db import (
 SESSION_FACTORY = "session_factory"
 CRYPTO = "crypto"
 GIT = "git"
+SETTINGS = "settings"
 
 
 def from_state(request: Request, attribute: str) -> Any:
@@ -95,4 +100,36 @@ def template_ports(request: Request) -> Iterator[TemplatePorts]:
             uow=uow,
             templates=SQLAlchemyTemplateVersionRepository(uow.session),
             clock=SystemClock(),
+        )
+
+
+def harness_ports(request: Request) -> Iterator[HarnessPorts]:
+    """The ports a harness use case runs on, inside one transaction."""
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield HarnessPorts(uow=uow, harnesses=SQLAlchemyHarnessRepository(uow.session))
+
+
+def preflight_ports(request: Request) -> Iterator[PreflightPorts]:
+    """The ports pre-flight runs on. Writes nothing, but still opens one transaction, the
+    way `template_ports` does for its own read-only routes."""
+    session_factory = from_state(request, SESSION_FACTORY)
+    settings = from_state(request, SETTINGS)
+    git = git_adapter(request)
+    if git is None:
+        raise RuntimeError(
+            "app.state.git is not set: this application was built without it, "
+            "and pre-flight needs a git port"
+        )
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield PreflightPorts(
+            git=git,
+            templates=SQLAlchemyTemplateVersionRepository(uow.session),
+            runs=SQLAlchemyRunRepository(uow.session),
+            harnesses=SQLAlchemyHarnessRepository(uow.session),
+            repositories=SQLAlchemyRepositoryRepository(uow.session),
+            projects=SQLAlchemyProjectRepository(uow.session),
+            bmad_version=settings.bmad_version,
+            max_active_runs=settings.max_active_runs,
+            work_dir=settings.work_dir,
         )

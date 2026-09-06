@@ -50,17 +50,22 @@ from orchestrator.api.routers import (
     clone_check,
     graph,
     graph_text,
+    harnesses,
     ping,
     projects,
     repositories,
+    runs,
     templates,
 )
+from orchestrator.application.use_cases.harnesses import HarnessPorts, seed_harnesses
 from orchestrator.application.use_cases.templates import SeedResult, TemplatePorts, seed_shipped
+from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.ports.crypto import Crypto
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db import (
+    SQLAlchemyHarnessRepository,
     SQLAlchemyTemplateVersionRepository,
     SQLAlchemyUnitOfWork,
     create_engine_from,
@@ -140,14 +145,44 @@ def seed_shipped_templates(settings: Settings) -> list[SeedResult]:
     return results
 
 
+#: The three harness names this image installs (SPEC CAP-3, AD-10), each paired with the
+#: `Settings` field that pins its version. `local` is OpenCode — see `.env.example`'s own
+#: comment on `LOCAL_MODELS`.
+HARNESS_VERSION_SETTINGS: dict[str, str] = {
+    "claude": "claude_code_version",
+    "codex": "codex_version",
+    "local": "opencode_version",
+}
+
+
+def seed_harness_table(settings: Settings) -> list[Harness]:
+    """Idempotent upsert of the three harness names and their pinned versions (AD-10).
+
+    Builds its own engine, the same way `seed_shipped_templates` does and for the same
+    reason: `run_migrations`'s call site takes exactly `settings`, and this function owns
+    the engine it opens.
+    """
+    pins = {name: getattr(settings, field) for name, field in HARNESS_VERSION_SETTINGS.items()}
+    engine = create_engine_from(settings)
+    try:
+        session_factory = create_session_factory(engine)
+        with SQLAlchemyUnitOfWork(session_factory) as uow:
+            ports = HarnessPorts(uow=uow, harnesses=SQLAlchemyHarnessRepository(uow.session))
+            return seed_harnesses(ports, pins)
+    finally:
+        engine.dispose()
+
+
 def run_migrations(settings: Settings) -> str:
-    """The pre-serve start-up step: schema to head, then the shipped Templates seeded.
+    """The pre-serve start-up step: schema to head, the shipped Templates and the harness
+    table seeded.
 
     Combined under this one name for the reason the module docstring gives: every test that
     replaces `main.run_migrations` takes exactly one argument, `settings`.
     """
     head = db_migrations.run_migrations(settings)
     seed_shipped_templates(settings)
+    seed_harness_table(settings)
     return head
 
 
@@ -258,6 +293,18 @@ def create_app(
     )
     app.include_router(
         graph.router,
+        prefix=API_PREFIX,
+        dependencies=[Depends(require_bearer)],
+        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
+    )
+    app.include_router(
+        runs.router,
+        prefix=API_PREFIX,
+        dependencies=[Depends(require_bearer)],
+        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
+    )
+    app.include_router(
+        harnesses.router,
         prefix=API_PREFIX,
         dependencies=[Depends(require_bearer)],
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},

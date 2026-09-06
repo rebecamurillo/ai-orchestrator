@@ -6,6 +6,26 @@
  */
 
 export interface paths {
+    "/api/v1/harnesses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every harness
+         * @description The three seeded rows, and whatever Epic 5's readiness use case has written onto them.
+         */
+        get: operations["list_harnesses_api_v1_harnesses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ping": {
         parameters: {
             query?: never;
@@ -151,6 +171,30 @@ export interface paths {
          *     `application/` reads the environment (AD-20).
          */
         post: operations["run_clone_check_api_v1_repositories__repository_id__clone_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pre-flight an empty request
+         * @description The same computation over an entirely empty request — every line `skip`.
+         */
+        get: operations["preflight_empty_api_v1_runs_preflight_get"];
+        put?: never;
+        /**
+         * Pre-flight a Run
+         * @description Every FR-8 line, `start_allowed`, the queue note, and the rows the plan would persist.
+         */
+        post: operations["preflight_api_v1_runs_preflight_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -447,6 +491,22 @@ export interface components {
             members: string[];
         };
         /**
+         * HarnessOut
+         * @description One row of `GET /harnesses`.
+         */
+        HarnessOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Failing Check */
+            failing_check: string | null;
+            /** Last Readiness At */
+            last_readiness_at: string | null;
+            /** Name */
+            name: string;
+            /** Version Pin */
+            version_pin: string;
+        };
+        /**
          * Health
          * @description The `/healthz` payload. Typed so the generated contract carries a real schema (AD-3).
          */
@@ -471,6 +531,23 @@ export interface components {
             type: string;
             /** Values */
             values: string[];
+        };
+        /**
+         * LineOut
+         * @description One check line: `{check, status, text, fix?}`.
+         */
+        LineOut: {
+            /** Check */
+            check: string;
+            /** Fix */
+            fix?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "warn" | "fail" | "skip";
+            /** Text */
+            text: string;
         };
         /**
          * MaskedEnvVarOut
@@ -517,6 +594,13 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** Page[HarnessOut] */
+        Page_HarnessOut_: {
+            /** Items */
+            items: components["schemas"]["HarnessOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[ProjectRead] */
         Page_ProjectRead_: {
             /** Items */
@@ -546,12 +630,109 @@ export interface components {
             next_cursor?: string | null;
         };
         /**
+         * PlanErrorOut
+         * @description Why *What will run* could not be built.
+         */
+        PlanErrorOut: {
+            /** Item */
+            item: string | null;
+            /** Line */
+            line: number | null;
+            /** Reason */
+            reason: string;
+            /** Template */
+            template: string | null;
+            /** Version */
+            version: number | null;
+        };
+        /**
+         * PlannedRowOut
+         * @description One row of *What will run* — the same shape `create_run` (4.4) will persist.
+         */
+        PlannedRowOut: {
+            /** Frame */
+            frame: string | null;
+            /**
+             * Gate
+             * @enum {string}
+             */
+            gate: "liveness" | "deterministic" | "human" | "unvalidated";
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Path */
+            path: string;
+            /** Reason */
+            reason: string | null;
+            /** Seq */
+            seq: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "queued" | "running" | "done" | "blocked" | "checkpoint" | "error" | "skipped";
+            /** Story Id */
+            story_id: string | null;
+            /** With Resolved */
+            with_resolved: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * Pong
          * @description The `/api/v1/ping` payload. Typed so the generated contract carries a schema (AD-3).
          */
         Pong: {
             /** Pong */
             pong: boolean;
+        };
+        /**
+         * PreflightIn
+         * @description The pre-flight request. Every field but `re_review_done` is optional — a missing one
+         *     makes its dependent lines `skip` rather than a 422 (the brief's own rule).
+         */
+        PreflightIn: {
+            /** Base Branch */
+            base_branch?: string | null;
+            /** Budget Usd */
+            budget_usd?: number | string | null;
+            /** Harness */
+            harness?: string | null;
+            /** Inputs */
+            inputs?: {
+                [key: string]: unknown;
+            };
+            /** Model */
+            model?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Re Review Done
+             * @default false
+             */
+            re_review_done: boolean;
+            /** Repository Id */
+            repository_id?: string | null;
+            /** Template Name */
+            template_name?: string | null;
+            /** Template Version */
+            template_version?: number | null;
+        };
+        /**
+         * PreflightOut
+         * @description `POST /runs/preflight`'s response.
+         */
+        PreflightOut: {
+            /** Lines */
+            lines: components["schemas"]["LineOut"][];
+            plan_error: components["schemas"]["PlanErrorOut"] | null;
+            /** Queue Note */
+            queue_note: string;
+            /** Rows */
+            rows: components["schemas"]["PlannedRowOut"][] | null;
+            /** Start Allowed */
+            start_allowed: boolean;
         };
         /**
          * ProblemDetail
@@ -863,6 +1044,36 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_harnesses_api_v1_harnesses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_HarnessOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     ping_api_v1_ping_get: {
         parameters: {
             query?: never;
@@ -1424,6 +1635,80 @@ export interface operations {
                 };
             };
             /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    preflight_empty_api_v1_runs_preflight_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreflightOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    preflight_api_v1_runs_preflight_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreflightIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreflightOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The posted body does not match the shape below. */
             422: {
                 headers: {
                     [name: string]: unknown;

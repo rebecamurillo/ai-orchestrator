@@ -288,6 +288,54 @@
         "title": "GroupOut",
         "type": "object"
       },
+      "HarnessOut": {
+        "description": "One row of `GET /harnesses`.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "failing_check": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failing Check"
+          },
+          "last_readiness_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Readiness At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "version_pin": {
+            "title": "Version Pin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "enabled",
+          "last_readiness_at",
+          "failing_check",
+          "version_pin"
+        ],
+        "title": "HarnessOut",
+        "type": "object"
+      },
       "Health": {
         "description": "The `/healthz` payload. Typed so the generated contract carries a real schema (AD-3).",
         "properties": {
@@ -358,6 +406,47 @@
           "values"
         ],
         "title": "InputDeclOut",
+        "type": "object"
+      },
+      "LineOut": {
+        "description": "One check line: `{check, status, text, fix?}`.",
+        "properties": {
+          "check": {
+            "title": "Check",
+            "type": "string"
+          },
+          "fix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warn",
+              "fail",
+              "skip"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "check",
+          "status",
+          "text"
+        ],
+        "title": "LineOut",
         "type": "object"
       },
       "MaskedEnvVarOut": {
@@ -464,6 +553,33 @@
           "call"
         ],
         "title": "NodeOut",
+        "type": "object"
+      },
+      "Page_HarnessOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HarnessOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[HarnessOut]",
         "type": "object"
       },
       "Page_ProjectRead_": {
@@ -574,6 +690,165 @@
         "title": "Page[int]",
         "type": "object"
       },
+      "PlanErrorOut": {
+        "description": "Why *What will run* could not be built.",
+        "properties": {
+          "item": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "reason",
+          "template",
+          "version",
+          "line",
+          "item"
+        ],
+        "title": "PlanErrorOut",
+        "type": "object"
+      },
+      "PlannedRowOut": {
+        "description": "One row of *What will run* \u2014 the same shape `create_run` (4.4) will persist.",
+        "properties": {
+          "frame": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame"
+          },
+          "gate": {
+            "enum": [
+              "liveness",
+              "deterministic",
+              "human",
+              "unvalidated"
+            ],
+            "title": "Gate",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "queued",
+              "running",
+              "done",
+              "blocked",
+              "checkpoint",
+              "error",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "story_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Story Id"
+          },
+          "with_resolved": {
+            "additionalProperties": true,
+            "title": "With Resolved",
+            "type": "object"
+          }
+        },
+        "required": [
+          "seq",
+          "path",
+          "label",
+          "kind",
+          "gate",
+          "status",
+          "reason",
+          "with_resolved",
+          "frame",
+          "story_id"
+        ],
+        "title": "PlannedRowOut",
+        "type": "object"
+      },
       "Pong": {
         "description": "The `/api/v1/ping` payload. Typed so the generated contract carries a schema (AD-3).",
         "properties": {
@@ -586,6 +861,172 @@
           "pong"
         ],
         "title": "Pong",
+        "type": "object"
+      },
+      "PreflightIn": {
+        "description": "The pre-flight request. Every field but `re_review_done` is optional \u2014 a missing one\nmakes its dependent lines `skip` rather than a 422 (the brief's own rule).",
+        "properties": {
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          },
+          "budget_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Usd"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "re_review_done": {
+            "default": false,
+            "title": "Re Review Done",
+            "type": "boolean"
+          },
+          "repository_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Id"
+          },
+          "template_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Name"
+          },
+          "template_version": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 2147483647.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Version"
+          }
+        },
+        "title": "PreflightIn",
+        "type": "object"
+      },
+      "PreflightOut": {
+        "description": "`POST /runs/preflight`'s response.",
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/LineOut"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "plan_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "queue_note": {
+            "title": "Queue Note",
+            "type": "string"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PlannedRowOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows"
+          },
+          "start_allowed": {
+            "title": "Start Allowed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lines",
+          "start_allowed",
+          "queue_note",
+          "rows",
+          "plan_error"
+        ],
+        "title": "PreflightOut",
         "type": "object"
       },
       "ProblemDetail": {
@@ -1279,6 +1720,48 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/harnesses": {
+      "get": {
+        "description": "The three seeded rows, and whatever Epic 5's readiness use case has written onto them.",
+        "operationId": "list_harnesses_api_v1_harnesses_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_HarnessOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List every harness",
+        "tags": [
+          "harnesses"
+        ]
+      }
+    },
     "/api/v1/ping": {
       "get": {
         "operationId": "ping_api_v1_ping_get",
@@ -2178,6 +2661,113 @@
         "summary": "Run this Repository's clone check",
         "tags": [
           "repositories"
+        ]
+      }
+    },
+    "/api/v1/runs/preflight": {
+      "get": {
+        "description": "The same computation over an entirely empty request \u2014 every line `skip`.",
+        "operationId": "preflight_empty_api_v1_runs_preflight_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreflightOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pre-flight an empty request",
+        "tags": [
+          "runs"
+        ]
+      },
+      "post": {
+        "description": "Every FR-8 line, `start_allowed`, the queue note, and the rows the plan would persist.",
+        "operationId": "preflight_api_v1_runs_preflight_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreflightIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreflightOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The posted body does not match the shape below."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pre-flight a Run",
+        "tags": [
+          "runs"
         ]
       }
     },
