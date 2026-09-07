@@ -74,6 +74,11 @@ QUEUED = "queued"
 NEEDS_YOU = "needs_you"
 CHECKPOINT_PARK_KIND = "checkpoint"
 
+#: The statuses a walk stops in: the three terminal ones, and the parked one it waits in.
+#: `running` is not among them — it is the status a Run is passing through, which is why
+#: `wait_until_walked` waits for one of these rather than for "anything but `queued`".
+SETTLED = frozenset({NEEDS_YOU, "done", "failed", "cancelled"})
+
 #: This module's own Template — one `checkpoint` step — so its first Run genuinely parks
 #: rather than running straight to `done` the way `test_run_creation.py::LEAF` now does
 #: once `shell` is registered (4.7). See the module docstring.
@@ -156,16 +161,34 @@ def status_of(client: httpx.Client, run_id: str) -> str:
 
 
 def wait_until_walked(client: httpx.Client, run_id: str) -> str:
-    """Poll until the walker has moved the Run off `queued`, or fail naming the deadline."""
+    """Poll until the walker has walked the Run to a *settled* status, or fail saying which
+    of the two ways it failed to.
+
+    Not "off `queued`": a Run passes through `running` on its way to `needs_you`, so a poll
+    that returned the moment it left `queued` could hand back `running` — true at that
+    instant, and not what `test_the_engine_picks_the_run_up_and_walks_it` asserts. Waiting
+    for a status the walk *stops* in removes the race rather than making it rarer; there is
+    no sleep-then-read here, because a sleep would only move it.
+
+    The deadline distinguishes two different bugs. A Run still `queued` was never dequeued —
+    the engine did not pick it up. A Run that left `queued` and never settled was picked up
+    and stalled somewhere in the walk, which is a walker problem, not a queue one.
+    """
     deadline = time.monotonic() + WALK_TIMEOUT_SECONDS
     status = status_of(client, run_id)
-    while status == "queued" and time.monotonic() < deadline:
+    while status not in SETTLED and time.monotonic() < deadline:
         time.sleep(POLL_INTERVAL_SECONDS)
         status = status_of(client, run_id)
-    if status == "queued":
+    if status == QUEUED:
         pytest.fail(
             f"run {run_id} was still queued after {WALK_TIMEOUT_SECONDS:.0f}s: "
             "the durable engine did not pick it up"
+        )
+    if status not in SETTLED:
+        pytest.fail(
+            f"run {run_id} left queued but was still {status} after "
+            f"{WALK_TIMEOUT_SECONDS:.0f}s: the walk started and did not settle on any of "
+            f"{sorted(SETTLED)}"
         )
     return status
 

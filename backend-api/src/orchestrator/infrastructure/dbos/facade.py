@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
-from dbos import DBOS, DBOSConfig, SetEnqueueOptions, SetWorkflowID
+from dbos import DBOS, DBOSConfig, ScheduleInput, SetEnqueueOptions, SetWorkflowID
 
 # No public re-export exists for this one (`dbos/__init__.py` does not name it); the
 # library's own internal modules (`_sys_db.py`, `_core.py`, `_client.py`) all reach it the
@@ -190,14 +190,39 @@ class RealEngine:
         ]
 
     def schedule(self, name: str, cron: str, job: Callable[[], None]) -> None:
+        """Register a recurring job, once per process and idempotently across restarts.
+
+        `apply_schedules`, not `create_schedule`: the schedule is a row in the *system*
+        database, so it outlives the process that wrote it. `create_schedule` refuses a name
+        it already holds (`Schedule '{name}' already exists`), which makes registering it the
+        second time a start-up crash rather than a no-op — the backend then never binds, and
+        a restart is impossible against any database this application has already run
+        against. `apply_schedules` creates or replaces, so the definition in this source is
+        the one that is stored, whether or not an earlier process stored it; it preserves the
+        row's `last_fired_at`, so a restart does not make a daily job fire twice in a day.
+
+        The same idempotence AD-13 already asks of every `cancel` effect, and the same reason
+        `send` and `cancel` above swallow `DBOSNonExistentWorkflowError`: what a process finds
+        already done is not a failure. Found by `tests/e2e/test_durability.py`, which is the
+        first thing in this repository ever to start a second process against a live one.
+
+        One entry per call, though the library takes a list: the port registers one job at a
+        time (`WorkflowEngine.schedule`), and the list's one-transaction guarantee buys
+        nothing here — the two jobs are independent rows, and a process that wrote one and
+        died before the other writes the second on its next start, which is the whole point
+        of an upsert. `apply_schedules` removes no schedule absent from the list, so calling
+        it twice with one entry each leaves both.
+        """
+
         def scheduled(scheduled_at: datetime, actual_at: datetime) -> None:
             job()
 
-        DBOS.create_schedule(
-            schedule_name=name,
-            workflow_fn=DBOS.workflow(name=name)(scheduled),
-            schedule=cron,
-        )
+        entry: ScheduleInput = {
+            "schedule_name": name,
+            "workflow_fn": DBOS.workflow(name=name)(scheduled),
+            "schedule": cron,
+        }
+        DBOS.apply_schedules([entry])
 
     def step_id(self) -> int | None:
         return DBOS.step_id
