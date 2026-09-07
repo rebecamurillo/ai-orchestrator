@@ -197,6 +197,21 @@ conversation, and NONE is a standing rule.** Cite them as precedent for *asking*
 **The lesson under all three: a test whose precondition is "the feature does not exist yet" becomes
 a liability the moment the feature lands.** Do not write one. Assert the property you mean.
 
+**A fourth authorisation came after the epic closed, and it is the only amendment to the spine.**
+An operator's first real `repo-init@1` run committed 49 `.opencode/commands/bmad-*.md` files into the
+target repository. `bmad.install` appended AD-16's two literal ignore patterns, but the installer runs
+`--tools claude-code,codex,opencode` on purpose — a repository initialised for one harness must not
+refuse another later — and **opencode's output is commands, not skills**, so it matched neither. The
+operator authorised on 2026-09-07: the third pattern in `IGNORED`, the same pattern added to AD-16's
+rule sentence in `ARCHITECTURE-SPINE.md` (one line, nothing else touched), and a new test.
+
+The instructive part is why every gate was green. `test_repo_init.py::test_no_skill_folder_was_committed`
+asserted that two *named prefixes* were absent. AD-16's actual invariant is the **"only"** clause —
+nothing outside `_bmad/` and the spec folders is committed — and nothing asserted it. A test that
+enumerates the cases it knows about cannot fail on the one nobody thought of.
+`tests/e2e/test_repo_init_commit_scope.py` now asserts the clause itself, so the next tool folder any
+future `bmad-method` release adds fails the gate instead of reaching a target repository.
+
 **`make e2e` is the only gate that catches an entire class of bug.** It builds and runs the real
 image. It caught, in this epic alone: `DBOS.register_queue` refusing a thread with a running event
 loop; the queue needing to be declared *after* `launch` because it writes to the system database; and
