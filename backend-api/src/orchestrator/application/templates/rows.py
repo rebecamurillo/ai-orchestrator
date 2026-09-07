@@ -38,6 +38,7 @@ from orchestrator.application.templates.agent_row import (
     agent_extras,
     prompt_extra,
 )
+from orchestrator.application.templates.branches import BranchAllocator, fresh_params
 from orchestrator.application.templates.lists import (
     EPICS_KIND,
     ID_KEY,
@@ -130,7 +131,14 @@ class Frame:
     #: True when the whole frame is `already done`, so every row of it is skipped (FR-10).
     skipped: bool = False
     #: The branch this Template works on, used to find a list file the base does not hold.
+    #: What the file *declared*: the name the plan is read at, never the name created.
     branch: str | None = None
+    #: The name this Run creates instead (`branches.py`), carried by every `git.*` row of
+    #: the frame. `None` for a Template that checks nothing out.
+    fresh_branch: str | None = None
+    #: Where that fresh branch begins — the declared branch when the remote holds it, so
+    #: the worktree holds the tree the plan was read from.
+    fresh_from: str | None = None
     #: True inside a `for_each` item: what makes `PlannedRow.frame` a frame and not a path.
     in_loop: bool = False
     #: The name the enclosing loop bound its entry under, where the entry is this file's
@@ -145,6 +153,8 @@ class Context:
     tree: ResolvedTree
     inputs: RunInputs
     reader: PlanReader
+    #: One fresh name per declared branch, for the whole walk (AD-7, `branches.py`).
+    allocator: BranchAllocator
     #: The BMAD version this instance runs; carried for the executors 4.5 builds from a row.
     bmad_version: str
 
@@ -206,12 +216,15 @@ def expand_call(step: Step, call: TemplateCall, frame: Frame, ctx: Context) -> l
             item=f"{call.name}@{call.version}",
         )
     scope = {name: resolve(value, frame.scope) for name, value in call.inputs}
+    declared = working_branch(callee, scope)
     inner = replace(
         frame,
         prefix=frame.prefix if frame.in_loop else _joined(frame.prefix, step.id),
         scope=scope,
         template=callee,
-        branch=working_branch(callee, scope),
+        branch=declared,
+        fresh_branch=ctx.allocator.fresh(declared),
+        fresh_from=ctx.allocator.start_point(declared, ctx.inputs.base_branch),
         item_name=None,
     )
     return expand(callee.steps, inner, ctx)
@@ -346,7 +359,7 @@ def _resolved(step: Step, frame: Frame) -> dict[str, Any]:
     if step.agent is not None:
         resolved.update(agent_extras(step.agent, frame))
         resolved[PROMPT_EXTRA_KEY] = prompt_extra(resolved, frame)
-    return resolved
+    return fresh_params(step, frame, resolved)
 
 
 def _routing(step: Step, frame: Frame) -> str | Redispatched | None:

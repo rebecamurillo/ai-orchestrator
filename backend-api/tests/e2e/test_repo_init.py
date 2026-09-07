@@ -59,9 +59,13 @@ HTTP_CREATED = 201
 HTTP_OK = 200
 TIMEOUT_SECONDS = 10.0
 
-#: The shipped Template this module runs, and the branch it works on (AD-16).
+#: The shipped Template this module runs, and the branch it works on (AD-16). A Run never
+#: works on the name the Template declares: it works on the first ordinal of it the origin
+#: does not already hold (`templates/branches.py`), and this module's origin is made fresh,
+#: so it is always the first.
 TEMPLATE = "repo-init"
-INIT_BRANCH = "chore/bmad-init"
+DECLARED_BRANCH = "chore/bmad-init"
+INIT_BRANCH = f"{DECLARED_BRANCH}-1"
 COMMIT_SUBJECT = "chore: initialise BMAD method (orchestrator)"
 
 #: The rows `repo-init@1` plans, in order (`templates/repo-init.yaml` plus AD-7's row 1).

@@ -151,11 +151,19 @@ def branch_lines(ctx: Context) -> list[Line]:
             reason = "no repository or base_branch" if ctx.repository is None else "plan not built"
             return [Line(CHECK_BRANCH, "skip", reason)]
         return []
-    return [_branch_line(ctx, branch) for branch in branches]
+    return [_branch_line(ctx, ctx.plan, branch) for branch in branches]
 
 
-def _branch_line(ctx: Context, branch: str) -> Line:
-    holder = _holding_run(ctx.runs, ctx.repository, branch)
+def _branch_line(ctx: Context, plan: Plan, branch: str) -> Line:
+    """One branch the plan creates: who is holding it, and where it starts from.
+
+    The plan creates a branch nobody has used (`templates/branches.py`), so `held by run`
+    is asked of the name the Template *declared* — `Plan.branches` maps the two — and never
+    of the fresh one, which by construction no Run can be holding. AD-14's refusal is about
+    two Runs working the same branch, and that is still what it reports.
+    """
+    declared = _declared(plan, branch)
+    holder = _holding_run(ctx.runs, ctx.repository, declared)
     if holder is not None:
         return Line(
             CHECK_BRANCH,
@@ -165,12 +173,20 @@ def _branch_line(ctx: Context, branch: str) -> Line:
         )
     assert ctx.repository is not None  # a branch line only exists once the plan built
     try:
-        exists = ctx.git.ls_remote(ctx.repository.url, branch) is not None
+        starts_at = ctx.git.ls_remote(ctx.repository.url, declared) is not None
     except STEP_FAILURES as error:
         return Line(CHECK_BRANCH, "fail", _reason(error))
-    if exists:
-        return Line(CHECK_BRANCH, "ok", f"{branch} · will check out")
-    return Line(CHECK_BRANCH, "ok", f"{branch} · will create from {ctx.req.base_branch}")
+    start = declared if starts_at else ctx.req.base_branch
+    return Line(CHECK_BRANCH, "ok", f"{branch} · will create from {start}")
+
+
+def _declared(plan: Plan, branch: str) -> str:
+    """The name the Template wrote for a branch the plan creates, or the branch itself.
+
+    A branch no allocation names is its own declaration — a plan built before there was
+    anything to allocate, or a row that names a branch this Run does not create.
+    """
+    return {created: named for named, created in plan.branches.items()}.get(branch, branch)
 
 
 def _holding_run(runs: RunRepository, repository: Repository | None, branch: str) -> Run | None:

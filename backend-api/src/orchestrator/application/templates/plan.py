@@ -13,9 +13,15 @@ like `work_dir` and `bmad_version` do in `use_cases/clone_check.py`.
 
 **`plan_ref` is one rule, not three.** It is the SHA of the branch the Template works on
 when the remote holds it, and of the base branch otherwise. `repo-init@1` names
-`chore/bmad-init`, which does not exist yet, so it plans from the base; `epic@1` names
-`{{branch}}`, which does; `initiative@1` names no branch at all — its worktree is inside
-the epic frame — so it plans from the base too.
+`chore/bmad-init`, which does not exist the first time, so it plans from the base; `epic@1`
+names `{{branch}}`, which does; `initiative@1` names no branch at all — its worktree is
+inside the epic frame — so it plans from the base too.
+
+**The branch the Template names is not the branch this Run creates.** `BranchAllocator`
+turns each declared name into the first free ordinal of it — `chore/bmad-init-1`, then
+`-2` — and every `git.*` row carries that instead, so two Runs of one Template never meet
+on one branch (`branches.py`). The declared name is still what `plan_ref` above asks the
+remote about, and still where the fresh branch starts from.
 
 **The scope holds no `None`.** A Run that chose no model has no `model` to substitute, so
 the name is simply unbound and `{{model}}` resolves to `""` rather than to the four
@@ -37,6 +43,7 @@ from orchestrator.application.steps.plan_check import (
     PLAN_REFS_KEY,
     URL_KEY,
 )
+from orchestrator.application.templates.branches import BranchAllocator
 from orchestrator.application.templates.model import ParsedTemplate
 from orchestrator.application.templates.plan_model import (
     BASE_BRANCH_NOT_FOUND,
@@ -85,11 +92,27 @@ def plan_run(
 ) -> Plan:
     """Every row this Run will execute, read from one commit of one branch."""
     reader = PlanReader(git, base=base_dir, url=inputs.repository.url)
+    allocator = BranchAllocator(reader)
     scope = root_scope(inputs)
     branch = working_branch(tree.root, scope)
     ref = plan_ref(reader, branch, inputs.base_branch)
-    frame = Frame(prefix="", labels=(), ref=ref, scope=scope, template=tree.root, branch=branch)
-    context = Context(tree=tree, inputs=inputs, reader=reader, bmad_version=bmad_version)
+    frame = Frame(
+        prefix="",
+        labels=(),
+        ref=ref,
+        scope=scope,
+        template=tree.root,
+        branch=branch,
+        fresh_branch=allocator.fresh(branch),
+        fresh_from=allocator.start_point(branch, inputs.base_branch),
+    )
+    context = Context(
+        tree=tree,
+        inputs=inputs,
+        reader=reader,
+        allocator=allocator,
+        bmad_version=bmad_version,
+    )
     # `expand` runs first so `reader.plan_refs`/`plan_branches` are populated by the time
     # `plan_check_row` reads them — row 1 carries a copy of what the rest of the walk
     # recorded, because `plan.check` runs before any other row and cannot re-derive it.
@@ -102,7 +125,12 @@ def plan_run(
         list_branches=dict(reader.plan_branches),
     )
     rows = [check, *expanded]
-    return Plan(plan_ref=ref, plan_refs=dict(reader.plan_refs), rows=numbered(rows, tree.root))
+    return Plan(
+        plan_ref=ref,
+        plan_refs=dict(reader.plan_refs),
+        rows=numbered(rows, tree.root),
+        branches=allocator.allocated,
+    )
 
 
 def root_scope(inputs: RunInputs) -> dict[str, Any]:

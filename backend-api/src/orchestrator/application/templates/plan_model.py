@@ -51,6 +51,9 @@ AMBIGUOUS_STORY_FILE = "ambiguous story file"
 CALLEE_NOT_RESOLVED = "callee not resolved"
 #: The Run has no commit to plan from: the remote holds no such base branch.
 BASE_BRANCH_NOT_FOUND = "base branch not found"
+#: Every ordinal a declared branch could take is already a branch on the origin, so this
+#: Run has no name of its own to work on (`branches.py`).
+NO_FREE_BRANCH = "no free branch name"
 #: A row routes its failure back to a step that is not a row of its own frame. The
 #: validator only checks that the target is an earlier `agent` step *somewhere in the file*
 #: (`keys.py` keeps one flat set), so a step inside a loop may name one outside it — and
@@ -226,3 +229,8 @@ class Plan:
     #: `{path: sha}` — one entry per list file the plan read (see the module docstring).
     plan_refs: dict[str, str] = field(default_factory=dict)
     rows: tuple[PlannedRow, ...] = ()
+    #: `{declared: created}` — the branch each Template named, and the fresh name this Run
+    #: works on instead (`branches.py`). The rows carry only the created name, so this is
+    #: where pre-flight reads the declared one back: AD-14 refuses a Run whose branch
+    #: another Run is holding, and after allocation no two Runs can ever name one branch.
+    branches: dict[str, str] = field(default_factory=dict)

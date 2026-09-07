@@ -38,6 +38,13 @@ INITIATIVE_LIST_FILES = 3
 #: How many Stories `plan_fixtures.EPIC_STORIES` holds.
 STORY_COUNT = 3
 
+#: What a declared branch becomes: no Run works on the name a Template wrote, it works on
+#: the first ordinal of it the origin does not already hold (`templates/branches.py`).
+#: Nothing in these fixtures holds one, so every Run here is the first.
+FIRST_ORDINAL = "-1"
+INIT_BRANCH = f"{fixtures.INIT_BRANCH}{FIRST_ORDINAL}"
+INITIATIVE_BRANCH = f"{fixtures.INITIATIVE_BRANCH}{FIRST_ORDINAL}"
+
 
 def plan(name: str, run_inputs: RunInputs, git: FakeGit) -> Plan:
     return plan_run(
@@ -87,7 +94,7 @@ def test_repo_init_checkout_substitutes_the_base_branch_and_the_literal_branch(
 
     assert {key: value for key, value in resolved.items() if key != "timeout_min"} == {
         "base": fixtures.BASE_BRANCH,
-        "branch": fixtures.INIT_BRANCH,
+        "branch": INIT_BRANCH,
     }
 
 
@@ -97,7 +104,7 @@ def test_repo_init_carries_the_resolved_timeout_of_every_row(repo_init: Plan) ->
 
 
 def test_repo_init_pushes_the_branch_it_created(repo_init: Plan) -> None:
-    assert row(repo_init, "push").with_resolved["branch"] == fixtures.INIT_BRANCH
+    assert row(repo_init, "push").with_resolved["branch"] == INIT_BRANCH
 
 
 def test_repo_init_reads_no_list_file_at_all(repo_init: Plan) -> None:
@@ -345,9 +352,7 @@ def test_an_epic_row_belongs_to_the_epic_frame_and_to_no_story(initiative: Plan)
 
 
 def test_an_epic_works_on_the_branch_its_list_entry_named(initiative: Plan) -> None:
-    assert row(initiative, "epics[0].checkout").with_resolved["branch"] == (
-        fixtures.INITIATIVE_BRANCH
-    )
+    assert row(initiative, "epics[0].checkout").with_resolved["branch"] == INITIATIVE_BRANCH
 
 
 def test_each_epics_spec_folder_is_the_initiative_folder_plus_its_own(

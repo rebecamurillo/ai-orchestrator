@@ -264,13 +264,18 @@ def test_branch_lines_is_empty_when_nothing_blocks_and_no_plan_exists() -> None:
     assert lines == []
 
 
-def test_branch_lines_ok_will_check_out() -> None:
-    plan = Plan(plan_ref="sha", rows=(row(with_resolved={"branch": "feat/x"}),))
+def test_branch_lines_ok_will_create_from_the_branch_it_continues() -> None:
+    """Nothing is ever checked out: the line names the fresh branch and where it starts."""
+    plan = Plan(
+        plan_ref="sha",
+        rows=(row(with_resolved={"branch": "feat/x-1"}),),
+        branches={"feat/x": "feat/x-1"},
+    )
     lines = checks.branch_lines(
         ctx(repository=repo(), plan=plan, git=FakeGit(refs={"feat/x": "sha2"}))
     )
 
-    assert lines == [Line(CHECK_BRANCH, "ok", "feat/x · will check out", None)]
+    assert lines == [Line(CHECK_BRANCH, "ok", "feat/x-1 · will create from feat/x", None)]
 
 
 def test_branch_lines_ok_will_create_from_base() -> None:

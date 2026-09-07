@@ -125,7 +125,7 @@ def test_ac1_repo_init_full_success() -> None:
     assert result.rows is not None
     assert len(result.rows) == REPO_INIT_ROW_COUNT
     assert result.queue_note == QUEUE_FREE
-    assert line(result, CHECK_BRANCH).text == "chore/bmad-init · will create from main"
+    assert line(result, CHECK_BRANCH).text == "chore/bmad-init-1 · will create from main"
     assert line(result, CHECK_METHOD_VERSION).status == "skip"
 
 

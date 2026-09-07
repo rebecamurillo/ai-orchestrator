@@ -212,6 +212,36 @@ enumerates the cases it knows about cannot fail on the one nobody thought of.
 `tests/e2e/test_repo_init_commit_scope.py` now asserts the clause itself, so the next tool folder any
 future `bmad-method` release adds fails the gate instead of reaching a target repository.
 
+**A fifth authorisation, the same day, is the second amendment: a Run no longer works on the branch
+its Template names.** The operator's second `repo-init@1` run against the same repository did not
+push: `chore/bmad-init` was still open on the origin from the first one, so the Run checked that
+branch out again and the push had nowhere to land that was not already someone else's. The fix is in
+the planner, not in the Templates: `application/templates/branches.py` allocates each declared branch
+the first ordinal of it the origin does not hold — `chore/bmad-init-1`, then `-2` — and the `git.*`
+rows carry that name. The operator chose *always* suffixed over *suffixed on collision* on
+2026-09-07, and chose it for every Template rather than for `repo-init@1` alone.
+
+**Why an ordinal and not a timestamp, which is what was asked for.** AD-7 makes `plan_run` pure: two
+calls with the same tree, the same inputs and the same scripted `Git` return equal `Plan`s, which is
+what makes *What will run* a promise. A clock in the planner would mean the plan an Operator
+previewed is not the plan they started. The ordinal is read off the remote through `PlanReader`,
+which is a read the planner already makes and already memoises, so the promise survives.
+
+**The declared name did not become decorative.** It is still what `plan_ref` asks the origin about,
+still the list-file fallback (`epics.yaml` on the base branch, `stories.yaml` on the epic's own), and
+still what pre-flight's `held by run` refusal compares — `Plan.branches` carries the `{declared:
+created}` map for exactly that, because an allocated name is fresh by construction and could never
+collide, which would have quietly retired AD-14's refusal. A fresh branch also *starts* at the
+declared branch when the remote holds it, so a Run that planned from `origin/chore/bmad-init` creates
+`chore/bmad-init-2` from that commit and not from `main`: planning against one tree and checking out
+another is the bug this would otherwise have introduced.
+
+Six existing assertions moved with it, all of them naming a branch rather than testing one: three in
+`test_plan_shipped.py`, one in `test_preflight_use_case.py`, one in `tests/e2e/test_repo_init.py`, and
+`test_branch_lines_ok_will_check_out`, which was renamed because nothing is ever checked out any more.
+`test_shipped_templates.py` needed no change at all — the Templates still declare `chore/bmad-init`,
+and that is the point of doing this in the planner.
+
 **`make e2e` is the only gate that catches an entire class of bug.** It builds and runs the real
 image. It caught, in this epic alone: `DBOS.register_queue` refusing a thread with a running event
 loop; the queue needing to be declared *after* `launch` because it writes to the system database; and
