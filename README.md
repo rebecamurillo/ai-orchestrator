@@ -13,6 +13,9 @@ The product is specified, not yet built. Everything that decides what gets built
 
 ## Running it
 
+This section is the development stack. Deploying to the machine that does real work —
+images from GHCR, upgrades, rollback and the drain rule — is `DEPLOY.md`.
+
 Configuration is the environment (AD-20): `.env.example` is the contract, `make lint` fails when a
 setting exists in one place and not the other. Copy it once, fill it in, and never commit the result.
 

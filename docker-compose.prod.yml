@@ -1,0 +1,63 @@
+# ai-orchestrator — the overlay that turns the compose stack into the production one.
+#
+# NFR-7 says the whole MVP is one Docker Compose file, so this is an overlay and not a
+# second stack: `docker-compose.yml` stays the single definition of what the services are,
+# and this file changes only what production changes. It is merged the way the gate's
+# overlay is merged (`docker-compose.e2e.yml`), under a project name of its own:
+#
+#   docker compose -p aio-prod --env-file .env.prod \
+#     -f docker-compose.yml -f docker-compose.prod.yml <command>
+#
+# DEPLOY.md is the procedure; this file is only what the procedure configures.
+#
+# Four differences from the stack you develop against, each of which is a production
+# requirement rather than a preference:
+#
+#   1. The images are pulled, not built. `docker-compose.yml` carries a `build:` stanza and
+#      compose cannot unset it from an overlay, so `image:` here names the published
+#      artefact and the procedure runs `up --no-build` — without that flag compose would
+#      silently build from the working tree when the tag is not already local, and "what is
+#      deployed" would stop being answerable.
+#   2. The environment is `.env.prod`, `required: true`. Exactly the reason the e2e overlay
+#      overrides `env_file`: without it backend-api reads `.env`, which on a machine that is
+#      also a checkout is the development contract, with development credentials.
+#   3. Postgres is probed with a query, not with `pg_isready`. `pg_isready` treats
+#      `FATAL: database "…" does not exist` as *the server is accepting connections* and
+#      exits 0, so the base probe reports healthy against a database that is not there,
+#      `depends_on: service_healthy` is satisfied, and backend-api is started into a crash
+#      loop. A gate that fails open is not a gate (hard rule 7).
+#   4. Logs are rotated. Nothing else in this repository bounds them, and the default
+#      json-file driver keeps every line forever; on a host that runs for months that is the
+#      way the disk fills.
+#
+# `restart: always` rather than the base file's `unless-stopped`: on a machine that reboots,
+# `unless-stopped` leaves a manually stopped service stopped — correct while developing,
+# wrong for the one stack the operator expects to find running.
+
+services:
+  postgres:
+    # merged over the base healthcheck: the interval, timeout, retries and start_period
+    # there still apply, and only the probe itself is replaced
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - psql -U $${POSTGRES_USER} -d $${POSTGRES_DB} -tAc 'select 1' >/dev/null
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+    restart: always
+
+  backend-api:
+    image: ghcr.io/optimai-labs/ai-orchestrator/backend-api:${IMAGE_TAG:?set it in .env.prod — the release tag this host runs}
+    env_file: !override
+      - path: .env.prod
+        required: true
+    logging: *logging
+    restart: always
+
+  web-client:
+    image: ghcr.io/optimai-labs/ai-orchestrator/web-client:${IMAGE_TAG:?set it in .env.prod — the release tag this host runs}
+    logging: *logging
+    restart: always
