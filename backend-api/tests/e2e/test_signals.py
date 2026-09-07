@@ -223,12 +223,17 @@ def test_cancel_removes_the_worktree_and_deletes_the_unpushed_branch(
         run = SQLAlchemyRunRepository(session).get(UUID(run_id))
     assert run is not None
     (worktree,) = run.worktrees
-    assert worktree.branch == branch
+    # The Run works on the first ordinal of the branch the Template declared, never on the
+    # declared name itself (`templates/branches.py`); this fixture repository is new, so
+    # nothing holds it. The cleanup check is asked about the name that was *created* — the
+    # declared one was never a branch of the base clone, so asking about it would pass
+    # whatever `cancel` did.
+    assert worktree.branch == f"{branch}-1"
     assert worktree.created_branch is True
     assert worktree.pushed is False
     base = str(Path(worktree.path).parent.parent / "base")
-    assert run_check([base, worktree.path, branch]), (
-        f"worktree/branch not cleaned up: base={base} path={worktree.path} branch={branch}"
+    assert run_check([base, worktree.path, worktree.branch]), (
+        f"worktree/branch not cleaned up: base={base} path={worktree.path} branch={worktree.branch}"
     )
 
 
