@@ -38,6 +38,7 @@ from orchestrator.application.use_cases.harnesses import HarnessPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.queue import QueuePorts
+from orchestrator.application.use_cases.run_views import RunViewPorts
 from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.application.use_cases.signals import SignalEffectPorts
 from orchestrator.application.use_cases.templates import TemplatePorts
@@ -45,6 +46,8 @@ from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
+    SQLAlchemyAttemptRepository,
+    SQLAlchemyGateRecordRepository,
     SQLAlchemyHarnessRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
@@ -55,6 +58,7 @@ from orchestrator.infrastructure.db import (
     open_writer_ports,
 )
 from orchestrator.infrastructure.db.environment import read_run_environment
+from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.process.runner import RealProcessRunner
 
 #: The attributes `create_app` stores its adapters under.
@@ -175,12 +179,34 @@ def create_run_ports(request: Request) -> Iterator[CreateRunPorts]:
 
 
 def run_read_ports(request: Request) -> Iterator[RunReadPorts]:
-    """The ports `GET /runs/{id}` reads through. Writes nothing."""
+    """The ports `GET /runs`, `GET /runs/{id}` and `GET /runs?view=board` (4.12) read
+    through. Writes nothing."""
     session_factory = from_state(request, SESSION_FACTORY)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
         yield RunReadPorts(
             runs=SQLAlchemyRunRepository(uow.session),
             steps=SQLAlchemyStepRunRepository(uow.session),
+            projects=SQLAlchemyProjectRepository(uow.session),
+            repositories=SQLAlchemyRepositoryRepository(uow.session),
+            gate_records=SQLAlchemyGateRecordRepository(uow.session),
+        )
+
+
+def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
+    """The ports the Run detail and the run graph route read through (4.12). The Board
+    reads through `run_read_ports` instead — see `application/use_cases/run_views.py`'s own
+    module docstring for why it cannot share this one."""
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield RunViewPorts(
+            runs=SQLAlchemyRunRepository(uow.session),
+            steps=SQLAlchemyStepRunRepository(uow.session),
+            attempts=SQLAlchemyAttemptRepository(uow.session),
+            gate_records=SQLAlchemyGateRecordRepository(uow.session),
+            projects=SQLAlchemyProjectRepository(uow.session),
+            repositories=SQLAlchemyRepositoryRepository(uow.session),
+            logs=RealLogReader(),
+            clock=SystemClock(),
         )
 
 

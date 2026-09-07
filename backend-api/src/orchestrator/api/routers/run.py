@@ -17,14 +17,18 @@ future reshuffle fails loudly.
 
 `GET /runs` exists for the same reason `GET /runs/preflight` does: `test_bearer_auth.py`
 indexes `document["paths"][path]["get"]` for every published path, so a `POST`-only `/runs`
-would break that frozen sweep. It answers `RunRepository.list()` (4.1) as `Page[RunSummaryOut]`
-— the same minimal read model `GET /runs/{run_id}` renders, listed rather than pointed at;
-the full Board/queue read models are CAP-12/16's, not this story's.
+would break that frozen sweep. With no `view` query parameter it answers `RunRepository.
+list()` (4.1) as `Page[RunSummaryOut]` — the same minimal read model `GET /runs/{run_id}`
+renders, listed rather than pointed at. `?view=board` (4.12, SPEC CAP-12) answers the Board
+instead, on this same route rather than a new one — the query string is the only thing that
+differs, and `test_run_router.py`'s frozen route-count test only pins methods and paths, so
+this stays exactly the three operations it always was. The full `GET /runs/{id}` read model
+does *not* land here: see `api/routers/run_detail.py`'s own docstring for why.
 """
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -38,6 +42,7 @@ from orchestrator.api.errors import (
 )
 from orchestrator.api.providers import create_run_ports, run_read_ports
 from orchestrator.api.schemas.common import Page
+from orchestrator.api.schemas.run_views import BoardOut
 from orchestrator.api.schemas.runs import CreateRunOut, RunIn, RunSummaryOut, plan_error_problems
 from orchestrator.application.templates.plan_model import PlanError
 from orchestrator.application.use_cases.create_run import (
@@ -47,6 +52,8 @@ from orchestrator.application.use_cases.create_run import (
     get_run,
     park_row_kind_of,
 )
+from orchestrator.application.use_cases.run_views import board_view
+from orchestrator.infrastructure.clock import SystemClock
 
 router = APIRouter(tags=["runs"])
 
@@ -77,6 +84,11 @@ BAD_ID_RESPONSE = _refusal("`run_id` does not parse as a UUID.")
 # `HTTPValidationError` schema for the path-parameter 422 instead of this API's
 # `ProblemDetail` — `test_projects_router.py`'s repo-wide sweep checks the whole document.
 READ_REFUSALS = {404: NOT_FOUND_RESPONSE, HTTP_UNPROCESSABLE_CONTENT: BAD_ID_RESPONSE}
+# `view`/`project_id` (4.12) are the first query parameters this route has ever taken, so
+# they are the first thing that can make it answer a 422 — declared for the same reason
+# `READ_REFUSALS` is, just above.
+BAD_QUERY_RESPONSE = _refusal("`view` or `project_id` does not match the shape below.")
+LIST_REFUSALS = {HTTP_UNPROCESSABLE_CONTENT: BAD_QUERY_RESPONSE}
 
 
 @router.post(
@@ -100,10 +112,22 @@ def create(payload: RunIn, ports: CreatePorts) -> CreateRunOut:
     return CreateRunOut.of(result)
 
 
-@router.get("/runs", response_model=Page[RunSummaryOut], summary="List every Run")
-def list_runs(ports: ReadPorts) -> Page[RunSummaryOut]:
-    """Every stored Run, newest first — the minimal summary; the Board is CAP-12's."""
-    items = [RunSummaryOut.of(run) for run in ports.runs.list()]
+@router.get(
+    "/runs",
+    response_model=Page[RunSummaryOut] | BoardOut,
+    summary="List every Run, or read the Board (`?view=board`)",
+    responses=LIST_REFUSALS,
+)
+def list_runs(
+    ports: ReadPorts,
+    view: Literal["board"] | None = None,
+    project_id: UUID | None = None,
+) -> Page[RunSummaryOut] | BoardOut:
+    """`?view=board` answers the Board (SPEC CAP-12); otherwise every stored Run, newest
+    first, the minimal summary."""
+    if view == "board":
+        return BoardOut.of(board_view(ports, project_id=project_id, now=SystemClock().now()))
+    items = [RunSummaryOut.of(run) for run in ports.runs.list(project_id=project_id)]
     return Page[RunSummaryOut](items=items, next_cursor=None)
 
 

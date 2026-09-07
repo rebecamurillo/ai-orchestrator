@@ -48,101 +48,52 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
-from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
-
+from orchestrator.application.graph_schema import (
+    AFTER_ITEM,
+    BEFORE_ITEM,
+    FOR_EACH,
+    HUMAN_GATE,
+    SEPARATOR,
+    UNVALIDATED,
+    Edge,
+    Graph,
+    Group,
+    Node,
+    NodeCall,
+    NodeGate,
+)
+from orchestrator.application.rules.frames import epic_frame, rows_in_frame, story_frame
 from orchestrator.application.steps import (
     AGENT_KIND,
     CHECKPOINT_KIND,
     KIND_META,
     TEMPLATE_CALL_KIND,
-    Gate,
 )
 from orchestrator.application.templates.model import ForEach, ParsedTemplate, Step
+from orchestrator.domain.entities.run import Run
+from orchestrator.domain.entities.step_run import StepRun
+from orchestrator.domain.statuses import StepStatus
 
-#: What a node's `gate` reads when the step declared none (NFR-2). Never `gate_default`: a
-#: step nobody gated is not silently the kind's normal gate. The word is on screen, not green.
-UNVALIDATED: Literal["unvalidated"] = "unvalidated"
-
-#: A node's gate: what the file declared, or the word for "the file declared nothing".
-NodeGate = Gate | Literal["unvalidated"]
-
-#: The gate a person answers. A step carrying it is `human` whatever its kind is.
-HUMAN_GATE: Gate = "human"
-
-#: What joins the segments of a node id. One separator, no indices (AD-15).
-SEPARATOR = "."
-
-#: The last segment of each synthetic item checkpoint, and its label.
-BEFORE_ITEM = "before"
-AFTER_ITEM = "after"
-
-#: The one construct a `Group` can be in this release (AD-15: one `for_each` per file).
-FOR_EACH: Literal["for_each"] = "for_each"
-
-
-class NodeCall(BaseModel):
-    """The callee a collapsed `uses: template` node names. Never expanded here."""
-
-    model_config = ConfigDict(frozen=True)
-
-    name: str
-    version: int
-
-
-class Node(BaseModel):
-    """One box of the diagram, and one row of the Template screen's step list."""
-
-    model_config = ConfigDict(frozen=True)
-
-    #: The template-relative dotted path, index-free — joinable to `unvalidated`.
-    id: str
-    #: The step kind, resolved: `run:` sugar is `shell`, a call is `template`.
-    kind: str
-    #: The step id, or `{name}@{version}` for a call.
-    label: str
-    #: What the file declared, `unvalidated` where it declared nothing, `None` for a call.
-    gate: NodeGate | None = None
-    #: True iff the step dispatches a harness.
-    agent: bool = False
-    #: True iff a person decides this step: the `human` gate, or the `checkpoint` kind.
-    human: bool = False
-    #: The callee, for a collapsed call and for nothing else.
-    call: NodeCall | None = None
-
-
-class Edge(BaseModel):
-    """One arrow: the id it leaves, the id it enters. Rendered `{from, to}` on the wire."""
-
-    model_config = ConfigDict(frozen=True)
-
-    from_id: str
-    to_id: str
-
-
-class Group(BaseModel):
-    """One `for_each`, and the ordered node ids drawn inside its box."""
-
-    model_config = ConfigDict(frozen=True)
-
-    id: str
-    #: The loop's id: the group has no name of its own to carry.
-    label: str
-    #: The one construct a group can be. A field rather than an assumption, because Epic 4
-    #: draws a group per callee frame beside these and the two have to be told apart.
-    kind: Literal["for_each"] = FOR_EACH
-    members: tuple[str, ...] = ()
-
-
-class Graph(BaseModel):
-    """A Template version's shape. No layout, no status: 3.6 draws it, Epic 4 colours it."""
-
-    model_config = ConfigDict(frozen=True)
-
-    nodes: tuple[Node, ...] = ()
-    edges: tuple[Edge, ...] = ()
-    groups: tuple[Group, ...] = ()
+__all__ = [
+    "AFTER_ITEM",
+    "BEFORE_ITEM",
+    "FOR_EACH",
+    "HUMAN_GATE",
+    "ROOT_ID",
+    "SEPARATOR",
+    "STEP_TOKENS",
+    "UNVALIDATED",
+    "Edge",
+    "Graph",
+    "Group",
+    "Node",
+    "NodeCall",
+    "NodeGate",
+    "build_run_graph",
+    "build_template_graph",
+    "group_status",
+]
 
 
 @dataclass(frozen=True)
@@ -287,3 +238,149 @@ def _is_human(step: Step) -> bool:
 def _chain(ids: Sequence[str]) -> tuple[Edge, ...]:
     """One edge per consecutive pair; nothing at all for a single node."""
     return tuple(Edge(from_id=before, to_id=after) for before, after in pairwise(ids))
+
+
+# ── the run graph (4.12, SPEC CAP-12, AD-15) ──────────────────────────────────────────────
+#
+# Where the template graph collapses a call and never expands a loop, the run graph is the
+# opposite: the planner (4.2) has already expanded every loop into concrete rows, so there
+# is nothing left to collapse and nothing left to expand here. A node is one `StepRun`, its
+# id is `step_run.path` verbatim, and the only structure this module adds on top is the one
+# the walker itself has: a straight chain in `seq` order, with one synthetic node standing
+# for the Run as a whole at the head of it, and the `epics[i]`/`epics[i].stories[j]` frames
+# `application/rules/frames.py` already knows how to find, read as `Group`s.
+
+#: The synthetic node id that stands for the Run itself — never a `step_run.path`, since
+#: every shipped Template's step ids are plain identifiers with no brackets in them at the
+#: top level, so this can never collide with a real row.
+ROOT_ID = "root"
+
+#: Step tokens (Consistency Conventions — Status tokens), for a run graph's per-row nodes.
+STEP_TOKENS: dict[StepStatus, str] = {
+    "planned": "QUE",
+    "queued": "QUE",
+    "running": "RUN",
+    "done": "DON",
+    "blocked": "BLK",
+    "checkpoint": "CHK",
+    "error": "ERR",
+    "skipped": "SKP",
+}
+
+#: The three statuses that mean the whole Run — and so every group containing the row — is
+#: stopped for the Operator. Checked before `running`: the walker parks the Run the moment
+#: any one row reaches one of these, so at most one row in the whole plan can be in this set
+#: at a time, and nothing else can be `running` alongside it — the precedence below is a
+#: total order for a case that is unreachable in practice, not a live ambiguity.
+_STOPPED: tuple[StepStatus, ...] = ("error", "blocked", "checkpoint")
+
+
+def group_status(statuses: Sequence[StepStatus]) -> str:
+    """The one rule (SPEC CAP-12, AD-15) a run-graph group's status follows, and the only
+    place it is written: `error | blocked | checkpoint` if any member is, else `running` if
+    any is, else `skipped` when every member is, else `done` when every member is `done` or
+    `skipped`, else `queued`. `queued` for an empty sequence too — a group is only ever built
+    from a prefix some row actually named (`_group_prefixes`), so this is never reached
+    empty in practice, but `all(...)` over `[]` is vacuously true and would otherwise answer
+    the wrong branch (`skipped`) for a case that never means that."""
+    if not statuses:
+        return "queued"
+    for stopped in _STOPPED:
+        if stopped in statuses:
+            return stopped
+    if "running" in statuses:
+        return "running"
+    if all(status == "skipped" for status in statuses):
+        return "skipped"
+    if all(status in ("done", "skipped") for status in statuses):
+        return "done"
+    return "queued"
+
+
+def _run_token(run: Run) -> str:
+    """The Run's own UI token (Consistency Conventions — Status tokens): `BLK`/`CHK` while
+    parked, off `park_kind`, the fixed table otherwise. The same rule `application/use_cases/
+    project_runs.py::_token` states for the Board — duplicated rather than imported, that
+    module's own established precedent for a handful of lines two readers both need."""
+    if run.status == "needs_you":
+        return "CHK" if run.park_kind == "checkpoint" else "BLK"
+    return {
+        "queued": "QUE",
+        "running": "RUN",
+        "done": "DON",
+        "failed": "ERR",
+        "cancelled": "CAN",
+    }[run.status]
+
+
+def _run_node(run: Run) -> Node:
+    """The one synthetic node standing for the Run: `initiative` → the initiative, else the
+    epic (`run.template_name` names whichever it is) — the graph's own root."""
+    return Node(
+        id=ROOT_ID,
+        kind=run.template_name,
+        label=run.template_name,
+        gate=None,
+        status=run.status,
+        token=_run_token(run),
+        current=False,
+    )
+
+
+def _row_node(row: StepRun, *, current: bool) -> Node:
+    """One planned row, as one box: `step_run.path` verbatim, no index ever stripped."""
+    return Node(
+        id=row.path,
+        kind=row.kind,
+        label=row.label,
+        gate=row.gate,
+        agent=row.kind == AGENT_KIND,
+        human=row.gate == HUMAN_GATE or row.kind == CHECKPOINT_KIND,
+        status=row.status,
+        token=STEP_TOKENS[row.status],
+        current=current,
+    )
+
+
+def _is_current(row: StepRun, run: Run) -> bool:
+    """The running row, or the parked row while nothing is running (SPEC CAP-12)."""
+    return row.status == "running" or (run.park_path is not None and row.path == run.park_path)
+
+
+def _group_prefixes(rows: Sequence[StepRun]) -> list[str]:
+    """Every distinct `epics[i]` and `epics[i].stories[j]` (or `stories[j]`) frame present,
+    in the plan's own order — the first row of a frame is where it starts."""
+    seen: dict[str, int] = {}
+    for row in rows:
+        for prefix in (epic_frame(row.path), story_frame(row.path)):
+            if prefix is not None and prefix not in seen:
+                seen[prefix] = row.seq
+    return sorted(seen, key=lambda prefix: seen[prefix])
+
+
+def _group(prefix: str, rows: Sequence[StepRun], *, cancelled: bool) -> Group:
+    """One frame, its members in `seq` order, and its status by the one rule — `None` for a
+    `cancelled` Run, which never finished or stopped at any of them (SPEC CAP-12)."""
+    members = rows_in_frame(rows, prefix)
+    status = None if cancelled else group_status([member.status for member in members])
+    return Group(
+        id=prefix,
+        label=prefix,
+        members=tuple(member.path for member in members),
+        status=status,
+    )
+
+
+def build_run_graph(rows: Sequence[StepRun], run: Run) -> Graph:
+    """The graph of one Run: its planned rows, chained in `seq` order behind one root node
+    standing for the Run itself, grouped by the epic/story frames they fall under."""
+    ordered = sorted(rows, key=lambda row: row.seq)
+    root = _run_node(run)
+    row_nodes = [_row_node(row, current=_is_current(row, run)) for row in ordered]
+    nodes = (root, *row_nodes)
+    edges = _chain((ROOT_ID, *(row.path for row in ordered)))
+    groups = tuple(
+        _group(prefix, ordered, cancelled=run.status == "cancelled")
+        for prefix in _group_prefixes(ordered)
+    )
+    return Graph(nodes=nodes, edges=edges, groups=groups)

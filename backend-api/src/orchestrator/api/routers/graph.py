@@ -24,6 +24,7 @@ is rarely the only one, and a reader fixing the file needs the list, not the hea
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path
 
@@ -35,16 +36,20 @@ from orchestrator.api.errors import (
     Problem,
     ProblemDetail,
 )
-from orchestrator.api.providers import template_ports
+from orchestrator.api.providers import run_view_ports, template_ports
 from orchestrator.api.schemas.common import MAX_VERSION
-from orchestrator.api.schemas.graph import GraphOut
+from orchestrator.api.schemas.graph import GraphOut, RunGraphOut
 from orchestrator.api.schemas.templates import as_problem_errors
 from orchestrator.application.use_cases import templates as use_cases
+from orchestrator.application.use_cases.run_views import RunViewPorts, run_graph_for
 from orchestrator.application.use_cases.templates import StoredTemplateInvalid, TemplatePorts
 
 router = APIRouter(tags=["templates"])
 
 HTTP_NOT_FOUND = 404
+
+#: The second route this module carries (module docstring): the run graph, keyed by Run id.
+RUN_GRAPH_PATH = "/runs/{run_id}/graph"
 
 #: One path, one operation today. Named so Epic 4's run graph lands beside it, not on it.
 TEMPLATE_GRAPH_PATH = "/templates/{name}/{version}/graph"
@@ -99,3 +104,21 @@ def template_graph(
             errors=as_problem_errors(failure.errors),
         ) from failure
     return GraphOut.of(graph)
+
+
+RUN_NOT_FOUND = _refusal("No Run has that id.")
+RUN_BAD_ID = _refusal("`run_id` does not parse as a UUID.")
+RUN_REFUSALS = {HTTP_NOT_FOUND: RUN_NOT_FOUND, HTTP_UNPROCESSABLE_CONTENT: RUN_BAD_ID}
+
+RunPorts = Annotated[RunViewPorts, Depends(run_view_ports)]
+
+
+@router.get(
+    RUN_GRAPH_PATH,
+    response_model=RunGraphOut,
+    summary="Read one Run's graph",
+    responses=RUN_REFUSALS,
+)
+def run_graph(run_id: UUID, ports: RunPorts) -> RunGraphOut:
+    """`build_run_graph` (SPEC CAP-12, AD-15): the planned rows, chained, grouped, coloured."""
+    return RunGraphOut.of(run_graph_for(ports, run_id))

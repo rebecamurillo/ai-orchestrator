@@ -51,7 +51,13 @@ from orchestrator.domain.errors import Conflict, NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.engine import WorkflowEngine
-from orchestrator.domain.ports.repositories import RunRepository, StepRunRepository
+from orchestrator.domain.ports.repositories import (
+    GateRecordRepository,
+    ProjectRepository,
+    RepositoryRepository,
+    RunRepository,
+    StepRunRepository,
+)
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.values import PlannedRow
 
@@ -183,13 +189,23 @@ def _refuse_failing_lines(lines: tuple[Line, ...], *, skip_harness_check: bool) 
 
 @dataclass(frozen=True)
 class RunReadPorts:
-    """What `GET /runs/{id}` reads through — nothing this route writes."""
+    """What `GET /runs`, `GET /runs/{id}` and `GET /runs?view=board` (4.12) read through —
+    nothing any of them writes."""
 
     runs: RunRepository
     #: `None` for a caller that only ever reads a Run — `test_run_router.py` (4.4)
     #: constructs `RunReadPorts(runs=...)` alone. Set, a reader can also look up the parked
-    #: row's own `kind` for `RunSummaryOut.admitted_signals` (4.9).
+    #: row's own `kind` for `RunSummaryOut.admitted_signals` (4.9), and the Board (4.12)
+    #: reads a Run's rows for its progress and current-step label.
     steps: StepRunRepository | None = None
+    #: `None` for the same reason `steps` can be: the Board (4.12) names and slugs each
+    #: card with these, gracefully blank when unwired, the way `application/use_cases/
+    #: project_runs.py::embedded_runs` degrades rather than fails a read `runs`/`steps`
+    #: alone can already answer.
+    projects: ProjectRepository | None = None
+    repositories: RepositoryRepository | None = None
+    #: `None` likewise; the Board (4.12) reads this for `needs_you_since` alone.
+    gate_records: GateRecordRepository | None = None
 
 
 def get_run(ports: RunReadPorts, run_id: UUID) -> Run:
