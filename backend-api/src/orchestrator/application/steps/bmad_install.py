@@ -10,11 +10,12 @@ carries it — read once in `infrastructure/settings.py`, like every other insta
 `claude`, `codex` or `local` when they start a Run, and a repository initialised for one of
 them would refuse the other two later.
 
-**Skill folders are never committed** (AD-16). `bmad-method` writes `.claude/skills/bmad-*`
-and `.agents/skills/bmad-*` into the repository, and this row appends the two ignore lines
-that keep them out of the commit `git.commit` makes next. Appended, never rewritten: a
-repository that already ignores other things keeps ignoring them, and running this row twice
-adds nothing a second time.
+**Nothing outside `_bmad/` and the spec folders is committed** (AD-16). `bmad-method` also
+writes `.claude/skills/bmad-*`, `.agents/skills/bmad-*` and `.opencode/commands/bmad-*` into
+the repository — skills for claude and codex, commands for opencode — and this row appends
+the three ignore lines that keep all of them out of the commit `git.commit` makes next.
+Appended, never rewritten: a repository that already ignores other things keeps ignoring
+them, and running this row twice adds nothing a second time.
 
 The install itself goes through `ProcessRunner` like every other command (AD-14), so it is
 timed by the row's own `timeout_min` and killed as a group if it outlives it. `env={}`: the
@@ -59,9 +60,9 @@ INSTALL_COMMAND = (
     "{worktree}",
 )
 
-#: The file the two ignore lines are appended to, and the lines themselves (AD-16).
+#: The file the ignore lines are appended to, and the lines themselves (AD-16).
 GITIGNORE = ".gitignore"
-IGNORED = (".claude/skills/bmad-*", ".agents/skills/bmad-*")
+IGNORED = (".claude/skills/bmad-*", ".agents/skills/bmad-*", ".opencode/commands/bmad-*")
 
 #: What a failed install parks the Run with, and what a killed one leaves instead.
 INSTALL_FAILED = "bmad install failed: exit {code}"
@@ -72,7 +73,7 @@ ALREADY_IGNORED = "already ignored"
 
 
 class BmadInstallExecutor:
-    """Run the pinned `bmad-method` installer in the worktree, then ignore the skill folders."""
+    """Run the pinned `bmad-method` installer in the worktree, then ignore its tool folders."""
 
     def execute(self, ctx: StepContext) -> StepResult:
         env = require_env(ctx)
@@ -103,7 +104,7 @@ class BmadInstallExecutor:
 
 
 def _ignore_skill_folders(ctx: StepContext) -> bool:
-    """Append whichever of the two lines the worktree's `.gitignore` does not hold."""
+    """Append whichever of the three lines the worktree's `.gitignore` does not hold."""
     workspace = require_workspace(ctx, ctx.cwd)
     current = workspace.read(GITIGNORE) or ""
     lines = current.splitlines()
