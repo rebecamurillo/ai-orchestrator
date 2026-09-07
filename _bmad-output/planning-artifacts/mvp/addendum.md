@@ -28,6 +28,30 @@ See challenge-v1 §5 for the full table with doc citations. Facts that changed s
 - Per-harness setup scripts (`scripts/harness/{claude,codex,opencode}.sh`, drafted in `architecture/deliverables/`) are the place these facts land; each writes its harness's static config from environment variable names only.
 - LiteLLM: `/v1/messages` translation to any provider, Anthropic-native `/v1/models` for Claude Code gateway model discovery, header-driven Langfuse metadata (`langfuse_*`, `x-litellm-tags`, `x-litellm-session-id`), tag budgets via `/tag/new`.
 
+### Claude — flags re-verified 2026-09-07 (story 5.1)
+
+The brief requires the record whether or not anything changed. Nothing changed.
+
+`claude --help` was read on the development host at **2.1.236**; `CLAUDE_CODE_VERSION` pins **2.1.258**, and only the older CLI was reachable, so this is a re-verification one patch line behind the pin and not against it. Every flag of the FR-14 invocation exists at 2.1.236 with the meaning the brief assumes, and no equivalent had to be substituted:
+
+| Flag | Confirmed at 2.1.236 |
+|---|---|
+| `-p, --print` | "Print response and exit" — the headless mode |
+| `--session-id <uuid>` | "Use a specific session ID … (must be a valid UUID)" — so `capabilities.preassign_session = true` holds |
+| `--permission-mode <mode>` | choices include `dontAsk` |
+| `--allowedTools, --allowed-tools <tools...>` | "Comma or space-separated list of tool names to allow" — the adapter passes the comma-joined `CLAUDE_ALLOWED_TOOLS` |
+| `--disallowedTools, --disallowed-tools <tools...>` | same shape; `mcp__*` is passed as one word |
+| `--output-format <format>` | choices `text \| json \| stream-json`, "only works with `--print`" |
+| `--max-budget-usd <amount>` | "Maximum dollar amount to spend on API calls (only works with `--print`)" |
+| `--model <model>` | present; omitted entirely when the Template bound no model |
+| `-r, --resume [value]` | "Resume a conversation by session ID" — so `capabilities.resume = true` holds |
+
+`--bare` is still the wrong tool and is still not used: its 2.1.236 help text now says so itself ("skip hooks, LSP, plugin sync … and CLAUDE.md auto-discovery", "Anthropic auth is strictly `ANTHROPIC_API_KEY` or `apiKeyHelper`"), which would break both skill discovery for `bmad-build-auto` and the gateway token the contract supplies as `ANTHROPIC_AUTH_TOKEN`. The 2026-08-26 observation above stands.
+
+One deliberate deviation from the brief's own spelling, recorded because the brief requires deviations recorded: the brief writes resume as `claude -p --resume {id} --permission-mode dontAsk --allowedTools … --output-format json "{message}"`, and the adapter also passes `--disallowedTools "mcp__*"` there. A resumed attempt runs in the same container, on the same worktree, as the dispatch that opened the session; letting the MCP exclusion depend on which call started the turn would make the sandbox a property of the call rather than of the container. The flags `--resume` genuinely drops are `--session-id` (the session is named by `--resume`) and `--max-budget-usd` (the cap belongs to a dispatch).
+
+Still open, and 5.11's to close by observation rather than by documentation: **the JSON field that marks a stop caused by `--max-budget-usd`.** `--help` does not name it, and 5.1 does not guess — `HarnessResult.raw_result` carries the parsed result object verbatim so 5.7 can read whichever field 5.11 records here.
+
 ## C. Rejected alternatives (MVP)
 | Rejected | Why |
 |---|---|

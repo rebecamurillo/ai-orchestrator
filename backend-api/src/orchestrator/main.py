@@ -72,6 +72,12 @@ from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.ports.crypto import Crypto
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
+
+# the port and the stored entity share a name (AD-10); the entity keeps the plain one
+# because this module's seed writes rows, and the registry below is the only user of
+# the port here
+from orchestrator.domain.ports.harness import Harness as HarnessPort
+from orchestrator.domain.ports.process import ProcessRunner
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db import (
@@ -84,6 +90,7 @@ from orchestrator.infrastructure.db import (
 from orchestrator.infrastructure.db import migrations as db_migrations
 from orchestrator.infrastructure.dbos import build_engine, launch_engine, schedule_jobs, serving
 from orchestrator.infrastructure.git import SubprocessGit
+from orchestrator.infrastructure.harness import ClaudeHarness
 from orchestrator.infrastructure.logging import configure_logging
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.templates_loader import load_shipped_templates
@@ -182,6 +189,22 @@ def seed_harness_table(settings: Settings) -> list[Harness]:
             return seed_harnesses(ports, pins)
     finally:
         engine.dispose()
+
+
+def build_harnesses(settings: Settings, runner: ProcessRunner) -> dict[str, HarnessPort]:
+    """The harness registry, keyed by the name a Template writes (AD-10).
+
+    The one place an adapter class is named. 5.4's `agent` executor looks a harness up by
+    `with_resolved.harness`, so a key here is what makes `harness: claude` in a Template
+    resolve to anything at all, and every key is a name `seed_harness_table` also seeds —
+    a registry entry with no row would be a harness pre-flight could never enable.
+
+    It takes the `ProcessRunner` rather than building one, because AD-14 wants every harness
+    process in a group the same runner can kill: the walker's runner is that one.
+    `infrastructure/dbos/startup.py` may not import this module (AD-2), so 5.4 threads the
+    registry through the `build_engine(...)` call `main()` already makes.
+    """
+    return {ClaudeHarness.name: ClaudeHarness(runner, settings)}
 
 
 def run_migrations(settings: Settings) -> str:
