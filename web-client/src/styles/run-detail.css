@@ -1,0 +1,420 @@
+/**
+ * Styling for `RunDetail.tsx` and `src/components/run/*` (4.15). A plain stylesheet, not
+ * scoped `<style>` blocks — the same reason `board.css`/`new-workflow.css` give: React has
+ * no equivalent of Astro's own scoping, so every rule is hand-scoped under `.wf-`. Tokens
+ * only, no inline styles (`web-client/AGENTS.md`).
+ */
+
+.wf-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.wf-crumb {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.wf-headline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+}
+
+.wf-token {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--type-status-token);
+  letter-spacing: var(--type-status-token-tracking);
+}
+
+.wf-token-chip {
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+}
+
+.wf-token[data-signal='run'] {
+  color: var(--color-signal-run);
+}
+
+.wf-token[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.wf-token[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.wf-token[data-signal='neutral'] {
+  color: var(--color-text-tertiary);
+}
+
+.wf-branch {
+  color: var(--color-text);
+  font-size: var(--type-detail-title);
+  line-height: var(--type-detail-title-line);
+  letter-spacing: var(--type-detail-title-tracking);
+}
+
+.wf-age {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.wf-meta {
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.wf-toggle {
+  display: flex;
+  gap: var(--space-5);
+}
+
+.wf-toggle span {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.wf-toggle span[aria-current='true'] {
+  color: var(--color-text);
+}
+
+.wf-alert {
+  padding: var(--space-5) var(--space-8);
+  border-left: 2px solid var(--color-line-strong);
+  background: var(--color-surface-raised);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-6);
+  color: var(--color-text);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.wf-alert[data-signal='needs-you'] {
+  border-left-color: var(--color-signal-needs-you);
+}
+
+.wf-alert[data-signal='failed'] {
+  border-left-color: var(--color-signal-failed);
+}
+
+.wf-alert-side {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  white-space: nowrap;
+}
+
+.wf-summary {
+  padding: var(--space-5) var(--space-8);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.wf-body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--space-10);
+  padding: var(--space-8);
+  align-items: start;
+}
+
+.wf-left,
+.wf-right {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+}
+
+.wf-section-head {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-section-head);
+  letter-spacing: var(--type-section-head-tracking);
+  text-transform: var(--type-section-head-transform);
+}
+
+.wf-stop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.wf-stop-reason {
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.wf-stop-block {
+  background: var(--color-surface-inset);
+  border: 1px solid var(--color-line-strong);
+}
+
+.wf-stop-block-head {
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-eyebrow);
+  letter-spacing: var(--type-eyebrow-tracking);
+  text-transform: var(--type-eyebrow-transform);
+}
+
+.wf-stop-block pre {
+  margin: 0;
+  padding: var(--space-5);
+  overflow-x: auto;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-command);
+  line-height: var(--type-command-line);
+  white-space: pre;
+}
+
+.wf-stop-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.wf-signal {
+  padding: var(--space-3) var(--space-6);
+  border: 1px solid var(--color-accent);
+  background: none;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  cursor: pointer;
+}
+
+.wf-signal:disabled {
+  border-color: var(--color-line-strong);
+  color: var(--color-text-tertiary);
+  cursor: default;
+}
+
+.wf-cancel {
+  border-color: var(--color-signal-failed);
+  color: var(--color-signal-failed);
+}
+
+.wf-signal-error {
+  color: var(--color-signal-failed);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.wf-new-run-link {
+  color: var(--color-accent);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.wf-steps-scroll {
+  overflow-x: auto;
+}
+
+table.wf-steps {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.wf-steps th {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-rail);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  text-transform: var(--type-column-head-transform);
+  text-align: left;
+}
+
+table.wf-steps td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+table.wf-steps tr[data-current='true'] td {
+  color: var(--color-text);
+}
+
+.wf-step-token[data-signal='run'] {
+  color: var(--color-signal-run);
+}
+
+.wf-step-token[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.wf-step-token[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.wf-cost-kv {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.wf-cost-kv th,
+.wf-cost-kv td {
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-line);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.wf-cost-kv th {
+  color: var(--color-text-tertiary);
+  text-align: left;
+}
+
+.wf-cost-kv td {
+  color: var(--color-text);
+  text-align: right;
+}
+
+.wf-cost-links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.wf-cost-links a {
+  color: var(--color-accent);
+  font-size: var(--type-meta);
+  word-break: break-all;
+}
+
+.wf-stories {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.wf-stories-epic {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.wf-stories-epic-head {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.wf-stories-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.wf-story-cell {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--color-line-strong);
+  color: var(--color-text-tertiary);
+}
+
+.wf-story-cell[data-state='done'] {
+  background: var(--color-text-tertiary);
+}
+
+.wf-story-cell[data-state='current'] {
+  border-color: var(--color-signal-needs-you);
+  color: var(--color-signal-needs-you);
+}
+
+.wf-story-cell[data-state='skipped'] {
+  border-style: dashed;
+}
+
+.wf-gate-record {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.wf-gate-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.wf-gate-marker {
+  color: var(--color-text-tertiary);
+}
+
+.wf-gate-marker[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.wf-gate-marker[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.wf-cancel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg);
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wf-cancel-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wf-cancel-modal-panel {
+  position: relative;
+  max-width: 420px;
+  padding: var(--space-10);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line-strong);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.wf-cancel-modal-text {
+  color: var(--color-text);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.wf-cancel-modal-actions {
+  display: flex;
+  gap: var(--space-6);
+}
