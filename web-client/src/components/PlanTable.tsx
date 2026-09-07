@@ -18,7 +18,9 @@ interface Props {
 }
 
 function gateCell(row: PlannedRowOut): string {
-  return row.status === 'skipped' ? `skipped · ${row.reason ?? ''}` : row.gate;
+  if (row.status !== 'skipped') return row.gate;
+  // `reason` is nullable, and `skipped · ` with nothing after it reads as a missing value
+  return row.reason ? `skipped · ${row.reason}` : 'skipped';
 }
 
 export default function PlanTable({ rows, planError }: Props) {
@@ -33,23 +35,25 @@ export default function PlanTable({ rows, planError }: Props) {
   }
 
   return (
-    <table className="newwf-plan" data-testid="newwf-plan">
-      <thead>
-        <tr>
-          <th scope="col">PATH</th>
-          <th scope="col">KIND</th>
-          <th scope="col">GATE</th>
-        </tr>
-      </thead>
-      <tbody>
-        {(rows ?? []).map((row) => (
-          <tr key={row.seq} data-testid={`newwf-plan-row-${row.seq}`}>
-            <td>{row.path}</td>
-            <td>{row.kind}</td>
-            <td>{gateCell(row)}</td>
+    <div className="newwf-plan-scroll">
+      <table className="newwf-plan" data-testid="newwf-plan">
+        <thead>
+          <tr>
+            <th scope="col">PATH</th>
+            <th scope="col">KIND</th>
+            <th scope="col">GATE</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {(rows ?? []).map((row) => (
+            <tr key={row.seq} data-testid={`newwf-plan-row-${row.seq}`}>
+              <td>{row.path}</td>
+              <td>{row.kind}</td>
+              <td>{gateCell(row)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

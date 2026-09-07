@@ -24,6 +24,11 @@ const LINK = `/workflows/new?template=${INITIATIVE_NAME}&project=${MIXED_ID}&rep
 
 const RED = 'rgb(224, 82, 82)';
 
+/** *Start run* comes back only after the 400 ms debounce and the round trip behind it. The
+ * default 5 s expect timeout is thin for that when this file runs beside the CodeMirror
+ * specs, which saturate the CPU typing character by character. */
+const DEBOUNCED = 15_000;
+
 function preflightBody(overrides: Record<string, unknown> = {}) {
   return {
     lines: [{ check: 'origin reachable', status: 'ok', text: 'origin ok', fix: null }],
@@ -54,12 +59,27 @@ async function mockPreflight(page: Page, body: Record<string, unknown>): Promise
   );
 }
 
+/**
+ * Open the screen and wait until its `client:load` island is actually live.
+ *
+ * Hydration is what binds the form's handlers, and until it lands the controls are inert
+ * server-rendered markup: a `selectOption` before it is written straight back by React's own
+ * controlled `value` on the first render, and the template inputs it should have swapped in
+ * never appear. The queue note is empty in the server render and carries text only once the
+ * island's own first pre-flight has been applied, so it is the one signal that the island is
+ * mounted, has fetched, and has re-rendered.
+ */
+async function openForm(page: Page, url: string = LINK): Promise<void> {
+  await page.goto(url);
+  await expect(page.getByTestId('newwf-note')).not.toBeEmpty({ timeout: DEBOUNCED });
+}
+
 test.describe('/workflows/new', () => {
   test('pre-selects initiative, shows its input, and swaps to epic on switch; repo-init hides the harness list', async ({
     page,
   }) => {
     await mockPreflight(page, preflightBody());
-    await page.goto(LINK);
+    await openForm(page);
 
     await expect(page.getByTestId('newwf-template')).toHaveValue('initiative');
     await expect(page.getByTestId('newwf-input-initiative_folder')).toBeVisible();
@@ -161,10 +181,13 @@ test.describe('/workflows/new', () => {
     page,
   }) => {
     await mockPreflight(page, preflightBody());
-    await page.goto(LINK);
+    await openForm(page);
     await expect(page.getByTestId('newwf-start')).toBeEnabled();
 
     await page.getByTestId('newwf-budget').fill('50');
+    // the edit invalidates the pre-flight that authorised the button; it comes back once the
+    // debounced re-run answers
+    await expect(page.getByTestId('newwf-start')).toBeEnabled({ timeout: DEBOUNCED });
 
     await page.route('**/api/runs', (route: Route) => {
       if (route.request().method() !== 'POST') return route.fallback();
@@ -233,14 +256,19 @@ test.describe('/workflows/new', () => {
     page,
   }) => {
     await mockPreflight(page, preflightBody());
-    await page.goto(LINK);
+    await openForm(page);
     await page.getByTestId('newwf-template').selectOption('epic');
     await page.getByTestId('newwf-input-branch').fill('chore/my-epic');
-    await page.waitForURL((url) => url.searchParams.get('in_branch') === 'chore/my-epic');
+    // `history.replaceState` is not a navigation `waitForURL` can be relied on to observe
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get('in_branch'))
+      .toBe('chore/my-epic');
 
     let preflightCalls = 0;
+    let sent: Record<string, unknown> | null = null;
     await page.route('**/api/runs/preflight', (route: Route) => {
       preflightCalls += 1;
+      sent = route.request().postDataJSON() as Record<string, unknown>;
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -253,5 +281,192 @@ test.describe('/workflows/new', () => {
     await expect(page.getByTestId('newwf-template')).toHaveValue('epic');
     await expect(page.getByTestId('newwf-input-branch')).toHaveValue('chore/my-epic');
     await expect.poll(() => preflightCalls).toBeGreaterThan(0);
+    // the restored state is what pre-flight was re-run *with*, not merely that a call happened
+    expect(sent!.template_name).toBe('epic');
+    expect(sent!.inputs).toMatchObject({ branch: 'chore/my-epic' });
+  });
+
+  test('renders the queue note verbatim and offers Cancel back to the board', async ({ page }) => {
+    await mockPreflight(
+      page,
+      preflightBody({ queue_note: 'queues behind epic · chore/other-epic' }),
+    );
+    await page.goto(LINK);
+
+    await expect(page.getByTestId('newwf-note')).toHaveText(
+      'queues behind epic · chore/other-epic',
+    );
+    await expect(page.getByTestId('newwf-cancel')).toHaveAttribute('href', '/');
+  });
+
+  test('posts the resolved template version and the bound inputs to /runs', async ({ page }) => {
+    await mockPreflight(page, preflightBody());
+    await openForm(page, `${LINK}&in_initiative_folder=docs/initiative`);
+    await page.getByTestId('newwf-budget').fill('25');
+    await expect(page.getByTestId('newwf-start')).toBeEnabled({ timeout: DEBOUNCED });
+
+    let posted: Record<string, unknown> | null = null;
+    await page.route('**/api/runs', (route: Route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      posted = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          run: { id: '01a06887-79ab-759b-97a0-71c32ad939fe' },
+          starts_now: true,
+          waiting: '',
+        }),
+      });
+    });
+    await page.getByTestId('newwf-start').click();
+
+    await expect.poll(() => posted).not.toBeNull();
+    expect(posted!.template_name).toBe('initiative');
+    // resolved from GET /templates/{name}/versions, never left null
+    expect(posted!.template_version).toBe(1);
+    expect(posted!.budget_usd).toBe('25');
+    expect(posted!.base_branch).toBe('main');
+    expect(posted!.inputs).toEqual({ initiative_folder: 'docs/initiative' });
+  });
+
+  test('switching to a template the list read did not carry still resolves its version', async ({
+    page,
+  }) => {
+    await mockPreflight(page, preflightBody());
+    await openForm(page);
+    await page.getByTestId('newwf-template').selectOption('epic');
+    await page.getByTestId('newwf-input-branch').fill('chore/x');
+    await page.getByTestId('newwf-input-spec_folder').fill('specs/');
+    await page.getByTestId('newwf-budget').fill('25');
+    await expect(page.getByTestId('newwf-start')).toBeEnabled({ timeout: DEBOUNCED });
+
+    let posted: Record<string, unknown> | null = null;
+    await page.route('**/api/runs', (route: Route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      posted = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          run: { id: '01a06887-79ab-759b-97a0-71c32ad939fd' },
+          starts_now: true,
+          waiting: '',
+        }),
+      });
+    });
+    await page.getByTestId('newwf-start').click();
+
+    await expect.poll(() => posted).not.toBeNull();
+    expect(posted!.template_name).toBe('epic');
+    expect(posted!.template_version).toBe(1);
+  });
+
+  test('Start run with a required field still empty states the reason rather than doing nothing', async ({
+    page,
+  }) => {
+    // pre-flight says yes (its own fields are all optional) while budget is still empty
+    await mockPreflight(page, preflightBody());
+    await openForm(page);
+    await expect(page.getByTestId('newwf-start')).toBeEnabled();
+    await expect(page.getByTestId('newwf-budget')).toHaveValue('');
+
+    await page.getByTestId('newwf-start').click();
+
+    await expect(page.getByTestId('newwf-start-error')).toContainText(
+      'every field but model and manual estimate is required',
+    );
+  });
+
+  test('the re-run readiness link points at the endpoint and says it is not served yet', async ({
+    page,
+  }) => {
+    await mockPreflight(page, preflightBody());
+    await page.goto(LINK);
+
+    await expect(page.getByTestId('newwf-readiness-claude')).toHaveAttribute(
+      'href',
+      '/api/harnesses/claude/readiness',
+    );
+    await expect(page.getByTestId('newwf-readiness-claude-note')).toHaveText('not available yet');
+    // the link is offered on a disabled harness too — re-running readiness is what enables one
+    await expect(page.getByTestId('newwf-harness-claude').locator('input')).toBeDisabled();
+  });
+
+  test('a pre-flight that cannot be read says so instead of rendering an empty column', async ({
+    page,
+  }) => {
+    await page.route('**/api/runs/preflight', (route: Route) => route.abort());
+    await page.goto(LINK);
+
+    await expect(page.getByTestId('newwf-preflight-failed')).toContainText(
+      'pre-flight could not be read from backend-api',
+    );
+    await expect(page.getByTestId('newwf-start')).toBeDisabled();
+  });
+
+  test('a plan error replaces the table with one red line', async ({ page }) => {
+    await mockPreflight(
+      page,
+      preflightBody({
+        rows: null,
+        plan_error: {
+          reason: 'unknown input',
+          template: 'initiative',
+          version: 1,
+          line: 4,
+          item: 'initiative_folder',
+        },
+      }),
+    );
+    await page.goto(LINK);
+
+    const plan = page.getByTestId('newwf-plan');
+    await expect(plan).toHaveText('plan error · initiative@1 · line 4 · unknown input');
+    await expect(plan).toHaveCSS('color', RED);
+  });
+
+  test('a deep link naming a repository but no branch opens with the default branch bound', async ({
+    page,
+  }) => {
+    await mockPreflight(page, preflightBody());
+    await page.goto(
+      `/workflows/new?template=${INITIATIVE_NAME}&project=${MIXED_ID}&repository=${MIXED_OK_REPO_ID}`,
+    );
+
+    await expect(page.getByTestId('newwf-base')).toHaveValue('main');
+  });
+
+  test('a deep link naming a repository of another project drops it rather than posting it', async ({
+    page,
+  }) => {
+    await mockPreflight(page, preflightBody());
+    await page.goto(
+      `/workflows/new?template=${INITIATIVE_NAME}&project=${MIXED_ID}&repository=00000000-0000-4000-8000-0000000000ff`,
+    );
+
+    await expect(page.getByTestId('newwf-repository')).toHaveValue('');
+  });
+
+  test('one debounced pre-flight covers a burst of keystrokes', async ({ page }) => {
+    await mockPreflight(page, preflightBody());
+    await openForm(page);
+    await expect(page.getByTestId('newwf-preflight-origin-reachable')).toBeVisible();
+
+    let calls = 0;
+    await page.route('**/api/runs/preflight', (route: Route) => {
+      calls += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(preflightBody()),
+      });
+    });
+
+    await page.getByTestId('newwf-base').fill('a-long-branch-name-typed-in-one-go');
+
+    await expect.poll(() => calls).toBeGreaterThan(0);
+    // 400 ms after the last change, not once per character
+    expect(calls).toBe(1);
   });
 });

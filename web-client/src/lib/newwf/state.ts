@@ -74,12 +74,22 @@ export function defaultFormState(): FormState {
   };
 }
 
-/** Switching template keeps every field but the inputs the new template does not have. */
+/** Whether this Template dispatches to a harness at all — `repo-init` runs no agent step,
+ * so the brief hides its harness list entirely. */
+export function usesHarness(template: TemplateName): boolean {
+  return template !== 'repo-init';
+}
+
+/**
+ * Switching template keeps every field but the inputs the new template does not have, and
+ * clears `harness` for a template whose form has no harness list: hiding the control while
+ * still submitting its value would post a harness the Operator can no longer see or change.
+ */
 export function withTemplate(state: FormState, template: TemplateName): FormState {
   const fields = TEMPLATE_INPUT_FIELDS[template];
   const inputs: Record<string, string> = {};
   for (const field of fields) inputs[field.key] = state.inputs[field.key] ?? '';
-  return { ...state, template, inputs };
+  return { ...state, template, inputs, harness: usesHarness(template) ? state.harness : '' };
 }
 
 export function withInput(state: FormState, key: string, value: string): FormState {
@@ -166,22 +176,76 @@ export function lineWord(status: LineOut['status']): string {
   }
 }
 
-/** The test-id suffix for one check line: lower-kebab, so `"origin reachable"` becomes
- * `origin-reachable` and the id stays a single CSS-safe token. */
+/** The test-id suffix for one check line: lower-kebab, and every character that is not a
+ * letter, a digit or a dash folded to a dash, so `"SPEC.md"` becomes `spec-md` and the id is
+ * a single token no CSS selector or `getByTestId` has to escape. */
 export function checkSlug(check: string): string {
-  return check.trim().toLowerCase().replace(/\s+/g, '-');
+  return check
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
-/** `{name} · enabled | disabled: {failing_check or "no readiness run"} · last readiness
- * {time or —} · re-run readiness` — the brief's own line, verbatim. */
-export function harnessLine(harness: HarnessOut): string {
+/**
+ * The part of the harness line before its `re-run readiness` link:
+ * `{name} · enabled | disabled: {failing_check or "no readiness run"} · last readiness
+ * {time or —} · `. The link itself is an anchor the component renders, not text — the brief
+ * puts it in scope ("here the link points to it") even though Epic 5 provides the endpoint.
+ */
+export function harnessLineText(harness: HarnessOut): string {
   const status = harness.enabled
     ? 'enabled'
     : `disabled: ${harness.failing_check ?? 'no readiness run'}`;
   const readiness = harness.last_readiness_at ? readinessTime(harness.last_readiness_at) : '—';
-  return `${harness.name} · ${status} · last readiness ${readiness} · re-run readiness`;
+  return `${harness.name} · ${status} · last readiness ${readiness} · `;
 }
+
+/** The whole line as one string, link text included — what a reader sees, and what the
+ * acceptance criterion quotes verbatim. */
+export function harnessLine(harness: HarnessOut): string {
+  return `${harnessLineText(harness)}${READINESS_LINK_LABEL}`;
+}
+
+export const READINESS_LINK_LABEL = 're-run readiness';
+
+/** Where the `re-run readiness` link points (Epic 5 serves it; a 404 until then). */
+export function readinessHref(name: string): string {
+  return `/api/harnesses/${encodeURIComponent(name)}/readiness`;
+}
+
+/** Stated beside the link while `contracts/openapi.json` carries no readiness route — see
+ * `src/components/HarnessList.tsx` for why this is a fact about the build, not a guess. */
+export const READINESS_NOT_AVAILABLE = 'not available yet';
 
 function readinessTime(iso: string): string {
   return iso.slice(0, 19).replace('T', ' ');
+}
+
+/**
+ * The form state a URL asked for, reconciled against what the page actually loaded: a
+ * Repository that is not one of the named Project's, and a harness that is not enabled, are
+ * both dropped. Without this a link can put a value into a `<select>` that has no matching
+ * `<option>` (so the control reads `—` while the state still holds the id) or check a
+ * disabled radio, and either would then be posted to `/runs/preflight` and `/runs`.
+ */
+export function reconcileInitial(
+  state: FormState,
+  projects: components['schemas']['ProjectRead'][],
+  harnesses: HarnessOut[],
+): FormState {
+  const repositories = repositoriesFor(projects, state.projectId);
+  const repository = repositoryById(repositories, state.repositoryId);
+  const harnessEnabled = harnesses.some(
+    (candidate) => candidate.name === state.harness && candidate.enabled,
+  );
+  return {
+    ...state,
+    repositoryId: repository ? state.repositoryId : '',
+    // the brief's own rule: "a disabled harness is not selectable"
+    harness: harnessEnabled && usesHarness(state.template) ? state.harness : '',
+    // "base branch (default: repository default branch)" — seeded when the link named a
+    // Repository but no branch, so a real prefill link opens a startable form
+    baseBranch: state.baseBranch || repository?.default_branch || '',
+  };
 }

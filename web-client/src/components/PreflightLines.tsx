@@ -19,24 +19,21 @@ interface Props {
 export default function PreflightLines({ lines }: Props) {
   return (
     <div className="newwf-preflight" data-testid="newwf-preflight">
-      {lines.map((line) => (
+      {lines.map((line, index) => (
+        // keyed by index as well as name: `LineOut.check` is a free-form string with no
+        // uniqueness guarantee, and two lines of one name would otherwise share a React key
         <p
-          key={line.check}
+          key={`${line.check}-${index}`}
           className="newwf-preflight-line"
           data-testid={`newwf-preflight-${checkSlug(line.check)}`}
         >
-          <span className="newwf-preflight-row">
-            <span
-              className="newwf-preflight-word"
-              data-signal={line.status === 'fail' ? 'failed' : undefined}
-            >
-              {lineWord(line.status)}
-            </span>
-            {' · '}
-            {line.check}
-            {' · '}
-            {line.text}
+          <span
+            className="newwf-preflight-word"
+            data-signal={line.status === 'fail' ? 'failed' : undefined}
+          >
+            {lineWord(line.status)}
           </span>
+          {` · ${line.check} · ${line.text}`}
           {line.status === 'fail' && line.fix ? (
             <span className="newwf-preflight-fix">{line.fix}</span>
           ) : null}

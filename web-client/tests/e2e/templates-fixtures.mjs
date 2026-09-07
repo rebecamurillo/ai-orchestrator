@@ -237,11 +237,14 @@ TEMPLATES[EPIC_NAME] = {
 };
 
 /**
- * 4.13's own fixtures below, added the same way 3.6 added `EPIC_NAME` above: a second and
- * third entry under `TEMPLATES`, so `GET /templates/{name}/versions` answers for real while
- * `GET /api/v1/templates` stays unconditionally empty for the frozen `shell.spec.ts`. The
- * root Templates this epic ships (`templates/initiative.yaml`, `templates/repo-init.yaml`) —
- * `new-workflow.spec.ts` is the only spec that reads either.
+ * 4.13's own fixtures below, added the same way 3.6 added `EPIC_NAME` above: a fourth and
+ * fifth entry under `TEMPLATES`, so `GET /templates/{name}/versions` answers for real while
+ * `GET /api/v1/templates` stays unconditionally empty for the frozen `shell.spec.ts`.
+ *
+ * These are the two remaining root Templates this epic ships
+ * (`templates/initiative.yaml`, `templates/repo-init.yaml`); the third, `epic`, is already
+ * above under `EPIC_NAME`. `new-workflow.spec.ts` reads all three, because the New Workflow
+ * screen offers all three in its Template dropdown and resolves a version for each.
  */
 export const INITIATIVE_NAME = 'initiative';
 export const REPO_INIT_NAME = 'repo-init';

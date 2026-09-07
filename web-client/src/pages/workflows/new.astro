@@ -1,30 +1,36 @@
 ---
 /**
  * New workflow (4.13, SPEC CAP-13, UX-DR8): the form that binds a Template's inputs, beside
- * the pre-flight readout and the plan the Run will execute. The form is Template-dependent,
- * so with no Template known there is nothing to bind and no plan to show.
+ * the pre-flight readout and the plan the Run will execute.
  *
  * Three reads build the page — `GET /templates`, `GET /projects`, `GET /harnesses` — exactly
- * the brief's own list, each best effort so a slow or failing read narrows the page rather
- * than crashing it.
+ * the brief's own list, issued together and each best effort so a slow or failing read
+ * narrows the page rather than crashing it.
  *
- * A "start a new run" link (the brief's own `?template=&project=&repository=&branch=`
- * prefill) may name a Template or a Project the bare lists above do not carry — most often
- * because whatever is deep-linked is not near the front of either list. When that happens
- * this page resolves the one entity by name or id (`GET /templates/{name}/versions`,
- * `GET /projects/{project_id}` — the same routes `templates/[name]/[version].astro` and
- * `projects/[id].astro` already read) and folds it into what is rendered, so a real link
- * still opens a working form. A bare visit carries none of these parameters, so none of this
- * runs, and the bare lists decide alone — which is what keeps the frozen `shell.spec.ts`'s
- * "NO TEMPLATE TO BIND" reading of `/workflows/new` true unchanged: the shared e2e stub
- * answers both bare lists empty (their own Design Notes), exactly as before this story.
+ * The island offers a fixed three-name Template list (`initiative`, `epic`, `repo-init`), so
+ * every one of those names needs a resolvable `latest_version` before *Start run* can build
+ * a `POST /runs` body: a name the list read did not carry is resolved individually through
+ * `GET /templates/{name}/versions`. That is not only a deep-link concern — the shared e2e
+ * stub answers `GET /api/v1/templates` unconditionally empty (3.5's own Design Notes, which
+ * protect the frozen `shell.spec.ts`), and a real instance's list is paginated, so the list
+ * read is never the authority on whether a shipped root Template exists.
+ *
+ * A `?project=` naming a Project the (equally forced-empty, equally paginated) list read did
+ * not carry is resolved the same way, through `GET /projects/{project_id}` — the route
+ * `projects/[id].astro` already reads.
+ *
+ * The empty state distinguishes "nothing is stored" from "backend-api could not be read":
+ * the first is a fact about the instance, the second is a fact about this request, and
+ * saying the first when the second happened would state something untrue (NFR-8). A bare
+ * visit against a reachable backend with nothing stored still renders `NO TEMPLATE TO BIND`,
+ * which is what the frozen `shell.spec.ts` asserts.
  */
 import EmptyState from '../../components/EmptyState.astro';
 import Shell from '../../layouts/Shell.astro';
 import { backend } from '../../api/server';
 import NewWorkflow from '../../islands/NewWorkflow';
 import { parseFormStateFromQuery } from '../../lib/newwf/query';
-import { isTemplateName } from '../../lib/newwf/state';
+import { TEMPLATE_ORDER, reconcileInitial } from '../../lib/newwf/state';
 import type { components } from '../../api/schema';
 
 export const prerender = false;
@@ -33,76 +39,106 @@ type TemplateSummary = components['schemas']['TemplateSummaryOut'];
 type ProjectRead = components['schemas']['ProjectRead'];
 type HarnessOut = components['schemas']['HarnessOut'];
 
-const templateParam = Astro.url.searchParams.get('template');
 const projectParam = Astro.url.searchParams.get('project');
 
-let templates: TemplateSummary[] = [];
-try {
-  const { data, error } = await backend().GET('/api/v1/templates');
-  if (!error && data) templates = data.items;
-} catch {
-  // best effort — see the module doc
-}
-
-let projects: ProjectRead[] = [];
-try {
-  const { data, error } = await backend().GET('/api/v1/projects');
-  if (!error && data) projects = data.items;
-} catch {
-  // best effort — see the module doc
-}
-
-let harnesses: HarnessOut[] = [];
-try {
-  const { data, error } = await backend().GET('/api/v1/harnesses');
-  if (!error && data) harnesses = data.items;
-} catch {
-  // best effort — see the module doc
-}
-
-if (
-  templateParam &&
-  isTemplateName(templateParam) &&
-  !templates.some((template) => template.name === templateParam)
-) {
+/** Every read here is best effort, and each one reports whether it actually answered: a
+ * failure must not be rendered as an empty list (see the module doc). */
+async function read<T>(load: () => Promise<T | null>): Promise<{ data: T | null; ok: boolean }> {
   try {
-    const { data, error } = await backend().GET('/api/v1/templates/{name}/versions', {
-      params: { path: { name: templateParam } },
-    });
-    if (!error && data && data.items.length > 0) {
-      templates = [
-        ...templates,
-        {
-          name: templateParam,
-          description: null,
-          latest_version: Math.max(...data.items),
-          versions: data.items,
-        },
-      ];
-    }
+    const data = await load();
+    return { data, ok: data !== null };
   } catch {
-    // best effort — see the module doc
+    return { data: null, ok: false };
   }
 }
 
+const [templateList, projectList, harnessList] = await Promise.all([
+  read<TemplateSummary[]>(async () => {
+    const { data, error } = await backend().GET('/api/v1/templates');
+    return error || !data ? null : data.items;
+  }),
+  read<ProjectRead[]>(async () => {
+    const { data, error } = await backend().GET('/api/v1/projects');
+    return error || !data ? null : data.items;
+  }),
+  read<HarnessOut[]>(async () => {
+    const { data, error } = await backend().GET('/api/v1/harnesses');
+    return error || !data ? null : data.items;
+  }),
+]);
+
+let templates: TemplateSummary[] = templateList.data ?? [];
+let projects: ProjectRead[] = projectList.data ?? [];
+const harnesses: HarnessOut[] = harnessList.data ?? [];
+
+/**
+ * The root Templates the island offers that the list read did not carry — resolved one at a
+ * time so the dropdown never offers a name whose version *Start run* cannot pin. Without
+ * this, arriving at `?template=initiative` and switching to `epic` leaves `latest_version`
+ * unresolvable for the selected name, and *Start run* can build no body at all.
+ *
+ * Only attempted once there is reason to believe this instance has Templates: either the
+ * list read already carried one, or a link named one. A bare visit to an instance whose list
+ * is empty asks for no Template by name and gets no per-name probing — it is the "nothing is
+ * stored" readout, which is what the frozen `shell.spec.ts` measures.
+ */
+const namedByLink = Astro.url.searchParams.has('template') || projectParam !== null;
+const unresolved =
+  templates.length > 0 || namedByLink
+    ? TEMPLATE_ORDER.filter((name) => !templates.some((template) => template.name === name))
+    : [];
+
+const resolved = await Promise.all(
+  unresolved.map(async (name) => {
+    const { data } = await read<number[]>(async () => {
+      const { data, error } = await backend().GET('/api/v1/templates/{name}/versions', {
+        params: { path: { name } },
+      });
+      return error || !data || data.items.length === 0 ? null : data.items;
+    });
+    if (!data) return null;
+    return {
+      name,
+      description: null,
+      latest_version: Math.max(...data),
+      versions: data,
+    } satisfies TemplateSummary;
+  }),
+);
+templates = [...templates, ...resolved.filter((entry) => entry !== null)];
+
 if (projectParam && !projects.some((project) => project.id === projectParam)) {
-  try {
+  const { data } = await read<ProjectRead>(async () => {
     const { data, error } = await backend().GET('/api/v1/projects/{project_id}', {
       params: { path: { project_id: projectParam } },
     });
-    if (!error && data) projects = [...projects, data];
-  } catch {
-    // best effort — see the module doc
-  }
+    return error || !data ? null : data;
+  });
+  if (data) projects = [...projects, data];
 }
 
 const hasTemplates = templates.length > 0;
-const initial = parseFormStateFromQuery(Astro.url.searchParams);
+//: nothing answered at all — every statement about what is stored would be a guess
+const unreachable = !templateList.ok && templates.length === 0;
+const initial = reconcileInitial(
+  parseFormStateFromQuery(Astro.url.searchParams),
+  projects,
+  harnesses,
+);
 ---
 
 <Shell active="workflows" title="NEW WORKFLOW">
   {
-    !hasTemplates ? (
+    unreachable ? (
+      <EmptyState
+        testId="newwf-unavailable"
+        headline="TEMPLATES UNAVAILABLE"
+        lines={[
+          'The template list could not be read from backend-api, so there are no inputs to bind.',
+          'Reload the page once the connection is restored.',
+        ]}
+      />
+    ) : !hasTemplates ? (
       <EmptyState
         testId="newwf-empty"
         headline="NO TEMPLATE TO BIND"

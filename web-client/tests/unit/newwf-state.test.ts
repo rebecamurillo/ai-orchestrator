@@ -3,19 +3,24 @@ import { describe, expect, it } from 'vitest';
 import {
   CLONE_CHECK_FAILED_NOTE,
   DEFAULT_TEMPLATE,
+  READINESS_LINK_LABEL,
   TEMPLATE_INPUT_FIELDS,
   TEMPLATE_ORDER,
   checkSlug,
   cloneCheckNote,
   defaultFormState,
   harnessLine,
+  harnessLineText,
   isTemplateName,
   latestVersion,
   lineWord,
   preflightBody,
+  readinessHref,
+  reconcileInitial,
   repositoriesFor,
   repositoryById,
   runBody,
+  usesHarness,
   withInput,
   withTemplate,
 } from '../../src/lib/newwf/state';
@@ -231,7 +236,12 @@ describe('lineWord', () => {
 describe('checkSlug', () => {
   it('lower-kebabs a check name for a test-id', () => {
     expect(checkSlug('origin reachable')).toBe('origin-reachable');
-    expect(checkSlug('SPEC.md')).toBe('spec.md');
+  });
+
+  it('folds every non-alphanumeric run to one dash, so the id needs no escaping', () => {
+    expect(checkSlug('SPEC.md')).toBe('spec-md');
+    expect(checkSlug('stories.yaml')).toBe('stories-yaml');
+    expect(checkSlug('  what  will   run  ')).toBe('what-will-run');
   });
 });
 
@@ -267,5 +277,101 @@ describe('harnessLine', () => {
     expect(harnessLine(harness({ enabled: true }))).toBe(
       'claude · enabled · last readiness — · re-run readiness',
     );
+  });
+
+  it('splits the line so the re-run readiness half can be rendered as a control', () => {
+    expect(harnessLineText(harness())).toBe(
+      'claude · disabled: no readiness run · last readiness — · ',
+    );
+    expect(`${harnessLineText(harness())}${READINESS_LINK_LABEL}`).toBe(harnessLine(harness()));
+  });
+});
+
+describe('readinessHref', () => {
+  it('points at the harness readiness endpoint through the proxy, name encoded', () => {
+    expect(readinessHref('claude')).toBe('/api/harnesses/claude/readiness');
+    expect(readinessHref('a/b')).toBe('/api/harnesses/a%2Fb/readiness');
+  });
+});
+
+describe('usesHarness', () => {
+  it('is false only for repo-init, which runs no agent step', () => {
+    expect(usesHarness('initiative')).toBe(true);
+    expect(usesHarness('epic')).toBe(true);
+    expect(usesHarness('repo-init')).toBe(false);
+  });
+});
+
+describe('withTemplate — the harness it carries', () => {
+  it('clears a chosen harness when switching to repo-init', () => {
+    const state = { ...defaultFormState(), harness: 'claude' };
+
+    expect(withTemplate(state, 'repo-init').harness).toBe('');
+  });
+
+  it('keeps it when switching between two templates that dispatch one', () => {
+    const state = { ...defaultFormState(), harness: 'claude' };
+
+    expect(withTemplate(state, 'epic').harness).toBe('claude');
+  });
+});
+
+describe('reconcileInitial', () => {
+  const enabled: HarnessOut = {
+    name: 'codex',
+    enabled: true,
+    last_readiness_at: null,
+    failing_check: null,
+    version_pin: '0.152.1',
+  };
+  const disabled: HarnessOut = { ...enabled, name: 'claude', enabled: false };
+
+  it('drops a repository that does not belong to the named project', () => {
+    const projects = [project({ id: 'p1', repositories: [repository({ id: 'r1' })] })];
+    const state = { ...defaultFormState(), projectId: 'p1', repositoryId: 'r-other' };
+
+    expect(reconcileInitial(state, projects, []).repositoryId).toBe('');
+  });
+
+  it('keeps a repository that does belong to it, and seeds the base branch from it', () => {
+    const repo = repository({ id: 'r1', default_branch: 'trunk' });
+    const projects = [project({ id: 'p1', repositories: [repo] })];
+    const state = { ...defaultFormState(), projectId: 'p1', repositoryId: 'r1' };
+
+    const reconciled = reconcileInitial(state, projects, []);
+
+    expect(reconciled.repositoryId).toBe('r1');
+    expect(reconciled.baseBranch).toBe('trunk');
+  });
+
+  it('never replaces a base branch the link already named', () => {
+    const repo = repository({ id: 'r1', default_branch: 'trunk' });
+    const projects = [project({ id: 'p1', repositories: [repo] })];
+    const state = {
+      ...defaultFormState(),
+      projectId: 'p1',
+      repositoryId: 'r1',
+      baseBranch: 'release/1',
+    };
+
+    expect(reconcileInitial(state, projects, []).baseBranch).toBe('release/1');
+  });
+
+  it('drops a harness that is not enabled — a disabled one is not selectable', () => {
+    const state = { ...defaultFormState(), harness: 'claude' };
+
+    expect(reconcileInitial(state, [], [disabled]).harness).toBe('');
+  });
+
+  it('keeps an enabled harness', () => {
+    const state = { ...defaultFormState(), harness: 'codex' };
+
+    expect(reconcileInitial(state, [], [enabled]).harness).toBe('codex');
+  });
+
+  it('drops even an enabled harness for repo-init, whose form has no harness list', () => {
+    const state = { ...withTemplate(defaultFormState(), 'repo-init'), harness: 'codex' };
+
+    expect(reconcileInitial(state, [], [enabled]).harness).toBe('');
   });
 });

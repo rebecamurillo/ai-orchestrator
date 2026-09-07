@@ -9,6 +9,11 @@
  * (3.5, Review Triage Log finding 3): every call captures the counter it incremented to and
  * only applies its outcome while that value is still current.
  *
+ * *Start run* is disabled while a pre-flight is in flight or pending, not only when the last
+ * one refused: between a keystroke and the response that answers it, `start_allowed` describes
+ * a form the Operator has already changed, and starting on that authorisation would start a
+ * Run pre-flight never actually cleared.
+ *
  * The URL carries the form state as query parameters (`src/lib/newwf/query.ts`) so a reload
  * restores it; `history.replaceState` keeps the address bar in sync without adding a history
  * entry per keystroke.
@@ -17,23 +22,19 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { components } from '../api/schema';
 import { api } from '../api/client';
+import HarnessList from '../components/HarnessList';
+import NewWorkflowFields from '../components/NewWorkflowFields';
 import PlanTable from '../components/PlanTable';
 import PreflightLines from '../components/PreflightLines';
 import { formStateToQuery } from '../lib/newwf/query';
 import {
-  TEMPLATE_INPUT_FIELDS,
-  TEMPLATE_ORDER,
   cloneCheckNote,
-  harnessLine,
-  isTemplateName,
   preflightBody,
   repositoriesFor,
   repositoryById,
   runBody,
-  withInput,
-  withTemplate,
+  usesHarness,
   type FormState,
-  type TemplateName,
 } from '../lib/newwf/state';
 import '../styles/new-workflow.css';
 
@@ -51,6 +52,9 @@ interface Props {
 
 const DEBOUNCE_MS = 400;
 const GENERIC_FAILURE_DETAIL = 'the request failed';
+const PREFLIGHT_FAILED_LINE = 'pre-flight could not be read from backend-api';
+const INCOMPLETE_FORM_DETAIL =
+  'every field but model and manual estimate is required before a run can start';
 
 function emptyPreflight(): PreflightOut {
   return { lines: [], start_allowed: false, queue_note: '', rows: null, plan_error: null };
@@ -59,6 +63,8 @@ function emptyPreflight(): PreflightOut {
 export default function NewWorkflow({ templates, projects, harnesses, initial }: Props) {
   const [state, setState] = useState<FormState>(initial);
   const [preflight, setPreflight] = useState<PreflightOut>(emptyPreflight());
+  const [preflightFailed, setPreflightFailed] = useState(false);
+  const [pending, setPending] = useState(true);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | undefined>(undefined);
   const requestSeqRef = useRef(0);
@@ -74,22 +80,38 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
       if (seq !== requestSeqRef.current) return;
       if (error || !data) {
         setPreflight(emptyPreflight());
+        setPreflightFailed(true);
         return;
       }
       setPreflight(data);
+      setPreflightFailed(false);
     } catch {
-      if (seq === requestSeqRef.current) setPreflight(emptyPreflight());
+      if (seq === requestSeqRef.current) {
+        setPreflight(emptyPreflight());
+        setPreflightFailed(true);
+      }
+    } finally {
+      // `timerRef.current` still set means a further change was made while this request was
+      // in flight and its own re-run is already scheduled: the form is dirty again, so
+      // clearing `pending` here would flash *Start run* live against an outcome that no
+      // longer describes the form
+      if (seq === requestSeqRef.current && timerRef.current === undefined) setPending(false);
     }
   }
 
   function schedulePreflight(): void {
     clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => void runPreflight(), DEBOUNCE_MS);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = undefined;
+      void runPreflight();
+    }, DEBOUNCE_MS);
   }
 
   function update(next: FormState): void {
     setState(next);
     setStartError(undefined);
+    // the last outcome describes a form that no longer exists; nothing may start on it
+    setPending(true);
     const query = formStateToQuery(next).toString();
     const url = query ? `${window.location.pathname}?${query}` : window.location.pathname;
     window.history.replaceState(null, '', url);
@@ -105,7 +127,11 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
 
   async function startRun(): Promise<void> {
     const body = runBody(state, templates);
-    if (!body) return;
+    if (!body) {
+      // never a silent no-op: the button can be live while a required field is still empty
+      setStartError(INCOMPLETE_FORM_DETAIL);
+      return;
+    }
     setStarting(true);
     setStartError(undefined);
     try {
@@ -127,10 +153,8 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
   }
 
   const repositories = repositoriesFor(projects, state.projectId);
-  const selectedRepository = repositoryById(repositories, state.repositoryId);
-  const note = cloneCheckNote(selectedRepository);
-  const showHarnesses = state.template !== 'repo-init';
-  const startDisabled = starting || !preflight.start_allowed;
+  const note = cloneCheckNote(repositoryById(repositories, state.repositoryId));
+  const startDisabled = starting || pending || !preflight.start_allowed;
 
   return (
     <div className="newwf">
@@ -140,158 +164,37 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
           data-testid="newwf-form"
           onSubmit={(event) => event.preventDefault()}
         >
-          <label className="newwf-field">
-            <span className="newwf-field-label">TEMPLATE</span>
-            <select
-              data-testid="newwf-template"
-              value={state.template}
-              onChange={(event) => {
-                const value = event.target.value;
-                if (isTemplateName(value)) update(withTemplate(state, value as TemplateName));
-              }}
-            >
-              {TEMPLATE_ORDER.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="newwf-field">
-            <span className="newwf-field-label">PROJECT</span>
-            <select
-              data-testid="newwf-project"
-              value={state.projectId}
-              onChange={(event) =>
-                update({ ...state, projectId: event.target.value, repositoryId: '' })
-              }
-            >
-              <option value="">—</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="newwf-field">
-            <span className="newwf-field-label">REPOSITORY</span>
-            <select
-              data-testid="newwf-repository"
-              value={state.repositoryId}
-              onChange={(event) => {
-                const repository = repositoryById(repositories, event.target.value);
-                update({
-                  ...state,
-                  repositoryId: event.target.value,
-                  baseBranch: state.baseBranch || repository?.default_branch || '',
-                });
-              }}
-            >
-              <option value="">—</option>
-              {repositories.map((repository) => (
-                <option key={repository.id} value={repository.id}>
-                  {repository.slug}
-                </option>
-              ))}
-            </select>
-            {note ? <span className="newwf-field-note">{note}</span> : null}
-          </label>
-
-          <label className="newwf-field">
-            <span className="newwf-field-label">BASE BRANCH</span>
-            <input
-              type="text"
-              data-testid="newwf-base"
-              value={state.baseBranch}
-              onChange={(event) => update({ ...state, baseBranch: event.target.value })}
+          <NewWorkflowFields
+            state={state}
+            projects={projects}
+            repositories={repositories}
+            note={note}
+            onChange={update}
+          />
+          {usesHarness(state.template) ? (
+            <HarnessList
+              harnesses={harnesses}
+              selected={state.harness}
+              onSelect={(name) => update({ ...state, harness: name })}
             />
-          </label>
-
-          {TEMPLATE_INPUT_FIELDS[state.template].map((field) => (
-            <label className="newwf-field" key={field.key}>
-              <span className="newwf-field-label">{field.label}</span>
-              <input
-                type="text"
-                data-testid={`newwf-input-${field.key}`}
-                value={state.inputs[field.key] ?? ''}
-                onChange={(event) => update(withInput(state, field.key, event.target.value))}
-              />
-            </label>
-          ))}
-
-          {showHarnesses ? (
-            <div className="newwf-field">
-              <span className="newwf-field-label">HARNESS</span>
-              <div className="newwf-harnesses">
-                {harnesses.map((harness) => (
-                  <label
-                    className="newwf-harness"
-                    key={harness.name}
-                    data-testid={`newwf-harness-${harness.name}`}
-                  >
-                    <input
-                      type="radio"
-                      name="newwf-harness"
-                      value={harness.name}
-                      disabled={!harness.enabled}
-                      checked={state.harness === harness.name}
-                      onChange={() => update({ ...state, harness: harness.name })}
-                    />
-                    {harnessLine(harness)}
-                  </label>
-                ))}
-              </div>
-            </div>
           ) : null}
-
-          <label className="newwf-field">
-            <span className="newwf-field-label">MODEL</span>
-            <input
-              type="text"
-              data-testid="newwf-model"
-              placeholder="harness default"
-              value={state.model}
-              onChange={(event) => update({ ...state, model: event.target.value })}
-            />
-          </label>
-
-          <label className="newwf-field">
-            <span className="newwf-field-label">BUDGET (USD)</span>
-            <input
-              type="text"
-              data-testid="newwf-budget"
-              value={state.budgetUsd}
-              onChange={(event) => update({ ...state, budgetUsd: event.target.value })}
-            />
-          </label>
-
-          <label className="newwf-field newwf-switch">
-            <input
-              type="checkbox"
-              data-testid="newwf-rereview"
-              checked={state.reReviewDone}
-              onChange={(event) => update({ ...state, reReviewDone: event.target.checked })}
-            />
-            <span>re-review done stories</span>
-          </label>
-
-          <label className="newwf-field">
-            <span className="newwf-field-label">MANUAL ESTIMATE (H)</span>
-            <input
-              type="text"
-              data-testid="newwf-estimate"
-              value={state.manualEstimateH}
-              onChange={(event) => update({ ...state, manualEstimateH: event.target.value })}
-            />
-          </label>
         </form>
 
         <div className="newwf-side">
-          <PreflightLines lines={preflight.lines} />
-          <PlanTable rows={preflight.rows} planError={preflight.plan_error} />
+          <section className="newwf-section">
+            <h2 className="newwf-section-head">PRE-FLIGHT</h2>
+            {preflightFailed ? (
+              <p className="newwf-preflight-failed" data-testid="newwf-preflight-failed">
+                {PREFLIGHT_FAILED_LINE}
+              </p>
+            ) : (
+              <PreflightLines lines={preflight.lines} />
+            )}
+          </section>
+          <section className="newwf-section">
+            <h2 className="newwf-section-head">WHAT WILL RUN</h2>
+            <PlanTable rows={preflight.rows} planError={preflight.plan_error} />
+          </section>
         </div>
       </div>
 

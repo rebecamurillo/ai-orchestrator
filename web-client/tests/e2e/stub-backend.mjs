@@ -61,28 +61,30 @@ const projects = JSON.parse(JSON.stringify(PROJECTS_BY_ID));
  * fresh copy per process rather than the fixture module's own object. */
 const templates = JSON.parse(JSON.stringify(TEMPLATES));
 
-/** The three names `main.py`'s `HARNESS_VERSION_ENV` installs, seeded disabled (4.13). */
+/** The three names `main.py`'s `HARNESS_VERSION_SETTINGS` maps, seeded disabled (4.13), each
+ * carrying the pin `.env.example` declares for it (`CLAUDE_CODE_VERSION`, `CODEX_VERSION`,
+ * `OPENCODE_VERSION`). */
 const HARNESSES = [
   {
     name: 'claude',
     enabled: false,
     last_readiness_at: null,
     failing_check: null,
-    version_pin: '1.0.0',
+    version_pin: '2.1.258',
   },
   {
     name: 'codex',
     enabled: false,
     last_readiness_at: null,
     failing_check: null,
-    version_pin: '1.0.0',
+    version_pin: '0.152.1',
   },
   {
     name: 'local',
     enabled: false,
     last_readiness_at: null,
     failing_check: null,
-    version_pin: '1.0.0',
+    version_pin: '1.18.26',
   },
 ];
 
