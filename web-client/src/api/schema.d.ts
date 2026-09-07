@@ -1613,6 +1613,8 @@ export interface components {
         StepRowOut: {
             /** Attempts */
             attempts: number;
+            /** Cost Usd */
+            cost_usd?: string;
             /** Gate */
             gate: string;
             /** Kind */
@@ -1633,6 +1635,8 @@ export interface components {
         };
         /** StoryCellOut */
         StoryCellOut: {
+            /** Cost Usd */
+            cost_usd?: string;
             /** Epic Index */
             epic_index: number;
             /** State */

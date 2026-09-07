@@ -30,10 +30,11 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from orchestrator.application.graph import STEP_TOKENS, Graph, build_run_graph
-from orchestrator.application.rules.frames import epic_frame, story_frame
+from orchestrator.application.rules.frames import epic_frame, rows_in_frame, story_frame
 from orchestrator.application.rules.signals import row_at, run_admitted_signals
 from orchestrator.application.steps import COMMIT_KIND, PUSH_KIND
 from orchestrator.application.use_cases.create_run import RunReadPorts
@@ -224,7 +225,7 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
         header=_header(run, project, repository),
         alert=_alert(run),
         steps=[_step_row(ports, row, attempts_by_row[row.id]) for row in rows],
-        stories=_story_cells(run, rows),
+        stories=_story_cells(run, rows, attempts_by_row),
         cost=_cost(run, attempts_by_row, now=ports.clock.now(), tracer=ports.tracer),
         gate_record=ports.gate_records.list_for_run(run.id),
         admitted_signals=admitted,
@@ -254,6 +255,7 @@ def _alert(run: Run) -> Alert | None:
 
 def _step_row(ports: RunViewPorts, row: StepRun, attempts: Sequence[Attempt]) -> StepRowView:
     latest = max(attempts, key=lambda attempt: attempt.n, default=None)
+    cost_usd = sum((attempt.cost_usd or Decimal("0") for attempt in attempts), Decimal("0"))
     return StepRowView(
         seq=row.seq,
         path=row.path,
@@ -265,6 +267,7 @@ def _step_row(ports: RunViewPorts, row: StepRun, attempts: Sequence[Attempt]) ->
         reason=row.reason,
         attempts=len(attempts),
         latest=_latest_attempt(ports, latest) if latest is not None else None,
+        cost_usd=cost_usd,
     )
 
 
@@ -285,7 +288,9 @@ def _latest_attempt(ports: RunViewPorts, attempt: Attempt) -> LatestAttempt:
     )
 
 
-def _story_cells(run: Run, rows: Sequence[StepRun]) -> list[StoryCell]:
+def _story_cells(
+    run: Run, rows: Sequence[StepRun], attempts_by_row: Mapping[UUID, Sequence[Attempt]]
+) -> list[StoryCell]:
     """One cell per story frame, in plan order — state off the frame's own commit-guard row."""
     commit_rows = sorted((row for row in rows if row.kind == COMMIT_KIND), key=lambda row: row.seq)
     cells = []
@@ -293,11 +298,17 @@ def _story_cells(run: Run, rows: Sequence[StepRun]) -> list[StoryCell]:
         frame = story_frame(commit_row.path)
         if frame is None:
             continue
-        cells.append(_story_cell(run, rows, frame, commit_row))
+        frame_cost = Decimal("0")
+        for frame_row in rows_in_frame(rows, frame):
+            for attempt in attempts_by_row.get(frame_row.id, ()):
+                frame_cost += attempt.cost_usd or Decimal("0")
+        cells.append(_story_cell(run, rows, frame, commit_row, frame_cost))
     return cells
 
 
-def _story_cell(run: Run, rows: Sequence[StepRun], frame: str, commit_row: StepRun) -> StoryCell:
+def _story_cell(
+    run: Run, rows: Sequence[StepRun], frame: str, commit_row: StepRun, cost_usd: Decimal
+) -> StoryCell:
     epic = epic_frame(frame)
     epic_index = _bracket_index(epic) if epic is not None else 0
     if commit_row.status == "skipped":
@@ -308,7 +319,9 @@ def _story_cell(run: Run, rows: Sequence[StepRun], frame: str, commit_row: StepR
         state = "current"
     else:
         state = "future"
-    return StoryCell(epic_index=epic_index, story_id=commit_row.story_id or "", state=state)
+    return StoryCell(
+        epic_index=epic_index, story_id=commit_row.story_id or "", state=state, cost_usd=cost_usd
+    )
 
 
 def _frame_is_current(run: Run, rows: Sequence[StepRun], frame: str) -> bool:

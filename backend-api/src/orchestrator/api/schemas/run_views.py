@@ -16,7 +16,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from orchestrator.api.schemas.common import MoneyStr, UtcTimestamp
 from orchestrator.api.schemas.runs import RunSummaryOut
@@ -53,6 +53,13 @@ class WorktreeOut(BaseModel):
             created_branch=worktree.created_branch,
             pushed=worktree.pushed,
         )
+
+
+def _drop_default(schema: dict[str, Any]) -> None:
+    """Strip the JSON-schema `default` a defaulted field carries, so `openapi-typescript`
+    (`defaultNonNullable`) still emits it as optional — an existing web-client test fixture
+    predates `cost_usd` below and must keep compiling without it."""
+    schema.pop("default", None)
 
 
 class ProgressOut(BaseModel):
@@ -267,6 +274,8 @@ class StepRowOut(BaseModel):
     reason: str | None
     attempts: int
     latest: LatestAttemptOut | None
+    #: `.of()` always sets the real value; see `_drop_default` for why schema-optional.
+    cost_usd: MoneyStr = Field(default=Decimal("0"), json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, row: StepRowView) -> StepRowOut:
@@ -281,6 +290,7 @@ class StepRowOut(BaseModel):
             reason=row.reason,
             attempts=row.attempts,
             latest=None if row.latest is None else LatestAttemptOut.of(row.latest),
+            cost_usd=row.cost_usd,
         )
 
 
@@ -288,10 +298,17 @@ class StoryCellOut(BaseModel):
     epic_index: int
     story_id: str
     state: str
+    #: See `StepRowOut.cost_usd`'s own comment.
+    cost_usd: MoneyStr = Field(default=Decimal("0"), json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, cell: StoryCell) -> StoryCellOut:
-        return cls(epic_index=cell.epic_index, story_id=cell.story_id, state=cell.state)
+        return cls(
+            epic_index=cell.epic_index,
+            story_id=cell.story_id,
+            state=cell.state,
+            cost_usd=cell.cost_usd,
+        )
 
 
 class CostOut(BaseModel):

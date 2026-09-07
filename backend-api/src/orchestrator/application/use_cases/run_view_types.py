@@ -154,6 +154,8 @@ class StepRowView:
     reason: str | None
     attempts: int
     latest: LatestAttempt | None
+    #: This row's own attempts, summed (5.3). Defaulted: predates this story.
+    cost_usd: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)
@@ -161,6 +163,8 @@ class StoryCell:
     epic_index: int
     story_id: str
     state: str  # "done" | "current" | "future" | "skipped"
+    #: This frame's own rows' attempts, summed (5.3). Defaulted: predates this story.
+    cost_usd: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)

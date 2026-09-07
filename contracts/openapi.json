@@ -3074,6 +3074,10 @@
             "title": "Attempts",
             "type": "integer"
           },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "string"
+          },
           "gate": {
             "title": "Gate",
             "type": "string"
@@ -3141,6 +3145,10 @@
       },
       "StoryCellOut": {
         "properties": {
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "string"
+          },
           "epic_index": {
             "title": "Epic Index",
             "type": "integer"
