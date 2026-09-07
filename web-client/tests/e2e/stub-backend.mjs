@@ -36,6 +36,11 @@
  * `new-workflow.spec.ts` mocks both with `page.route()`, the same way `template-diagram.
  * spec.ts` mocks `/templates/*graph` and `/validate` — the New Workflow screen's own ACs are
  * about rendering a given response, not about a plan a stub with no engine cannot walk.
+ *
+ * 4.16 adds `GET /api/v1/queue`, unconditionally empty — the `GET /api/v1/projects` list's
+ * own precedent above, needed for the same reason: the frozen `shell.spec.ts` asserts
+ * `NO RUNS` at bare `/runs` against this same stub. `runs-queue.spec.ts`'s own real-content
+ * scenarios mock this route with `page.route()` instead, `board.spec.ts`'s own precedent.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -641,6 +646,19 @@ createServer(async (request, response) => {
   }
   if (pathname === '/api/v1/harnesses' && request.method === 'GET') {
     send(response, 200, JSON_TYPE, JSON.stringify({ items: HARNESSES, next_cursor: null }));
+    return;
+  }
+  if (pathname === '/api/v1/queue' && request.method === 'GET') {
+    // forced empty unconditionally, `GET /api/v1/projects`'s own precedent above: the
+    // frozen `shell.spec.ts` asserts `NO RUNS` at bare `/runs` against this same,
+    // `fullyParallel` stub; every real-content scenario (4.16) mocks this route with
+    // `page.route()` instead, `board.spec.ts`'s own precedent for `GET /runs?view=board`
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({ items: [], next_cursor: null, max_active_runs: 2 }),
+    );
     return;
   }
   if (pathname === '/api/v1/projects' && request.method === 'GET') {

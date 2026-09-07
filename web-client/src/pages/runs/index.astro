@@ -1,21 +1,141 @@
 ---
 /**
- * Runs — every attempt: the engine queue on top, the history below. Both read models arrive
- * in epic 4; before the first run there is no queue and no history to print.
+ * Runs (4.16, SPEC CAP-16, FR-13, FR-25, UX-DR14): the Bar's project and status filters, the
+ * QUEUE section (`RunsQueue.tsx`, `client:load`, its own poll of `GET /queue`), and the
+ * HISTORY section head — the table itself is Epic 7 (this story's own scope: "render the
+ * section head ... render it now").
+ *
+ * The project filter mirrors `src/pages/index.astro`'s own SSR read of `GET /projects` for
+ * its filter chrome (`?project=` full navigation). Neither filter changes the QUEUE section:
+ * `GET /queue` (4.11) takes no query parameters and is not widened here (this story's own
+ * operating rule); filtering it by project would also hide exactly the "another project is
+ * holding the global concurrency slot" fact CAP-16 exists to state (AD-12's queue is a
+ * system-wide partition, not a per-project one). The brief states this deferral outright for
+ * the status filter ("status filter applies to the history section arriving in Epic 7;
+ * render it now"); the project filter is deferred to the same, unbuilt HISTORY table for the
+ * same reason — "a screen reads one endpoint and aggregates nothing" (AD-8) rules out a
+ * client-side join against a second `GET /projects` read to filter the QUEUE section by.
+ * Both filters still write `?project=`/`?status=` so the History story can read them.
  */
-import EmptyState from '../../components/EmptyState.astro';
+import type { components } from '../../api/schema';
 import Shell from '../../layouts/Shell.astro';
+import RunsQueue from '../../islands/RunsQueue';
+import { backend } from '../../api/server';
 
 export const prerender = false;
+
+type ProjectListItem = components['schemas']['ProjectRead'];
+
+const STATUS_FILTERS = ['ALL', 'QUE', 'RUN', 'BLK', 'ERR', 'DON'] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+function isStatusFilter(value: string): value is StatusFilter {
+  return (STATUS_FILTERS as readonly string[]).includes(value);
+}
+
+const selectedProjectId = Astro.url.searchParams.get('project');
+// an unrecognized `?status=` (a stale link, or a token History's own story adds later) falls
+// back to `ALL` rather than persisting silently with no filter link ever marked current
+const rawStatus = Astro.url.searchParams.get('status');
+const selectedStatus: StatusFilter = rawStatus && isStatusFilter(rawStatus) ? rawStatus : 'ALL';
+
+let projects: ProjectListItem[] = [];
+try {
+  const { data, error } = await backend().GET('/api/v1/projects');
+  if (!error) projects = data?.items ?? [];
+} catch {
+  // the bar still renders with just "all" — the QUEUE section below reads its own endpoint
+  // and does not depend on this list at all
+}
+
+// A plain string join rather than `URLSearchParams`: eslint's `no-undef` (`js.configs.
+// recommended`) has no declared globals for `.astro` frontmatter (`eslint.config.js`'s own
+// `languageOptions.globals` list is scoped to `.mjs`/`.js`; TS files are exempt through
+// `tseslint.configs.recommended`'s own `no-undef` turn-off, which does not reach `.astro`).
+function filterHref(projectId: string | null, status: string): string {
+  const query = [
+    projectId ? `project=${encodeURIComponent(projectId)}` : '',
+    status !== 'ALL' ? `status=${encodeURIComponent(status)}` : '',
+  ]
+    .filter((part) => part.length > 0)
+    .join('&');
+  return query ? `/runs?${query}` : '/runs';
+}
 ---
 
-<Shell active="runs" title="RUNS" count="0 attempts">
-  <EmptyState
-    testId="runs-empty"
-    headline="NO RUNS"
-    lines={[
-      'No run has been started, so the engine queue is empty.',
-      'Every attempt is recorded here once a run exists: one row per step, newest first.',
-    ]}
-  />
+<Shell active="runs" title="RUNS">
+  <Fragment slot="filters">
+    <div class="runs-filter-project" data-testid="runs-filter-project">
+      <a
+        href={filterHref(null, selectedStatus)}
+        aria-current={selectedProjectId ? undefined : 'true'}
+      >
+        all
+      </a>
+      {
+        projects.map((project) => (
+          <a
+            href={filterHref(project.id, selectedStatus)}
+            aria-current={selectedProjectId === project.id ? 'true' : undefined}
+          >
+            {project.name}
+          </a>
+        ))
+      }
+    </div>
+    <div class="runs-filter-status" data-testid="runs-filter-status">
+      {
+        STATUS_FILTERS.map((token) => (
+          <a
+            href={filterHref(selectedProjectId, token)}
+            aria-current={selectedStatus === token ? 'true' : undefined}
+          >
+            {token}
+          </a>
+        ))
+      }
+    </div>
+  </Fragment>
+
+  <RunsQueue client:load />
+
+  <h2 class="runs-history-head" data-testid="runs-history">
+    HISTORY · history arrives with the harness comparison epic
+  </h2>
 </Shell>
+
+<style>
+  .runs-filter-project,
+  .runs-filter-status {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-5);
+  }
+
+  .runs-filter-project a,
+  .runs-filter-status a {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-control);
+    letter-spacing: var(--type-control-tracking);
+    text-transform: var(--type-control-transform);
+    text-decoration: none;
+  }
+
+  .runs-filter-project a[aria-current='true'],
+  .runs-filter-status a[aria-current='true'] {
+    color: var(--color-text);
+  }
+
+  /* Same box model as `runs.css`'s own `.runs-section-head` (padding, not margin, for the
+     horizontal edge) — `--section-gap` stands in for that rule's `--space-8` top padding,
+     since this head needs the product's largest vertical interval above it, not the queue
+     section's own tighter one. */
+  .runs-history-head {
+    padding: var(--section-gap) var(--space-8) var(--space-3);
+    border-bottom: 1px solid var(--color-line);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-section-head);
+    letter-spacing: var(--type-section-head-tracking);
+    text-transform: var(--type-section-head-transform);
+  }
+</style>
