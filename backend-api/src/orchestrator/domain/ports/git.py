@@ -96,3 +96,75 @@ class Git(Protocol):
     def read_file(self, dest: Path, ref: str, path: str) -> str | None:
         """One file's text out of the base clone at a ref, or `None` when it is not there."""
         ...
+
+    def list_files(self, dest: Path, ref: str, prefix: str) -> tuple[str, ...]:
+        """Every repository-relative path under `prefix` at a ref, in the tree's own order.
+
+        A ref the clone does not hold and a prefix with nothing under it are both `()`, per
+        the second convention above: a folder that is not there is an ordinary answer, and
+        the planner reads it as "this Story has written no file yet".
+        """
+        ...
+
+    def worktree_add(self, base: Path, path: Path, branch: str, start_point: str | None) -> str:
+        """Add `path` as a worktree of the base clone, and report git's own output.
+
+        `start_point` is what decides which of AD-14's two cases this is. `None` means the
+        origin already holds the branch, so the worktree checks it out and tracks
+        `origin/{branch}`; a value means the branch does not exist yet and is created at that
+        commit-ish. The caller knows which because it asked `branch_exists` first — the port
+        does not guess, because guessing wrong is a Run working on the wrong commit.
+        """
+        ...
+
+    def sync(self, worktree: Path, branch: str) -> str | None:
+        """Fetch the branch and fast-forward the worktree onto it; `None` when it has no
+        upstream.
+
+        A branch this Run created and never pushed has no upstream, and AD-14 calls that a
+        recorded no-op rather than a failure — which is why "not there" is `None` here, like
+        everywhere else in this port. A history that cannot be fast-forwarded *is* a failure
+        and raises, so that the caller parks the Run on git's own words.
+        """
+        ...
+
+    def status(self, worktree: Path) -> str:
+        """`git status --porcelain`: the empty string when the worktree is clean."""
+        ...
+
+    def stage(self, worktree: Path, pathspec: str | None = None) -> None:
+        """Stage everything, or everything under one pathspec.
+
+        Separate from `commit` because the commit-guard stages the spec folder first and the
+        rest afterwards (FR-10), and "first" is a fact about two calls rather than about one.
+        """
+        ...
+
+    def commit(self, worktree: Path, message: str) -> str:
+        """Commit whatever is staged as the orchestrator, and answer with the new commit."""
+        ...
+
+    def diff_names(self, worktree: Path, from_sha: str) -> tuple[str, ...]:
+        """Every path that changed between `from_sha` and the worktree as it stands now."""
+        ...
+
+    def push(self, worktree: Path, branch: str, set_upstream: bool) -> str:
+        """Push the branch to `origin`, setting its upstream when this Run created it.
+
+        Never a force: a rejected push is a `GitError` the caller parks on (AD-13's
+        `push_rejected`), and overwriting the remote to make it succeed is the one thing this
+        system must not do on someone else's branch.
+        """
+        ...
+
+    def head_sha(self, path: Path) -> str | None:
+        """The commit `HEAD` points at, or `None` where there is no commit yet."""
+        ...
+
+    def remove_worktree(self, base: Path, path: Path) -> None:
+        """Remove a worktree of the base clone; a worktree already gone is not a failure."""
+        ...
+
+    def delete_branch(self, base: Path, branch: str) -> None:
+        """Delete a local branch of the base clone; a branch already gone is not a failure."""
+        ...

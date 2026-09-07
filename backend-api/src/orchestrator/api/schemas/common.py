@@ -52,12 +52,18 @@ def _as_money(value: Decimal) -> Decimal:
     """Refuse anything `numeric(12,6)` cannot hold, instead of rounding it away silently.
 
     Every refusal is a `ValueError`, which pydantic reports as a 422. `Decimal.quantize`
-    raises `decimal.InvalidOperation` on `NaN` and `Infinity` — an `ArithmeticError`, which
-    pydantic does not catch, so a non-finite amount would leave as a 500 instead.
+    raises `decimal.InvalidOperation` — an `ArithmeticError`, which pydantic does not catch
+    and which would otherwise leave as a 500 (the Schemathesis gate's own find, 4.4: a
+    magnitude like `1e284` is finite but has far more digits than `Decimal`'s default
+    28-digit context allows to quantize) — for `NaN`, `Infinity`, and exactly this case
+    alike, so both are caught here rather than only the non-finite one `is_finite()` names.
     """
     if not value.is_finite():
         raise ValueError(f"money must be a finite amount, got {value}")
-    quantised = value.quantize(MONEY_SCALE)
+    try:
+        quantised = value.quantize(MONEY_SCALE)
+    except ArithmeticError as error:
+        raise ValueError(f"money has too many digits to quantize, got {value}") from error
     if quantised != value:
         raise ValueError(f"money has at most 6 decimal places, got {value}")
     if len(quantised.as_tuple().digits) > MONEY_DIGITS:

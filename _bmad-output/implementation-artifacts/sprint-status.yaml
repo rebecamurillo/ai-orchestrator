@@ -62,24 +62,24 @@ development_status:
   3-6-template-diagram-rendered-from-the-backend-graph: backlog
   epic-3-retrospective: optional
 
-  epic-4: backlog
-  4-1-run-domain-model-and-status-machines: backlog
-  4-2-pure-planner-plan_run: backlog
-  4-3-pre-flight-checks-and-the-harness-table: backlog
-  4-4-create-and-enqueue-a-run: backlog
-  4-5-status-writers-start_attempt-apply_step_result-signal_run: backlog
-  4-6-dbos-engine-adapter-and-walker: backlog
-  4-7-process-runner-workspace-and-the-plan-check-shell-checkpoint: backlog
-  4-8-git-step-kinds-git-worktree-git-sync-git-commit-git-push-pr: backlog
-  4-9-signals-endpoint-with-cancel-retry-and-continue: backlog
-  4-10-initialise-a-repository-from-the-project-screen: backlog
-  4-11-queue-read-model-and-scheduled-jobs: backlog
-  4-12-run-read-models-for-the-board-the-detail-and-the-run-graph: backlog
-  4-13-new-workflow-screen-with-pre-flight-and-what-will-run: backlog
-  4-14-board-with-polling-and-the-failed-fetch-readout: backlog
-  4-15-run-detail-core: backlog
-  4-16-runs-screen-queue-section: backlog
-  4-17-durability-proof-restart-and-orphan-test: backlog
+  epic-4: done
+  4-1-run-domain-model-and-status-machines: done
+  4-2-pure-planner-plan_run: done
+  4-3-pre-flight-checks-and-the-harness-table: done
+  4-4-create-and-enqueue-a-run: done
+  4-5-status-writers-start_attempt-apply_step_result-signal_run: done
+  4-6-dbos-engine-adapter-and-walker: done
+  4-7-process-runner-workspace-and-the-plan-check-shell-checkpoint: done
+  4-8-git-step-kinds-git-worktree-git-sync-git-commit-git-push-pr: done
+  4-9-signals-endpoint-with-cancel-retry-and-continue: done
+  4-10-initialise-a-repository-from-the-project-screen: done
+  4-11-queue-read-model-and-scheduled-jobs: done
+  4-12-run-read-models-for-the-board-the-detail-and-the-run-graph: done
+  4-13-new-workflow-screen-with-pre-flight-and-what-will-run: done
+  4-14-board-with-polling-and-the-failed-fetch-readout: done
+  4-15-run-detail-core: done
+  4-16-runs-screen-queue-section: done
+  4-17-durability-proof-restart-and-orphan-test: done
   epic-4-retrospective: optional
 
   epic-5: backlog

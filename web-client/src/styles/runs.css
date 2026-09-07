@@ -1,0 +1,71 @@
+/**
+ * Styling for `RunsQueue.tsx` and `src/components/runs/QueueTable.tsx` (4.16). A plain
+ * stylesheet, not scoped `<style>` blocks — the same reason `board.css`/`run-detail.css`
+ * give: React has no equivalent of Astro's own scoping, so every rule is hand-scoped under
+ * its own `.runs-` prefix. Tokens only, no inline styles (`web-client/AGENTS.md`).
+ */
+
+.runs-section-head {
+  padding: var(--space-8) var(--space-8) var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-section-head);
+  letter-spacing: var(--type-section-head-tracking);
+  text-transform: var(--type-section-head-transform);
+}
+
+.runs-queue-scroll {
+  overflow-x: auto;
+}
+
+table.runs-queue-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.runs-queue-table th {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-rail);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  text-transform: var(--type-column-head-transform);
+  text-align: left;
+}
+
+table.runs-queue-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+table.runs-queue-table a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.runs-queue-hint {
+  display: block;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-micro);
+}
+
+.runs-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8);
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.runs-empty-headline {
+  color: var(--color-text);
+  font-size: var(--type-surface-title);
+  letter-spacing: var(--type-surface-title-tracking);
+  text-transform: var(--type-surface-title-transform);
+}

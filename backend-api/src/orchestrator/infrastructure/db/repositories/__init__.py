@@ -7,16 +7,30 @@ already opened, so a use case's reads and writes share one transaction.
 
 from __future__ import annotations
 
+from orchestrator.infrastructure.db.repositories.attempts import SQLAlchemyAttemptRepository
+from orchestrator.infrastructure.db.repositories.gate_records import (
+    SQLAlchemyGateRecordRepository,
+)
+from orchestrator.infrastructure.db.repositories.harnesses import SQLAlchemyHarnessRepository
 from orchestrator.infrastructure.db.repositories.projects import SQLAlchemyProjectRepository
 from orchestrator.infrastructure.db.repositories.repository import (
     SQLAlchemyRepositoryRepository,
+)
+from orchestrator.infrastructure.db.repositories.runs import SQLAlchemyRunRepository
+from orchestrator.infrastructure.db.repositories.step_runs import (
+    SQLAlchemyStepRunRepository,
 )
 from orchestrator.infrastructure.db.repositories.templates import (
     SQLAlchemyTemplateVersionRepository,
 )
 
 __all__ = [
+    "SQLAlchemyAttemptRepository",
+    "SQLAlchemyGateRecordRepository",
+    "SQLAlchemyHarnessRepository",
     "SQLAlchemyProjectRepository",
     "SQLAlchemyRepositoryRepository",
+    "SQLAlchemyRunRepository",
+    "SQLAlchemyStepRunRepository",
     "SQLAlchemyTemplateVersionRepository",
 ]

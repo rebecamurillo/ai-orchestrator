@@ -15,7 +15,7 @@ PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
 # --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
 NODE_RUN := $(PNPM) --dir $(WEB) run
 
-.PHONY: lint test coverage e2e e2e-api e2e-ui images openapi env up down logs host-up host-down host-logs host-doctor host-env-sync
+.PHONY: lint test coverage e2e e2e-api e2e-ui durability images openapi env up down logs host-up host-down host-logs host-doctor host-env-sync
 
 ## lint — ruff · mypy (strict on domain/ and application/) · import-linter · env-contract check
 ##        · test pairs · contract drift · eslint · prettier --check · tsc --noEmit · astro check
@@ -80,9 +80,23 @@ e2e:
 ## needs: a stack up, and the whole contract exported with DATABASE_URL and BACKEND_API_URL
 ## reachable from this machine. `make e2e` does all of that; running this target directly is
 ## the sharp edge it exists to blunt, so the guard refuses any database but the gate's own.
+##
+## E2E_MARKER is what this target selects. The default deselects `durability`, which kills and
+## restarts the backend *container*: this target attaches to whatever stack is configured, and
+## in CI that is a backend-api process started from source on the runner, with no container to
+## kill. `make durability` sets the marker the other way round, against a stack of its own.
+E2E_MARKER ?= not durability
 e2e-api:
 	./scripts/check_e2e_target.sh
-	$(PYTHON_RUN) pytest tests/e2e -q
+	$(PYTHON_RUN) pytest tests/e2e -q -m "$(E2E_MARKER)"
+
+## durability — the restart-and-orphan proof (SPEC CAP-17, FR-12, SM-4)
+## The same disposable stack `make e2e` builds — its own project, its own volumes, its own
+## `down -v` trap — with the marker inverted, because this gate SIGKILLs `backend-api` and
+## brings it back. Reached by recursion for the reason `make e2e` reaches `e2e-api` by
+## recursion: the stack is defined once, so the two cannot drift.
+durability:
+	$(SUBMAKE) e2e E2E_MARKER=durability
 
 ## e2e-ui — playwright against the built web-client
 ## needs: pnpm --dir web-client exec playwright install chromium, once per machine

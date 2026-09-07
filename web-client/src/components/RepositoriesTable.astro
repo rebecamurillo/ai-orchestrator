@@ -34,6 +34,7 @@ const NONE_DECLARED = '— none declared';
  * `id` here keeps it: the two query params combine into one reference that still carries both.
  */
 const recheckAction = `?id=${projectId}&${actions.repositories.recheck.toString().slice(1)}`;
+const initAction = `?id=${projectId}&${actions.repositories.init.toString().slice(1)}`;
 
 function cloneCheckText(row: RepositoryRow): string {
   if (row.status === 'ok') return `ok · ${row.seconds}s`;
@@ -43,6 +44,45 @@ function cloneCheckText(row: RepositoryRow): string {
 
 function outputBlock(row: RepositoryRow): string {
   return row.hint ? `${row.output}\n\n${row.hint}` : row.output;
+}
+
+/**
+ * *Initialise repository* (4.10, UX-DR12): one of three states, read off the row's own
+ * most recent `repo-init` Run (`index.astro` finds it in the Project's `runs[]`).
+ *
+ * - **`linking`** — the Run is not yet terminal: `initialising · {token}`, to its own page.
+ * - **`done`** — `initialised · v{version} · link` (the copy list's own words) once the
+ *   method cell beside it reads a real version; `repo-init@1` pushes `_bmad/` to
+ *   `chore/bmad-init` only (AD-16), never to `default_branch`, so the clone check the
+ *   completion hook re-runs still answers `missing`/`outdated` until the Operator merges the
+ *   compare link — `initialised · link` (no version) is that honest, and no less true,
+ *   middle state.
+ * - **`button`** — the action itself, offered whenever the method still needs it; a
+ *   `failed`/`cancelled` last attempt adds its own line beside the button, never replacing it.
+ */
+type InitControl =
+  | { kind: 'linking'; text: string; href: string }
+  | { kind: 'done'; version: string | null; href: string }
+  | { kind: 'button'; lastAttempt: string | null };
+
+const NON_TERMINAL_TOKENS = new Set(['QUE', 'RUN', 'BLK', 'CHK']);
+const UNRESOLVED_METHODS = new Set(['missing', 'outdated', '—']);
+
+function initControl(row: RepositoryRow): InitControl | null {
+  const run = row.run;
+  if (run && NON_TERMINAL_TOKENS.has(run.token)) {
+    return { kind: 'linking', text: `initialising · ${run.token}`, href: `/workflows/${run.id}` };
+  }
+  if (run && run.token === 'DON' && run.compareUrl) {
+    const version = UNRESOLVED_METHODS.has(row.method) ? null : row.method;
+    return { kind: 'done', version, href: run.compareUrl };
+  }
+  if (!row.methodNeedsInit) return null;
+  const lastAttempt =
+    run && (run.token === 'ERR' || run.token === 'CAN')
+      ? `last attempt ${run.token} · ${run.reason}`
+      : null;
+  return { kind: 'button', lastAttempt };
 }
 ---
 
@@ -64,11 +104,42 @@ function outputBlock(row: RepositoryRow): string {
       </thead>
       <tbody>
         {repositories.flatMap((row) => {
+          const control = initControl(row);
           const cells = (
             <tr data-testid={`projects-repo-${row.slug}`}>
               <td>{row.slug}</td>
               <td>{row.defaultBranch}</td>
-              <td>{row.method}</td>
+              <td>
+                {row.method}
+                {control?.kind === 'linking' && (
+                  <div class="init-status">
+                    <a href={control.href} data-testid={`projects-init-${row.slug}-status`}>
+                      {control.text}
+                    </a>
+                  </div>
+                )}
+                {control?.kind === 'done' && (
+                  <div class="init-status" data-testid={`projects-init-${row.slug}-status`}>
+                    {control.version ? `initialised · v${control.version} · ` : 'initialised · '}
+                    <a href={control.href} target="_blank" rel="noreferrer">
+                      link
+                    </a>
+                  </div>
+                )}
+                {control?.kind === 'button' && (
+                  <div class="init-control">
+                    <form method="POST" action={initAction}>
+                      <input type="hidden" name="repositoryId" value={row.id} />
+                      <Button
+                        label="Initialise repository"
+                        type="submit"
+                        testId={`projects-init-${row.slug}`}
+                      />
+                    </form>
+                    {control.lastAttempt && <p class="init-last-attempt">{control.lastAttempt}</p>}
+                  </div>
+                )}
+              </td>
               <td>{row.qualityGateCommand || NONE_DECLARED}</td>
               <td>{row.testGlobs.length > 0 ? row.testGlobs.join(', ') : NONE_DECLARED}</td>
               <td data-signal={row.status === 'failed' ? 'failed' : undefined}>
@@ -131,6 +202,18 @@ function outputBlock(row: RepositoryRow): string {
   /* the only coloured cell in the table (Signal rule): red text, no fill */
   .repositories td[data-signal='failed'] {
     color: var(--color-signal-failed);
+  }
+
+  .init-status,
+  .init-last-attempt {
+    margin-top: var(--space-2);
+    color: var(--color-text-tertiary);
+    font-size: var(--type-meta);
+    line-height: var(--type-meta-line);
+  }
+
+  .init-control {
+    margin-top: var(--space-3);
   }
 
   .inset-row td {

@@ -1,0 +1,22 @@
+---
+/**
+ * Run detail (4.15, SPEC CAP-15, FR-23): the header, the alert banner, the Steps table, the
+ * gate record, the cost block, the links, the Cancel confirm, and the Retry/Continue stop
+ * bodies this epic has.
+ *
+ * No server-side read of its own — `RunDetail.tsx` does its own polled
+ * `GET /runs/{id}/detail` client:load, the same split `index.astro` draws for `Board.tsx`
+ * (that page's own module doc: "the island renders the response as is"). The only thing
+ * this page supplies is the id the URL already carries.
+ */
+import Shell from '../../layouts/Shell.astro';
+import RunDetail from '../../islands/RunDetail';
+
+export const prerender = false;
+
+const { id } = Astro.params;
+---
+
+<Shell active="workflows" title="RUN DETAIL">
+  <RunDetail client:load runId={id as string} />
+</Shell>

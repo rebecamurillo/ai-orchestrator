@@ -108,8 +108,8 @@ class TemplateVersionOut(BaseModel):
         int,
         Field(
             description=(
-                "Always 0 in this release: counting a Template Version's active Runs is "
-                "Epic 4's write, not this story's."
+                "How many Runs, of any status, pin this exact Version — root or callee "
+                "(AD-15, SPEC CAP-4)."
             )
         ),
     ]
@@ -125,7 +125,7 @@ class TemplateVersionOut(BaseModel):
             hash=detail.template.hash,
             calls=[TemplateRefOut.of(ref) for ref in detail.template.calls],
             called_by=[TemplateRefOut.of(ref) for ref in detail.called_by],
-            pinned_by=0,
+            pinned_by=detail.pinned_by,
             created_at=detail.template.created_at,
             inputs=[InputDeclOut.of(decl) for decl in detail.inputs],
         )

@@ -1,0 +1,126 @@
+# ai-orchestrator — publish the two images to GHCR for a tagged release.
+#
+# `ci.yml` decides whether a commit is good; this file decides what a good commit is called
+# and where the artefact lives. The two never overlap: nothing is built here that CI has not
+# already gated, and nothing is gated here that CI already gates.
+#
+# The trigger is a tag, because a tag is the only name a running container can be traced
+# back to. `DEPLOY.md` is the procedure that creates it.
+#
+# Actions are pinned to a commit, for the reason `ci.yml` gives: a tag can be moved under
+# the pipeline, a commit cannot.
+#
+# The images are private, because the repository is. The host that pulls them authenticates
+# to the registry with a token in its own docker config — the docker daemon's credential,
+# never a container's environment, so AD-5 is untouched by it. DEPLOY.md says how.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # read the conclusion of the ci run for this commit
+  actions: read
+  # push to ghcr.io
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  # `github.repository` is `OptimAI-labs/ai-orchestrator`, and GHCR rejects an uppercase
+  # path. Written out rather than lowercased in a shell step so the value is readable at
+  # the point it is used.
+  IMAGE_NAMESPACE: ghcr.io/optimai-labs/ai-orchestrator
+
+jobs:
+  # A tag is a claim that a commit is releasable. This job checks the claim against the
+  # only thing that can settle it, and refuses to publish an artefact for a commit whose
+  # gates never passed. Without it, `git tag` is the whole quality bar.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: The ci workflow succeeded for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          runs=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')
+          if [ "$runs" -eq 0 ]; then
+            echo "no successful ci run for ${{ github.sha }} — tag a commit that is green on main" >&2
+            exit 1
+          fi
+          echo "ci is green for ${{ github.sha }} ($runs successful run(s))"
+
+  images:
+    needs: verify
+    # arm64, natively: the deployment target is an Apple Silicon Mac mini (PRD §12), and
+    # `backend-api/Dockerfile` selects the Node and gh archives from
+    # `dpkg --print-architecture`, so an amd64 image would run under emulation or not at
+    # all. Cross-building this image on an amd64 runner under QEMU means emulating three
+    # npm CLI installs and would not finish inside a sane timeout. If this runner label is
+    # not available on the plan, the fallback is `ubuntu-latest` plus
+    # `docker/setup-qemu-action` and `platforms: linux/arm64` — correct, and slow.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    strategy:
+      # one image per job, so a web-client failure does not hide a backend-api success
+      fail-fast: false
+      matrix:
+        include:
+          # the repository root: the backend image needs `backend-api/` and the shared
+          # `scripts/harness/` and `templates/` (see backend-api/Dockerfile)
+          - component: backend-api
+            context: .
+            dockerfile: backend-api/Dockerfile
+          # its own context: the component needs nothing from the rest of the repository
+          - component: web-client
+            context: ./web-client
+            dockerfile: ./web-client/Dockerfile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          # the job's own token, scoped by `packages: write` above; no repository secret
+          password: ${{ github.token }}
+
+      - name: Build and push ${{ matrix.component }}
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64
+          push: true
+          # Two names for one build. The tag is what DEPLOY.md pins in `.env.prod` and what
+          # an operator says out loud; the commit is what an incident is debugged from, and
+          # it is immutable in a way a tag is not. No `latest`: a stack that runs `latest`
+          # cannot answer which version it is running, which is the question every rollback
+          # starts with.
+          tags: |
+            ${{ env.IMAGE_NAMESPACE }}/${{ matrix.component }}:${{ github.ref_name }}
+            ${{ env.IMAGE_NAMESPACE }}/${{ matrix.component }}:sha-${{ github.sha }}
+          # `docker inspect` on the host answers "what is this" without the registry
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+          # a plain manifest rather than an image index: the host pulls one platform, and
+          # an attestation manifest is one more thing that can differ between `docker pull`
+          # implementations for no benefit here
+          provenance: false
+          sbom: false

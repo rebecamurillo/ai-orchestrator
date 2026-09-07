@@ -12,15 +12,31 @@ by anything but name.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from orchestrator.domain.entities.template import TemplateRef, TemplateSummary, TemplateVersion
+
+if TYPE_CHECKING:  # pragma: no cover — typing only
+    from tests.unit.fakes.runs import FakeRunRepository
 
 
 class FakeTemplateVersionRepository:
-    """Stored Template Versions in a dictionary, keyed by `(name, version)`."""
+    """Stored Template Versions in a dictionary, keyed by `(name, version)`.
 
-    def __init__(self, versions: list[TemplateVersion] | None = None) -> None:
+    `runs`, when given, is the `FakeRunRepository` `pinned_by` (4.4) counts against — read
+    live at call time, so a Run a test creates after construction still counts. Omitted, as
+    every caller before 4.4 omits it, `pinned_by` answers `0`: no fake pins anything.
+    """
+
+    def __init__(
+        self,
+        versions: list[TemplateVersion] | None = None,
+        *,
+        runs: FakeRunRepository | None = None,
+    ) -> None:
         self.versions: dict[tuple[str, int], TemplateVersion] = {}
         self.descriptions: dict[str, str | None] = {}
+        self._runs = runs
         for version in versions or []:
             self.add(version)
 
@@ -63,3 +79,9 @@ class FakeTemplateVersionRepository:
             if target in stored.calls
         ]
         return sorted(callers, key=lambda ref: (ref.name, ref.version))
+
+    def pinned_by(self, name: str, version: int) -> int:
+        if self._runs is None:
+            return 0
+        target = TemplateRef(name=name, version=version)
+        return sum(1 for run in self._runs.runs.values() if target in run.pinned_versions)

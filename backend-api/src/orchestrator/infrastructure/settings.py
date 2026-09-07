@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     database_url: SecretStr
     dbos_application_version: Annotated[int, Field(ge=1)]
     max_active_runs: Annotated[int, Field(ge=1)]
+    #: The single `recv` the walker parks in lasts this long (AD-13). A setting rather
+    #: than a constant so an e2e scenario can shorten the 30 days it defaults to.
+    human_wait_seconds: Annotated[int, Field(ge=1)]
+    #: How long a terminal Run's worktrees and logs are kept before `worktree_gc` sweeps
+    #: them (SPEC CAP-11, FR-9).
+    worktree_retention_days: Annotated[int, Field(ge=1)]
+    #: The two scheduled jobs' own crons (SPEC CAP-11, FR-4, FR-9); `engine.schedule` reads
+    #: these, never a constant, so an e2e scenario can run either sooner.
+    clone_check_cron: str
+    worktree_gc_cron: str
 
     # ── Git (AD-5) — never handed to a harness process ───────────────────────
     github_token: SecretStr

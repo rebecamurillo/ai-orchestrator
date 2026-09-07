@@ -235,3 +235,54 @@ TEMPLATES[EPIC_NAME] = {
     },
   },
 };
+
+/**
+ * 4.13's own fixtures below, added the same way 3.6 added `EPIC_NAME` above: a fourth and
+ * fifth entry under `TEMPLATES`, so `GET /templates/{name}/versions` answers for real while
+ * `GET /api/v1/templates` stays unconditionally empty for the frozen `shell.spec.ts`.
+ *
+ * These are the two remaining root Templates this epic ships
+ * (`templates/initiative.yaml`, `templates/repo-init.yaml`); the third, `epic`, is already
+ * above under `EPIC_NAME`. `new-workflow.spec.ts` reads all three, because the New Workflow
+ * screen offers all three in its Template dropdown and resolves a version for each.
+ */
+export const INITIATIVE_NAME = 'initiative';
+export const REPO_INIT_NAME = 'repo-init';
+
+TEMPLATES[INITIATIVE_NAME] = {
+  description: 'every epic of one initiative, in order, on one repository',
+  versions: {
+    1: {
+      id: '01a06887-79ab-759b-97a0-71c32ad939e1',
+      name: INITIATIVE_NAME,
+      version: 1,
+      yaml: 'name: initiative\nversion: 1\n',
+      hash: 'f'.repeat(64),
+      calls: [],
+      called_by: [],
+      pinned_by: 0,
+      created_at: '2026-09-01T09:00:00Z',
+      inputs: [
+        { name: 'initiative_folder', type: 'path', required: true, default: null, values: [] },
+      ],
+    },
+  },
+};
+
+TEMPLATES[REPO_INIT_NAME] = {
+  description: 'bootstrap the BMAD method into a repository, opened as a pull request',
+  versions: {
+    1: {
+      id: '01a06887-79ab-759b-97a0-71c32ad939e2',
+      name: REPO_INIT_NAME,
+      version: 1,
+      yaml: 'name: repo-init\nversion: 1\n',
+      hash: '0'.repeat(64),
+      calls: [],
+      called_by: [],
+      pinned_by: 0,
+      created_at: '2026-09-01T09:00:00Z',
+      inputs: [],
+    },
+  },
+};

@@ -45,6 +45,10 @@ class TemplateVersionRepository(Protocol):
         """Every stored version whose `calls` names this `(name, version)`."""
         ...
 
+    def pinned_by(self, name: str, version: int) -> int:
+        """How many Runs, of any status, pin this Version — root or callee (AD-15, 4.4)."""
+        ...
+
     # Defined last: mypy resolves a bare `list[...]` written *after* this point in the class
     # body against the method below rather than the builtin (both are named `list`), so
     # every other method's `list[...]` return type is declared above it, never after.

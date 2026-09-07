@@ -130,7 +130,9 @@ jobs:
   e2e-api:
     needs: unit
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 20 for the gate itself; the rest is the durability step's own stack, which builds the
+    # backend image before it can kill a container of it
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -199,6 +201,16 @@ jobs:
       - name: Stop the stack
         if: always()
         run: docker compose down -v
+      - name: Durability proof
+        # SPEC CAP-17 / FR-12 / SM-4: the one gate that kills the backend mid-Run and
+        # restarts it. It needs a backend it may kill, which means a container — the backend
+        # this job started from source above is a process on the runner, so `make e2e-api`
+        # deselects the `durability` marker and this step runs it against a compose stack of
+        # its own instead (`make e2e`'s stack, marker inverted: own project, own volumes,
+        # `down -v` on the way out). It runs after the stack above is stopped so the two
+        # never share a port. No credential: `scripts/generate-env.sh e2e` writes the whole
+        # environment itself, placeholders included (AD-5).
+        run: make durability
 
   e2e-ui:
     needs: e2e-api

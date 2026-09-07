@@ -54,7 +54,12 @@ from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.crypto import Crypto
 from orchestrator.domain.ports.git import Git
-from orchestrator.domain.ports.repositories import ProjectRepository, RepositoryRepository
+from orchestrator.domain.ports.repositories import (
+    ProjectRepository,
+    RepositoryRepository,
+    RunRepository,
+    StepRunRepository,
+)
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 
 #: The first suffix a colliding slug is given: `my-website`, then `my-website-2`.
@@ -84,6 +89,10 @@ class ProjectPorts:
     #: router path has no git adapter. `api/providers.py` always supplies one, so only the
     #: clone check ever reads it, and it says so rather than silently checking nothing.
     git: Git | None = None
+    #: `None` for the same reason as `repositories` and `git`: only `embedded_runs` (4.10)
+    #: reads these two, for the Project's **RUNS ON THIS PROJECT** list.
+    runs: RunRepository | None = None
+    steps: StepRunRepository | None = None
 
 
 @dataclass(frozen=True)

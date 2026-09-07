@@ -6,6 +6,26 @@
  */
 
 export interface paths {
+    "/api/v1/harnesses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every harness
+         * @description The three seeded rows, and whatever Epic 5's readiness use case has written onto them.
+         */
+        get: operations["list_harnesses_api_v1_harnesses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ping": {
         parameters: {
             query?: never;
@@ -106,6 +126,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the queue
+         * @description Every Run the engine is holding, joined with the reason it waits. Writes nothing.
+         */
+        get: operations["read_queue_api_v1_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repository_id}": {
         parameters: {
             query?: never;
@@ -151,6 +191,163 @@ export interface paths {
          *     `application/` reads the environment (AD-20).
          */
         post: operations["run_clone_check_api_v1_repositories__repository_id__clone_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repository_id}/init": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the Repository this path initialises
+         * @description The same read `GET /repositories/{id}` gives, published under this path too (4.10).
+         */
+        get: operations["get_init_api_v1_repositories__repository_id__init_get"];
+        put?: never;
+        /**
+         * Initialise this Repository for the method
+         * @description Start a `repo-init@1` Run on `repository.default_branch`, with no harness.
+         */
+        post: operations["init_api_v1_repositories__repository_id__init_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every Run, or read the Board (`?view=board`)
+         * @description `?view=board` answers the Board (SPEC CAP-12); otherwise every stored Run, newest
+         *     first, the minimal summary.
+         */
+        get: operations["list_runs_api_v1_runs_get"];
+        put?: never;
+        /**
+         * Create and enqueue a Run
+         * @description Re-runs pre-flight; a `fail` line is 409, an unbuildable plan is 422 (AD-7).
+         */
+        post: operations["create_api_v1_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pre-flight an empty request
+         * @description The same computation over an entirely empty request — every line `skip`.
+         */
+        get: operations["preflight_empty_api_v1_runs_preflight_get"];
+        put?: never;
+        /**
+         * Pre-flight a Run
+         * @description Every FR-8 line, `start_allowed`, the queue note, and the rows the plan would persist.
+         */
+        post: operations["preflight_api_v1_runs_preflight_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one Run
+         * @description The minimal Run read model; `GET /runs/{run_id}` gains the full one in 4.12.
+         */
+        get: operations["get_api_v1_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one Run's full detail
+         * @description Everything the Run detail screen shows, from one read (SPEC CAP-12 "one per screen").
+         */
+        get: operations["detail_api_v1_runs__run_id__detail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one Run's graph
+         * @description `build_run_graph` (SPEC CAP-12, AD-15): the planned rows, chained, grouped, coloured.
+         */
+        get: operations["run_graph_api_v1_runs__run_id__graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the Run this path signals, and what it currently admits
+         * @description The same read `GET /runs/{run_id}` gives, published under this path too (4.9).
+         */
+        get: operations["get_signals_api_v1_runs__run_id__signals_get"];
+        put?: never;
+        /**
+         * Signal a Run: cancel, retry, or continue
+         * @description Validate against AD-13, refuse a kind this epic does not apply yet, then apply it.
+         */
+        post: operations["post_signal_api_v1_runs__run_id__signals_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -263,7 +460,7 @@ export interface paths {
         };
         /**
          * Read one Template Version
-         * @description `calls`, `called_by` and `inputs` alongside the stored text. `pinned_by` is always 0.
+         * @description `calls`, `called_by`, `inputs` and `pinned_by` (4.4) alongside the stored text.
          */
         get: operations["get_version_api_v1_templates__name___version__get"];
         put?: never;
@@ -315,6 +512,85 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AlertOut */
+        AlertOut: {
+            /** Park Kind */
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | null;
+            /** Reason */
+            reason: string | null;
+            /** Token */
+            token: string;
+        };
+        /** BoardColumnsOut */
+        BoardColumnsOut: {
+            /** Done */
+            done: components["schemas"]["CardOut"][];
+            /** Failed */
+            failed: components["schemas"]["CardOut"][];
+            /** Needs You */
+            needs_you: components["schemas"]["CardOut"][];
+            /** Queued */
+            queued: components["schemas"]["CardOut"][];
+            /** Running */
+            running: components["schemas"]["CardOut"][];
+        };
+        /** BoardCountsOut */
+        BoardCountsOut: {
+            /** Needs You */
+            needs_you: number;
+            /** Queued */
+            queued: number;
+            /** Running */
+            running: number;
+        };
+        /**
+         * BoardOut
+         * @description `GET /runs?view=board`. Five columns, always present; `counts` sums three of them.
+         */
+        BoardOut: {
+            columns: components["schemas"]["BoardColumnsOut"];
+            counts: components["schemas"]["BoardCountsOut"];
+            /** Generated At */
+            generated_at: string;
+        };
+        /** CardOut */
+        CardOut: {
+            /** Age Seconds */
+            age_seconds: number;
+            /** Branch */
+            branch: string;
+            /** Current Step Label */
+            current_step_label: string;
+            /** Harness */
+            harness: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind Label */
+            kind_label: string | null;
+            /** Needs You Since */
+            needs_you_since: string | null;
+            /** Park Kind */
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | null;
+            progress: components["schemas"]["ProgressOut"] | null;
+            /** Project Name */
+            project_name: string;
+            /** Repository Slug */
+            repository_slug: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
+            /** Template */
+            template: string;
+            /** Token */
+            token: string;
+            /** Version */
+            version: number;
+        };
         /**
          * CloneCheckLineOut
          * @description One command the check ran: what it was, how it went, how long, and what it said.
@@ -378,6 +654,36 @@ export interface components {
              */
             status: "pending" | "ok" | "failed";
         };
+        /** CostOut */
+        CostOut: {
+            /** Active Seconds */
+            active_seconds: number;
+            /** Budget Usd */
+            budget_usd: string;
+            /** Provisional */
+            provisional: boolean;
+            /** Spent Usd */
+            spent_usd: string;
+            /** Tokens In */
+            tokens_in: number;
+            /** Tokens Out */
+            tokens_out: number;
+            /** Trace Url */
+            trace_url: string | null;
+            /** Wall Clock Seconds */
+            wall_clock_seconds: number;
+        };
+        /**
+         * CreateRunOut
+         * @description `POST /runs`'s 201 body: the Run, and where it stands in the queue.
+         */
+        CreateRunOut: {
+            run: components["schemas"]["RunSummaryOut"];
+            /** Starts Now */
+            starts_now: boolean;
+            /** Waiting */
+            waiting: string;
+        };
         /**
          * EdgeOut
          * @description One arrow, keyed `from` and `to` — the names `from_id`/`to_id` stand in for.
@@ -407,6 +713,29 @@ export interface components {
             name: string;
             /** Value */
             value?: string | null;
+        };
+        /** GateRecordOut */
+        GateRecordOut: {
+            /**
+             * Actor
+             * @enum {string}
+             */
+            actor: "operator" | "machine" | "terminal";
+            /** At */
+            at: string;
+            /** Attempt N */
+            attempt_n: number | null;
+            /** Event */
+            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume") | ("start" | "done" | "failed" | "cancelled") | ("redispatch" | "retry_auto");
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Path */
+            path: string | null;
+            /** Text */
+            text: string;
         };
         /**
          * GraphOut
@@ -447,6 +776,47 @@ export interface components {
             members: string[];
         };
         /**
+         * HarnessOut
+         * @description One row of `GET /harnesses`.
+         */
+        HarnessOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Failing Check */
+            failing_check: string | null;
+            /** Last Readiness At */
+            last_readiness_at: string | null;
+            /** Name */
+            name: string;
+            /** Version Pin */
+            version_pin: string;
+        };
+        /** HeaderMetaOut */
+        HeaderMetaOut: {
+            /** Base Branch */
+            base_branch: string;
+            /** Folder */
+            folder: string;
+            /** Harness */
+            harness: string | null;
+            /** Project */
+            project: string;
+            /** Repository */
+            repository: string;
+            /** Started At */
+            started_at: string | null;
+            /** Template */
+            template: string;
+            /** Version */
+            version: number;
+            /** Worktree Path */
+            worktree_path: string | null;
+        };
+        /** HeaderOut */
+        HeaderOut: {
+            meta: components["schemas"]["HeaderMetaOut"];
+        };
+        /**
          * Health
          * @description The `/healthz` payload. Typed so the generated contract carries a real schema (AD-3).
          */
@@ -471,6 +841,44 @@ export interface components {
             type: string;
             /** Values */
             values: string[];
+        };
+        /** LatestAttemptOut */
+        LatestAttemptOut: {
+            /** Cost Usd */
+            cost_usd: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /** Exit Code */
+            exit_code: number | null;
+            /** Harness */
+            harness: string | null;
+            /** Log Tail */
+            log_tail: string[];
+            /** Model */
+            model: string | null;
+            /** N */
+            n: number;
+            /** Seconds */
+            seconds: number | null;
+            /** Started At */
+            started_at: string | null;
+        };
+        /**
+         * LineOut
+         * @description One check line: `{check, status, text, fix?}`.
+         */
+        LineOut: {
+            /** Check */
+            check: string;
+            /** Fix */
+            fix?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "warn" | "fail" | "skip";
+            /** Text */
+            text: string;
         };
         /**
          * MaskedEnvVarOut
@@ -517,6 +925,13 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** Page[HarnessOut] */
+        Page_HarnessOut_: {
+            /** Items */
+            items: components["schemas"]["HarnessOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[ProjectRead] */
         Page_ProjectRead_: {
             /** Items */
@@ -528,6 +943,13 @@ export interface components {
         Page_RepositoryOut_: {
             /** Items */
             items: components["schemas"]["RepositoryOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[RunSummaryOut] */
+        Page_RunSummaryOut_: {
+            /** Items */
+            items: components["schemas"]["RunSummaryOut"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -546,12 +968,109 @@ export interface components {
             next_cursor?: string | null;
         };
         /**
+         * PlanErrorOut
+         * @description Why *What will run* could not be built.
+         */
+        PlanErrorOut: {
+            /** Item */
+            item: string | null;
+            /** Line */
+            line: number | null;
+            /** Reason */
+            reason: string;
+            /** Template */
+            template: string | null;
+            /** Version */
+            version: number | null;
+        };
+        /**
+         * PlannedRowOut
+         * @description One row of *What will run* — the same shape `create_run` (4.4) will persist.
+         */
+        PlannedRowOut: {
+            /** Frame */
+            frame: string | null;
+            /**
+             * Gate
+             * @enum {string}
+             */
+            gate: "liveness" | "deterministic" | "human" | "unvalidated";
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Path */
+            path: string;
+            /** Reason */
+            reason: string | null;
+            /** Seq */
+            seq: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "queued" | "running" | "done" | "blocked" | "checkpoint" | "error" | "skipped";
+            /** Story Id */
+            story_id: string | null;
+            /** With Resolved */
+            with_resolved: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * Pong
          * @description The `/api/v1/ping` payload. Typed so the generated contract carries a schema (AD-3).
          */
         Pong: {
             /** Pong */
             pong: boolean;
+        };
+        /**
+         * PreflightIn
+         * @description The pre-flight request. Every field but `re_review_done` is optional — a missing one
+         *     makes its dependent lines `skip` rather than a 422 (the brief's own rule).
+         */
+        PreflightIn: {
+            /** Base Branch */
+            base_branch?: string | null;
+            /** Budget Usd */
+            budget_usd?: number | string | null;
+            /** Harness */
+            harness?: string | null;
+            /** Inputs */
+            inputs?: {
+                [key: string]: unknown;
+            };
+            /** Model */
+            model?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Re Review Done
+             * @default false
+             */
+            re_review_done: boolean;
+            /** Repository Id */
+            repository_id?: string | null;
+            /** Template Name */
+            template_name?: string | null;
+            /** Template Version */
+            template_version?: number | null;
+        };
+        /**
+         * PreflightOut
+         * @description `POST /runs/preflight`'s response.
+         */
+        PreflightOut: {
+            /** Lines */
+            lines: components["schemas"]["LineOut"][];
+            plan_error: components["schemas"]["PlanErrorOut"] | null;
+            /** Queue Note */
+            queue_note: string;
+            /** Rows */
+            rows: components["schemas"]["PlannedRowOut"][] | null;
+            /** Start Allowed */
+            start_allowed: boolean;
         };
         /**
          * ProblemDetail
@@ -593,6 +1112,19 @@ export interface components {
             /** Version */
             version?: string | null;
         };
+        /** ProgressOut */
+        ProgressOut: {
+            /** Epics Done */
+            epics_done: number | null;
+            /** Epics Total */
+            epics_total: number | null;
+            /** Links */
+            links: number;
+            /** Stories Done */
+            stories_done: number;
+            /** Stories Total */
+            stories_total: number;
+        };
         /**
          * ProjectCreate
          * @description `POST /projects`. Every variable carries its value.
@@ -614,7 +1146,7 @@ export interface components {
         };
         /**
          * ProjectRead
-         * @description A Project as every read returns it, its Repositories embedded.
+         * @description A Project as every read returns it, its Repositories and its Runs embedded.
          *
          *     Every read answers the same shape (POST's 201, PUT's 200, both GETs) — a Repository
          *     added between two reads is exactly the kind of state change the Operator relies on the
@@ -641,10 +1173,44 @@ export interface components {
             name: string;
             /** Repositories */
             repositories: components["schemas"]["RepositoryOut"][];
+            /** Runs */
+            runs: components["schemas"]["ProjectRunOut"][];
             /** Slug */
             slug: string;
             /** Updated At */
             updated_at: string;
+        };
+        /**
+         * ProjectRunOut
+         * @description One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the
+         *     record row's own fields, plus what a Repository row's `Initialise repository` control
+         *     reads about the Run it started.
+         */
+        ProjectRunOut: {
+            /** Branch */
+            branch: string;
+            /** Compare Urls */
+            compare_urls: string[];
+            /** Created At */
+            created_at: string;
+            /** Current Step Label */
+            current_step_label: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Repository Id
+             * Format: uuid
+             */
+            repository_id: string;
+            /** Template */
+            template: string;
+            /** Token */
+            token: string;
         };
         /**
          * ProjectUpdate
@@ -664,6 +1230,35 @@ export interface components {
             log_prompt_content?: boolean | null;
             /** Name */
             name: string;
+        };
+        /**
+         * QueueItemOut
+         * @description One row: a Run the engine is holding, and why it waits.
+         */
+        QueueItemOut: {
+            /** Next Step Label */
+            next_step_label: string;
+            /** Position */
+            position: number | null;
+            /** Reason */
+            reason: string;
+            run: components["schemas"]["RunSummaryOut"];
+            /** Waiting Seconds */
+            waiting_seconds: number;
+            /** Waiting Since */
+            waiting_since: string;
+        };
+        /**
+         * QueueOut
+         * @description `GET /queue`'s body: the rows, and the ceiling the section head names beside them.
+         */
+        QueueOut: {
+            /** Items */
+            items: components["schemas"]["QueueItemOut"][];
+            /** Max Active Runs */
+            max_active_runs: number;
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /**
          * RepositoryCreate
@@ -775,12 +1370,283 @@ export interface components {
             url: string;
         };
         /**
+         * RunDetailOut
+         * @description `GET /runs/{run_id}/detail`. One request, every section the screen shows.
+         */
+        RunDetailOut: {
+            /** Admitted Signals */
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume")[];
+            alert: components["schemas"]["AlertOut"] | null;
+            cost: components["schemas"]["CostOut"];
+            /** Gate Record */
+            gate_record: components["schemas"]["GateRecordOut"][];
+            header: components["schemas"]["HeaderOut"];
+            run: components["schemas"]["RunDetailSummaryOut"];
+            /** Steps */
+            steps: components["schemas"]["StepRowOut"][];
+            /** Stories */
+            stories: components["schemas"]["StoryCellOut"][];
+            summary: components["schemas"]["SummaryOut"] | null;
+        };
+        /**
+         * RunDetailSummaryOut
+         * @description `RunSummaryOut` plus what only the detail's own `run` field carries.
+         */
+        RunDetailSummaryOut: {
+            /** Accepted Paths */
+            accepted_paths: string[];
+            /** Admitted Signals */
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume")[];
+            /** Branch */
+            branch: string;
+            /** Budget Usd */
+            budget_usd: string;
+            /** Compare Urls */
+            compare_urls: string[];
+            /** Created At */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Inputs */
+            inputs: {
+                [key: string]: unknown;
+            };
+            /** Manual Estimate H */
+            manual_estimate_h: string | null;
+            /** Plan Ref */
+            plan_ref: string | null;
+            /**
+             * Project
+             * Format: uuid
+             */
+            project: string;
+            /**
+             * Repository
+             * Format: uuid
+             */
+            repository: string;
+            /** Spend Usd */
+            spend_usd: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
+            /** Template */
+            template: string;
+            /** Terminal Session */
+            terminal_session: boolean;
+            /** Version */
+            version: number;
+            /** Worktree Path */
+            worktree_path: string | null;
+            /** Worktrees */
+            worktrees: components["schemas"]["WorktreeOut"][];
+        };
+        /**
+         * RunGraphOut
+         * @description `GET /runs/{run_id}/graph`. Three lists, never `null` — same shape as `GraphOut`.
+         */
+        RunGraphOut: {
+            /** Edges */
+            edges: components["schemas"]["EdgeOut"][];
+            /** Groups */
+            groups: components["schemas"]["RunGroupOut"][];
+            /** Nodes */
+            nodes: components["schemas"]["RunNodeOut"][];
+        };
+        /**
+         * RunGroupOut
+         * @description One `epics[i]`/`epics[i].stories[j]` frame — `GroupOut` plus its computed status.
+         */
+        RunGroupOut: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "for_each";
+            /** Label */
+            label: string;
+            /** Members */
+            members: string[];
+            /** Status */
+            status: string | null;
+        };
+        /**
+         * RunIn
+         * @description `POST /runs`'s body: what *Start run* submits once every field is filled in.
+         */
+        RunIn: {
+            /** Base Branch */
+            base_branch: string;
+            /** Budget Usd */
+            budget_usd: number | string;
+            /** Harness */
+            harness?: string | null;
+            /** Inputs */
+            inputs?: {
+                [key: string]: unknown;
+            };
+            /** Manual Estimate H */
+            manual_estimate_h?: number | string | null;
+            /** Model */
+            model?: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Re Review Done
+             * @default false
+             */
+            re_review_done: boolean;
+            /**
+             * Repository Id
+             * Format: uuid
+             */
+            repository_id: string;
+            /** Template Name */
+            template_name: string;
+            /** Template Version */
+            template_version: number;
+        };
+        /**
+         * RunNodeOut
+         * @description One row of a Run, as one box of the run graph — `NodeOut` plus its live state.
+         */
+        RunNodeOut: {
+            /** Agent */
+            agent: boolean;
+            call: components["schemas"]["NodeCallOut"] | null;
+            /** Current */
+            current: boolean;
+            /** Gate */
+            gate: ("liveness" | "deterministic" | "human") | "unvalidated" | null;
+            /** Human */
+            human: boolean;
+            /**
+             * Id
+             * @description `step_run.path`, verbatim — the join key (AD-15).
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Status */
+            status: string | null;
+            /** Token */
+            token: string | null;
+        };
+        /**
+         * RunSummaryOut
+         * @description The minimal Run read model (4.12 replaces this with the full one).
+         */
+        RunSummaryOut: {
+            /** Admitted Signals */
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume")[];
+            /** Branch */
+            branch: string;
+            /** Budget Usd */
+            budget_usd: string;
+            /** Created At */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Plan Ref */
+            plan_ref: string | null;
+            /**
+             * Project
+             * Format: uuid
+             */
+            project: string;
+            /**
+             * Repository
+             * Format: uuid
+             */
+            repository: string;
+            /** Spend Usd */
+            spend_usd: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
+            /** Template */
+            template: string;
+            /** Version */
+            version: number;
+        };
+        /**
          * SaveVersionIn
          * @description `POST /templates/{name}/versions`. Same one field; a distinct name for a distinct route.
          */
         SaveVersionIn: {
             /** Yaml */
             yaml: string;
+        };
+        /**
+         * SignalIn
+         * @description `POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.
+         */
+        SignalIn: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume";
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+        };
+        /** StepRowOut */
+        StepRowOut: {
+            /** Attempts */
+            attempts: number;
+            /** Gate */
+            gate: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            latest: components["schemas"]["LatestAttemptOut"] | null;
+            /** Path */
+            path: string;
+            /** Reason */
+            reason: string | null;
+            /** Seq */
+            seq: number;
+            /** Status */
+            status: string;
+            /** Token */
+            token: string;
+        };
+        /** StoryCellOut */
+        StoryCellOut: {
+            /** Epic Index */
+            epic_index: number;
+            /** State */
+            state: string;
+            /** Story Id */
+            story_id: string;
+        };
+        /** SummaryOut */
+        SummaryOut: {
+            /** Links */
+            links: string[];
+            progress: components["schemas"]["ProgressOut"] | null;
+            /** Skipped */
+            skipped: string[];
         };
         /**
          * TemplateRefOut
@@ -828,7 +1694,7 @@ export interface components {
             name: string;
             /**
              * Pinned By
-             * @description Always 0 in this release: counting a Template Version's active Runs is Epic 4's write, not this story's.
+             * @description How many Runs, of any status, pin this exact Version — root or callee (AD-15, SPEC CAP-4).
              */
             pinned_by: number;
             /** Version */
@@ -854,6 +1720,17 @@ export interface components {
             /** Unvalidated */
             unvalidated: string[];
         };
+        /** WorktreeOut */
+        WorktreeOut: {
+            /** Branch */
+            branch: string;
+            /** Created Branch */
+            created_branch: boolean;
+            /** Path */
+            path: string;
+            /** Pushed */
+            pushed: boolean;
+        };
     };
     responses: never;
     parameters: never;
@@ -863,6 +1740,36 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_harnesses_api_v1_harnesses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_HarnessOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     ping_api_v1_ping_get: {
         parameters: {
             query?: never;
@@ -1213,6 +2120,36 @@ export interface operations {
             };
         };
     };
+    read_queue_api_v1_queue_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     get_repository_api_v1_repositories__repository_id__get: {
         parameters: {
             query?: never;
@@ -1424,6 +2361,575 @@ export interface operations {
                 };
             };
             /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_init_api_v1_repositories__repository_id__init_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repository_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepositoryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Repository has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    init_api_v1_repositories__repository_id__init_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repository_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateRunOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Repository has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The clone check has failed, or a repo-init Run is already running on this Repository. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_runs_api_v1_runs_get: {
+        parameters: {
+            query?: {
+                view?: "board" | null;
+                project_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_RunSummaryOut_"] | components["schemas"]["BoardOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `view` or `project_id` does not match the shape below. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    create_api_v1_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateRunOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Pre-flight failed at least one line; `detail` names them. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The Template tree could not be planned; see `errors[]`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    preflight_empty_api_v1_runs_preflight_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreflightOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    preflight_api_v1_runs_preflight_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreflightIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreflightOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The posted body does not match the shape below. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_api_v1_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummaryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    detail_api_v1_runs__run_id__detail_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDetailOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    run_graph_api_v1_runs__run_id__graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunGraphOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_signals_api_v1_runs__run_id__signals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummaryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_signal_api_v1_runs__run_id__signals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummaryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The signal does not apply to this Run's status or park, or is not available yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The posted body does not match the shape below. */
             422: {
                 headers: {
                     [name: string]: unknown;

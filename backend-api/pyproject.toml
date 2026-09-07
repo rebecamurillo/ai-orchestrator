@@ -5,6 +5,9 @@ description = "ai-orchestrator backend-api — plans, executes, and parks BMAD d
 requires-python = "==3.14.*"
 dependencies = [
     "alembic==1.19.1",
+    # AD-6: the durable engine. Imported only under `infrastructure/dbos/`, which the
+    # forbidden contract below makes checkable rather than a review note.
+    "dbos==2.31.0",
     # Fernet, for the Project env vars encrypted at rest with ORCHESTRATOR_SECRET_KEY (AD-5)
     "cryptography==50.0.1",
     "fastapi==0.141.1",
@@ -124,10 +127,33 @@ forbidden_modules = [
     "cryptography",
 ]
 
+[[tool.importlinter.contracts]]
+# AD-6: the durable engine is a port, and the library that implements it is named once.
+# `allow_indirect_imports` is what makes this the rule it says it is: `main.py` may reach the
+# adapter package (it wires it), and this contract is about which module writes `import dbos`.
+# The one exception is listed, so adding a second `import dbos` anywhere fails `make lint`.
+name = "AD-6 forbidden: only infrastructure/dbos/facade.py imports dbos"
+type = "forbidden"
+source_modules = ["orchestrator"]
+forbidden_modules = ["dbos"]
+allow_indirect_imports = true
+ignore_imports = ["orchestrator.infrastructure.dbos.facade -> dbos"]
+
 # ── pytest ───────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# --strict-markers, because the selection below is a *gate*: without it `-m "not durabilty"`
+# is a typo that silently selects everything, and `make e2e-api` would kill the stack it is
+# running against instead of deselecting the one module that does.
+addopts = "--strict-markers"
+# `durability` is the restart-and-orphan proof (SPEC CAP-17): it SIGKILLs the backend-api
+# container and brings it back, so it needs a compose stack rather than any running backend.
+# `make e2e-api` deselects it (`E2E_MARKER`), `make durability` selects it; declaring it here
+# is what lets both express the selection as a marker instead of a path.
+markers = [
+    "durability: kills and restarts the backend-api container; needs a compose stack",
+]
 
 # ── coverage — AD-18 "the gates are checkable" ───────────────────────────────
 # Branch coverage over the whole package, measured in one run: `make test` prints the

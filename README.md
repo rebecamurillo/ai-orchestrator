@@ -13,6 +13,9 @@ The product is specified, not yet built. Everything that decides what gets built
 
 ## Running it
 
+This section is the development stack. Deploying to the machine that does real work —
+images from GHCR, upgrades, rollback and the drain rule — is `DEPLOY.md`.
+
 Configuration is the environment (AD-20): `.env.example` is the contract, `make lint` fails when a
 setting exists in one place and not the other. Copy it once, fill it in, and never commit the result.
 
@@ -105,6 +108,7 @@ make test        # backend unit tests (pytest) + web-client unit tests (vitest)
 make e2e-api     # httpx scenarios + schemathesis against the stack   (story 1.2)
 make openapi     # export contracts/openapi.json, regenerate types    (story 1.3)
 make e2e-ui      # playwright against the built web-client            (story 1.3)
+make durability  # kill the backend mid-Run, restart it, count what is left (story 4.17)
 make up / down   # docker compose: web-client, backend-api, postgres  (story 1.6)
 ```
 
@@ -176,6 +180,7 @@ make coverage    # changed lines >= 90 %, against the branch this work forks fro
 make e2e         # the e2e-api gate in a stack of its own, created and destroyed around it
 make e2e-api     # httpx scenarios + schemathesis against a running stack
 make e2e-ui      # playwright against the built web-client and a stubbed backend
+make durability  # the restart-and-orphan proof: kill the backend mid-Run and count what is left
 make openapi     # re-export the contract; CI then fails on any diff (AD-3)
 make images      # build both container images without starting anything
 ```
@@ -211,6 +216,25 @@ Two rules are enforced rather than asked for:
   fails with the path of the module that is not. `__init__.py`, `main.py`, generated and
   ambient declarations, and `.astro` page routes are exempt — everything else has a test
   module of its own.
+
+`make durability` is the proof that "a Run survives a restart" is measured rather than
+promised (FR-12, SM-4). It builds the same disposable stack `make e2e` builds and then, inside
+it, starts a Run, `docker compose kill`s `backend-api` in the middle of a step, brings the
+container back and reads what the database and the container's process table say: the row that
+was running gets a second Attempt and the one that had already finished does not, the Run reaches
+`done`, and exactly one process group for that Run exists afterwards. A second scenario kills the
+backend while a Run waits on a `checkpoint` row and then continues it. Both print the Run's
+attempt table.
+
+It is a target of its own rather than part of `make e2e-api` because it needs a backend it may
+kill and restart, which means a container. `make e2e-api` attaches to whatever stack is
+configured — in CI that is a backend-api process started from source on the runner — so the
+`durability` marker is deselected there and CI runs `make durability` as its own step of the
+`e2e-api` job instead, against a compose stack of its own:
+
+```bash
+make durability   # builds and destroys its own stack; the two scenarios take ~75 seconds
+```
 
 `make images` is last because it is the slowest and the only one that needs a Docker
 daemon. It is also the only gate that proves a Dockerfile still builds: every gate before it

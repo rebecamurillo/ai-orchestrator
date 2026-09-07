@@ -17,6 +17,19 @@ double would pass here and fail against a real process:
 - **A command takes time.** The adapter's line durations come from the `Clock`, so this fake
   advances the `FakeClock` it is given by `seconds` on every call. Without that a line's
   `seconds` would be zero for every scenario and nothing would be asserting them.
+
+4.8 completed the port, so the worktree half is scripted the same way: `worktree_add`,
+`sync`, `status`, `stage`, `commit`, `diff_names`, `push`, `head_sha`, `remove_worktree` and
+`delete_branch` each take a list, an entry that is an exception is raised, and every call is
+logged with its arguments — which is what lets "the spec folder was staged before everything
+else" and "no push command ran" be assertions rather than hopes.
+
+The planner asks the same three questions of many refs and paths, and "which answer came
+back" matters more to it than "how many answers were scripted", so three of the methods
+also take a **mapping**: `refs` (branch -> sha), `files` (`(ref, path)` -> text) and
+`listings` (`(ref, prefix)` -> paths). A mapping that is not given is not used, so every
+caller written against the sequential script keeps exactly the behaviour it had; a key a
+mapping does not hold is the port's own "not there" — `None`, `None` and `()`.
 """
 
 from __future__ import annotations
@@ -47,10 +60,27 @@ class FakeGit:
         fetch_base: list[Any] | None = None,
         branch_exists: list[Any] | None = None,
         read_file: list[Any] | None = None,
+        list_files: list[Any] | None = None,
+        worktree_add: list[Any] | None = None,
+        sync: list[Any] | None = None,
+        status: list[Any] | None = None,
+        stage: list[Any] | None = None,
+        commit: list[Any] | None = None,
+        diff_names: list[Any] | None = None,
+        push: list[Any] | None = None,
+        head_sha: list[Any] | None = None,
+        remove_worktree: list[Any] | None = None,
+        delete_branch: list[Any] | None = None,
+        refs: dict[str, str] | None = None,
+        files: dict[tuple[str, str], str] | None = None,
+        listings: dict[tuple[str, str], list[str]] | None = None,
     ) -> None:
         self.clock = clock
         self.seconds = seconds
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
+        self.refs = refs
+        self.files = files
+        self.listings = listings
         self._scripts: dict[str, list[Any]] = {
             "ls_remote": ls_remote or [DEFAULT_REF],
             "base_exists": base_exists or [False],
@@ -58,12 +88,26 @@ class FakeGit:
             "fetch_base": fetch_base or [None],
             "branch_exists": branch_exists or [True],
             "read_file": read_file or [None],
+            "list_files": list_files or [()],
+            "worktree_add": worktree_add or [""],
+            "sync": sync or [""],
+            "status": status or [""],
+            "stage": stage or [None],
+            "commit": commit or [DEFAULT_SHA],
+            "diff_names": diff_names or [()],
+            "push": push or [""],
+            "head_sha": head_sha or [DEFAULT_SHA],
+            "remove_worktree": remove_worktree or [None],
+            "delete_branch": delete_branch or [None],
         }
         self._used: dict[str, int] = dict.fromkeys(self._scripts, 0)
 
     # ── the port ─────────────────────────────────────────────────────────────
 
     def ls_remote(self, url: str, ref: str | None = None) -> RemoteRef | None:
+        if self.refs is not None and ref is not None:
+            self._record("ls_remote", (url, ref))
+            return _remote_ref(ref, self.refs.get(ref))
         answer: RemoteRef | None = self._answer("ls_remote", (url, ref))
         return answer
 
@@ -83,15 +127,68 @@ class FakeGit:
         return answer
 
     def read_file(self, dest: Path, ref: str, path: str) -> str | None:
+        if self.files is not None:
+            self._record("read_file", (dest, ref, path))
+            return self.files.get((ref, path))
         answer: str | None = self._answer("read_file", (dest, ref, path))
         return answer
 
+    def list_files(self, dest: Path, ref: str, prefix: str) -> tuple[str, ...]:
+        if self.listings is not None:
+            self._record("list_files", (dest, ref, prefix))
+            return tuple(self.listings.get((ref, prefix), ()))
+        answer: tuple[str, ...] = self._answer("list_files", (dest, ref, prefix))
+        return answer
+
+    # ── the worktree half (4.8) ──────────────────────────────────────────────
+
+    def worktree_add(self, base: Path, path: Path, branch: str, start_point: str | None) -> str:
+        answer: str = self._answer("worktree_add", (base, path, branch, start_point))
+        return answer
+
+    def sync(self, worktree: Path, branch: str) -> str | None:
+        answer: str | None = self._answer("sync", (worktree, branch))
+        return answer
+
+    def status(self, worktree: Path) -> str:
+        answer: str = self._answer("status", (worktree,))
+        return answer
+
+    def stage(self, worktree: Path, pathspec: str | None = None) -> None:
+        self._answer("stage", (worktree, pathspec))
+
+    def commit(self, worktree: Path, message: str) -> str:
+        answer: str = self._answer("commit", (worktree, message))
+        return answer
+
+    def diff_names(self, worktree: Path, from_sha: str) -> tuple[str, ...]:
+        answer: tuple[str, ...] = self._answer("diff_names", (worktree, from_sha))
+        return answer
+
+    def push(self, worktree: Path, branch: str, set_upstream: bool) -> str:
+        answer: str = self._answer("push", (worktree, branch, set_upstream))
+        return answer
+
+    def head_sha(self, path: Path) -> str | None:
+        answer: str | None = self._answer("head_sha", (path,))
+        return answer
+
+    def remove_worktree(self, base: Path, path: Path) -> None:
+        self._answer("remove_worktree", (base, path))
+
+    def delete_branch(self, base: Path, branch: str) -> None:
+        self._answer("delete_branch", (base, branch))
+
     # ── the script ───────────────────────────────────────────────────────────
 
-    def _answer(self, method: str, arguments: tuple[Any, ...]) -> Any:
+    def _record(self, method: str, arguments: tuple[Any, ...]) -> None:
+        """Every call is logged and every call costs time, scripted or answered by a map."""
         self.calls.append((method, arguments))
         if self.clock is not None:
             self.clock.advance(self.seconds)
+
+    def _answer(self, method: str, arguments: tuple[Any, ...]) -> Any:
+        self._record(method, arguments)
         script = self._scripts[method]
         index = min(self._used[method], len(script) - 1)
         self._used[method] = index + 1
@@ -103,3 +200,10 @@ class FakeGit:
     def called(self, method: str) -> list[tuple[Any, ...]]:
         """The arguments every call to one method was made with."""
         return [arguments for name, arguments in self.calls if name == method]
+
+
+def _remote_ref(branch: str, sha: str | None) -> RemoteRef | None:
+    """What `ls_remote` answers for a mapped branch: the full ref name, or nothing."""
+    if sha is None:
+        return None
+    return RemoteRef(ref=f"refs/heads/{branch}", sha=sha)

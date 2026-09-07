@@ -7,8 +7,25 @@ exactly that reason: a model nothing imported would be invisible to `alembic
 
 from __future__ import annotations
 
+from orchestrator.infrastructure.db.models.harness import HarnessRow
 from orchestrator.infrastructure.db.models.project import ProjectRow
 from orchestrator.infrastructure.db.models.repository import RepositoryRow
+from orchestrator.infrastructure.db.models.run import (
+    AttemptRow,
+    GateRecordRow,
+    RunRow,
+    StepRunRow,
+)
 from orchestrator.infrastructure.db.models.template import TemplateRow, TemplateVersionRow
 
-__all__ = ["ProjectRow", "RepositoryRow", "TemplateRow", "TemplateVersionRow"]
+__all__ = [
+    "AttemptRow",
+    "GateRecordRow",
+    "HarnessRow",
+    "ProjectRow",
+    "RepositoryRow",
+    "RunRow",
+    "StepRunRow",
+    "TemplateRow",
+    "TemplateVersionRow",
+]

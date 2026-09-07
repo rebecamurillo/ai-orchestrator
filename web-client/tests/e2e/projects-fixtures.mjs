@@ -26,6 +26,9 @@ export const MIXED_FAILED_REPO_ID = '00000000-0000-4000-8000-0000000000a3';
 export const MIXED_MISSING_REPO_ID = '00000000-0000-4000-8000-0000000000a4';
 export const MIXED_PENDING_REPO_ID = '00000000-0000-4000-8000-0000000000a5';
 export const MIXED_RECHECK_REPO_ID = '00000000-0000-4000-8000-0000000000a6';
+//: 4.10's own dedicated target — a `POST .../init` fixture, mutated by no other test in
+//: this file, the same reasoning `MIXED_RECHECK_REPO_ID` gives `MIXED_FAILED_REPO_ID`.
+export const MIXED_INIT_REPO_ID = '00000000-0000-4000-8000-0000000000a7';
 
 /**
  * The repository the stub's `POST clone-check` route flips from `failed` to `ok` — its own,
@@ -74,6 +77,9 @@ function project(overrides) {
     env_vars: [],
     log_prompt_content: false,
     repositories: [],
+    //: 4.10 — the real contract always carries this key; `[]` reads exactly like the
+    //: pre-4.10 fixtures did when `index.astro` falls back on a missing one.
+    runs: [],
     created_at: CREATED_AT,
     updated_at: UPDATED_AT,
     ...overrides,
@@ -160,6 +166,26 @@ const recheckTargetRepository = repository({
   verify_skipped: false,
 });
 
+/** The sole target of the stub's `POST .../init` route — see `MIXED_INIT_REPO_ID`. Its
+ * method is `missing`, exactly the state `Initialise repository` (4.10) offers itself for,
+ * and it carries no Run yet: `orchestrator-docs` (`missingMethodRepository` above) stays
+ * read-only for every other test in this file. */
+const initTargetRepository = repository({
+  id: MIXED_INIT_REPO_ID,
+  project_id: MIXED_ID,
+  slug: 'orchestrator-init',
+  quality_gate_command: '',
+  test_globs: [],
+  clone_check: {
+    status: 'ok',
+    at: '2026-09-04T12:11:00Z',
+    output: 'cloned ok',
+    bmad_version: 'missing',
+  },
+  clone_check_lines: [{ name: 'clone', status: 'ok', seconds: 2, output: 'Cloning into base...' }],
+  verify_skipped: true,
+});
+
 export const MIXED = project({
   id: MIXED_ID,
   slug: 'mixed-signals',
@@ -174,6 +200,7 @@ export const MIXED = project({
     missingMethodRepository,
     pendingRepository,
     recheckTargetRepository,
+    initTargetRepository,
   ],
   created_at: CREATED_AT,
   updated_at: UPDATED_AT,

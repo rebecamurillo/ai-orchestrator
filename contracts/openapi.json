@@ -1,6 +1,286 @@
 {
   "components": {
     "schemas": {
+      "AlertOut": {
+        "properties": {
+          "park_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "blocked",
+                  "checkpoint",
+                  "verify_failed",
+                  "budget",
+                  "timeout",
+                  "push_rejected",
+                  "protected_path",
+                  "misconfigured",
+                  "plan_stale",
+                  "internal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Kind"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "reason",
+          "park_kind"
+        ],
+        "title": "AlertOut",
+        "type": "object"
+      },
+      "BoardColumnsOut": {
+        "properties": {
+          "done": {
+            "items": {
+              "$ref": "#/components/schemas/CardOut"
+            },
+            "title": "Done",
+            "type": "array"
+          },
+          "failed": {
+            "items": {
+              "$ref": "#/components/schemas/CardOut"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "needs_you": {
+            "items": {
+              "$ref": "#/components/schemas/CardOut"
+            },
+            "title": "Needs You",
+            "type": "array"
+          },
+          "queued": {
+            "items": {
+              "$ref": "#/components/schemas/CardOut"
+            },
+            "title": "Queued",
+            "type": "array"
+          },
+          "running": {
+            "items": {
+              "$ref": "#/components/schemas/CardOut"
+            },
+            "title": "Running",
+            "type": "array"
+          }
+        },
+        "required": [
+          "queued",
+          "running",
+          "needs_you",
+          "done",
+          "failed"
+        ],
+        "title": "BoardColumnsOut",
+        "type": "object"
+      },
+      "BoardCountsOut": {
+        "properties": {
+          "needs_you": {
+            "title": "Needs You",
+            "type": "integer"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "running": {
+            "title": "Running",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "running",
+          "queued",
+          "needs_you"
+        ],
+        "title": "BoardCountsOut",
+        "type": "object"
+      },
+      "BoardOut": {
+        "description": "`GET /runs?view=board`. Five columns, always present; `counts` sums three of them.",
+        "properties": {
+          "columns": {
+            "$ref": "#/components/schemas/BoardColumnsOut"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/BoardCountsOut"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "columns",
+          "counts",
+          "generated_at"
+        ],
+        "title": "BoardOut",
+        "type": "object"
+      },
+      "CardOut": {
+        "properties": {
+          "age_seconds": {
+            "title": "Age Seconds",
+            "type": "number"
+          },
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "current_step_label": {
+            "title": "Current Step Label",
+            "type": "string"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind Label"
+          },
+          "needs_you_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs You Since"
+          },
+          "park_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "blocked",
+                  "checkpoint",
+                  "verify_failed",
+                  "budget",
+                  "timeout",
+                  "push_rejected",
+                  "protected_path",
+                  "misconfigured",
+                  "plan_stale",
+                  "internal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Kind"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProgressOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "repository_slug": {
+            "title": "Repository Slug",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "needs_you",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "token",
+          "status",
+          "park_kind",
+          "branch",
+          "project_name",
+          "repository_slug",
+          "current_step_label",
+          "harness",
+          "template",
+          "version",
+          "progress",
+          "kind_label",
+          "age_seconds",
+          "needs_you_since"
+        ],
+        "title": "CardOut",
+        "type": "object"
+      },
       "CloneCheckLineOut": {
         "description": "One command the check ran: what it was, how it went, how long, and what it said.",
         "properties": {
@@ -143,6 +423,84 @@
         "title": "CloneCheckResultOut",
         "type": "object"
       },
+      "CostOut": {
+        "properties": {
+          "active_seconds": {
+            "title": "Active Seconds",
+            "type": "integer"
+          },
+          "budget_usd": {
+            "title": "Budget Usd",
+            "type": "string"
+          },
+          "provisional": {
+            "title": "Provisional",
+            "type": "boolean"
+          },
+          "spent_usd": {
+            "title": "Spent Usd",
+            "type": "string"
+          },
+          "tokens_in": {
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "title": "Tokens Out",
+            "type": "integer"
+          },
+          "trace_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Url"
+          },
+          "wall_clock_seconds": {
+            "title": "Wall Clock Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "spent_usd",
+          "budget_usd",
+          "tokens_in",
+          "tokens_out",
+          "wall_clock_seconds",
+          "active_seconds",
+          "provisional",
+          "trace_url"
+        ],
+        "title": "CostOut",
+        "type": "object"
+      },
+      "CreateRunOut": {
+        "description": "`POST /runs`'s 201 body: the Run, and where it stands in the queue.",
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/RunSummaryOut"
+          },
+          "starts_now": {
+            "title": "Starts Now",
+            "type": "boolean"
+          },
+          "waiting": {
+            "title": "Waiting",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run",
+          "starts_now",
+          "waiting"
+        ],
+        "title": "CreateRunOut",
+        "type": "object"
+      },
       "EdgeOut": {
         "description": "One arrow, keyed `from` and `to` \u2014 the names `from_id`/`to_id` stand in for.",
         "properties": {
@@ -204,6 +562,116 @@
           "name"
         ],
         "title": "EnvVarIn",
+        "type": "object"
+      },
+      "GateRecordOut": {
+        "properties": {
+          "actor": {
+            "enum": [
+              "operator",
+              "machine",
+              "terminal"
+            ],
+            "title": "Actor",
+            "type": "string"
+          },
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "attempt_n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt N"
+          },
+          "event": {
+            "anyOf": [
+              {
+                "enum": [
+                  "blocked",
+                  "checkpoint",
+                  "verify_failed",
+                  "budget",
+                  "timeout",
+                  "push_rejected",
+                  "protected_path",
+                  "misconfigured",
+                  "plan_stale",
+                  "internal"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "answer",
+                  "continue",
+                  "retry",
+                  "skip_story",
+                  "skip_epic",
+                  "budget_raise",
+                  "cancel",
+                  "terminal_start",
+                  "terminal_release",
+                  "terminal_resume"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "start",
+                  "done",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "redispatch",
+                  "retry_auto"
+                ],
+                "type": "string"
+              }
+            ],
+            "title": "Event"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "path",
+          "event",
+          "actor",
+          "text",
+          "attempt_n"
+        ],
+        "title": "GateRecordOut",
         "type": "object"
       },
       "GraphOut": {
@@ -288,6 +756,140 @@
         "title": "GroupOut",
         "type": "object"
       },
+      "HarnessOut": {
+        "description": "One row of `GET /harnesses`.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "failing_check": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failing Check"
+          },
+          "last_readiness_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Readiness At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "version_pin": {
+            "title": "Version Pin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "enabled",
+          "last_readiness_at",
+          "failing_check",
+          "version_pin"
+        ],
+        "title": "HarnessOut",
+        "type": "object"
+      },
+      "HeaderMetaOut": {
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "project": {
+            "title": "Project",
+            "type": "string"
+          },
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "worktree_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worktree Path"
+          }
+        },
+        "required": [
+          "project",
+          "repository",
+          "base_branch",
+          "folder",
+          "template",
+          "version",
+          "harness",
+          "started_at",
+          "worktree_path"
+        ],
+        "title": "HeaderMetaOut",
+        "type": "object"
+      },
+      "HeaderOut": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/HeaderMetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "HeaderOut",
+        "type": "object"
+      },
       "Health": {
         "description": "The `/healthz` payload. Typed so the generated contract carries a real schema (AD-3).",
         "properties": {
@@ -358,6 +960,152 @@
           "values"
         ],
         "title": "InputDeclOut",
+        "type": "object"
+      },
+      "LatestAttemptOut": {
+        "properties": {
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "log_tail": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Log Tail",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "n",
+          "started_at",
+          "ended_at",
+          "seconds",
+          "harness",
+          "model",
+          "exit_code",
+          "cost_usd",
+          "log_tail"
+        ],
+        "title": "LatestAttemptOut",
+        "type": "object"
+      },
+      "LineOut": {
+        "description": "One check line: `{check, status, text, fix?}`.",
+        "properties": {
+          "check": {
+            "title": "Check",
+            "type": "string"
+          },
+          "fix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warn",
+              "fail",
+              "skip"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "check",
+          "status",
+          "text"
+        ],
+        "title": "LineOut",
         "type": "object"
       },
       "MaskedEnvVarOut": {
@@ -466,6 +1214,33 @@
         "title": "NodeOut",
         "type": "object"
       },
+      "Page_HarnessOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HarnessOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[HarnessOut]",
+        "type": "object"
+      },
       "Page_ProjectRead_": {
         "properties": {
           "items": {
@@ -518,6 +1293,33 @@
           "items"
         ],
         "title": "Page[RepositoryOut]",
+        "type": "object"
+      },
+      "Page_RunSummaryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RunSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[RunSummaryOut]",
         "type": "object"
       },
       "Page_TemplateSummaryOut_": {
@@ -574,6 +1376,165 @@
         "title": "Page[int]",
         "type": "object"
       },
+      "PlanErrorOut": {
+        "description": "Why *What will run* could not be built.",
+        "properties": {
+          "item": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "reason",
+          "template",
+          "version",
+          "line",
+          "item"
+        ],
+        "title": "PlanErrorOut",
+        "type": "object"
+      },
+      "PlannedRowOut": {
+        "description": "One row of *What will run* \u2014 the same shape `create_run` (4.4) will persist.",
+        "properties": {
+          "frame": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame"
+          },
+          "gate": {
+            "enum": [
+              "liveness",
+              "deterministic",
+              "human",
+              "unvalidated"
+            ],
+            "title": "Gate",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "queued",
+              "running",
+              "done",
+              "blocked",
+              "checkpoint",
+              "error",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "story_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Story Id"
+          },
+          "with_resolved": {
+            "additionalProperties": true,
+            "title": "With Resolved",
+            "type": "object"
+          }
+        },
+        "required": [
+          "seq",
+          "path",
+          "label",
+          "kind",
+          "gate",
+          "status",
+          "reason",
+          "with_resolved",
+          "frame",
+          "story_id"
+        ],
+        "title": "PlannedRowOut",
+        "type": "object"
+      },
       "Pong": {
         "description": "The `/api/v1/ping` payload. Typed so the generated contract carries a schema (AD-3).",
         "properties": {
@@ -586,6 +1547,172 @@
           "pong"
         ],
         "title": "Pong",
+        "type": "object"
+      },
+      "PreflightIn": {
+        "description": "The pre-flight request. Every field but `re_review_done` is optional \u2014 a missing one\nmakes its dependent lines `skip` rather than a 422 (the brief's own rule).",
+        "properties": {
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          },
+          "budget_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Usd"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "re_review_done": {
+            "default": false,
+            "title": "Re Review Done",
+            "type": "boolean"
+          },
+          "repository_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Id"
+          },
+          "template_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Name"
+          },
+          "template_version": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 2147483647.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Version"
+          }
+        },
+        "title": "PreflightIn",
+        "type": "object"
+      },
+      "PreflightOut": {
+        "description": "`POST /runs/preflight`'s response.",
+        "properties": {
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/LineOut"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "plan_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "queue_note": {
+            "title": "Queue Note",
+            "type": "string"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PlannedRowOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows"
+          },
+          "start_allowed": {
+            "title": "Start Allowed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lines",
+          "start_allowed",
+          "queue_note",
+          "rows",
+          "plan_error"
+        ],
+        "title": "PreflightOut",
         "type": "object"
       },
       "ProblemDetail": {
@@ -706,6 +1833,53 @@
         "title": "ProblemError",
         "type": "object"
       },
+      "ProgressOut": {
+        "properties": {
+          "epics_done": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epics Done"
+          },
+          "epics_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epics Total"
+          },
+          "links": {
+            "title": "Links",
+            "type": "integer"
+          },
+          "stories_done": {
+            "title": "Stories Done",
+            "type": "integer"
+          },
+          "stories_total": {
+            "title": "Stories Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "epics_done",
+          "epics_total",
+          "stories_done",
+          "stories_total",
+          "links"
+        ],
+        "title": "ProgressOut",
+        "type": "object"
+      },
       "ProjectCreate": {
         "description": "`POST /projects`. Every variable carries its value.",
         "properties": {
@@ -753,7 +1927,7 @@
         "type": "object"
       },
       "ProjectRead": {
-        "description": "A Project as every read returns it, its Repositories embedded.\n\nEvery read answers the same shape (POST's 201, PUT's 200, both GETs) \u2014 a Repository\nadded between two reads is exactly the kind of state change the Operator relies on the\nnext read to show, and a narrower shape for the list or the create response would have\nto justify why *that* read is allowed to lie about what is stored.",
+        "description": "A Project as every read returns it, its Repositories and its Runs embedded.\n\nEvery read answers the same shape (POST's 201, PUT's 200, both GETs) \u2014 a Repository\nadded between two reads is exactly the kind of state change the Operator relies on the\nnext read to show, and a narrower shape for the list or the create response would have\nto justify why *that* read is allowed to lie about what is stored.",
         "properties": {
           "context_paths": {
             "items": {
@@ -797,6 +1971,13 @@
             "title": "Repositories",
             "type": "array"
           },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRunOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -815,10 +1996,70 @@
           "env_vars",
           "log_prompt_content",
           "repositories",
+          "runs",
           "created_at",
           "updated_at"
         ],
         "title": "ProjectRead",
+        "type": "object"
+      },
+      "ProjectRunOut": {
+        "description": "One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the\nrecord row's own fields, plus what a Repository row's `Initialise repository` control\nreads about the Run it started.",
+        "properties": {
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "compare_urls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Compare Urls",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_step_label": {
+            "title": "Current Step Label",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "repository_id": {
+            "format": "uuid",
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "token",
+          "template",
+          "branch",
+          "repository_id",
+          "current_step_label",
+          "reason",
+          "compare_urls",
+          "created_at"
+        ],
+        "title": "ProjectRunOut",
         "type": "object"
       },
       "ProjectUpdate": {
@@ -865,6 +2106,84 @@
           "name"
         ],
         "title": "ProjectUpdate",
+        "type": "object"
+      },
+      "QueueItemOut": {
+        "description": "One row: a Run the engine is holding, and why it waits.",
+        "properties": {
+          "next_step_label": {
+            "title": "Next Step Label",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "run": {
+            "$ref": "#/components/schemas/RunSummaryOut"
+          },
+          "waiting_seconds": {
+            "title": "Waiting Seconds",
+            "type": "number"
+          },
+          "waiting_since": {
+            "title": "Waiting Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "position",
+          "run",
+          "next_step_label",
+          "reason",
+          "waiting_since",
+          "waiting_seconds"
+        ],
+        "title": "QueueItemOut",
+        "type": "object"
+      },
+      "QueueOut": {
+        "description": "`GET /queue`'s body: the rows, and the ceiling the section head names beside them.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueueItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "max_active_runs": {
+            "title": "Max Active Runs",
+            "type": "integer"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "max_active_runs"
+        ],
+        "title": "QueueOut",
         "type": "object"
       },
       "RepositoryCreate": {
@@ -1079,6 +2398,630 @@
         "title": "RepositoryUpdate",
         "type": "object"
       },
+      "RunDetailOut": {
+        "description": "`GET /runs/{run_id}/detail`. One request, every section the screen shows.",
+        "properties": {
+          "admitted_signals": {
+            "items": {
+              "enum": [
+                "answer",
+                "continue",
+                "retry",
+                "skip_story",
+                "skip_epic",
+                "budget_raise",
+                "cancel",
+                "terminal_start",
+                "terminal_release",
+                "terminal_resume"
+              ],
+              "type": "string"
+            },
+            "title": "Admitted Signals",
+            "type": "array"
+          },
+          "alert": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlertOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost": {
+            "$ref": "#/components/schemas/CostOut"
+          },
+          "gate_record": {
+            "items": {
+              "$ref": "#/components/schemas/GateRecordOut"
+            },
+            "title": "Gate Record",
+            "type": "array"
+          },
+          "header": {
+            "$ref": "#/components/schemas/HeaderOut"
+          },
+          "run": {
+            "$ref": "#/components/schemas/RunDetailSummaryOut"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepRowOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "stories": {
+            "items": {
+              "$ref": "#/components/schemas/StoryCellOut"
+            },
+            "title": "Stories",
+            "type": "array"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SummaryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "run",
+          "header",
+          "alert",
+          "steps",
+          "stories",
+          "cost",
+          "gate_record",
+          "admitted_signals",
+          "summary"
+        ],
+        "title": "RunDetailOut",
+        "type": "object"
+      },
+      "RunDetailSummaryOut": {
+        "description": "`RunSummaryOut` plus what only the detail's own `run` field carries.",
+        "properties": {
+          "accepted_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Accepted Paths",
+            "type": "array"
+          },
+          "admitted_signals": {
+            "items": {
+              "enum": [
+                "answer",
+                "continue",
+                "retry",
+                "skip_story",
+                "skip_epic",
+                "budget_raise",
+                "cancel",
+                "terminal_start",
+                "terminal_release",
+                "terminal_resume"
+              ],
+              "type": "string"
+            },
+            "title": "Admitted Signals",
+            "type": "array"
+          },
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "budget_usd": {
+            "title": "Budget Usd",
+            "type": "string"
+          },
+          "compare_urls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Compare Urls",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "manual_estimate_h": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Estimate H"
+          },
+          "plan_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Ref"
+          },
+          "project": {
+            "format": "uuid",
+            "title": "Project",
+            "type": "string"
+          },
+          "repository": {
+            "format": "uuid",
+            "title": "Repository",
+            "type": "string"
+          },
+          "spend_usd": {
+            "title": "Spend Usd",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "needs_you",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "terminal_session": {
+            "title": "Terminal Session",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "worktree_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worktree Path"
+          },
+          "worktrees": {
+            "items": {
+              "$ref": "#/components/schemas/WorktreeOut"
+            },
+            "title": "Worktrees",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "template",
+          "version",
+          "project",
+          "repository",
+          "branch",
+          "budget_usd",
+          "spend_usd",
+          "plan_ref",
+          "created_at",
+          "admitted_signals",
+          "inputs",
+          "manual_estimate_h",
+          "worktree_path",
+          "worktrees",
+          "compare_urls",
+          "terminal_session",
+          "accepted_paths"
+        ],
+        "title": "RunDetailSummaryOut",
+        "type": "object"
+      },
+      "RunGraphOut": {
+        "description": "`GET /runs/{run_id}/graph`. Three lists, never `null` \u2014 same shape as `GraphOut`.",
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/EdgeOut"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/RunGroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/RunNodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges",
+          "groups"
+        ],
+        "title": "RunGraphOut",
+        "type": "object"
+      },
+      "RunGroupOut": {
+        "description": "One `epics[i]`/`epics[i].stories[j]` frame \u2014 `GroupOut` plus its computed status.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "for_each",
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "members",
+          "status"
+        ],
+        "title": "RunGroupOut",
+        "type": "object"
+      },
+      "RunIn": {
+        "description": "`POST /runs`'s body: what *Start run* submits once every field is filled in.",
+        "properties": {
+          "base_branch": {
+            "title": "Base Branch",
+            "type": "string"
+          },
+          "budget_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "gt": 0,
+            "title": "Budget Usd"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "manual_estimate_h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Estimate H"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "re_review_done": {
+            "default": false,
+            "title": "Re Review Done",
+            "type": "boolean"
+          },
+          "repository_id": {
+            "format": "uuid",
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "template_name": {
+            "title": "Template Name",
+            "type": "string"
+          },
+          "template_version": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 2147483647.0,
+            "title": "Template Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "template_name",
+          "template_version",
+          "project_id",
+          "repository_id",
+          "base_branch",
+          "budget_usd"
+        ],
+        "title": "RunIn",
+        "type": "object"
+      },
+      "RunNodeOut": {
+        "description": "One row of a Run, as one box of the run graph \u2014 `NodeOut` plus its live state.",
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "boolean"
+          },
+          "call": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeCallOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "enum": [
+                  "liveness",
+                  "deterministic",
+                  "human"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "unvalidated",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gate"
+          },
+          "human": {
+            "title": "Human",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "`step_run.path`, verbatim \u2014 the join key (AD-15).",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "gate",
+          "agent",
+          "human",
+          "call",
+          "status",
+          "token",
+          "current"
+        ],
+        "title": "RunNodeOut",
+        "type": "object"
+      },
+      "RunSummaryOut": {
+        "description": "The minimal Run read model (4.12 replaces this with the full one).",
+        "properties": {
+          "admitted_signals": {
+            "items": {
+              "enum": [
+                "answer",
+                "continue",
+                "retry",
+                "skip_story",
+                "skip_epic",
+                "budget_raise",
+                "cancel",
+                "terminal_start",
+                "terminal_release",
+                "terminal_resume"
+              ],
+              "type": "string"
+            },
+            "title": "Admitted Signals",
+            "type": "array"
+          },
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "budget_usd": {
+            "title": "Budget Usd",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "plan_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Ref"
+          },
+          "project": {
+            "format": "uuid",
+            "title": "Project",
+            "type": "string"
+          },
+          "repository": {
+            "format": "uuid",
+            "title": "Repository",
+            "type": "string"
+          },
+          "spend_usd": {
+            "title": "Spend Usd",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "needs_you",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "template",
+          "version",
+          "project",
+          "repository",
+          "branch",
+          "budget_usd",
+          "spend_usd",
+          "plan_ref",
+          "created_at",
+          "admitted_signals"
+        ],
+        "title": "RunSummaryOut",
+        "type": "object"
+      },
       "SaveVersionIn": {
         "description": "`POST /templates/{name}/versions`. Same one field; a distinct name for a distinct route.",
         "properties": {
@@ -1092,6 +3035,166 @@
           "yaml"
         ],
         "title": "SaveVersionIn",
+        "type": "object"
+      },
+      "SignalIn": {
+        "description": "`POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "answer",
+              "continue",
+              "retry",
+              "skip_story",
+              "skip_epic",
+              "budget_raise",
+              "cancel",
+              "terminal_start",
+              "terminal_release",
+              "terminal_resume"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "SignalIn",
+        "type": "object"
+      },
+      "StepRowOut": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "gate": {
+            "title": "Gate",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatestAttemptOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "path",
+          "label",
+          "kind",
+          "gate",
+          "status",
+          "token",
+          "reason",
+          "attempts",
+          "latest"
+        ],
+        "title": "StepRowOut",
+        "type": "object"
+      },
+      "StoryCellOut": {
+        "properties": {
+          "epic_index": {
+            "title": "Epic Index",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "story_id": {
+            "title": "Story Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "epic_index",
+          "story_id",
+          "state"
+        ],
+        "title": "StoryCellOut",
+        "type": "object"
+      },
+      "SummaryOut": {
+        "properties": {
+          "links": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProgressOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "progress",
+          "links",
+          "skipped"
+        ],
+        "title": "SummaryOut",
         "type": "object"
       },
       "TemplateRefOut": {
@@ -1197,7 +3300,7 @@
             "type": "string"
           },
           "pinned_by": {
-            "description": "Always 0 in this release: counting a Template Version's active Runs is Epic 4's write, not this story's.",
+            "description": "How many Runs, of any status, pin this exact Version \u2014 root or callee (AD-15, SPEC CAP-4).",
             "title": "Pinned By",
             "type": "integer"
           },
@@ -1263,6 +3366,34 @@
         ],
         "title": "ValidateOut",
         "type": "object"
+      },
+      "WorktreeOut": {
+        "properties": {
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "created_branch": {
+            "title": "Created Branch",
+            "type": "boolean"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "pushed": {
+            "title": "Pushed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "branch",
+          "path",
+          "created_branch",
+          "pushed"
+        ],
+        "title": "WorktreeOut",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -1279,6 +3410,48 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/harnesses": {
+      "get": {
+        "description": "The three seeded rows, and whatever Epic 5's readiness use case has written onto them.",
+        "operationId": "list_harnesses_api_v1_harnesses_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_HarnessOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List every harness",
+        "tags": [
+          "harnesses"
+        ]
+      }
+    },
     "/api/v1/ping": {
       "get": {
         "operationId": "ping_api_v1_ping_get",
@@ -1824,6 +3997,48 @@
         ]
       }
     },
+    "/api/v1/queue": {
+      "get": {
+        "description": "Every Run the engine is holding, joined with the reason it waits. Writes nothing.",
+        "operationId": "read_queue_api_v1_queue_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read the queue",
+        "tags": [
+          "queue"
+        ]
+      }
+    },
     "/api/v1/repositories/{repository_id}": {
       "get": {
         "description": "One stored Repository. An unknown id is a 404 problem document.",
@@ -2178,6 +4393,933 @@
         "summary": "Run this Repository's clone check",
         "tags": [
           "repositories"
+        ]
+      }
+    },
+    "/api/v1/repositories/{repository_id}/init": {
+      "get": {
+        "description": "The same read `GET /repositories/{id}` gives, published under this path too (4.10).",
+        "operationId": "get_init_api_v1_repositories__repository_id__init_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Repository has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read the Repository this path initialises",
+        "tags": [
+          "repositories"
+        ]
+      },
+      "post": {
+        "description": "Start a `repo-init@1` Run on `repository.default_branch`, with no harness.",
+        "operationId": "init_api_v1_repositories__repository_id__init_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Repository has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The clone check has failed, or a repo-init Run is already running on this Repository."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Initialise this Repository for the method",
+        "tags": [
+          "repositories"
+        ]
+      }
+    },
+    "/api/v1/runs": {
+      "get": {
+        "description": "`?view=board` answers the Board (SPEC CAP-12); otherwise every stored Run, newest\nfirst, the minimal summary.",
+        "operationId": "list_runs_api_v1_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "board",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Page_RunSummaryOut_"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BoardOut"
+                    }
+                  ],
+                  "title": "Response List Runs Api V1 Runs Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`view` or `project_id` does not match the shape below."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List every Run, or read the Board (`?view=board`)",
+        "tags": [
+          "runs"
+        ]
+      },
+      "post": {
+        "description": "Re-runs pre-flight; a `fail` line is 409, an unbuildable plan is 422 (AD-7).",
+        "operationId": "create_api_v1_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Pre-flight failed at least one line; `detail` names them."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The Template tree could not be planned; see `errors[]`."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create and enqueue a Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/preflight": {
+      "get": {
+        "description": "The same computation over an entirely empty request \u2014 every line `skip`.",
+        "operationId": "preflight_empty_api_v1_runs_preflight_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreflightOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pre-flight an empty request",
+        "tags": [
+          "runs"
+        ]
+      },
+      "post": {
+        "description": "Every FR-8 line, `start_allowed`, the queue note, and the rows the plan would persist.",
+        "operationId": "preflight_api_v1_runs_preflight_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreflightIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreflightOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The posted body does not match the shape below."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Pre-flight a Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}": {
+      "get": {
+        "description": "The minimal Run read model; `GET /runs/{run_id}` gains the full one in 4.12.",
+        "operationId": "get_api_v1_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`run_id` does not parse as a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/detail": {
+      "get": {
+        "description": "Everything the Run detail screen shows, from one read (SPEC CAP-12 \"one per screen\").",
+        "operationId": "detail_api_v1_runs__run_id__detail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`run_id` does not parse as a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one Run's full detail",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/graph": {
+      "get": {
+        "description": "`build_run_graph` (SPEC CAP-12, AD-15): the planned rows, chained, grouped, coloured.",
+        "operationId": "run_graph_api_v1_runs__run_id__graph_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunGraphOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`run_id` does not parse as a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one Run's graph",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/signals": {
+      "get": {
+        "description": "The same read `GET /runs/{run_id}` gives, published under this path too (4.9).",
+        "operationId": "get_signals_api_v1_runs__run_id__signals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`run_id` does not parse as a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read the Run this path signals, and what it currently admits",
+        "tags": [
+          "runs"
+        ]
+      },
+      "post": {
+        "description": "Validate against AD-13, refuse a kind this epic does not apply yet, then apply it.",
+        "operationId": "post_signal_api_v1_runs__run_id__signals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignalIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The signal does not apply to this Run's status or park, or is not available yet."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The posted body does not match the shape below."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Signal a Run: cancel, retry, or continue",
+        "tags": [
+          "runs"
         ]
       }
     },
@@ -2732,7 +5874,7 @@
     },
     "/api/v1/templates/{name}/{version}": {
       "get": {
-        "description": "`calls`, `called_by` and `inputs` alongside the stored text. `pinned_by` is always 0.",
+        "description": "`calls`, `called_by`, `inputs` and `pinned_by` (4.4) alongside the stored text.",
         "operationId": "get_version_api_v1_templates__name___version__get",
         "parameters": [
           {

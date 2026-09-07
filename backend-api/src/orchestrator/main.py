@@ -1,6 +1,9 @@
 """Composition root: the only module that wires adapters into ports.
 
-`DBOS.launch()` belongs here too, from Epic 4 on. Until then this process is a FastAPI
+The durable engine is launched here too (Operations): `main()` builds it — no connection —
+names it as the engine this process serves with, and `run_migrations` launches it after the
+schema and the seeds, before uvicorn binds. `infrastructure/dbos/startup.py` says why the
+launch lives inside that one name and not beside it. Everything else is a FastAPI
 application: the public `/healthz`, and every feature router mounted under `/api/v1` behind
 the one bearer dependency (AD-4).
 
@@ -33,6 +36,7 @@ the one statement of *when the schema migrates*; this module only orders the two
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from functools import cache
@@ -40,7 +44,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 import structlog
 import uvicorn
-from fastapi import Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
@@ -50,23 +54,35 @@ from orchestrator.api.routers import (
     clone_check,
     graph,
     graph_text,
+    harnesses,
     ping,
     projects,
+    queue,
     repositories,
+    repository_init,
+    run,
+    run_detail,
+    runs,
+    signals,
     templates,
 )
+from orchestrator.application.use_cases.harnesses import HarnessPorts, seed_harnesses
 from orchestrator.application.use_cases.templates import SeedResult, TemplatePorts, seed_shipped
+from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.ports.crypto import Crypto
+from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db import (
+    SQLAlchemyHarnessRepository,
     SQLAlchemyTemplateVersionRepository,
     SQLAlchemyUnitOfWork,
     create_engine_from,
     create_session_factory,
 )
 from orchestrator.infrastructure.db import migrations as db_migrations
+from orchestrator.infrastructure.dbos import build_engine, launch_engine, schedule_jobs, serving
 from orchestrator.infrastructure.git import SubprocessGit
 from orchestrator.infrastructure.logging import configure_logging
 from orchestrator.infrastructure.settings import Settings
@@ -140,19 +156,58 @@ def seed_shipped_templates(settings: Settings) -> list[SeedResult]:
     return results
 
 
+#: The three harness names this image installs (SPEC CAP-3, AD-10), each paired with the
+#: `Settings` field that pins its version. `local` is OpenCode — see `.env.example`'s own
+#: comment on `LOCAL_MODELS`.
+HARNESS_VERSION_SETTINGS: dict[str, str] = {
+    "claude": "claude_code_version",
+    "codex": "codex_version",
+    "local": "opencode_version",
+}
+
+
+def seed_harness_table(settings: Settings) -> list[Harness]:
+    """Idempotent upsert of the three harness names and their pinned versions (AD-10).
+
+    Builds its own engine, the same way `seed_shipped_templates` does and for the same
+    reason: `run_migrations`'s call site takes exactly `settings`, and this function owns
+    the engine it opens.
+    """
+    pins = {name: getattr(settings, field) for name, field in HARNESS_VERSION_SETTINGS.items()}
+    engine = create_engine_from(settings)
+    try:
+        session_factory = create_session_factory(engine)
+        with SQLAlchemyUnitOfWork(session_factory) as uow:
+            ports = HarnessPorts(uow=uow, harnesses=SQLAlchemyHarnessRepository(uow.session))
+            return seed_harnesses(ports, pins)
+    finally:
+        engine.dispose()
+
+
 def run_migrations(settings: Settings) -> str:
-    """The pre-serve start-up step: schema to head, then the shipped Templates seeded.
+    """The pre-serve start-up step: schema to head, the shipped Templates and the harness
+    table seeded.
 
     Combined under this one name for the reason the module docstring gives: every test that
-    replaces `main.run_migrations` takes exactly one argument, `settings`.
+    replaces `main.run_migrations` takes exactly one argument, `settings`. The durable
+    engine's launch is the fourth step for the same reason and one of its own (AD-6, FR-12):
+    recovery of the Runs an earlier container was walking begins at that call, and it must
+    not begin against a schema that has not been migrated.
     """
     head = db_migrations.run_migrations(settings)
     seed_shipped_templates(settings)
+    seed_harness_table(settings)
+    # last, and inside this function: see `infrastructure/dbos/startup.py`. A process that
+    # is not serving — every unit test — has no engine registered and launches nothing.
+    launch_engine()
+    # after the launch: `engine.schedule` writes to the database the launch just opened
+    # (SPEC CAP-11), the same reason `register_queue` runs after `start` inside it.
+    schedule_jobs(settings)
     return head
 
 
 def migrating_lifespan(settings: Settings) -> Lifespan:
-    """The start-up step that brings the schema to head before the socket is bound.
+    """The start-up step that migrates, seeds and launches before the socket is bound.
 
     Built here rather than inside `create_app` so that the only application that migrates
     is the one this module hands to uvicorn. See `infrastructure/db/migrations.py`.
@@ -160,7 +215,12 @@ def migrating_lifespan(settings: Settings) -> Lifespan:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        run_migrations(settings)
+        # off the event loop, and not as an optimisation: the whole start-up step is
+        # blocking I/O — alembic, the two seeds, and the durable engine's own launch — and
+        # the engine refuses to register its queue from a thread that is running a loop,
+        # because that registration writes to the database. uvicorn still waits for all of
+        # it before it binds, which is the guarantee this lifespan exists to give.
+        await asyncio.to_thread(run_migrations, settings)
         yield
 
     return lifespan
@@ -182,20 +242,21 @@ def crypto_factory(settings: Settings) -> CryptoFactory:
     return build
 
 
-def create_app(
+def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s own precedent
     settings: Settings,
     *,
     lifespan: Lifespan | None = None,
     session_factory: SessionFactory | None = None,
     crypto: CryptoFactory | None = None,
     git: Git | None = None,
+    engine: WorkflowEngine | None = None,
 ) -> FastAPI:
     """Build the ASGI application. Adapters are constructed here and nowhere else.
 
     Without a `lifespan` the application performs no I/O at any point in its life — the
-    shape every unit test builds. The two ports are optional for the same reason: the
-    contract exporter builds this application from `Settings.model_construct()` and only
-    reads its routes, and a unit test overrides them through `dependency_overrides`.
+    shape every unit test builds. The ports are optional for the same reason: the contract
+    exporter builds this application from `Settings.model_construct()` and only reads its
+    routes, and a unit test overrides them through `dependency_overrides`.
     """
     app = FastAPI(
         title="ai-orchestrator backend-api",
@@ -208,6 +269,7 @@ def create_app(
     app.state.session_factory = session_factory
     app.state.crypto = crypto
     app.state.git = git
+    app.state.engine = engine
     install_error_handlers(app)
 
     @app.get("/healthz", tags=["health"], response_model=Health)
@@ -216,34 +278,15 @@ def create_app(
 
     # one dependency for the whole versioned surface: a feature router added later
     # inherits the bearer check — and its declared 401 — instead of having to remember them
-    app.include_router(
-        ping.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
-    app.include_router(
-        projects.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
-    app.include_router(
-        repositories.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
-    app.include_router(
-        clone_check.router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
+    for router in (ping.router, projects.router, repositories.router, clone_check.router):
+        _mount(app, router)
+    _mount(app, repository_init.router)
     # before `templates.router`, and that is load-bearing: Starlette matches in registration
     # order and `templates.router` registers `GET /templates/{name}/{version}` last, so a
     # three-segment `GET /templates/{name}/graph` mounted after it would be swallowed as
-    # `version="graph"` and answered 422 instead of reaching this operation at all
+    # `version="graph"` and answered 422 instead of reaching this operation at all.
+    # `test_graph_text_router.py` reads this pair's own literal source, so unlike every
+    # other router above and below, neither goes through the `_mount` helper.
     app.include_router(
         graph_text.router,
         prefix=API_PREFIX,
@@ -256,14 +299,26 @@ def create_app(
         dependencies=[Depends(require_bearer)],
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
     )
+    for router in (graph.router, runs.router):
+        _mount(app, router)
+    # after `runs.router`, and that is load-bearing the same way `graph_text.router` before
+    # `templates.router` is: `GET /runs/{run_id}` and `GET /runs/preflight` are the same
+    # shape to Starlette, which matches registration order, so the literal path has to be
+    # checked first (`api/routers/run.py`'s own docstring; `test_run_router.py` pins it)
+    for router in (run.router, run_detail.router, signals.router, harnesses.router, queue.router):
+        _mount(app, router)
+
+    return app
+
+
+def _mount(app: FastAPI, router: APIRouter) -> None:
+    """One feature router, on the versioned prefix, behind the one bearer dependency (AD-4)."""
     app.include_router(
-        graph.router,
+        router,
         prefix=API_PREFIX,
         dependencies=[Depends(require_bearer)],
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
     )
-
-    return app
 
 
 def main() -> None:
@@ -273,8 +328,23 @@ def main() -> None:
         raise SystemExit(f"configuration error (AD-20): .env is incomplete\n{error}") from error
 
     configure_logging(settings.log_level)
-    # neither call opens a connection, so this stays inside the "no I/O before start-up" rule
+    # none of these opens a connection, so this stays inside the "no I/O before start-up" rule
     session_factory = create_session_factory(create_engine_from(settings))
+    # the one place the git adapter is named. It holds GITHUB_TOKEN for the subprocess
+    # environments it builds itself, and puts it nowhere else (AD-5)
+    git = SubprocessGit(settings.github_token.get_secret_value())
+    engine = build_engine(settings, session_factory, git)
+    with serving(engine, session_factory, git):
+        _serve(settings, session_factory, git, engine)
+
+
+def _serve(
+    settings: Settings,
+    session_factory: SessionFactory,
+    git: Git,
+    engine: WorkflowEngine,
+) -> None:
+    """Hand uvicorn the application whose start-up step migrates, seeds and launches."""
     uvicorn.run(
         # the migration is the application's start-up step: uvicorn awaits it before it
         # binds, so the process never serves a half-migrated schema
@@ -283,9 +353,10 @@ def main() -> None:
             lifespan=migrating_lifespan(settings),
             session_factory=session_factory,
             crypto=crypto_factory(settings),
-            # the one place the git adapter is named. It holds GITHUB_TOKEN for the
-            # subprocess environments it builds itself, and puts it nowhere else (AD-5)
-            git=SubprocessGit(settings.github_token.get_secret_value()),
+            git=git,
+            # the durable engine (AD-6): `POST /runs` enqueues through it, and the walker it
+            # registered is what executes the Run
+            engine=engine,
         ),
         # binds every interface: reached from the compose network, not from the host
         host="0.0.0.0",

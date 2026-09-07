@@ -22,6 +22,25 @@
  * `RECHECK_REPOSITORY_ID`) is untouched, because `projects.spec.ts` (2.4) depends on every
  * *other* static fixture id still 404ing that route — `STATIC_REPOSITORY_IDS` is the
  * snapshot that keeps the two behaviours apart.
+ *
+ * 4.10 adds `POST`/`GET /repositories/{id}/init`. There is no engine here to walk a real
+ * plan, so `initRepository` simulates the whole Run reaching `done` in the one response —
+ * the real timing, queueing and completion hook are `tests/e2e/test_repository_init.py`'s
+ * own subject; this stub only has to prove the round trip the page itself drives.
+ *
+ * 4.13 adds `GET /api/v1/harnesses`, brand new — nothing before it read this route, so
+ * unlike the Projects and Templates lists it carries no frozen-empty constraint and answers
+ * the three seeded harnesses for real, disabled, exactly as a fresh instance's own
+ * `main.seed_harness_table` leaves them (nothing in this epic enables one).
+ * `POST /runs/preflight` and `POST /runs` are deliberately not added here:
+ * `new-workflow.spec.ts` mocks both with `page.route()`, the same way `template-diagram.
+ * spec.ts` mocks `/templates/*graph` and `/validate` — the New Workflow screen's own ACs are
+ * about rendering a given response, not about a plan a stub with no engine cannot walk.
+ *
+ * 4.16 adds `GET /api/v1/queue`, unconditionally empty — the `GET /api/v1/projects` list's
+ * own precedent above, needed for the same reason: the frozen `shell.spec.ts` asserts
+ * `NO RUNS` at bare `/runs` against this same stub. `runs-queue.spec.ts`'s own real-content
+ * scenarios mock this route with `page.route()` instead, `board.spec.ts`'s own precedent.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -46,6 +65,33 @@ const projects = JSON.parse(JSON.stringify(PROJECTS_BY_ID));
 /** Same reasoning as `projects` above: a save (3.5) mutates this in place, so it must be a
  * fresh copy per process rather than the fixture module's own object. */
 const templates = JSON.parse(JSON.stringify(TEMPLATES));
+
+/** The three names `main.py`'s `HARNESS_VERSION_SETTINGS` maps, seeded disabled (4.13), each
+ * carrying the pin `.env.example` declares for it (`CLAUDE_CODE_VERSION`, `CODEX_VERSION`,
+ * `OPENCODE_VERSION`). */
+const HARNESSES = [
+  {
+    name: 'claude',
+    enabled: false,
+    last_readiness_at: null,
+    failing_check: null,
+    version_pin: '2.1.258',
+  },
+  {
+    name: 'codex',
+    enabled: false,
+    last_readiness_at: null,
+    failing_check: null,
+    version_pin: '0.152.1',
+  },
+  {
+    name: 'local',
+    enabled: false,
+    last_readiness_at: null,
+    failing_check: null,
+    version_pin: '1.18.26',
+  },
+];
 
 /** Every Repository, static fixtures and 2.5's newly created ones alike, keyed by id — the
  * one index `PUT /repositories/{id}` and the clone-check simulation both need, since a
@@ -113,6 +159,7 @@ function createProject(body) {
     env_vars: [],
     log_prompt_content: body.log_prompt_content ?? false,
     repositories: [],
+    runs: [],
     created_at: now,
     updated_at: now,
   };
@@ -266,6 +313,87 @@ function rerunCloneCheck(repositoryId) {
     };
   }
   return null;
+}
+
+//: The tokens `handle_signal`/`run_admitted_signals` (4.9) leave a Run in once it stops
+//: changing — mirrored here rather than imported, since this file runs outside the backend.
+const REPO_INIT_TERMINAL_TOKENS = new Set(['DON', 'ERR', 'CAN']);
+
+/**
+ * `POST /repositories/{id}/init` (4.10): finds the Project a Repository belongs to, refuses
+ * the same two ways the real endpoint does, and otherwise simulates the whole Run reaching
+ * `done` at once — pushing one entry onto that Project's own `runs[]`. There is no engine
+ * here to walk a real plan: the real timing, queueing and completion hook are
+ * `tests/e2e/test_repository_init.py`'s own subject; this stub only has to prove the round
+ * trip the page itself drives.
+ */
+function initRepository(repositoryId) {
+  const repository = repositoriesById.get(repositoryId);
+  if (!repository) return { status: 404, title: 'no Repository has that id' };
+  const project = Object.values(projects).find((candidate) =>
+    candidate.repositories.some((candidateRepository) => candidateRepository.id === repositoryId),
+  );
+
+  if (repository.clone_check.status === 'failed') {
+    return {
+      status: 409,
+      title: 'conflict',
+      detail: 'clone check failed: run the clone check again before initialising',
+    };
+  }
+  const running = (project.runs ?? []).find(
+    (run) =>
+      run.repository_id === repositoryId &&
+      run.template.startsWith('repo-init@') &&
+      !REPO_INIT_TERMINAL_TOKENS.has(run.token),
+  );
+  if (running) {
+    return {
+      status: 409,
+      title: 'conflict',
+      detail: `initialisation already running: ${running.id}`,
+    };
+  }
+
+  const now = new Date().toISOString();
+  const runId = randomUUID();
+  const compareUrl = `https://github.com/example/${repository.slug}/compare/${repository.default_branch}...chore/bmad-init`;
+  project.runs = [
+    {
+      id: runId,
+      token: 'DON',
+      template: 'repo-init@1',
+      branch: repository.default_branch,
+      repository_id: repositoryId,
+      current_step_label: 'link',
+      reason: '',
+      compare_urls: [compareUrl],
+      created_at: now,
+    },
+    ...(project.runs ?? []),
+  ];
+
+  return {
+    status: 201,
+    body: {
+      run: {
+        id: runId,
+        status: 'done',
+        template: 'repo-init',
+        version: 1,
+        project: project.id,
+        repository: repositoryId,
+        branch: repository.default_branch,
+        budget_usd: '0',
+        spend_usd: '0',
+        plan_ref: null,
+        created_at: now,
+        admitted_signals: [],
+      },
+      starts_now: true,
+      waiting: '',
+    },
+  };
 }
 
 /** 3.5's own routes below — every route the four `/templates` endpoints `templates.spec.ts`
@@ -516,6 +644,23 @@ createServer(async (request, response) => {
     });
     return;
   }
+  if (pathname === '/api/v1/harnesses' && request.method === 'GET') {
+    send(response, 200, JSON_TYPE, JSON.stringify({ items: HARNESSES, next_cursor: null }));
+    return;
+  }
+  if (pathname === '/api/v1/queue' && request.method === 'GET') {
+    // forced empty unconditionally, `GET /api/v1/projects`'s own precedent above: the
+    // frozen `shell.spec.ts` asserts `NO RUNS` at bare `/runs` against this same,
+    // `fullyParallel` stub; every real-content scenario (4.16) mocks this route with
+    // `page.route()` instead, `board.spec.ts`'s own precedent for `GET /runs?view=board`
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({ items: [], next_cursor: null, max_active_runs: 2 }),
+    );
+    return;
+  }
   if (pathname === '/api/v1/projects' && request.method === 'GET') {
     send(response, 200, JSON_TYPE, JSON.stringify({ items: [], next_cursor: null }));
     return;
@@ -568,6 +713,33 @@ createServer(async (request, response) => {
       return notFound(response, 'no Repository has that id');
     }
     send(response, 200, JSON_TYPE, JSON.stringify(simulateCloneCheck(repository)));
+    return;
+  }
+  const initMatch = pathname.match(/^\/api\/v1\/repositories\/([^/]+)\/init$/);
+  if (initMatch && request.method === 'POST') {
+    const result = initRepository(initMatch[1]);
+    if (result.status === 404) return notFound(response, result.title);
+    if (result.status === 409) {
+      send(
+        response,
+        409,
+        PROBLEM,
+        JSON.stringify({
+          type: 'about:blank',
+          title: result.title,
+          status: 409,
+          detail: result.detail,
+        }),
+      );
+      return;
+    }
+    send(response, result.status, JSON_TYPE, JSON.stringify(result.body));
+    return;
+  }
+  if (initMatch && request.method === 'GET') {
+    const repository = repositoriesById.get(initMatch[1]);
+    if (!repository) return notFound(response, 'no Repository has that id');
+    send(response, 200, JSON_TYPE, JSON.stringify(repository));
     return;
   }
   if (pathname === '/api/v1/templates' && request.method === 'GET') {

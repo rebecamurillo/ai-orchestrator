@@ -129,3 +129,85 @@ class GraphOut(BaseModel):
 
 class GraphTextIn(ValidateIn):
     """`POST /templates/{name}/graph`. Same one field; a distinct name for a distinct route."""
+
+
+# ── the run graph (4.12, SPEC CAP-12) ─────────────────────────────────────────────────────
+#
+# A second, wider wire shape rather than new fields on `NodeOut`/`GroupOut` above: both are
+# pinned by exact-dict equality in `tests/unit/test_graph_schemas.py` and
+# `tests/unit/test_graph_router.py` (`body["groups"] == [{four keys exactly}]`), and FastAPI
+# serialises every declared field of a `response_model` whether or not it is `None` — so any
+# field added there, populated or not, is a fifth key neither test expects and neither test
+# names 4.12 as what replaces. `application/graph.py`'s `Node`/`Group` are still the one
+# schema `build_template_graph` and `build_run_graph` both build (the brief's own "reuse the
+# Graph schema"); only the wire projection of it forks here.
+
+
+class RunNodeOut(BaseModel):
+    """One row of a Run, as one box of the run graph — `NodeOut` plus its live state."""
+
+    id: Annotated[str, Field(description="`step_run.path`, verbatim — the join key (AD-15).")]
+    kind: str
+    label: str
+    gate: NodeGate | None
+    agent: bool
+    human: bool
+    call: NodeCallOut | None
+    #: `StepStatus` on a row's own node; `RunStatus` on the one root node (SPEC CAP-12).
+    status: str | None
+    #: The token the UI renders; sent, never derived (Consistency Conventions).
+    token: str | None
+    #: True on the running row, or the parked row while nothing is running.
+    current: bool
+
+    @classmethod
+    def of(cls, node: Node) -> RunNodeOut:
+        return cls(
+            id=node.id,
+            kind=node.kind,
+            label=node.label,
+            gate=node.gate,
+            agent=node.agent,
+            human=node.human,
+            call=None if node.call is None else NodeCallOut.of(node.call),
+            status=node.status,
+            token=node.token,
+            current=node.current,
+        )
+
+
+class RunGroupOut(BaseModel):
+    """One `epics[i]`/`epics[i].stories[j]` frame — `GroupOut` plus its computed status."""
+
+    id: str
+    label: str
+    kind: Literal["for_each"]
+    members: list[str]
+    #: By the one rule (`application/graph.py::group_status`); `None` for a cancelled Run.
+    status: str | None
+
+    @classmethod
+    def of(cls, group: Group) -> RunGroupOut:
+        return cls(
+            id=group.id,
+            label=group.label,
+            kind=group.kind,
+            members=list(group.members),
+            status=group.status,
+        )
+
+
+class RunGraphOut(BaseModel):
+    """`GET /runs/{run_id}/graph`. Three lists, never `null` — same shape as `GraphOut`."""
+
+    nodes: list[RunNodeOut]
+    edges: list[EdgeOut]
+    groups: list[RunGroupOut]
+
+    @classmethod
+    def of(cls, graph: Graph) -> RunGraphOut:
+        return cls(
+            nodes=[RunNodeOut.of(node) for node in graph.nodes],
+            edges=[EdgeOut.of(edge) for edge in graph.edges],
+            groups=[RunGroupOut.of(group) for group in graph.groups],
+        )

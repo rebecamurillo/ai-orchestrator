@@ -5,6 +5,6 @@
  */
 import { login } from './login';
 import { save } from './projects';
-import { recheck } from './repositories';
+import { init, recheck } from './repositories';
 
-export const server = { login, repositories: { recheck }, projects: { save } };
+export const server = { login, repositories: { recheck, init }, projects: { save } };
