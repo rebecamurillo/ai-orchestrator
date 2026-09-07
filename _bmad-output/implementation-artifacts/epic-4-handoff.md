@@ -220,10 +220,27 @@ lost work, because both were caught and audited — but finish synchronously or 
   collects `attempt.pgid` and always finds `None`. Costless in Epic 4 — nothing here leaves a process
   running at a stop — but **Epic 5's `agent` kind must land the `mark_started` write with it**, or
   cancel silently fails to kill anything.
-- **The orphan clause of FR-12 is proven only half-way.** `docker compose kill` tears down the
-  container's PID namespace, so the child is gone by topology rather than by `kill_group`. The test
-  names and docstrings were narrowed to the double-start net they actually prove. The reaping half
-  needs a kill that leaves the process table standing — Epic 5.
+- **The orphan clause of FR-12: the reaping half is now proven, the Run-level half is not.**
+  `tests/unit/test_process_runner_reaping.py` proves on Linux that `kill_group` collects its own
+  child (`waitpid` answers `ECHILD`) and that the group leaves the process table (`killpg` answers
+  `ESRCH`), with the process table standing and no namespace teardown involved. What is left for
+  Epic 5 is an end-to-end orphan scenario at Run level — a kill that leaves the process table
+  standing — and that needs `attempt.pgid` (above) first. Note that `tests/e2e/test_durability.py`
+  defers this coverage to "`ProcessRunner.kill_group`'s own unit coverage", and until commit
+  `bb69235` that coverage **did not actually prove reaping**: on Darwin it passed for an unreaped
+  zombie, and on Linux it failed.
+
+- **No local gate runs on Linux, and that is a structural blind spot.** `make lint`, `make test`,
+  `make e2e-ui` and `make durability` all run on the operator's macOS machine; only `make e2e` runs
+  anything inside a Linux image, and it runs the *app*, not the unit suite. A syscall whose
+  behaviour differs between the two platforms can therefore be green locally and broken in
+  production. That is exactly what happened: `_group_alive` probed with `os.killpg(pgid, 0)` and
+  treated any `OSError` as "dead", which is true on Darwin — where an unreaped zombie answers
+  `EPERM` — and false on Linux, where it answers successfully. So `kill_group` waited out its full
+  ten-second grace and then `SIGKILL`ed a corpse on **every** kill in a container, while every local
+  gate passed. Measured on Linux before the fix: 20.16 s for two `kill_group` calls, group still
+  reading alive; after: 0.10 s, group gone. CI's `unit` job on ubuntu is what caught it. **Treat a
+  green local run as evidence about macOS, not about the deployment platform.**
 - **`tests/unit/test_dbos_facade.py::CALLED` is stale**: it lists `create_schedule`, which the facade
   no longer calls, and omits `apply_schedules`. It still passes and nothing is unpinned
   (`test_dbos_schedule_registration.py` covers the new call), but correcting it is an anchor edit and
