@@ -27,6 +27,15 @@
  * plan, so `initRepository` simulates the whole Run reaching `done` in the one response —
  * the real timing, queueing and completion hook are `tests/e2e/test_repository_init.py`'s
  * own subject; this stub only has to prove the round trip the page itself drives.
+ *
+ * 4.13 adds `GET /api/v1/harnesses`, brand new — nothing before it read this route, so
+ * unlike the Projects and Templates lists it carries no frozen-empty constraint and answers
+ * the three seeded harnesses for real, disabled, exactly as a fresh instance's own
+ * `main.seed_harness_table` leaves them (nothing in this epic enables one).
+ * `POST /runs/preflight` and `POST /runs` are deliberately not added here:
+ * `new-workflow.spec.ts` mocks both with `page.route()`, the same way `template-diagram.
+ * spec.ts` mocks `/templates/*graph` and `/validate` — the New Workflow screen's own ACs are
+ * about rendering a given response, not about a plan a stub with no engine cannot walk.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -51,6 +60,31 @@ const projects = JSON.parse(JSON.stringify(PROJECTS_BY_ID));
 /** Same reasoning as `projects` above: a save (3.5) mutates this in place, so it must be a
  * fresh copy per process rather than the fixture module's own object. */
 const templates = JSON.parse(JSON.stringify(TEMPLATES));
+
+/** The three names `main.py`'s `HARNESS_VERSION_ENV` installs, seeded disabled (4.13). */
+const HARNESSES = [
+  {
+    name: 'claude',
+    enabled: false,
+    last_readiness_at: null,
+    failing_check: null,
+    version_pin: '1.0.0',
+  },
+  {
+    name: 'codex',
+    enabled: false,
+    last_readiness_at: null,
+    failing_check: null,
+    version_pin: '1.0.0',
+  },
+  {
+    name: 'local',
+    enabled: false,
+    last_readiness_at: null,
+    failing_check: null,
+    version_pin: '1.0.0',
+  },
+];
 
 /** Every Repository, static fixtures and 2.5's newly created ones alike, keyed by id — the
  * one index `PUT /repositories/{id}` and the clone-check simulation both need, since a
@@ -601,6 +635,10 @@ createServer(async (request, response) => {
       Authorization: request.headers.authorization,
       'X-Echoed-Credential': request.headers.authorization,
     });
+    return;
+  }
+  if (pathname === '/api/v1/harnesses' && request.method === 'GET') {
+    send(response, 200, JSON_TYPE, JSON.stringify({ items: HARNESSES, next_cursor: null }));
     return;
   }
   if (pathname === '/api/v1/projects' && request.method === 'GET') {

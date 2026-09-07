@@ -1,0 +1,182 @@
+/**
+ * Styling for `NewWorkflow.tsx` (4.13). A plain stylesheet, not scoped `<style>` blocks —
+ * the same reason `project-form.css` gives: React has no equivalent of Astro's own scoping,
+ * so every rule is hand-scoped under `.newwf`. Tokens only, no inline styles
+ * (`web-client/AGENTS.md`).
+ */
+
+.newwf-columns {
+  display: grid;
+  grid-template-columns: 190px 1fr 1fr;
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.newwf-form {
+  grid-column: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  max-width: var(--detail-max);
+}
+
+.newwf-field {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+}
+
+.newwf-field-label {
+  flex: 0 0 190px;
+  color: var(--color-text-secondary);
+  font-size: var(--type-eyebrow);
+  letter-spacing: var(--type-eyebrow-tracking);
+  text-transform: var(--type-eyebrow-transform);
+}
+
+.newwf-field input[type='text'],
+.newwf-field select {
+  flex: 1;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+}
+
+.newwf-field-note {
+  color: var(--color-signal-failed);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.newwf-switch {
+  align-items: center;
+}
+
+.newwf-harnesses {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: 1;
+}
+
+.newwf-harness {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.newwf-side {
+  grid-column: 3;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+}
+
+.newwf-preflight {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.newwf-preflight-line {
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.newwf-preflight-word[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.newwf-preflight-fix {
+  display: block;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+table.newwf-plan {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.newwf-plan th {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-rail);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  text-transform: var(--type-column-head-transform);
+  text-align: left;
+}
+
+table.newwf-plan td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.newwf-plan-error {
+  color: var(--color-signal-failed);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.newwf-bar {
+  margin-top: var(--section-gap);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.newwf-bar-error {
+  color: var(--color-signal-failed);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.newwf-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.newwf-start,
+.newwf-cancel {
+  padding: var(--space-3) var(--space-6);
+  border: 1px solid var(--color-line-strong);
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  text-decoration: none;
+}
+
+.newwf-start {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.newwf-start:disabled {
+  border-color: var(--color-line-strong);
+  color: var(--color-text-tertiary);
+}
+
+.newwf-note {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
