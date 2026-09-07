@@ -57,6 +57,7 @@ from orchestrator.api.routers import (
     harnesses,
     ping,
     projects,
+    queue,
     repositories,
     repository_init,
     run,
@@ -80,7 +81,7 @@ from orchestrator.infrastructure.db import (
     create_session_factory,
 )
 from orchestrator.infrastructure.db import migrations as db_migrations
-from orchestrator.infrastructure.dbos import build_engine, launch_engine, serving
+from orchestrator.infrastructure.dbos import build_engine, launch_engine, schedule_jobs, serving
 from orchestrator.infrastructure.git import SubprocessGit
 from orchestrator.infrastructure.logging import configure_logging
 from orchestrator.infrastructure.settings import Settings
@@ -198,6 +199,9 @@ def run_migrations(settings: Settings) -> str:
     # last, and inside this function: see `infrastructure/dbos/startup.py`. A process that
     # is not serving — every unit test — has no engine registered and launches nothing.
     launch_engine()
+    # after the launch: `engine.schedule` writes to the database the launch just opened
+    # (SPEC CAP-11), the same reason `register_queue` runs after `start` inside it.
+    schedule_jobs(settings)
     return head
 
 
@@ -300,7 +304,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
     # `templates.router` is: `GET /runs/{run_id}` and `GET /runs/preflight` are the same
     # shape to Starlette, which matches registration order, so the literal path has to be
     # checked first (`api/routers/run.py`'s own docstring; `test_run_router.py` pins it)
-    for router in (run.router, signals.router, harnesses.router):
+    for router in (run.router, signals.router, harnesses.router, queue.router):
         _mount(app, router)
 
     return app
@@ -329,7 +333,7 @@ def main() -> None:
     # environments it builds itself, and puts it nowhere else (AD-5)
     git = SubprocessGit(settings.github_token.get_secret_value())
     engine = build_engine(settings, session_factory, git)
-    with serving(engine):
+    with serving(engine, session_factory, git):
         _serve(settings, session_factory, git, engine)
 
 

@@ -126,6 +126,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the queue
+         * @description Every Run the engine is holding, joined with the reason it waits. Writes nothing.
+         */
+        get: operations["read_queue_api_v1_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repository_id}": {
         parameters: {
             query?: never;
@@ -991,6 +1011,35 @@ export interface components {
             name: string;
         };
         /**
+         * QueueItemOut
+         * @description One row: a Run the engine is holding, and why it waits.
+         */
+        QueueItemOut: {
+            /** Next Step Label */
+            next_step_label: string;
+            /** Position */
+            position: number | null;
+            /** Reason */
+            reason: string;
+            run: components["schemas"]["RunSummaryOut"];
+            /** Waiting Seconds */
+            waiting_seconds: number;
+            /** Waiting Since */
+            waiting_since: string;
+        };
+        /**
+         * QueueOut
+         * @description `GET /queue`'s body: the rows, and the ceiling the section head names beside them.
+         */
+        QueueOut: {
+            /** Items */
+            items: components["schemas"]["QueueItemOut"][];
+            /** Max Active Runs */
+            max_active_runs: number;
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
          * RepositoryCreate
          * @description `POST /projects/{project_id}/repositories`.
          */
@@ -1654,6 +1703,36 @@ export interface operations {
             };
             /** @description The request broke a rule; `errors[]` names it and the reason. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_queue_api_v1_queue_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

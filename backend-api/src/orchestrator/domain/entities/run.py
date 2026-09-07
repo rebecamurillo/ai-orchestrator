@@ -78,6 +78,15 @@ class Run(BaseModel):
     #: Every worktree the Run has created, current one included.
     worktrees: tuple[Worktree, ...] = ()
     compare_urls: tuple[str, ...] = ()
+    #: Whether `worktree_gc` (SPEC CAP-11, FR-9) has already swept this Run's worktrees and
+    #: logs — what makes the job's own sweep idempotent (AD-14). `worktrees` itself is left
+    #: as history rather than cleared, so a Run's own record still says which branch it
+    #: worked on after the files are gone. A `bool` rather than a `removed_at` timestamp
+    #: (the brief's own suggestion): `tests/unit/test_run_repository_adapter.py`'s closed
+    #: set of nullable `run` columns is frozen (hard rule 1), and a `NOT NULL` column with a
+    #: default reaches the same idempotency without joining that set — see this story's
+    #: Design Notes.
+    worktrees_removed: bool = False
     #: The Langfuse trace this Run's attempt spans hang under (AD-11).
     trace_id: str | None = None
     terminal_session: bool = False

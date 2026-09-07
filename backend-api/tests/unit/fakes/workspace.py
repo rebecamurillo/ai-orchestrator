@@ -59,6 +59,11 @@ class FakeWorkspace:
         )
         return tuple(TreeEntry(path=path, is_dir=False) for path in sorted(under))
 
+    def remove(self, path: str) -> None:
+        self._checked(path)
+        for stored in [p for p in self._files if p == path or p.startswith(f"{path}/")]:
+            del self._files[stored]
+
     def _checked(self, path: str) -> None:
         if not self._rooted:
             raise WorkspaceError(NO_ROOT)

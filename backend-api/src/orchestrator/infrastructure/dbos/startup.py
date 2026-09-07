@@ -49,14 +49,18 @@ from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
 from orchestrator.infrastructure.dbos.config import engine_config
 from orchestrator.infrastructure.dbos.facade import RealEngine
 from orchestrator.infrastructure.dbos.walker import WalkerDeps
+from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.process import RealProcessRunner
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.workspace import FsWorkspace
 
-#: The engine this process is serving with, for as long as it is serving. A list rather than
-#: a rebound name so `serving` needs no `global`: what matters is that it is empty in any
-#: process that is not serving, and that it empties itself again on the way out.
-_SERVING: list[DbosWorkflowEngine] = []
+#: One entry per engine this process is serving with, for as long as it is serving: the
+#: engine itself, and the two adapters `schedule_jobs` needs to build the jobs' own ports —
+#: `None` for a caller that only ever passed the engine (every test below `serving`'s own,
+#: predating this story), which is exactly the shape that registers no job at all. A list
+#: rather than a rebound name so `serving` needs no `global`: what matters is that it is
+#: empty in any process that is not serving, and that it empties itself again on the way out.
+_SERVING: list[tuple[DbosWorkflowEngine, SessionFactory | None, Git | None]] = []
 
 
 def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -> WalkerDeps:
@@ -99,19 +103,46 @@ def build_engine(
 
 
 @contextmanager
-def serving(engine: DbosWorkflowEngine) -> Iterator[DbosWorkflowEngine]:
-    """Name the engine the start-up step is to launch, for the length of the server's life."""
-    _SERVING.append(engine)
+def serving(
+    engine: DbosWorkflowEngine,
+    session_factory: SessionFactory | None = None,
+    git: Git | None = None,
+) -> Iterator[DbosWorkflowEngine]:
+    """Name the engine the start-up step is to launch, for the length of the server's life.
+
+    `session_factory` and `git` are optional, and only `main()`'s own call passes them: it
+    is what lets `schedule_jobs` build the two jobs' own ports from the app's adapters
+    rather than a fresh connection pool, while every test that calls `serving(engine)` with
+    the engine alone keeps working unchanged — it never reaches `schedule_jobs` either way.
+    """
+    entry = (engine, session_factory, git)
+    _SERVING.append(entry)
     try:
         yield engine
     finally:
         # remove, not clear: a second block would otherwise unregister an engine it never
         # named. Nothing nests one today; this costs nothing and does not have to be read
         # twice to be sure of that.
-        _SERVING.remove(engine)
+        _SERVING.remove(entry)
 
 
 def launch_engine() -> None:
     """Launch the engine this process is serving with, if it is serving with one."""
-    for engine in _SERVING:
+    for engine, _session_factory, _git in _SERVING:
         engine.launch()
+
+
+def schedule_jobs(settings: Settings) -> None:
+    """Register the two scheduled jobs (SPEC CAP-11) on the engine this process serves with.
+
+    Guarded the way `launch_engine` is guarded: a process that is not serving (every unit
+    test) has nothing in `_SERVING`, so the loop body never runs and nothing here opens a
+    session or touches git. A `serving(engine)` call with no adapters — `test_dbos_startup.py`'s
+    own, which predates this story — registers nothing either, for the same reason a real
+    schedule needs a real `session_factory` and a real `Git` to build its jobs from.
+    """
+    for engine, session_factory, git in _SERVING:
+        if session_factory is None or git is None:
+            continue
+        for name, cron, job in scheduled_jobs(settings, session_factory, git):
+            engine.schedule(name, cron, job)

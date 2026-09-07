@@ -100,6 +100,7 @@ class RunRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    worktrees_removed: Mapped[bool] = mapped_column(Boolean())
 
 
 class StepRunRow(Base):

@@ -37,6 +37,7 @@ from orchestrator.application.use_cases.create_run import CreateRunPorts, RunRea
 from orchestrator.application.use_cases.harnesses import HarnessPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
+from orchestrator.application.use_cases.queue import QueuePorts
 from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.application.use_cases.signals import SignalEffectPorts
 from orchestrator.application.use_cases.templates import TemplatePorts
@@ -180,6 +181,21 @@ def run_read_ports(request: Request) -> Iterator[RunReadPorts]:
         yield RunReadPorts(
             runs=SQLAlchemyRunRepository(uow.session),
             steps=SQLAlchemyStepRunRepository(uow.session),
+        )
+
+
+def queue_ports(request: Request) -> Iterator[QueuePorts]:
+    """The ports `GET /queue` reads through. Writes nothing."""
+    session_factory = from_state(request, SESSION_FACTORY)
+    engine: WorkflowEngine = from_state(request, ENGINE)
+    settings = from_state(request, SETTINGS)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield QueuePorts(
+            engine=engine,
+            runs=SQLAlchemyRunRepository(uow.session),
+            steps=SQLAlchemyStepRunRepository(uow.session),
+            clock=SystemClock(),
+            max_active_runs=settings.max_active_runs,
         )
 
 

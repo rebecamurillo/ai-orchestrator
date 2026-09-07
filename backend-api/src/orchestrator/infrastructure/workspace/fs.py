@@ -10,6 +10,7 @@ happened to remember to ask.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path, PurePosixPath
 
 from orchestrator.domain.ports.workspace import TreeEntry, WorkspaceError
@@ -62,6 +63,13 @@ class FsWorkspace:
             TreeEntry(path=_posix(entry.relative_to(root)), is_dir=entry.is_dir())
             for entry in sorted(base.rglob("*"))
         )
+
+    def remove(self, path: str) -> None:
+        target = self._resolve(path)
+        if target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            target.unlink()
 
     def _resolve(self, path: str) -> Path:
         self._require_root()

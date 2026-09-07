@@ -54,3 +54,9 @@ class Workspace(Protocol):
     def tree(self, prefix: str = "") -> tuple[TreeEntry, ...]:
         """Every file and directory under `prefix`, relative to the root."""
         ...
+
+    def remove(self, path: str) -> None:
+        """Remove the file or directory at `path`, recursively; already gone is not a
+        failure (AD-14) — `worktree_gc` (SPEC CAP-11) calls this on a Run it may have swept
+        before, and a second sweep must land as cleanly as the first."""
+        ...

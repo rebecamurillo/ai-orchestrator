@@ -1425,6 +1425,84 @@
         "title": "ProjectUpdate",
         "type": "object"
       },
+      "QueueItemOut": {
+        "description": "One row: a Run the engine is holding, and why it waits.",
+        "properties": {
+          "next_step_label": {
+            "title": "Next Step Label",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "run": {
+            "$ref": "#/components/schemas/RunSummaryOut"
+          },
+          "waiting_seconds": {
+            "title": "Waiting Seconds",
+            "type": "number"
+          },
+          "waiting_since": {
+            "title": "Waiting Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "position",
+          "run",
+          "next_step_label",
+          "reason",
+          "waiting_since",
+          "waiting_seconds"
+        ],
+        "title": "QueueItemOut",
+        "type": "object"
+      },
+      "QueueOut": {
+        "description": "`GET /queue`'s body: the rows, and the ceiling the section head names beside them.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueueItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "max_active_runs": {
+            "title": "Max Active Runs",
+            "type": "integer"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "max_active_runs"
+        ],
+        "title": "QueueOut",
+        "type": "object"
+      },
       "RepositoryCreate": {
         "description": "`POST /projects/{project_id}/repositories`.",
         "properties": {
@@ -2653,6 +2731,48 @@
         "summary": "Register a Repository under a Project",
         "tags": [
           "repositories"
+        ]
+      }
+    },
+    "/api/v1/queue": {
+      "get": {
+        "description": "Every Run the engine is holding, joined with the reason it waits. Writes nothing.",
+        "operationId": "read_queue_api_v1_queue_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read the queue",
+        "tags": [
+          "queue"
         ]
       }
     },
