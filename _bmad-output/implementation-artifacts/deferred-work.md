@@ -57,3 +57,15 @@ Findings surfaced by review that are real but belong to a later story. Append-on
 - source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-01-foundation/stories/1-7-ci-pipeline-and-coverage-gates.md`
   summary: `web-client/src/api/server.ts` — the module that holds the bearer — has no unit test that imports it; it satisfies the new pairing rule only by being named as a file path.
   evidence: `web-client/tests/unit/lint.test.ts:56` names `src/api/server.ts` as a virtual file path for an eslint run, which asserts the AD-1 exemption rather than the module's behaviour. `pnpm test --coverage` measures it at 95 % lines because `client.test.ts` and the proxy test reach it indirectly; nothing asserts `forward` attaches the bearer, and `src/api/**` is outside the 90 % threshold globs the brief names.
+
+- source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-04-runs/stories/4-17-durability-proof-restart-and-orphan-test.md`
+  summary: `attempt.pgid` is never written, so `signal_effects._cancel` always finds `None` and `cancel` kills no process group — Epic 5's `agent` executor must land the `mark_started` write with it.
+  evidence: AD-8 gives that write to the `agent` executor and the field list scopes `pgid` to `agent` rows, so no Epic 4 kind could write it. Costless in Epic 4 (nothing here leaves a process running at a stop) and therefore invisible: the signals endpoint, the writers and `ProcessRunner.kill_group` are each individually correct and tested, and the gap is only in what connects them. `cancel` will appear to work — it transitions the Run and removes the worktree — while leaving the process running.
+
+- source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-04-runs/stories/4-7-process-runner-workspace-and-basic-kinds.md`
+  summary: No local gate runs the backend unit suite on Linux, so a syscall whose behaviour differs between Darwin and Linux can be green locally and broken in production.
+  evidence: `make lint`, `make test`, `make e2e-ui` and `make durability` all run on the operator's host; only `make e2e` enters a Linux image, and it exercises the app rather than the unit suite. This shipped a real defect — `_group_alive` read an unreaped zombie as dead on Darwin and alive on Linux, so `kill_group` burned its full ten-second grace on every kill in a container (measured 20.16s → 0.10s after commit `bb69235`). Caught only by CI's `unit` job. Closing this means either a Linux unit run in the local gate set or an explicit statement that CI is the only Linux evidence — a change to the gate set, and therefore a spine decision (AD-18 fixes the five CI jobs).
+
+The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred` frontmatter under
+`_bmad-output/planning-artifacts/mvp/epics/epic-04-runs/stories/`, summarised in
+`epic-4-handoff.md` §4. Only the two cross-epic ones are repeated here.

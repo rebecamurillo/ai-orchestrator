@@ -52,6 +52,12 @@ GET       /harnesses
 verified by running it three times against one held stack with zero leftover `queued`/`needs_you`
 rows after each pass.
 
+**CI is green too, and that is a separate fact from the local gates.** All five jobs pass on
+`feat/epic-4-runs` — `lint`, `unit`, `e2e-api` (durability step included), `e2e-ui`, `images`. Read
+the two as different evidence, not as confirmation of each other: the local set runs on macOS and
+CI runs on Linux, and this epic shipped a defect that was green on every local gate and broken in
+CI. See §4's blind-spot bullet before you trust a local run.
+
 **`repo-init@1` runs end to end.** `plan → checkout → install → commit → push → link` on the real
 engine against a local bare `file://` origin, with `run.worktrees` recording
 `created_branch: true, pushed: true` and the compare URL captured. `tests/e2e/test_repo_init.py`
@@ -252,12 +258,14 @@ lost work, because both were caught and audited — but finish synchronously or 
   introduced here.
 - **A concurrent write race still surfaces as a 500, not a 409** — the same unmapped `IntegrityError`
   pattern Epics 2 and 3 recorded.
-- **The CI durability step is the one thing that could not be verified locally**, because nothing in
-  this repo runs GitHub Actions. A sixth job was impossible (`test_ci_workflow.py` freezes the job
-  tuple at five, and AD-18 fixes those five), so `make durability` runs as a **step** of the `e2e-api`
-  job after its own stack is stopped, building its own compose stack; the job timeout went 20 → 40
-  minutes for the image build. If the runner exceeds it, the fix is a larger timeout or moving the
-  step to the `images` job. **The first CI run on this branch is what will say.**
+- **The durability gate runs as a step of `e2e-api`, not as a job — and it works.** A sixth job was
+  impossible (`test_ci_workflow.py` freezes the job tuple at five, and AD-18 fixes those five), so
+  `make durability` runs as a **step** of `e2e-api` after that job's own stack is stopped, building
+  a compose stack of its own; the job timeout went 20 → 40 minutes to cover the image build.
+  Confirmed on the first CI run of `feat/epic-4-runs`: the step reported `11 passed, 144 deselected
+  in 81.86s` and tore its stack down cleanly, with the whole `e2e-api` job finishing in **4m51s**
+  against that 40-minute ceiling. There is headroom, not risk. If a future change ever does exceed
+  it, the fix is a larger timeout or moving the step to the `images` job.
 - **`followup_review_recommended: true`** on several stories, and roughly forty deferred items sit
   across the seventeen specs' frontmatter.
 
