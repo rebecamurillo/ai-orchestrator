@@ -1,0 +1,238 @@
+/**
+ * Styling for `Board.tsx`, `BoardColumn.tsx`, `RunCard.tsx` and `FailedFetch.tsx` (4.14). A
+ * plain stylesheet, not scoped `<style>` blocks — the same reason `new-workflow.css` gives:
+ * React has no equivalent of Astro's own scoping, so every rule is hand-scoped under its own
+ * prefix. Tokens only, no inline styles (`web-client/AGENTS.md`).
+ */
+
+.board-readout {
+  padding: var(--space-7) var(--space-8) 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.board-refresh {
+  margin: var(--space-4) var(--space-8) 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  cursor: pointer;
+}
+
+.board-columns {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-8);
+  padding: var(--space-8);
+  align-items: start;
+}
+
+.board-column-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  text-transform: var(--type-column-head-transform);
+}
+
+.board-column-head[data-signal='run'] {
+  color: var(--color-signal-run);
+}
+
+.board-column-head[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.board-column-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-top: var(--space-6);
+}
+
+.board-column-empty,
+.board-column-more {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.run-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--color-line);
+  border-left-width: 2px;
+  background: var(--color-surface);
+  color: inherit;
+  text-decoration: none;
+}
+
+.run-card[data-left-rule='needs-you'] {
+  border-left-color: var(--color-signal-needs-you);
+}
+
+.run-card[data-left-rule='failed'] {
+  border-left-color: var(--color-signal-failed);
+}
+
+.run-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.run-card-token {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-status-token);
+  letter-spacing: var(--type-status-token-tracking);
+}
+
+.run-card-token[data-signal='run'] {
+  color: var(--color-signal-run);
+}
+
+.run-card-token[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.run-card-token[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.run-card-chip {
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+}
+
+.run-card-harness {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-micro);
+}
+
+.run-card-branch {
+  color: var(--color-text);
+  font-size: var(--type-row-title);
+  line-height: var(--type-row-title-line);
+}
+
+.run-card-meta,
+.run-card-step,
+.run-card-progress {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.run-card-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-micro);
+}
+
+.run-card-age[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.board-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--section-gap) var(--space-8);
+  text-align: center;
+}
+
+.board-empty-headline {
+  color: var(--color-text);
+  font-size: var(--type-surface-title);
+  letter-spacing: var(--type-surface-title-tracking);
+  text-transform: var(--type-surface-title-transform);
+}
+
+.board-empty-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  line-height: 1.9;
+}
+
+.board-empty-action {
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.failed-fetch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--section-gap) var(--space-8);
+  max-width: var(--detail-max);
+}
+
+.failed-fetch-headline {
+  color: var(--color-text);
+  font-size: var(--type-surface-title);
+  letter-spacing: var(--type-surface-title-tracking);
+  text-transform: var(--type-surface-title-transform);
+}
+
+.failed-fetch-block {
+  margin: 0;
+  background: var(--color-surface-inset);
+  border: 1px solid var(--color-line-strong);
+}
+
+.failed-fetch-eyebrow {
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-eyebrow);
+  letter-spacing: var(--type-eyebrow-tracking);
+  text-transform: var(--type-eyebrow-transform);
+}
+
+.failed-fetch-command {
+  margin: 0;
+  padding: var(--space-5);
+  overflow-x: auto;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-command);
+  line-height: var(--type-command-line);
+  white-space: pre;
+}
+
+.failed-fetch-retry {
+  align-self: flex-start;
+  padding: var(--space-3) var(--space-6);
+  border: 1px solid var(--color-accent);
+  background: none;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  cursor: pointer;
+}

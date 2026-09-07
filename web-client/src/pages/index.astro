@@ -1,24 +1,150 @@
 ---
 /**
- * Workflows — the home surface. The board of runs by status arrives with the read models in
- * epic 4; until a project exists there is nothing to run, so the readout says so and names
- * the two surfaces that change it.
+ * Workflows — the home surface (4.14, SPEC CAP-14). One SSR read, `GET /projects`, decides
+ * which of two things renders: with no Project registered, the same static `NOTHING
+ * REGISTERED` empty state this page has shown since story 2/3-era placeholders (kept
+ * verbatim — `tests/e2e/login.spec.ts` (frozen) asserts its exact headline, link text and
+ * `href`); with at least one, the `Board` island (`client:load`), which does its own polled
+ * read of `GET /runs?view=board` and needs no further SSR data of its own (the binding
+ * rule: "the island renders the response as is").
+ *
+ * A resolved `error` and a rejected promise both mean the list could not be read, neither is
+ * "no Project registered" — the same distinction `src/pages/projects/index.astro` and
+ * `templates/index.astro` already draw, applied here for the same reason (a `PROJECTS
+ * UNAVAILABLE` readout is not one of the two states the brief names, but conflating it with
+ * either would tell the Operator something false).
+ *
+ * The project filter, the `BOARD`/`LIST` toggle (`LIST` stays disabled — Epic 8) and
+ * *+ New workflow* are static, server-rendered links in the `filters` slot: switching
+ * Project is a full navigation to `/?project=`, never client-side state, so `Board.tsx`
+ * only ever needs to read `project_id` once, at mount.
+ *
+ * A `?project=` deep link resolves through `GET /projects/{id}` when the bare list itself
+ * answers empty (`new.astro`'s own precedent, 4.13 Design Notes) — see the inline comment
+ * below for why.
  */
+import type { components } from '../api/schema';
+import Button from '../components/Button.astro';
 import EmptyState from '../components/EmptyState.astro';
 import Shell from '../layouts/Shell.astro';
+import Board from '../islands/Board';
+import { backend } from '../api/server';
 
 export const prerender = false;
+
+type ProjectListItem = components['schemas']['ProjectRead'];
+
+const selectedProjectId = Astro.url.searchParams.get('project');
+
+let projects: ProjectListItem[] = [];
+let listUnavailable = false;
+try {
+  const { data, error } = await backend().GET('/api/v1/projects');
+  if (error) {
+    listUnavailable = true;
+  } else {
+    projects = data?.items ?? [];
+  }
+} catch {
+  listUnavailable = true;
+}
+
+// The shared e2e stub answers this bare list unconditionally empty — the frozen
+// `shell.spec.ts`'s own "NOTHING REGISTERED" reading of a bare `/` (2.4/3.5's constraint for
+// `/projects` and `/templates`, restated for this page). A `?project=` link — the same shape
+// this page's own filter writes — resolves that one Project through the non-list
+// `GET /projects/{id}` instead, `new.astro`'s own deep-link precedent (4.13 Design Notes), so
+// a deep link still finds a real Project even where the bare list never will.
+if (!listUnavailable && projects.length === 0 && selectedProjectId) {
+  try {
+    const { data, error } = await backend().GET('/api/v1/projects/{project_id}', {
+      params: { path: { project_id: selectedProjectId } },
+    });
+    if (!error && data) projects = [data];
+  } catch {
+    // leave `projects` empty — the zero-Project empty state is still the correct one
+  }
+}
 ---
 
-<Shell active="workflows" title="WORKFLOWS" count="0 runs">
-  <EmptyState
-    testId="board-empty"
-    headline="NOTHING REGISTERED"
-    lines={[
-      'No project is registered, so no run can be started.',
-      'A project binds the repositories a run works in; register one on /projects.',
-      'A run is then started from a template on /workflows/new.',
-    ]}
-    action={{ label: 'register a project to start', href: '/projects' }}
-  />
+<Shell active="workflows" title="WORKFLOWS" count={projects.length > 0 ? undefined : '0 runs'}>
+  {
+    projects.length > 0 && (
+      <Fragment slot="filters">
+        <div class="board-filter" data-testid="board-filter-project">
+          <a href="/" aria-current={selectedProjectId ? undefined : 'true'}>
+            all
+          </a>
+          {projects.map((project) => (
+            <a
+              href={`/?project=${encodeURIComponent(project.id)}`}
+              aria-current={selectedProjectId === project.id ? 'true' : undefined}
+            >
+              {project.name}
+            </a>
+          ))}
+        </div>
+        <div class="board-toggle" data-testid="board-toggle-view">
+          <span aria-current="true">BOARD</span>
+          <span class="board-toggle-list" data-testid="board-toggle-list" aria-disabled="true">
+            LIST
+          </span>
+        </div>
+        <Button label="+ New workflow" href="/workflows/new" testId="board-new" />
+      </Fragment>
+    )
+  }
+
+  {
+    listUnavailable ? (
+      <EmptyState
+        testId="board-list-error"
+        headline="PROJECTS UNAVAILABLE"
+        lines={[
+          'The Project list could not be read from backend-api.',
+          'Reload the page once the connection is restored.',
+        ]}
+      />
+    ) : projects.length === 0 ? (
+      <EmptyState
+        testId="board-empty"
+        headline="NOTHING REGISTERED"
+        lines={[
+          'No project is registered, so no run can be started.',
+          'A project binds the repositories a run works in; register one on /projects.',
+          'A run is then started from a template on /workflows/new.',
+        ]}
+        action={{ label: 'register a project to start', href: '/projects' }}
+      />
+    ) : (
+      <Board client:load initialProjectId={selectedProjectId} />
+    )
+  }
 </Shell>
+
+<style>
+  .board-filter,
+  .board-toggle {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-5);
+  }
+
+  .board-filter a,
+  .board-toggle span {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-control);
+    letter-spacing: var(--type-control-tracking);
+    text-transform: var(--type-control-transform);
+    text-decoration: none;
+  }
+
+  .board-filter a[aria-current='true'],
+  .board-toggle span[aria-current='true'] {
+    color: var(--color-text);
+  }
+
+  .board-toggle-list[aria-disabled='true'] {
+    color: var(--color-text-tertiary);
+  }
+</style>
