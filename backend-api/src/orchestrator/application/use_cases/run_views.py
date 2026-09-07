@@ -59,6 +59,7 @@ from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import NotFound
+from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.statuses import RunStatus
 
 __all__ = [
@@ -224,7 +225,7 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
         alert=_alert(run),
         steps=[_step_row(ports, row, attempts_by_row[row.id]) for row in rows],
         stories=_story_cells(run, rows),
-        cost=_cost(run, attempts_by_row, now=ports.clock.now()),
+        cost=_cost(run, attempts_by_row, now=ports.clock.now(), tracer=ports.tracer),
         gate_record=ports.gate_records.list_for_run(run.id),
         admitted_signals=admitted,
         summary=_summary(run, rows),
@@ -327,7 +328,13 @@ def _bracket_index(prefix: str) -> int:
     return int(match.group(1)) if match else 0
 
 
-def _cost(run: Run, attempts_by_row: Mapping[UUID, Sequence[Attempt]], *, now: datetime) -> Cost:
+def _cost(
+    run: Run,
+    attempts_by_row: Mapping[UUID, Sequence[Attempt]],
+    *,
+    now: datetime,
+    tracer: Tracer | None,
+) -> Cost:
     every_attempt = [attempt for attempts in attempts_by_row.values() for attempt in attempts]
     wall_clock = 0.0
     if run.started_at is not None:
@@ -341,6 +348,7 @@ def _cost(run: Run, attempts_by_row: Mapping[UUID, Sequence[Attempt]], *, now: d
         wall_clock_seconds=wall_clock,
         active_seconds=run.active_seconds,
         provisional=any(attempt.cost_provisional for attempt in every_attempt),
+        trace_url=tracer.trace_url(run.trace_id) if (tracer is not None and run.trace_id) else None,
     )
 
 

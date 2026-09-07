@@ -11,6 +11,9 @@ dependencies = [
     # Fernet, for the Project env vars encrypted at rest with ORCHESTRATOR_SECRET_KEY (AD-5)
     "cryptography==50.0.1",
     "fastapi==0.141.1",
+    # AD-11: tracing. Imported only under `infrastructure/tracing/`, per the forbidden
+    # contract below.
+    "langfuse==4.15.1",
     "psycopg[binary]==3.3.5",
     "pydantic==2.13.5",
     # AD-15: `application/templates/lines.py` loads Template YAML, so PyYAML is a runtime

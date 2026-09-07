@@ -59,6 +59,7 @@ from orchestrator.application.use_cases.writers import (
     require_run,
 )
 from orchestrator.domain.entities.gate_record import GateRecord
+from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import NotFound
 from orchestrator.domain.statuses import GateEvent, RunStatus
@@ -139,21 +140,33 @@ def run_row(
     seq: int,
     resume_event: GateEvent | None = None,
 ) -> StepResult:
-    """Execute one row through its kind's executor and report what it returned."""
+    """Execute one row through its kind's executor and report what it returned.
+
+    `step_span` wraps the width of `execute` only, opened after the unit of work that reads
+    the context has already closed — the tracer is never called from inside a transaction.
+    `WalkPorts.step.tracer` is `None` for every frozen ports construction predating this
+    story (AD-11's own "no tracer wired" degrade), which is why the `Run` is read once,
+    here, rather than through a second repository call inside the `if`.
+    """
     with ports.writers.uow:
-        context = _context(ports, run_id, seq, resume_event)
-    return execute(context)
+        run = require_run(ports.writers, run_id)
+        context = _context(ports, run, seq, resume_event)
+    tracer = context.ports.tracer
+    if tracer is None:
+        return execute(context)
+    with tracer.step_span(run, context.row, context.attempt):
+        return execute(context)
 
 
 def _context(
     ports: WalkPorts,
-    run_id: UUID,
+    run: Run,
     seq: int,
     resume_event: GateEvent | None,
 ) -> StepContext:
     """AD-9's own field list, read out of the Run the walker is standing in."""
     writers = ports.writers
-    run = require_run(writers, run_id)
+    run_id = run.id
     row = require_row(writers, run_id, seq)
     attempts = writers.attempts.list_for_row(row.id)
     if not attempts:

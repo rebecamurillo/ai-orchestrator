@@ -25,6 +25,7 @@ from orchestrator.domain.ports.repositories import (
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.statuses import ParkKind, RunStatus, SignalKind
 
 
@@ -40,6 +41,10 @@ class RunViewPorts:
     repositories: RepositoryRepository
     logs: LogReader
     clock: Clock
+    #: `None` degrades to `cost.trace_url = None` (AD-11) — every frozen `RunViewPorts(...)`
+    #: construction predating this story (`test_run_views.py`'s own `harness` fixture)
+    #: keeps working unchanged. Production wiring always sets one.
+    tracer: Tracer | None = None
 
 
 @dataclass(frozen=True)
@@ -167,9 +172,8 @@ class Cost:
     wall_clock_seconds: float
     active_seconds: int
     provisional: bool
-    #: Always `None` in this epic (no tracing UI yet, SPEC CAP-12); typed `str | None`
-    #: rather than the narrower `None` so a later story can populate it without widening
-    #: this field's type again.
+    #: The Langfuse UI link for this Run's trace (AD-11), or `None` when `run.trace_id` was
+    #: never set (no tracer wired at Run creation) or no `Tracer` is wired on this read.
     trace_url: str | None = None
 
 

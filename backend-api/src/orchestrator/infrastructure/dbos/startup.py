@@ -52,6 +52,7 @@ from orchestrator.infrastructure.dbos.walker import WalkerDeps
 from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.process import RealProcessRunner
 from orchestrator.infrastructure.settings import Settings
+from orchestrator.infrastructure.tracing import LangfuseTracer
 from orchestrator.infrastructure.workspace import FsWorkspace
 
 #: One entry per engine this process is serving with, for as long as it is serving: the
@@ -82,6 +83,7 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
             work_dir=str(settings.work_dir),
             process=RealProcessRunner(),
             workspace=FsWorkspace,
+            tracer=LangfuseTracer(settings),
         ),
         human_wait_seconds=settings.human_wait_seconds,
         read_environment=partial(read_run_environment, session_factory, settings.bmad_version),

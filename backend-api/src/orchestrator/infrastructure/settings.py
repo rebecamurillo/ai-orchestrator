@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     langfuse_public_key: str
     langfuse_secret_key: SecretStr
     langfuse_environment: str
+    #: `LangfuseTracer.trace_url` formats the UI link from this alone, so it never has to
+    #: make the SDK's own blocking `get_trace_url()` project lookup (5.2's own spike).
+    langfuse_project_id: str
 
     # ── Pinned tool versions carried by the image (AD-16) ────────────────────
     bmad_version: str

@@ -60,6 +60,7 @@ from orchestrator.infrastructure.db import (
 from orchestrator.infrastructure.db.environment import read_run_environment
 from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.process.runner import RealProcessRunner
+from orchestrator.infrastructure.tracing import LangfuseTracer
 
 #: The attributes `create_app` stores its adapters under.
 SESSION_FACTORY = "session_factory"
@@ -165,9 +166,15 @@ def preflight_ports(request: Request) -> Iterator[PreflightPorts]:
 
 def create_run_ports(request: Request) -> Iterator[CreateRunPorts]:
     """The ports `create_run` (4.4) runs on: pre-flight's own, plus what only creation
-    writes (`steps`, `engine`)."""
+    writes (`steps`, `engine`), plus a `Tracer` (5.2) so every Run's trace opens.
+
+    `LangfuseTracer(settings)` is built fresh per request rather than read off
+    `app.state`: its own client is lazy (built only once a call actually opens a span), and
+    `main.py` has no room left for a fourth adapter singleton — see 5.2's Design Notes.
+    """
     session_factory = from_state(request, SESSION_FACTORY)
     engine: WorkflowEngine = from_state(request, ENGINE)
+    settings = from_state(request, SETTINGS)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
         yield CreateRunPorts(
             preflight=_preflight_ports(request, uow, "create_run"),
@@ -175,6 +182,7 @@ def create_run_ports(request: Request) -> Iterator[CreateRunPorts]:
             steps=SQLAlchemyStepRunRepository(uow.session),
             uow=uow,
             clock=SystemClock(),
+            tracer=LangfuseTracer(settings),
         )
 
 
@@ -195,8 +203,12 @@ def run_read_ports(request: Request) -> Iterator[RunReadPorts]:
 def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
     """The ports the Run detail and the run graph route read through (4.12). The Board
     reads through `run_read_ports` instead — see `application/use_cases/run_views.py`'s own
-    module docstring for why it cannot share this one."""
+    module docstring for why it cannot share this one.
+
+    `tracer` (5.2) is what `cost.trace_url` reads through — built fresh per request, the
+    same reasoning as `create_run_ports`'s own `LangfuseTracer`."""
     session_factory = from_state(request, SESSION_FACTORY)
+    settings = from_state(request, SETTINGS)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
         yield RunViewPorts(
             runs=SQLAlchemyRunRepository(uow.session),
@@ -207,6 +219,7 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
             repositories=SQLAlchemyRepositoryRepository(uow.session),
             logs=RealLogReader(),
             clock=SystemClock(),
+            tracer=LangfuseTracer(settings),
         )
 
 

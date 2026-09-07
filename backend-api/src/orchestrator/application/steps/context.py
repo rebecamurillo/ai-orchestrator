@@ -58,6 +58,7 @@ from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.process import ProcessRunner
 from orchestrator.domain.ports.protected_paths import ProtectedPaths
+from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.ports.workspace import Workspace
 from orchestrator.domain.values import StepResult, Worktree
 
@@ -134,6 +135,11 @@ class StepPorts:
     #: AD-17's frozen-anchor rule. `None` throughout Epic 4 — the port is the seam Epic 5
     #: fills; `domain/ports/protected_paths.py` says why that is not a green check.
     protected_paths: ProtectedPaths | None = None
+    #: `None` until a caller wires a real one (5.2). `run_row` degrades to "no span opened"
+    #: when unset — every frozen `StepPorts(...)` construction predating this story keeps
+    #: working unchanged; 5.4's agent executor reaches this the same way, through
+    #: `context.ports.tracer`, so `WalkPorts` itself needs no `Tracer` of its own (AD-11).
+    tracer: Tracer | None = None
 
 
 @dataclass(frozen=True)
