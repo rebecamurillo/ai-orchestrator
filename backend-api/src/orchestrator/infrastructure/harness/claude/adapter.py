@@ -73,8 +73,10 @@ __all__ = [
     "ENCODING",
     "RESULT_TYPE",
     "RESULT_TYPE_FIELD",
+    "SUBSCRIPTION_KEY_HEADER",
     "ClaudeHarness",
     "claude_aliases",
+    "claude_subscription_aliases",
     "json_objects",
     "read_text",
     "render_budget",
@@ -101,6 +103,14 @@ HEADER_SOURCES: tuple[tuple[str, str], ...] = (
     ("x-litellm-session-id", "ORCH_ATTEMPT_ID"),
     ("x-litellm-tags", "ORCH_TAGS"),
 )
+
+#: Where the Gateway's virtual key travels when `Authorization` is not carrying it.
+#:
+#: On a Claude subscription, Claude Code puts its own OAuth token in `Authorization` and the
+#: Gateway forwards that upstream (`forward_client_headers_to_llm_api`, host-side), so the
+#: key LiteLLM authenticates *this instance* with needs a header of its own. This is the one
+#: LiteLLM reads it from. It carries `Bearer <key>`, the same shape `Authorization` would.
+SUBSCRIPTION_KEY_HEADER = "x-litellm-api-key"
 
 #: The two names Claude Code reads to put prompt and tool content into its OTLP spans. Added
 #: only when the Project asked for content logging (`ORCH_LOG_CONTENT == "1"`).
@@ -133,6 +143,39 @@ def claude_aliases(contract: Mapping[str, str]) -> dict[str, str]:
     }
     if contract.get("ORCH_LOG_CONTENT") == "1":
         aliases.update(dict.fromkeys(CONTENT_LOGGING_NAMES, "1"))
+    return aliases
+
+
+def claude_subscription_aliases(contract: Mapping[str, str]) -> dict[str, str]:
+    """`claude_aliases` for an instance whose Claude Code is logged in on a subscription.
+
+    Two edits to the default set, and it is written as two edits — derived from
+    `claude_aliases` rather than restated — so the five attribution headers AD-11 pins and
+    the content-logging switch cannot come to differ between the modes by being typed twice:
+
+    - `ANTHROPIC_AUTH_TOKEN` is **dropped**. Set, Claude Code sends it as `Authorization`
+      instead of the subscription's OAuth token, and the subscription is never used. Its
+      absence is the whole mechanism, not an omission.
+    - `SUBSCRIPTION_KEY_HEADER` is added, carrying the same virtual key the dropped name
+      held. `Authorization` now belongs to the OAuth token, so the key that identifies this
+      instance to the Gateway — for the budget, the rate limit and the spend log — moves to
+      the header LiteLLM reads it from when `Authorization` is not its own.
+
+    Still the Gateway's virtual key and never an Anthropic one (AD-5): the subscription's
+    credential is Claude Code's own, held in `AGENT_HOME`, and never passes through here.
+
+    This is the one place the environment departs from `scripts/harness/claude.sh`'s
+    `HARNESS_ENV_ALIASES` array, which states the default; `tests/unit/
+    test_harness_env_subscription.py` states this mode's key set as an equality against it.
+    """
+    aliases = claude_aliases(contract)
+    del aliases["ANTHROPIC_AUTH_TOKEN"]
+    aliases["ANTHROPIC_CUSTOM_HEADERS"] = "\n".join(
+        (
+            aliases["ANTHROPIC_CUSTOM_HEADERS"],
+            f"{SUBSCRIPTION_KEY_HEADER}: Bearer {contract['LITELLM_API_KEY']}",
+        )
+    )
     return aliases
 
 

@@ -28,6 +28,12 @@ name = "LiteLLM"
 base_url = "${LITELLM_BASE_URL%/}/v1"
 env_key = "LITELLM_API_KEY"
 wire_api = "responses"
+# A BMAD turn is a long single stream — planning, edits, a gate run — and the default idle
+# timeout is far shorter than one. LiteLLM's own Codex guide sets this; without it a turn
+# that thinks for a while is cut off as idle. Not a retry (hard rule 7): the two retry knobs
+# that guide also sets are deliberately left at their defaults, because a silently repeated
+# dispatch is exactly what that rule forbids.
+stream_idle_timeout_ms = 7200000
 # Per-attempt headers by environment variable NAME (AD-10): values come from env_for(attempt), never from this file.
 env_http_headers = { langfuse_session_id = "ORCH_RUN_ID", langfuse_tags = "ORCH_LANGFUSE_TAGS", x-litellm-end-user-id = "ORCH_RUN_ID", x-litellm-session-id = "ORCH_ATTEMPT_ID", x-litellm-tags = "ORCH_TAGS" }
 

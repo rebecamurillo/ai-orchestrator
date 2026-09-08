@@ -10,10 +10,15 @@ resolves through, and the environment builder one attempt's process receives. Ep
 
 from __future__ import annotations
 
-from orchestrator.infrastructure.harness.claude import ClaudeHarness, claude_aliases
+from orchestrator.infrastructure.harness.claude import (
+    ClaudeHarness,
+    claude_aliases,
+    claude_subscription_aliases,
+)
 from orchestrator.infrastructure.harness.env import HARNESS_ENV_CONTRACT, env_for
 from orchestrator.infrastructure.harness.registry import (
     ALIASES,
+    SUBSCRIPTION_ALIASES,
     build_harness_env,
     build_harnesses,
 )
@@ -21,9 +26,11 @@ from orchestrator.infrastructure.harness.registry import (
 __all__ = [
     "ALIASES",
     "HARNESS_ENV_CONTRACT",
+    "SUBSCRIPTION_ALIASES",
     "ClaudeHarness",
     "build_harness_env",
     "build_harnesses",
     "claude_aliases",
+    "claude_subscription_aliases",
     "env_for",
 ]

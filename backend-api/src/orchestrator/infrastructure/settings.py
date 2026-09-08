@@ -96,6 +96,18 @@ class Settings(BaseSettings):
 
     # ── Harness environment ──────────────────────────────────────────────────
     claude_allowed_tools: CommaSeparated
+    #: How this instance's Claude Code authenticates to the Gateway (AD-5).
+    #:
+    #: `false` — the default and the shipped contract — is API-key mode: the Gateway's
+    #: virtual key goes to the harness as `ANTHROPIC_AUTH_TOKEN`, and LiteLLM calls the
+    #: provider with the key the host holds.
+    #:
+    #: `true` is subscription mode: Claude Code is logged in against the operator's own
+    #: Claude subscription, so `Authorization` carries that OAuth token, the virtual key
+    #: moves to `x-litellm-api-key`, and `ANTHROPIC_AUTH_TOKEN` must be absent or it would
+    #: override the login. It needs `forward_client_headers_to_llm_api: true` on the
+    #: Gateway, which is host-side and documented in `host/README.md`.
+    claude_subscription_auth: bool
     work_dir: Path
     agent_home: Path
 

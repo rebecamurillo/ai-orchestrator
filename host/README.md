@@ -191,6 +191,50 @@ Claude Code additionally asks for **its own default model** when the Template bi
 `Invalid model name passed in model=claude-opus-5` even when the upstream key is good. Either
 add that name to `model_list` or bind a model on the Run.
 
+### Or authenticate on a Claude subscription instead (`CLAUDE_SUBSCRIPTION_AUTH`)
+
+The section above needs a provider API key. If you have a Claude Max or Pro subscription and
+would rather spend that than an API key, the Gateway can forward Claude Code's own OAuth
+token upstream instead — this is the one path to a green `claude` readiness run that needs no
+`ANTHROPIC_API_KEY` at all.
+
+It is a *different* authentication topology, not an extra header, and the difference is which
+credential holds `Authorization`:
+
+| | API-key mode (default) | Subscription mode |
+| --- | --- | --- |
+| `Authorization` carries | the Gateway virtual key, via `ANTHROPIC_AUTH_TOKEN` | Claude Code's subscription OAuth token |
+| the virtual key travels in | `Authorization` | `x-litellm-api-key` — because `Authorization` is taken |
+| LiteLLM reaches Anthropic with | `ANTHROPIC_API_KEY` from `host/.env` | the forwarded OAuth token |
+
+Four steps, and the first two are on this host:
+
+1. In `host/litellm.config.yaml`, uncomment `forward_client_headers_to_llm_api: true` under
+   `general_settings` and the `claude-subscription` entry in `model_list`. Restart the proxy.
+2. Note what that switch does: it forwards client headers upstream for **every** route on
+   this proxy, not only the Claude one. This proxy is single-tenant and reachable only from
+   the orchestrator (see *Egress*), which is what makes it acceptable here.
+3. Set `CLAUDE_SUBSCRIPTION_AUTH=true` in the stack's own `.env` and restart `backend-api`.
+   The adapter then stops exporting `ANTHROPIC_AUTH_TOKEN` — set, it would override the
+   login and the subscription would never be used — and moves the virtual key into the
+   `x-litellm-api-key` header.
+4. Log Claude Code in, once, inside the container:
+   `docker compose exec backend-api claude login` (it prints a URL to open, and stores the
+   credentials under `AGENT_HOME`, which is a named volume and survives `make down`). Then
+   bind the Run to the `claude-subscription` model name — Claude Code's own default model is
+   not in `model_list`, the same trap the section above describes.
+
+**What this changes about money.** A subscription is not metered per request, so the dollar
+figures LiteLLM writes to `/spend/logs/v2` are computed from its price table rather than from
+anything you are billed. The Run budget, the `--max-budget-usd` cap and the FR-17 park all go
+on working, and all of them are then enforcing a notional cost. Nothing in the orchestrator
+changes to reflect that — deliberately, and recorded here so the numbers on screen are read
+for what they are.
+
+**Unverified end to end.** The repo half is tested
+(`backend-api/tests/unit/test_harness_env_subscription.py`); the host half above is written
+from LiteLLM's own guide and has not been run against a live subscription here.
+
 ## Langfuse
 
 Langfuse 4.27.0, self-hosted with its own compose file, on port 3000. The stack sends traces to

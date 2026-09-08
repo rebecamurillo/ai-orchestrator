@@ -23,6 +23,15 @@ model_list:
       model: openai/gpt-5.4
       api_key: os.environ/OPENAI_API_KEY
 
+  # ── hosted, on the operator's own Claude subscription ─────────────────────
+  # Uncomment together with `forward_client_headers_to_llm_api` below to spend a Claude Max
+  # or Pro subscription instead of an API key. No `api_key` here on purpose: the credential
+  # is the OAuth token Claude Code puts in `Authorization`, forwarded by that switch. Pair
+  # it with CLAUDE_SUBSCRIPTION_AUTH=true in the stack's .env — see host/README.md.
+  # - model_name: claude-subscription
+  #   litellm_params:
+  #     model: anthropic/claude-sonnet-4-6
+
   # ── local, served by oMLX ─────────────────────────────────────────────────
   # `openai/<alias>` with `use_chat_completions_api: true`: oMLX speaks chat completions,
   # and Codex only speaks `/v1/responses`. This is the bridge (addendum §A).
@@ -49,6 +58,11 @@ litellm_settings:
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
+  # Subscription mode only (host/README.md). Forwards the client's own Authorization header
+  # upstream, which is how Claude Code's subscription OAuth token reaches Anthropic. It
+  # applies to EVERY route on this proxy, not only the Claude one — acceptable here because
+  # this proxy is single-tenant and reachable only from the orchestrator (see Egress).
+  # forward_client_headers_to_llm_api: true
   # the orchestrator reads GET /spend/logs/v2 with LITELLM_SPEND_KEY; harnesses hold a
   # key_type: llm_api virtual key instead, which cannot reach this route (AD-5)
   store_model_in_db: false

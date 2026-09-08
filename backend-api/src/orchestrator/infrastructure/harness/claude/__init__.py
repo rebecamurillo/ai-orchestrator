@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from orchestrator.infrastructure.harness.claude.adapter import ClaudeHarness, claude_aliases
+from orchestrator.infrastructure.harness.claude.adapter import (
+    SUBSCRIPTION_KEY_HEADER,
+    ClaudeHarness,
+    claude_aliases,
+    claude_subscription_aliases,
+)
 from orchestrator.infrastructure.harness.claude.result import (
     json_objects,
     read_text,
@@ -11,8 +16,10 @@ from orchestrator.infrastructure.harness.claude.result import (
 )
 
 __all__ = [
+    "SUBSCRIPTION_KEY_HEADER",
     "ClaudeHarness",
     "claude_aliases",
+    "claude_subscription_aliases",
     "json_objects",
     "read_text",
     "result_object",

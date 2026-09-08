@@ -23,12 +23,26 @@ from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.harness import Harness, HarnessEnv
 from orchestrator.domain.ports.process import ProcessRunner
-from orchestrator.infrastructure.harness.claude import ClaudeHarness, claude_aliases
+from orchestrator.infrastructure.harness.claude import (
+    ClaudeHarness,
+    claude_aliases,
+    claude_subscription_aliases,
+)
 from orchestrator.infrastructure.harness.env import AliasBuilder, env_for
 from orchestrator.infrastructure.settings import Settings
 
 #: The harness-native name builders, keyed the way the registry itself is (AD-5, AD-10).
 ALIASES: dict[str, AliasBuilder] = {ClaudeHarness.name: claude_aliases}
+
+#: The same table for an instance authenticating on a Claude subscription
+#: (`CLAUDE_SUBSCRIPTION_AUTH`). A second table rather than a setting read inside
+#: `claude_aliases`: the builder's signature is `AliasBuilder`, which takes the contract and
+#: nothing else, and that is what keeps `env.py` harness-agnostic and lets
+#: `test_harness_env_contract.py` compare a builder against the bash arrays by calling it.
+#: A harness with no entry here falls back to `ALIASES` — Epic 7's `codex` and `local` reach
+#: LiteLLM by `env_key` and a config file, so neither has an `Authorization` header of
+#: Claude's kind to displace, and neither needs a second builder to get one.
+SUBSCRIPTION_ALIASES: dict[str, AliasBuilder] = {ClaudeHarness.name: claude_subscription_aliases}
 
 
 def build_harnesses(settings: Settings, runner: ProcessRunner) -> dict[str, Harness]:
@@ -52,7 +66,12 @@ def build_harness_env(settings: Settings) -> HarnessEnv:
     A closure rather than a partial so the result is the `HarnessEnv` port exactly:
     `application/steps/agent.py` calls it with the facts one attempt has and nothing it
     would have to know about `Settings` to supply.
+
+    The alias table is chosen once, here, because the choice is the instance's and not the
+    attempt's: `CLAUDE_SUBSCRIPTION_AUTH` describes how *this deployment's* Claude Code is
+    logged in, which cannot differ between two attempts of the same process.
     """
+    table = SUBSCRIPTION_ALIASES if settings.claude_subscription_auth else ALIASES
 
     def harness_env(  # noqa: PLR0913 — the port's own signature
         attempt: Attempt,
@@ -73,7 +92,7 @@ def build_harness_env(settings: Settings) -> HarnessEnv:
             settings=settings,
             story_id=story_id,
             traceparent=traceparent,
-            aliases=ALIASES.get(attempt.harness or ""),
+            aliases=table.get(attempt.harness or ""),
         )
 
     return harness_env
