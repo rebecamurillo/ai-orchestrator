@@ -11,48 +11,38 @@ AD-8).
 - **`with_resolved` is the row's, not the Template's.** The planner resolved every
   expression before the Run started (AD-7); an executor that re-read a Template would be
   re-planning mid-Run.
-- **`resume_signal` is a `GateRecord`, not a `Signal`.** AD-9 says the worktree effects of
-  a signal happen in the resumed row's executor, and the record is what `signal_run` wrote
-  and committed — so the executor reads a durable row rather than a message the engine
-  happened to carry.
+- **`resume_signal` is a `GateRecord`, not a `Signal`.** AD-9 puts a signal's worktree
+  effects in the resumed row's executor, and the record is what `signal_run` committed — a
+  durable row rather than a message the engine happened to carry.
 
-`StepPorts` holds what the executors of this epic can reach today. It grows with them:
-4.7 adds the `ProcessRunner` and the `Workspace`, 4.8 needs nothing new, Epic 5 adds the
-harnesses and the gateway. Every field is a port or a plain value, so a unit test builds
-one from the shared fakes.
+`StepPorts` holds what the executors can reach today, and grows with them. Every field is a
+port or a plain value, so a unit test builds one from the shared fakes.
 
 **`workspace` is a factory, not an instance.** `Git`, `Clock` and `process` are the same
-object for every row of every Run — nothing about them depends on which Run is executing.
-A `Workspace` is rooted at `run.worktree_path`, which is a fact of one Run, so `StepPorts`
-(built once, in the composition root, before any Run exists) cannot hold a rooted instance
+object for every row of every Run. A `Workspace` is rooted at `run.worktree_path`, a fact of
+one Run, so `StepPorts` — built once, before any Run exists — cannot hold a rooted instance
 without holding a stale one for every Run after the first. `StepPorts.workspace(ctx.cwd)`
 builds the one the current row needs, on demand, from the root the walker already read.
 
 **`run_env` is resolved by the walker, not fetched by the executor.** AD-9 closes
 `StepContext`'s field list, and an executor needs facts the row cannot carry: where this
-Repository's clone lives, what its `install_command` says, which branch is its default, and
-which worktrees this Run has already made. `ports` is the field AD-9 leaves open, so the
-walker's `attempt_row` step reads those once, before the executor runs, and hands them over
-as a frozen `RunEnvironment` inside `StepPorts` (`infrastructure/dbos/walker.py`). The
-executor therefore reads a value and never a repository, which is what AD-8 asks for.
+Repository's clone lives, its `install_command`, its default branch, the worktrees this Run
+has made. `ports` is the field AD-9 leaves open, so the walker's `attempt_row` step reads
+those once, before the executor runs, and hands them over as a frozen `RunEnvironment`
+inside `StepPorts`. The executor reads a value and never a repository, which is AD-8.
 
-**Epic 5's three fields are the same move, one layer out.** `harnesses`, `harness_env` and
-`attempt_writes` are what the `agent` kind needs and no other kind has: the registry a
-Template's `harness:` resolves through, the builder that turns one attempt into the
-environment its process receives (AD-5), and the unit of work `mark_started`, the `pgid`
-update and `mark_finished` each commit in (AD-8). All three are ports or plain callables,
-all three are built once in the composition root, and all three default to `None` so every
-`StepPorts(...)` written before this story keeps working. `RunEnvironment` grows with them:
-`env_for`, `attempt_span` and `budget minus spend` all need the `Run` entity, the Project's own
-context and variables are what the harness is handed, and `test_globs` is what AD-17's
-frozen set is computed from — all facts `read_run_environment` already had a session open
-for.
+**Epic 5's fields are the same move, one layer out.** `harnesses`, `harness_env`,
+`attempt_writes` and `logs` are what the `agent` kind and the walker need and no other kind
+has. All are ports or plain callables, all are built once in the composition root, and all
+default to `None` so every `StepPorts(...)` written before them keeps working —
+`tests/unit/test_step_executor_registry.py` and the walk's own tests still construct one
+from `git`, `clock` and `work_dir` alone. `RunEnvironment` grew the same way: the `Run`
+entity, the Project's own context and variables, `test_globs` and the verify failure are
+all facts `read_run_environment` or the walker already had a session open for.
 
-`process`, `workspace`, `run_env` and `protected_paths` default to `None` so
-`tests/unit/test_step_executor_registry.py`
-and the walk's own tests — written before 4.7 existed — keep constructing `StepPorts` from
-`git`, `clock` and `work_dir` alone; only a kind that actually starts a process or touches
-the worktree needs either one set.
+**The three questions at the end are how an executor knows which re-dispatch it is.** AD-9
+closes `StepContext`'s field list, so `retrying`, `operator_retry` and `redispatched` read
+the fields already there rather than a new one.
 """
 
 from __future__ import annotations
@@ -72,8 +62,10 @@ from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.harness import Harness, HarnessEnv
+from orchestrator.domain.ports.logs import LogReader
 from orchestrator.domain.ports.process import ProcessRunner
 from orchestrator.domain.ports.protected_paths import ProtectedPaths
+from orchestrator.domain.ports.repositories import AttemptRepository
 from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.ports.workspace import Workspace
 from orchestrator.domain.values import StepResult, Worktree
@@ -101,10 +93,9 @@ class ProjectContext:
     """The Project facts a dispatch hands to a harness process (AD-5, FR-14).
 
     `env_vars` is *decrypted*: `read_run_environment` turns `project.env_vars_enc` into
-    plaintext through the `Crypto` port, which is what `domain/ports/crypto.py` means by
-    "only when a Run is about to hand the value to a harness process". It is never written
-    to `step_run.with_resolved`, never logged and never returned by an endpoint — it exists
-    for exactly as long as the row that dispatches is executing.
+    plaintext through the `Crypto` port, which is `domain/ports/crypto.py`'s "only when a
+    Run is about to hand the value to a harness process". It is never written to
+    `step_run.with_resolved`, never logged and never returned by an endpoint.
     """
 
     context_text: str = ""
@@ -117,13 +108,30 @@ class ProjectContext:
 
 
 @dataclass(frozen=True)
+class VerifyFailure:
+    """Why the `verify` row sent this Story back, as the walker read it (FR-10, AD-9).
+
+    A value and not a handle, for the reason every other field of `RunEnvironment` is one:
+    the row that failed is a different row, its attempt is a different attempt, and an
+    executor that could ask a repository for either would be reading state AD-8 says only
+    the walker holds. `walk._context` resolves it once, before the executor runs.
+    """
+
+    #: The `verify` row's own resolved command, as the Operator would re-run it.
+    command: str
+    #: What it exited with; `None` when it was sent back before an attempt recorded one.
+    exit_code: int | None
+    #: The last lines of its log, oldest first, as `LogReader.tail` answered them.
+    log_tail: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class RunEnvironment:
     """One Run's own facts, as the walker read them just before this row ran.
 
     A snapshot, not a handle: an executor cannot ask it a second question and cannot write
-    through it. Everything here is either a Project/Repository column the plan was built from
-    or a Run column an earlier row's `RunUpdates` set, so a row always sees what the row
-    before it committed.
+    through it. Everything here is a Project/Repository column the plan was built from, or a
+    Run column an earlier row committed — so a row always sees what the row before it left.
     """
 
     run_id: UUID
@@ -153,6 +161,9 @@ class RunEnvironment:
     project: ProjectContext = field(default_factory=ProjectContext)
     #: `repository.test_globs` — what AD-17's frozen test set is computed from.
     test_globs: tuple[str, ...] = ()
+    #: Why the `verify` row redispatched to this one, or `None` — which is every row that
+    #: was not sent back, and every walker built before 5.5 resolved one (FR-10).
+    verify_failure: VerifyFailure | None = None
 
     def base_dir(self, work_dir: str) -> Path:
         """`{work_dir}/{project.slug}/{repository.slug}/base` — the one layout (AD-14)."""
@@ -201,6 +212,10 @@ class StepPorts:
     #: One unit of work per attempt write (AD-8). The `agent` kind is the only executor that
     #: writes at all, and it writes only through `WriterPorts.attempts`.
     attempt_writes: AttemptWrites | None = None
+    #: How the walker reads the tail of a failed `verify` row's log (SPEC CAP-12, 5.5).
+    #: `None` in every process that wired none, which degrades to "no lines resolved" — the
+    #: same "no facts, no append" the executor already has to handle.
+    logs: LogReader | None = None
 
 
 @dataclass(frozen=True)
@@ -258,6 +273,9 @@ NO_RUN = "RunEnvironment.run is not set: the agent kind needs the Run it dispatc
 #: What a git kind says when it is reached before `git.worktree` has made a worktree.
 NO_WORKTREE = "no worktree: {path} runs before git.worktree"
 
+#: The `gate_record.event` an Operator's *Retry* leaves (AD-13), as `signal_run` wrote it.
+RETRY_EVENT = "retry"
+
 
 def require_env(ctx: StepContext) -> RunEnvironment:
     """The Run's environment, or the wiring bug that it was never resolved."""
@@ -314,3 +332,67 @@ def require_cwd(ctx: StepContext) -> Path:
     if ctx.cwd is None:
         raise RuntimeError(NO_WORKTREE.format(path=ctx.row.path))
     return Path(ctx.cwd)
+
+
+def resolved_text(resolved: Mapping[str, Any], key: str) -> str:
+    """One resolved key as a string; an absent, null or empty value is `""` either way.
+    Here rather than in `steps/agent.py` because the tail reads the same row the dispatch
+    does, and the dependency between the two runs one way."""
+    return str(resolved.get(key) or "").strip()
+
+
+def committed(ctx: StepContext, write: Callable[[AttemptRepository], None]) -> None:
+    """One attempt write, in its own scope and transaction; `AttemptRepository` only (AD-8)."""
+    with require_attempt_writes(ctx)() as writers, writers.uow:
+        write(writers.attempts)
+        writers.uow.commit()
+
+
+def retrying(ctx: StepContext) -> bool:
+    """Whether this attempt is the Template's own `retry` firing again (AD-9, FR-16).
+
+    An automatic re-queue only ever follows `error` (a retry) or `done` (a verify
+    redispatch), and every Operator resume carries a `resume_signal` — so "no signal, and
+    the attempt before this one ended `error`" is nearly a retry, and `end_sha` is the rest
+    of it. A backend killed mid-dispatch leaves exactly that shape too: `start_attempt`
+    closes the interrupted attempt `error` and the walk restarts with no signal at all.
+    `end_sha` is written only by the tail, so it alone means "the dispatch came back" —
+    the same discriminator `agent.py::_orphan_control` uses, for the same reason `ended_at`
+    cannot be one. Without it a crash recovery would resume the killed session with a retry
+    prompt and never be counted against `retry_count`, which AD-9 forbids.
+    """
+    previous = ctx.previous_attempt
+    return (
+        ctx.resume_signal is None
+        and previous is not None
+        and previous.status == "error"
+        and previous.end_sha is not None
+    )
+
+
+def operator_retry(ctx: StepContext) -> bool:
+    """Whether a person sent this row *Retry* from the stop it parked on (AD-13, §4.6).
+
+    The other half of "run this row again". `misconfigured` — `ambiguous story file` above
+    all — is never re-executed automatically (AD-9), so an Operator signal is the only way
+    such a row ever runs a second time, and the prepare phase has to recognise it.
+    """
+    signal = ctx.resume_signal
+    return signal is not None and signal.event == RETRY_EVENT
+
+
+def redispatched(ctx: StepContext) -> bool:
+    """Whether this attempt is a `verify` row sending the Story back (FR-10, AD-9).
+
+    The observable form of "the row's redispatch counter went up": an agent row reaches
+    `done` before verify can fail it, so a predecessor that finished plus a counter above
+    zero is a redispatch. It stays right when a retry follows a redispatch — that attempt's
+    predecessor is `error`, so this answers `False` and nothing is appended twice.
+    """
+    previous = ctx.previous_attempt
+    return (
+        ctx.resume_signal is None
+        and previous is not None
+        and previous.status == "done"
+        and ctx.row.redispatch_count > 0
+    )

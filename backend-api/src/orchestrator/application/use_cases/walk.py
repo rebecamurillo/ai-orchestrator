@@ -30,6 +30,13 @@ replay would hand back unchanged — the interrupted row would silently continue
 and the count the Operator reads would say the kill never happened. The brief left the exact
 recovery sequence to this story's spec checkpoint; this is it.
 
+**A verify failure is resolved here for the same reason `frame_start_sha` is.** A row a
+`verify` step sent back needs three facts about a *different* row — its command, its exit
+code and the tail of its log (FR-10) — and AD-9 closes `StepContext`'s field list. This is
+the only place holding both the row and the repositories, so it reads them once and hands
+them over as a frozen `VerifyFailure` on `RunEnvironment`; the executor reads a value and
+never a repository (AD-8).
+
 **`run_row` reads; the executor does the work.** It opens one unit of work to assemble the
 `StepContext` and closes it *before* the executor runs, because an executor holds a process
 for minutes (FR-10) and a database session held across that is a connection nothing can use
@@ -38,7 +45,8 @@ and a transaction nothing can see past.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from typing import Any
 from uuid import UUID
 
@@ -46,6 +54,12 @@ import structlog
 
 from orchestrator.application.rules.frames import rows_in_frame
 from orchestrator.application.steps import StepContext, StepPorts, execute
+from orchestrator.application.steps.context import VerifyFailure
+from orchestrator.application.templates.plan_model import (
+    ON_FAIL_KEY,
+    REDISPATCH_TARGET_SEQ,
+)
+from orchestrator.application.templates.rows import COMMAND_KEY
 from orchestrator.application.use_cases.apply_step_result import apply_step_result
 from orchestrator.application.use_cases.start_attempt import start_attempt
 from orchestrator.application.use_cases.writers import (
@@ -100,6 +114,10 @@ RUNNING = "running"
 
 #: The line a close that arrives after the Run already moved leaves, and nothing else.
 LATE_CLOSE = "close ignored"
+
+#: How much of a failed `verify` row's log the Story file is handed back (FR-10). Enough to
+#: show what failed, bounded so a prepare commit never carries a whole build log.
+VERIFY_LOG_LINES = 200
 
 
 def next_row(ports: WalkPorts, run_id: UUID) -> int | None:
@@ -179,8 +197,55 @@ def _context(
         previous_attempt=attempts[-2] if len(attempts) > 1 else None,
         attempt=attempts[-1],
         resume_signal=_resume_signal(writers, run_id, resume_event),
-        ports=ports.step,
+        ports=_step_ports(ports, run_id, row),
     )
+
+
+def _step_ports(ports: WalkPorts, run_id: UUID, row: StepRun) -> StepPorts:
+    """The executors' ports, plus whatever this row alone needs resolving (FR-10).
+
+    The same object for every row that was not sent back, which is almost all of them: a
+    `replace` only happens when there is something to put in it.
+    """
+    environment = ports.step.run_env
+    failure = _verify_failure(ports, run_id, row)
+    if environment is None or failure is None:
+        return ports.step
+    return replace(ports.step, run_env=replace(environment, verify_failure=failure))
+
+
+def _verify_failure(ports: WalkPorts, run_id: UUID, row: StepRun) -> VerifyFailure | None:
+    """Why the `verify` row redispatched to this one failed, or `None` when none did.
+
+    The target is matched on `seq` rather than on a kind: `on_fail: {redispatch: …}` is the
+    only thing that sends a Run backwards (AD-9), and the planner already resolved it to
+    this row's number (`templates/plan_model.py`). A `verify` row that never recorded an
+    attempt still names its command — the Operator can read that even with no code to show.
+    """
+    if row.redispatch_count == 0:
+        return None
+    writers = ports.writers
+    sender = next(
+        (entry for entry in writers.steps.list_for_run(run_id) if _redispatches_to(entry, row.seq)),
+        None,
+    )
+    if sender is None:
+        return None
+    attempts = writers.attempts.list_for_row(sender.id)
+    latest = attempts[-1] if attempts else None
+    reader = ports.step.logs
+    tail = reader.tail(latest.log_path, VERIFY_LOG_LINES) if reader and latest else []
+    return VerifyFailure(
+        command=str(sender.with_resolved.get(COMMAND_KEY) or ""),
+        exit_code=latest.exit_code if latest is not None else None,
+        log_tail=tuple(tail),
+    )
+
+
+def _redispatches_to(row: StepRun, seq: int) -> bool:
+    """Whether this row's own `on_fail` is a redispatch aimed at `seq` (AD-9)."""
+    action = row.with_resolved.get(ON_FAIL_KEY)
+    return isinstance(action, Mapping) and action.get(REDISPATCH_TARGET_SEQ) == seq
 
 
 def _frame_start_sha(ports: WriterPorts, run_id: UUID, row: StepRun) -> str | None:

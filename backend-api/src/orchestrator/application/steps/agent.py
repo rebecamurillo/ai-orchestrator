@@ -1,40 +1,46 @@
 """The `agent` kind: preparing a worktree for a coding agent, and dispatching one (AD-9,
-AD-10, AD-14, FR-14).
+AD-10, AD-14, FR-14). What the dispatch *reached* is `agent_tail`'s: it records the attempt
+and routes on the Story file the agent wrote (FR-16), at gate `liveness` either way.
 
-**AD-9's side-effect order is the shape of `execute`, verbatim**: orphan control, WIP
-commit, the orchestrator's own writes, prepare commit, `start_sha`, prompt, dispatch,
-`mark_finished`. The harness lookup runs first, being a pure read: a row naming a harness
-this instance lacks must park without leaving a commit behind.
+**AD-9's side-effect order is the shape of `execute`, verbatim**: orphan control, WIP commit,
+the orchestrator's own writes, prepare commit, `start_sha`, prompt, dispatch, `mark_finished`.
+The harness lookup runs first, being a pure read: a row naming a harness this instance lacks
+must park without leaving a commit behind. The harness then receives exactly what
+`HarnessEnv` returned and nothing of this process's own (AD-5, AD-10).
 
 **Three writes, three units of work** (AD-8): `mark_started` before the process exists, the
-`pgid` update between `Harness.start` and `Harness.wait`, `mark_finished` after it exits.
-The middle one is why the `Harness` port has two halves. Nothing here writes a row, a Run
-or a status.
+`pgid` update between `Harness.start` and `Harness.wait`, `mark_finished` after it exits. That
+middle write is the one thing a *resumed* session skips — `Harness.resume` is a single call.
 
 **Orphan control is what makes a restart safe** (AD-14, FR-12): a previous attempt with a
-`pgid` and no `end_sha` is a harness a dead backend left running — its group is killed, the
-index lock awaited, and only then is it closed `error` · `interrupted`. The discriminator
-cannot be `ended_at`: `start_attempt` (`_open_the_row`) already stamps that on an attempt
-it finds open after a restart, which is the very case this guards, while `end_sha` is
-written only by `_finish` — so it alone means "the dispatch came back".
+`pgid` and no `end_sha` is a harness a dead backend left running. The discriminator cannot be
+`ended_at` — `start_attempt` already stamps that on an attempt it finds open after a restart,
+which is the very case this guards — while `end_sha` is written only by the tail.
 
-**The harness receives exactly what `HarnessEnv` returned** (AD-5, AD-10), and **`_tail` is
-a stub** whose `done` means "observed", never "verified" — the row's gate is `liveness`.
+**Three re-dispatches reach this module and are not the same dispatch** (AD-9, AD-13): the
+Template's own `retry`, which resumes the session or prepends its prompt to a fresh one; a
+person's *Retry* from a stop, which archives every extra Story file an ambiguity left before
+anything reads the glob again (AD-13); a `verify` redispatch, which hands
+the agent its file back at `in-progress` with a `## Verify Failure` section (FR-10).
+`context.retrying`, `context.operator_retry` and `context.redispatched` tell them apart, off
+`StepContext` alone.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
 
 import structlog
 
+from orchestrator.application.steps import agent_tail
 from orchestrator.application.steps.context import (
     StepContext,
+    committed,
     log_path,
-    require_attempt_writes,
+    redispatched,
     require_cwd,
     require_env,
     require_harness_env,
@@ -42,8 +48,11 @@ from orchestrator.application.steps.context import (
     require_process,
     require_run,
     require_workspace,
+    resolved_text,
+    retrying,
 )
 from orchestrator.application.steps.registry import register
+from orchestrator.application.story_file import after_verify
 from orchestrator.application.templates.agent_row import (
     PROMPT_EXTRA_KEY,
     SPEC_CHECKPOINT_KEY,
@@ -54,8 +63,7 @@ from orchestrator.application.templates.rows import TIMEOUT_KEY
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.ids import new_id
-from orchestrator.domain.ports.harness import Harness, HarnessResult
-from orchestrator.domain.ports.repositories import AttemptRepository
+from orchestrator.domain.ports.harness import Harness
 from orchestrator.domain.values import Park, StepResult
 
 log = structlog.get_logger(__name__)
@@ -79,8 +87,11 @@ DISPATCH = (
 )
 HALT = " Halt after planning."
 ANSWER = ' Answer from the operator to the blocking condition "{condition}": {answer}'
+#: How a retry prompt reaches a *new* session: in front of the dispatch sentence the session
+#: has not been told yet. A resumed one is sent the retry prompt alone.
+RETRY_PROMPT = "{retry} {dispatch}"
 
-#: The two commits this module makes, and the document it writes between them.
+#: The two commits this module makes, and the documents it writes between them.
 WIP_MESSAGE = "wip: story {id} attempt {n} (interrupted)"
 PREPARE_MESSAGE = "orchestrator: prepare story {id} attempt {n}"
 CONTEXT_FILE = "project-context.md"
@@ -89,7 +100,6 @@ CONTEXT_MISSING = "context path missing: {path}"
 
 #: The reasons this row leaves, and what an interrupted attempt carries instead of one.
 UNKNOWN_HARNESS = "harness misconfigured: unknown harness {name}"
-TIMED_OUT = "timeout {path} after {n} min"
 INTERRUPTED = "interrupted"
 
 #: git's own crash-recovery lock, and how long this row waits for git to clear it (AD-14).
@@ -106,12 +116,14 @@ DEFAULT_TIMEOUT_MIN = 90
 
 @dataclass(frozen=True)
 class _Dispatch:
-    """One dispatch, decided before the span opens: the two calls share these four facts."""
+    """One dispatch, decided before the span opens: the calls share these five facts.
+    `resume_id` is the session to continue, or `None` for a dispatch that starts one."""
 
     harness: Harness
     attempt: Attempt
     prompt: str
     session_id: str
+    resume_id: str | None = None
 
 
 class AgentExecutor:
@@ -132,38 +144,33 @@ def compose_prompt(
     resume_signal: GateRecord | None,
     previous_attempt: Attempt | None,
 ) -> str:
-    """What the harness is asked, from the row the planner resolved (FR-14, AD-7).
-
-    Four pieces, in order: the dispatch sentence, what the Template bound as `prompt_extra`,
-    the halt a spec checkpoint asks for, and the Operator's answer when one resumed this row.
-    The halt is gated on `resume_signal is None` because that is exactly "a first dispatch or
-    a re-plan": a `retry` never reaches this function, and a resume must not halt twice.
-    """
+    """What the harness is asked, from the row the planner resolved (FR-14, AD-7): the
+    dispatch sentence, the Template's `prompt_extra`, the halt a spec checkpoint asks for,
+    and the Operator's answer when one resumed this row. The halt is gated on
+    `resume_signal is None` because that is exactly "a first dispatch or a re-plan": a
+    `retry` never reaches this function, and a resume must not halt twice."""
     parts = [
         DISPATCH.format(
-            skill=_text(with_resolved, SKILL_KEY),
-            spec_folder=_text(with_resolved, SPEC_FOLDER_KEY),
-            story_id=_text(with_resolved, STORY_ID_KEY),
+            skill=resolved_text(with_resolved, SKILL_KEY),
+            spec_folder=resolved_text(with_resolved, SPEC_FOLDER_KEY),
+            story_id=resolved_text(with_resolved, STORY_ID_KEY),
         )
     ]
-    extra = _text(with_resolved, PROMPT_EXTRA_KEY)
+    payload = resume_signal.payload if resume_signal is not None else {}
+    extra = resolved_text(with_resolved, PROMPT_EXTRA_KEY)
     if extra:
         parts.append(f" {extra}")
     if with_resolved.get(SPEC_CHECKPOINT_KEY) and resume_signal is None:
         parts.append(HALT)
     if resume_signal is not None and resume_signal.event == ANSWER_EVENT:
-        parts.append(
-            ANSWER.format(
-                condition=resume_signal.payload.get(CONDITION_KEY, ""),
-                answer=resume_signal.payload.get(ANSWER_KEY, ""),
-            )
-        )
+        condition, answer = payload.get(CONDITION_KEY, ""), payload.get(ANSWER_KEY, "")
+        parts.append(ANSWER.format(condition=condition, answer=answer))
     return "".join(parts)
 
 
 def _harness(ctx: StepContext) -> Harness | StepResult:
     """The adapter this row's `harness:` names, or the park an unknown name is."""
-    name = _text(ctx.with_resolved, HARNESS_KEY)
+    name = resolved_text(ctx.with_resolved, HARNESS_KEY)
     found = require_harnesses(ctx).get(name)
     if found is not None:
         return found
@@ -177,26 +184,22 @@ def _harness(ctx: StepContext) -> Harness | StepResult:
 
 
 def _orphan_control(ctx: StepContext) -> None:
-    """Kill whatever the last attempt left running, then close it (AD-14, FR-12) — a
-    `pgid` and no `end_sha` is "started and never came back"; see the module docstring."""
+    """Kill whatever the last attempt left running, wait for git to clear its own crash lock,
+    then close the attempt (AD-14, FR-12). The wait is bounded and never raises: the row goes
+    on either way, and the commit that follows reports the lock if it is still there."""
     previous = ctx.previous_attempt
     if previous is None or previous.pgid is None or previous.end_sha is not None:
         return
     require_process(ctx).kill_group(previous.pgid)
-    _await_unlock(ctx)
-    closed = previous.model_copy(
-        update={"status": "error", "ended_at": ctx.ports.clock.now(), "output_ref": INTERRUPTED}
-    )
-    _committed(ctx, lambda attempts: attempts.mark_finished(closed))
-
-
-def _await_unlock(ctx: StepContext) -> None:
-    """Poll `.git/index.lock` until git clears it, or until the deadline (AD-14)."""
     workspace = require_workspace(ctx, ctx.cwd)
     waited = 0.0
     while waited < LOCK_TIMEOUT_SECONDS and workspace.exists(INDEX_LOCK):
         ctx.ports.clock.sleep(LOCK_POLL_SECONDS)
         waited += LOCK_POLL_SECONDS
+    closed = previous.model_copy(
+        update={"status": "error", "ended_at": ctx.ports.clock.now(), "output_ref": INTERRUPTED}
+    )
+    committed(ctx, lambda attempts: attempts.mark_finished(closed))
 
 
 def _wip_commit(ctx: StepContext) -> None:
@@ -206,18 +209,53 @@ def _wip_commit(ctx: StepContext) -> None:
     if not git.status(worktree).strip():
         return
     git.stage(worktree)
-    git.commit(worktree, WIP_MESSAGE.format(id=_story_id(ctx), n=ctx.attempt.n))
+    git.commit(worktree, WIP_MESSAGE.format(id=_text(ctx, STORY_ID_KEY), n=ctx.attempt.n))
 
 
 def _prepare_writes(ctx: StepContext) -> None:
-    """The orchestrator's write into the worktree, and the commit that records it."""
-    _prepare_commit(ctx, _context_document(ctx))
+    """The orchestrator's writes into the worktree, and the one commit holding exactly them.
+
+    The archive runs first: everything after it reads the glob it leaves behind. Its renames
+    are staged alongside the files written, because they are this row's writes too — an
+    unstaged move would still be in the tree at `start_sha` and 5.6 would read it as the
+    agent's (AD-17, FR-31), and it would dirty the whole-tree commit guard while leaving the
+    index empty. Files are staged by name and the tree asked afterwards, so unchanged bytes
+    leave no empty commit.
+    """
+    moved = agent_tail.archive_ambiguous(ctx)
+    written = (_context_document(ctx), _verify_failure(ctx))
+    targets = [*moved, *(target for target in written if target is not None)]
+    if not targets:
+        return
+    worktree = require_cwd(ctx)
+    git = ctx.ports.git
+    for target in targets:
+        git.stage(worktree, target)
+    if not git.status(worktree).strip():
+        return
+    git.commit(worktree, PREPARE_MESSAGE.format(id=_text(ctx, STORY_ID_KEY), n=ctx.attempt.n))
+
+
+def _verify_failure(ctx: StepContext) -> str | None:
+    """FR-10: the Story file a `verify` row sent back, at `in-progress` and carrying what
+    failed. Nothing is written when the walker resolved no facts, or when the glob names
+    other than one file — a rewrite on a guess is the ambiguity liveness refuses."""
+    if not redispatched(ctx):
+        return None
+    fail = require_env(ctx).verify_failure
+    matches = agent_tail.story_files(ctx) or ()
+    if fail is None or len(matches) != 1:
+        return None
+    workspace = require_workspace(ctx, ctx.cwd)
+    text = workspace.read(matches[0]) or ""
+    workspace.write(matches[0], after_verify(text, fail.command, fail.exit_code, fail.log_tail))
+    return matches[0]
 
 
 def _context_document(ctx: StepContext) -> str | None:
     """`{spec_folder}/project-context.md`, or `None` when the row names no spec folder; a
     path the worktree lacks is logged and left out, and the heading is always written."""
-    spec_folder = _text(ctx.with_resolved, SPEC_FOLDER_KEY)
+    spec_folder = _text(ctx, SPEC_FOLDER_KEY)
     if not spec_folder:
         return None
     workspace = require_workspace(ctx, ctx.cwd)
@@ -234,44 +272,29 @@ def _context_document(ctx: StepContext) -> str | None:
     return target
 
 
-def _prepare_commit(ctx: StepContext, target: str | None) -> None:
-    """One commit holding exactly the file this row wrote — staged by name, then asked."""
-    if target is None:
-        return
-    worktree = require_cwd(ctx)
-    git = ctx.ports.git
-    git.stage(worktree, target)
-    if not git.status(worktree).strip():
-        return
-    git.commit(worktree, PREPARE_MESSAGE.format(id=_story_id(ctx), n=ctx.attempt.n))
-
-
 def _start(ctx: StepContext) -> Attempt:
-    """The start half, committed alone, before the process exists: `start_sha` read after
-    both commits, `pgid` `None` until `Harness.start` answers (AD-8, AD-14)."""
+    """The start half, committed alone, before the process exists: `start_sha` after both
+    commits, `pgid` `None` until the harness answers (AD-8, AD-14)."""
     start_sha = ctx.ports.git.head_sha(require_cwd(ctx))
     started = ctx.attempt.model_copy(
         update={
             "start_sha": start_sha,
             "frozen_test_files": _frozen_test_files(ctx, start_sha),
             "pgid": None,
-            "harness": _text(ctx.with_resolved, HARNESS_KEY),
-            "model": (_text(ctx.with_resolved, MODEL_KEY) or None),
+            "harness": _text(ctx, HARNESS_KEY),
+            "model": (_text(ctx, MODEL_KEY) or None),
         }
     )
-    _committed(ctx, lambda attempts: attempts.mark_started(started))
+    committed(ctx, lambda attempts: attempts.mark_started(started))
     return started
 
 
 def _frozen_test_files(ctx: StepContext, start_sha: str | None) -> tuple[str, ...] | None:
     """AD-17's anchors, as the *committed tree* at `start_sha` holds them (AD-17, 5.6).
-
     Through `Git.list_files` and not off the worktree: 5.6 compares this set against
     `diff_names(start_sha, end_sha)`, and globbing the filesystem would carry directory
     entries and untracked files no commit range can name. Skipped only for an attempt whose
-    predecessor actually *reached* `start_sha` (AD-17's "lowest-`n` attempt that has a
-    `start_sha`"), so a first attempt that parked in prepare leaves the freezing to the next.
-    """
+    predecessor actually *reached* `start_sha`."""
     previous = ctx.previous_attempt
     if start_sha is None or (previous is not None and previous.start_sha is not None):
         return None
@@ -282,12 +305,7 @@ def _frozen_test_files(ctx: StepContext, start_sha: str | None) -> tuple[str, ..
 
 def _dispatch(ctx: StepContext, harness: Harness, attempt: Attempt) -> StepResult:
     """Dispatch inside the attempt's span; an unwired tracer degrades to `""` (AD-11)."""
-    dispatch = _Dispatch(
-        harness=harness,
-        attempt=attempt,
-        prompt=compose_prompt(ctx.with_resolved, ctx.resume_signal, ctx.previous_attempt),
-        session_id=str(new_id()),
-    )
+    dispatch = _planned(ctx, harness, attempt)
     tracer = ctx.ports.tracer
     if tracer is None:
         return _run(ctx, dispatch, "")
@@ -295,106 +313,75 @@ def _dispatch(ctx: StepContext, harness: Harness, attempt: Attempt) -> StepResul
         return _run(ctx, dispatch, span.traceparent)
 
 
+def _planned(ctx: StepContext, harness: Harness, attempt: Attempt) -> _Dispatch:
+    """Which of the three dispatches this is, and what it carries (FR-16, AD-10).
+    `compose_prompt` never sees a retry prompt: a resumed session already holds the context
+    that sentence would repeat, while a session that cannot be resumed — the contract said
+    not to, the harness cannot, or the last attempt recorded none — is a new one, which
+    needs the sentence and gets the retry prompt in front of it."""
+    previous = ctx.previous_attempt
+    retry = agent_tail.retry_of(ctx) if retrying(ctx) else None
+    session, resumable = str(new_id()), previous.session_id if previous is not None else None
+    if retry is not None and retry.resume_session and harness.capabilities.resume and resumable:
+        return _Dispatch(harness, attempt, retry.prompt, session, resumable)
+    prompt = compose_prompt(ctx.with_resolved, ctx.resume_signal, previous)
+    if retry is not None:
+        prompt = RETRY_PROMPT.format(retry=retry.prompt, dispatch=prompt)
+    return _Dispatch(harness, attempt, prompt, session)
+
+
 def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
-    """Start the harness, commit its group, then wait for it — AD-14's order, exactly."""
-    env = require_env(ctx)
-    run = require_run(ctx)
+    """Start the harness, commit its group, then wait for it — AD-14's order, exactly. A
+    resumed session skips the middle write: `Harness.resume` is one call, so no handle sits
+    between two halves for a dead backend to lose."""
+    run, environment = require_run(ctx), require_env(ctx)
     timeout_min = ctx.with_resolved.get(TIMEOUT_KEY) or DEFAULT_TIMEOUT_MIN
+    env = require_harness_env(ctx)(
+        dispatch.attempt,
+        run=run,
+        project_slug=environment.project_slug,
+        project_env=environment.project.env_vars,
+        log_content=environment.project.log_prompt_content,
+        story_id=_text(ctx, STORY_ID_KEY) or None,
+        traceparent=traceparent,
+    )
+    if dispatch.resume_id is not None:
+        resumed = dispatch.harness.resume(
+            cwd=require_cwd(ctx),
+            session_id=dispatch.resume_id,
+            message=dispatch.prompt,
+            env=env,
+            timeout_min=timeout_min,
+            log_path=log_path(ctx),
+        )
+        return agent_tail.finish(ctx, dispatch.attempt, resumed, timeout_min)
     handle = dispatch.harness.start(
         cwd=require_cwd(ctx),
         prompt=dispatch.prompt,
-        env=require_harness_env(ctx)(
-            dispatch.attempt,
-            run=run,
-            project_slug=env.project_slug,
-            project_env=env.project.env_vars,
-            log_content=env.project.log_prompt_content,
-            story_id=_story_id(ctx) or None,
-            traceparent=traceparent,
-        ),
-        model=(_text(ctx.with_resolved, MODEL_KEY) or None),
+        env=env,
+        model=(_text(ctx, MODEL_KEY) or None),
         session_id=dispatch.session_id,
         budget_usd_remaining=run.budget_usd - run.spend_usd,
         timeout_min=timeout_min,
         log_path=log_path(ctx),
     )
+    # the session travels with the group: a dead backend must leave a resumable attempt
     running = dispatch.attempt.model_copy(
-        # the session id travels with the group: a backend that dies here must leave behind
-        # an attempt FR-21 can still write a `resume_command` for
         update={"pgid": handle.pgid, "session_id": handle.session_id}
     )
     try:
-        _committed(ctx, lambda attempts: attempts.update(running))
+        committed(ctx, lambda attempts: attempts.update(running))
     except BaseException:
-        # this frame is the only place holding the handle, so a write that fails between
-        # `start` and `wait` would orphan the process the adapter's own guard never sees
+        # the only frame holding the handle: an escape without a kill is AD-14's orphan
         require_process(ctx).kill_group(handle.pgid)
         raise
-    return _finish(ctx, running, dispatch.harness.wait(handle), timeout_min)
+    return agent_tail.finish(ctx, running, dispatch.harness.wait(handle), timeout_min)
 
 
-def _finish(
-    ctx: StepContext, attempt: Attempt, result: HarnessResult, timeout_min: float
-) -> StepResult:
-    """Record what the harness did, then say what the row reached; `mark_finished` runs
-    first, so a killed attempt is as fully recorded as one that exited cleanly (AD-8)."""
-    finished = attempt.model_copy(
-        update={
-            "ended_at": ctx.ports.clock.now(),
-            "end_sha": ctx.ports.git.head_sha(require_cwd(ctx)),
-            "exit_code": result.exit_code,
-            "session_id": result.session_id,
-            "log_path": str(result.log_path),
-            **_usage(result),
-        }
-    )
-    _committed(ctx, lambda attempts: attempts.mark_finished(finished))
-    if result.timed_out:
-        reason = TIMED_OUT.format(path=ctx.row.path, n=timeout_min)
-        return StepResult(
-            status="error",
-            gate=ctx.row.gate,
-            output_ref=str(result.log_path),
-            reason=reason,
-            park=Park(kind="timeout", reason=reason, path=ctx.row.path),
-        )
-    return _tail(ctx, finished, result)
-
-
-def _tail(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> StepResult:
-    """What the dispatch reached — a stub whose `done` means "5.5 will decide". 5.5 reads
-    `expect`/`retry`, 5.6 the range, 5.7 the usage: all three already arguments here."""
-    return StepResult(status="done", gate=ctx.row.gate, output_ref=str(result.log_path))
-
-
-def _usage(result: HarnessResult) -> dict[str, Any]:
-    """The harness's figures, or nothing — never zeroes read back as measured (AD-11)."""
-    usage = result.usage
-    if usage is None:
-        return {}
-    return {
-        "tokens_in": usage.tokens_in,
-        "tokens_out": usage.tokens_out,
-        "cost_usd": usage.cost_usd,
-        "cost_provisional": True,
-    }
-
-
-def _committed(ctx: StepContext, write: Callable[[AttemptRepository], None]) -> None:
-    """One attempt write, in its own scope and transaction; `AttemptRepository` only (AD-8)."""
-    with require_attempt_writes(ctx)() as writers, writers.uow:
-        write(writers.attempts)
-        writers.uow.commit()
-
-
-def _story_id(ctx: StepContext) -> str:
-    """The Story this row works on, flattened onto the row by the planner (AD-7)."""
-    return _text(ctx.with_resolved, STORY_ID_KEY)
-
-
-def _text(resolved: Mapping[str, Any], key: str) -> str:
-    """One resolved key as a string; an absent, null or empty value is `""` either way."""
-    return str(resolved.get(key) or "").strip()
+def _text(ctx: StepContext, key: str) -> str:
+    """One of this row's resolved keys as a string — `STORY_ID_KEY` is the Story it works
+    on, flattened onto the row by the planner (AD-7)."""
+    return resolved_text(ctx.with_resolved, key)
 
 
 register(KIND, AgentExecutor())

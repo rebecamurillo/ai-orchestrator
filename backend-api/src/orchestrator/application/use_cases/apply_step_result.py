@@ -18,7 +18,8 @@ The order is AD-8's and it matters, because each step can change what the next o
    recorded before the Run started (AD-7), and a completion is not allowed to re-decide how
    the step's success is judged.
 3. **Route.** A redispatch goes back (bounded, AD-9); a `park` stops the Run for the
-   Operator; a finished row queues its successor, or ends the Run when it has none; an
+   Operator; a `retry` re-queues *this* row, counted and recorded (AD-9, FR-16); a
+   finished row queues its successor, or ends the Run when it has none; an
    `error` row is routed by its own `on_fail` — `fail` ends the Run `failed`, `continue`
    queues the successor exactly as a finished row does, and `escalate` (the action the DSL
    gives a row that declared none) writes nothing here, because an executor that escalates
@@ -115,6 +116,10 @@ REBASELINE_FAILED = "re-baseline failed after skip"
 #: What the gate record says when a redispatch fires.
 REDISPATCHED = "verify failed, story re-dispatched {n}/{max}"
 
+#: What it says when a Template's own `retry` fires — the reason the executor gave, and
+#: which of the contract's attempts this is (AD-9: bounded, recorded, never silent).
+RETRIED = "{reason} · retry {n}/{max}"
+
 
 def apply_step_result(
     ports: WriterPorts,
@@ -207,6 +212,9 @@ def _route(
         return _park(ports, run, row, park, attempt)
     if went_back:
         return run
+    if result.retry is not None:
+        _retry(ports, run, row, result, attempt)
+        return run
     if row.status in FINISHED:
         return _advance(ports, run, row)
     if row.status == "error":
@@ -258,6 +266,35 @@ def _redispatch(
         ),
     )
     return None, True
+
+
+def _retry(
+    ports: WriterPorts, run: Run, row: StepRun, result: StepResult, attempt: Attempt | None
+) -> None:
+    """Run this row again, counted and recorded (AD-9, FR-16). No Run transition: the Run is
+    still `running`, and `("error", "retry")` is the only pair the machine re-queues from —
+    a result that carried a `retry` on any other status raises `InvalidTransition` here,
+    which is a caller's bug rather than an outcome.
+
+    The bound itself was already applied: the executor returned a `retry` only while the
+    row's counter was below the contract's `max` (`application/rules/routing.py`), so this
+    counts the attempt rather than deciding whether there is one.
+    """
+    retry = result.retry
+    assert retry is not None  # `_route` calls this only when the result carries one
+    count = row.retry_count + 1
+    set_row(ports, row, status=step_transition(row.status, "retry"), retry_count=count)
+    record(
+        ports,
+        run,
+        Entry(
+            event="retry_auto",
+            actor="machine",
+            path=row.path,
+            text=RETRIED.format(reason=result.reason or "", n=count, max=retry.max),
+            attempt_n=attempt.n if attempt is not None else None,
+        ),
+    )
 
 
 def _park(ports: WriterPorts, run: Run, row: StepRun, park: Park, attempt: Attempt | None) -> Run:

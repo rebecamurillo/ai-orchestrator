@@ -53,6 +53,16 @@ class FsWorkspace:
         destination.parent.mkdir(parents=True, exist_ok=True)
         source.rename(destination)
 
+    def mtime(self, path: str) -> float:
+        # `stat` after `_resolve`, and `0.0` for anything that is not there: the caller is
+        # ordering files it globbed a moment ago, and a sweep between the two calls must
+        # not turn a prepare phase into a traceback.
+        target = self._resolve(path)
+        try:
+            return target.stat().st_mtime
+        except OSError:
+            return 0.0
+
     def tree(self, prefix: str = "") -> tuple[TreeEntry, ...]:
         base = self._resolve(prefix) if prefix else self._resolve(".")
         root = self._root

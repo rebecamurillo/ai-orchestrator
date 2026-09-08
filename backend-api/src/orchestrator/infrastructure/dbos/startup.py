@@ -55,6 +55,7 @@ from orchestrator.infrastructure.dbos.walker import WalkerDeps
 from orchestrator.infrastructure.harness import build_harness_env, build_harnesses
 from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.process import RealProcessRunner
+from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.tracing import LangfuseTracer
 from orchestrator.infrastructure.workspace import FsWorkspace
@@ -85,7 +86,9 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
     started, and two instances would be two answers. `crypto` reaches the environment reader
     as a factory for the reason that module's docstring gives: `FernetCrypto` refuses the
     contract's placeholder key at construction, and every unit test that builds these deps
-    passes exactly that placeholder.
+    passes exactly that placeholder. `logs` is the same `RealLogReader` the Run detail reads
+    an attempt's tail with (SPEC CAP-12); the walker uses it to resolve the last lines of a
+    failed `verify` row's log for the Story the redispatch hands back (FR-10).
     """
     runner = RealProcessRunner()
     return WalkerDeps(
@@ -100,6 +103,7 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
             harnesses=build_harnesses(settings, runner),
             harness_env=build_harness_env(settings),
             attempt_writes=partial(open_writer_ports, session_factory),
+            logs=RealLogReader(),
         ),
         human_wait_seconds=settings.human_wait_seconds,
         read_environment=partial(

@@ -51,6 +51,16 @@ class Workspace(Protocol):
         """Rename `src` to `dst`, both relative to the root."""
         ...
 
+    def mtime(self, path: str) -> float:
+        """When `path` was last written, as a POSIX timestamp; `0.0` when nothing is there.
+
+        The one ordering question a caller can ask about two files it globbed: AD-13's
+        de-ambiguation keeps the newest match and archives the rest, and neither `glob` nor
+        `read` can answer "which of these came last". A path outside the root is refused
+        here exactly as it is everywhere else on this port.
+        """
+        ...
+
     def tree(self, prefix: str = "") -> tuple[TreeEntry, ...]:
         """Every file and directory under `prefix`, relative to the root."""
         ...
