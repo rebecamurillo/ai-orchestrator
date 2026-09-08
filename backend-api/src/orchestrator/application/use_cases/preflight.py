@@ -168,7 +168,16 @@ def _resolve_tree(
 def _build_plan(
     ports: PreflightPorts, req: PreflightRequest, resolved: _Resolved
 ) -> tuple[Plan | None, PlanError | None]:
-    """*What will run*, or the `PlanError` naming why it could not be built."""
+    """*What will run*, or the `PlanError` naming why it could not be built.
+
+    `STEP_FAILURES` is caught alongside `PlanError` because planning issues git commands of
+    its own — `plan_ref` resolves the working branch with `ls_remote` — and a remote that is
+    unreachable or missing raises from the adapter rather than refusing. The line half of
+    pre-flight has always answered that failure with a `fail` line carrying git's own
+    redacted words (`checks.STEP_FAILURES`); the plan half raised it, and it left the API as
+    a 500. Pre-flight exists to say whether a Run can start and why not, and an unreachable
+    remote is one of its answers, so the two halves are held to one rule.
+    """
     if resolved.tree_error is not None:
         return None, resolved.tree_error
     inputs = _run_inputs(req, resolved.project, resolved.repository)
@@ -184,6 +193,10 @@ def _build_plan(
         )
     except PlanError as error:
         return None, error
+    except checks.STEP_FAILURES as error:
+        # `GitError.output` is redacted by the adapter before it is raised (AD-5), so its
+        # sentence is safe to carry into a refusal the operator reads.
+        return None, PlanError(reason=checks.failure_text(error))
     return plan, None
 
 

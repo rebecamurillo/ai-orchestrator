@@ -13,6 +13,18 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+#: The three harnesses the image installs, and the whole of what `name` may be.
+#:
+#: A *row* is not what makes a name real: `harness_readiness.start` runs with
+#: `skip_harness_check=True` so a harness with no row, or a row with `enabled` false, can
+#: still run the Run that would enable it (AD-10). This tuple is what a name is checked
+#: against instead — `POST /harnesses/{name}/readiness` takes a free string, and without it
+#: a typo became a branch and a `git ls-remote` against the fixture remote.
+#:
+#: `main.HARNESS_VERSION_SETTINGS` names the same three, one version pin each, and
+#: `tests/unit/application/test_harness_readiness_start_unknown_name.py` compares the two.
+HARNESS_NAMES: tuple[str, ...] = ("claude", "codex", "local")
+
 
 class EvaluationLine(BaseModel):
     """One line `evaluate` (SPEC CAP-8) produced: one named check, and whether it passed."""

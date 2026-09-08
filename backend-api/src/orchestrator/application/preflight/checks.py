@@ -88,8 +88,13 @@ class Context:
         return self.tree is not None and self.tree.root.name == "initiative"
 
 
-def _reason(error: Exception) -> str:
-    """The sentence a failed line carries — `GitError`'s own words, or the class and message."""
+def failure_text(error: Exception) -> str:
+    """The sentence a failed line carries — `GitError`'s own words, or the class and message.
+
+    Public because `use_cases/preflight.py::_build_plan` answers the same failures with the
+    same sentence: a git command that fails while *planning* says what one that fails on a
+    *line* says, rather than inventing a second wording for one event.
+    """
     if isinstance(error, GitError):
         return error.output
     return f"{type(error).__name__}: {error}"
@@ -103,7 +108,7 @@ def origin_reachable(ctx: Context) -> Line:
         ref = ctx.git.ls_remote(ctx.repository.url)
     except STEP_FAILURES as error:
         return Line(
-            CHECK_ORIGIN, "fail", _reason(error), fix="check the URL and the instance token"
+            CHECK_ORIGIN, "fail", failure_text(error), fix="check the URL and the instance token"
         )
     if ref is None:
         return Line(
@@ -123,7 +128,7 @@ def base_branch_line(ctx: Context) -> Line:
     try:
         ref = ctx.git.ls_remote(ctx.repository.url, base)
     except STEP_FAILURES as error:
-        return Line(CHECK_BASE_BRANCH, "fail", _reason(error))
+        return Line(CHECK_BASE_BRANCH, "fail", failure_text(error))
     if ref is None:
         return Line(CHECK_BASE_BRANCH, "fail", "branch does not exist on origin")
     return Line(CHECK_BASE_BRANCH, "ok", f"{base} at {ref.sha}")
@@ -175,7 +180,7 @@ def _branch_line(ctx: Context, plan: Plan, branch: str) -> Line:
     try:
         starts_at = ctx.git.ls_remote(ctx.repository.url, declared) is not None
     except STEP_FAILURES as error:
-        return Line(CHECK_BRANCH, "fail", _reason(error))
+        return Line(CHECK_BRANCH, "fail", failure_text(error))
     start = declared if starts_at else ctx.req.base_branch
     return Line(CHECK_BRANCH, "ok", f"{branch} · will create from {start}")
 

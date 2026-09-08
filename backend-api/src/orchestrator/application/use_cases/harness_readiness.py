@@ -26,6 +26,7 @@ from orchestrator.application.use_cases.create_run import (
     CreateRunResult,
     create_run,
 )
+from orchestrator.domain.entities.harness import HARNESS_NAMES
 from orchestrator.domain.entities.project import READINESS_PROJECT_SLUG
 from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.entities.run import Run
@@ -66,10 +67,20 @@ class HarnessReadinessPorts:
 def start(ports: HarnessReadinessPorts, name: str) -> CreateRunResult:
     """Dispatch one `epic@1` readiness Run of `name` on the fixture Repository.
 
+    `NotFound` (404) when `name` is not one of the three harnesses the image installs. That
+    is checked first, and against `HARNESS_NAMES` rather than against the `harness` table:
+    a missing row is how "never enabled" is stored, and this is the one endpoint that must
+    work for a harness in exactly that state (AD-10). Checked *first* because every later
+    statement treats the name as real — it becomes the branch `readiness/{name}/{date}` and
+    then a `git ls-remote` for that branch, so an unrecognised name reached the remote and
+    left a `GitError` as a 500 rather than a refusal naming the name.
+
     `Conflict` (409) when a non-terminal readiness Run for `name` already exists — one
     harness readiness Run in flight at a time, so two `re-run readiness` clicks can never
     race each other onto the same branch.
     """
+    if name not in HARNESS_NAMES:
+        raise NotFound(f"no harness named {name!r}")
     preflight = ports.create_run.preflight
     project = preflight.projects.get_by_slug(READINESS_PROJECT_SLUG)
     if project is None:
