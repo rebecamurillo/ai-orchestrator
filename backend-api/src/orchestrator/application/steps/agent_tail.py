@@ -104,12 +104,12 @@ HITS_KEY = "hits"
 #: files under `rules/signals.py::FILES_KEY`; a `continue` on a checkpoint carries none.
 CONTINUE_EVENT = "continue"
 
-#: [ASSUMPTION] The field and value `claude -p --output-format json` puts on its result
-#: object when `--max-budget-usd` stopped it (AD-10, FR-14). 5.11 verifies this against the
-#: real CLI; until then this is the brief's own literal guess, held behind these two
-#: constants so the field name closes in one edit.
-CAP_EXIT_FIELD = "stop_reason"
-CAP_EXIT_VALUE = "max_budget"
+#: The field and value `claude -p --output-format json` puts on its result object when
+#: `--max-budget-usd` stopped it (AD-10, FR-14). 5.11 confirmed this against the shipped
+#: 2.1.258 bundle's own error-result schema: `subtype` carries `"error_max_budget_usd"` when
+#: `terminal_reason === "budget_exhausted"` — `"max_budget"` occurs zero times in the bundle.
+CAP_EXIT_FIELD = "subtype"
+CAP_EXIT_VALUE = "error_max_budget_usd"
 
 
 def finish(

@@ -77,7 +77,11 @@ def test_an_attempt_exactly_at_budget_does_not_park() -> None:
 
 def test_a_claude_cap_exit_is_read_as_a_budget_park_never_a_retry() -> None:
     """AC4: `raw_result` marking the cap stop parks `budget` regardless of what `route`
-    would have decided — `retry` stays unset, so `retry_count` and `retry_auto` never fire."""
+    would have decided — `retry` stays unset, so `retry_count` and `retry_auto` never fire.
+
+    `subtype: "error_max_budget_usd"` is 5.11's confirmed pairing, read out of the shipped
+    2.1.258 bundle's own error-result schema (`terminal_reason === "budget_exhausted"` ->
+    `subtype: "error_max_budget_usd"`), not 5.7's disproved `stop_reason`/`max_budget` guess."""
     gateway = FakeGateway()
     world = with_spend(a_tail_world(run=a_run(budget_usd=BUDGET)), gateway=gateway)
     gateway.script(world.run.id, world.attempt.id, spend("41.20"))
@@ -85,7 +89,7 @@ def test_a_claude_cap_exit_is_read_as_a_budget_park_never_a_retry() -> None:
         session_id=SESSION_ID,
         exit_code=1,
         log_path=LOG_PATH,
-        raw_result={"stop_reason": "max_budget"},
+        raw_result={"subtype": "error_max_budget_usd"},
     )
 
     outcome = agent_tail.tail(world.ctx, world.attempt, result)
@@ -104,7 +108,7 @@ def test_a_cap_exit_field_that_does_not_match_the_assumed_value_is_not_read_as_o
         session_id=SESSION_ID,
         exit_code=0,
         log_path=LOG_PATH,
-        raw_result={"stop_reason": "end_turn"},
+        raw_result={"subtype": "success"},
     )
 
     outcome = agent_tail.tail(world.ctx, world.attempt, result)
