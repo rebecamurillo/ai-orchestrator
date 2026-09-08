@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-03-2026 09:16
-last_updated: 09-05-2026 12:04
+last_updated: 09-08-2026
 project: ai-orchestrator
 project_key: NOKEY
 tracking_system: file-system
@@ -54,12 +54,12 @@ development_status:
   epic-2-retrospective: optional
 
   epic-3: backlog
-  3-1-dsl-v1-parser-and-validator: backlog
-  3-2-shipped-templates-repo-init-story-epic-initiative: backlog
-  3-3-template-versions-api-and-seeding: backlog
-  3-4-graph-builder-and-template-graph-endpoint: backlog
-  3-5-templates-screen-with-versions-list-editor-validate-and-save: backlog
-  3-6-template-diagram-rendered-from-the-backend-graph: backlog
+  3-1-dsl-v1-parser-and-validator: done
+  3-2-shipped-templates-repo-init-story-epic-initiative: done
+  3-3-template-versions-api-and-seeding: done
+  3-4-graph-builder-and-template-graph-endpoint: done
+  3-5-templates-screen-with-versions-list-editor-validate-and-save: done
+  3-6-template-diagram-rendered-from-the-backend-graph: done
   epic-3-retrospective: optional
 
   epic-4: done
@@ -82,45 +82,45 @@ development_status:
   4-17-durability-proof-restart-and-orphan-test: done
   epic-4-retrospective: optional
 
-  epic-5: backlog
-  5-1-harness-port-environment-contract-and-the-claude-adapter: backlog
-  5-2-tracer-port-and-the-langfuse-adapter: backlog
-  5-3-gateway-spend-adapter-and-the-budget-rule: backlog
-  5-4-agent-executor-prepare-and-dispatch: backlog
-  5-5-agent-executor-contract-evaluation-and-routing: backlog
-  5-6-protected-paths: backlog
-  5-7-budget-halt-in-the-loop: backlog
-  5-8-harness-readiness: backlog
-  5-9-trajectory-record: backlog
-  5-10-run-detail-additions-for-story-steps: backlog
-  5-11-claude-readiness-passes-end-to-end: backlog
+  epic-5: in-progress
+  5-1-harness-port-environment-contract-and-the-claude-adapter: done
+  5-2-tracer-port-and-the-langfuse-adapter: done
+  5-3-gateway-spend-adapter-and-the-budget-rule: done
+  5-4-agent-executor-prepare-and-dispatch: done
+  5-5-agent-executor-contract-evaluation-and-routing: done
+  5-6-protected-paths: done
+  5-7-budget-halt-in-the-loop: done
+  5-8-harness-readiness: done
+  5-9-trajectory-record: done
+  5-10-run-detail-additions-for-story-steps: done
+  5-11-claude-readiness-passes-end-to-end: in-progress
   epic-5-retrospective: optional
 
   epic-6: backlog
-  6-1-answer-a-blocked-story-with-a-scripted-test-harness: backlog
-  6-2-continue-and-reject-at-checkpoints: backlog
-  6-3-inline-spec-editing-while-parked: backlog
-  6-4-skip-story-with-the-re-baseline: backlog
-  6-5-skip-epic: backlog
-  6-6-raise-budget-and-accept-a-protected-path-change: backlog
-  6-7-terminal-resume-command-session-flag-and-poll: backlog
-  6-8-uj-3-proven-end-to-end: backlog
+  6-1-answer-a-blocked-story-with-a-scripted-test-harness: done
+  6-2-continue-and-reject-at-checkpoints: done
+  6-3-inline-spec-editing-while-parked: done
+  6-4-skip-story-with-the-re-baseline: done
+  6-5-skip-epic: done
+  6-6-raise-budget-and-accept-a-protected-path-change: done
+  6-7-terminal-resume-command-session-flag-and-poll: done
+  6-8-uj-3-proven-end-to-end: done
   epic-6-retrospective: optional
 
   epic-7: backlog
-  7-1-codex-adapter-and-script: backlog
-  7-2-codex-readiness-passes-end-to-end: backlog
-  7-3-opencode-adapter-and-script-for-local-models: backlog
-  7-4-opencode-readiness-passes-end-to-end-with-host-model-serving: backlog
-  7-5-runs-history: backlog
-  7-6-trajectory-export: backlog
+  7-1-codex-adapter-and-script: done
+  7-2-codex-readiness-passes-end-to-end: done
+  7-3-opencode-adapter-and-script-for-local-models: done
+  7-4-opencode-readiness-passes-end-to-end-with-host-model-serving: done
+  7-5-runs-history: done
+  7-6-trajectory-export: done
   epic-7-retrospective: optional
 
   epic-8: backlog
-  8-1-run-diagram-view: backlog
-  8-2-active-operator-time: backlog
-  8-3-changed-since-last-opened-marks: backlog
-  8-4-board-list-view: backlog
-  8-5-login-lockout: backlog
-  8-6-per-project-monthly-spend: backlog
+  8-1-run-diagram-view: done
+  8-2-active-operator-time: done
+  8-3-changed-since-last-opened-marks: done
+  8-4-board-list-view: done
+  8-5-login-lockout: done
+  8-6-per-project-monthly-spend: done
   epic-8-retrospective: optional
