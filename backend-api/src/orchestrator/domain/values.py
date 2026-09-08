@@ -44,6 +44,29 @@ class Redispatch(BaseModel):
     max: int
 
 
+class Retry(BaseModel):
+    """A Template's own bounded re-run of the row that just failed (AD-9, FR-16).
+
+    `Redispatch`'s sibling, and deliberately its shape: both are a completed row asking the
+    walker for one more bounded execution, and neither carries a status — `apply_step_result`
+    counts the attempt, records it and re-queues the row (AD-8). The difference is where the
+    Run goes: a redispatch names an *earlier* row, a retry is this row again.
+
+    `prompt` is what the next attempt is told, resolved at plan time (AD-7): a prompt naming
+    `{{story.id}}` had to be filled in from the branch the plan was made on, not from
+    whatever the branch says an hour later.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    #: What the next attempt is asked, in front of the dispatch prompt or on its own.
+    prompt: str
+    #: How many times the row may re-run before it parks instead.
+    max: int
+    #: Whether the harness should continue the same session, where it can (AD-10).
+    resume_session: bool = True
+
+
 class Worktree(BaseModel):
     """One worktree a Run created, and what happened to the branch in it."""
 
@@ -91,12 +114,25 @@ class StepResult(BaseModel):
     #: Set when the result stops the Run — `apply_step_result` writes `run.park_kind`,
     #: `run.park_path` and the `gate_record` together from it (AD-8).
     park: Park | None = None
+    #: Set only alongside `park` (AD-11, FR-17): a routed stop (`blocked`, `checkpoint`, …)
+    #: that is *also* over budget keeps its own record and gets a second one for this, and
+    #: `run.park_kind` is rewritten to `budget` after it — `apply_step_result`'s own
+    #: `after_route` seam, because the machine has no `(needs_you, park)` pair to re-enter.
+    budget_park: Park | None = None
     #: Set only by a kind that routes backwards on failure.
     redispatch: Redispatch | None = None
+    #: Set only by a kind whose Template declared a `retry` contract and whose row has not
+    #: used it up; `None` on every result that is not asking to run again (FR-16).
+    retry: Retry | None = None
     #: The sentence the Operator reads on the row.
     reason: str | None = None
     #: The Run's own columns this result asks the writer to set; `None` when it asks for none.
     run_updates: RunUpdates | None = None
+    #: Whatever the stop needs kept on its gate record — AD-17's list of the protected paths
+    #: an attempt touched, so the Operator and 5.9's trajectory read the files and not only
+    #: the sentence. Written by `apply_step_result` alongside the park (AD-8); `{}` on every
+    #: result that carries nothing, and built per instance so two results never share one.
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class Signal(BaseModel):

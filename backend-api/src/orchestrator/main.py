@@ -54,6 +54,7 @@ from orchestrator.api.routers import (
     clone_check,
     graph,
     graph_text,
+    harness_readiness,
     harnesses,
     ping,
     projects,
@@ -66,7 +67,12 @@ from orchestrator.api.routers import (
     signals,
     templates,
 )
+from orchestrator.application.use_cases.harness_readiness_seed import (
+    seed_readiness_project,
+    sync_pins,
+)
 from orchestrator.application.use_cases.harnesses import HarnessPorts, seed_harnesses
+from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.templates import SeedResult, TemplatePorts, seed_shipped
 from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.ports.crypto import Crypto
@@ -76,6 +82,8 @@ from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db import (
     SQLAlchemyHarnessRepository,
+    SQLAlchemyProjectRepository,
+    SQLAlchemyRepositoryRepository,
     SQLAlchemyTemplateVersionRepository,
     SQLAlchemyUnitOfWork,
     create_engine_from,
@@ -84,6 +92,12 @@ from orchestrator.infrastructure.db import (
 from orchestrator.infrastructure.db import migrations as db_migrations
 from orchestrator.infrastructure.dbos import build_engine, launch_engine, schedule_jobs, serving
 from orchestrator.infrastructure.git import SubprocessGit
+
+# the registry moved to `infrastructure/harness/registry.py`, beside the adapter it names,
+# because `infrastructure/dbos/startup.py` builds the walker's ports and may not import
+# this module (AD-2). It is re-exported here because `tests/unit/test_main_harness_registry.py`
+# imports it from `orchestrator.main`.
+from orchestrator.infrastructure.harness import build_harnesses  # noqa: F401
 from orchestrator.infrastructure.logging import configure_logging
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.templates_loader import load_shipped_templates
@@ -167,19 +181,32 @@ HARNESS_VERSION_SETTINGS: dict[str, str] = {
 
 
 def seed_harness_table(settings: Settings) -> list[Harness]:
-    """Idempotent upsert of the three harness names and their pinned versions (AD-10).
-
-    Builds its own engine, the same way `seed_shipped_templates` does and for the same
-    reason: `run_migrations`'s call site takes exactly `settings`, and this function owns
-    the engine it opens.
+    """Idempotent upsert of the three harness names and pinned versions (AD-10), plus the
+    readiness bootstrapping this step now carries (SPEC CAP-8): `sync_pins` against the
+    *stored* version, the upsert, then the built-in `readiness` Project and Repository —
+    still the one name `run_migrations` calls, `test_main_templates_seed.py`'s frozen
+    three-collaborator test replacing this whole function, not a fourth collaborator to it.
     """
     pins = {name: getattr(settings, field) for name, field in HARNESS_VERSION_SETTINGS.items()}
     engine = create_engine_from(settings)
     try:
         session_factory = create_session_factory(engine)
         with SQLAlchemyUnitOfWork(session_factory) as uow:
-            ports = HarnessPorts(uow=uow, harnesses=SQLAlchemyHarnessRepository(uow.session))
-            return seed_harnesses(ports, pins)
+            hports = HarnessPorts(uow=uow, harnesses=SQLAlchemyHarnessRepository(uow.session))
+            sync_pins(hports, pins)
+            seeded = seed_harnesses(hports, pins)
+            pports = ProjectPorts(
+                uow=uow,
+                projects=SQLAlchemyProjectRepository(uow.session),
+                crypto=FernetCrypto(settings.orchestrator_secret_key.get_secret_value()),
+                clock=SystemClock(),
+                repositories=SQLAlchemyRepositoryRepository(uow.session),
+                git=SubprocessGit(settings.github_token.get_secret_value()),
+            )
+            seed_readiness_project(
+                pports, work_dir=settings.work_dir, bmad_version=settings.bmad_version
+            )
+        return seeded
     finally:
         engine.dispose()
 
@@ -307,6 +334,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
     # checked first (`api/routers/run.py`'s own docstring; `test_run_router.py` pins it)
     for router in (run.router, run_detail.router, signals.router, harnesses.router, queue.router):
         _mount(app, router)
+    _mount(app, harness_readiness.router)
 
     return app
 

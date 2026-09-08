@@ -18,13 +18,16 @@ import type { components } from '../../api/schema';
 import type { RunDetailOut, Token } from '../../lib/run/detail';
 import {
   bannerText,
+  blockedSignals,
   currentStepPath,
   logTail,
+  misconfiguredFiles,
   stepAt,
   stopKind,
   stopSignals,
 } from '../../lib/run/detail';
 import { signalLabel, type SignalKind } from '../../lib/run/signals';
+import QuestionBlock from './QuestionBlock';
 
 type ProblemDetail = components['schemas']['ProblemDetail'];
 
@@ -51,14 +54,27 @@ export default function StopBody({
   const kind = stopKind(detail, token);
   if (kind === null) return null;
 
-  const signals = stopSignals(detail.admitted_signals);
+  const isQuestion = kind === 'blocked' || kind === 'misconfigured';
+  const signals = isQuestion
+    ? blockedSignals(detail.admitted_signals)
+    : stopSignals(detail.admitted_signals);
   const canCancel = detail.admitted_signals.includes('cancel');
   const tail = logTail(detail);
   const path = currentStepPath(detail);
   const row = stepAt(detail.steps, path);
+  const files = kind === 'misconfigured' ? misconfiguredFiles(detail.alert?.reason) : [];
 
   return (
     <div className="wf-stop" data-testid={`wf-stop-${kind}`}>
+      {kind === 'blocked' && detail.alert ? <QuestionBlock alert={detail.alert} /> : null}
+      {kind === 'misconfigured' ? <p className="wf-stop-reason">{bannerText(detail)}</p> : null}
+      {files.length > 0 ? (
+        <ul className="wf-stop-files" data-testid="wf-stop-files">
+          {files.map((file) => (
+            <li key={file}>{file}</li>
+          ))}
+        </ul>
+      ) : null}
       {kind === 'plan_stale' ? <PlanStaleBody detail={detail} /> : null}
       {kind === 'push_rejected' ? <p className="wf-stop-reason">{RESOLVE_LINE}</p> : null}
       {kind === 'checkpoint' ? <p className="wf-stop-reason">{bannerText(detail)}</p> : null}

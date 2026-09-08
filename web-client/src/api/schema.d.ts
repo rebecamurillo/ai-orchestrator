@@ -26,6 +26,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/harnesses/{name}/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one harness's current readiness
+         * @description The same row `GET /harnesses` lists, addressed by name.
+         */
+        get: operations["get_readiness_api_v1_harnesses__name__readiness_get"];
+        put?: never;
+        /**
+         * Dispatch a readiness Run for one harness
+         * @description Dispatch an `epic@1` Run of the fixture Repository, `skip_harness_check` bypassing
+         *     the disabled-harness pre-flight line (AD-10) so a harness never yet enabled can still
+         *     run the Run that would enable it.
+         */
+        post: operations["start_readiness_api_v1_harnesses__name__readiness_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ping": {
         parameters: {
             query?: never;
@@ -514,12 +540,26 @@ export interface components {
     schemas: {
         /** AlertOut */
         AlertOut: {
+            attribution?: components["schemas"]["AttributionOut"] | null;
             /** Park Kind */
             park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | null;
             /** Reason */
             reason: string | null;
             /** Token */
             token: string;
+        };
+        /**
+         * AttributionOut
+         * @description The blocked Question's eyebrow (5.10, SPEC CAP-10): `Agent · {harness} · {model} ·
+         *     {ended_at}`.
+         */
+        AttributionOut: {
+            /** Ended At */
+            ended_at: string | null;
+            /** Harness */
+            harness: string | null;
+            /** Model */
+            model: string | null;
         };
         /** BoardColumnsOut */
         BoardColumnsOut: {
@@ -714,6 +754,18 @@ export interface components {
             /** Value */
             value?: string | null;
         };
+        /**
+         * EvaluationLineOut
+         * @description One line `evaluate` produced: `{check, ok, text}`, the brief's own literal shape.
+         */
+        EvaluationLineOut: {
+            /** Check */
+            check: string;
+            /** Ok */
+            ok: boolean;
+            /** Text */
+            text: string;
+        };
         /** GateRecordOut */
         GateRecordOut: {
             /**
@@ -786,6 +838,10 @@ export interface components {
             failing_check: string | null;
             /** Last Readiness At */
             last_readiness_at: string | null;
+            /** Last Readiness Run Id */
+            last_readiness_run_id?: string | null;
+            /** Lines */
+            lines?: components["schemas"]["EvaluationLineOut"][];
             /** Name */
             name: string;
             /** Version Pin */
@@ -844,6 +900,8 @@ export interface components {
         };
         /** LatestAttemptOut */
         LatestAttemptOut: {
+            /** Cost Provisional */
+            cost_provisional?: boolean;
             /** Cost Usd */
             cost_usd: string | null;
             /** Ended At */
@@ -1154,6 +1212,8 @@ export interface components {
          *     to justify why *that* read is allowed to lie about what is stored.
          */
         ProjectRead: {
+            /** Builtin */
+            builtin?: boolean | null;
             /** Context Paths */
             context_paths: string[];
             /** Context Text */
@@ -1613,6 +1673,8 @@ export interface components {
         StepRowOut: {
             /** Attempts */
             attempts: number;
+            /** Cost Usd */
+            cost_usd?: string;
             /** Gate */
             gate: string;
             /** Kind */
@@ -1633,6 +1695,8 @@ export interface components {
         };
         /** StoryCellOut */
         StoryCellOut: {
+            /** Cost Usd */
+            cost_usd?: string;
             /** Epic Index */
             epic_index: number;
             /** State */
@@ -1760,6 +1824,120 @@ export interface operations {
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_readiness_api_v1_harnesses__name__readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No harness has that name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `name` does not match the shape below. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    start_readiness_api_v1_harnesses__name__readiness_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateRunOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The readiness Project or Repository is not seeded. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A non-terminal readiness Run for this harness already exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `name` does not match the shape below. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

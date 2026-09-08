@@ -128,6 +128,113 @@ another Run's spend. The spend key is the opposite: it reads every user's rows a
 a harness environment. Putting the master key in both places works and is a recorded exposure,
 not the intended setup.
 
+#### Verified 2026-09-08 (story 5.11)
+
+The separation was checked by calling the running proxy with each key in turn, not inferred
+from the configuration. Both commands below are the ones to re-run after rotating a key.
+
+```bash
+# 1. mint the harness key (model routes only). Keep the returned `key` as LITELLM_API_KEY.
+curl -sX POST http://localhost:4000/key/generate \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"key_type": "llm_api", "key_alias": "ai-orchestrator-harness"}'
+
+# 2. prove it can reach the model routes …
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $LITELLM_API_KEY" http://localhost:4000/v1/models          # 200
+
+# 3. … and cannot reach spend.
+curl -s -w '\nHTTP %{http_code}\n' \
+  -H "Authorization: Bearer $LITELLM_API_KEY" \
+  "http://localhost:4000/spend/logs/v2?start_date=2026-09-01&end_date=2026-09-09"      # 403
+
+# 4. prove the spend key can.
+curl -s -w '\nHTTP %{http_code}\n' \
+  -H "Authorization: Bearer $LITELLM_SPEND_KEY" \
+  "http://localhost:4000/spend/logs/v2?start_date=2026-09-01&end_date=2026-09-09"      # 200
+```
+
+Step 3's body is the proxy's own words, and is what "the harness key cannot read spend" means
+in practice:
+
+```json
+{"detail":"Virtual key is not allowed to call this route. Only allowed to call routes: ['llm_api_routes']. Tried to call route: /spend/logs/v2"}
+```
+
+`start_date` and `end_date` are required by `/spend/logs/v2`; omitting them answers `400`, not
+`401`, which is why a probe that omits them proves nothing about authorisation.
+
+### Upstream provider keys are not optional for a readiness run
+
+`host/.env` ships `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `OMLX_API_KEY` as `not-set`, and
+its own comment says the proxy still starts, answers `/health` and lists `/v1/models` without
+them — which is all `scripts/harness/<name>.sh doctor` checks. That is enough to bring the
+stack up and **not** enough to run a harness: every entry in `model_list` fails at the first
+completion. Observed 2026-09-08 with the harness key:
+
+| Model | Result |
+| --- | --- |
+| `claude-sonnet-4-6` | `401` — upstream Anthropic: `invalid x-api-key` |
+| `gpt-5.4` | `401` — upstream OpenAI: `Incorrect API key provided: not-set` |
+| `local-coder`, `local-general` | `404` — `OMLX_BASE_URL` resolves to the orchestrator's own API port; oMLX is not running |
+
+So before `POST /harnesses/{name}/readiness` can reach `enabled`, at least one of these has to
+be a real credential (or oMLX has to be up on a port nothing else holds). `curl -s -H
+"Authorization: Bearer $LITELLM_API_KEY" -X POST http://localhost:4000/v1/messages -H
+'anthropic-version: 2023-06-01' -d '{"model":"<name>","max_tokens":16,"messages":[{"role":
+"user","content":"say pong"}]}'` is the one-line check that a model is actually completable —
+`/v1/models` listing it is not the same thing.
+
+Claude Code additionally asks for **its own default model** when the Template binds none; on
+2.1.258 that is `claude-opus-5`, which this `model_list` does not serve, so the call fails with
+`Invalid model name passed in model=claude-opus-5` even when the upstream key is good. Either
+add that name to `model_list` or bind a model on the Run.
+
+### Or authenticate on a Claude subscription instead (`CLAUDE_SUBSCRIPTION_AUTH`)
+
+The section above needs a provider API key. If you have a Claude Max or Pro subscription and
+would rather spend that than an API key, the Gateway can forward Claude Code's own OAuth
+token upstream instead — this is the one path to a green `claude` readiness run that needs no
+`ANTHROPIC_API_KEY` at all.
+
+It is a *different* authentication topology, not an extra header, and the difference is which
+credential holds `Authorization`:
+
+| | API-key mode (default) | Subscription mode |
+| --- | --- | --- |
+| `Authorization` carries | the Gateway virtual key, via `ANTHROPIC_AUTH_TOKEN` | Claude Code's subscription OAuth token |
+| the virtual key travels in | `Authorization` | `x-litellm-api-key` — because `Authorization` is taken |
+| LiteLLM reaches Anthropic with | `ANTHROPIC_API_KEY` from `host/.env` | the forwarded OAuth token |
+
+Four steps, and the first two are on this host:
+
+1. In `host/litellm.config.yaml`, uncomment `forward_client_headers_to_llm_api: true` under
+   `general_settings` and the `claude-subscription` entry in `model_list`. Restart the proxy.
+2. Note what that switch does: it forwards client headers upstream for **every** route on
+   this proxy, not only the Claude one. This proxy is single-tenant and reachable only from
+   the orchestrator (see *Egress*), which is what makes it acceptable here.
+3. Set `CLAUDE_SUBSCRIPTION_AUTH=true` in the stack's own `.env` and restart `backend-api`.
+   The adapter then stops exporting `ANTHROPIC_AUTH_TOKEN` — set, it would override the
+   login and the subscription would never be used — and moves the virtual key into the
+   `x-litellm-api-key` header.
+4. Log Claude Code in, once, inside the container:
+   `docker compose exec backend-api claude login` (it prints a URL to open, and stores the
+   credentials under `AGENT_HOME`, which is a named volume and survives `make down`). Then
+   bind the Run to the `claude-subscription` model name — Claude Code's own default model is
+   not in `model_list`, the same trap the section above describes.
+
+**What this changes about money.** A subscription is not metered per request, so the dollar
+figures LiteLLM writes to `/spend/logs/v2` are computed from its price table rather than from
+anything you are billed. The Run budget, the `--max-budget-usd` cap and the FR-17 park all go
+on working, and all of them are then enforcing a notional cost. Nothing in the orchestrator
+changes to reflect that — deliberately, and recorded here so the numbers on screen are read
+for what they are.
+
+**Unverified end to end.** The repo half is tested
+(`backend-api/tests/unit/test_harness_env_subscription.py`); the host half above is written
+from LiteLLM's own guide and has not been run against a live subscription here.
+
 ## Langfuse
 
 Langfuse 4.27.0, self-hosted with its own compose file, on port 3000. The stack sends traces to
@@ -138,6 +245,35 @@ derives that header at container start; nothing writes a key into a config file.
 Create one project, take its public and secret keys, and put them in `.env`.
 `LANGFUSE_ENVIRONMENT` separates this instance's traces from anything else sending to the same
 server.
+
+### `events_only` mode blocks the readiness trace check (observed 2026-09-08)
+
+This instance answers every public **read** API with
+
+```
+404 {"message":"This endpoint is not available on deployments running in Langfuse v4 events_only mode…"}
+```
+
+— `GET /api/public/traces`, `GET /api/public/traces/{id}` and `GET /api/public/observations`
+alike. OTLP **ingestion** is unaffected; only reading back is gone.
+
+That matters beyond the UI. `Tracer.attempt_observed(run_id, attempt_id)` — the readiness
+check that proves the harness's spans landed under the attempt span (AD-10, AD-11, PRD §8
+item 2) — is implemented as `api.observations.get_many(trace_id=…)` and answers `False` on any
+query failure rather than raising (SM-3, deliberate). So on a deployment in this mode the
+readiness line `trace observed` can never be `ok`, and `POST /harnesses/{name}/readiness` can
+never reach `enabled`, however well tracing itself is working.
+
+`GET /api/public/health` and `GET /api/public/projects` both still answer `200`, so a
+credential check passes and gives no hint of this. Check it directly:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -u "$LANGFUSE_PUBLIC_KEY:$LANGFUSE_SECRET_KEY" \
+  "http://localhost:3000/api/public/observations?limit=1"        # 200 = readable, 404 = events_only
+```
+
+Either run this Langfuse outside `events_only` mode, or `attempt_observed` needs a source
+other than the read API. Recorded, not decided.
 
 ## oMLX
 

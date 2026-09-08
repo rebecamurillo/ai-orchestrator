@@ -33,6 +33,7 @@ export type GateRecordOut = components['schemas']['GateRecordOut'];
 export type StoryCellOut = components['schemas']['StoryCellOut'];
 export type CostOut = components['schemas']['CostOut'];
 export type AlertOut = components['schemas']['AlertOut'];
+export type AttributionOut = components['schemas']['AttributionOut'];
 export type ParkKind = NonNullable<AlertOut['park_kind']>;
 export type SignalKind = RunDetailOut['admitted_signals'][number];
 export type RunStatus = RunDetailOut['run']['status'];
@@ -304,4 +305,41 @@ export function stopKind(detail: RunDetailOut, token: Token): ParkKind | 'failed
  * boardRequestPath`'s own reason. */
 export function detailRequestPath(runId: string): string {
   return `/api/runs/${runId}/detail`;
+}
+
+/** The Question block's own eyebrow (5.10, UX-DR9): `Agent · {harness} · {model} ·
+ * {ended_at}`, `—` for a part the parked row's attempt never got far enough to record. */
+export function questionEyebrow(attribution: AttributionOut | null | undefined): string {
+  const harness = attribution?.harness ?? '—';
+  const model = attribution?.model ?? '—';
+  const endedAt = attribution?.ended_at ?? '—';
+  return `Agent · ${harness} · ${model} · ${endedAt}`;
+}
+
+//: `rules/routing.py::AMBIGUOUS_STORY_FILE` is the only `misconfigured` condition that names
+//: files, always as `ambiguous story file: {comma-separated names}`.
+const AMBIGUOUS_PREFIX = 'ambiguous story file: ';
+
+/** The file list a `misconfigured` condition names, or `[]` — every condition but the
+ * ambiguous-file one names none (5.10, UX-DR10). */
+export function misconfiguredFiles(reason: string | null | undefined): string[] {
+  if (!reason || !reason.startsWith(AMBIGUOUS_PREFIX)) return [];
+  return reason
+    .slice(AMBIGUOUS_PREFIX.length)
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+}
+
+//: The extra kinds a `blocked`/`misconfigured` stop's own button row offers (5.10, SPEC
+//: CAP-10) — `retry` (admitted for `misconfigured` only) and the two skips. Kept apart from
+//: `EFFECTIVE_KINDS`/`hasEffect` above: those stay the exact three kinds the frozen
+//: `run-detail-lib.test.ts` asserts this epic gives every other park kind.
+const BLOCKED_EXTRA_KINDS: readonly SignalKind[] = ['retry', 'skip_story', 'skip_epic'];
+
+/** `admitted_signals`, narrowed to the kinds a `blocked`/`misconfigured` stop's own button
+ * row renders — never `answer` (Epic 6), never `cancel` (`StopBody`'s own dedicated button,
+ * `stopSignals`'s own precedent). */
+export function blockedSignals(admitted: readonly SignalKind[]): SignalKind[] {
+  return admitted.filter((kind) => BLOCKED_EXTRA_KINDS.includes(kind));
 }

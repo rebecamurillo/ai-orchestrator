@@ -24,12 +24,14 @@ from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
+from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
     GateRecordRepository,
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.trajectories import TrajectoryRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.statuses import (
     Actor,
@@ -66,7 +68,12 @@ RUN_EXPIRED = "parked 30 days"
 
 @dataclass(frozen=True)
 class WriterPorts:
-    """The four repositories every status write goes through, plus the scope and the clock."""
+    """The four repositories every status write goes through, plus the scope and the clock.
+
+    `git` and `trajectories` (5.9) are the two `record_trajectory` needs beyond these four —
+    both default `None` and degrade like `tracer`/`spend_writes`, so every `WriterPorts(...)`
+    construction that predates this story keeps working unchanged.
+    """
 
     runs: RunRepository
     steps: StepRunRepository
@@ -74,6 +81,8 @@ class WriterPorts:
     records: GateRecordRepository
     uow: UnitOfWork
     clock: Clock
+    git: Git | None = None
+    trajectories: TrajectoryRepository | None = None
 
 
 def require_run(ports: WriterPorts, run_id: UUID) -> Run:
@@ -157,12 +166,22 @@ def clear_park(now: datetime | None = None) -> dict[str, Any]:
     return cleared
 
 
-def park_run(ports: WriterPorts, run: Run, park: Park, attempt_n: int | None = None) -> Run:
+def park_run(
+    ports: WriterPorts,
+    run: Run,
+    park: Park,
+    attempt_n: int | None = None,
+    payload: dict[str, Any] | None = None,
+) -> Run:
     """Stop a Run for the Operator: the three park fields and one record, together.
 
     The only way `run.park_kind`, `run.park_path` and `run.park_reason` are written, so a
     parked Run always carries the three of them and the record that says the same thing.
     `path` is the park's own when it names one and the caller's row otherwise.
+
+    `payload` is what the stop needs kept beyond its sentence — AD-17's list of the protected
+    paths an attempt touched. It goes on the record, which is append-only, rather than on a
+    Run column the next park would overwrite.
     """
     parked = set_run(
         ports,
@@ -181,6 +200,7 @@ def park_run(ports: WriterPorts, run: Run, park: Park, attempt_n: int | None = N
             path=park.path,
             text=park.reason,
             attempt_n=attempt_n,
+            payload=payload or {},
         ),
     )
     return parked

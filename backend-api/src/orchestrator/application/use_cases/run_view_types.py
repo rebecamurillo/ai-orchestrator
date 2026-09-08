@@ -25,6 +25,7 @@ from orchestrator.domain.ports.repositories import (
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.statuses import ParkKind, RunStatus, SignalKind
 
 
@@ -40,6 +41,10 @@ class RunViewPorts:
     repositories: RepositoryRepository
     logs: LogReader
     clock: Clock
+    #: `None` degrades to `cost.trace_url = None` (AD-11) — every frozen `RunViewPorts(...)`
+    #: construction predating this story (`test_run_views.py`'s own `harness` fixture)
+    #: keeps working unchanged. Production wiring always sets one.
+    tracer: Tracer | None = None
 
 
 @dataclass(frozen=True)
@@ -118,10 +123,24 @@ class Header:
 
 
 @dataclass(frozen=True)
+class Attribution:
+    """Who a `blocked` park's Question is attributed to (SPEC CAP-10): the parked row's own
+    latest Attempt, whose `harness`/`model`/`ended_at` are already settled by the time a
+    Story can block (`mark_finished` before `apply_step_result` ever routes one) — `None`
+    only for a park kind whose row never ran an Attempt."""
+
+    harness: str | None
+    model: str | None
+    ended_at: datetime | None
+
+
+@dataclass(frozen=True)
 class Alert:
     token: str
     reason: str | None
     park_kind: ParkKind | None
+    #: `None` predates this story; every `blocked` park now carries one (5.10).
+    attribution: Attribution | None = None
 
 
 @dataclass(frozen=True)
@@ -135,6 +154,8 @@ class LatestAttempt:
     exit_code: int | None
     cost_usd: Decimal | None
     log_tail: list[str]
+    #: True while `cost_usd` is the harness's own estimate (5.10, off `Attempt.cost_provisional`).
+    cost_provisional: bool = False
 
 
 @dataclass(frozen=True)
@@ -149,6 +170,8 @@ class StepRowView:
     reason: str | None
     attempts: int
     latest: LatestAttempt | None
+    #: This row's own attempts, summed (5.3). Defaulted: predates this story.
+    cost_usd: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)
@@ -156,6 +179,8 @@ class StoryCell:
     epic_index: int
     story_id: str
     state: str  # "done" | "current" | "future" | "skipped"
+    #: This frame's own rows' attempts, summed (5.3). Defaulted: predates this story.
+    cost_usd: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)
@@ -167,9 +192,8 @@ class Cost:
     wall_clock_seconds: float
     active_seconds: int
     provisional: bool
-    #: Always `None` in this epic (no tracing UI yet, SPEC CAP-12); typed `str | None`
-    #: rather than the narrower `None` so a later story can populate it without widening
-    #: this field's type again.
+    #: The Langfuse UI link for this Run's trace (AD-11), or `None` when `run.trace_id` was
+    #: never set (no tracer wired at Run creation) or no `Tracer` is wired on this read.
     trace_url: str | None = None
 
 

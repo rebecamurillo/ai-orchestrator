@@ -23,10 +23,20 @@ class FakeWorkspace:
     """An in-memory tree: `path -> text`, rooted and traversal-checked like the real one."""
 
     def __init__(
-        self, root: str | None = "/work/wt/fake", files: dict[str, str] | None = None
+        self,
+        root: str | None = "/work/wt/fake",
+        files: dict[str, str] | None = None,
+        mtimes: dict[str, float] | None = None,
     ) -> None:
         self._rooted = root is not None
         self._files: dict[str, str] = dict(files or {})
+        #: Public, so a test can populate it on a workspace someone else built; a file the
+        #: mapping does not name is `0.0`, which is what the real adapter answers for one
+        #: that is not there.
+        self.mtimes: dict[str, float] = dict(mtimes or {})
+        #: Every pattern `glob` was asked, in order — "the row's own glob was the one
+        #: asked" is an assertion about the call, not about what came back.
+        self.globbed: list[str] = []
 
     def read(self, path: str) -> str | None:
         self._checked(path)
@@ -42,13 +52,19 @@ class FakeWorkspace:
 
     def glob(self, pattern: str) -> tuple[str, ...]:
         self._checked(pattern)
+        self.globbed.append(pattern)
         return tuple(sorted(path for path in self._files if fnmatch(path, pattern)))
+
+    def mtime(self, path: str) -> float:
+        self._checked(path)
+        return self.mtimes.get(path, 0.0)
 
     def move(self, src: str, dst: str) -> None:
         self._checked(src)
         self._checked(dst)
         if src in self._files:
             self._files[dst] = self._files.pop(src)
+            self.mtimes[dst] = self.mtimes.pop(src, 0.0)
 
     def tree(self, prefix: str = "") -> tuple[TreeEntry, ...]:
         self._checked(prefix or ".")

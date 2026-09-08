@@ -73,6 +73,9 @@ NEEDS_YOU = "needs_you"
 #: The status the 30-day deadline leaves the Run in when nothing beat it.
 FAILED = "failed"
 
+#: The status an operator `cancel` signal leaves the Run in.
+CANCELLED = "cancelled"
+
 #: The key the Operator's signal travels under in a `recv` message.
 SIGNAL_KIND = "kind"
 
@@ -87,10 +90,18 @@ WALK_ENDED = "walk ended"
 #: Repository's clone check exactly as informative as it already was.
 DONE = "done"
 
+#: `done`, `failed` and `cancelled` — the module docstring's own point 6. What `on_terminal`
+#: (SPEC CAP-8) fires on; `run_finished`'s own gate above stays `DONE`-only, untouched.
+TERMINAL = frozenset({DONE, FAILED, CANCELLED})
+
 #: What the walker logs when the completion hook itself raises — a best-effort refresh of a
 #: Repository's clone check, never a reason to jeopardise a status transition that is
 #: already durable by the time this call is made.
 RUN_FINISHED_HOOK_FAILED = "run finished hook failed"
+
+#: What the walker logs when the readiness hook itself raises (SPEC CAP-8) — the same
+#: best-effort tolerance `RUN_FINISHED_HOOK_FAILED` states, for the second hook.
+ON_TERMINAL_HOOK_FAILED = "on terminal hook failed"
 
 
 @dataclass(frozen=True)
@@ -107,6 +118,13 @@ class WalkerDeps:
     #: leaves it `done`. `None` in every process that wires no such effect — every unit test
     #: among them, and any process built before this hook existed.
     run_finished: Callable[[UUID], None] | None = None
+    #: The readiness hook (SPEC CAP-8): called with a Run's id whenever a step of this walk
+    #: leaves it in *any* terminal status — `done`, `failed` or `cancelled`. A second,
+    #: independent hook rather than a second effect on `run_finished`, because that one's
+    #: own `DONE`-only gate is a frozen test (`_finish`'s own docstring says which). `None`
+    #: in every process that wires no such effect — every unit test among them, and any
+    #: process built before this hook existed.
+    on_terminal: Callable[[UUID], None] | None = None
 
 
 def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]:
@@ -224,21 +242,37 @@ def _close_run(deps: WalkerDeps) -> Callable[[str], str]:
 
 
 def _finish(deps: WalkerDeps, run_id: str, status: str) -> None:
-    """The completion hook (4.10), run from inside the step that just reached `done`.
+    """The two completion hooks (4.10, SPEC CAP-8), run from inside the step that just left
+    the Run `done` or otherwise terminal.
 
     Not a sixth declared step of its own: `test_dbos_walker.py::
     test_the_walk_declares_five_steps_and_one_workflow` pins the walk at exactly five, and
-    that test is frozen (hard rule 1). A best-effort call — its own failure is logged and
-    swallowed rather than raised, because by the time it runs the Run's own status is already
-    durable, and retrying the step that reached `done` over a hook that only refreshes a
-    Repository's clone check would risk re-applying a transition that already happened.
+    that test is frozen (hard rule 1). Each call is best-effort — its own failure is logged
+    and swallowed rather than raised, because by the time either runs the Run's own status
+    is already durable, and retrying the step that reached it over a hook that only
+    refreshes a read model would risk re-applying a transition that already happened.
+
+    `run_finished`'s own `DONE`-only gate is exactly what it always was:
+    `tests/unit/test_dbos_walker_on_finished.py::
+    test_the_hook_is_not_called_when_the_run_does_not_reach_done` pins it, names no
+    successor story, and this function still returns before calling it for anything else.
+    `on_terminal` is a second, independent call on the wider `TERMINAL` set, not a second
+    effect folded into that gate.
     """
-    if status != DONE or deps.run_finished is None:
+    if status == DONE:
+        _call(deps.run_finished, run_id, RUN_FINISHED_HOOK_FAILED)
+    if status in TERMINAL:
+        _call(deps.on_terminal, run_id, ON_TERMINAL_HOOK_FAILED)
+
+
+def _call(hook: Callable[[UUID], None] | None, run_id: str, failure_key: str) -> None:
+    """One completion hook, called if wired, its own failure logged and swallowed."""
+    if hook is None:
         return
     try:
-        deps.run_finished(UUID(run_id))
+        hook(UUID(run_id))
     except Exception:
-        log.exception(RUN_FINISHED_HOOK_FAILED, run_id=run_id)
+        log.exception(failure_key, run_id=run_id)
 
 
 def _expire(deps: WalkerDeps) -> Callable[[str], str]:

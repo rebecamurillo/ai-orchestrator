@@ -29,6 +29,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
+from orchestrator.domain.ports.git import Change, ChangeKind
+
 #: Where a base clone's origin refs live. The same word `subprocess_git.py` uses.
 ORIGIN = "origin"
 
@@ -44,6 +46,24 @@ NUL = "\0"
 
 #: Everything a `stage` stages when the caller named no pathspec.
 EVERYTHING = "-A"
+
+#: What `status` asks for, and both are AD-17's doing. Porcelain collapses a wholly untracked
+#: *directory* to one `?? dir/` entry, so an `AGENTS.md` an agent created inside a folder it
+#: also created would never be named and the frozen-anchor rule could not see it;
+#: `--untracked-files=all` enumerates the files themselves. And porcelain C-quotes any path
+#: holding non-ASCII or special bytes (`"sp\303\251cs/SPEC.md"`), which is a *different
+#: string* from the one the anchor set and the `AGENTS.md` basename are compared against —
+#: `core.quotePath=false` prints the bytes, the same reason `-z` is used everywhere else here.
+UNTRACKED_ALL = "--untracked-files=all"
+RAW_PATHS = ("-c", "core.quotePath=false")
+
+#: `--name-status` letters this system distinguishes; anything else — `M`, `T`, `U` — is a
+#: modification, which is what AD-17 needs to know about a path that was already there.
+STATUS_KINDS: dict[str, ChangeKind] = {"A": "added", "D": "deleted"}
+
+#: The two letters that carry a second path: git writes `R100 old new`, and AD-17 reads that
+#: as the old path gone and the new one created.
+TWO_PATH_STATUSES = "RC"
 
 
 class _Runner(Protocol):
@@ -118,8 +138,13 @@ class WorktreeCommands:
         return fetched + merged
 
     def status(self: _Runner, worktree: Path) -> str:
-        """`git status --porcelain`: the empty string when the worktree is clean."""
-        return self._run("-C", str(worktree), "status", "--porcelain")
+        """`git status --porcelain`: the empty string when the worktree is clean.
+
+        Every untracked file by name and every path unquoted — see `UNTRACKED_ALL` and
+        `RAW_PATHS` above for why AD-17 needs both. The return type is unchanged: one string,
+        one line per path, which is what `git_commit.py` and `rules/protected_paths.py` read.
+        """
+        return self._run("-C", str(worktree), *RAW_PATHS, "status", "--porcelain", UNTRACKED_ALL)
 
     def stage(self: _Runner, worktree: Path, pathspec: str | None = None) -> None:
         """`git add -A`, over everything or over one pathspec the caller named."""
@@ -157,6 +182,35 @@ class WorktreeCommands:
         )
         names = f"{changed or ''}{NUL}{untracked}".split(NUL)
         return tuple(dict.fromkeys(name for name in names if name))
+
+    def diff_changes(
+        self: _Runner, worktree: Path, from_sha: str, to_sha: str
+    ) -> tuple[Change, ...]:
+        """`git diff --name-status -z {from} {to}` — a bounded range, with each path's kind.
+
+        `-z` for the reason `diff_names` uses it, and it changes the parsing: with `-z` git
+        writes the status and each path as separate NUL-terminated fields rather than as one
+        tab-separated line, so a rename arrives as three fields and everything else as two.
+        A ref the repository does not hold is `_attempt`'s `None`, which is `()` here.
+        """
+        raw = self._attempt(
+            "-C", str(worktree), "diff", "--name-status", "-z", from_sha, to_sha, END_OF_OPTIONS
+        )
+        fields = [field for field in (raw or "").split(NUL) if field]
+        changes: list[Change] = []
+        index = 0
+        while index + 1 < len(fields):
+            letter = fields[index][:1]
+            if letter in TWO_PATH_STATUSES and index + 2 < len(fields):
+                changes.append(Change(path=fields[index + 1], kind="deleted"))
+                changes.append(Change(path=fields[index + 2], kind="added"))
+                index += 3
+                continue
+            changes.append(
+                Change(path=fields[index + 1], kind=STATUS_KINDS.get(letter, "modified"))
+            )
+            index += 2
+        return tuple(changes)
 
     def push(self: _Runner, worktree: Path, branch: str, set_upstream: bool) -> str:
         """`git push origin {branch}`, with `-u` when this Run created the branch. Never forced."""

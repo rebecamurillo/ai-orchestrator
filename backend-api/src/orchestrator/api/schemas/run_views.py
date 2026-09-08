@@ -8,6 +8,10 @@ to `MoneyStr`/`UtcTimestamp` (`api/schemas/common.py`).
 `RunDetailSummaryOut` is `RunSummaryOut` (`api/schemas/runs.py`) plus the extra fields the
 Run detail's own `run` field carries — a subclass rather than a fifth restatement of
 `RunSummaryOut`'s eleven fields, since it *is* that shape with more on it.
+
+The Board's own shapes (`ProgressOut` through `BoardOut`) moved to `api/schemas/board_view.py`
+on line count alone (5.10) — imported back below so every existing import of `BoardOut`/
+`CardOut` off this module keeps resolving.
 """
 
 from __future__ import annotations
@@ -16,18 +20,23 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from orchestrator.api.schemas.board_view import (
+    BoardColumnsOut,
+    BoardCountsOut,
+    BoardOut,
+    CardOut,
+    ProgressOut,
+)
 from orchestrator.api.schemas.common import MoneyStr, UtcTimestamp
 from orchestrator.api.schemas.runs import RunSummaryOut
 from orchestrator.application.use_cases.run_views import (
     Alert,
-    BoardView,
-    Card,
+    Attribution,
     Cost,
     Header,
     LatestAttempt,
-    Progress,
     RunDetailView,
     StepRowView,
     StoryCell,
@@ -35,8 +44,17 @@ from orchestrator.application.use_cases.run_views import (
 )
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
-from orchestrator.domain.statuses import Actor, GateEvent, ParkKind, RunStatus, SignalKind
+from orchestrator.domain.statuses import Actor, GateEvent, ParkKind, SignalKind
 from orchestrator.domain.values import Worktree
+
+__all__ = [
+    "BoardColumnsOut",
+    "BoardCountsOut",
+    "BoardOut",
+    "CardOut",
+    "ProgressOut",
+    "RunDetailOut",
+]
 
 
 class WorktreeOut(BaseModel):
@@ -55,103 +73,11 @@ class WorktreeOut(BaseModel):
         )
 
 
-class ProgressOut(BaseModel):
-    epics_done: int | None
-    epics_total: int | None
-    stories_done: int
-    stories_total: int
-    links: int
-
-    @classmethod
-    def of(cls, progress: Progress) -> ProgressOut:
-        return cls(
-            epics_done=progress.epics_done,
-            epics_total=progress.epics_total,
-            stories_done=progress.stories_done,
-            stories_total=progress.stories_total,
-            links=progress.links,
-        )
-
-
-# ── the Board (SPEC CAP-12, CAP-14) ───────────────────────────────────────────────────────
-
-
-class CardOut(BaseModel):
-    id: UUID
-    token: str
-    status: RunStatus
-    park_kind: ParkKind | None
-    branch: str
-    project_name: str
-    repository_slug: str
-    current_step_label: str
-    harness: str | None
-    template: str
-    version: int
-    progress: ProgressOut | None
-    kind_label: str | None
-    age_seconds: float
-    needs_you_since: UtcTimestamp | None
-
-    @classmethod
-    def of(cls, card: Card) -> CardOut:
-        return cls(
-            id=card.id,
-            token=card.token,
-            status=card.status,
-            park_kind=card.park_kind,
-            branch=card.branch,
-            project_name=card.project_name,
-            repository_slug=card.repository_slug,
-            current_step_label=card.current_step_label,
-            harness=card.harness,
-            template=card.template,
-            version=card.version,
-            progress=None if card.progress is None else ProgressOut.of(card.progress),
-            kind_label=card.kind_label,
-            age_seconds=card.age_seconds,
-            needs_you_since=card.needs_you_since,
-        )
-
-
-class BoardColumnsOut(BaseModel):
-    queued: list[CardOut]
-    running: list[CardOut]
-    needs_you: list[CardOut]
-    done: list[CardOut]
-    failed: list[CardOut]
-
-
-class BoardCountsOut(BaseModel):
-    running: int
-    queued: int
-    needs_you: int
-
-
-class BoardOut(BaseModel):
-    """`GET /runs?view=board`. Five columns, always present; `counts` sums three of them."""
-
-    columns: BoardColumnsOut
-    counts: BoardCountsOut
-    generated_at: UtcTimestamp
-
-    @classmethod
-    def of(cls, view: BoardView) -> BoardOut:
-        return cls(
-            columns=BoardColumnsOut(
-                queued=[CardOut.of(card) for card in view.columns.queued],
-                running=[CardOut.of(card) for card in view.columns.running],
-                needs_you=[CardOut.of(card) for card in view.columns.needs_you],
-                done=[CardOut.of(card) for card in view.columns.done],
-                failed=[CardOut.of(card) for card in view.columns.failed],
-            ),
-            counts=BoardCountsOut(
-                running=view.counts.running,
-                queued=view.counts.queued,
-                needs_you=view.counts.needs_you,
-            ),
-            generated_at=view.generated_at,
-        )
+def _drop_default(schema: dict[str, Any]) -> None:
+    """Strip the JSON-schema `default` a defaulted field carries, so `openapi-typescript`
+    (`defaultNonNullable`) still emits it as optional — an existing web-client test fixture
+    predates `cost_usd` below and must keep compiling without it."""
+    schema.pop("default", None)
 
 
 # ── the Run detail (SPEC CAP-12, CAP-15) ──────────────────────────────────────────────────
@@ -220,14 +146,37 @@ class HeaderOut(BaseModel):
         )
 
 
+class AttributionOut(BaseModel):
+    """The blocked Question's eyebrow (5.10, SPEC CAP-10): `Agent · {harness} · {model} ·
+    {ended_at}`."""
+
+    harness: str | None
+    model: str | None
+    ended_at: UtcTimestamp | None
+
+    @classmethod
+    def of(cls, attribution: Attribution) -> AttributionOut:
+        return cls(
+            harness=attribution.harness, model=attribution.model, ended_at=attribution.ended_at
+        )
+
+
 class AlertOut(BaseModel):
     token: str
     reason: str | None
     park_kind: ParkKind | None
+    #: `.of()` always sets the real value; see `_drop_default` — predates this field (5.10).
+    attribution: AttributionOut | None = Field(default=None, json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, alert: Alert) -> AlertOut:
-        return cls(token=alert.token, reason=alert.reason, park_kind=alert.park_kind)
+        attribution = None if alert.attribution is None else AttributionOut.of(alert.attribution)
+        return cls(
+            token=alert.token,
+            reason=alert.reason,
+            park_kind=alert.park_kind,
+            attribution=attribution,
+        )
 
 
 class LatestAttemptOut(BaseModel):
@@ -240,6 +189,8 @@ class LatestAttemptOut(BaseModel):
     exit_code: int | None
     cost_usd: MoneyStr | None
     log_tail: list[str]
+    #: See `StepRowOut.cost_usd`'s own comment; predates this field (5.10).
+    cost_provisional: bool = Field(default=False, json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, latest: LatestAttempt) -> LatestAttemptOut:
@@ -253,6 +204,7 @@ class LatestAttemptOut(BaseModel):
             exit_code=latest.exit_code,
             cost_usd=latest.cost_usd,
             log_tail=list(latest.log_tail),
+            cost_provisional=latest.cost_provisional,
         )
 
 
@@ -267,6 +219,8 @@ class StepRowOut(BaseModel):
     reason: str | None
     attempts: int
     latest: LatestAttemptOut | None
+    #: `.of()` always sets the real value; see `_drop_default` for why schema-optional.
+    cost_usd: MoneyStr = Field(default=Decimal("0"), json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, row: StepRowView) -> StepRowOut:
@@ -281,6 +235,7 @@ class StepRowOut(BaseModel):
             reason=row.reason,
             attempts=row.attempts,
             latest=None if row.latest is None else LatestAttemptOut.of(row.latest),
+            cost_usd=row.cost_usd,
         )
 
 
@@ -288,10 +243,17 @@ class StoryCellOut(BaseModel):
     epic_index: int
     story_id: str
     state: str
+    #: See `StepRowOut.cost_usd`'s own comment.
+    cost_usd: MoneyStr = Field(default=Decimal("0"), json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, cell: StoryCell) -> StoryCellOut:
-        return cls(epic_index=cell.epic_index, story_id=cell.story_id, state=cell.state)
+        return cls(
+            epic_index=cell.epic_index,
+            story_id=cell.story_id,
+            state=cell.state,
+            cost_usd=cell.cost_usd,
+        )
 
 
 class CostOut(BaseModel):

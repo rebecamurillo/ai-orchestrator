@@ -54,6 +54,11 @@ RESERVED_ENV_REASON = "instance setting, not a project variable"
 MASK_PREFIX = "••••"
 MASK_TAIL = 4
 
+#: The one Project seeded at start-up (SPEC CAP-8): the fixture readiness runs work in.
+#: `Project.builtin` is `True` exactly when a Project's `slug` equals this — never a stored
+#: column of its own, since `slug` already is one and is already unique per instance.
+READINESS_PROJECT_SLUG = "readiness"
+
 #: A slug names a directory; keep it short enough to nest under `/work` comfortably.
 SLUG_MAX_LENGTH = 40
 SLUG_SEPARATOR = "-"
@@ -136,6 +141,13 @@ class ProjectView(BaseModel):
     context_paths: tuple[str, ...]
     env_vars: tuple[MaskedEnvVar, ...]
     log_prompt_content: bool
+    #: Whether this is the seeded `readiness` Project (SPEC CAP-8): never editable or
+    #: deletable through the API. `False` for every Project an Operator creates. Derived
+    #: from `slug`, not a stored column (`Project.builtin`'s own docstring says why).
+    #: Defaulted `False`, the same reason `Project.builtin` is: every `ProjectView(...)`
+    #: construction predating this story — every frozen schema test among them — keeps
+    #: reading unchanged.
+    builtin: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -152,6 +164,13 @@ class Project(BaseModel):
     context_paths: tuple[str, ...]
     env_vars_enc: tuple[EncryptedEnvVar, ...]
     log_prompt_content: bool
+    #: `True` for exactly the Project whose `slug` is `READINESS_PROJECT_SLUG` (SPEC CAP-8).
+    #: Not a stored field on the row this entity is read from — the repository computes it
+    #: from `slug` every time (`infrastructure/db/repositories/projects.py::to_entity`'s own
+    #: docstring says why: a second, redundant column would only ever agree with `slug` or
+    #: be a bug). The default here is what every existing `Project(...)` construction site
+    #: — every unit test among them — keeps reading as `False` unchanged.
+    builtin: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -173,6 +192,7 @@ class Project(BaseModel):
                 for variable in self.env_vars_enc
             ),
             log_prompt_content=self.log_prompt_content,
+            builtin=self.builtin,
             created_at=self.created_at,
             updated_at=self.updated_at,
         )

@@ -9,20 +9,19 @@ instead. The run *graph* is not here: `build_run_graph` lives beside `build_temp
 in `application/graph.py` (Epic 3's hand-off), and this module leans on that module's
 `STEP_TOKENS` table so the two never state the mapping twice.
 
-`run_detail` and the run graph route share `RunViewPorts`, a fresh, fully-required ports
-bundle behind a brand new dependency (`api/providers.py::run_view_ports`) — both are new
-routes with no existing caller to keep working. `board_view` cannot: it answers
-`GET /runs?view=board`, the *same* route and the *same* `run_read_ports` dependency
-`GET /runs` (no `view`) already uses, and `tests/unit/test_run_router.py` overrides that
-dependency with a `RunReadPorts(runs=self.runs)` built years before this story — adding a
-second, required dependency to that route's handler would resolve it unconditionally on
-every call and crash that existing test's plain list. So `board_view` reads through
-`RunReadPorts` instead (`application/use_cases/create_run.py`, extended here with the
-optional `projects`/`repositories`/`gate_records` fields it needs, following the same
-"`None` where a caller does not wire it" precedent `steps` already set on that dataclass),
-and takes `now` as a plain argument rather than a `Clock` port — the router already has one
-free to call (`SystemClock` from `infrastructure/`, which `api/` may import) and a Board
-read gains nothing from making that a fourth optional port to thread through.
+`run_detail` and the run graph route share `RunViewPorts`, a fresh, fully-required ports bundle
+behind a brand new dependency (`api/providers.py::run_view_ports`) — both are new routes with no
+existing caller to keep working. `board_view` cannot: it answers `GET /runs?view=board`, the
+*same* route and the *same* `run_read_ports` dependency `GET /runs` (no `view`) already uses, and
+`tests/unit/test_run_router.py` overrides that dependency with a `RunReadPorts(runs=self.runs)`
+built years before this story — adding a second, required dependency to that route's handler would
+resolve it unconditionally on every call and crash that existing test's plain list. So
+`board_view` reads through `RunReadPorts` instead (`application/use_cases/create_run.py`, extended
+here with the optional `projects`/`repositories`/`gate_records` fields it needs, following the
+same "`None` where a caller does not wire it" precedent `steps` already set on that dataclass),
+and takes `now` as a plain argument rather than a `Clock` port — the router already has one free
+to call (`SystemClock` from `infrastructure/`, which `api/` may import) and a Board read gains
+nothing from making that a fourth optional port to thread through.
 """
 
 from __future__ import annotations
@@ -30,15 +29,18 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
-from orchestrator.application.graph import STEP_TOKENS, Graph, build_run_graph
-from orchestrator.application.rules.frames import epic_frame, story_frame
+from orchestrator.application.graph import STEP_TOKENS
+from orchestrator.application.rules.frames import epic_frame, rows_in_frame, story_frame
 from orchestrator.application.rules.signals import row_at, run_admitted_signals
 from orchestrator.application.steps import COMMIT_KIND, PUSH_KIND
 from orchestrator.application.use_cases.create_run import RunReadPorts
+from orchestrator.application.use_cases.run_graph import run_graph_for
 from orchestrator.application.use_cases.run_view_types import (
     Alert,
+    Attribution,
     BoardColumns,
     BoardCounts,
     BoardView,
@@ -59,10 +61,12 @@ from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import NotFound
+from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.statuses import RunStatus
 
 __all__ = [
     "Alert",
+    "Attribution",
     "BoardColumns",
     "BoardCounts",
     "BoardView",
@@ -85,8 +89,7 @@ __all__ = [
 #: Template — `repo-init` today — has no `epics[i]`/`stories[j]` frame in any of its rows.
 _PROGRESS_TEMPLATES = ("epic", "initiative")
 
-#: The kind-to-`kind_label` a Card shows, for the Templates that have one (SPEC CAP-12).
-#: `readiness` is not shipped yet; naming it here costs nothing and needs no later change.
+#: The kind-to-`kind_label` a Card shows (SPEC CAP-12); `readiness` is unshipped but free to name.
 _KIND_LABELS: dict[str, str] = {"repo-init": "repo-init", "readiness": "readiness"}
 
 #: The statuses that finish a frame's own row, one way or the other (AD-9's own pair).
@@ -218,13 +221,14 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
     repository = ports.repositories.get(run.repository_id)
     park_row = row_at(rows, run.park_path)
     admitted = run_admitted_signals(run, park_row.kind if park_row is not None else None)
+    park_attempts = attempts_by_row.get(park_row.id, ()) if park_row is not None else ()
     return RunDetailView(
         run=run,
         header=_header(run, project, repository),
-        alert=_alert(run),
+        alert=_alert(run, _latest_of(park_attempts)),
         steps=[_step_row(ports, row, attempts_by_row[row.id]) for row in rows],
-        stories=_story_cells(run, rows),
-        cost=_cost(run, attempts_by_row, now=ports.clock.now()),
+        stories=_story_cells(run, rows, attempts_by_row),
+        cost=_cost(run, attempts_by_row, now=ports.clock.now(), tracer=ports.tracer),
         gate_record=ports.gate_records.list_for_run(run.id),
         admitted_signals=admitted,
         summary=_summary(run, rows),
@@ -245,14 +249,29 @@ def _header(run: Run, project: Project | None, repository: Repository | None) ->
     )
 
 
-def _alert(run: Run) -> Alert | None:
+def _alert(run: Run, attempt: Attempt | None) -> Alert | None:
     if run.status != "needs_you":
         return None
-    return Alert(token=_run_token(run), reason=run.park_reason, park_kind=run.park_kind)
+    attribution = None if attempt is None else _attribution(attempt)
+    return Alert(
+        token=_run_token(run),
+        reason=run.park_reason,
+        park_kind=run.park_kind,
+        attribution=attribution,
+    )
+
+
+def _attribution(attempt: Attempt) -> Attribution:
+    return Attribution(harness=attempt.harness, model=attempt.model, ended_at=attempt.ended_at)
+
+
+def _latest_of(attempts: Sequence[Attempt]) -> Attempt | None:
+    return max(attempts, key=lambda attempt: attempt.n, default=None)
 
 
 def _step_row(ports: RunViewPorts, row: StepRun, attempts: Sequence[Attempt]) -> StepRowView:
-    latest = max(attempts, key=lambda attempt: attempt.n, default=None)
+    latest = _latest_of(attempts)
+    cost_usd = sum((attempt.cost_usd or Decimal("0") for attempt in attempts), Decimal("0"))
     return StepRowView(
         seq=row.seq,
         path=row.path,
@@ -264,6 +283,7 @@ def _step_row(ports: RunViewPorts, row: StepRun, attempts: Sequence[Attempt]) ->
         reason=row.reason,
         attempts=len(attempts),
         latest=_latest_attempt(ports, latest) if latest is not None else None,
+        cost_usd=cost_usd,
     )
 
 
@@ -281,10 +301,13 @@ def _latest_attempt(ports: RunViewPorts, attempt: Attempt) -> LatestAttempt:
         exit_code=attempt.exit_code,
         cost_usd=attempt.cost_usd,
         log_tail=ports.logs.tail(attempt.log_path, 40),
+        cost_provisional=attempt.cost_provisional,
     )
 
 
-def _story_cells(run: Run, rows: Sequence[StepRun]) -> list[StoryCell]:
+def _story_cells(
+    run: Run, rows: Sequence[StepRun], attempts_by_row: Mapping[UUID, Sequence[Attempt]]
+) -> list[StoryCell]:
     """One cell per story frame, in plan order — state off the frame's own commit-guard row."""
     commit_rows = sorted((row for row in rows if row.kind == COMMIT_KIND), key=lambda row: row.seq)
     cells = []
@@ -292,11 +315,17 @@ def _story_cells(run: Run, rows: Sequence[StepRun]) -> list[StoryCell]:
         frame = story_frame(commit_row.path)
         if frame is None:
             continue
-        cells.append(_story_cell(run, rows, frame, commit_row))
+        frame_cost = Decimal("0")
+        for frame_row in rows_in_frame(rows, frame):
+            for attempt in attempts_by_row.get(frame_row.id, ()):
+                frame_cost += attempt.cost_usd or Decimal("0")
+        cells.append(_story_cell(run, rows, frame, commit_row, frame_cost))
     return cells
 
 
-def _story_cell(run: Run, rows: Sequence[StepRun], frame: str, commit_row: StepRun) -> StoryCell:
+def _story_cell(
+    run: Run, rows: Sequence[StepRun], frame: str, commit_row: StepRun, cost_usd: Decimal
+) -> StoryCell:
     epic = epic_frame(frame)
     epic_index = _bracket_index(epic) if epic is not None else 0
     if commit_row.status == "skipped":
@@ -307,7 +336,9 @@ def _story_cell(run: Run, rows: Sequence[StepRun], frame: str, commit_row: StepR
         state = "current"
     else:
         state = "future"
-    return StoryCell(epic_index=epic_index, story_id=commit_row.story_id or "", state=state)
+    return StoryCell(
+        epic_index=epic_index, story_id=commit_row.story_id or "", state=state, cost_usd=cost_usd
+    )
 
 
 def _frame_is_current(run: Run, rows: Sequence[StepRun], frame: str) -> bool:
@@ -327,7 +358,13 @@ def _bracket_index(prefix: str) -> int:
     return int(match.group(1)) if match else 0
 
 
-def _cost(run: Run, attempts_by_row: Mapping[UUID, Sequence[Attempt]], *, now: datetime) -> Cost:
+def _cost(
+    run: Run,
+    attempts_by_row: Mapping[UUID, Sequence[Attempt]],
+    *,
+    now: datetime,
+    tracer: Tracer | None,
+) -> Cost:
     every_attempt = [attempt for attempts in attempts_by_row.values() for attempt in attempts]
     wall_clock = 0.0
     if run.started_at is not None:
@@ -341,6 +378,7 @@ def _cost(run: Run, attempts_by_row: Mapping[UUID, Sequence[Attempt]], *, now: d
         wall_clock_seconds=wall_clock,
         active_seconds=run.active_seconds,
         provisional=any(attempt.cost_provisional for attempt in every_attempt),
+        trace_url=tracer.trace_url(run.trace_id) if (tracer is not None and run.trace_id) else None,
     )
 
 
@@ -360,18 +398,3 @@ def _summary(run: Run, rows: Sequence[StepRun]) -> Summary | None:
         if row.kind == COMMIT_KIND and row.status == "skipped" and row.story_id is not None
     ]
     return Summary(progress=_progress(run, rows), links=list(run.compare_urls), skipped=skipped)
-
-
-# ── the run graph route's one fetch (SPEC CAP-12, AD-15) ─────────────────────────────────
-
-
-def run_graph_for(ports: RunViewPorts, run_id: UUID) -> Graph:
-    """The one read `GET /runs/{id}/graph` needs: the Run and its rows, then `build_run_graph`
-    (`application/graph.py`). Raising `NotFound` here, not in the router, matches `run_detail`
-    (above) and `create_run.py::get_run` — the router stays a thin parse-call-map, per
-    `backend-api/AGENTS.md`'s "Routers are thin" rule."""
-    run = ports.runs.get(run_id)
-    if run is None:
-        raise NotFound(f"no run {run_id}")
-    rows = ports.steps.list_for_run(run_id)
-    return build_run_graph(rows, run)

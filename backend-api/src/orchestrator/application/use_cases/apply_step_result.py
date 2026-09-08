@@ -18,7 +18,8 @@ The order is AD-8's and it matters, because each step can change what the next o
    recorded before the Run started (AD-7), and a completion is not allowed to re-decide how
    the step's success is judged.
 3. **Route.** A redispatch goes back (bounded, AD-9); a `park` stops the Run for the
-   Operator; a finished row queues its successor, or ends the Run when it has none; an
+   Operator; a `retry` re-queues *this* row, counted and recorded (AD-9, FR-16); a
+   finished row queues its successor, or ends the Run when it has none; an
    `error` row is routed by its own `on_fail` — `fail` ends the Run `failed`, `continue`
    queues the successor exactly as a finished row does, and `escalate` (the action the DSL
    gives a row that declared none) writes nothing here, because an executor that escalates
@@ -41,17 +42,26 @@ is the walker's own re-walk after a redispatch, which owns it.
 
 `after_route(run, row, result)` is Epic 5's seam: the budget rule's second gate record and
 the `park_kind = budget` rewrite hang there. Nothing in Epic 4 passes it.
+
+**5.9's own trigger hangs here too, unconditionally.** The instant a Story frame's own
+commit-guard row itself reaches `done`, `record_trajectory` runs inside the same unit of
+work — the frame's last row, and the only point at which the trajectory's `end_sha` ("HEAD
+after the commit-guard") is a fact. It is idempotent on `(run_id, frame)`, so a durable-step
+replay of this same call records nothing twice (AD-19, AD-6).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 import structlog
 
 from orchestrator.application.rules.frames import rows_after
+from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
+from orchestrator.application.use_cases.record_trajectory import record_trajectory
 from orchestrator.application.use_cases.writers import (
     FINISHED,
     Entry,
@@ -115,6 +125,10 @@ REBASELINE_FAILED = "re-baseline failed after skip"
 #: What the gate record says when a redispatch fires.
 REDISPATCHED = "verify failed, story re-dispatched {n}/{max}"
 
+#: What it says when a Template's own `retry` fires — the reason the executor gave, and
+#: which of the contract's attempts this is (AD-9: bounded, recorded, never silent).
+RETRIED = "{reason} · retry {n}/{max}"
+
 
 def apply_step_result(
     ports: WriterPorts,
@@ -139,6 +153,7 @@ def apply_step_result(
             status=step_transition(row.status, _event(result.status)),
             reason=result.reason,
         )
+        _maybe_record_trajectory(ports, row)
         run = _route(ports, run, row, result, attempt)
         if after_route is not None:
             after_route(run, row, result)
@@ -204,8 +219,11 @@ def _route(
     if result.redispatch is not None:
         park, went_back = _redispatch(ports, run, row, result.redispatch, attempt)
     if park is not None:
-        return _park(ports, run, row, park, attempt)
+        return _park(ports, run, row, park, attempt, payload=result.payload)
     if went_back:
+        return run
+    if result.retry is not None:
+        _retry(ports, run, row, result, attempt)
         return run
     if row.status in FINISHED:
         return _advance(ports, run, row)
@@ -260,10 +278,52 @@ def _redispatch(
     return None, True
 
 
-def _park(ports: WriterPorts, run: Run, row: StepRun, park: Park, attempt: Attempt | None) -> Run:
-    """Stop the Run for the Operator, on this row when the park named none of its own."""
+def _retry(
+    ports: WriterPorts, run: Run, row: StepRun, result: StepResult, attempt: Attempt | None
+) -> None:
+    """Run this row again, counted and recorded (AD-9, FR-16). No Run transition: the Run is
+    still `running`, and `("error", "retry")` is the only pair the machine re-queues from —
+    a result that carried a `retry` on any other status raises `InvalidTransition` here,
+    which is a caller's bug rather than an outcome.
+
+    The bound itself was already applied: the executor returned a `retry` only while the
+    row's counter was below the contract's `max` (`application/rules/routing.py`), so this
+    counts the attempt rather than deciding whether there is one.
+    """
+    retry = result.retry
+    assert retry is not None  # `_route` calls this only when the result carries one
+    count = row.retry_count + 1
+    set_row(ports, row, status=step_transition(row.status, "retry"), retry_count=count)
+    record(
+        ports,
+        run,
+        Entry(
+            event="retry_auto",
+            actor="machine",
+            path=row.path,
+            text=RETRIED.format(reason=result.reason or "", n=count, max=retry.max),
+            attempt_n=attempt.n if attempt is not None else None,
+        ),
+    )
+
+
+def _park(  # noqa: PLR0913 — the park, the attempt it happened on and what it kept are one write
+    ports: WriterPorts,
+    run: Run,
+    row: StepRun,
+    park: Park,
+    attempt: Attempt | None,
+    *,
+    payload: dict[str, Any],
+) -> Run:
+    """Stop the Run for the Operator, on this row when the park named none of its own.
+
+    `payload` is the result's own (AD-17's hit list): the executor returns the values and
+    this is where they are written, in the unit of work already open. Only the park path
+    carries one — `retry_auto` and `redispatch` are records this module decides itself.
+    """
     on_row = park if park.path is not None else park.model_copy(update={"path": row.path})
-    return park_run(ports, run, on_row, attempt.n if attempt is not None else None)
+    return park_run(ports, run, on_row, attempt.n if attempt is not None else None, payload)
 
 
 def _advance(ports: WriterPorts, run: Run, row: StepRun) -> Run:
@@ -275,6 +335,47 @@ def _advance(ports: WriterPorts, run: Run, row: StepRun) -> Run:
             queue_row(ports, candidate)
         return run
     return finish_run(ports, run)
+
+
+def budget_second_record(ports: WriterPorts, run: Run, row: StepRun, result: StepResult) -> None:
+    """Epic 5's own `after_route` (AD-8, AD-11): a routed stop that is *also* over budget
+    gets a second gate record, and `run.park_kind`/`park_path`/`park_reason` are rewritten
+    to `budget` on top of it.
+
+    `set_run` rather than `park_run`: the first park already moved the Run to `needs_you`
+    (`_route` ran before this), and `RUN_TRANSITIONS` has no `(needs_you, "park")` pair —
+    a second `run_transition` call would raise. The three park fields are "written
+    together with the gate_record" every time (`domain/entities/run.py`'s own docstring),
+    which this still does; it is only the *status* transition that does not repeat.
+    """
+    park = result.budget_park
+    if park is None:
+        return
+    path = park.path or row.path
+    updated = set_run(ports, run, park_kind=park.kind, park_path=path, park_reason=park.reason)
+    record(ports, updated, Entry(event=park.kind, actor="machine", path=path, text=park.reason))
+
+
+def _maybe_record_trajectory(ports: WriterPorts, row: StepRun) -> None:
+    """5.9's own trigger: the frame's commit-guard row reaching `done` closes the Story.
+
+    Gated on `row.kind` rather than the literal step id — `application/steps/__init__.py`'s
+    own "a kind is named there or nowhere" (AD-9) — so a Template that names its commit row
+    something other than `commit-guard` still triggers this correctly.
+    """
+    if row.kind != COMMIT_KIND or row.status != "done" or row.frame is None:
+        return
+    record_trajectory(
+        row.run_id,
+        row.frame,
+        runs=ports.runs,
+        steps=ports.steps,
+        attempts=ports.attempts,
+        gate_records=ports.records,
+        git=ports.git,
+        trajectories=ports.trajectories,
+        clock=ports.clock,
+    )
 
 
 def _fail(ports: WriterPorts, run: Run, row: StepRun, result: StepResult) -> Run:

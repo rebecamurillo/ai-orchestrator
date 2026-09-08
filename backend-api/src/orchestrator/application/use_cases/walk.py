@@ -6,47 +6,59 @@ and holds no rule of its own. Nothing here writes a status directly: `next_row` 
 `close_run` reach AD-8's transitions through `writers.py`, exactly as the three status
 writers do, and `run_row` writes nothing at all.
 
-**`next_row` is the only thing that starts a plan.** Every row a Run is created with is
-`planned` (AD-7): the planner expands the whole tree before the Run exists, and
-`apply_step_result` queues a *successor*, so the first row of a plan has nothing behind it
-to queue it. That is this function's first job, and it is deliberately narrow — the plan's
-first `planned` row is queued only when no row of the Run is in any other unfinished status.
-A Run parked on an `error` row has rows further down that are still `planned`, and queueing
-one of those would run past the stop the Operator has not answered yet.
+**`next_row` is the only thing that starts a plan**, and deliberately narrow: every row a
+Run is created with is `planned` (AD-7), and `apply_step_result` queues a *successor*, so
+the plan's first row is queued only when no row of the Run is in any other unfinished
+status — a Run parked on `error` has `planned` rows further down a queue here would skip.
 
-**`close_run` is what "nothing to run" means.** A Run whose rows are all `done` or
-`skipped` is finished. A Run with no queued row *and* an unfinished one is stalled — the row
-is `error` with an `on_fail` nothing routes, or `blocked` with no signal — and a stall is
-reported as an `internal` park naming the row, not as a Run quietly reaching `done`. A Run
-that is no longer `running` when the walk reaches this point is neither: `cancel` moved it
-while a step was in flight, and both machine transitions here would raise. It is reported as
-it stands, the way `apply_step_result` reports a late result.
+**`close_run` is what "nothing to run" means.** All `done`/`skipped` rows finishes the Run;
+no queued row plus an unfinished one is a stall, reported as an `internal` park naming the
+row rather than a Run quietly reaching `done`. A Run no longer `running` here is neither —
+`cancel` moved it mid-step — and is reported as it stands, the way a late result is.
 
-**`attempt_row` is one durable step, on purpose.** The Attempt is opened and the executor
-runs inside the same step, so a backend killed mid-execution re-executes both after the
-restart: `start_attempt` finds the row `running` with an Attempt that never ended, closes it
-and opens the next one (FR-12). Splitting them would make the start a *recorded* step, which
-replay would hand back unchanged — the interrupted row would silently continue as Attempt 1,
-and the count the Operator reads would say the kill never happened. The brief left the exact
-recovery sequence to this story's spec checkpoint; this is it.
+**`attempt_row` is one durable step, on purpose**: the Attempt opens and the executor runs
+inside it, so a backend killed mid-execution re-executes both after restart —
+`start_attempt` closes the row's never-ended Attempt and opens the next one (FR-12), where a
+split start would replay unchanged and leave the interrupted attempt silently uncounted.
 
-**`run_row` reads; the executor does the work.** It opens one unit of work to assemble the
-`StepContext` and closes it *before* the executor runs, because an executor holds a process
-for minutes (FR-10) and a database session held across that is a connection nothing can use
-and a transaction nothing can see past.
+**A verify failure and a frame's anchors are resolved here for the same reason
+`frame_start_sha` is**: a row a `verify` step sent back needs facts about a *different* row
+(FR-10), AD-17's rule needs every row of the Story frame, and AD-9 closes `StepContext`'s
+field list. Read once, here — the only place holding both the rows and the repositories —
+and handed over as frozen values on `RunEnvironment`/`StepPorts` (AD-8).
+
+**`run_row` reads; the executor does the work**, in a unit of work closed *before* the
+executor runs — a process held for minutes (FR-10) cannot hold a session too.
+
+**`apply_result` always binds `apply_step_result`'s own `after_route`** to 5.7's
+`budget_second_record`, unconditionally (that module's own docstring names the seam).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 import structlog
 
+from orchestrator.application.rules import protected_paths
 from orchestrator.application.rules.frames import rows_in_frame
 from orchestrator.application.steps import StepContext, StepPorts, execute
-from orchestrator.application.use_cases.apply_step_result import apply_step_result
+from orchestrator.application.steps.context import RunEnvironment, VerifyFailure
+from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY
+from orchestrator.application.templates.plan_model import (
+    ON_FAIL_KEY,
+    REDISPATCH_TARGET_SEQ,
+)
+from orchestrator.application.templates.rows import COMMAND_KEY
+from orchestrator.application.use_cases.apply_step_result import (
+    AfterRoute,
+    apply_step_result,
+    budget_second_record,
+)
 from orchestrator.application.use_cases.start_attempt import start_attempt
 from orchestrator.application.use_cases.writers import (
     FINISHED,
@@ -58,7 +70,9 @@ from orchestrator.application.use_cases.writers import (
     require_row,
     require_run,
 )
+from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
+from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import NotFound
 from orchestrator.domain.statuses import GateEvent, RunStatus
@@ -100,6 +114,14 @@ RUNNING = "running"
 #: The line a close that arrives after the Run already moved leaves, and nothing else.
 LATE_CLOSE = "close ignored"
 
+#: How much of a failed `verify` row's log the Story file is handed back (FR-10). Enough to
+#: show what failed, bounded so a prepare commit never carries a whole build log.
+VERIFY_LOG_LINES = 200
+
+#: The Run input `initiative@1` binds its epic list under (AD-17's `{initiative_folder}`).
+#: `epic@1` and `story@1` declare none, and a Run without one freezes no `epics.yaml`.
+INITIATIVE_FOLDER_INPUT = "initiative_folder"
+
 
 def next_row(ports: WalkPorts, run_id: UUID) -> int | None:
     """The `seq` of the row to run now, queueing the plan's first row when nothing is."""
@@ -139,52 +161,188 @@ def run_row(
     seq: int,
     resume_event: GateEvent | None = None,
 ) -> StepResult:
-    """Execute one row through its kind's executor and report what it returned."""
+    """Execute one row through its kind's executor and report what it returned.
+
+    `step_span` wraps the width of `execute` only, opened after the unit of work that reads
+    the context has already closed — the tracer is never called from inside a transaction.
+    `WalkPorts.step.tracer` is `None` for every frozen ports construction predating this
+    story (AD-11's own "no tracer wired" degrade), which is why the `Run` is read once,
+    here, rather than through a second repository call inside the `if`.
+    """
     with ports.writers.uow:
-        context = _context(ports, run_id, seq, resume_event)
-    return execute(context)
+        run = require_run(ports.writers, run_id)
+        context = _context(ports, run, seq, resume_event)
+    tracer = context.ports.tracer
+    if tracer is None:
+        return execute(context)
+    with tracer.step_span(run, context.row, context.attempt):
+        return execute(context)
 
 
 def _context(
     ports: WalkPorts,
-    run_id: UUID,
+    run: Run,
     seq: int,
     resume_event: GateEvent | None,
 ) -> StepContext:
     """AD-9's own field list, read out of the Run the walker is standing in."""
     writers = ports.writers
-    run = require_run(writers, run_id)
+    run_id = run.id
     row = require_row(writers, run_id, seq)
     attempts = writers.attempts.list_for_row(row.id)
     if not attempts:
         raise NotFound(f"no attempt on step {seq} of run {run_id}")
+    frame = _frame(writers, run_id, row)
     return StepContext(
         row=row,
         with_resolved=row.with_resolved,
         cwd=run.worktree_path,
-        frame_start_sha=_frame_start_sha(writers, run_id, row),
+        frame_start_sha=_frame_start_sha(frame.attempts),
         previous_attempt=attempts[-2] if len(attempts) > 1 else None,
         attempt=attempts[-1],
         resume_signal=_resume_signal(writers, run_id, resume_event),
-        ports=ports.step,
+        ports=_step_ports(ports, run, row, frame),
     )
 
 
-def _frame_start_sha(ports: WriterPorts, run_id: UUID, row: StepRun) -> str | None:
-    """The commit the row's Story frame started at: its first row's first attempt (AD-9)."""
+def _step_ports(ports: WalkPorts, run: Run, row: StepRun, frame: _Frame) -> StepPorts:
+    """The executors' ports, plus whatever this row alone needs resolving (FR-10, AD-17).
+
+    A walker that resolved no environment is handed over unchanged: there is nowhere to put a
+    frame's facts, and the executor refuses with the wiring error `require_env` names.
+
+    **Only a row inside a Story frame is given the rule.** AD-17 is frame-scoped: its frozen
+    test set is that frame's first attempt's, and outside a frame there is no agent range at
+    all — so all that would be left of the check is "anything staged whose basename is
+    `AGENTS.md`". `repo-init@1`'s `bmad.install` row stages exactly that, written by the
+    orchestrator, and would park a Run on the system's own file.
+    """
+    environment = ports.step.run_env
+    if environment is None:
+        return ports.step
+    failure = _verify_failure(ports, run.id, row)
     if row.frame is None:
-        return None
-    # the row itself is in its own frame and the caller has already required an Attempt on
-    # it, so this walk always finds one; `None` is what a frame whose first attempt recorded
-    # no commit reports, not a frame that has not run
-    return next(
-        (
-            attempts[0].start_sha
-            for entry in rows_in_frame(ports.steps.list_for_run(run_id), row.frame)
-            if (attempts := ports.attempts.list_for_row(entry.id))
+        return replace(ports.step, run_env=replace(environment, verify_failure=failure))
+    rule = _anchors(ports, run, environment, frame)
+    return replace(
+        ports.step,
+        run_env=replace(environment, anchors=rule.anchors, verify_failure=failure),
+        protected_paths=rule,
+    )
+
+
+@dataclass(frozen=True)
+class _Frame:
+    """One Story frame as the walker read it: its rows, and every attempt they recorded.
+
+    Read once per row: three questions are asked of it — the commit the frame started at, the
+    tests its first attempt froze, the ranges its dispatches recorded — over the same rows.
+    """
+
+    rows: tuple[StepRun, ...] = ()
+    attempts: tuple[Attempt, ...] = ()
+
+
+def _frame(ports: WriterPorts, run_id: UUID, row: StepRun) -> _Frame:
+    """The row's frame, in plan order then attempt order; empty outside a frame (AD-9)."""
+    if row.frame is None:
+        return _Frame()
+    rows = tuple(rows_in_frame(ports.steps.list_for_run(run_id), row.frame))
+    return _Frame(
+        rows=rows,
+        attempts=tuple(
+            attempt for entry in rows for attempt in ports.attempts.list_for_row(entry.id)
         ),
+    )
+
+
+def _anchors(
+    ports: WalkPorts, run: Run, environment: RunEnvironment, frame: _Frame
+) -> protected_paths.FrameAnchors:
+    """AD-17's anchor set and the frame's agent ranges, resolved once for two readers.
+
+    Here because this is the only place holding both the frame's rows and the repositories
+    (AD-8). The tail reads the anchor set off `RunEnvironment`; the commit-guard reaches the
+    whole object through the port it already calls.
+    """
+    return protected_paths.FrameAnchors(
+        git=ports.step.git,
+        worktree=Path(run.worktree_path or ""),
+        anchors=protected_paths.build(
+            spec_folders=_spec_folders(environment, frame.rows),
+            initiative_folder=str(run.inputs.get(INITIATIVE_FOLDER_INPUT) or ""),
+            frozen_test_files=_frozen_test_files(frame.attempts),
+        ),
+        ranges=_agent_ranges(frame.attempts),
+    )
+
+
+def _spec_folders(environment: RunEnvironment, rows: Sequence[StepRun]) -> tuple[str, ...]:
+    """Every spec folder this frame touches: the Run's own input, and each row's resolved one."""
+    folders = {environment.spec_folder or ""}
+    folders.update(str(row.with_resolved.get(SPEC_FOLDER_KEY) or "") for row in rows)
+    return tuple(sorted(folder for folder in folders if folder))
+
+
+def _frozen_test_files(attempts: Sequence[Attempt]) -> tuple[str, ...]:
+    """AD-17: the `frozen_test_files` of the frame's lowest-`n` attempt with a `start_sha`."""
+    for attempt in attempts:
+        if attempt.start_sha is not None:
+            return attempt.frozen_test_files or ()
+    return ()
+
+
+def _agent_ranges(attempts: Sequence[Attempt]) -> tuple[tuple[str, str], ...]:
+    """Every agent range the frame recorded: an attempt that started *and* came back.
+    `end_sha` is written by the agent tail alone, so an attempt carrying both SHAs is a
+    dispatch and nothing else — the scope AD-17 gives the commit-guard."""
+    return tuple(
+        (attempt.start_sha, attempt.end_sha)
+        for attempt in attempts
+        if attempt.start_sha is not None and attempt.end_sha is not None
+    )
+
+
+def _verify_failure(ports: WalkPorts, run_id: UUID, row: StepRun) -> VerifyFailure | None:
+    """Why the `verify` row redispatched to this one failed, or `None` when none did.
+
+    The target is matched on `seq` rather than on a kind: `on_fail: {redispatch: …}` is the
+    only thing that sends a Run backwards (AD-9), and the planner already resolved it to
+    this row's number (`templates/plan_model.py`). A `verify` row that never recorded an
+    attempt still names its command — the Operator can read that even with no code to show.
+    """
+    if row.redispatch_count == 0:
+        return None
+    writers = ports.writers
+    sender = next(
+        (entry for entry in writers.steps.list_for_run(run_id) if _redispatches_to(entry, row.seq)),
         None,
     )
+    if sender is None:
+        return None
+    attempts = writers.attempts.list_for_row(sender.id)
+    latest = attempts[-1] if attempts else None
+    reader = ports.step.logs
+    tail = reader.tail(latest.log_path, VERIFY_LOG_LINES) if reader and latest else []
+    return VerifyFailure(
+        command=str(sender.with_resolved.get(COMMAND_KEY) or ""),
+        exit_code=latest.exit_code if latest is not None else None,
+        log_tail=tuple(tail),
+    )
+
+
+def _redispatches_to(row: StepRun, seq: int) -> bool:
+    """Whether this row's own `on_fail` is a redispatch aimed at `seq` (AD-9)."""
+    action = row.with_resolved.get(ON_FAIL_KEY)
+    return isinstance(action, Mapping) and action.get(REDISPATCH_TARGET_SEQ) == seq
+
+
+def _frame_start_sha(attempts: Sequence[Attempt]) -> str | None:
+    """The commit the row's Story frame started at, in AD-17's own words: the frame's
+    lowest-`n` attempt that *has* a `start_sha`. Reading past the attempts that recorded none
+    is the whole rule: a Story frame's first row is `git.sync`, which records no commit, so an
+    answer taken from the first row that merely *has* an attempt would always be `None`."""
+    return next((attempt.start_sha for attempt in attempts if attempt.start_sha is not None), None)
 
 
 def _resume_signal(
@@ -199,8 +357,13 @@ def _resume_signal(
 
 def apply_result(ports: WalkPorts, run_id: UUID, seq: int, result: StepResult) -> RunStatus:
     """Apply one result through AD-8's writer, and report where the Run now stands."""
-    apply_step_result(ports.writers, run_id, seq, result)
+    apply_step_result(ports.writers, run_id, seq, result, after_route=_budget_hook(ports.writers))
     return require_run(ports.writers, run_id).status
+
+
+def _budget_hook(writers: WriterPorts) -> AfterRoute:
+    """5.7's `after_route`, bound to this call's own writers."""
+    return lambda run, row, result: budget_second_record(writers, run, row, result)
 
 
 def close_run(ports: WalkPorts, run_id: UUID) -> RunStatus:

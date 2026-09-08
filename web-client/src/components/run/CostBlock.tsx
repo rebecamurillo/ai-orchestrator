@@ -1,8 +1,9 @@
 /**
- * The COST & TRACE kv (4.15, right column): spent/budget as a ratio, tokens in/out,
- * wall-clock, `your active time —` (Epic 8 is out of this story's scope, per its own Out
- * list), the trace link when one exists (Epic 5 — always absent this epic), the compare
- * links, and the branch link.
+ * The COST & TRACE kv (4.15, right column; provisional marker and trace row 5.10): spent/
+ * budget as a ratio with `provisional` after it when any attempt's cost is still an estimate,
+ * tokens in/out, wall-clock, `your active time —` (Epic 8 is out of this story's scope, per
+ * its own Out list), a `trace` row linking `open in Langfuse` to `cost.trace_url` when one
+ * exists (absent — no row at all — when it does not), the compare links, and the branch link.
  *
  * A ratio is printed as a ratio, never a bar or a percentage (`KvTable.astro`'s own rule,
  * restated here since a `.astro` component cannot be nested inside a React island).
@@ -26,7 +27,12 @@ export default function CostBlock({ detail }: Props) {
         <tbody>
           <tr>
             <th scope="row">spent / budget</th>
-            <td>{moneyRatio(cost)}</td>
+            <td>
+              {moneyRatio(cost)}
+              {cost.provisional ? (
+                <span data-testid="wf-cost-provisional"> provisional</span>
+              ) : null}
+            </td>
           </tr>
           <tr>
             <th scope="row">tokens</th>
@@ -40,13 +46,18 @@ export default function CostBlock({ detail }: Props) {
             <th scope="row">your active time</th>
             <td>—</td>
           </tr>
+          {cost.trace_url ? (
+            <tr>
+              <th scope="row">trace</th>
+              <td>
+                <a href={cost.trace_url} data-testid="wf-trace">
+                  open in Langfuse
+                </a>
+              </td>
+            </tr>
+          ) : null}
         </tbody>
       </table>
-      {cost.trace_url ? (
-        <p>
-          <a href={cost.trace_url}>trace</a>
-        </p>
-      ) : null}
       <ul className="wf-cost-links">
         {detail.run.compare_urls.map((url) => (
           <li key={url}>

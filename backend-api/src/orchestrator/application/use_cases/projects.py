@@ -145,6 +145,7 @@ def update_project(ports: ProjectPorts, project_id: UUID, draft: ProjectDraft) -
     silent reset of a choice the Operator made deliberately.
     """
     stored = _require(ports.projects, project_id)
+    _refuse_builtin(stored)
     _refuse_duplicate_name(ports.projects, draft.name, excluding=stored.id)
     updated = stored.model_copy(
         update={
@@ -194,6 +195,12 @@ def _require(projects: ProjectRepository, project_id: UUID) -> Project:
     if stored is None:
         raise NotFound(f"no project with id {project_id}")
     return stored
+
+
+def _refuse_builtin(stored: Project) -> None:
+    """The seeded `readiness` Project (SPEC CAP-8) is never editable through this route."""
+    if stored.builtin:
+        raise Conflict(f"project {stored.slug!r} is built in and cannot be edited")
 
 
 def _refuse_duplicate_name(

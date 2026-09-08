@@ -21,10 +21,13 @@ export function signalsRequestPath(runId: string): string {
   return `/api/runs/${runId}/signals`;
 }
 
-/** The word a button reads for one signal kind — `Continue`, `Retry`, `Cancel run`. */
+/** The word a button reads for one signal kind — `Continue`, `Retry`, `Cancel run`, and
+ * (5.10) `Skip story`/`Skip epic` for a `blocked`/`misconfigured` stop's own row. */
 export function signalLabel(kind: SignalKind): string {
   if (kind === 'continue') return 'Continue';
   if (kind === 'retry') return 'Retry';
   if (kind === 'cancel') return 'Cancel run';
+  if (kind === 'skip_story') return 'Skip story';
+  if (kind === 'skip_epic') return 'Skip epic';
   return kind;
 }

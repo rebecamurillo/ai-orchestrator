@@ -22,6 +22,7 @@ from orchestrator.infrastructure.db.models import (
     StepRunRow,
     TemplateRow,
     TemplateVersionRow,
+    TrajectoryRow,
 )
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyAttemptRepository,
@@ -32,6 +33,7 @@ from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyRunRepository,
     SQLAlchemyStepRunRepository,
     SQLAlchemyTemplateVersionRepository,
+    SQLAlchemyTrajectoryRepository,
 )
 from orchestrator.infrastructure.db.session import create_session_factory
 from orchestrator.infrastructure.db.unit_of_work import SQLAlchemyUnitOfWork
@@ -54,11 +56,13 @@ __all__ = [
     "SQLAlchemyRunRepository",
     "SQLAlchemyStepRunRepository",
     "SQLAlchemyTemplateVersionRepository",
+    "SQLAlchemyTrajectoryRepository",
     "SQLAlchemyUnitOfWork",
     "SessionUnitOfWork",
     "StepRunRow",
     "TemplateRow",
     "TemplateVersionRow",
+    "TrajectoryRow",
     "create_engine_from",
     "create_session_factory",
     "open_writer_ports",

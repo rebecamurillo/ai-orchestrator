@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
-from orchestrator.domain.entities.harness import Harness
+from orchestrator.domain.entities.harness import EvaluationLine, Harness
 from orchestrator.infrastructure.db.models.harness import HarnessRow
 
 if TYPE_CHECKING:  # pragma: no cover — typing only
@@ -26,7 +26,14 @@ def to_entity(row: HarnessRow) -> Harness:
         last_readiness_at=row.last_readiness_at,
         failing_check=row.failing_check,
         version_pin=row.version_pin,
+        last_readiness_run_id=row.last_readiness_run_id,
+        lines=tuple(EvaluationLine(**line) for line in row.lines),
     )
+
+
+def _lines_json(harness: Harness) -> list[dict[str, object]]:
+    """`harness.lines` as the `jsonb` column holds it, in evaluation order."""
+    return [line.model_dump(mode="json") for line in harness.lines]
 
 
 class SQLAlchemyHarnessRepository:
@@ -47,6 +54,8 @@ class SQLAlchemyHarnessRepository:
                 last_readiness_at=harness.last_readiness_at,
                 failing_check=harness.failing_check,
                 version_pin=harness.version_pin,
+                last_readiness_run_id=harness.last_readiness_run_id,
+                lines=_lines_json(harness),
             )
         )
 
@@ -58,6 +67,10 @@ class SQLAlchemyHarnessRepository:
         row.last_readiness_at = harness.last_readiness_at
         row.failing_check = harness.failing_check
         row.version_pin = harness.version_pin
+        row.last_readiness_run_id = harness.last_readiness_run_id
+        # rebuilt, not mutated in place: SQLAlchemy does not track a mutation inside a JSON
+        # value, and the update would be silently dropped (`project.py`'s own precedent).
+        row.lines = _lines_json(harness)
 
     def list(self) -> list[Harness]:
         rows = self._session.scalars(select(HarnessRow).order_by(HarnessRow.name)).all()

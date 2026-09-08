@@ -14,6 +14,7 @@ password into every `repr()` and every log line binding these settings (hard rul
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -64,6 +65,9 @@ class Settings(BaseSettings):
     #: these, never a constant, so an e2e scenario can run either sooner.
     clone_check_cron: str
     worktree_gc_cron: str
+    #: `harness_readiness.start`'s own `budget_usd` (SPEC CAP-8) — the fixture's one story
+    #: is small, so a low ceiling still leaves room for a retry or two.
+    readiness_budget_usd: Annotated[Decimal, Field(gt=0)]
 
     # ── Git (AD-5) — never handed to a harness process ───────────────────────
     github_token: SecretStr
@@ -79,6 +83,9 @@ class Settings(BaseSettings):
     langfuse_public_key: str
     langfuse_secret_key: SecretStr
     langfuse_environment: str
+    #: `LangfuseTracer.trace_url` formats the UI link from this alone, so it never has to
+    #: make the SDK's own blocking `get_trace_url()` project lookup (5.2's own spike).
+    langfuse_project_id: str
 
     # ── Pinned tool versions carried by the image (AD-16) ────────────────────
     bmad_version: str
@@ -89,6 +96,18 @@ class Settings(BaseSettings):
 
     # ── Harness environment ──────────────────────────────────────────────────
     claude_allowed_tools: CommaSeparated
+    #: How this instance's Claude Code authenticates to the Gateway (AD-5).
+    #:
+    #: `false` — the default and the shipped contract — is API-key mode: the Gateway's
+    #: virtual key goes to the harness as `ANTHROPIC_AUTH_TOKEN`, and LiteLLM calls the
+    #: provider with the key the host holds.
+    #:
+    #: `true` is subscription mode: Claude Code is logged in against the operator's own
+    #: Claude subscription, so `Authorization` carries that OAuth token, the virtual key
+    #: moves to `x-litellm-api-key`, and `ANTHROPIC_AUTH_TOKEN` must be absent or it would
+    #: override the login. It needs `forward_client_headers_to_llm_api: true` on the
+    #: Gateway, which is host-side and documented in `host/README.md`.
+    claude_subscription_auth: bool
     work_dir: Path
     agent_home: Path
 

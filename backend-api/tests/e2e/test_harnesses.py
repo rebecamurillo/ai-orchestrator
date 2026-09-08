@@ -47,4 +47,12 @@ def test_the_response_is_the_one_list_envelope(authenticated: httpx.Client) -> N
     body = response.json()
     assert set(body) == {"items", "next_cursor"}
     for item in body["items"]:
-        assert set(item) == {"name", "enabled", "last_readiness_at", "failing_check", "version_pin"}
+        assert set(item) == {
+            "name",
+            "enabled",
+            "last_readiness_at",
+            "failing_check",
+            "version_pin",
+            "last_readiness_run_id",
+            "lines",
+        }

@@ -27,8 +27,13 @@ export default function Banner({ detail, token }: Props) {
 
   if (level) {
     const progress = storiesProgressText(detail);
+    // `blocked`'s own Question block (`QuestionBlock.tsx`) carries the amber left rule for
+    // that park kind (5.10's own signal rule: the question block's rule and the current
+    // strip cell are the only amber elements a `blocked` detail shows) — this banner stays
+    // neutral rather than adding a second one.
+    const signal = detail.alert?.park_kind === 'blocked' ? 'neutral' : level;
     return (
-      <aside className="wf-alert" data-testid="wf-alert" data-signal={level} role="status">
+      <aside className="wf-alert" data-testid="wf-alert" data-signal={signal} role="status">
         <span>
           {token} · {bannerText(detail)}
         </span>

@@ -7,10 +7,15 @@ its frozen test set to say anything at all. What Epic 4 needs is the *seam*: `gi
 already has the place where a hit turns into `status: error, park: protected_path`, and a
 port declared now is what keeps that place from being invented twice.
 
-Nothing implements it in this epic. `StepPorts.protected_paths` is `None`, and `git.commit`
-reads that as "no hits" — the honest answer for a system that has not been told what is
-protected, and not a silently green check: the Run has no `agent` step yet either (SPEC
-non-goals), so there is nothing an agent could have edited.
+`application/rules/protected_paths.py::FrameAnchors` is what implements it (5.6): the walker
+binds one per row, out of the frame's anchors and the ranges its attempts recorded, so
+`git.commit` reaches AD-17's whole scope through the call it already made. A `StepPorts`
+whose `protected_paths` is still `None` — every construction outside a walk — reads as "no
+hits", which stays the honest answer for a process that resolved no frame at all.
+
+The member set is exactly `check`, and it stays that way: the tail needs each hit's *kind*
+for the record and calls the rule directly with the values it computed, rather than growing
+a sibling method here that no other implementation would have.
 
 `check` is a query and returns the hits, never a bool: the Operator reads *which* files were
 touched, and a rule that answered yes or no could not tell them.

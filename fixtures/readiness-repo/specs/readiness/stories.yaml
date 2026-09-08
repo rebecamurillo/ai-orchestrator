@@ -1,0 +1,6 @@
+- id: "1"
+  title: Create HELLO.md
+  description: >
+    Create HELLO.md at the repository root, containing the word hello, so
+    specs/readiness/SPEC.md's CAP-1 ("a file HELLO.md exists at the repository root and
+    contains the word hello") holds and `sh check.sh` exits 0.

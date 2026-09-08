@@ -58,6 +58,7 @@ from orchestrator.domain.ports.repositories import (
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.values import PlannedRow
 
@@ -79,6 +80,10 @@ class CreateRunPorts:
     #: AD-10: a Run for Project `readiness` skips the harness-enabled fail line. Epic 5
     #: is this flag's caller; nothing in this story sets it to `True`.
     skip_harness_check: bool = False
+    #: `None` degrades to "no trace opened, `run.trace_id` stays `None`" (AD-11) — every
+    #: frozen `CreateRunPorts(...)` construction predating this story keeps working
+    #: unchanged. Production wiring (`api/providers.py::create_run_ports`) always sets one.
+    tracer: Tracer | None = None
 
 
 @dataclass(frozen=True)
@@ -144,6 +149,11 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     assert tree is not None
 
     run_id: UUID = new_id()
+    trace = (
+        ports.tracer.create_run_trace(run_id, project.slug, (), name=_trace_name(req))
+        if ports.tracer is not None
+        else None
+    )
     run = Run(
         id=run_id,
         project_id=project.id,
@@ -158,6 +168,7 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         budget_usd=req.budget_usd,
         manual_estimate_h=req.manual_estimate_h,
         re_review_done=req.re_review_done,
+        trace_id=trace.trace_id if trace is not None else None,
         created_at=ports.clock.now(),
     )
     step_rows = [_step_run(run_id, row) for row in plan.rows]
@@ -227,6 +238,16 @@ def park_row_kind_of(ports: RunReadPorts, run: Run) -> str | None:
         return None
     row = row_at(ports.steps.list_for_run(run.id), run.park_path)
     return row.kind if row is not None else None
+
+
+def _trace_name(req: CreateRunRequest) -> str:
+    """`run {template}@{version} {branch}` — AD-11's own identity line for the root
+    observation `create_run_trace` opens. The brief's literal port signature
+    (`create_run_trace(run_id, project_slug, tags)`) has nowhere to carry this, so it is
+    added keyword-only (5.1's own precedent for `env_for`'s `traceparent`/`story_id`): keep
+    every brief-named parameter, add the one missing, stated fact rather than inventing an
+    unrelated shape."""
+    return f"run {req.template_name}@{req.template_version} {req.base_branch}"
 
 
 def _inputs_dict(req: CreateRunRequest) -> dict[str, Any]:
