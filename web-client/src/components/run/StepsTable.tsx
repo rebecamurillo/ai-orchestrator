@@ -23,9 +23,11 @@ function timeText(step: StepRowOut): string {
   return seconds == null ? '—' : ageText(seconds);
 }
 
+/** The row's own `cost_usd` (5.3, summed across every attempt) as `$0.00`, with the word
+ * `provisional` after it when the latest attempt's own cost is still an estimate (5.10). */
 function costText(step: StepRowOut): string {
-  const cost = step.latest?.cost_usd;
-  return cost == null ? '—' : `$${cost}`;
+  const provisional = step.latest?.cost_provisional ? ' provisional' : '';
+  return `$${step.cost_usd ?? '0'}${provisional}`;
 }
 
 function attemptsSuffix(step: StepRowOut): string {

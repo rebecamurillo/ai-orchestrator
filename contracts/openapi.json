@@ -3,6 +3,16 @@
     "schemas": {
       "AlertOut": {
         "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttributionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "park_kind": {
             "anyOf": [
               {
@@ -48,6 +58,51 @@
           "park_kind"
         ],
         "title": "AlertOut",
+        "type": "object"
+      },
+      "AttributionOut": {
+        "description": "The blocked Question's eyebrow (5.10, SPEC CAP-10): `Agent \u00b7 {harness} \u00b7 {model} \u00b7\n{ended_at}`.",
+        "properties": {
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "required": [
+          "harness",
+          "model",
+          "ended_at"
+        ],
+        "title": "AttributionOut",
         "type": "object"
       },
       "BoardColumnsOut": {
@@ -1007,6 +1062,10 @@
       },
       "LatestAttemptOut": {
         "properties": {
+          "cost_provisional": {
+            "title": "Cost Provisional",
+            "type": "boolean"
+          },
           "cost_usd": {
             "anyOf": [
               {

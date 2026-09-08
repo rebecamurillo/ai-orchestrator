@@ -16,7 +16,8 @@ interface Props {
 }
 
 export default function GateRecord({ detail, token }: Props) {
-  const level = bannerLevel(token);
+  // Neutral for a `blocked` detail (5.10's own signal rule — see `Banner.tsx`'s own comment).
+  const level = detail.alert?.park_kind === 'blocked' ? null : bannerLevel(token);
   const lastIndex = detail.gate_record.length - 1;
 
   return (

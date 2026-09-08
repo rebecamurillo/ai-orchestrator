@@ -540,12 +540,26 @@ export interface components {
     schemas: {
         /** AlertOut */
         AlertOut: {
+            attribution?: components["schemas"]["AttributionOut"] | null;
             /** Park Kind */
             park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | null;
             /** Reason */
             reason: string | null;
             /** Token */
             token: string;
+        };
+        /**
+         * AttributionOut
+         * @description The blocked Question's eyebrow (5.10, SPEC CAP-10): `Agent · {harness} · {model} ·
+         *     {ended_at}`.
+         */
+        AttributionOut: {
+            /** Ended At */
+            ended_at: string | null;
+            /** Harness */
+            harness: string | null;
+            /** Model */
+            model: string | null;
         };
         /** BoardColumnsOut */
         BoardColumnsOut: {
@@ -886,6 +900,8 @@ export interface components {
         };
         /** LatestAttemptOut */
         LatestAttemptOut: {
+            /** Cost Provisional */
+            cost_provisional?: boolean;
             /** Cost Usd */
             cost_usd: string | null;
             /** Ended At */

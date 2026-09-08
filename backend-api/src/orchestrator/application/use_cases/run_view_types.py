@@ -123,10 +123,24 @@ class Header:
 
 
 @dataclass(frozen=True)
+class Attribution:
+    """Who a `blocked` park's Question is attributed to (SPEC CAP-10): the parked row's own
+    latest Attempt, whose `harness`/`model`/`ended_at` are already settled by the time a
+    Story can block (`mark_finished` before `apply_step_result` ever routes one) — `None`
+    only for a park kind whose row never ran an Attempt."""
+
+    harness: str | None
+    model: str | None
+    ended_at: datetime | None
+
+
+@dataclass(frozen=True)
 class Alert:
     token: str
     reason: str | None
     park_kind: ParkKind | None
+    #: `None` predates this story; every `blocked` park now carries one (5.10).
+    attribution: Attribution | None = None
 
 
 @dataclass(frozen=True)
@@ -140,6 +154,8 @@ class LatestAttempt:
     exit_code: int | None
     cost_usd: Decimal | None
     log_tail: list[str]
+    #: True while `cost_usd` is the harness's own estimate (5.10, off `Attempt.cost_provisional`).
+    cost_provisional: bool = False
 
 
 @dataclass(frozen=True)
