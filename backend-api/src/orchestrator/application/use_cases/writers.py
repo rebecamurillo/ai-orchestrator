@@ -24,12 +24,14 @@ from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
+from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
     GateRecordRepository,
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.trajectories import TrajectoryRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.statuses import (
     Actor,
@@ -66,7 +68,12 @@ RUN_EXPIRED = "parked 30 days"
 
 @dataclass(frozen=True)
 class WriterPorts:
-    """The four repositories every status write goes through, plus the scope and the clock."""
+    """The four repositories every status write goes through, plus the scope and the clock.
+
+    `git` and `trajectories` (5.9) are the two `record_trajectory` needs beyond these four —
+    both default `None` and degrade like `tracer`/`spend_writes`, so every `WriterPorts(...)`
+    construction that predates this story keeps working unchanged.
+    """
 
     runs: RunRepository
     steps: StepRunRepository
@@ -74,6 +81,8 @@ class WriterPorts:
     records: GateRecordRepository
     uow: UnitOfWork
     clock: Clock
+    git: Git | None = None
+    trajectories: TrajectoryRepository | None = None
 
 
 def require_run(ports: WriterPorts, run_id: UUID) -> Run:

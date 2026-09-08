@@ -17,6 +17,7 @@ from orchestrator.infrastructure.db.models.run import (
     StepRunRow,
 )
 from orchestrator.infrastructure.db.models.template import TemplateRow, TemplateVersionRow
+from orchestrator.infrastructure.db.models.trajectory import TrajectoryRow
 
 __all__ = [
     "AttemptRow",
@@ -28,4 +29,5 @@ __all__ = [
     "StepRunRow",
     "TemplateRow",
     "TemplateVersionRow",
+    "TrajectoryRow",
 ]

@@ -26,12 +26,14 @@ from sqlalchemy.orm import Session
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.ports.gateway import Gateway
+from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyAttemptRepository,
     SQLAlchemyGateRecordRepository,
     SQLAlchemyRunRepository,
     SQLAlchemyStepRunRepository,
+    SQLAlchemyTrajectoryRepository,
 )
 
 #: How a scope reaches a session: `create_session_factory`'s own return shape.
@@ -67,8 +69,15 @@ class SessionUnitOfWork:
 
 
 @contextmanager
-def open_writer_ports(session_factory: SessionFactory) -> Iterator[WriterPorts]:
-    """One session's worth of `WriterPorts`, closed on every path."""
+def open_writer_ports(
+    session_factory: SessionFactory, git: Git | None = None
+) -> Iterator[WriterPorts]:
+    """One session's worth of `WriterPorts`, closed on every path.
+
+    `git` is `None` for every caller that predates 5.9 (`attempt_writes`'s own scope has
+    never needed it): `record_trajectory` degrades the same way `tracer`/`spend_writes` do.
+    `trajectories` needs no adapter of its own beyond the session, so it is always built.
+    """
     session = session_factory()
     try:
         yield WriterPorts(
@@ -78,6 +87,8 @@ def open_writer_ports(session_factory: SessionFactory) -> Iterator[WriterPorts]:
             records=SQLAlchemyGateRecordRepository(session),
             uow=SessionUnitOfWork(session),
             clock=SystemClock(),
+            git=git,
+            trajectories=SQLAlchemyTrajectoryRepository(session),
         )
     finally:
         session.close()

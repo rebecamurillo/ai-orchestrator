@@ -42,6 +42,12 @@ is the walker's own re-walk after a redispatch, which owns it.
 
 `after_route(run, row, result)` is Epic 5's seam: the budget rule's second gate record and
 the `park_kind = budget` rewrite hang there. Nothing in Epic 4 passes it.
+
+**5.9's own trigger hangs here too, unconditionally.** The instant a Story frame's own
+commit-guard row itself reaches `done`, `record_trajectory` runs inside the same unit of
+work — the frame's last row, and the only point at which the trajectory's `end_sha` ("HEAD
+after the commit-guard") is a fact. It is idempotent on `(run_id, frame)`, so a durable-step
+replay of this same call records nothing twice (AD-19, AD-6).
 """
 
 from __future__ import annotations
@@ -53,7 +59,9 @@ from uuid import UUID
 import structlog
 
 from orchestrator.application.rules.frames import rows_after
+from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
+from orchestrator.application.use_cases.record_trajectory import record_trajectory
 from orchestrator.application.use_cases.writers import (
     FINISHED,
     Entry,
@@ -145,6 +153,7 @@ def apply_step_result(
             status=step_transition(row.status, _event(result.status)),
             reason=result.reason,
         )
+        _maybe_record_trajectory(ports, row)
         run = _route(ports, run, row, result, attempt)
         if after_route is not None:
             after_route(run, row, result)
@@ -345,6 +354,28 @@ def budget_second_record(ports: WriterPorts, run: Run, row: StepRun, result: Ste
     path = park.path or row.path
     updated = set_run(ports, run, park_kind=park.kind, park_path=path, park_reason=park.reason)
     record(ports, updated, Entry(event=park.kind, actor="machine", path=path, text=park.reason))
+
+
+def _maybe_record_trajectory(ports: WriterPorts, row: StepRun) -> None:
+    """5.9's own trigger: the frame's commit-guard row reaching `done` closes the Story.
+
+    Gated on `row.kind` rather than the literal step id — `application/steps/__init__.py`'s
+    own "a kind is named there or nowhere" (AD-9) — so a Template that names its commit row
+    something other than `commit-guard` still triggers this correctly.
+    """
+    if row.kind != COMMIT_KIND or row.status != "done" or row.frame is None:
+        return
+    record_trajectory(
+        row.run_id,
+        row.frame,
+        runs=ports.runs,
+        steps=ports.steps,
+        attempts=ports.attempts,
+        gate_records=ports.records,
+        git=ports.git,
+        trajectories=ports.trajectories,
+        clock=ports.clock,
+    )
 
 
 def _fail(ports: WriterPorts, run: Run, row: StepRun, result: StepResult) -> Run:

@@ -23,6 +23,9 @@ from orchestrator.infrastructure.db.repositories.step_runs import (
 from orchestrator.infrastructure.db.repositories.templates import (
     SQLAlchemyTemplateVersionRepository,
 )
+from orchestrator.infrastructure.db.repositories.trajectories import (
+    SQLAlchemyTrajectoryRepository,
+)
 
 __all__ = [
     "SQLAlchemyAttemptRepository",
@@ -33,4 +36,5 @@ __all__ = [
     "SQLAlchemyRunRepository",
     "SQLAlchemyStepRunRepository",
     "SQLAlchemyTemplateVersionRepository",
+    "SQLAlchemyTrajectoryRepository",
 ]

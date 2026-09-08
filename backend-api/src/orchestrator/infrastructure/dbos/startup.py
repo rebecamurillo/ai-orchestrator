@@ -106,14 +106,17 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
     (5.7) is its own scope for the same reason `attempt_writes` cannot serve it: the budget
     read needs `runs`/`steps`, which the agent kind's own writes may never touch (AD-8).
     `LiteLLMSpend` is built once here, over one shared `httpx.Client` an explicit timeout —
-    `SPEND_TIMEOUT_SECONDS` — rather than httpx's own 5 s default.
+    `SPEND_TIMEOUT_SECONDS` — rather than httpx's own 5 s default. `open_ports` (`apply_step_
+    result`'s own scope) carries `git` too (5.9): `record_trajectory` reads the committed
+    story file and `HEAD` through it, and needs no adapter `attempt_writes` does not already
+    have wired elsewhere.
     """
     runner = RealProcessRunner()
     gateway = LiteLLMSpend(
         settings, httpx.Client(base_url=settings.litellm_base_url, timeout=SPEND_TIMEOUT_SECONDS)
     )
     return WalkerDeps(
-        open_ports=partial(open_writer_ports, session_factory),
+        open_ports=partial(open_writer_ports, session_factory, git=git),
         step_ports=StepPorts(
             git=git,
             clock=SystemClock(),
