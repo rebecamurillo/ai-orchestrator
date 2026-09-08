@@ -34,6 +34,7 @@ from typing import Any
 from fastapi import Request
 
 from orchestrator.application.use_cases.create_run import CreateRunPorts, RunReadPorts
+from orchestrator.application.use_cases.harness_readiness import HarnessReadinessPorts
 from orchestrator.application.use_cases.harnesses import HarnessPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
@@ -183,6 +184,31 @@ def create_run_ports(request: Request) -> Iterator[CreateRunPorts]:
             uow=uow,
             clock=SystemClock(),
             tracer=LangfuseTracer(settings),
+        )
+
+
+def readiness_ports(request: Request) -> Iterator[HarnessReadinessPorts]:
+    """The ports `POST /harnesses/{name}/readiness` runs `start` on (SPEC CAP-8).
+
+    `create_run_ports`'s own wiring, over `skip_harness_check=True`: AD-10's carried-forward
+    flag, whose one caller this endpoint is — a harness that has never passed readiness can
+    still run the readiness Run that would enable it.
+    """
+    session_factory = from_state(request, SESSION_FACTORY)
+    engine: WorkflowEngine = from_state(request, ENGINE)
+    settings = from_state(request, SETTINGS)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield HarnessReadinessPorts(
+            create_run=CreateRunPorts(
+                preflight=_preflight_ports(request, uow, "readiness"),
+                engine=engine,
+                steps=SQLAlchemyStepRunRepository(uow.session),
+                uow=uow,
+                clock=SystemClock(),
+                skip_harness_check=True,
+                tracer=LangfuseTracer(settings),
+            ),
+            budget_usd=settings.readiness_budget_usd,
         )
 
 

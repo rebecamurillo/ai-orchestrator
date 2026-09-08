@@ -564,6 +564,30 @@
         "title": "EnvVarIn",
         "type": "object"
       },
+      "EvaluationLineOut": {
+        "description": "One line `evaluate` produced: `{check, ok, text}`, the brief's own literal shape.",
+        "properties": {
+          "check": {
+            "title": "Check",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "check",
+          "ok",
+          "text"
+        ],
+        "title": "EvaluationLineOut",
+        "type": "object"
+      },
       "GateRecordOut": {
         "properties": {
           "actor": {
@@ -784,6 +808,25 @@
               }
             ],
             "title": "Last Readiness At"
+          },
+          "last_readiness_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Readiness Run Id"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationLineOut"
+            },
+            "title": "Lines",
+            "type": "array"
           },
           "name": {
             "title": "Name",
@@ -1929,6 +1972,17 @@
       "ProjectRead": {
         "description": "A Project as every read returns it, its Repositories and its Runs embedded.\n\nEvery read answers the same shape (POST's 201, PUT's 200, both GETs) \u2014 a Repository\nadded between two reads is exactly the kind of state change the Operator relies on the\nnext read to show, and a narrower shape for the list or the create response would have\nto justify why *that* read is allowed to lie about what is stored.",
         "properties": {
+          "builtin": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Builtin"
+          },
           "context_paths": {
             "items": {
               "type": "string"
@@ -3455,6 +3509,185 @@
           }
         ],
         "summary": "List every harness",
+        "tags": [
+          "harnesses"
+        ]
+      }
+    },
+    "/api/v1/harnesses/{name}/readiness": {
+      "get": {
+        "description": "The same row `GET /harnesses` lists, addressed by name.",
+        "operationId": "get_readiness_api_v1_harnesses__name__readiness_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No harness has that name."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`name` does not match the shape below."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one harness's current readiness",
+        "tags": [
+          "harnesses"
+        ]
+      },
+      "post": {
+        "description": "Dispatch an `epic@1` Run of the fixture Repository, `skip_harness_check` bypassing\nthe disabled-harness pre-flight line (AD-10) so a harness never yet enabled can still\nrun the Run that would enable it.",
+        "operationId": "start_readiness_api_v1_harnesses__name__readiness_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The readiness Project or Repository is not seeded."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A non-terminal readiness Run for this harness already exists."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`name` does not match the shape below."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Dispatch a readiness Run for one harness",
         "tags": [
           "harnesses"
         ]

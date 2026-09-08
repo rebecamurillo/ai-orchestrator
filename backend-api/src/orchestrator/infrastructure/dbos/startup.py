@@ -48,6 +48,7 @@ from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db.environment import read_run_environment
+from orchestrator.infrastructure.db.harness_readiness import readiness_evaluate_hook
 from orchestrator.infrastructure.db.run_finished import run_finished_hook
 from orchestrator.infrastructure.db.writers import (
     SessionFactory,
@@ -135,6 +136,14 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
         ),
         run_finished=partial(
             run_finished_hook, session_factory, git, settings.work_dir, settings.bmad_version
+        ),
+        on_terminal=partial(
+            readiness_evaluate_hook,
+            session_factory,
+            git,
+            LangfuseTracer(settings),
+            gateway,
+            settings.work_dir,
         ),
     )
 

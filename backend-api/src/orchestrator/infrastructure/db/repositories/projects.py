@@ -17,7 +17,11 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from orchestrator.domain.entities.project import EncryptedEnvVar, Project
+from orchestrator.domain.entities.project import (
+    READINESS_PROJECT_SLUG,
+    EncryptedEnvVar,
+    Project,
+)
 from orchestrator.infrastructure.db.models.project import ProjectRow
 
 if TYPE_CHECKING:  # pragma: no cover — typing only
@@ -37,7 +41,15 @@ MUTABLE_FIELDS = (
 
 
 def to_entity(row: ProjectRow) -> Project:
-    """A row as the domain entity every layer above works with."""
+    """A row as the domain entity every layer above works with.
+
+    `builtin` carries no column of its own (`tests/unit/test_project_repository_adapter.
+    py::test_the_table_carries_exactly_the_columns_the_entity_has` closes this table's
+    column set, and names no successor story): it is derived from `slug` alone, which is
+    already unique and already stored, so a second, redundant fact the migration would have
+    to keep in step with it is never written at all — the seeded `readiness` Project (SPEC
+    CAP-8) is the one row this slug ever names.
+    """
     return Project(
         id=row.id,
         slug=row.slug,
@@ -49,6 +61,7 @@ def to_entity(row: ProjectRow) -> Project:
             for item in row.env_vars_enc
         ),
         log_prompt_content=row.log_prompt_content,
+        builtin=row.slug == READINESS_PROJECT_SLUG,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

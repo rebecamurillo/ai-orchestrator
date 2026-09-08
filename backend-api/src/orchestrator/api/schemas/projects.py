@@ -243,6 +243,14 @@ class ProjectRead(BaseModel):
     context_paths: list[str]
     env_vars: list[MaskedEnvVarOut]
     log_prompt_content: bool
+    #: `True` for exactly the seeded `readiness` Project (SPEC CAP-8) — the New workflow
+    #: screen and any future Edit affordance both read this rather than comparing `slug`.
+    #: Nullable, never actually `None` in a rendered response (`of` always resolves a real
+    #: `bool`): `openapi-typescript` marks a defaulted *non-nullable* field required
+    #: regardless of the contract's own `required` list, and only a nullable one optional —
+    #: which is what lets `web-client/tests/unit/newwf-state.test.ts`'s existing `ProjectRead`
+    #: fixtures, frozen and predating this story, keep compiling unchanged.
+    builtin: bool | None = None
     repositories: list[RepositoryOut]
     runs: list[ProjectRunOut]
     created_at: UtcTimestamp

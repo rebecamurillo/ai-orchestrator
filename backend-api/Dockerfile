@@ -104,11 +104,16 @@ RUN uv sync --locked --no-dev
 # `docker compose exec backend-api scripts/harness/claude.sh doctor` reads the same file a
 # reviewer reads.
 COPY --chown=agent:agent scripts/harness /app/scripts/harness
+COPY --chown=agent:agent scripts/readiness_fixture.sh /app/scripts/readiness_fixture.sh
 COPY --chown=agent:agent backend-api/docker-entrypoint.sh /app/docker-entrypoint.sh
 
 # The shipped Templates (SPEC CAP-3): `seed_shipped` reads this path at start-up
 # (`TEMPLATES_DIR=/app/templates`, story 3.3). Repository-root, like `scripts/harness` above.
 COPY --chown=agent:agent templates /app/templates
+
+# The readiness fixture (SPEC CAP-8): `scripts/readiness_fixture.sh` copies this, never
+# edits it in place. Repository-root, like `templates` above.
+COPY --chown=agent:agent fixtures /app/fixtures
 
 WORKDIR /app
 

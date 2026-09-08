@@ -14,6 +14,7 @@ password into every `repr()` and every log line binding these settings (hard rul
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -64,6 +65,9 @@ class Settings(BaseSettings):
     #: these, never a constant, so an e2e scenario can run either sooner.
     clone_check_cron: str
     worktree_gc_cron: str
+    #: `harness_readiness.start`'s own `budget_usd` (SPEC CAP-8) — the fixture's one story
+    #: is small, so a low ceiling still leaves room for a retry or two.
+    readiness_budget_usd: Annotated[Decimal, Field(gt=0)]
 
     # ── Git (AD-5) — never handed to a harness process ───────────────────────
     github_token: SecretStr
