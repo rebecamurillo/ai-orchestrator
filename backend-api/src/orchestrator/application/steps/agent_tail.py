@@ -122,7 +122,7 @@ def finish(
     without routing, so a dispatch that edited an anchor and then hung would escape the check
     permanently rather than only this once: the Operator's *Retry* opens attempt 2, whose WIP
     commit commits that edit, and that commit falls *between* attempt 1's `end_sha` and
-    attempt 2's `start_sha` — inside no agent range `walk._agent_ranges` collects, and gone
+    attempt 2's `start_sha` — inside no agent range `walk_frame.py` collects, and gone
     from the tree the commit-guard reads. FR-31's "a modified anchor wins over every route"
     is the same sentence for this stop as for the routed ones.
     """
