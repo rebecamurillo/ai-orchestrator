@@ -27,7 +27,11 @@ mkdir -p "${READINESS_DIR}"
 rm -rf "${SCRATCH}" "${ORIGIN}"
 
 log "bare origin at ${ORIGIN}"
-git init --bare -q "${ORIGIN}"
+# `-b main`, not the default: `git init --bare` leaves HEAD a symbolic ref to whatever
+# `init.defaultBranch` says — `master` in this image — which this fixture never creates, and
+# `git ls-remote -- <url> HEAD`, the clone check's own first line, answers nothing for an
+# unborn HEAD (`use_cases/clone_check.py::_reachable` then reports `the remote answered no refs`).
+git init --bare -q -b main "${ORIGIN}"
 
 log "building main from ${FIXTURE_SRC} (BMAD_VERSION=${BMAD_VERSION})"
 cp -r "${FIXTURE_SRC}" "${SCRATCH}"
