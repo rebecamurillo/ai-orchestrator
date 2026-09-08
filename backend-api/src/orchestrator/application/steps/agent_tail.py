@@ -19,7 +19,10 @@ the same ambiguity rule the routing below refuses to guess at.
 3. the attempt's spend and the budget check (5.7), *after* the routing — FR-17 says the step
    keeps the status its file routed to and the Run parks on top of it.
 
-Two of the three are seams here, named where they go and doing nothing yet.
+The third is still a seam, named where it goes and doing nothing yet. The first is
+`protected` below, over `rules/protected_paths.py` and the anchors the walker resolved onto
+`RunEnvironment` — and `re_check` is where the Operator's *Accept* comes back to it, because
+answering a `protected_path` park re-runs this tail and dispatches nothing (AD-9).
 
 **`done` still means "observed".** The row's gate is `liveness` and this module never
 changes it: a Story step is green only when the `verify` row after it says so (NFR-2). A row
@@ -32,15 +35,18 @@ Story that escaped its contract.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
+from orchestrator.application.rules import protected_paths
 from orchestrator.application.rules.routing import route
+from orchestrator.application.rules.signals import accepted_files
 from orchestrator.application.steps.context import (
     StepContext,
     committed,
     operator_retry,
     require_cwd,
+    require_env,
     require_workspace,
     resolved_text,
     retrying,
@@ -54,6 +60,7 @@ from orchestrator.application.templates.agent_row import (
     STORY_ID_KEY,
 )
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.ports.git import Change
 from orchestrator.domain.ports.harness import HarnessResult
 from orchestrator.domain.values import Park, Retry, StepResult
 
@@ -76,12 +83,35 @@ AMBIGUOUS = 2
 #: harness never got to write a file, so there is nothing for FR-16 to read.
 TIMED_OUT = "timeout {path} after {n} min"
 
+#: What an anchor an attempt touched stops the Run with (AD-17), and how the files are named.
+#: A sentence of its own rather than `git_commit.py`'s: that one is about a commit that was
+#: refused, this one is about a dispatch that has already happened.
+PROTECTED = "protected path modified: {paths}"
+PATH_SEPARATOR = ", "
+
+#: Where the hit list travels to the gate record: `StepResult.payload["hits"]`, one entry per
+#: file, so the Operator's `continue` can name exactly the paths the Run reported (AD-9).
+HITS_KEY = "hits"
+
+#: The signal a person answers a `protected_path` park with (AD-13). It carries the accepted
+#: files under `rules/signals.py::FILES_KEY`; a `continue` on a checkpoint carries none.
+CONTINUE_EVENT = "continue"
+
 
 def finish(
     ctx: StepContext, attempt: Attempt, result: HarnessResult, timeout_min: float
 ) -> StepResult:
     """Record what the harness did, then say what the row reached; `mark_finished` runs
-    first, so a killed attempt is as fully recorded as one that exited cleanly (AD-8)."""
+    first, so a killed attempt is as fully recorded as one that exited cleanly (AD-8).
+
+    **A timeout is checked for anchors too, and it has to be.** The timeout park returns
+    without routing, so a dispatch that edited an anchor and then hung would escape the check
+    permanently rather than only this once: the Operator's *Retry* opens attempt 2, whose WIP
+    commit commits that edit, and that commit falls *between* attempt 1's `end_sha` and
+    attempt 2's `start_sha` — inside no agent range `walk._agent_ranges` collects, and gone
+    from the tree the commit-guard reads. FR-31's "a modified anchor wins over every route"
+    is the same sentence for this stop as for the routed ones.
+    """
     finished = attempt.model_copy(
         update={
             "ended_at": ctx.ports.clock.now(),
@@ -94,6 +124,9 @@ def finish(
     )
     committed(ctx, lambda attempts: attempts.mark_finished(finished))
     if result.timed_out:
+        hit = protected(ctx, finished)
+        if hit is not None:
+            return hit.model_copy(update={"output_ref": str(result.log_path)})
         reason = TIMED_OUT.format(path=ctx.row.path, n=timeout_min)
         return StepResult(
             status="error",
@@ -108,13 +141,16 @@ def finish(
 def tail(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> StepResult:
     """What the dispatch reached, by the Story file it wrote and nothing else (FR-16).
 
-    `attempt` is the finished record, and the two seams marked below are its only readers
+    `attempt` is the finished record, and the two checks marked below are its only readers
     here: the protected-path check compares the agent's range against `attempt.start_sha`,
     and the budget check reads the same attempt's usage and spend.
     """
     log = str(result.log_path)
-    # 5.6 — the protected-path check goes here, before the routing. FR-31: a modified
-    # anchor wins over every route below, which it cannot do from behind one.
+    # 5.6 — the protected-path check, before the routing. FR-31: a modified anchor wins over
+    # every route below, which it cannot do from behind one.
+    hit = protected(ctx, attempt)
+    if hit is not None:
+        return hit.model_copy(update={"output_ref": log})
     files = story_files(ctx)
     if files is None:
         return StepResult(status="done", gate=ctx.row.gate, output_ref=log)
@@ -131,6 +167,58 @@ def tail(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> StepResul
     # 5.7 — the attempt's spend and the budget check go here, after the routing. FR-17: the
     # step keeps the status its file routed to and the Run parks on top of it.
     return routed.model_copy(update={"output_ref": log})
+
+
+def protected(ctx: StepContext, attempt: Attempt) -> StepResult | None:
+    """AD-17 over this attempt's own range, or `None` when it touched no anchor.
+
+    The range is `start_sha .. end_sha` — what the harness did between the SHA recorded
+    before it started and the SHA recorded when it exited — unioned with whatever it left
+    uncommitted, so a file written and never committed is as much a hit as a committed one.
+    Nothing else is in scope: an operator commit and the orchestrator's own WIP and prepare
+    commits are outside those two ends by construction, which is what makes this check
+    deterministic rather than a guess about who wrote what.
+
+    A hit is never retried. `apply_step_result` parks the Run on it (AD-8) and the Operator
+    answers with *Accept* or a skip; `re_check` below is what an Accept comes back to.
+    """
+    environment = require_env(ctx)
+    hits = protected_paths.check(
+        _changes(ctx, attempt), environment.anchors, environment.accepted_paths
+    )
+    if not hits:
+        return None
+    reason = PROTECTED.format(paths=PATH_SEPARATOR.join(hit.path for hit in hits))
+    return StepResult(
+        status="error",
+        gate=ctx.row.gate,
+        reason=reason,
+        park=Park(kind="protected_path", reason=reason, path=ctx.row.path),
+        payload={HITS_KEY: [{"path": hit.path, "kind": hit.kind} for hit in hits]},
+    )
+
+
+def re_check(ctx: StepContext) -> StepResult | None:
+    """The Accept branch (AD-9): a `continue` carrying files re-runs the tail, dispatching
+    nothing. `None` for every other resume, which is the ordinary dispatch.
+
+    The Operator answered a `protected_path` park by accepting the paths, so the work the
+    row was doing is already in the worktree — re-dispatching would ask the harness to do it
+    again, and would put a WIP commit and a prepare commit in front of a range the check is
+    about to read. What is left is the check and the routing, over the *previous* attempt's
+    own two SHAs, with `run.accepted_paths` — which `signal_run` has already extended —
+    excluded.
+
+    The discriminator is `StepContext` alone, as AD-9 requires: the event plus a payload that
+    carries files. A `continue` on a `checkpoint` park carries none, and a row whose first
+    attempt was resumed has no range to re-read.
+    """
+    signal, previous = ctx.resume_signal, ctx.previous_attempt
+    if signal is None or signal.event != CONTINUE_EVENT or previous is None:
+        return None
+    if not accepted_files(signal.payload):
+        return None
+    return tail(ctx, previous, _reported(previous))
 
 
 def story_files(ctx: StepContext) -> tuple[str, ...] | None:
@@ -209,6 +297,34 @@ def usage(result: HarnessResult) -> dict[str, Any]:
         "cost_usd": figures.cost_usd,
         "cost_provisional": True,
     }
+
+
+def _changes(ctx: StepContext, attempt: Attempt) -> tuple[Change, ...]:
+    """The attempt's committed range and the tree it left, as one list of changes (AD-17).
+
+    An attempt that recorded neither SHA bounded no range — a worktree with no commit in it
+    at all — and the uncommitted tree is then the whole of what it did.
+    """
+    worktree, git = require_cwd(ctx), ctx.ports.git
+    ranged: tuple[Change, ...] = ()
+    if attempt.start_sha is not None and attempt.end_sha is not None:
+        ranged = git.diff_changes(worktree, attempt.start_sha, attempt.end_sha)
+    return (*ranged, *protected_paths.uncommitted(git.status(worktree)))
+
+
+def _reported(attempt: Attempt) -> HarnessResult:
+    """What the dispatch that parked already reported, rebuilt from its own attempt row.
+
+    The Accept branch runs no harness, and `tail` takes what one returned: the exit code and
+    the log are the attempt's columns (AD-8's `mark_finished` wrote them), so the routing
+    reads exactly what it read the first time. `usage` is left out on purpose — the spend of
+    that dispatch was recorded against that dispatch, and 5.7 must not count it twice.
+    """
+    return HarnessResult(
+        session_id=attempt.session_id or "",
+        exit_code=attempt.exit_code,
+        log_path=Path(attempt.log_path or ""),
+    )
 
 
 def _parsed(ctx: StepContext, files: tuple[str, ...]) -> StoryFile | None:

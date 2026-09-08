@@ -157,12 +157,22 @@ def clear_park(now: datetime | None = None) -> dict[str, Any]:
     return cleared
 
 
-def park_run(ports: WriterPorts, run: Run, park: Park, attempt_n: int | None = None) -> Run:
+def park_run(
+    ports: WriterPorts,
+    run: Run,
+    park: Park,
+    attempt_n: int | None = None,
+    payload: dict[str, Any] | None = None,
+) -> Run:
     """Stop a Run for the Operator: the three park fields and one record, together.
 
     The only way `run.park_kind`, `run.park_path` and `run.park_reason` are written, so a
     parked Run always carries the three of them and the record that says the same thing.
     `path` is the park's own when it names one and the caller's row otherwise.
+
+    `payload` is what the stop needs kept beyond its sentence — AD-17's list of the protected
+    paths an attempt touched. It goes on the record, which is append-only, rather than on a
+    Run column the next park would overwrite.
     """
     parked = set_run(
         ports,
@@ -181,6 +191,7 @@ def park_run(ports: WriterPorts, run: Run, park: Park, attempt_n: int | None = N
             path=park.path,
             text=park.reason,
             attempt_n=attempt_n,
+            payload=payload or {},
         ),
     )
     return parked

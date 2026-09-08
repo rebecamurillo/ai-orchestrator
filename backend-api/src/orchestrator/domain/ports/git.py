@@ -25,7 +25,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
+
+#: How one path changed inside a commit range. A rename is neither: the adapter reports it
+#: as the pair it is (AD-17 — moving a protected file away is losing it).
+ChangeKind = Literal["added", "modified", "deleted"]
+
+
+@dataclass(frozen=True)
+class Change:
+    """One path a commit range touched, and how it was touched.
+
+    A value type of the port for the reason `RemoteRef` is one: `diff_names` answers "which
+    paths", which is all the commit-guard needs, while AD-17's other call site has to tell a
+    deleted anchor from a file the agent created — two facts, so one object rather than two
+    parallel tuples the caller could pair up wrongly.
+    """
+
+    path: str
+    kind: ChangeKind
 
 
 @dataclass(frozen=True)
@@ -146,6 +164,18 @@ class Git(Protocol):
 
     def diff_names(self, worktree: Path, from_sha: str) -> tuple[str, ...]:
         """Every path that changed between `from_sha` and the worktree as it stands now."""
+        ...
+
+    def diff_changes(self, worktree: Path, from_sha: str, to_sha: str) -> tuple[Change, ...]:
+        """Every path two commits differ in, and how each of them changed.
+
+        A **bounded** range, unlike `diff_names`: AD-17 asks what one attempt did between the
+        SHA recorded before the harness started and the SHA recorded after it exited, so a
+        commit outside those two ends — an operator edit, the orchestrator's own WIP or
+        prepare commit — is not in the answer by construction.
+
+        A ref the repository does not hold is `()`, per the second convention above.
+        """
         ...
 
     def push(self, worktree: Path, branch: str, set_upstream: bool) -> str:

@@ -17,6 +17,12 @@ middle write is the one thing a *resumed* session skips — `Harness.resume` is 
 `ended_at` — `start_attempt` already stamps that on an attempt it finds open after a restart,
 which is the very case this guards — while `end_sha` is written only by the tail.
 
+**One resume reaches this module and dispatches nothing.** A `continue` carrying accepted
+files answers a `protected_path` park (AD-17): the work is already in the worktree, so
+`agent_tail.re_check` re-runs the check and the routing over the previous attempt and
+`execute` returns that — before the orphan control, before the WIP commit, before anything
+here would put a commit of its own in front of the range about to be read.
+
 **Three re-dispatches reach this module and are not the same dispatch** (AD-9, AD-13): the
 Template's own `retry`, which resumes the session or prepends its prompt to a fresh one; a
 person's *Retry* from a stop, which archives every extra Story file an ambiguity left before
@@ -130,6 +136,9 @@ class AgentExecutor:
     """Prepare the worktree, dispatch the harness, record the attempt. Decide nothing."""
 
     def execute(self, ctx: StepContext) -> StepResult:
+        accepted = agent_tail.re_check(ctx)
+        if accepted is not None:
+            return accepted
         found = _harness(ctx)
         if isinstance(found, StepResult):
             return found

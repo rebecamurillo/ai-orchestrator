@@ -47,6 +47,7 @@ the `park_kind = budget` rewrite hang there. Nothing in Epic 4 passes it.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -209,7 +210,7 @@ def _route(
     if result.redispatch is not None:
         park, went_back = _redispatch(ports, run, row, result.redispatch, attempt)
     if park is not None:
-        return _park(ports, run, row, park, attempt)
+        return _park(ports, run, row, park, attempt, payload=result.payload)
     if went_back:
         return run
     if result.retry is not None:
@@ -297,10 +298,23 @@ def _retry(
     )
 
 
-def _park(ports: WriterPorts, run: Run, row: StepRun, park: Park, attempt: Attempt | None) -> Run:
-    """Stop the Run for the Operator, on this row when the park named none of its own."""
+def _park(  # noqa: PLR0913 — the park, the attempt it happened on and what it kept are one write
+    ports: WriterPorts,
+    run: Run,
+    row: StepRun,
+    park: Park,
+    attempt: Attempt | None,
+    *,
+    payload: dict[str, Any],
+) -> Run:
+    """Stop the Run for the Operator, on this row when the park named none of its own.
+
+    `payload` is the result's own (AD-17's hit list): the executor returns the values and
+    this is where they are written, in the unit of work already open. Only the park path
+    carries one — `retry_auto` and `redispatch` are records this module decides itself.
+    """
     on_row = park if park.path is not None else park.model_copy(update={"path": row.path})
-    return park_run(ports, run, on_row, attempt.n if attempt is not None else None)
+    return park_run(ports, run, on_row, attempt.n if attempt is not None else None, payload)
 
 
 def _advance(ports: WriterPorts, run: Run, row: StepRun) -> Run:

@@ -164,6 +164,8 @@ class RunEnvironment:
     #: Why the `verify` row redispatched to this one, or `None` — which is every row that
     #: was not sent back, and every walker built before 5.5 resolved one (FR-10).
     verify_failure: VerifyFailure | None = None
+    #: AD-17's frozen anchors for this row's Story frame, as the walker resolved them.
+    anchors: frozenset[str] = frozenset()
 
     def base_dir(self, work_dir: str) -> Path:
         """`{work_dir}/{project.slug}/{repository.slug}/base` — the one layout (AD-14)."""

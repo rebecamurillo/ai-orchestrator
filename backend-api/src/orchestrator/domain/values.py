@@ -123,6 +123,11 @@ class StepResult(BaseModel):
     reason: str | None = None
     #: The Run's own columns this result asks the writer to set; `None` when it asks for none.
     run_updates: RunUpdates | None = None
+    #: Whatever the stop needs kept on its gate record — AD-17's list of the protected paths
+    #: an attempt touched, so the Operator and 5.9's trajectory read the files and not only
+    #: the sentence. Written by `apply_step_result` alongside the park (AD-8); `{}` on every
+    #: result that carries nothing, and built per instance so two results never share one.
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class Signal(BaseModel):
