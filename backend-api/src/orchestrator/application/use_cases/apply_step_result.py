@@ -328,6 +328,25 @@ def _advance(ports: WriterPorts, run: Run, row: StepRun) -> Run:
     return finish_run(ports, run)
 
 
+def budget_second_record(ports: WriterPorts, run: Run, row: StepRun, result: StepResult) -> None:
+    """Epic 5's own `after_route` (AD-8, AD-11): a routed stop that is *also* over budget
+    gets a second gate record, and `run.park_kind`/`park_path`/`park_reason` are rewritten
+    to `budget` on top of it.
+
+    `set_run` rather than `park_run`: the first park already moved the Run to `needs_you`
+    (`_route` ran before this), and `RUN_TRANSITIONS` has no `(needs_you, "park")` pair —
+    a second `run_transition` call would raise. The three park fields are "written
+    together with the gate_record" every time (`domain/entities/run.py`'s own docstring),
+    which this still does; it is only the *status* transition that does not repeat.
+    """
+    park = result.budget_park
+    if park is None:
+        return
+    path = park.path or row.path
+    updated = set_run(ports, run, park_kind=park.kind, park_path=path, park_reason=park.reason)
+    record(ports, updated, Entry(event=park.kind, actor="machine", path=path, text=park.reason))
+
+
 def _fail(ports: WriterPorts, run: Run, row: StepRun, result: StepResult) -> Run:
     """`on_fail: fail`: the Run ends `failed`, and the record carries the row's reason."""
     failed = set_run(

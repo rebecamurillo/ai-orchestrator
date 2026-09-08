@@ -23,7 +23,9 @@ from types import TracebackType
 
 from sqlalchemy.orm import Session
 
+from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
+from orchestrator.domain.ports.gateway import Gateway
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyAttemptRepository,
@@ -76,6 +78,24 @@ def open_writer_ports(session_factory: SessionFactory) -> Iterator[WriterPorts]:
             records=SQLAlchemyGateRecordRepository(session),
             uow=SessionUnitOfWork(session),
             clock=SystemClock(),
+        )
+    finally:
+        session.close()
+
+
+@contextmanager
+def open_spend_ports(session_factory: SessionFactory, gateway: Gateway) -> Iterator[SpendPorts]:
+    """One session's worth of `SpendPorts` (5.7) — its own scope, since `attempt_writes`'
+    `WriterPorts` may reach only `.attempts` (AD-8) and the budget read needs `runs`/`steps`
+    too. `gateway` is the one adapter built once at the composition root, not per session."""
+    session = session_factory()
+    try:
+        yield SpendPorts(
+            gateway=gateway,
+            runs=SQLAlchemyRunRepository(session),
+            steps=SQLAlchemyStepRunRepository(session),
+            attempts=SQLAlchemyAttemptRepository(session),
+            uow=SessionUnitOfWork(session),
         )
     finally:
         session.close()

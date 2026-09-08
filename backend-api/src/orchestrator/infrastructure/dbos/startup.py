@@ -31,6 +31,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import partial
 
+import httpx
+
 from orchestrator.application.steps import StepPorts
 from orchestrator.application.steps import agent as _agent  # noqa: F401
 from orchestrator.application.steps import bmad_install as _bmad_install  # noqa: F401
@@ -47,11 +49,16 @@ from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db.environment import read_run_environment
 from orchestrator.infrastructure.db.run_finished import run_finished_hook
-from orchestrator.infrastructure.db.writers import SessionFactory, open_writer_ports
+from orchestrator.infrastructure.db.writers import (
+    SessionFactory,
+    open_spend_ports,
+    open_writer_ports,
+)
 from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
 from orchestrator.infrastructure.dbos.config import engine_config
 from orchestrator.infrastructure.dbos.facade import RealEngine
 from orchestrator.infrastructure.dbos.walker import WalkerDeps
+from orchestrator.infrastructure.gateway.litellm_spend import LiteLLMSpend
 from orchestrator.infrastructure.harness import build_harness_env, build_harnesses
 from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.process import RealProcessRunner
@@ -59,6 +66,12 @@ from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.tracing import LangfuseTracer
 from orchestrator.infrastructure.workspace import FsWorkspace
+
+#: `LiteLLMSpend`'s own client timeout (5.7): httpx's 5 s default is tight for a paginated
+#: `/spend/logs/v2` read the tail blocks on after every agent attempt, so this is explicit
+#: and a little more generous — long enough for a slow proxy, short enough that a budget
+#: read never holds a row up the way a hung harness process would.
+SPEND_TIMEOUT_SECONDS = 10.0
 
 #: One entry per engine this process is serving with, for as long as it is serving: the
 #: engine itself, and the two adapters `schedule_jobs` needs to build the jobs' own ports —
@@ -88,9 +101,16 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
     contract's placeholder key at construction, and every unit test that builds these deps
     passes exactly that placeholder. `logs` is the same `RealLogReader` the Run detail reads
     an attempt's tail with (SPEC CAP-12); the walker uses it to resolve the last lines of a
-    failed `verify` row's log for the Story the redispatch hands back (FR-10).
+    failed `verify` row's log for the Story the redispatch hands back (FR-10). `spend_writes`
+    (5.7) is its own scope for the same reason `attempt_writes` cannot serve it: the budget
+    read needs `runs`/`steps`, which the agent kind's own writes may never touch (AD-8).
+    `LiteLLMSpend` is built once here, over one shared `httpx.Client` an explicit timeout —
+    `SPEND_TIMEOUT_SECONDS` — rather than httpx's own 5 s default.
     """
     runner = RealProcessRunner()
+    gateway = LiteLLMSpend(
+        settings, httpx.Client(base_url=settings.litellm_base_url, timeout=SPEND_TIMEOUT_SECONDS)
+    )
     return WalkerDeps(
         open_ports=partial(open_writer_ports, session_factory),
         step_ports=StepPorts(
@@ -104,6 +124,7 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
             harness_env=build_harness_env(settings),
             attempt_writes=partial(open_writer_ports, session_factory),
             logs=RealLogReader(),
+            spend_writes=partial(open_spend_ports, session_factory, gateway),
         ),
         human_wait_seconds=settings.human_wait_seconds,
         read_environment=partial(

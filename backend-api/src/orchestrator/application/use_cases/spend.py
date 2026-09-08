@@ -56,16 +56,20 @@ class SpendPorts:
 
 def record_attempt_spend(
     ports: SpendPorts, run: Run, attempt: Attempt, harness_usage: HarnessUsage | None
-) -> None:
+) -> Run:
     """Price one attempt from the Gateway (falling back to `harness_usage`), then
-    recompute `run.spend_usd` from every attempt the Run has."""
+    recompute `run.spend_usd` from every attempt the Run has, and return the updated Run
+    — the same `set_run` shape every other writer in this codebase returns, and what the
+    budget check (5.7's own caller) reads without a second repository round trip."""
     with ports.uow:
         spend = ports.gateway.spend_for_attempt(run.id, attempt.id)
         priced = _priced_attempt(attempt, spend, harness_usage)
         if priced is not attempt:
             ports.attempts.update(priced)
-        ports.runs.update(run.model_copy(update={"spend_usd": _run_spend(ports, run)}))
+        updated = run.model_copy(update={"spend_usd": _run_spend(ports, run)})
+        ports.runs.update(updated)
         ports.uow.commit()
+        return updated
 
 
 def _priced_attempt(

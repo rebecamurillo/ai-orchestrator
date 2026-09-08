@@ -114,6 +114,11 @@ class StepResult(BaseModel):
     #: Set when the result stops the Run — `apply_step_result` writes `run.park_kind`,
     #: `run.park_path` and the `gate_record` together from it (AD-8).
     park: Park | None = None
+    #: Set only alongside `park` (AD-11, FR-17): a routed stop (`blocked`, `checkpoint`, …)
+    #: that is *also* over budget keeps its own record and gets a second one for this, and
+    #: `run.park_kind` is rewritten to `budget` after it — `apply_step_result`'s own
+    #: `after_route` seam, because the machine has no `(needs_you, park)` pair to re-enter.
+    budget_park: Park | None = None
     #: Set only by a kind that routes backwards on failure.
     redispatch: Redispatch | None = None
     #: Set only by a kind whose Template declared a `retry` contract and whose row has not

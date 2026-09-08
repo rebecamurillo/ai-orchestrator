@@ -6,40 +6,32 @@ and holds no rule of its own. Nothing here writes a status directly: `next_row` 
 `close_run` reach AD-8's transitions through `writers.py`, exactly as the three status
 writers do, and `run_row` writes nothing at all.
 
-**`next_row` is the only thing that starts a plan.** Every row a Run is created with is
-`planned` (AD-7): the planner expands the whole tree before the Run exists, and
-`apply_step_result` queues a *successor*, so the first row of a plan has nothing behind it
-to queue it. That is this function's first job, and it is deliberately narrow — the plan's
-first `planned` row is queued only when no row of the Run is in any other unfinished status.
-A Run parked on an `error` row has rows further down that are still `planned`, and queueing
-one of those would run past the stop the Operator has not answered yet.
+**`next_row` is the only thing that starts a plan**, and deliberately narrow: every row a
+Run is created with is `planned` (AD-7), and `apply_step_result` queues a *successor*, so
+the plan's first row is queued only when no row of the Run is in any other unfinished
+status — a Run parked on `error` has `planned` rows further down a queue here would skip.
 
-**`close_run` is what "nothing to run" means.** A Run whose rows are all `done` or
-`skipped` is finished. A Run with no queued row *and* an unfinished one is stalled — the row
-is `error` with an `on_fail` nothing routes, or `blocked` with no signal — and a stall is
-reported as an `internal` park naming the row, not as a Run quietly reaching `done`. A Run
-that is no longer `running` when the walk reaches this point is neither: `cancel` moved it
-while a step was in flight, and both machine transitions here would raise. It is reported as
-it stands, the way `apply_step_result` reports a late result.
+**`close_run` is what "nothing to run" means.** All `done`/`skipped` rows finishes the Run;
+no queued row plus an unfinished one is a stall, reported as an `internal` park naming the
+row rather than a Run quietly reaching `done`. A Run no longer `running` here is neither —
+`cancel` moved it mid-step — and is reported as it stands, the way a late result is.
 
-**`attempt_row` is one durable step, on purpose.** The Attempt is opened and the executor
-runs inside the same step, so a backend killed mid-execution re-executes both after the
-restart: `start_attempt` finds the row `running` with an Attempt that never ended, closes it
-and opens the next one (FR-12). Splitting them would make the start a *recorded* step, which
-replay would hand back unchanged — the interrupted row would silently continue as Attempt 1,
-and the count the Operator reads would say the kill never happened. The brief left the exact
-recovery sequence to this story's spec checkpoint; this is it.
+**`attempt_row` is one durable step, on purpose**: the Attempt opens and the executor runs
+inside it, so a backend killed mid-execution re-executes both after restart —
+`start_attempt` closes the row's never-ended Attempt and opens the next one (FR-12), where a
+split start would replay unchanged and leave the interrupted attempt silently uncounted.
 
 **A verify failure and a frame's anchors are resolved here for the same reason
-`frame_start_sha` is.** A row a `verify` step sent back needs three facts about a *different*
-row (FR-10), and AD-17's rule needs facts about every row of the Story frame — while AD-9
-closes `StepContext`'s field list. This is the only place holding both the rows and the
-repositories, so they are read once and handed over as frozen values on `RunEnvironment` and
-`StepPorts`; the executor reads a value and never a repository (AD-8).
+`frame_start_sha` is**: a row a `verify` step sent back needs facts about a *different* row
+(FR-10), AD-17's rule needs every row of the Story frame, and AD-9 closes `StepContext`'s
+field list. Read once, here — the only place holding both the rows and the repositories —
+and handed over as frozen values on `RunEnvironment`/`StepPorts` (AD-8).
 
-**`run_row` reads; the executor does the work.** It opens one unit of work to assemble the
-`StepContext` and closes it *before* the executor runs, because an executor holds a process
-for minutes (FR-10) and a session held across that is a connection nothing can use.
+**`run_row` reads; the executor does the work**, in a unit of work closed *before* the
+executor runs — a process held for minutes (FR-10) cannot hold a session too.
+
+**`apply_result` always binds `apply_step_result`'s own `after_route`** to 5.7's
+`budget_second_record`, unconditionally (that module's own docstring names the seam).
 """
 
 from __future__ import annotations
@@ -62,7 +54,11 @@ from orchestrator.application.templates.plan_model import (
     REDISPATCH_TARGET_SEQ,
 )
 from orchestrator.application.templates.rows import COMMAND_KEY
-from orchestrator.application.use_cases.apply_step_result import apply_step_result
+from orchestrator.application.use_cases.apply_step_result import (
+    AfterRoute,
+    apply_step_result,
+    budget_second_record,
+)
 from orchestrator.application.use_cases.start_attempt import start_attempt
 from orchestrator.application.use_cases.writers import (
     FINISHED,
@@ -361,8 +357,13 @@ def _resume_signal(
 
 def apply_result(ports: WalkPorts, run_id: UUID, seq: int, result: StepResult) -> RunStatus:
     """Apply one result through AD-8's writer, and report where the Run now stands."""
-    apply_step_result(ports.writers, run_id, seq, result)
+    apply_step_result(ports.writers, run_id, seq, result, after_route=_budget_hook(ports.writers))
     return require_run(ports.writers, run_id).status
+
+
+def _budget_hook(writers: WriterPorts) -> AfterRoute:
+    """5.7's `after_route`, bound to this call's own writers."""
+    return lambda run, row, result: budget_second_record(writers, run, row, result)
 
 
 def close_run(ports: WalkPorts, run_id: UUID) -> RunStatus:

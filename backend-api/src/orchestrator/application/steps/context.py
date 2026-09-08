@@ -6,43 +6,35 @@ and returns a `StepResult`. It never writes a status, never reaches a repository
 imports `infrastructure` — `StepPorts` is built once in `main.py` and travels here (AD-2,
 AD-8).
 
-`StepContext` is the spine's own field list. Two of them carry a rule:
-
-- **`with_resolved` is the row's, not the Template's.** The planner resolved every
-  expression before the Run started (AD-7); an executor that re-read a Template would be
-  re-planning mid-Run.
-- **`resume_signal` is a `GateRecord`, not a `Signal`.** AD-9 puts a signal's worktree
-  effects in the resumed row's executor, and the record is what `signal_run` committed — a
-  durable row rather than a message the engine happened to carry.
+`StepContext` is the spine's own field list. Two of them carry a rule: `with_resolved` is
+the row's, not the Template's — the planner resolved every expression before the Run
+started (AD-7), so an executor that re-read a Template would be re-planning mid-Run; and
+`resume_signal` is a `GateRecord`, not a `Signal` — AD-9 puts a signal's worktree effects in
+the resumed row's executor, and the record is what `signal_run` committed, a durable row
+rather than a message the engine happened to carry.
 
 `StepPorts` holds what the executors can reach today, and grows with them. Every field is a
 port or a plain value, so a unit test builds one from the shared fakes.
 
-**`workspace` is a factory, not an instance.** `Git`, `Clock` and `process` are the same
-object for every row of every Run. A `Workspace` is rooted at `run.worktree_path`, a fact of
-one Run, so `StepPorts` — built once, before any Run exists — cannot hold a rooted instance
-without holding a stale one for every Run after the first. `StepPorts.workspace(ctx.cwd)`
-builds the one the current row needs, on demand, from the root the walker already read.
+**`workspace` is a factory, not an instance**: `Git`/`Clock`/`process` are one object for
+every row of every Run, but a `Workspace` is rooted at `run.worktree_path`, so
+`StepPorts.workspace(ctx.cwd)` builds the one the current row needs on demand rather than
+holding a stale rooted instance.
 
-**`run_env` is resolved by the walker, not fetched by the executor.** AD-9 closes
-`StepContext`'s field list, and an executor needs facts the row cannot carry: where this
-Repository's clone lives, its `install_command`, its default branch, the worktrees this Run
-has made. `ports` is the field AD-9 leaves open, so the walker's `attempt_row` step reads
-those once, before the executor runs, and hands them over as a frozen `RunEnvironment`
-inside `StepPorts`. The executor reads a value and never a repository, which is AD-8.
+**`run_env` is resolved by the walker, not fetched by the executor.** An executor needs
+facts the row cannot carry — the Repository's clone, its `install_command`, its worktrees —
+so `attempt_row` reads them once and hands them over as a frozen `RunEnvironment` inside
+`StepPorts`: the executor reads a value, never a repository (AD-8).
 
-**Epic 5's fields are the same move, one layer out.** `harnesses`, `harness_env`,
-`attempt_writes` and `logs` are what the `agent` kind and the walker need and no other kind
-has. All are ports or plain callables, all are built once in the composition root, and all
-default to `None` so every `StepPorts(...)` written before them keeps working —
-`tests/unit/test_step_executor_registry.py` and the walk's own tests still construct one
-from `git`, `clock` and `work_dir` alone. `RunEnvironment` grew the same way: the `Run`
-entity, the Project's own context and variables, `test_globs` and the verify failure are
-all facts `read_run_environment` or the walker already had a session open for.
+**Epic 5's fields are the same move, one layer out**: `harnesses`, `harness_env`,
+`attempt_writes`, `logs` and `spend_writes` are what the `agent` kind and the walker need
+and no other kind has — ports or callables, built once in the composition root, defaulted
+to `None` so every prior `StepPorts(...)` keeps working. Most refuse when unset (`require_*`
+below); `spend_writes` degrades like `tracer` instead, skipping the budget read (5.7).
 
-**The three questions at the end are how an executor knows which re-dispatch it is.** AD-9
-closes `StepContext`'s field list, so `retrying`, `operator_retry` and `redispatched` read
-the fields already there rather than a new one.
+**The three questions at the end are how an executor knows which re-dispatch it is**: AD-9
+closes `StepContext`'s field list, so `retrying`/`operator_retry`/`redispatched` read the
+fields already there rather than a new one.
 """
 
 from __future__ import annotations
@@ -54,6 +46,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
+from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
@@ -78,6 +71,10 @@ WorkspaceFactory = Callable[[str | None], Workspace]
 #: (AD-8), and each of them opens one of these — never a session held across a dispatch that
 #: runs for ninety minutes.
 AttemptWrites = Callable[[], AbstractContextManager[WriterPorts]]
+
+#: `StepPorts.spend_writes`: a `SpendPorts` scope of its own — `attempt_writes` reaches only
+#: `.attempts` (AD-8); the budget read (5.7) also needs `runs`/`steps`.
+SpendWrites = Callable[[], AbstractContextManager[SpendPorts]]
 
 #: The directory a Repository's base clone lives in, under its Project's (AD-14). The same
 #: word `use_cases/clone_check.py` uses, because it is the same directory.
@@ -218,6 +215,9 @@ class StepPorts:
     #: `None` in every process that wired none, which degrades to "no lines resolved" — the
     #: same "no facts, no append" the executor already has to handle.
     logs: LogReader | None = None
+    #: The attempt's own spend scope (5.7). `None` skips the budget read — see the module
+    #: docstring's "degrades like `tracer`" — rather than raising like `attempt_writes`.
+    spend_writes: SpendWrites | None = None
 
 
 @dataclass(frozen=True)

@@ -16,7 +16,16 @@ from orchestrator.domain.values import Park
 
 
 def check(run: Run) -> Park | None:
-    """`Park(kind="budget", ...)` once spend exceeds budget; `None` at or under it.
+    """`Park(kind="budget", ...)` once spend exceeds budget; `None` at or under it."""
+    if run.spend_usd <= run.budget_usd:
+        return None
+    return forced(run)
+
+
+def forced(run: Run) -> Park:
+    """`Park(kind="budget", ...)` unconditionally — for the harness's own cap exit (AD-10,
+    FR-14): `--max-budget-usd` already stopped the process, so the figures are read and
+    reported regardless of what the comparison in `check` would say on its own.
 
     The reason is always rendered to two decimal places (`:.2f`) regardless of how many
     `Attempt.cost_usd` summed into `run.spend_usd`: a real Gateway figure round-trips a
@@ -24,7 +33,5 @@ def check(run: Run) -> Park | None:
     park reason is a sentence an operator reads, not the wire `MoneyStr` (which keeps all
     six of the column's own decimal places, `api/schemas/common.py::_money_string`).
     """
-    if run.spend_usd <= run.budget_usd:
-        return None
     reason = f"budget ${run.spend_usd:.2f} / ${run.budget_usd:.2f}"
     return Park(kind="budget", reason=reason)

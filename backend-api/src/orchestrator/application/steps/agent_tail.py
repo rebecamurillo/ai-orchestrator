@@ -19,10 +19,15 @@ the same ambiguity rule the routing below refuses to guess at.
 3. the attempt's spend and the budget check (5.7), *after* the routing — FR-17 says the step
    keeps the status its file routed to and the Run parks on top of it.
 
-The third is still a seam, named where it goes and doing nothing yet. The first is
-`protected` below, over `rules/protected_paths.py` and the anchors the walker resolved onto
-`RunEnvironment` — and `re_check` is where the Operator's *Accept* comes back to it, because
-answering a `protected_path` park re-runs this tail and dispatches nothing (AD-9).
+The first is `protected` below, over `rules/protected_paths.py` and the anchors the walker
+resolved onto `RunEnvironment` — and `re_check` is where the Operator's *Accept* comes back
+to it, because answering a `protected_path` park re-runs this tail and dispatches nothing
+(AD-9). The third is `_spend_and_budget`: it records this attempt's spend through the
+Gateway (`application/use_cases/spend.py`), then parks `budget` on top of whatever `route`
+decided — the row keeps the status it reached, the Run stops for the Operator. A harness
+that stopped for its own `--max-budget-usd` cap (AD-10, FR-14) is folded into the same
+check rather than left to `route`, which would read the cut-off dispatch as an expect miss
+or send it down the retry path (FR-17 forbids both).
 
 **`done` still means "observed".** The row's gate is `liveness` and this module never
 changes it: a Story step is green only when the `verify` row after it says so (NFR-2). A row
@@ -38,7 +43,7 @@ from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from orchestrator.application.rules import protected_paths
+from orchestrator.application.rules import budget, protected_paths
 from orchestrator.application.rules.routing import route
 from orchestrator.application.rules.signals import accepted_files
 from orchestrator.application.steps.context import (
@@ -47,6 +52,7 @@ from orchestrator.application.steps.context import (
     operator_retry,
     require_cwd,
     require_env,
+    require_run,
     require_workspace,
     resolved_text,
     retrying,
@@ -59,6 +65,7 @@ from orchestrator.application.templates.agent_row import (
     SPEC_FOLDER_KEY,
     STORY_ID_KEY,
 )
+from orchestrator.application.use_cases.spend import record_attempt_spend
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.ports.git import Change
 from orchestrator.domain.ports.harness import HarnessResult
@@ -96,6 +103,13 @@ HITS_KEY = "hits"
 #: The signal a person answers a `protected_path` park with (AD-13). It carries the accepted
 #: files under `rules/signals.py::FILES_KEY`; a `continue` on a checkpoint carries none.
 CONTINUE_EVENT = "continue"
+
+#: [ASSUMPTION] The field and value `claude -p --output-format json` puts on its result
+#: object when `--max-budget-usd` stopped it (AD-10, FR-14). 5.11 verifies this against the
+#: real CLI; until then this is the brief's own literal guess, held behind these two
+#: constants so the field name closes in one edit.
+CAP_EXIT_FIELD = "stop_reason"
+CAP_EXIT_VALUE = "max_budget"
 
 
 def finish(
@@ -166,7 +180,43 @@ def tail(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> StepResul
     )
     # 5.7 — the attempt's spend and the budget check go here, after the routing. FR-17: the
     # step keeps the status its file routed to and the Run parks on top of it.
-    return routed.model_copy(update={"output_ref": log})
+    final = _spend_and_budget(ctx, attempt, result, routed)
+    return final.model_copy(update={"output_ref": log})
+
+
+def _spend_and_budget(
+    ctx: StepContext, attempt: Attempt, result: HarnessResult, routed: StepResult
+) -> StepResult:
+    """FR-17, after `route` has already decided: record this attempt's spend, then park
+    `budget` on top of whatever the row reached. A routed stop (`park` already set, e.g.
+    `blocked`/`checkpoint`) keeps its own record and gets a second one via `budget_park`
+    (`apply_step_result.budget_second_record`); a routed `done` or a retry-path `error`
+    (no `park` of its own) gets the budget `Park` directly, and any `retry` is dropped —
+    a Run parks instead of retrying once it is over budget.
+
+    `ctx.ports.spend_writes` degrades like `tracer`: `None` skips the read entirely, which
+    is every `StepPorts(...)` this story predates.
+    """
+    if ctx.ports.spend_writes is None:
+        return routed
+    run = require_run(ctx)
+    with ctx.ports.spend_writes() as spend_ports:
+        run = record_attempt_spend(spend_ports, run, attempt, result.usage)
+    if _cap_exit(result):
+        forced = budget.forced(run)
+        return StepResult(status="error", gate=ctx.row.gate, reason=forced.reason, park=forced)
+    park = budget.check(run)
+    if park is None:
+        return routed
+    if routed.park is not None:
+        return routed.model_copy(update={"budget_park": park})
+    return routed.model_copy(update={"retry": None, "park": park})
+
+
+def _cap_exit(result: HarnessResult) -> bool:
+    """Whether the harness's own JSON result marks a `--max-budget-usd` cap stop."""
+    raw = result.raw_result
+    return isinstance(raw, Mapping) and raw.get(CAP_EXIT_FIELD) == CAP_EXIT_VALUE
 
 
 def protected(ctx: StepContext, attempt: Attempt) -> StepResult | None:
