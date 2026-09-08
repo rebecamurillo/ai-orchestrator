@@ -128,6 +128,69 @@ another Run's spend. The spend key is the opposite: it reads every user's rows a
 a harness environment. Putting the master key in both places works and is a recorded exposure,
 not the intended setup.
 
+#### Verified 2026-09-08 (story 5.11)
+
+The separation was checked by calling the running proxy with each key in turn, not inferred
+from the configuration. Both commands below are the ones to re-run after rotating a key.
+
+```bash
+# 1. mint the harness key (model routes only). Keep the returned `key` as LITELLM_API_KEY.
+curl -sX POST http://localhost:4000/key/generate \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"key_type": "llm_api", "key_alias": "ai-orchestrator-harness"}'
+
+# 2. prove it can reach the model routes …
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -H "Authorization: Bearer $LITELLM_API_KEY" http://localhost:4000/v1/models          # 200
+
+# 3. … and cannot reach spend.
+curl -s -w '\nHTTP %{http_code}\n' \
+  -H "Authorization: Bearer $LITELLM_API_KEY" \
+  "http://localhost:4000/spend/logs/v2?start_date=2026-09-01&end_date=2026-09-09"      # 403
+
+# 4. prove the spend key can.
+curl -s -w '\nHTTP %{http_code}\n' \
+  -H "Authorization: Bearer $LITELLM_SPEND_KEY" \
+  "http://localhost:4000/spend/logs/v2?start_date=2026-09-01&end_date=2026-09-09"      # 200
+```
+
+Step 3's body is the proxy's own words, and is what "the harness key cannot read spend" means
+in practice:
+
+```json
+{"detail":"Virtual key is not allowed to call this route. Only allowed to call routes: ['llm_api_routes']. Tried to call route: /spend/logs/v2"}
+```
+
+`start_date` and `end_date` are required by `/spend/logs/v2`; omitting them answers `400`, not
+`401`, which is why a probe that omits them proves nothing about authorisation.
+
+### Upstream provider keys are not optional for a readiness run
+
+`host/.env` ships `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `OMLX_API_KEY` as `not-set`, and
+its own comment says the proxy still starts, answers `/health` and lists `/v1/models` without
+them — which is all `scripts/harness/<name>.sh doctor` checks. That is enough to bring the
+stack up and **not** enough to run a harness: every entry in `model_list` fails at the first
+completion. Observed 2026-09-08 with the harness key:
+
+| Model | Result |
+| --- | --- |
+| `claude-sonnet-4-6` | `401` — upstream Anthropic: `invalid x-api-key` |
+| `gpt-5.4` | `401` — upstream OpenAI: `Incorrect API key provided: not-set` |
+| `local-coder`, `local-general` | `404` — `OMLX_BASE_URL` resolves to the orchestrator's own API port; oMLX is not running |
+
+So before `POST /harnesses/{name}/readiness` can reach `enabled`, at least one of these has to
+be a real credential (or oMLX has to be up on a port nothing else holds). `curl -s -H
+"Authorization: Bearer $LITELLM_API_KEY" -X POST http://localhost:4000/v1/messages -H
+'anthropic-version: 2023-06-01' -d '{"model":"<name>","max_tokens":16,"messages":[{"role":
+"user","content":"say pong"}]}'` is the one-line check that a model is actually completable —
+`/v1/models` listing it is not the same thing.
+
+Claude Code additionally asks for **its own default model** when the Template binds none; on
+2.1.258 that is `claude-opus-5`, which this `model_list` does not serve, so the call fails with
+`Invalid model name passed in model=claude-opus-5` even when the upstream key is good. Either
+add that name to `model_list` or bind a model on the Run.
+
 ## Langfuse
 
 Langfuse 4.27.0, self-hosted with its own compose file, on port 3000. The stack sends traces to
@@ -138,6 +201,35 @@ derives that header at container start; nothing writes a key into a config file.
 Create one project, take its public and secret keys, and put them in `.env`.
 `LANGFUSE_ENVIRONMENT` separates this instance's traces from anything else sending to the same
 server.
+
+### `events_only` mode blocks the readiness trace check (observed 2026-09-08)
+
+This instance answers every public **read** API with
+
+```
+404 {"message":"This endpoint is not available on deployments running in Langfuse v4 events_only mode…"}
+```
+
+— `GET /api/public/traces`, `GET /api/public/traces/{id}` and `GET /api/public/observations`
+alike. OTLP **ingestion** is unaffected; only reading back is gone.
+
+That matters beyond the UI. `Tracer.attempt_observed(run_id, attempt_id)` — the readiness
+check that proves the harness's spans landed under the attempt span (AD-10, AD-11, PRD §8
+item 2) — is implemented as `api.observations.get_many(trace_id=…)` and answers `False` on any
+query failure rather than raising (SM-3, deliberate). So on a deployment in this mode the
+readiness line `trace observed` can never be `ok`, and `POST /harnesses/{name}/readiness` can
+never reach `enabled`, however well tracing itself is working.
+
+`GET /api/public/health` and `GET /api/public/projects` both still answer `200`, so a
+credential check passes and gives no hint of this. Check it directly:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -u "$LANGFUSE_PUBLIC_KEY:$LANGFUSE_SECRET_KEY" \
+  "http://localhost:3000/api/public/observations?limit=1"        # 200 = readable, 404 = events_only
+```
+
+Either run this Langfuse outside `events_only` mode, or `attempt_observed` needs a source
+other than the read API. Recorded, not decided.
 
 ## oMLX
 

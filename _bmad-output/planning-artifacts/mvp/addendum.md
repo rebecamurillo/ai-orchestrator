@@ -52,6 +52,172 @@ One deliberate deviation from the brief's own spelling, recorded because the bri
 
 Still open, and 5.11's to close by observation rather than by documentation: **the JSON field that marks a stop caused by `--max-budget-usd`.** `--help` does not name it, and 5.1 does not guess — `HarnessResult.raw_result` carries the parsed result object verbatim so 5.7 can read whichever field 5.11 records here.
 
+### Claude — verified against the image, 2026-09-08 (story 5.11)
+
+Everything below was observed on the dev compose stack (`make up`, project `aio-dev`) against
+the running host LiteLLM (`:4000`) and Langfuse (`:3000`), on the **image's own** Claude Code —
+which closes 5.1's disclosed gap: 5.1 read `--help` at 2.1.236 on the host, this pass read it
+inside the container at **2.1.258**, the version `CLAUDE_CODE_VERSION` pins. No flag differs
+from what 5.1 recorded, and `--permission-mode`'s choice list now reads verbatim
+`acceptEdits, auto, bypassPermissions, manual, dontAsk, plan`.
+
+**Verified invocation** (`infrastructure/harness/claude/adapter.py::_argv`, unchanged):
+
+```
+claude -p --session-id <uuid> --permission-mode dontAsk \
+  --allowedTools "$CLAUDE_ALLOWED_TOOLS" --disallowedTools "mcp__*" \
+  --output-format json --max-budget-usd <remaining> "<prompt>"
+```
+
+**Allowlist.** `.env.example`'s default is unchanged and is what the dispatch would carry:
+`Task,Bash(uv run *),Bash(git *),Bash(pnpm *),Bash(npm *),Bash(make *),Edit,Read,Write,Skill,ToolSearch`.
+It was **not** exercised by a real agent dispatch — see "What is still open" — so PRD §8 item 1
+is not closed. `--permission-mode dontAsk` itself is confirmed to exist and be accepted at
+2.1.258.
+
+**Cap-exit field — closed.** `--max-budget-usd` does **not** surface through `stop_reason`.
+5.7's placeholder pair (`CAP_EXIT_FIELD = "stop_reason"`, `CAP_EXIT_VALUE = "max_budget"`) is
+wrong: the literal `"max_budget"` occurs **zero times** anywhere in the shipped 2.1.258 bundle,
+and `stop_reason` carries the model's own stop reason (`stop_sequence`, or `null`). The result
+object's own zod schema in the shipped bundle declares the error variant as
+
+```
+subtype: ["error_during_execution", "error_max_turns",
+          "error_max_budget_usd", "error_max_structured_output_retries"]
+```
+
+and the emitting branch reads `terminal_reason === "budget_exhausted"` → `subtype:
+"error_max_budget_usd", is_error: true`. `terminal_reason` is `.optional()` in that schema;
+`subtype` is not. **So the field is `subtype` and the value is `error_max_budget_usd`**, with
+`terminal_reason: "budget_exhausted"` as the corroborating second marker.
+
+This was read out of the CLI's own result schema rather than out of an observed cap stop: a
+cap stop needs real model spend, and no model call can complete on this host (below). The two
+constants in `application/steps/agent_tail.py` are therefore **still the placeholders** — see
+"What is still open".
+
+**`--max-budget-usd 0` and `0.00` are refused outright**, before any dispatch:
+`option '--max-budget-usd <amount>' argument '0.00' is invalid. --max-budget-usd must be a
+positive number greater than 0` (exit 1, no JSON at all). `render_budget`'s `NO_BUDGET =
+"0.00"` therefore produces an argv the CLI rejects whenever a Run's remaining budget is zero
+or negative. `0.01` and `0.001` are both accepted.
+
+**Skill discovery from the worktree — closed, no fallback needed.** The image's
+`~/.claude/skills/` carries all 49 BMAD stubs including `bmad-build-auto/SKILL.md`
+(`scripts/harness/claude.sh doctor` reports `bmad-build-auto discoverable in
+/home/agent/.claude/skills`), and the readiness fixture's origin carries a committed `_bmad/`
+with `_bmad/scripts/render_skill.py`. Run inside a clone of that origin, the stub's own command
+
+```
+uv run --no-cache "<worktree>/_bmad/scripts/render_skill.py" \
+  --project-root "<worktree>" --skill "/home/agent/.claude/skills/bmad-build-auto"
+```
+
+answers `read and follow <worktree>/_bmad/render/bmad-build-auto/.../workflow.md`. The worktree
+resolves as project root and the global stub renders against it, so the
+`SKILL_STUBS_INTO_WORKTREE` fallback 5.8 held in reserve was **not** built and is not needed.
+(`.gitignore` in the fixture ignores `.claude/skills/bmad-*` exactly as a real repo-init does,
+so the stubs are correctly absent from the worktree itself.)
+
+**Two keys — closed (PRD §8 item 5).** Confirmed by direct call against the host proxy:
+
+| Key | `GET /v1/models` | `GET /spend/logs/v2` |
+| --- | --- | --- |
+| `LITELLM_API_KEY` (virtual, `key_type: llm_api`) | `200` | **`403`** — `Virtual key is not allowed to call this route. Only allowed to call routes: ['llm_api_routes']. Tried to call route: /spend/logs/v2` |
+| `LITELLM_SPEND_KEY` (master) | — | `200`, real rows |
+
+The harness key cannot read spend and the spend key can. The generating commands are in
+`host/README.md`.
+
+**What is still open, and why — PRD §8 items 1, 2, 4 are NOT closed.** The `claude` readiness
+Run did not reach `enabled`; `GET /harnesses` still reads `claude · disabled`. Four independent
+findings, in the order they were hit:
+
+1. **`scripts/readiness_fixture.sh` leaves the bare origin's `HEAD` unborn — diagnosed and
+   patched, but held back; see the last paragraph.** `git init --bare` (no `-b`) leaves `HEAD`
+   a symbolic ref to a `refs/heads/master` the fixture never creates, and
+   `git ls-remote -- <url> HEAD` — exactly what the clone check's first line runs — then
+   answers **zero lines** (exit 0, no output). The `readiness-repo` Repository read
+   `clone_check.status: failed`, one line, `the remote answered no refs`; no base clone was
+   made; and because `PlanReader` reads every list file out of that clone,
+   `POST /harnesses/claude/readiness` answered `422 invalid plan — epic@1 line 24: list file
+   not found: specs/readiness/stories.yaml`. With `git init --bare -q -b main` all four
+   clone-check lines turn `ok` (`reachable, HEAD at ecd7fa9d…`, `cloned 69401 bytes`,
+   `main at ecd7fa9d…`, `_bmad/_config/manifest.yaml states 6.11.0`) and the Run plans — that
+   is how findings 2, 3 and 4 below were reached at all.
+2. **`plan.check` parks `plan_stale` on the first `epic@1` Run of any new branch.**
+   `application/templates/lists.py::read_list` records `plan_branches[path] = frame.branch`
+   unconditionally, so the readiness Run recorded
+   `list_branches: {"specs/readiness/stories.yaml": "readiness/claude/2026-09-08"}` — a branch
+   the origin does not hold yet. `plan.check` then resolves `ls_remote(url, that branch)` to
+   `None`, reads `current = None`, compares it against the real text, and parks
+   `plan stale: specs/readiness/stories.yaml`. `PlanReader.record`'s own docstring states the
+   intended contract — "`None` means … a Template naming one the remote does not hold yet" —
+   so the recorded branch contradicts it. Every previous Run in this instance was
+   `repo-init@1`, which names `{{base_branch}}`; this is the first `epic@1` Run ever executed
+   here, which is why nothing caught it. **Epic 4 surface; not fixed here.**
+3. **`continue` on a `plan_stale` park leaves the Run unrecoverable.**
+   `signal_effects` applies `continue_accept`, taking the row `error → running` (its own
+   docstring reasons this out of AD-13). Nothing then enqueues that row: the walk that
+   follows finds no queued row, falls to `walk.close_run`, sees `plan` is not finished and
+   parks `internal` — `no runnable step: plan is running`. Observed verbatim on Run
+   `01a08187-cfb1-709d-8ebe-04999822573e`. **Epic 4/6 surface; not fixed here.**
+4. **`POST /harnesses/{name}/readiness` accepts any name.** `harness_readiness.start`
+   resolves the readiness Project and Repository but never checks `{name}` against the
+   `harness` table, so `POST /api/v1/harnesses/not-a-harness/readiness` answers **201** and
+   creates a real `epic@1` Run for a harness that does not exist —
+   `GET /api/v1/harnesses/not-a-harness/readiness` correctly answers 404 for the same name.
+   This is why the e2e suite reacts so strongly to finding 1: schemathesis drives every
+   published operation, so once the fixture works, one fuzzing pass created **74** readiness
+   Runs (`GET /templates/epic/1` then reads `pinned_by: 74` against its own frozen `== 0`).
+   **Epic 5.8 surface; not fixed here** — see the last paragraph.
+5. **The readiness Run binds no model, and Claude Code's default is not a Gateway model.**
+   `epic@1`'s `model` input is optional and `harness_readiness.start` binds none, so the
+   adapter omits `--model` and the CLI asks for its own default. Observed verbatim:
+   `API Error: 400 … Invalid model name passed in model=claude-opus-5. Call /v1/models to view
+   available models for your key.` The Gateway's `model_list` serves `claude-sonnet-4-6`,
+   `gpt-5.4`, `local-coder`, `local-general`. **Not fixed here** — binding a model needs a
+   setting and a default, which is an operator decision, not a story's.
+
+**And the two host-side reasons the run could not have passed even so.**
+
+- **No upstream provider credential on the Gateway.** `host/.env` carries
+  `ANTHROPIC_API_KEY=not-set`, `OPENAI_API_KEY=not-set`, `OMLX_API_KEY=not-set`, and
+  `OMLX_BASE_URL` resolves to the orchestrator's own API port rather than a running oMLX.
+  Every model on `model_list` therefore fails: `claude-sonnet-4-6` → `401 invalid x-api-key`
+  (upstream Anthropic), `gpt-5.4` → `401 Incorrect API key provided: not-set` (upstream
+  OpenAI), `local-coder`/`local-general` → `404` from the orchestrator's own RFC 9457 handler.
+  With no completable model call there is no agent attempt, no spend row, and no cap stop to
+  observe — which is why items 1, 2 and 4 stay open and why the cap field above is read from
+  the CLI's schema rather than from a run.
+- **Langfuse runs in v4 `events_only` mode, and `attempt_observed` needs a read API.**
+  `GET /api/public/observations` and `GET /api/public/traces` both answer
+  `404 — This endpoint is not available on deployments running in Langfuse v4 events_only
+  mode` on this 4.27.0 instance. `LangfuseTracer.attempt_observed` is exactly
+  `api.observations.get_many(trace_id=…)`, and its `except` arm answers `False` rather than
+  raising (SM-3). So readiness line 3, `trace observed`, can never be `ok` against this
+  deployment mode no matter what the harness emits — OTLP **ingestion** is unaffected, only
+  reads are. AD-10 makes the readiness verdict depend on a read API this mode does not serve;
+  that is an architecture-level question, recorded here rather than decided.
+
+**Why the one-line fix for finding 1 was not committed.** `make e2e` is green on this branch
+today (145 passed) *because* the readiness endpoint always answers 422: nothing ever reaches
+the `epic@1` path. Applying the `-b main` fix alone turns that gate red — measured, both ways,
+on the same commit: **145 passed / exit 0 without it, 5 failed / 140 passed / exit 2 with it**
+(`test_signals.py` ×4 and `test_templates.py::test_epic_1_shows_its_call_its_caller_and_its_inputs`).
+The five failures are findings 2, 3 and 4 becoming reachable, not a defect in the fix: the
+created Runs park `plan_stale`, `continue` cannot release them, and every `needs_you` Run then
+outlives the sweep `test_every_needs_you_run_this_stack_holds_can_be_released` performs. No
+combination of changes inside this story's authorised surface (5.1–5.8) restores green —
+fixing finding 4 caps the fuzzer at three Runs rather than 74, and three still fails a frozen
+`== 0`. So the fix belongs in the same change as finding 2's, on an Epic 4 surface this story
+may not decide. The patch and its regression test are recorded verbatim in
+`epics/epic-05-dev-loop/stories/5-11-claude-readiness-passes-end-to-end.md`.
+
+**Deferred, not built (per the brief's own instruction to record and not build):** a target
+repository's own Bash patterns extending `CLAUDE_ALLOWED_TOOLS` as a per-Project setting.
+Nothing observed in this pass argued for or against it, because no agent dispatch ran.
+
 ## C. Rejected alternatives (MVP)
 | Rejected | Why |
 |---|---|
