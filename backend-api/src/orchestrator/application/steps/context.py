@@ -36,6 +36,18 @@ walker's `attempt_row` step reads those once, before the executor runs, and hand
 as a frozen `RunEnvironment` inside `StepPorts` (`infrastructure/dbos/walker.py`). The
 executor therefore reads a value and never a repository, which is what AD-8 asks for.
 
+**Epic 5's three fields are the same move, one layer out.** `harnesses`, `harness_env` and
+`attempt_writes` are what the `agent` kind needs and no other kind has: the registry a
+Template's `harness:` resolves through, the builder that turns one attempt into the
+environment its process receives (AD-5), and the unit of work `mark_started`, the `pgid`
+update and `mark_finished` each commit in (AD-8). All three are ports or plain callables,
+all three are built once in the composition root, and all three default to `None` so every
+`StepPorts(...)` written before this story keeps working. `RunEnvironment` grows with them:
+`env_for`, `attempt_span` and `budget minus spend` all need the `Run` entity, the Project's own
+context and variables are what the harness is handed, and `test_globs` is what AD-17's
+frozen set is computed from — all facts `read_run_environment` already had a session open
+for.
+
 `process`, `workspace`, `run_env` and `protected_paths` default to `None` so
 `tests/unit/test_step_executor_registry.py`
 and the walk's own tests — written before 4.7 existed — keep constructing `StepPorts` from
@@ -45,17 +57,21 @@ the worktree needs either one set.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
+from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
+from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.harness import Harness, HarnessEnv
 from orchestrator.domain.ports.process import ProcessRunner
 from orchestrator.domain.ports.protected_paths import ProtectedPaths
 from orchestrator.domain.ports.tracer import Tracer
@@ -65,6 +81,12 @@ from orchestrator.domain.values import StepResult, Worktree
 #: What `StepPorts.workspace` is: a `Workspace` rooted at whichever path the caller names.
 WorkspaceFactory = Callable[[str | None], Workspace]
 
+#: What `StepPorts.attempt_writes` is: one scope's `WriterPorts`, opened and closed around a
+#: single commit. The `agent` executor writes an attempt three times in three units of work
+#: (AD-8), and each of them opens one of these — never a session held across a dispatch that
+#: runs for ninety minutes.
+AttemptWrites = Callable[[], AbstractContextManager[WriterPorts]]
+
 #: The directory a Repository's base clone lives in, under its Project's (AD-14). The same
 #: word `use_cases/clone_check.py` uses, because it is the same directory.
 BASE_DIRECTORY = "base"
@@ -72,6 +94,26 @@ BASE_DIRECTORY = "base"
 #: The directory every worktree of a Repository lives under (AD-14). A `/` in a branch name
 #: becomes a directory level, which is what `Path` does with it anyway.
 WORKTREES_DIRECTORY = "wt"
+
+
+@dataclass(frozen=True)
+class ProjectContext:
+    """The Project facts a dispatch hands to a harness process (AD-5, FR-14).
+
+    `env_vars` is *decrypted*: `read_run_environment` turns `project.env_vars_enc` into
+    plaintext through the `Crypto` port, which is what `domain/ports/crypto.py` means by
+    "only when a Run is about to hand the value to a harness process". It is never written
+    to `step_run.with_resolved`, never logged and never returned by an endpoint — it exists
+    for exactly as long as the row that dispatches is executing.
+    """
+
+    context_text: str = ""
+    context_paths: tuple[str, ...] = ()
+    #: `repr=False` is the docstring's "never logged", made mechanical: a dataclass prints
+    #: every field by default, and this one holds plaintext secrets — one `structlog` binding
+    #: or one traceback frame carrying the value would be the leak AD-5 forbids.
+    env_vars: Mapping[str, str] = field(default_factory=dict, repr=False)
+    log_prompt_content: bool = False
 
 
 @dataclass(frozen=True)
@@ -101,6 +143,16 @@ class RunEnvironment:
     compare_urls: tuple[str, ...] = ()
     #: `run.accepted_paths` — files an earlier `continue` let through (AD-9).
     accepted_paths: tuple[str, ...] = ()
+    #: The Run itself, for the three things that need the entity and not a column of it:
+    #: `env_for(run=…)`, `Tracer.attempt_span(run, …)` and `budget_usd - spend_usd`. `None`
+    #: in every `RunEnvironment(...)` written before 5.4.
+    run: Run | None = None
+    #: The Project's own context and variables, as the harness receives them (AD-5). A
+    #: factory, not one instance built at class-definition time: a shared default would give
+    #: every `RunEnvironment` that omits the field the same `env_vars` mapping.
+    project: ProjectContext = field(default_factory=ProjectContext)
+    #: `repository.test_globs` — what AD-17's frozen test set is computed from.
+    test_globs: tuple[str, ...] = ()
 
     def base_dir(self, work_dir: str) -> Path:
         """`{work_dir}/{project.slug}/{repository.slug}/base` — the one layout (AD-14)."""
@@ -140,6 +192,15 @@ class StepPorts:
     #: working unchanged; 5.4's agent executor reaches this the same way, through
     #: `context.ports.tracer`, so `WalkPorts` itself needs no `Tracer` of its own (AD-11).
     tracer: Tracer | None = None
+    #: The harness registry, keyed by the name a Template writes (AD-10). `None` outside a
+    #: process that wired one, which is every unit test not about the `agent` kind.
+    harnesses: Mapping[str, Harness] | None = None
+    #: What builds one attempt's harness environment (AD-5). A port, so `application/` never
+    #: reaches `infrastructure/harness/env.py` or the `Settings` it reads.
+    harness_env: HarnessEnv | None = None
+    #: One unit of work per attempt write (AD-8). The `agent` kind is the only executor that
+    #: writes at all, and it writes only through `WriterPorts.attempts`.
+    attempt_writes: AttemptWrites | None = None
 
 
 @dataclass(frozen=True)
@@ -189,6 +250,11 @@ def log_path(ctx: StepContext) -> Path:
 NO_ENVIRONMENT = "StepPorts.run_env is not set: a git kind needs the Run's environment"
 NO_RUNNER = "StepPorts.process is not set: this kind needs a ProcessRunner"
 NO_WORKSPACE = "StepPorts.workspace is not set: this kind needs a Workspace"
+NO_HARNESSES = "StepPorts.harnesses is not set: the agent kind needs the harness registry"
+NO_HARNESS_ENV = "StepPorts.harness_env is not set: the agent kind needs an environment builder"
+NO_ATTEMPT_WRITES = "StepPorts.attempt_writes is not set: the agent kind needs a unit of work"
+#: What a `RunEnvironment` carrying no `Run` means: the reader that built it is out of date.
+NO_RUN = "RunEnvironment.run is not set: the agent kind needs the Run it dispatches for"
 #: What a git kind says when it is reached before `git.worktree` has made a worktree.
 NO_WORKTREE = "no worktree: {path} runs before git.worktree"
 
@@ -212,6 +278,35 @@ def require_workspace(ctx: StepContext, root: str | None) -> Workspace:
     if ctx.ports.workspace is None:
         raise RuntimeError(NO_WORKSPACE)
     return ctx.ports.workspace(root)
+
+
+def require_harnesses(ctx: StepContext) -> Mapping[str, Harness]:
+    """The harness registry, or the wiring bug that none was built."""
+    if ctx.ports.harnesses is None:
+        raise RuntimeError(NO_HARNESSES)
+    return ctx.ports.harnesses
+
+
+def require_harness_env(ctx: StepContext) -> HarnessEnv:
+    """The environment builder, or the wiring bug that none was bound."""
+    if ctx.ports.harness_env is None:
+        raise RuntimeError(NO_HARNESS_ENV)
+    return ctx.ports.harness_env
+
+
+def require_attempt_writes(ctx: StepContext) -> AttemptWrites:
+    """How an attempt write opens its own unit of work, or the wiring bug that it cannot."""
+    if ctx.ports.attempt_writes is None:
+        raise RuntimeError(NO_ATTEMPT_WRITES)
+    return ctx.ports.attempt_writes
+
+
+def require_run(ctx: StepContext) -> Run:
+    """The Run this row belongs to, or the wiring bug that the reader did not carry it."""
+    run = require_env(ctx).run
+    if run is None:
+        raise RuntimeError(NO_RUN)
+    return run
 
 
 def require_cwd(ctx: StepContext) -> Path:

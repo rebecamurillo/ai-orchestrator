@@ -25,8 +25,17 @@ Three things follow from that and are worth naming here rather than in each adap
 - **The process is the `ProcessRunner`'s (AD-14).** An adapter starts nothing itself, so
   every harness process gets its own process group and its own deadline from the one place
   that can kill it. `pgid` is on the result for the record; AD-14 wants it stored *before*
-  the process is awaited, which `run` — one call that starts and waits — cannot give. That
-  seam is 5.4's to close.
+  the process is awaited, which `run` — one call that starts and waits — could not give.
+  5.4 closed that seam by splitting the call in two: `start` hands back a `HarnessHandle`
+  carrying the `pgid`, the caller commits it, and `wait` blocks on the handle. `run` stays
+  on the port and is exactly `wait(start(...))`, so nothing that only dispatches has to
+  know the halves exist.
+
+`HarnessEnv` is the other seam this port names: the callable that builds one attempt's
+environment. It is declared here, in `domain/`, because `application/steps/agent.py` hands
+the harness "exactly what the environment builder returned" (AD-5, AD-10) and may not
+import the builder itself — `infrastructure/harness/env.py` takes `Settings`. The
+composition root binds those and passes the closure down as a port.
 
 `resume_command` is the operator's escape hatch (FR-21): a line to paste into a terminal,
 not a command this system runs. The read model prefixes it with the container's own `docker
@@ -40,6 +49,9 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
+
+from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.run import Run
 
 
 @dataclass(frozen=True)
@@ -93,6 +105,41 @@ class HarnessResult:
     raw_result: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True)
+class HarnessHandle:
+    """A harness process that has started and not yet been awaited (AD-14).
+
+    `pid` and `pgid` both, because `ProcessRunner.wait` takes a `Handle(pid, pgid)` and an
+    adapter must be able to rebuild one without holding an opaque object of its own.
+    `session_id` and `log_path` travel with it so `wait` needs no second copy of what
+    `start` was told.
+    """
+
+    session_id: str
+    log_path: Path
+    pid: int
+    pgid: int
+
+
+@runtime_checkable
+class HarnessEnv(Protocol):
+    """Builds the environment one attempt's harness process receives, and nothing else."""
+
+    def __call__(  # noqa: PLR0913 — one argument per fact; AD-5 fixes the list
+        self,
+        attempt: Attempt,
+        *,
+        run: Run,
+        project_slug: str,
+        project_env: Mapping[str, str],
+        log_content: bool,
+        story_id: str | None,
+        traceparent: str,
+    ) -> dict[str, str]:
+        """Exactly `HARNESS_ENV_CONTRACT`, the harness's aliases, and the Project's own."""
+        ...
+
+
 @runtime_checkable
 class Harness(Protocol):
     """One coding-agent harness: dispatch, resume, and the line an operator can paste."""
@@ -118,6 +165,37 @@ class Harness(Protocol):
         `env` is what `infrastructure/harness/env.py` built (AD-5): the adapter adds no
         name to it and reads no credential of its own. `model` is `None` when the Template
         bound none, and the harness's configured default then decides.
+
+        Exactly `wait(start(...))`: a caller with nothing to do between the two halves
+        calls this and never sees a handle.
+        """
+        ...
+
+    def start(  # noqa: PLR0913 — the same list `run` takes, for the same reason
+        self,
+        *,
+        cwd: Path,
+        prompt: str,
+        env: Mapping[str, str],
+        model: str | None,
+        session_id: str,
+        budget_usd_remaining: Decimal,
+        timeout_min: float,
+        log_path: Path,
+    ) -> HarnessHandle:
+        """Start the dispatch and hand back its handle, without waiting for it.
+
+        The half AD-14 needs: `attempt.pgid` is stored from this handle, in its own unit of
+        work, before `wait` blocks — so a backend killed mid-attempt knows which process
+        group to reap.
+        """
+        ...
+
+    def wait(self, handle: HarnessHandle) -> HarnessResult:
+        """Block until the process `start` returned ends, and read its log.
+
+        The group is killed if this raises: the handle is the only thing that knows the
+        `pgid`, so an exception escaping here without a kill is the orphan AD-14 forbids.
         """
         ...
 

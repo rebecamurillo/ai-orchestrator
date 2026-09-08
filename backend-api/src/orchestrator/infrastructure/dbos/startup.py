@@ -15,8 +15,9 @@ exactly the length of `uvicorn.run`. A process that never got that far — every
 has nothing to launch, and says so by having nothing registered.
 
 **Why the kind modules are imported here, and not by `application/steps/__init__.py`
-itself.** Each `steps/<kind>.py` module's own `register(...)` call is what fills the
-registry (AD-9), but `checkpoint.py` and `shell.py` need constants from
+itself.** (`agent` is in the list for the same reason and one of its own: importing it is
+what registers the executor at all.) Each `steps/<kind>.py` module's own `register(...)`
+call is what fills the registry (AD-9), but `checkpoint.py` and `shell.py` need constants from
 `application/templates/`, and those modules import `application/steps` right back for
 `KIND_META` — importing them *from inside* the package would be the cycle that makes.
 Importing them here instead works because this module is a full layer above `application/`
@@ -31,6 +32,7 @@ from contextlib import contextmanager
 from functools import partial
 
 from orchestrator.application.steps import StepPorts
+from orchestrator.application.steps import agent as _agent  # noqa: F401
 from orchestrator.application.steps import bmad_install as _bmad_install  # noqa: F401
 from orchestrator.application.steps import checkpoint as _checkpoint  # noqa: F401
 from orchestrator.application.steps import git_commit as _git_commit  # noqa: F401
@@ -42,6 +44,7 @@ from orchestrator.application.steps import pr_link as _pr_link  # noqa: F401
 from orchestrator.application.steps import shell as _shell  # noqa: F401
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
+from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db.environment import read_run_environment
 from orchestrator.infrastructure.db.run_finished import run_finished_hook
 from orchestrator.infrastructure.db.writers import SessionFactory, open_writer_ports
@@ -49,6 +52,7 @@ from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
 from orchestrator.infrastructure.dbos.config import engine_config
 from orchestrator.infrastructure.dbos.facade import RealEngine
 from orchestrator.infrastructure.dbos.walker import WalkerDeps
+from orchestrator.infrastructure.harness import build_harness_env, build_harnesses
 from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.process import RealProcessRunner
 from orchestrator.infrastructure.settings import Settings
@@ -74,19 +78,36 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
     (`application/steps/context.py`'s own docstring says why one static `Workspace` cannot
     be right for every Run). `read_environment` is bound to the session factory and to
     `BMAD_VERSION` the same way, and opens nothing until a step calls it (4.8).
+
+    The `agent` kind's three ports are built here too (5.4). The `ProcessRunner` is bound to
+    a name first because the harness registry must start its processes through the *same*
+    runner the walker holds — AD-14 wants one object able to kill every group this process
+    started, and two instances would be two answers. `crypto` reaches the environment reader
+    as a factory for the reason that module's docstring gives: `FernetCrypto` refuses the
+    contract's placeholder key at construction, and every unit test that builds these deps
+    passes exactly that placeholder.
     """
+    runner = RealProcessRunner()
     return WalkerDeps(
         open_ports=partial(open_writer_ports, session_factory),
         step_ports=StepPorts(
             git=git,
             clock=SystemClock(),
             work_dir=str(settings.work_dir),
-            process=RealProcessRunner(),
+            process=runner,
             workspace=FsWorkspace,
             tracer=LangfuseTracer(settings),
+            harnesses=build_harnesses(settings, runner),
+            harness_env=build_harness_env(settings),
+            attempt_writes=partial(open_writer_ports, session_factory),
         ),
         human_wait_seconds=settings.human_wait_seconds,
-        read_environment=partial(read_run_environment, session_factory, settings.bmad_version),
+        read_environment=partial(
+            read_run_environment,
+            session_factory,
+            settings.bmad_version,
+            crypto=partial(FernetCrypto, settings.orchestrator_secret_key.get_secret_value()),
+        ),
         run_finished=partial(
             run_finished_hook, session_factory, git, settings.work_dir, settings.bmad_version
         ),

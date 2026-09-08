@@ -9,20 +9,40 @@ test restate the prompt it does not care about.
 Every call is recorded whole — `prompt`, `env`, `cwd`, `model`, `session_id` and
 `budget_usd_remaining` — because AD-5 is a rule about what reached the harness, and only a
 call log can settle "the executor passed the environment it built" in a unit test.
+
+`start` and `wait` are the port's two halves (5.4), recorded under their own names. Two
+call logs compared afterwards cannot tell "committed between them" from "committed after
+both", so `on_wait` is the hook that can: it runs as the first statement of `wait`, while
+the process is conceptually still running, and a test that snapshots
+`FakeAttemptRepository.calls` from inside it is reading the world at exactly the instant
+AD-14 legislates about. `run` records one `"run"` call and answers the next
+scripted result directly rather than delegating to the pair: `tests/unit/test_harness_port.py`
+is frozen and asserts that one dispatch leaves exactly one entry in `calls`. Both paths
+consume the same script, so a test that scripts one result gets it whichever it calls.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from orchestrator.domain.ports.harness import HarnessCapabilities, HarnessResult
+from orchestrator.domain.ports.harness import (
+    HarnessCapabilities,
+    HarnessHandle,
+    HarnessResult,
+)
 
 #: The claude adapter's own capabilities: the default, so a test about an executor need not
 #: restate them.
 DEFAULT_CAPABILITIES = HarnessCapabilities(preassign_session=True, resume=True, native_tracing=True)
+
+#: The process group `start` reports when a test names none. A number no real group would
+#: have, so an assertion on it cannot pass by coincidence.
+DEFAULT_PGID = 4242
+#: The pid `start` reports; `ProcessRunner.Handle` carries both and nothing here forks.
+DEFAULT_PID = 4241
 
 
 class FakeHarness:
@@ -34,10 +54,14 @@ class FakeHarness:
         name: str = "claude",
         capabilities: HarnessCapabilities = DEFAULT_CAPABILITIES,
         results: list[HarnessResult] | None = None,
+        pgid: int = DEFAULT_PGID,
+        on_wait: Callable[[], None] | None = None,
     ) -> None:
         self.name = name
         self.capabilities = capabilities
         self.results = list(results or [])
+        self.pgid = pgid
+        self.on_wait = on_wait
         self.calls: list[dict[str, Any]] = []
 
     def run(  # noqa: PLR0913 — the port's own signature
@@ -66,6 +90,43 @@ class FakeHarness:
             }
         )
         return self._next(session_id, log_path)
+
+    def start(  # noqa: PLR0913 — the port's own signature
+        self,
+        *,
+        cwd: Path,
+        prompt: str,
+        env: Mapping[str, str],
+        model: str | None,
+        session_id: str,
+        budget_usd_remaining: Decimal,
+        timeout_min: float,
+        log_path: Path,
+    ) -> HarnessHandle:
+        self.calls.append(
+            {
+                "method": "start",
+                "cwd": cwd,
+                "prompt": prompt,
+                "env": dict(env),
+                "model": model,
+                "session_id": session_id,
+                "budget_usd_remaining": budget_usd_remaining,
+                "timeout_min": timeout_min,
+                "log_path": log_path,
+            }
+        )
+        return HarnessHandle(
+            session_id=session_id, log_path=log_path, pid=DEFAULT_PID, pgid=self.pgid
+        )
+
+    def wait(self, handle: HarnessHandle) -> HarnessResult:
+        # first, before anything else this method does: the hook observes the world as it
+        # stood when the caller began to block on the process
+        if self.on_wait is not None:
+            self.on_wait()
+        self.calls.append({"method": "wait", "pgid": handle.pgid})
+        return self._next(handle.session_id, handle.log_path)
 
     def resume(  # noqa: PLR0913 — the port's own signature
         self,

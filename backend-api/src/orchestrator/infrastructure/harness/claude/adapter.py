@@ -28,6 +28,13 @@ warnings and an exporter's errors share it with the result. The object itself is
 whole as `raw_result`, because AD-10 forbids this adapter from deciding what any other
 field means; 5.7 reads the budget-cap field out of it.
 
+**A dispatch is two halves** (AD-14, 5.4). `start` hands back a `HarnessHandle` carrying
+the process group, `wait` blocks on it and parses the log, and `run` is `wait(start(...))`
+— so `application/steps/agent.py` can commit `attempt.pgid` between the two. `resume` goes
+through the same private start and the same public `wait`, because a resumed attempt is the
+same process under a different argv. What the log is read *for* moved to `result.py`, whose
+public names this module re-exports.
+
 **Static configuration is not this module's** (AD-10). `ANTHROPIC_BASE_URL`, the OTLP
 exporter and `DISABLE_AUTOUPDATER` are written to `~/.claude/settings.json` by
 `scripts/harness/claude.sh configure` at container start; the adapter writes nothing under
@@ -37,15 +44,43 @@ record holds what was asked as well as what came back.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
-from decimal import ROUND_DOWN, Decimal, InvalidOperation
+from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
-from typing import Any
 
-from orchestrator.domain.ports.harness import HarnessCapabilities, HarnessResult, HarnessUsage
-from orchestrator.domain.ports.process import ProcessRunner
+from orchestrator.domain.ports.harness import (
+    HarnessCapabilities,
+    HarnessHandle,
+    HarnessResult,
+)
+from orchestrator.domain.ports.process import Handle, ProcessRunner
+from orchestrator.infrastructure.harness.claude.result import (
+    ENCODING,
+    RESULT_TYPE,
+    RESULT_TYPE_FIELD,
+    json_objects,
+    read_text,
+    result_object,
+    usage_from,
+)
 from orchestrator.infrastructure.settings import Settings
+
+#: What this module still owns, plus what it re-exports from `result.py`: the parsing moved
+#: out when `start`/`wait` moved in (5.4), and every name it was reachable under here stays
+#: reachable here, because a reader who knows the adapter should not have to learn a second
+#: module path to find what it reads back.
+__all__ = [
+    "ENCODING",
+    "RESULT_TYPE",
+    "RESULT_TYPE_FIELD",
+    "ClaudeHarness",
+    "claude_aliases",
+    "json_objects",
+    "read_text",
+    "render_budget",
+    "result_object",
+    "usage_from",
+]
 
 #: The executable the image installs at `CLAUDE_CODE_VERSION`.
 EXECUTABLE = "claude"
@@ -74,20 +109,10 @@ CONTENT_LOGGING_NAMES = ("OTEL_LOG_USER_PROMPTS", "OTEL_LOG_TOOL_CONTENT")
 #: The suffix the prompt is written under, beside the attempt's own log.
 PROMPT_SUFFIX = ".prompt"
 
-#: The envelope field `claude -p --output-format json` puts on its own final object, and the
-#: value that marks it. Reading it is the same class of read as `session_id` — the harness's
-#: own framing, not anything the model produced (AD-10).
-RESULT_TYPE_FIELD = "type"
-RESULT_TYPE = "result"
-
 #: Cents. `--max-budget-usd` takes an amount, and the amount is rounded *down* to it.
 BUDGET_PRECISION = Decimal("0.01")
 #: What is passed when nothing remains: the CLI is never handed a negative amount.
 NO_BUDGET = "0.00"
-
-#: The one encoding every log and prompt file is written and read in, so the container's
-#: locale never decides what is parsed out of an attempt's own record.
-ENCODING = "utf-8"
 
 
 def claude_aliases(contract: Mapping[str, str]) -> dict[str, str]:
@@ -133,7 +158,33 @@ class ClaudeHarness:
         timeout_min: float,
         log_path: Path,
     ) -> HarnessResult:
-        """First dispatch: a pre-assigned session, the remaining budget as the harness cap."""
+        """First dispatch, start to finish: exactly `wait(start(...))` (AD-14)."""
+        return self.wait(
+            self.start(
+                cwd=cwd,
+                prompt=prompt,
+                env=env,
+                model=model,
+                session_id=session_id,
+                budget_usd_remaining=budget_usd_remaining,
+                timeout_min=timeout_min,
+                log_path=log_path,
+            )
+        )
+
+    def start(  # noqa: PLR0913 — the port's own signature (AD-10)
+        self,
+        *,
+        cwd: Path,
+        prompt: str,
+        env: Mapping[str, str],
+        model: str | None,
+        session_id: str,
+        budget_usd_remaining: Decimal,
+        timeout_min: float,
+        log_path: Path,
+    ) -> HarnessHandle:
+        """Start the dispatch and hand its group back before anything waits on it (AD-14)."""
         argv = self._argv(
             ["--session-id", session_id],
             budget_usd_remaining=budget_usd_remaining,
@@ -141,7 +192,7 @@ class ClaudeHarness:
             message=prompt,
         )
         self._record_prompt(log_path, prompt)
-        return self._execute(
+        return self._start(
             argv,
             cwd=cwd,
             env=env,
@@ -168,13 +219,15 @@ class ClaudeHarness:
             message=message,
         )
         self._record_prompt(log_path, message)
-        return self._execute(
-            argv,
-            cwd=cwd,
-            env=env,
-            timeout_min=timeout_min,
-            log_path=log_path,
-            session_id=session_id,
+        return self.wait(
+            self._start(
+                argv,
+                cwd=cwd,
+                env=env,
+                timeout_min=timeout_min,
+                log_path=log_path,
+                session_id=session_id,
+            )
         )
 
     def resume_command(self, cwd: str, session_id: str) -> str:
@@ -210,7 +263,34 @@ class ClaudeHarness:
         argv.append(message)
         return argv
 
-    def _execute(  # noqa: PLR0913 — the runner's own call, one argument per port parameter
+    def wait(self, handle: HarnessHandle) -> HarnessResult:
+        """Wait for the process `start` returned, then read its log (AD-14).
+
+        The wait is guarded because the group is the only handle on the process and this
+        frame is the only place that holds it: a `wait` that raises would leave a coding
+        agent running in a worktree with nothing left that knows its `pgid`, which is the
+        orphan AD-14 exists to prevent. The kill is the runner's own idempotent one, so it
+        is safe on a process that already ended, and the exception still reaches the walker.
+        """
+        try:
+            outcome = self.runner.wait(Handle(pid=handle.pid, pgid=handle.pgid))
+        except BaseException:
+            # BaseException, not Exception: a cancelled walker thread must not orphan a
+            # harness either. The group is killed and the original exception re-raised.
+            self.runner.kill_group(handle.pgid)
+            raise
+        raw_result = result_object(read_text(handle.log_path))
+        return HarnessResult(
+            session_id=handle.session_id,
+            exit_code=outcome.exit_code,
+            log_path=handle.log_path,
+            usage=usage_from(raw_result),
+            timed_out=outcome.timed_out,
+            pgid=handle.pgid,
+            raw_result=raw_result,
+        )
+
+    def _start(  # noqa: PLR0913 — the runner's own call, one argument per port parameter
         self,
         argv: list[str],
         *,
@@ -219,47 +299,19 @@ class ClaudeHarness:
         timeout_min: float,
         log_path: Path,
         session_id: str,
-    ) -> HarnessResult:
-        """Start, wait, and read the log — the whole of AD-14's contract for this adapter.
-
-        The wait is guarded because the group is the only handle on the process and this
-        frame is the only place that holds it: a `wait` that raises would leave a coding
-        agent running in a worktree with nothing left that knows its `pgid`, which is the
-        orphan AD-14 exists to prevent. The kill is the runner's own idempotent one, so it
-        is safe on a process that already ended, and the exception still reaches the walker.
-        """
+    ) -> HarnessHandle:
+        """The runner's handle, as the port's own: what `wait` needs and nothing more."""
         handle = self.runner.start(
             argv, cwd=cwd, env=env, timeout_min=timeout_min, log_path=log_path
         )
-        try:
-            outcome = self.runner.wait(handle)
-        except BaseException:
-            # BaseException, not Exception: a cancelled walker thread must not orphan a
-            # harness either. The group is killed and the original exception re-raised.
-            self.runner.kill_group(handle.pgid)
-            raise
-        raw_result = result_object(read_text(log_path))
-        return HarnessResult(
-            session_id=session_id,
-            exit_code=outcome.exit_code,
-            log_path=log_path,
-            usage=usage_from(raw_result),
-            timed_out=outcome.timed_out,
-            pgid=handle.pgid,
-            raw_result=raw_result,
+        return HarnessHandle(
+            session_id=session_id, log_path=log_path, pid=handle.pid, pgid=handle.pgid
         )
 
     def _record_prompt(self, log_path: Path, message: str) -> None:
         """The prompt, beside the log, so an attempt's record holds what was asked."""
         log_path.parent.mkdir(parents=True, exist_ok=True)
         Path(f"{log_path}{PROMPT_SUFFIX}").write_text(message, encoding=ENCODING)
-
-
-def read_text(log_path: Path) -> str:
-    """The log's text, or nothing at all — a process killed before it wrote has no log."""
-    if not log_path.is_file():
-        return ""
-    return log_path.read_text(encoding=ENCODING, errors="replace")
 
 
 def render_budget(remaining: Decimal) -> str:
@@ -274,92 +326,3 @@ def render_budget(remaining: Decimal) -> str:
     if remaining <= 0:
         return NO_BUDGET
     return str(remaining.quantize(BUDGET_PRECISION, rounding=ROUND_DOWN))
-
-
-def json_objects(text: str) -> list[dict[str, Any]]:
-    """Every top-level JSON object in `text`, in the order they appear.
-
-    Scanning rather than `json.loads`: the log holds stdout and stderr interleaved, so the
-    result object is normally surrounded by whatever the tooling printed. Each `{` is
-    offered to `raw_decode`, and a successful decode advances past the whole object, so a
-    nested one is never mistaken for a top-level one.
-    """
-    decoder = json.JSONDecoder()
-    found: list[dict[str, Any]] = []
-    index = text.find("{")
-    while index != -1:
-        try:
-            value, end = decoder.raw_decode(text, index)
-        except ValueError:
-            index = text.find("{", index + 1)
-            continue
-        found.append(value)
-        index = text.find("{", end)
-    return found
-
-
-def result_object(text: str) -> dict[str, Any] | None:
-    """The harness's own result object, or `None` when the log holds no JSON at all.
-
-    The brief's rule is "the last JSON object", and that is the fallback here rather than
-    the rule, because stdout and stderr share one file: an OTLP exporter error or an npm
-    error payload printed *after* the result would take its place, and `usage` would go
-    `None` on a run that reported it. So the last object carrying `"type": "result"` wins.
-
-    That is not an interpretation of model output (AD-10). `type` is the envelope field
-    `--output-format json` puts on the object it prints — the same class of read as
-    `session_id`, which this adapter already takes from the harness's own framing. Nothing
-    inside the envelope is read here; `raw_result` carries it on whole.
-    """
-    objects = json_objects(text)
-    envelopes = [item for item in objects if item.get(RESULT_TYPE_FIELD) == RESULT_TYPE]
-    if envelopes:
-        return envelopes[-1]
-    return objects[-1] if objects else None
-
-
-def _as_int(value: Any) -> int | None:
-    """A token count, or `None` when the field is there but is not one.
-
-    `bool` is rejected explicitly because it is an `int` in Python, and `True` tokens is a
-    reading error rather than one token.
-    """
-    if isinstance(value, bool) or not isinstance(value, int | float | str):
-        return None
-    try:
-        return int(value)
-    except TypeError, ValueError:
-        return None
-
-
-def _as_decimal(value: Any) -> Decimal | None:
-    """A USD amount, or `None` when the field is there but is not one."""
-    if isinstance(value, bool) or not isinstance(value, int | float | str):
-        return None
-    try:
-        return Decimal(str(value))
-    except InvalidOperation:
-        return None
-
-
-def usage_from(result: dict[str, Any] | None) -> HarnessUsage | None:
-    """The three numbers AD-11 records, or `None` when the result does not carry all three.
-
-    Nothing is inferred and nothing raises. A result with a cost and no token counts is as
-    unusable as no result at all, because `attempt.tokens_in`/`tokens_out` would then be
-    written as zero and read as measured; a field that is present but not a number
-    (`"total_cost_usd": "n/a"`) is the same fact, and is reported the same way rather than
-    as an exception a walker would have to catch. `raw_result` still carries the object, so
-    nothing observed is lost.
-    """
-    if result is None:
-        return None
-    usage = result.get("usage")
-    if not isinstance(usage, dict):
-        return None
-    cost = _as_decimal(result.get("total_cost_usd"))
-    tokens_in = _as_int(usage.get("input_tokens"))
-    tokens_out = _as_int(usage.get("output_tokens"))
-    if cost is None or tokens_in is None or tokens_out is None:
-        return None
-    return HarnessUsage(tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost)

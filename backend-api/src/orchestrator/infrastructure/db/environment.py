@@ -15,13 +15,26 @@ A Run, Project or Repository that is not there answers `None` rather than raisin
 executor then refuses with the wiring error `require_env` names, which is an `internal` park
 with a class name on it (`steps/registry.py`) — the honest outcome for a Run whose Repository
 was deleted underneath it, and not a traceback in the middle of a durable step.
+
+**`crypto` is a factory, and it is optional.** The `agent` kind hands the Project's own
+variables to a harness process (AD-5), and this is the one moment they are decrypted — the
+`Crypto` port's own docstring says "only when a Run is about to hand the value to a harness
+process", and this function is that moment. A *factory* rather than an instance because
+`FernetCrypto` refuses a key that is not a Fernet key at construction, and the contract's
+placeholder is not one: `walker_deps(Settings(), ...)` runs in unit tests that never
+dispatch anything, and building the adapter there would fail before a Run existed. A Project
+with no variables never calls it, and a caller that supplied none reads `{}` — which is what
+the three-positional call every git kind's test makes has always meant.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from uuid import UUID
 
-from orchestrator.application.steps.context import RunEnvironment
+from orchestrator.application.steps.context import ProjectContext, RunEnvironment
+from orchestrator.domain.entities.project import Project
+from orchestrator.domain.ports.crypto import Crypto
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
@@ -35,7 +48,11 @@ SPEC_FOLDER_INPUT = "spec_folder"
 
 
 def read_run_environment(
-    session_factory: SessionFactory, bmad_version: str, run_id: UUID
+    session_factory: SessionFactory,
+    bmad_version: str,
+    run_id: UUID,
+    *,
+    crypto: Callable[[], Crypto] | None = None,
 ) -> RunEnvironment | None:
     """One Run's Project, Repository and worktree state, as one frozen value."""
     session = session_factory()
@@ -60,6 +77,26 @@ def read_run_environment(
             worktrees=run.worktrees,
             compare_urls=run.compare_urls,
             accepted_paths=run.accepted_paths,
+            run=run,
+            project=_project_context(project, crypto),
+            test_globs=repository.test_globs,
         )
     finally:
         session.close()
+
+
+def _project_context(project: Project, crypto: Callable[[], Crypto] | None) -> ProjectContext:
+    """The Project as a dispatch receives it, with its variables decrypted here and only
+    here (AD-5). No key is built for a Project that declares no variable."""
+    variables = project.env_vars_enc
+    decrypt = crypto() if variables and crypto is not None else None
+    return ProjectContext(
+        context_text=project.context_text,
+        context_paths=project.context_paths,
+        env_vars=(
+            {}
+            if decrypt is None
+            else {entry.name: decrypt.decrypt(entry.value_enc) for entry in variables}
+        ),
+        log_prompt_content=project.log_prompt_content,
+    )
