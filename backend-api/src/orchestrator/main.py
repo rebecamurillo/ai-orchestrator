@@ -67,29 +67,28 @@ from orchestrator.api.routers import (
     signals,
     templates,
 )
-from orchestrator.application.use_cases.harness_readiness_seed import (
-    seed_readiness_project,
-    sync_pins,
-)
-from orchestrator.application.use_cases.harnesses import HarnessPorts, seed_harnesses
-from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.templates import SeedResult, TemplatePorts, seed_shipped
-from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.ports.crypto import Crypto
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db import (
-    SQLAlchemyHarnessRepository,
-    SQLAlchemyProjectRepository,
-    SQLAlchemyRepositoryRepository,
     SQLAlchemyTemplateVersionRepository,
     SQLAlchemyUnitOfWork,
     create_engine_from,
     create_session_factory,
 )
 from orchestrator.infrastructure.db import migrations as db_migrations
+
+# the harness-table seed moved to `infrastructure/db/seed.py` for the reason the registry
+# below moved: this module is at its 400-line cap and that is one subject of its own. Both
+# names are re-exported here, where `run_migrations` names one collaborator and
+# `tests/unit/test_main_harness_registry.py` reads the pin table from `orchestrator.main`.
+from orchestrator.infrastructure.db.seed import (  # noqa: F401
+    HARNESS_VERSION_SETTINGS,
+    seed_harness_table,
+)
 from orchestrator.infrastructure.dbos import build_engine, launch_engine, schedule_jobs, serving
 from orchestrator.infrastructure.git import SubprocessGit
 
@@ -168,47 +167,6 @@ def seed_shipped_templates(settings: Settings) -> list[SeedResult]:
                 version=result.inserted_as,
             )
     return results
-
-
-#: The three harness names this image installs (SPEC CAP-3, AD-10), each paired with the
-#: `Settings` field that pins its version. `local` is OpenCode — see `.env.example`'s own
-#: comment on `LOCAL_MODELS`.
-HARNESS_VERSION_SETTINGS: dict[str, str] = {
-    "claude": "claude_code_version",
-    "codex": "codex_version",
-    "local": "opencode_version",
-}
-
-
-def seed_harness_table(settings: Settings) -> list[Harness]:
-    """Idempotent upsert of the three harness names and pinned versions (AD-10), plus the
-    readiness bootstrapping this step now carries (SPEC CAP-8): `sync_pins` against the
-    *stored* version, the upsert, then the built-in `readiness` Project and Repository —
-    still the one name `run_migrations` calls, `test_main_templates_seed.py`'s frozen
-    three-collaborator test replacing this whole function, not a fourth collaborator to it.
-    """
-    pins = {name: getattr(settings, field) for name, field in HARNESS_VERSION_SETTINGS.items()}
-    engine = create_engine_from(settings)
-    try:
-        session_factory = create_session_factory(engine)
-        with SQLAlchemyUnitOfWork(session_factory) as uow:
-            hports = HarnessPorts(uow=uow, harnesses=SQLAlchemyHarnessRepository(uow.session))
-            sync_pins(hports, pins)
-            seeded = seed_harnesses(hports, pins)
-            pports = ProjectPorts(
-                uow=uow,
-                projects=SQLAlchemyProjectRepository(uow.session),
-                crypto=FernetCrypto(settings.orchestrator_secret_key.get_secret_value()),
-                clock=SystemClock(),
-                repositories=SQLAlchemyRepositoryRepository(uow.session),
-                git=SubprocessGit(settings.github_token.get_secret_value()),
-            )
-            seed_readiness_project(
-                pports, work_dir=settings.work_dir, bmad_version=settings.bmad_version
-            )
-        return seeded
-    finally:
-        engine.dispose()
 
 
 def run_migrations(settings: Settings) -> str:

@@ -107,8 +107,8 @@ describe('StopBody · blocked', () => {
     expect(html).toContain('data-testid="wf-signal-skip_epic"');
     expect(html).toContain('Skip epic');
     expect(html).toContain('data-testid="wf-cancel"');
-    expect(html).not.toContain('data-testid="wf-signal-answer"');
-    expect(html).not.toContain('<textarea');
+    expect(html).toContain('data-testid="wf-signal-answer"');
+    expect(html).toContain('<textarea');
   });
 });
 

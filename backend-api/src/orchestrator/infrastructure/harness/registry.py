@@ -29,6 +29,7 @@ from orchestrator.infrastructure.harness.claude import (
     claude_subscription_aliases,
 )
 from orchestrator.infrastructure.harness.env import AliasBuilder, env_for
+from orchestrator.infrastructure.harness.fake import FakeHarness
 from orchestrator.infrastructure.settings import Settings
 
 #: The harness-native name builders, keyed the way the registry itself is (AD-5, AD-10).
@@ -56,8 +57,18 @@ def build_harnesses(settings: Settings, runner: ProcessRunner) -> dict[str, Harn
     It takes the `ProcessRunner` rather than building one, because AD-14 wants every harness
     process in a group the same runner can kill: the walker's runner is that one, and
     `walker_deps` passes the very instance it puts on `StepPorts.process`.
+
+    The scripted `fake` harness (AR-14, SPEC CAP-1) is the one conditional entry, and the
+    condition is a setting rather than a name a Template may write: with `ORCH_TEST_MODE`
+    off it is absent here *and* has no `harness` row, so `harness: fake` resolves to nothing
+    and pre-flight refuses it before a Run is created. That is what let the shipped
+    Templates keep their `values: [claude, codex, local]` byte for byte — an Operator is
+    never offered a harness that only exists to make the gates deterministic.
     """
-    return {ClaudeHarness.name: ClaudeHarness(runner, settings)}
+    built: dict[str, Harness] = {ClaudeHarness.name: ClaudeHarness(runner, settings)}
+    if settings.orch_test_mode:
+        built[FakeHarness.name] = FakeHarness(runner, settings)
+    return built
 
 
 def build_harness_env(settings: Settings) -> HarnessEnv:

@@ -1,0 +1,18 @@
+- id: "1"
+  title: Record the notification
+  description: >
+    Create NOTIFY.md at the repository root so specs/gates/SPEC.md's CAP-1 holds. The
+    scripted harness blocks on its first dispatch with the condition `intent gap`, and
+    writes the file once an Operator has answered.
+- id: "2"
+  title: Record the plan
+  spec_checkpoint: true
+  description: >
+    Create PLAN.md at the repository root so CAP-2 holds. The spec checkpoint stops the Run
+    after planning, for the Operator to read the planned Story file and continue.
+- id: "3"
+  title: Record the shipment
+  done_checkpoint: true
+  description: >
+    Create SHIP.md at the repository root so CAP-3 holds. The done checkpoint stops the Run
+    after the Story is verified and committed.

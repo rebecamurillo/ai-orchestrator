@@ -170,12 +170,12 @@ test.describe('/workflows/[id] — 5.10 additions', () => {
       'Agent · claude · claude-opus-4 · 2026-09-07T09:12:00Z',
     );
 
-    // exactly the admitted signals this epic renders for a blocked stop — never Answer
+    // exactly the admitted signals a blocked stop renders, with the Answer box 6.1 adds
     await expect(page.getByTestId('wf-signal-skip_story')).toBeVisible();
     await expect(page.getByTestId('wf-signal-skip_epic')).toBeVisible();
     await expect(page.getByTestId('wf-cancel')).toBeVisible();
-    await expect(page.getByTestId('wf-signal-answer')).toHaveCount(0);
-    await expect(page.locator('textarea')).toHaveCount(0);
+    await expect(page.getByTestId('wf-signal-answer')).toBeVisible();
+    await expect(page.locator('textarea')).toHaveCount(1);
 
     // the Stories strip states
     await expect(page.getByTestId('wf-story-1-1')).toHaveAttribute('data-state', 'done');

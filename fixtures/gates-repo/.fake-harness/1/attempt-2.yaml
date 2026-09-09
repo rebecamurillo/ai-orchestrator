@@ -1,0 +1,26 @@
+# Story 1, second dispatch: the Operator has answered, so this one finishes the work.
+#
+# `echo_prompt` appends the prompt under `## Prompt`, which is how a test reads back the
+# Answer clause `application/steps/agent.py::ANSWER` put on the end of it. `commit: true`
+# puts the Story file, the archived file the prepare phase moved, and NOTIFY.md on the
+# branch as one `fake <fake@local>` commit.
+story_file:
+  slug: notify
+  content: |
+    ---
+    status: done
+    ---
+
+    # Story 1 — Record the notification
+
+    ## Auto Run Result
+
+    Status: done
+files:
+  - path: NOTIFY.md
+    content: |
+      Posted to the project's channel only.
+commit: true
+echo_prompt: true
+exit_code: 0
+usage: { tokens_in: 210, tokens_out: 480, cost_usd: "0.02" }

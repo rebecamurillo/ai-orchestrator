@@ -205,17 +205,18 @@ def test_continue_on_protected_path_is_refused_not_available_yet() -> None:
     assert world.engine.calls == []
 
 
-def test_answer_is_refused_not_available_yet_once_validation_passes() -> None:
-    """The brief's own AC: `answer` on a `blocked` Run in this epic validates and is then
-    refused — `detail` says so, and nothing about the row or the Run moved."""
+def test_answer_moves_the_blocked_row_and_resumes_the_run() -> None:
+    """`answer` was refused here until SPEC CAP-1 (6.1) built the `agent` row's own resume —
+    the archive, the re-dispatch and the prompt clause. It is in scope from that story on:
+    the blocked row goes back to `queued` and the Run leaves `needs_you`, which is FR-18's
+    "the Run leaves `needs_you` as soon as `signal_run` commits"."""
     world = parked("blocked", BUILD, "blocked")
     ports = effect_ports(world)
 
-    with pytest.raises(Conflict, match="answer not available yet"):
-        send(world, ports, "answer", text="use the psycopg adapter")
+    outcome = send(world, ports, "answer", text="use the psycopg adapter")
 
-    assert world.status_of(BUILD) == "blocked"
-    assert world.stored_run().status == "needs_you"
+    assert world.status_of(BUILD) == "queued"
+    assert outcome.run.status == "running"
 
 
 def _skip_epic_world() -> World:

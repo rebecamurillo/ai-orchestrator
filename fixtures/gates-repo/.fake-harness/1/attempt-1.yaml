@@ -1,0 +1,22 @@
+# Story 1, first dispatch: the agent finds an intent gap and blocks (SPEC CAP-1, FR-18).
+#
+# It writes only the Story file — no source change, no commit — which is exactly what a
+# real `bmad-build-auto` HALT leaves behind. `Blocking condition:` is the line the Answer's
+# prompt clause quotes back, so the text here is what the e2e asserts on the harness prompt.
+story_file:
+  slug: notify
+  content: |
+    ---
+    status: blocked
+    ---
+
+    # Story 1 — Record the notification
+
+    ## Auto Run Result
+
+    Status: blocked
+    Blocking condition: intent gap
+
+    Where should the notification be posted?
+exit_code: 0
+usage: { tokens_in: 120, tokens_out: 340, cost_usd: "0.01" }

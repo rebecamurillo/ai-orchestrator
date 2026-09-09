@@ -458,3 +458,40 @@ table.wf-steps tr[data-current='true'] td {
   display: flex;
   gap: var(--space-6);
 }
+
+/* ── the Answer box (6.1, UX-DR10, UX-DR17) ─────────────────────────────── */
+/* The first textarea on the surface. Monospace and full width because what is typed is
+   read back to a coding agent verbatim, so what the Operator sees is what it gets. */
+.wf-answer-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-block: var(--space-6);
+}
+
+.wf-answer {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+  resize: vertical;
+}
+
+.wf-answer:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.wf-answer-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+}
+
+.wf-answer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}

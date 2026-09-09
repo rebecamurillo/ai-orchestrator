@@ -119,6 +119,11 @@ class Settings(BaseSettings):
     # ── This process ─────────────────────────────────────────────────────────
     log_prompt_content_default: bool
     log_level: LogLevel
+    #: Test mode (SPEC CAP-1): the scripted `fake` harness is registered and its `harness`
+    #: row seeded `enabled` only while this is on. Off is the shipped contract, and off is
+    #: what every unit test sees — `tests/unit/conftest.py` builds its environment from
+    #: `.env.example`, so the registry a test reads is the production one.
+    orch_test_mode: bool
     backend_api_port: Annotated[int, Field(ge=MIN_TCP_PORT, le=MAX_TCP_PORT)]
 
     @field_validator("work_dir", "agent_home")

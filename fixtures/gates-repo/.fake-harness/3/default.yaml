@@ -1,0 +1,21 @@
+# Story 3, every dispatch: the last story, which the epic pauses after (SPEC CAP-2's done
+# checkpoint). One dispatch is enough — nothing stops this story itself.
+story_file:
+  slug: ship
+  content: |
+    ---
+    status: done
+    ---
+
+    # Story 3 — Record the shipment
+
+    ## Auto Run Result
+
+    Status: done
+files:
+  - path: SHIP.md
+    content: |
+      Shipped.
+commit: true
+exit_code: 0
+usage: { tokens_in: 80, tokens_out: 120, cost_usd: "0.01" }

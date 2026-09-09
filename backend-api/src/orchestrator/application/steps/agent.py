@@ -41,7 +41,12 @@ from typing import Any
 
 import structlog
 
-from orchestrator.application.steps import agent_tail
+from orchestrator.application.steps import agent_answer, agent_tail
+from orchestrator.application.steps.agent_answer import (
+    ANSWER_EVENT,
+    ANSWER_KEY,
+    CONDITION_KEY,
+)
 from orchestrator.application.steps.context import (
     StepContext,
     committed,
@@ -81,10 +86,6 @@ KIND = "agent"
 HARNESS_KEY = "harness"
 MODEL_KEY = "model"
 SKILL_KEY = "skill"
-#: The `answer` signal's payload, as `signal_run` stored it.
-ANSWER_EVENT = "answer"
-CONDITION_KEY = "condition"
-ANSWER_KEY = "answer"
 
 #: The prompt, in the pieces FR-14 pins. Asserted verbatim by the prompt tests.
 DISPATCH = (
@@ -224,14 +225,14 @@ def _wip_commit(ctx: StepContext) -> None:
 def _prepare_writes(ctx: StepContext) -> None:
     """The orchestrator's writes into the worktree, and the one commit holding exactly them.
 
-    The archive runs first: everything after it reads the glob it leaves behind. Its renames
+    The archives run first: everything after them reads the glob they leave. Their renames
     are staged alongside the files written, because they are this row's writes too — an
     unstaged move would still be in the tree at `start_sha` and 5.6 would read it as the
     agent's (AD-17, FR-31), and it would dirty the whole-tree commit guard while leaving the
     index empty. Files are staged by name and the tree asked afterwards, so unchanged bytes
     leave no empty commit.
     """
-    moved = agent_tail.archive_ambiguous(ctx)
+    moved = (*agent_answer.archive_with_answer(ctx), *agent_tail.archive_ambiguous(ctx))
     written = (_context_document(ctx), _verify_failure(ctx))
     targets = [*moved, *(target for target in written if target is not None)]
     if not targets:
@@ -333,7 +334,7 @@ def _planned(ctx: StepContext, harness: Harness, attempt: Attempt) -> _Dispatch:
     session, resumable = str(new_id()), previous.session_id if previous is not None else None
     if retry is not None and retry.resume_session and harness.capabilities.resume and resumable:
         return _Dispatch(harness, attempt, retry.prompt, session, resumable)
-    prompt = compose_prompt(ctx.with_resolved, ctx.resume_signal, previous)
+    prompt = compose_prompt(ctx.with_resolved, agent_answer.resolved_signal(ctx), previous)
     if retry is not None:
         prompt = RETRY_PROMPT.format(retry=retry.prompt, dispatch=prompt)
     return _Dispatch(harness, attempt, prompt, session)

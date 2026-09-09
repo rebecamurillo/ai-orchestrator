@@ -1,0 +1,25 @@
+# Story 2, every dispatch: the spec-checkpoint story finishes in one pass (SPEC CAP-2).
+#
+# One file for every attempt on purpose. A spec checkpoint stops the Run *after* the
+# dispatch that planned it, and the dispatch a Continue makes is the second one for this
+# story — so both must write the same finished Story file for the Run to carry on.
+story_file:
+  slug: plan
+  content: |
+    ---
+    status: done
+    ---
+
+    # Story 2 — Record the plan
+
+    ## Auto Run Result
+
+    Status: done
+files:
+  - path: PLAN.md
+    content: |
+      Planned.
+commit: true
+echo_prompt: true
+exit_code: 0
+usage: { tokens_in: 90, tokens_out: 150, cost_usd: "0.01" }

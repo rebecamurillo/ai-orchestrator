@@ -26,7 +26,9 @@ import {
   stopKind,
   stopSignals,
 } from '../../lib/run/detail';
+import { answerTarget, offersAnswer } from '../../lib/run/answer';
 import { signalLabel, type SignalKind } from '../../lib/run/signals';
+import AnswerBox from './AnswerBox';
 import QuestionBlock from './QuestionBlock';
 
 type ProblemDetail = components['schemas']['ProblemDetail'];
@@ -38,6 +40,11 @@ interface Props {
   onCancelClick: () => void;
   posting: SignalKind | null;
   error: ProblemDetail | null;
+  /** The Answer (6.1, FR-18) — the one signal that carries a payload, so it is reported
+   * with its text rather than by kind alone. Optional because the box appears only on a
+   * `blocked` stop whose Run admits `answer`, and a caller that renders no such stop has
+   * nothing to hand it. */
+  onAnswer?: (text: string) => void;
 }
 
 const RESOLVE_LINE = 'resolve on the remote, then Retry — Retry fetches first';
@@ -50,6 +57,7 @@ export default function StopBody({
   onCancelClick,
   posting,
   error,
+  onAnswer = () => {},
 }: Props) {
   const kind = stopKind(detail, token);
   if (kind === null) return null;
@@ -67,6 +75,14 @@ export default function StopBody({
   return (
     <div className="wf-stop" data-testid={`wf-stop-${kind}`}>
       {kind === 'blocked' && detail.alert ? <QuestionBlock alert={detail.alert} /> : null}
+      {offersAnswer(detail, kind) ? (
+        <AnswerBox
+          target={answerTarget(detail)}
+          onAnswer={onAnswer}
+          posting={posting !== null}
+          error={posting === null && error ? error : null}
+        />
+      ) : null}
       {kind === 'misconfigured' ? <p className="wf-stop-reason">{bannerText(detail)}</p> : null}
       {files.length > 0 ? (
         <ul className="wf-stop-files" data-testid="wf-stop-files">
