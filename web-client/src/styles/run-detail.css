@@ -721,7 +721,10 @@ table.wf-steps tr[data-current='true'] td {
   color: var(--color-text);
   font-family: var(--font-mono);
   font-size: var(--type-body);
-  width: var(--space-16);
+  /* Wide enough for the figure plus the number spinner: `--space-16` is 32px, which Chromium
+   * renders as a bare `!` once the spinner takes its share, so the Operator cannot read the
+   * budget being submitted. `ch` is the honest unit here — the field is mono. */
+  width: 12ch;
 }
 
 .wf-budget-actions {
