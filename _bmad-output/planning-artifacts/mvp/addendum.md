@@ -218,6 +218,35 @@ may not decide. The patch and its regression test are recorded verbatim in
 repository's own Bash patterns extending `CLAUDE_ALLOWED_TOOLS` as a per-Project setting.
 Nothing observed in this pass argued for or against it, because no agent dispatch ran.
 
+### Codex — flags NOT re-verified 2026-09-09 (story 7.1)
+
+The brief requires the record whether or not anything changed. **Nothing was verified, and that
+is the record.** Codex CLI is not installed on the development host and story 7.1 does not run a
+harness (running it is 7.2's, by the brief's own scope), so every flag below is the documented
+shape from this section's 2026-08-26 pass and from `research/tracing.md` §Codex — implemented
+because an adapter has to write *something*, marked provisional in the code where each one is
+defined, and **not a fact until 7.2 has observed it on the real host at `CODEX_VERSION`**.
+
+| Value | Where it lives | Status |
+|---|---|---|
+| `codex exec --json -C <worktree> -m <model> -o <log>.last.md "<prompt>"` | `codex/adapter.py` module docstring + `JSON_FLAG`/`WORKTREE_FLAG`/`MODEL_FLAG`/`LAST_MESSAGE_FLAG` | provisional |
+| whether `--skip-git-repo-check` (or any sandbox flag) is needed under `cap_drop ALL` | **not passed**; `codex/adapter.py` docstring says why | open |
+| `thread.started` / `thread_id` — the session capture | `codex/events.py` `THREAD_STARTED`, `THREAD_ID` | provisional |
+| `turn.completed` / `usage.input_tokens` / `usage.output_tokens` | `codex/events.py` `TURN_COMPLETED`, `USAGE`, `INPUT_TOKENS`, `OUTPUT_TOKENS` | provisional |
+| `codex exec resume <id> --json "<message>"` | `codex/adapter.py::CodexHarness.resume` | provisional |
+| `-c otel.log_user_prompt=true` — the content switch | `codex/adapter.py` `CONFIG_FLAG`, `CONTENT_SWITCH` | provisional |
+| `cd <cwd> && codex resume <id>` — FR-21's paste line | `codex/adapter.py` `RESUME_COMMAND` | provisional |
+| `TRACEPARENT` honoured by `codex exec` | source-verified only (`research/tracing.md` §Codex) | 7.2's day-1 check |
+
+Two decisions that are *not* provisional, because they follow from the spine rather than from the
+CLI. **Cost is zero from the stream** (`codex/events.py::STREAM_COST_USD`): Codex reports tokens
+and no money, and AD-11 makes the Gateway's spend log the settled figure — `agent_tail.usage`
+already marks every harness figure `cost_provisional`. **`preassign_session` is `False`**, so
+`HarnessHandle` carries no session on a first dispatch and `CodexHarness.wait` is the only half
+that can report one; an attempt whose backend dies between `start` and `wait` therefore has no
+session to resume, which is a property of a harness that names its own thread and not of the
+adapter.
+
 ## C. Rejected alternatives (MVP)
 | Rejected | Why |
 |---|---|

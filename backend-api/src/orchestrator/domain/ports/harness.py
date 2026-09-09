@@ -97,7 +97,14 @@ class HarnessResult:
 
     #: The session this attempt ran under — pre-assigned when the harness allows it, so the
     #: value is known even when the harness printed nothing.
-    session_id: str
+    #:
+    #: `None` is the answer of a harness that names its own session and then did not print it:
+    #: `capabilities.preassign_session = False` means the caller's id was never used, so an
+    #: output with no session event leaves the attempt with none at all. `Attempt.session_id`
+    #: is `str | None` for the same reason, and `agent_tail.finish` writes this straight onto
+    #: it — the absence is recorded as an absence rather than as an empty string a later
+    #: `resume` would try to continue.
+    session_id: str | None
     #: `None` only when the process was killed before it could report one (AD-14).
     exit_code: int | None
     #: Where stdout and stderr went. The prompt is beside it, at `{log_path}.prompt`.
