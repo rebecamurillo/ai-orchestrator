@@ -665,3 +665,19 @@ table.wf-steps tr[data-current='true'] td {
   text-transform: var(--type-control-transform);
   cursor: pointer;
 }
+
+/* The inline Skip story / Skip epic confirm (6.4, FR-20): a line and its two buttons, in
+   the stop's own action row rather than over it — the brief rules a modal out here, and
+   `.wf-stop-actions` already lays its children out in a row with the same gap. `flex-wrap`
+   is what keeps the sentence readable when the row runs out of width. */
+.wf-confirm {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.wf-confirm-line {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+}

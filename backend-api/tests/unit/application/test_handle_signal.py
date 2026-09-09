@@ -234,7 +234,6 @@ def _terminal_resume_world() -> World:
 @pytest.mark.parametrize(
     ("world_factory", "kind", "payload"),
     [
-        (lambda: parked("verify_failed", VERIFY, "error"), "skip_story", {}),
         (_skip_epic_world, "skip_epic", {}),
         (lambda: parked("budget", BUILD, "blocked"), "budget_raise", {"budget_usd": "50"}),
         (lambda: parked("misconfigured", "push", "error"), "terminal_start", {}),
@@ -242,7 +241,6 @@ def _terminal_resume_world() -> World:
         (_terminal_resume_world, "terminal_resume", {}),
     ],
     ids=[
-        "skip_story",
         "skip_epic",
         "budget_raise",
         "terminal_start",

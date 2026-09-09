@@ -1,7 +1,8 @@
 /**
  * The stop body (4.15, UX-DR10): what stopped the Run, in words and — where the park kind
- * has one — a log tail, then the buttons `admitted_signals` and this epic's own effects
- * (`cancel`, `retry`, `continue` — SPEC Non-goals) both allow. `park_kind`-keyed rather than
+ * has one — a log tail, then the buttons `admitted_signals` and the effects that have landed
+ * (`cancel`, `retry`, `continue`; `answer` 6.1, `skip_story` 6.4) both allow.
+ * `park_kind`-keyed rather than
  * a name-per-component split: every variant but `plan_stale` renders the same shape (a
  * reason, an optional command block, the button row), so one switch reads truer than seven
  * near-identical files.
@@ -36,7 +37,14 @@ import {
   plannedEyebrow,
 } from '../../lib/run/checkpoint';
 import { signalLabel, type SignalKind } from '../../lib/run/signals';
+import {
+  KEEP_LABEL,
+  SKIP_STORY_LABEL,
+  offersSkipStory,
+  skipStoryConfirmLine,
+} from '../../lib/run/skip';
 import AnswerBox from './AnswerBox';
+import ConfirmAction from './ConfirmAction';
 import QuestionBlock from './QuestionBlock';
 import RejectBox from './RejectBox';
 import StoryFileBlock from './StoryFileBlock';
@@ -80,11 +88,21 @@ export default function StopBody({
   if (kind === null) return null;
 
   const isQuestion = kind === 'blocked' || kind === 'misconfigured';
-  const signals = isQuestion
+  const offered = isQuestion
     ? blockedSignals(detail.admitted_signals)
     : kind === 'checkpoint'
       ? checkpointSignals(detail.admitted_signals)
       : stopSignals(detail.admitted_signals);
+  // FR-20 puts *Skip story* on four stops none of the three filters above reaches
+  // (`verify_failed`, `timeout`, `protected_path`, `internal`), and it renders as a confirm
+  // wherever it appears. Appending rather than widening any of them keeps each one's own
+  // frozen test true; `offersSkipStory` reads `admitted_signals`, so the server still decides.
+  const skipStoryId = answerTarget(detail).storyId;
+  const signals =
+    offersSkipStory(kind, detail.admitted_signals, skipStoryId) && !offered.includes('skip_story')
+      ? [...offered, 'skip_story' as SignalKind]
+      : offered;
+  const skipStoryLine = skipStoryConfirmLine(skipStoryId);
   const canCancel = detail.admitted_signals.includes('cancel');
   const tail = logTail(detail);
   const path = currentStepPath(detail);
@@ -155,18 +173,31 @@ export default function StopBody({
         </p>
       ) : (
         <div className="wf-stop-actions">
-          {signals.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className="wf-signal"
-              data-testid={`wf-signal-${s}`}
-              disabled={posting !== null}
-              onClick={() => onSignal(s)}
-            >
-              {signalLabel(s)}
-            </button>
-          ))}
+          {signals.map((s) =>
+            s === 'skip_story' ? (
+              <ConfirmAction
+                key={s}
+                kind={s}
+                label={SKIP_STORY_LABEL}
+                line={skipStoryLine}
+                confirmLabel={SKIP_STORY_LABEL}
+                keepLabel={KEEP_LABEL}
+                disabled={posting !== null}
+                onConfirm={() => onSignal(s)}
+              />
+            ) : (
+              <button
+                key={s}
+                type="button"
+                className="wf-signal"
+                data-testid={`wf-signal-${s}`}
+                disabled={posting !== null}
+                onClick={() => onSignal(s)}
+              >
+                {signalLabel(s)}
+              </button>
+            ),
+          )}
           {canCancel ? (
             <button
               type="button"

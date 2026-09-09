@@ -8,15 +8,16 @@ and, only for a branch this Run created and never pushed, `delete_branch` — al
 because a Run cancelled twice, or racing its own timeout, must not fail either caller
 (AD-13).
 
-**Why this module refuses six of AD-13's ten kinds after `validate` passes.**
+**Why this module refuses five of AD-13's ten kinds after `validate` passes.**
 `signal_effects.py` already implements every one of the ten correctly — AD-13 is one state
 machine, and 4.5 built it whole rather than leaving nine gaps for nine later stories to fill
 under the same 100 %-branch bar it was held to. But Epic 4 shipped no surface for
 `skip_story`/`skip_epic` (nothing to skip yet),
 `budget_raise` (no spend to raise against), the three `terminal_*` kinds (no terminal
 session), or `continue` on a `protected_path` park (no protected-path rule, Epic 5's). Each
-belongs to a later epic's own story, and `answer` was the first of them to land — SPEC
-CAP-1 (6.1) built the `agent` row's resume. `validate` still runs first, unconditionally: a signal
+belongs to a later epic's own story: `answer` was the first of them to land — SPEC CAP-1
+(6.1) built the `agent` row's resume — and `skip_story` the second, with SPEC CAP-4 (6.4).
+`validate` still runs first, unconditionally: a signal
 AD-13 itself refuses gets its own `Conflict` text, never this module's; only a signal that
 validation *admits* and this epic does not yet apply is refused here, with the payload and
 the state untouched.
@@ -69,11 +70,14 @@ class SignalEffectPorts:
 
 
 def _in_scope(kind: SignalKind, park_kind: ParkKind | None) -> bool:
-    """The scope built so far: `cancel`, `retry` and `answer` always; `continue` on two park
-    kinds. `answer` joined the list with SPEC CAP-1 (6.1), which built the `agent` row's own
-    resume — the archive, the re-dispatch and the prompt clause — so the kind AD-13 has
-    always admitted finally has an effect to reach."""
-    if kind in ("cancel", "retry", "answer"):
+    """The scope built so far: `cancel`, `retry`, `answer` and `skip_story` always;
+    `continue` on two park kinds. `answer` joined the list with SPEC CAP-1 (6.1), which
+    built the `agent` row's own resume — the archive, the re-dispatch and the prompt clause;
+    `skip_story` joined it with SPEC CAP-4 (6.4), whose surface is the *Skip story* control
+    and whose effect — the skipped rows, the re-baseline, the commit message — 4.5 already
+    built whole. Neither needed a new writer: the kinds AD-13 has always admitted finally
+    have an effect to reach."""
+    if kind in ("cancel", "retry", "answer", "skip_story"):
         return True
     return kind == "continue" and park_kind in CONTINUE_PARK_KINDS
 

@@ -9,6 +9,11 @@ instead. The run *graph* is not here: `build_run_graph` lives beside `build_temp
 in `application/graph.py` (Epic 3's hand-off), and this module leans on that module's
 `STEP_TOKENS` table so the two never state the mapping twice.
 
+Two seams have since been cut out of it for length rather than for design — `run_views_alert.py`
+(6.2) and `run_views_summary.py` (6.4), each 400 lines' worth of pressure on a module that had
+none to spare. Both are imported straight back under the private names this module already
+used, so the paragraph above still describes how the three read models are assembled.
+
 `run_detail` and the run graph route share `RunViewPorts`, a fresh, fully-required ports bundle
 behind a brand new dependency (`api/providers.py::run_view_ports`) — both are new routes with no
 existing caller to keep working. `board_view` cannot: it answers `GET /runs?view=board`, the
@@ -26,16 +31,13 @@ nothing from making that a fourth optional port to thread through.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
 from orchestrator.application.graph import STEP_TOKENS
-from orchestrator.application.rules.frames import epic_frame, rows_in_frame, story_frame
 from orchestrator.application.rules.signals import row_at, run_admitted_signals
-from orchestrator.application.steps import COMMIT_KIND, PUSH_KIND
 from orchestrator.application.use_cases.create_run import RunReadPorts
 from orchestrator.application.use_cases.run_graph import run_graph_for
 from orchestrator.application.use_cases.run_view_types import (
@@ -57,6 +59,12 @@ from orchestrator.application.use_cases.run_view_types import (
     Summary,
 )
 from orchestrator.application.use_cases.run_views_alert import build_alert, run_token
+from orchestrator.application.use_cases.run_views_summary import (
+    bracket_index,
+    progress,
+    story_cells,
+    summary,
+)
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import Repository
@@ -87,43 +95,18 @@ __all__ = [
     "run_graph_for",
 ]
 
-#: The two Templates whose Runs carry epic/story progress (SPEC CAP-12). Every other
-#: Template — `repo-init` today — has no `epics[i]`/`stories[j]` frame in any of its rows.
-_PROGRESS_TEMPLATES = ("epic", "initiative")
-
 #: The kind-to-`kind_label` a Card shows (SPEC CAP-12); `readiness` is unshipped but free to name.
 _KIND_LABELS: dict[str, str] = {"repo-init": "repo-init", "readiness": "readiness"}
 
-#: The statuses that finish a frame's own row, one way or the other (AD-9's own pair).
-_SETTLED: tuple[str, ...] = ("done", "skipped")
-
-_BRACKET_INDEX = re.compile(r"\[(\d+)\]$")
-
-#: `run_token`/`build_alert` live in `run_views_alert.py` now (line count alone — see that
-#: module's own docstring); `_run_token` stays the name every call site here uses.
+#: `run_token`/`build_alert` live in `run_views_alert.py` now, and the epic/story arithmetic
+#: — progress, the Story cells, the summary — in `run_views_summary.py` (line count alone,
+#: 6.2's own seam; see those modules' docstrings). The private names every call site here
+#: already used stay bound to them, so nothing else in this module changed.
 _run_token = run_token
-
-
-def _progress(run: Run, rows: Sequence[StepRun]) -> Progress | None:
-    """`None` for a Run whose Template has no epic/story frame at all (e.g. `repo-init`)."""
-    if run.template_name not in _PROGRESS_TEMPLATES:
-        return None
-    story_commits = [row for row in rows if row.kind == COMMIT_KIND]
-    stories_total = len(story_commits)
-    stories_done = sum(1 for row in story_commits if row.status in _SETTLED)
-    epics_total: int | None = None
-    epics_done: int | None = None
-    if run.template_name == "initiative":
-        epic_pushes = [row for row in rows if row.kind == PUSH_KIND]
-        epics_total = len(epic_pushes)
-        epics_done = sum(1 for row in epic_pushes if row.status in _SETTLED)
-    return Progress(
-        epics_done=epics_done,
-        epics_total=epics_total,
-        stories_done=stories_done,
-        stories_total=stories_total,
-        links=len(run.compare_urls),
-    )
+_bracket_index = bracket_index
+_progress = progress
+_story_cells = story_cells
+_summary = summary
 
 
 # ── the Board (SPEC CAP-12, CAP-14) ───────────────────────────────────────────────────────
@@ -294,59 +277,6 @@ def _latest_attempt(ports: RunViewPorts, attempt: Attempt) -> LatestAttempt:
     )
 
 
-def _story_cells(
-    run: Run, rows: Sequence[StepRun], attempts_by_row: Mapping[UUID, Sequence[Attempt]]
-) -> list[StoryCell]:
-    """One cell per story frame, in plan order — state off the frame's own commit-guard row."""
-    commit_rows = sorted((row for row in rows if row.kind == COMMIT_KIND), key=lambda row: row.seq)
-    cells = []
-    for commit_row in commit_rows:
-        frame = story_frame(commit_row.path)
-        if frame is None:
-            continue
-        frame_cost = Decimal("0")
-        for frame_row in rows_in_frame(rows, frame):
-            for attempt in attempts_by_row.get(frame_row.id, ()):
-                frame_cost += attempt.cost_usd or Decimal("0")
-        cells.append(_story_cell(run, rows, frame, commit_row, frame_cost))
-    return cells
-
-
-def _story_cell(
-    run: Run, rows: Sequence[StepRun], frame: str, commit_row: StepRun, cost_usd: Decimal
-) -> StoryCell:
-    epic = epic_frame(frame)
-    epic_index = _bracket_index(epic) if epic is not None else 0
-    if commit_row.status == "skipped":
-        state = "skipped"
-    elif commit_row.status == "done":
-        state = "done"
-    elif _frame_is_current(run, rows, frame):
-        state = "current"
-    else:
-        state = "future"
-    return StoryCell(
-        epic_index=epic_index, story_id=commit_row.story_id or "", state=state, cost_usd=cost_usd
-    )
-
-
-def _frame_is_current(run: Run, rows: Sequence[StepRun], frame: str) -> bool:
-    """The same "current" concept `application/graph.py::_is_current` states per row, here
-    over a whole frame: any member is running, or is the parked row (guarded on
-    `park_path is not None` for the same reason that function is, even though `row.path`
-    being a non-empty `str` already makes `row.path == None` impossible)."""
-    return any(
-        row.status == "running" or (run.park_path is not None and row.path == run.park_path)
-        for row in rows
-        if row.path == frame or row.path.startswith(f"{frame}.")
-    )
-
-
-def _bracket_index(prefix: str) -> int:
-    match = _BRACKET_INDEX.search(prefix)
-    return int(match.group(1)) if match else 0
-
-
 def _cost(
     run: Run,
     attempts_by_row: Mapping[UUID, Sequence[Attempt]],
@@ -376,14 +306,3 @@ def _latest_seen(attempts: Sequence[Attempt]) -> datetime | None:
     while it has no `run.ended_at` yet."""
     ended = [attempt.ended_at for attempt in attempts if attempt.ended_at is not None]
     return max(ended) if ended else None
-
-
-def _summary(run: Run, rows: Sequence[StepRun]) -> Summary | None:
-    if run.status != "done":
-        return None
-    skipped = [
-        row.story_id
-        for row in rows
-        if row.kind == COMMIT_KIND and row.status == "skipped" and row.story_id is not None
-    ]
-    return Summary(progress=_progress(run, rows), links=list(run.compare_urls), skipped=skipped)

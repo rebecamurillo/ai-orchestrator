@@ -70,6 +70,14 @@ ANSWER_KEY = "text"
 #: The payload key `continue` on a `protected_path` park carries the accepted files under.
 FILES_KEY = "files"
 
+#: The park reason `apply_step_result` leaves when a skipped Story's re-baseline fails —
+#: AD-9's redispatch onto a target that was never run (`use_cases/apply_step_result.py`
+#: imports it from here, so the sentence has one definition and this module can read it
+#: without importing a use case). It is stated here because it is an *admission* fact:
+#: PRD §4.6 is "the reason-text and admitted-signal contract", and the Story that park is
+#: about has already been skipped, so `skip_story` has nothing left to skip.
+REBASELINE_FAILED = "re-baseline failed after skip"
+
 
 @dataclass(frozen=True)
 class Rule:
@@ -266,6 +274,13 @@ def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKin
     (AD-13: `cancel` applies to every non-terminal status), and nothing once it is terminal.
     `park_row_kind` is the parked row's `kind`, or `None` when the caller has not looked it
     up (`RunSummaryOut`'s list view does not, and answers conservatively without it).
+
+    **One stop is narrower than its park kind** (6.4, FR-20): a `verify_failed` park whose
+    reason is `REBASELINE_FAILED` is the re-baseline of a Story the Operator has *already*
+    skipped, so it offers Retry, Skip epic and Cancel run — not a second Skip story, which
+    would find nothing left to skip and merely re-queue the row Retry re-queues. `validate`
+    is deliberately not narrowed with it: AD-13's table is keyed on the park *kind*, and a
+    `skip_story` posted here is admissible and harmless. This is what the stop *offers*.
     """
     if run.status in TERMINAL_RUN:
         return ()
@@ -273,7 +288,10 @@ def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKin
         return ("cancel",)
     if run.park_kind is None:
         return ()
-    return admitted_signals(run.park_kind, park_row_kind or "")
+    offered = admitted_signals(run.park_kind, park_row_kind or "")
+    if run.park_reason == REBASELINE_FAILED:
+        return tuple(kind for kind in offered if kind != "skip_story")
+    return offered
 
 
 def record_text(rule: Rule, payload: dict[str, Any]) -> str:
