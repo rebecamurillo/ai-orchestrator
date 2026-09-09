@@ -196,6 +196,11 @@ class AlertOut(BaseModel):
     checkpoint_story: CheckpointStoryOut | None = Field(
         default=None, json_schema_extra=_drop_default
     )
+    #: The parking gate record's own payload (6.6) — AD-17's `{"hits": [{path, kind}]}` on a
+    #: `protected_path` stop, `{}` on every other. `dict[str, Any]`, the type `GateRecord.
+    #: payload` itself carries: a typed model here would fix a shape the record deliberately
+    #: leaves open ("whatever the event needs kept", its own docstring).
+    payload: dict[str, Any] = Field(default_factory=dict, json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, alert: Alert) -> AlertOut:
@@ -209,6 +214,7 @@ class AlertOut(BaseModel):
             attribution=attribution,
             row_kind=alert.row_kind,
             checkpoint_story=story,
+            payload=alert.payload,
         )
 
 

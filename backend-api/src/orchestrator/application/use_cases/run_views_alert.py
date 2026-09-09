@@ -25,9 +25,11 @@ from decimal import Decimal
 from uuid import UUID
 
 from orchestrator.application.rules.frames import rows_in_frame, story_frame
+from orchestrator.application.rules.protected_paths import park_record_payload
 from orchestrator.application.steps import AGENT_KIND, COMMIT_KIND, COMMIT_MESSAGE_KEY, SHELL_KIND
 from orchestrator.application.use_cases.run_view_types import Alert, Attribution, CheckpointStory
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.statuses import RunStatus
@@ -66,6 +68,7 @@ def build_alert(  # noqa: PLR0913 — one keyword per fact `checkpoint_story` ne
     rows: Sequence[StepRun],
     park_row: StepRun | None,
     attempts_by_row: Mapping[UUID, Sequence[Attempt]],
+    records: Sequence[GateRecord] = (),
 ) -> Alert | None:
     if run.status != "needs_you":
         return None
@@ -80,6 +83,7 @@ def build_alert(  # noqa: PLR0913 — one keyword per fact `checkpoint_story` ne
         attribution=attribution,
         row_kind=row_kind,
         checkpoint_story=checkpoint_story,
+        payload=park_record_payload(records, run),
     )
 
 

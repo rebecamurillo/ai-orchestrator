@@ -2,7 +2,7 @@
 title: 'Raise budget and Accept a protected-path change'
 type: 'feature'
 created: '2026-09-09'
-status: 'blocked'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
@@ -53,332 +53,128 @@ specifies.
 - New coverage goes in new test files; `tests/unit/fakes/` is the sole additive exception
   (`FakeGit.diff`).
 
-**Block If:** — **TRIGGERED, see `## Auto Run Result`.** Any assertion in an existing test
-file other than the two operator-named pending-gate registry rows would have to change.
-Specifically: `backend-api/tests/unit/application/test_handle_signal.py::
-test_continue_on_protected_path_is_refused_not_available_yet` (added by story 4-9, so it
-predates this branch and is not one of the two named registries) asserts that a `continue`
-on a `protected_path` park raises `Conflict("continue not available yet")` — which is
-exactly the gate this story lands. HALT and report rather than self-authorise.
+**Block If:** — **triggered, and resolved by an operator ruling; see `## Auto Run Result
 
-**Never:**
-- Do not implement, test, or shape the terminal path (`terminal_start`, `terminal_release`,
-  `terminal_resume`, `resume_command`, the poll) — story 6-7 owns it, and story 6-1's guess
-  at 6-2's behaviour already cost this epic a halt.
-- Do not widen `stopSignals`/`hasEffect`/`EFFECTIVE_KINDS`, `blockedSignals`/
-  `BLOCKED_EXTRA_KINDS` or `checkpointSignals`/`CHECKPOINT_EXTRA_KINDS` — all frozen. Both
-  new controls are their own components (the `AnswerBox`/`ConfirmAction` precedent), so
-  neither needs a filter widened.
-- Do not touch `test_signals_router.py::test_a_kind_outside_this_epics_scope_is_a_409_not_
-  available_yet`: its vehicle is `terminal_start`, which this story does not land.
-- Do not fix the Epic-7 gaps (`pgid` on a resumed dispatch, `Harness.resume`'s arguments).
-  The Accept path resumes the tail with **no dispatch**, so neither is on this path.
+Status: done
 
-## I/O & Edge-Case Matrix
+**Summary.** Both of AD-13's last non-terminal actions reach their effects.
+`handle_signal`'s scope gate admits `budget_raise` and `continue` on a `protected_path`
+park; the raised budget now actually resumes the plan (a real bug — see below); the Accept
+is refused unless its file list is exactly the hit list AD-17 recorded; `alert.payload`
+publishes that hit list; `GET /runs/{id}/files` grew a `diff=1` mode scoped to those same
+hits; and the two stops that had no body at all now have one each.
 
-| Scenario | Input / State | Expected Output / Behavior | Error Handling |
-|---|---|---|---|
-| Raise over a `blocked` row | `budget` park, row `blocked`, `budget_raise {budget_usd: 60}` | `run.budget_usd == 60`, `park_kind == "blocked"`, Run stays `needs_you`, no `engine.signal`, record `budget raised to $60.00` | — |
-| Raise over a `checkpoint` row | same, row `checkpoint` | `park_kind == "checkpoint"`, Run stays `needs_you` | — |
-| Raise over a `done` row | `budget` park, row `done` | Run `running`, the frame's next unfinished row (`verify`) `queued` | — |
-| Raise over an `error` row | `budget` park, row `error` (retry path) | row `queued`, Run `running` | — |
-| Raise over a run-level park | `park_path is None` | Run `running`, walker starts the plan | — |
-| Raise at or below spend | `budget_usd: 30`, `spend_usd: 41.20` | nothing written | 409 `new budget must exceed spend $41.20` |
-| Accept the exact hits | `protected_path` park, hits `[tests/a.py ~, AGENTS.md +]`, `continue {files: [tests/a.py, AGENTS.md]}` | `accepted_paths` holds both, row `error → running`, record `continue` with `payload.files` and text `accepted: tests/a.py, AGENTS.md`, no harness call | — |
-| Accept a list that is not the hits | `files: [tests/a.py]` (or `[]`, or a superset) | nothing written | 409 naming the recorded hits |
-| Diff one hit | `GET …/files?path=AGENTS.md&diff=1` | unified diff of `start_sha .. worktree` for that path | 403 for a path that is not a recorded hit; 422 for an escaping path; 404 for an unknown Run |
-| Protected-path body | `alert.payload.hits` present | one row per file with its `+ − ~`, a diff link each, the accept line, *Accept changes* | — |
-| Budget body | `budget` park | banner `BLK · budget $41.20 / $40.00`, the cost kv, a numeric field pre-filled `spend + 10` rounded, *Raise budget*, *Cancel run*, no skips | — |
+**The bug the brief's first `[ASSUMPTION]` uncovered.** `signal_effects.py::_budget_raise`
+wrote `run.budget_usd`, let `signal_run` move the Run to `running`, and queued **nothing**.
+`walk.py::next_row` finds work three ways, and a budget park on an `error` row — FR-17's
+retry path — matched none of them: `next_row` answered `None`, `close_run` read it as a
+stall, and the Run parked `internal`, a stop admitting only `cancel`. A park on a `done` row
+happened to work through `_start_the_plan`'s "every row is planned/done/skipped" branch, so
+the half that was broken was invisible. `resume_from(ports, park_row)` — the call every
+other resuming effect already makes — is both cases in one line.
+`test_budget_raise_resume.py` pins the `error` path against `next_row` itself, not only
+against the repository, because "the row is queued" and "the walk finds it" are the two
+halves that came apart.
 
-</intent-contract>
+**Files changed** (backend): `application/rules/signals.py` (`Rule.text_from`/
+`Rule.extra_refusal` and their two builders — `budget raised to $60.00` off the *validated*
+figure, `accepted: a, b` for an Accept while a checkpoint `continue` keeps its phrase; the
+`new budget must exceed spend $41.20` refusal), `application/rules/protected_paths.py`
+(`hits_payload`/`park_record_payload`/`hit_paths` — the hit list as stored state, written by
+both call sites and read by both readers), `application/use_cases/signal_effects.py`
+(`_budget_raise` resumes), `application/use_cases/signals.py` (the scope gate, and the
+Accept's own hit-list 409), `application/steps/git_commit.py` (its `protected_path` park
+records a hit list, which it never did — without it the brief's "`files` must equal the hit
+list" was unsatisfiable for a commit-guard park), `application/steps/agent_tail.py`
+(`HITS_KEY` re-bound from the rule; still exactly 400 lines, marker order untouched),
+`run_view_types.py`/`run_views_alert.py`/`run_views.py`/`api/schemas/run_views.py`
+(`Alert.payload`), `domain/ports/git.py` + `infrastructure/git/worktrees.py` +
+`tests/unit/fakes/git.py` (`Git.diff`), `application/use_cases/run_files.py` +
+`api/schemas/run_files.py` + `api/routers/run_files.py` + `api/providers.py` (the `diff`
+mode). Nine new test files; three pending-gate assertions removed under the ruling.
 
-## Code Map
+**Files changed** (frontend): `lib/run/budget.ts` and `lib/run/accept.ts` (new),
+`components/run/BudgetRaiseBox.tsx` and `components/run/AcceptBox.tsx` (new),
+`components/run/StopBody.tsx` (both bodies; the plain `Continue` button steps aside on the
+`protected_path` stop only), `islands/RunDetail.tsx` (two more payload-carrying callbacks
+through 6.1's own `sendSignal`), `lib/run/artifacts.ts` (`isFile` beside `isTree` — the
+files response is a three-member union now, so "not the tree" stopped being a narrowing),
+`components/run/ArtifactsPanel.tsx`, `styles/run-detail.css`. Six new test files.
+`contracts/openapi.json`/`schema.d.ts` regenerated with `AlertOut.payload`,
+`RunFileDiffOut` and the `diff` query parameter.
 
-**Backend — the scope gate (both halves).**
-- `application/use_cases/signals.py::_in_scope` (line ~72) — the tuple gains `"budget_raise"`;
-  `CONTINUE_PARK_KINDS` (line ~57) gains `"protected_path"`. The module docstring's "refuses
-  four of AD-13's ten kinds" paragraph is corrected to the three terminal kinds.
-- `tests/unit/application/test_handle_signal.py` — the `budget_raise` parametrize row and its
-  `ids` entry (lines ~233, ~239) may go under the operator's exception (a).
-  **`test_continue_on_protected_path_is_refused_not_available_yet` (lines 197-206) may not** —
-  see Block If.
-- `tests/unit/application/test_answer_signal_scope.py` (lines ~92-99) — its registry holds
-  exactly one row, `budget_raise`. Removing it empties the list, so the whole
-  `test_the_kinds_this_story_did_not_land_still_answer_not_available_yet` function goes with
-  it (an empty `parametrize` collects as a skipped placeholder, which asserts nothing).
+**Anchor removals, all three authorised by the operator's ruling.**
 
-**Backend — `budget_raise`'s two writer gaps (verified against the brief, 4.5 left both).**
-- `application/use_cases/signal_effects.py::_budget_raise` (line ~205) — correct today for the
-  `blocked`/`checkpoint` hold (`park_kind` rewritten to the row's status, `resume=False`).
-  **Missing:** it queues nothing. A `done` row happens to work by accident —
-  `walk.py::_start_the_plan` queues the first `planned` row because every row is then in
-  `STARTABLE` — but an `error` row is in none of `first_queued`/`_resumed_in_place`/
-  `STARTABLE`, so `next_row` answers `None` and `close_run` parks `internal`, a stop that
-  admits only `cancel`. Fix: `Effect(run_update=update, finished=not resume_from(ports, row))`
-  for the non-held case, which is `resume_from`'s own documented rule ("the parked row is the
-  first candidate") — a `done` parked row is stepped over to the verify row, an `error` one is
-  re-queued (`error → retry → queued`). `park_row is None` (a run-level park) keeps today's
-  bare `Effect(run_update=update)`. The frozen `test_signal_run.py::test_a_budget_raise_on_a_
-  row_that_kept_its_routed_status_resumes_the_run` asserts only budget/status/engine, so it
-  stays true.
-- `application/rules/signals.py` — `Rule.text` is `"budget raised by the operator"`; the brief
-  pins `budget raised to ${new}`. Add `Rule.text_from: Callable[[dict], str | None] | None`,
-  consulted by `record_text` before `text_key` and falling through on `None`; two named
-  builders (`_budget_raised_text` → `BUDGET_RAISED.format(...)` off `raised_budget`, always
-  present because `validate` ran first; `_accepted_text` → `ACCEPTED.format(paths=…)` off
-  `accepted_files`, `None` for a checkpoint `continue`, which keeps `"continued by the
-  operator"`). Also `Rule.extra_refusal: str | None`, used by `validate` when `extra` alone
-  refuses, so `budget_raise` gets `BUDGET_TOO_LOW = "new budget must exceed spend ${spend}"`
-  (`:.2f`, `rules/budget.py::forced`'s own convention) while a wrong park keeps `INVALID`.
-  `test_signal_rules.py`'s budget refusals assert `pytest.raises(Conflict)` bare, so they stay
-  true.
+| File | Removed | Replaced by |
+| --- | --- | --- |
+| `tests/unit/application/test_handle_signal.py` | `test_continue_on_protected_path_is_refused_not_available_yet` (a standalone pending-gate test, story 4-9) | `tests/unit/application/test_accept_protected_path_signal.py` (10 tests) |
+| `tests/unit/application/test_handle_signal.py` | the `budget_raise` parametrize row, its `ids` entry, and the `COMMIT_GUARD` constant left unused | `test_budget_raise_signal.py` (6), `test_budget_raise_resume.py` (6) |
+| `tests/unit/application/test_answer_signal_scope.py` | the `budget_raise` row — its last — and with it the now-vacuous `test_the_kinds_this_story_did_not_land_still_answer_not_available_yet` | the same two files |
 
-**Backend — the Accept's 409 and the hit list.**
-- `application/rules/signals.py` — `HITS_KEY = "hits"`/`HIT_PATH_KEY = "path"` move here (one
-  definition; `steps/agent_tail.py:101` re-binds `HITS_KEY` from here so its public name and
-  the `rules ← steps` direction both hold), plus two pure functions: `park_payload(records,
-  run)` (the last `GateRecord` whose `event == run.park_kind`, its `payload`) and
-  `hit_paths(payload)`.
-- `application/use_cases/signals.py` — a second refusal beside `_refuse_out_of_scope`:
-  on `kind == "continue"` and `park_kind == "protected_path"`, compare
-  `accepted_files(signal.payload)` against `hit_paths(park_payload(ports.signal.writers.
-  records.list_for_run(run_id), run))` and raise `Conflict(ACCEPT_MISMATCH.format(hits=…))`
-  when they differ as sets. `WriterPorts.records` is already on the ports — no new port.
-- `application/steps/git_commit.py` (line ~68) — the commit-guard's own `protected_path`
-  `StepResult` carries **no** `payload`, so that park records no structured hit list at all.
-  Add `payload={HITS_KEY: [{HIT_PATH_KEY: p} for p in hits]}` (no `kind`: `ProtectedPaths.
-  check` returns paths only and its member set is frozen by `test_run_environment.py`), so
-  every `protected_path` park is acceptable. `test_git_commit_executor.py` asserts field by
-  field, not by equality, so it stays true.
+Nothing else in either file changed. `test_signals_router.py`'s scope-gate illustration was
+not touched: its vehicle is `terminal_start`, which this story does not land.
 
-**Backend — the read model.**
-- `application/use_cases/run_view_types.py::Alert` — `payload: dict[str, Any] =
-  field(default_factory=dict)`, defaulted so every existing `Alert(...)` construction keeps
-  compiling (`skipped_epics`' own precedent, 6.5).
-- `application/use_cases/run_views_alert.py::build_alert` — one more keyword, `records`, and
-  `payload=park_payload(records, run)`. `run_views.py::run_detail` already reads
-  `ports.gate_records.list_for_run(run.id)` (line 202) — pass that same list into `_alert`
-  rather than reading twice.
-- `api/schemas/run_views.py::AlertOut` (382/400) — `payload: dict[str, Any] =
-  Field(default_factory=dict, json_schema_extra=_drop_default)` plus one line in `.of()`.
-  `dict[str, Any]`, not a typed `HitOut`: it is `GateRecord.payload`'s own type, and the four
-  lines it costs are what keeps this module under the cap.
+**Decisions the brief left open.**
 
-**Backend — the `diff` mode.**
-- `domain/ports/git.py::Git` — `diff(self, worktree: Path, from_sha: str, path: str) -> str`
-  ("the unified diff of one path between `from_sha` and the worktree as it stands"), beside
-  `diff_names`/`diff_changes`.
-- `infrastructure/git/subprocess_git.py` — `git diff {from_sha} -- {path}`.
-- `tests/unit/fakes/git.py` — one more optional `diff` kwarg, one script entry, one method
-  (additive; the fakes exception).
-- `application/use_cases/run_files.py` (245 lines) — `RunFilesDiffPorts(runs, steps, attempts,
-  records, git)` and `diff_run_file(ports, run_id, path) -> RunFileDiff(path, from_sha, diff)`.
-  Refusal order mirrors `read_run_file`: 404 unknown Run → 422 `_escapes(path)` → **403 when
-  `path` is not one of `hit_paths(park_payload(...))`** → 404 when the parked row has no
-  attempt with a `start_sha`. The scope check is deliberately *not* `_within_spec_folder`:
-  every anchor AD-17 protects (`AGENTS.md` anywhere, every frozen test file) is outside the
-  spec folder by construction, so that gate would refuse exactly the paths this mode exists
-  to show. The recorded hit list is a tighter scope than the spec folder, not a wider one —
-  it is the Run's own record of what it is asking the Operator to judge. `_escapes` is reused
-  unchanged.
-- `api/schemas/run_files.py` — `RunFileDiffOut{path, from_sha, diff}`.
-- `api/routers/run_files.py` — `get_file` gains `diff: Annotated[bool, Query()] = False`;
-  `response_model` becomes `RunFileOut | RunFilesTreeOut | RunFileDiffOut`; the module
-  docstring's "stays at exactly `GET` and `PUT`" paragraph gains the mode. Route count
-  unchanged.
-- `api/providers.py` (312/400) — `run_files_diff_ports`, the same `with SQLAlchemyUnitOfWork`
-  shape `run_files_write_ports` uses, `git=_required_git(request, "run_files")`.
+- **`[ASSUMPTION]` 1 — a retry-path `error` under budget resumes as a retry.** Implemented
+  through `resume_from`, whose own rule ("the parked row is the first candidate") re-queues
+  an `error` row and steps over a `done` one, so AD-13's two separately-stated cases are one
+  line. See the bug note above.
+- **`[ASSUMPTION]` 2 — the field pre-filled with `spend + 10` rounded.** `Math.ceil`, to two
+  decimals. A floor would land at or below the spend for a spend under a dollar, so the
+  screen would sometimes pre-fill a figure the server is about to refuse; a ceiling always
+  clears. `run-budget-lib.test.ts` asserts that property over a range of spends rather than
+  only the example.
+- **The `diff` mode's scope** (implicit in the brief). Not `_within_spec_folder`: every
+  anchor AD-17 protects — `AGENTS.md` anywhere, every frozen test file — is outside the spec
+  folder by construction, so that gate would 403 exactly the paths the mode exists to show.
+  Scoped instead to the hit list *this Run's own park recorded*, which is tighter than the
+  spec folder and is state the Run wrote itself. `_escapes` is reused unchanged.
+- **The Accept is all-or-nothing, not a set of checkboxes.** The server refuses any list
+  that is not exactly the hits, so a partial accept would leave a flagged file unaccepted and
+  park the resumed check on it again. The per-file control an Operator needs is the diff
+  link, which is a read.
+- **The mismatch is compared as sets**, not as ordered lists: the Operator is answering "yes
+  to these files", and the order the list arrived in says nothing about that.
 
-**Frontend.**
-- `src/lib/run/budget.ts` (new, pure) — `BUDGET_RAISE_LABEL = 'Raise budget'`,
-  `prefilledBudget(cost)` (`spend + 10`, rounded — see Design Notes), `budgetRaiseBody(value)`
-  → `{kind: 'budget_raise', payload: {budget_usd: value}}`, `offersBudgetRaise(kind, admitted)`.
-- `src/lib/run/accept.ts` (new, pure) — `ProtectedHit{path, kind}`, `protectedHits(alert)`
-  (defensive read of `alert.payload.hits`, the `misconfiguredFiles` precedent),
-  `hitMark(kind)` (`added → +`, `deleted → −`, anything else → `~`), `diffHref(runId, path)`
-  (`/runs/{id}/files?path=…&diff=1`), `ACCEPT_LABEL = 'Accept changes'`,
-  `acceptLine(storyId)` (verbatim: `Accept records these files as accepted for story {id};
-  the check resumes on the same tree and the files ship with the story`),
-  `acceptBody(paths)` → `{kind: 'continue', payload: {files}}`,
-  `offersAccept(detail, kind)`.
-- `src/components/run/BudgetRaiseBox.tsx` (new) — the cost kv line, `<input type="number"
-  data-testid="wf-budget-raise-input">`, primary `wf-budget-raise`. Owns its own input state,
-  the `AnswerBox` precedent; `StopBody` stays stateless.
-- `src/components/run/AcceptBox.tsx` (new) — the `<ul data-testid="wf-accept-files">` of
-  `{mark} {path}` rows each with an `<a>` to `diffHref`, the accept line, primary `wf-accept`.
-  No `dangerouslySetInnerHTML`.
-- `src/components/run/StopBody.tsx` (270 lines) — render `BudgetRaiseBox` for
-  `kind === 'budget'` and `AcceptBox` for `kind === 'protected_path'`; on the
-  `protected_path` body only, drop `'continue'` out of the rendered button row (the
-  `AcceptBox` is that action). No filter is widened: `budget_raise` is not in
-  `EFFECTIVE_KINDS` and never enters `signals`. Existing `protected_path` assertions
-  (`run-stop-body-skip.test.ts`, `run-stop-body-skip-epic.test.ts`) never list `continue` in
-  `admitted_signals`, and every `wf-signal-continue` assertion anywhere is on a `plan_stale`
-  or `checkpoint` body, so all stay true.
-- `src/islands/RunDetail.tsx` — two more callbacks through the payload-carrying `sendSignal`
-  6.1 added (`onRaiseBudget`, `onAccept`), the `onAnswer` precedent exactly.
-- `src/styles/run-detail.css` — additive `.wf-budget*`/`.wf-accept*` at the end.
+**Gates — all run from a clean tree, all green**
 
-**E2E (backend, on the fake harness — no fixture change needed).**
-`tests/e2e/test_budget_raise.py`: create the gates Run with `budget_usd: "0.005"`. Story 1's
-`attempt-1.yaml` costs `0.01` and routes `blocked`, so the Run parks `blocked` and
-`budget_second_record` rewrites `park_kind` to `budget` on a **`blocked`** row — AC1 end to
-end. Raise to `"0.02"`: `park_kind` is `blocked` again, the Run is still `needs_you`, the
-Question body is back. Answer; `attempt-2.yaml` costs `0.02`, routes `done`, spend `0.03`
-exceeds `0.02`, so the Run parks `budget` on a **`done`** row. Raise to `"0.50"`: the Run
-reaches `running` and the frame's `verify` row starts — AC2 end to end.
+| Gate | Result |
+| --- | --- |
+| `make lint` | pass — ruff, ruff format, mypy (domain/application strict), import-linter (4 contracts kept), env contract, test pairs (189 backend / 89 web), `gen:api --check` (no drift), eslint, prettier, `tsc --noEmit`, astro check (0 errors) |
+| `make test` | pass — 5304 backend passed, 1 skipped; `domain/` + `application/` **100 %** branch coverage; web-client 1198 passed in 92 files |
+| `make openapi` | pass — `contracts/openapi.json` and `schema.d.ts` regenerated with `AlertOut.payload`, `RunFileDiffOut` and the `diff` query parameter; re-running produced no further change |
+| `make e2e` | pass — 183 passed, 11 deselected, 38 subtests, on the disposable `aio-e2e` stack with `ORCH_TEST_MODE=1`, including the new `test_budget_raise.py`; stack torn down |
+| `make e2e-ui` | pass — 148 passed, including the new `run-detail-accept.spec.ts` |
 
-## Tasks & Acceptance
+The two Epic-5 PNGs under `_bmad-output/implementation-artifacts/epic-5-screens/` are
+regenerated by story 5.10's own anchor spec; the new bytes are committed.
 
-**Execution:**
-- `backend-api/src/orchestrator/application/rules/signals.py` -- `Rule.text_from`/
-  `Rule.extra_refusal`, `BUDGET_RAISED`/`BUDGET_TOO_LOW`/`ACCEPTED`, `HITS_KEY`/
-  `HIT_PATH_KEY`, `park_payload`/`hit_paths` -- the table stays the one place a signal's
-  sentence and its refusal are written.
-- `backend-api/src/orchestrator/application/use_cases/signal_effects.py` -- `_budget_raise`
-  resumes through `resume_from` -- a retry-path `error` row otherwise resumes into a stall.
-- `backend-api/src/orchestrator/application/use_cases/signals.py` -- `budget_raise` joins
-  `_in_scope`, `protected_path` joins `CONTINUE_PARK_KINDS`, the accept's hit-list 409 --
-  the two kinds AD-13 admits finally have an effect to reach.
-- `backend-api/src/orchestrator/application/steps/git_commit.py` -- the protected park
-  records its hit list -- otherwise a commit-guard park can never be accepted.
-- `backend-api/src/orchestrator/application/steps/agent_tail.py` -- re-bind `HITS_KEY` from
-  `rules/signals.py` -- one definition, and the module stays at 400.
-- `backend-api/src/orchestrator/application/use_cases/run_view_types.py`,
-  `run_views_alert.py`, `run_views.py`, `api/schemas/run_views.py` -- `Alert.payload` and its
-  wire projection -- the body needs the hits and their kinds.
-- `backend-api/src/orchestrator/domain/ports/git.py`,
-  `infrastructure/git/subprocess_git.py`, `tests/unit/fakes/git.py` -- `Git.diff` -- the
-  unified diff the file list links to.
-- `backend-api/src/orchestrator/application/use_cases/run_files.py`,
-  `api/schemas/run_files.py`, `api/routers/run_files.py`, `api/providers.py` -- the `diff`
-  mode -- a mode on the existing `GET`, never a third operation.
-- `backend-api/tests/unit/application/test_handle_signal.py`,
-  `test_answer_signal_scope.py` -- remove the `budget_raise` registry rows -- the gate has
-  landed. **(The third pending-gate assertion in the first file is the Block If.)**
-- New backend test files, one concern each: `tests/unit/application/
-  test_budget_raise_signal.py`, `test_budget_raise_resume.py`, `test_accept_protected_path_
-  signal.py`, `test_signal_record_sentences.py`, `test_run_views_alert_payload.py`,
-  `tests/unit/test_run_files_diff.py`, `tests/unit/test_run_files_diff_router.py`,
-  `tests/unit/test_git_port_diff.py`, `tests/e2e/test_budget_raise.py`.
-- `web-client/src/lib/run/{budget,accept}.ts`, `src/components/run/{BudgetRaiseBox,
-  AcceptBox}.tsx`, `src/components/run/StopBody.tsx`, `src/islands/RunDetail.tsx`,
-  `src/styles/run-detail.css` -- the two bodies.
-- New frontend test files: `tests/unit/run-budget-lib.test.ts`,
-  `tests/unit/run-accept-lib.test.ts`, `tests/unit/run-stop-body-budget.test.ts`,
-  `tests/unit/run-stop-body-protected-path.test.ts`,
-  `tests/e2e/run-detail-accept.spec.ts`.
-- `make openapi` -- regenerate: `AlertOut.payload` and `RunFileDiffOut` are new wire shapes.
+## Notes for the next story (6-7, terminal resume)
 
-**Acceptance Criteria:** the brief's own five (verbatim,
-`briefs/6-6-raise-budget-and-accept.md`) govern; implement exactly as written there.
-
-## Spec Change Log
-
-## Review Triage Log
-
-## Design Notes
-
-**Why the `diff` mode is scoped to the recorded hits, not to the spec folder.** The operator's
-hand-off says to reuse `read_run_file`'s scope and escape checks. `_escapes` is reused as is.
-`_within_spec_folder` cannot be: AD-17's anchors are `AGENTS.md` *anywhere* and every frozen
-test file (`rules/protected_paths.py::build`/`check`), so every path the protected-path body
-links to is outside the Run's spec folder by construction and would 403. The honest
-alternative is not to widen the scope but to *narrow* it differently: the path must be one of
-the hits this Run's own park recorded. That is strictly tighter than "any file in the
-worktree" and is derived from state the Run wrote itself.
-
-**Why the hit list needed `git_commit.py` to change too.** `agent_tail.protected` returns
-`payload={"hits": [{"path", "kind"}]}`, which `apply_step_result::_park` carries onto the
-gate record. `GitCommitExecutor` returns the same park kind with no payload at all — so a
-commit-guard `protected_path` park had no machine-readable hit list, and the brief's "`files`
-must equal the hit list" would have had to be parsed out of the reason sentence for that
-half. One `payload=` on that `StepResult` makes both halves the same read. No `kind` is
-invented for those hits: `ProtectedPaths.check` answers paths only and its member set is
-frozen, so the body shows `~` for a hit with no kind.
-
-**Why `Rule.text_from` rather than formatting `Rule.text`.** `record_text(rule, payload)`
-would have to `.format(**payload)` a template with the operator's own dict — fine for our own
-templates but it would print the raw payload value (`"60"`), where the brief pins the
-*validated* figure (`$60.00`). A named builder per rule is the same shape `Rule.extra`
-already is, and it lets `continue` answer `accepted: a, b` for an Accept while keeping
-`continued by the operator` for a checkpoint Continue, which one template string cannot.
-
-**`prefilledBudget` — the brief's own `[ASSUMPTION]`.** "pre-filled with `spend + 10`
-rounded". Resolved as `Math.ceil(spend + 10)` rendered with two decimals: a ceiling can never
-land at or below the spend (a floor could, for a spend under $1), so the pre-filled value is
-always one `validate` would admit. Stated here because the brief marks it open.
-
-**The retry-path `error` resume — the brief's second `[ASSUMPTION]`.** "a retry-path error
-under budget resumes as a retry when the budget is raised". Resolved by `resume_from`, whose
-own docstring already says the parked row is the first candidate: it re-queues an `error` row
-(`error → retry`) and steps over a `done` one. One line covers both rows the brief describes
-separately, and it is the same call `_skip_story`/`_skip_epic`/`_terminal_resume` already
-make.
-
-## Verification
-
-**Commands:**
-- `make lint` -- expected: ruff, mypy (domain/application strict), import-linter (4
-  contracts), env contract, test pairs, `gen:api --check`, eslint, prettier, `tsc --noEmit`,
-  astro check all clean.
-- `make test` -- expected: backend + web unit suites green; `domain/` + `application/` hold
-  **100 %** branch coverage, including every new branch in `_budget_raise`, the accept
-  refusal, `park_payload`/`hit_paths` and `diff_run_file`.
-- `make openapi` -- expected: `contracts/openapi.json`/`schema.d.ts` regenerate with
-  `AlertOut.payload` and `RunFileDiffOut`; `gen:api --check` clean afterward.
-- `make e2e` -- expected: green on the disposable stack (`ORCH_TEST_MODE=1`), including
-  `test_budget_raise.py`.
-- `make e2e-ui` -- expected: green. The two Epic-5 PNGs under
-  `_bmad-output/implementation-artifacts/epic-5-screens/` are regenerated by story 5.10's
-  anchor spec; commit the new bytes.
-
-## Auto Run Result
-
-Status: blocked
-
-**Blocking condition:** anchor conflict — `backend-api/tests/unit/application/
-test_handle_signal.py::test_continue_on_protected_path_is_refused_not_available_yet`.
-
-Planning is complete (see the Code Map above; it is the whole investigation, so a resumed
-dispatch needs no re-survey). Implementation did not start: the story cannot be built without
-invalidating one assertion in an existing test file that is not covered by any exception the
-operator granted.
-
-**The conflict.**
-
-| | |
-|---|---|
-| File | `backend-api/tests/unit/application/test_handle_signal.py` |
-| Test | `test_continue_on_protected_path_is_refused_not_available_yet` (lines 197-206) |
-| Landed by | story 4-9 (`8ad015e`), Epic 4 — it predates this branch |
-| Assertion | `with pytest.raises(Conflict, match="continue not available yet"): send(world, ports, "continue")` on `parked("protected_path", COMMIT_GUARD, "error")`, then `world.status_of(COMMIT_GUARD) == "error"` and `world.engine.calls == []` |
-
-**Why it is unavoidable.** This story's own brief requires `continue` on a `protected_path`
-park to reach its effect. The only gate is `use_cases/signals.py::_in_scope`, and admitting
-that pair is what makes the test's `Conflict` stop being raised. Three alternatives were
-swept and all rejected:
-
-1. *Leave `_in_scope` alone.* Removes half the story (the brief's `continue`-on-
-   `protected_path` scope, FR-31, and the entire Accept path).
-2. *Admit it only when the payload carries `files`, so a payload-less `continue` still reads
-   `continue not available yet`.* The refusal would then lie: the action **is** available and
-   the caller sent no files. It is also the "route around it" the operator forbade, and it
-   fails NFR-8 ("copy names the mechanism").
-3. *Put the hit-list check in `rules/signals.py::validate` instead, so the refusal is AD-13's
-   own `INVALID` text.* `match="continue not available yet"` still fails, and it would put
-   gate-record state inside a table keyed on `(status, park_kind, row kind/status)`.
-
-**The minimal edit requested.** Delete the whole test function (lines 197-206) — it is a
-pending-gate assertion for a gate this story lands, structurally identical to the
-`budget_raise` registry row eleven lines below it that the operator already pre-authorised;
-its `world` builds no protected-path record, so there is nothing in it but the refusal.
-Nothing else in the file changes beyond the authorised `budget_raise` row. Strictly-exceeding
-coverage lands in the same commit in a new file,
-`tests/unit/application/test_accept_protected_path_signal.py`: the Accept applying through
-`handle_signal` on an agent-row park (accepted paths recorded, row `error → running`, the
-record carrying `payload.files`), the same on a commit-guard-row park, the mismatched-list
-409, the empty-list 409, and `world.engine.calls` in each case.
-
-Nothing was written to the repository: the working tree is clean at `b44152e` and no gate was
-run, because there is nothing yet to run one against.
+- **`_in_scope` now refuses exactly three kinds**, all yours: `terminal_start`,
+  `terminal_release`, `terminal_resume`. Landing the last of them empties
+  `use_cases/signals.py::_refuse_out_of_scope`'s second branch entirely.
+- **`test_signals_router.py::test_a_kind_outside_this_epics_scope_is_a_409_not_available_yet`
+  uses `terminal_start`** and cannot be retargeted after 6.6: no out-of-scope kind will be
+  left that is not one of yours. The operator has already ruled that the story landing the
+  last kind may retire that test together with the then-dead `_refuse_out_of_scope` branch,
+  provided coverage proves the endpoint's real behaviour.
+- **The two registries are terminal-only now.** `test_handle_signal.py` holds three rows
+  (`terminal_start`, `terminal_release`, `terminal_resume`) with `_terminal_release_world`
+  and `_terminal_resume_world` beside them; `test_answer_signal_scope.py` holds no registry
+  at all any more.
+- **`rules/signals.py` is at 397 of 400.** It has three lines of headroom, and 6.7 touches
+  it. Split along the seam its own docstring already names — the table (`Rule`, the
+  predicates, the text builders, `VALID`) against the questions asked of it (`validate`,
+  `admitted_signals`, `run_admitted_signals`, `record_text`, `row_at`, `raised_budget`,
+  `accepted_files`) — re-exporting every public name, rather than trimming comments.
+- **`Rule.text_from` is there if a terminal record needs a built sentence**, and
+  `Rule.extra_refusal` if `_in_terminal_session`/`_no_terminal_session` should say why they
+  refused rather than falling back to `INVALID`. Neither is used by a terminal kind today.
+- **`Alert.payload` is generic**, not protected-path specific: it is whatever the parking
+  gate record kept, so a terminal stop that wants to carry details to the screen has a place
+  for them without a new field.
+- **Still deferred to Epic 7, untouched:** a resumed dispatch records no `pgid`, and
+  `Harness.resume` takes neither `model` nor `budget_usd_remaining`. Neither blocked this
+  story — the Accept resumes the tail with no dispatch at all.

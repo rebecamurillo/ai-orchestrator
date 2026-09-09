@@ -89,26 +89,6 @@ def test_an_answer_on_a_row_that_is_not_an_agent_is_refused() -> None:
         send(world, effect_ports(world), "answer", **{ANSWER_KEY: ANSWER})
 
 
-@pytest.mark.parametrize(
-    ("park_kind", "path", "row_status", "kind", "payload"),
-    [
-        ("budget", BUILD, "blocked", "budget_raise", {"budget_usd": "50"}),
-    ],
-    ids=["budget_raise"],
-)
-def test_the_kinds_this_story_did_not_land_still_answer_not_available_yet(
-    park_kind: str, path: str, row_status: str, kind: str, payload: dict[str, object]
-) -> None:
-    """Widening the scope gate for one kind must not widen it for the rest: 6.4, 6.5 and 6.6
-    each land their own, and until they do the refusal is what an Operator gets."""
-    world = parked(park_kind, path, row_status)
-
-    with pytest.raises(Conflict, match=f"{kind} not available yet"):
-        send(world, effect_ports(world), kind, **payload)
-
-    assert world.engine.calls == []
-
-
 def test_an_answer_on_a_running_run_never_reaches_the_scope_gate_at_all() -> None:
     """`validate` runs first and unconditionally, so a Run that is not parked gets AD-13's
     own sentence rather than this module's — the order `handle_signal` is built on."""

@@ -98,7 +98,7 @@ PATH_SEPARATOR = ", "
 
 #: Where the hit list travels to the gate record: `StepResult.payload["hits"]`, one entry per
 #: file, so the Operator's `continue` can name exactly the paths the Run reported (AD-9).
-HITS_KEY = "hits"
+HITS_KEY = protected_paths.HITS_KEY
 
 #: The signal a person answers a `protected_path` park with (AD-13). It carries the accepted
 #: files under `rules/signals.py::FILES_KEY`; a `continue` on a checkpoint carries none.
@@ -244,7 +244,7 @@ def protected(ctx: StepContext, attempt: Attempt) -> StepResult | None:
         gate=ctx.row.gate,
         reason=reason,
         park=Park(kind="protected_path", reason=reason, path=ctx.row.path),
-        payload={HITS_KEY: [{"path": hit.path, "kind": hit.kind} for hit in hits]},
+        payload=protected_paths.hits_payload(hits),
     )
 
 

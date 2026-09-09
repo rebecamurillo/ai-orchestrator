@@ -66,6 +66,7 @@ from orchestrator.application.use_cases.run_views_summary import (
     summary,
 )
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.entities.run import Run
@@ -192,14 +193,17 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
     park_row = row_at(rows, run.park_path)
     admitted = run_admitted_signals(run, park_row.kind if park_row is not None else None)
     park_attempts = attempts_by_row.get(park_row.id, ()) if park_row is not None else ()
+    # Read once and shared: the detail publishes the whole gate record, and `_alert` needs
+    # the park's own entry off the same list (6.6) rather than a second query for it.
+    records = ports.gate_records.list_for_run(run.id)
     return RunDetailView(
         run=run,
         header=_header(run, project, repository),
-        alert=_alert(run, _latest_of(park_attempts), rows, park_row, attempts_by_row),
+        alert=_alert(run, _latest_of(park_attempts), rows, park_row, attempts_by_row, records),
         steps=[_step_row(ports, row, attempts_by_row[row.id]) for row in rows],
         stories=_story_cells(run, rows, attempts_by_row),
         cost=_cost(run, attempts_by_row, now=ports.clock.now(), tracer=ports.tracer),
-        gate_record=ports.gate_records.list_for_run(run.id),
+        gate_record=records,
         admitted_signals=admitted,
         summary=_summary(run, rows),
     )
@@ -219,12 +223,13 @@ def _header(run: Run, project: Project | None, repository: Repository | None) ->
     )
 
 
-def _alert(
+def _alert(  # noqa: PLR0913, PLR0917 — the positional adapter 6.2's split left
     run: Run,
     attempt: Attempt | None,
     rows: Sequence[StepRun],
     park_row: StepRun | None,
     attempts_by_row: Mapping[UUID, Sequence[Attempt]],
+    records: Sequence[GateRecord] = (),
 ) -> Alert | None:
     row_kind = park_row.kind if park_row is not None else None
     return build_alert(
@@ -234,6 +239,7 @@ def _alert(
         rows=rows,
         park_row=park_row,
         attempts_by_row=attempts_by_row,
+        records=records,
     )
 
 

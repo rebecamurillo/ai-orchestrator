@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from orchestrator.application.use_cases.run_files import RunFile, RunFilesTree
+from orchestrator.application.use_cases.run_files import RunFile, RunFileDiff, RunFilesTree
 from orchestrator.domain.ports.workspace import TreeEntry
 
 
@@ -55,6 +55,19 @@ class RunFilesTreeOut(BaseModel):
     @classmethod
     def of(cls, tree: RunFilesTree) -> RunFilesTreeOut:
         return cls(root=tree.root, entries=[RunFileEntryOut.of(entry) for entry in tree.entries])
+
+
+class RunFileDiffOut(BaseModel):
+    """`GET /runs/{id}/files?path=&diff=1` (6.6): one protected path's unified diff, and the
+    attempt `start_sha` it is measured from. The diff is git's own text, rendered verbatim."""
+
+    path: str
+    from_sha: str
+    diff: str
+
+    @classmethod
+    def of(cls, answer: RunFileDiff) -> RunFileDiffOut:
+        return cls(path=answer.path, from_sha=answer.from_sha, diff=answer.diff)
 
 
 class RunFileIn(BaseModel):

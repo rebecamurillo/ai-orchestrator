@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from orchestrator.domain.entities.gate_record import GateRecord
@@ -161,6 +162,10 @@ class Alert:
     row_kind: str | None = None
     #: Set only for a done checkpoint (`row_kind` not `agent`, `park_kind == "checkpoint"`).
     checkpoint_story: CheckpointStory | None = None
+    #: The payload of the gate record that parked this Run (6.6) — `{}` for every stop that
+    #: kept none. AD-17's hit list is what travels on one today, and the protected-path body
+    #: renders each file's added/deleted/modified mark and diff link from these entries.
+    payload: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

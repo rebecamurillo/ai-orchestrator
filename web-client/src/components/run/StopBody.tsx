@@ -2,6 +2,9 @@
  * The stop body (4.15, UX-DR10): what stopped the Run, in words and — where the park kind
  * has one — a log tail, then the buttons `admitted_signals` and the effects that have landed
  * (`cancel`, `retry`, `continue`; `answer` 6.1, `skip_story` 6.4, `skip_epic` 6.5) both allow.
+ * Three signals do not render as buttons at all, because each carries something a button
+ * cannot ask for: the Answer's text (6.1), the raised budget's figure and the Accept's file
+ * list (both 6.6). Each is a box of its own, offered only where `admitted_signals` says so.
  * `park_kind`-keyed rather than
  * a name-per-component split: every variant but `plan_stale` renders the same shape (a
  * reason, an optional command block, the button row), so one switch reads truer than seven
@@ -27,7 +30,9 @@ import {
   stopKind,
   stopSignals,
 } from '../../lib/run/detail';
+import { offersAccept, protectedHits } from '../../lib/run/accept';
 import { answerTarget, offersAnswer } from '../../lib/run/answer';
+import { offersBudgetRaise } from '../../lib/run/budget';
 import {
   checkpointSignals,
   checkpointSummaryLine,
@@ -47,7 +52,9 @@ import {
   skipEpicConfirmLine,
   skipStoryConfirmLine,
 } from '../../lib/run/skip';
+import AcceptBox from './AcceptBox';
 import AnswerBox from './AnswerBox';
+import BudgetRaiseBox from './BudgetRaiseBox';
 import ConfirmAction from './ConfirmAction';
 import QuestionBlock from './QuestionBlock';
 import RejectBox from './RejectBox';
@@ -69,6 +76,14 @@ interface Props {
    * both boxes. Optional because neither box appears outside the one stop that admits it,
    * and a caller that renders no such stop has nothing to hand it. */
   onAnswer?: (text: string) => void;
+  /** The raised budget (6.6, FR-17) — a figure, so like the Answer it is reported with its
+   * payload rather than by kind alone. Optional for the same reason: no other stop has one. */
+  onRaiseBudget?: (budgetUsd: string) => void;
+  /** The accepted protected paths (6.6, FR-31) — always exactly the files the park recorded,
+   * which is what the server refuses any other list against. */
+  onAccept?: (paths: string[]) => void;
+  /** This Run's id, for the per-file diff links the protected-path body renders. */
+  runId?: string;
   /** The planned story file a spec checkpoint shows inline (`GET /runs/{id}/files`) —
    * fetched by the island, since `StopBody` itself stays stateless. `undefined` while it
    * has not resolved yet, `null` on a failed fetch. */
@@ -86,6 +101,9 @@ export default function StopBody({
   posting,
   error,
   onAnswer = () => {},
+  onRaiseBudget = () => {},
+  onAccept = () => {},
+  runId = '',
   plannedFile = null,
 }: Props) {
   const kind = stopKind(detail, token);
@@ -116,6 +134,11 @@ export default function StopBody({
       ? [...withSkipStory, 'skip_epic' as SignalKind]
       : withSkipStory;
   const skipEpicLine = skipEpicConfirmLine(currentEpicNumber(detail), kind === 'push_rejected');
+  // The Accept *is* `continue` on this stop, and it posts a payload — so the plain button
+  // for that kind steps aside here, exactly as `skip_story`'s does for its confirm. Every
+  // other stop's `continue` button is untouched (`plan_stale`, `checkpoint`).
+  const accepting = offersAccept(detail, kind);
+  const buttons = accepting ? signals.filter((s) => s !== 'continue') : signals;
   const canCancel = detail.admitted_signals.includes('cancel');
   const tail = logTail(detail);
   const path = currentStepPath(detail);
@@ -143,6 +166,25 @@ export default function StopBody({
       ) : null}
       {kind === 'plan_stale' ? <PlanStaleBody detail={detail} /> : null}
       {kind === 'push_rejected' ? <p className="wf-stop-reason">{RESOLVE_LINE}</p> : null}
+      {kind === 'budget' ? <p className="wf-stop-reason">{bannerText(detail)}</p> : null}
+      {offersBudgetRaise(kind, detail.admitted_signals) ? (
+        <BudgetRaiseBox
+          cost={detail.cost}
+          onRaise={onRaiseBudget}
+          posting={posting !== null}
+          error={posting === null && error ? error : null}
+        />
+      ) : null}
+      {kind === 'protected_path' ? <p className="wf-stop-reason">{bannerText(detail)}</p> : null}
+      {accepting ? (
+        <AcceptBox
+          runId={runId}
+          hits={protectedHits(detail.alert)}
+          storyId={skipStoryId}
+          onAccept={onAccept}
+          posting={posting !== null}
+        />
+      ) : null}
       {kind === 'checkpoint' ? <p className="wf-stop-reason">{bannerText(detail)}</p> : null}
       {isSpecCheckpoint(detail, kind) ? (
         <>
@@ -186,7 +228,7 @@ export default function StopBody({
         </p>
       ) : (
         <div className="wf-stop-actions">
-          {signals.map((s) =>
+          {buttons.map((s) =>
             s === 'skip_story' ? (
               <ConfirmAction
                 key={s}

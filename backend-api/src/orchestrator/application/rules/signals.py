@@ -70,6 +70,23 @@ ANSWER_KEY = "text"
 #: The payload key `continue` on a `protected_path` park carries the accepted files under.
 FILES_KEY = "files"
 
+#: The sentence a raised budget's own gate record carries (AD-13). It names the new figure
+#: rather than the fact that a person raised it, at the two decimal places
+#: `rules/budget.py::forced` already renders a budget park's own reason to.
+BUDGET_RAISED = "budget raised to ${budget}"
+
+#: What a `budget_raise` that does not clear the spend is refused with. `Rule.extra_refusal`
+#: is why this reaches the Operator instead of `INVALID`: the table's columns all admit the
+#: signal here, and `_raises_the_budget` alone says no, so the sentence that says *why* is
+#: the useful one (NFR-8).
+BUDGET_TOO_LOW = "new budget must exceed spend ${spend}"
+
+#: The sentence a `continue` that accepted files carries (FR-31, 6.6): the paths, in the
+#: order they arrived. A `continue` at a `checkpoint` or `plan_stale` park accepts none and
+#: keeps the fixed phrase instead.
+ACCEPTED = "accepted: {paths}"
+ACCEPTED_SEPARATOR = ", "
+
 #: The park reason `apply_step_result` leaves when a skipped Story's re-baseline fails —
 #: AD-9's redispatch onto a target that was never run (`use_cases/apply_step_result.py`
 #: imports it from here, so the sentence has one definition and this module can read it
@@ -93,6 +110,9 @@ class Rule:
     row_statuses: frozenset[StepStatus] | None = None
     #: What the table states in words rather than in columns; `None` when it states nothing.
     extra: Callable[[Run, StepRun | None, Signal], bool] | None = None
+    #: The refusal `extra` alone earns, where the table has a better sentence than `INVALID`.
+    #: Formatted with the Run, so a `budget_raise` can name the spend it has to beat.
+    extra_refusal: str | None = None
     #: The Run transition this signal applies, or `None` when the Run's status is unchanged.
     run_event: RunEvent | None = None
     #: Who the gate record names.
@@ -101,6 +121,10 @@ class Rule:
     text: str = ""
     #: The payload key whose value is the gate record's text instead of `text`.
     text_key: str | None = None
+    #: The gate record's text, built from the payload — for a sentence that has to quote a
+    #: *validated* value, which is what `text_key` (the payload's own string, verbatim)
+    #: cannot do. `None` from the builder falls through to `text`.
+    text_from: Callable[[dict[str, Any]], str | None] | None = None
     #: True for the actions a person takes on the Run detail — what `admitted_signals`
     #: answers with. The terminal kinds are driven by the browser and the poll job.
     operator_action: bool = True
@@ -137,6 +161,29 @@ def _has_epic_frame(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
     return run.park_path is not None and epic_frame(run.park_path) is not None
 
 
+def _budget_raised_text(payload: dict[str, Any]) -> str:
+    """`budget raised to $60.00`, off the validated figure rather than the payload's string.
+
+    `raised_budget` asserts the payload holds a number, which is safe here for
+    `signal_run`'s own reason: the table is validated first and unconditionally, so a
+    payload that reaches a gate record has already cleared `_raises_the_budget`.
+    """
+    return BUDGET_RAISED.format(budget=f"{raised_budget(payload):.2f}")
+
+
+def _accepted_text(payload: dict[str, Any]) -> str | None:
+    """`accepted: tests/api/test_runs.py` for an Accept, `None` for every other `continue`.
+
+    One kind, two sentences: AD-13 gives `continue` three park kinds, and only the
+    `protected_path` one carries files. `None` is what falls the record back to
+    "continued by the operator" for the other two, which is what they still mean.
+    """
+    files = accepted_files(payload)
+    if not files:
+        return None
+    return ACCEPTED.format(paths=ACCEPTED_SEPARATOR.join(files))
+
+
 def _no_terminal_session(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
     return not run.terminal_session
 
@@ -158,6 +205,7 @@ VALID: dict[SignalKind, Rule] = {
         park_kinds=frozenset({"checkpoint", "protected_path", "plan_stale"}),
         run_event="continue",
         text="continued by the operator",
+        text_from=_accepted_text,
     ),
     "retry": Rule(
         park_kinds=frozenset(
@@ -188,8 +236,10 @@ VALID: dict[SignalKind, Rule] = {
     "budget_raise": Rule(
         park_kinds=frozenset({"budget"}),
         extra=_raises_the_budget,
+        extra_refusal=BUDGET_TOO_LOW,
         run_event="budget_raise",
         text="budget raised by the operator",
+        text_from=_budget_raised_text,
     ),
     "cancel": Rule(
         park_kinds=ANY_PARK,
@@ -239,7 +289,7 @@ def validate(run: Run, park_row: StepRun | None, signal: Signal) -> Rule:
     ):
         raise _refuse(run, signal)
     if rule.extra is not None and not rule.extra(run, park_row, signal):
-        raise _refuse(run, signal)
+        raise _refuse_extra(run, rule, signal)
     return rule
 
 
@@ -296,6 +346,10 @@ def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKin
 
 def record_text(rule: Rule, payload: dict[str, Any]) -> str:
     """What the gate record says: the payload's own words where it has any, else the phrase."""
+    if rule.text_from is not None:
+        built = rule.text_from(payload)
+        if built:
+            return built
     if rule.text_key is not None:
         supplied = payload.get(rule.text_key)
         if supplied:
@@ -330,3 +384,14 @@ def accepted_files(payload: dict[str, Any]) -> tuple[str, ...]:
 
 def _refuse(run: Run, signal: Signal) -> Conflict:
     return Conflict(INVALID.format(kind=signal.kind, status=run.status, park=run.park_kind))
+
+
+def _refuse_extra(run: Run, rule: Rule, signal: Signal) -> Conflict:
+    """What `extra` refusing means: the table's own sentence where it has one, else `INVALID`.
+
+    Only reached once every column has already matched, so a `budget_raise` on a `timeout`
+    park still gets `INVALID` — there it is the park that is wrong, not the figure.
+    """
+    if rule.extra_refusal is None:
+        return _refuse(run, signal)
+    return Conflict(rule.extra_refusal.format(spend=f"{run.spend_usd:.2f}"))

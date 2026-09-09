@@ -344,10 +344,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read one file inside a Run's own spec folder, or list its tree
+         * Read one file inside a Run's own spec folder, list its tree, or diff a hit
          * @description `path` omitted (6-3): every entry under the Run's own scope folder, recursively.
-         *     `path` given (6-2, unchanged): a single-segment glob is resolved here — see the use
-         *     case's own docstring for the exact refusal order.
+         *     `path` with `diff=1` (6-6): that protected path's unified diff, from the parked
+         *     attempt's `start_sha` to the worktree. `path` alone (6-2, unchanged): the file, with a
+         *     single-segment glob resolved here — see the use case's own docstring for each mode's
+         *     refusal order.
          */
         get: operations["get_file_api_v1_runs__run_id__files_get"];
         /**
@@ -572,6 +574,10 @@ export interface components {
             checkpoint_story?: components["schemas"]["CheckpointStoryOut"] | null;
             /** Park Kind */
             park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
             /** Reason */
             reason: string | null;
             /** Row Kind */
@@ -1553,6 +1559,19 @@ export interface components {
             worktree_path: string | null;
             /** Worktrees */
             worktrees: components["schemas"]["WorktreeOut"][];
+        };
+        /**
+         * RunFileDiffOut
+         * @description `GET /runs/{id}/files?path=&diff=1` (6.6): one protected path's unified diff, and the
+         *     attempt `start_sha` it is measured from. The diff is git's own text, rendered verbatim.
+         */
+        RunFileDiffOut: {
+            /** Diff */
+            diff: string;
+            /** From Sha */
+            from_sha: string;
+            /** Path */
+            path: string;
         };
         /**
          * RunFileEntryOut
@@ -3058,6 +3077,7 @@ export interface operations {
         parameters: {
             query?: {
                 path?: string | null;
+                diff?: boolean;
             };
             header?: never;
             path: {
@@ -3073,7 +3093,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunFileOut"] | components["schemas"]["RunFilesTreeOut"];
+                    "application/json": components["schemas"]["RunFileOut"] | components["schemas"]["RunFilesTreeOut"] | components["schemas"]["RunFileDiffOut"];
                 };
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
@@ -3086,7 +3106,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description The path is well formed but outside the Run's own spec folder. */
+            /** @description The path is well formed but outside the Run's own spec folder — or, with `diff=1`, is not one of the protected paths this Run's park recorded. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3096,7 +3116,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description No Run has that id, or no file is there. */
+            /** @description No Run has that id, no file is there, or — with `diff=1` — the parked step recorded no start commit to diff against. */
             404: {
                 headers: {
                     [name: string]: unknown;

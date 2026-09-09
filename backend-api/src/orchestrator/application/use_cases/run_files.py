@@ -26,6 +26,15 @@ session) — then `Workspace.write`, `Git.stage(worktree, pathspec=path)`,
 path"), one `GateRecord(event="spec_edit")`, and `uow.commit()`. The result is the same
 shape a tree row is (`path`, `kind`, `size`, `mtime`), so `write_run_file` returns a
 `TreeEntry` too rather than a fourth dataclass.
+
+**`diff_run_file` (6.6): the one read that is deliberately *not* spec-folder scoped.** The
+protected-path body links each file AD-17 flagged to its own unified diff, and AD-17's
+anchors are `AGENTS.md` wherever it is and every frozen test file (`rules/protected_paths.py
+::build`/`check`) — every one of them outside the Run's spec folder by construction. Running
+`_within_spec_folder` here would 403 exactly the paths the mode exists to show. The honest
+answer is not a wider scope but a different, tighter one: the path has to be one of the hits
+**this Run's own park recorded**, which is a list the Run wrote itself and is strictly
+narrower than "any file in the worktree". `_escapes` is reused unchanged.
 """
 
 from __future__ import annotations
@@ -35,19 +44,30 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from uuid import UUID
 
+from orchestrator.application.rules.protected_paths import hit_paths, park_record_payload
+from orchestrator.application.rules.signals import row_at
+from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.errors import Conflict, Forbidden, Invalid, NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.git import Git
-from orchestrator.domain.ports.repositories import GateRecordRepository, RunRepository
+from orchestrator.domain.ports.repositories import (
+    AttemptRepository,
+    GateRecordRepository,
+    RunRepository,
+    StepRunRepository,
+)
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.ports.workspace import TreeEntry, Workspace, WorkspaceError
 
 INVALID_PATH = "path escapes the workspace: {path}"
 OUTSIDE_SPEC_FOLDER = "path outside the run's spec folder: {path}"
 NO_SUCH_FILE = "no file at {path}"
+#: The `diff` mode's own two refusals (6.6).
+NOT_A_PROTECTED_HIT = "path is not one of this run's protected paths: {path}"
+NO_ATTEMPT_SHA = "the parked step recorded no start commit to diff against"
 #: The write's own two 409s (the Always section, verbatim).
 PLANNED_AT = "planned at {sha} — start a new run to change the list"
 PARKED_REQUIRED = "editing requires a parked run without a terminal session"
@@ -76,6 +96,15 @@ class RunFilesTree:
 
 
 @dataclass(frozen=True)
+class RunFileDiff:
+    """One protected path's unified diff, and the commit it is measured from."""
+
+    path: str
+    from_sha: str
+    diff: str
+
+
+@dataclass(frozen=True)
 class RunFilesPorts:
     runs: RunRepository
     #: A `Workspace` factory, rooted per Run (`FsWorkspace` itself, the class — the same
@@ -96,6 +125,22 @@ class RunFilesWritePorts:
     records: GateRecordRepository
     clock: Clock
     uow: UnitOfWork
+
+
+@dataclass(frozen=True)
+class RunFilesDiffPorts:
+    """`GET /runs/{id}/files?diff=1`'s own ports. No `Workspace`: `Git` reads the tree.
+
+    `steps`/`attempts` are what resolve the attempt whose `start_sha` the diff runs from —
+    the same "before the harness started" end AD-17's own check uses (`steps/agent_tail.py::
+    _changes`), so the Operator reads exactly the change the Run stopped for.
+    """
+
+    runs: RunRepository
+    steps: StepRunRepository
+    attempts: AttemptRepository
+    records: GateRecordRepository
+    git: Git
 
 
 def read_run_file(ports: RunFilesPorts, run_id: UUID, path: str) -> RunFile:
@@ -243,3 +288,35 @@ def _resolve(workspace: Workspace, path: str) -> str | None:
     if len(matches) == 1:
         return matches[0]
     return max(matches, key=workspace.mtime)
+
+
+def diff_run_file(ports: RunFilesDiffPorts, run_id: UUID, path: str) -> RunFileDiff:
+    """`GET /runs/{id}/files?path=&diff=1` (6.6): one protected path's unified diff.
+
+    Refusals in the same shape `read_run_file` uses, and in the same order: 404 (no such
+    Run), 422 (the path escapes the workspace), 403 (the path is not one of this park's own
+    recorded hits — see the module docstring for why the spec-folder scope cannot be the
+    gate here), 404 (the parked row recorded no `start_sha`, so there is no range to read).
+    """
+    run = ports.runs.get(run_id)
+    if run is None:
+        raise NotFound(f"no run {run_id}")
+    if _escapes(path):
+        raise Invalid(INVALID_PATH.format(path=path))
+    hits = hit_paths(park_record_payload(ports.records.list_for_run(run_id), run))
+    if path not in hits:
+        raise Forbidden(NOT_A_PROTECTED_HIT.format(path=path))
+    attempt = _park_attempt(ports, run)
+    if attempt is None or attempt.start_sha is None or run.worktree_path is None:
+        raise NotFound(NO_ATTEMPT_SHA)
+    diff = ports.git.diff(Path(run.worktree_path), attempt.start_sha, path)
+    return RunFileDiff(path=path, from_sha=attempt.start_sha, diff=diff)
+
+
+def _park_attempt(ports: RunFilesDiffPorts, run: Run) -> Attempt | None:
+    """The latest Attempt of the row the Run parked on, or `None` when it made none."""
+    row = row_at(ports.steps.list_for_run(run.id), run.park_path)
+    if row is None:
+        return None
+    attempts = ports.attempts.list_for_row(row.id)
+    return max(attempts, key=lambda attempt: attempt.n, default=None)

@@ -28,8 +28,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from typing import Any
 
+from orchestrator.domain.entities.gate_record import GateRecord
+from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.git import Change, ChangeKind, Git
+
+#: Where a hit list travels once the rule has run: `StepResult.payload`, carried onto the
+#: park's own gate record by `use_cases/writers.py::park_run`, one entry per file. Written
+#: by both call sites AD-17 names (`steps/agent_tail.py::protected`, with a `kind`;
+#: `steps/git_commit.py`, paths only — `ProtectedPaths.check` answers no kinds and its
+#: member set is frozen), and read back by the Accept (6.6): the files an Operator accepts
+#: have to be exactly the files the Run reported.
+HITS_KEY = "hits"
+HIT_PATH_KEY = "path"
+HIT_KIND_KEY = "kind"
 
 #: The three documents a folder contributes, as AD-17 names them.
 SPEC_FILENAME = "SPEC.md"
@@ -173,3 +186,53 @@ def _kind(code: str) -> ChangeKind:
     if DELETED in code:
         return "deleted"
     return "modified"
+
+
+def hits_payload(hits: Sequence[Change] | Sequence[str]) -> dict[str, Any]:
+    """One hit list as a `StepResult.payload` — the shape both call sites write (6.6).
+
+    `Change` entries keep their kind, which is what the protected-path body renders each
+    file's added/deleted/modified mark from; plain strings are the commit-guard's own,
+    whose rule answers paths only, and they carry no kind rather than an invented one.
+    """
+    entries: list[dict[str, str]] = []
+    for hit in hits:
+        if isinstance(hit, Change):
+            entries.append({HIT_PATH_KEY: hit.path, HIT_KIND_KEY: hit.kind})
+            continue
+        entries.append({HIT_PATH_KEY: hit})
+    return {HITS_KEY: entries}
+
+
+def park_record_payload(records: Sequence[GateRecord], run: Run) -> dict[str, Any]:
+    """The payload of the record that parked this Run, or `{}` for a Run that is not parked.
+
+    The last record whose `event` is the Run's own `park_kind` — `run_views.py::
+    _needs_you_since` already reads the gate record this same way, and for the same reason:
+    the three park fields are overwritten by the next park, while the records are
+    append-only, so the record is where a stop's own details survive.
+
+    Generic in shape, but AD-17's hit list is the only thing that has ever travelled on one,
+    which is why the reader lives beside the rule that writes it.
+    """
+    if run.park_kind is None:
+        return {}
+    matching = [record for record in records if record.event == run.park_kind]
+    return dict(matching[-1].payload) if matching else {}
+
+
+def hit_paths(payload: dict[str, Any]) -> tuple[str, ...]:
+    """The paths a park's payload named, in the order the rule reported them.
+
+    Defensive about its own stored shape for the reason `rules/signals.py::accepted_files`
+    is about the operator's: this is JSONB read back out of a column, so an entry that is
+    not a mapping with a string path is not a path at all rather than a crash on a read.
+    """
+    entries = payload.get(HITS_KEY)
+    if not isinstance(entries, list | tuple):
+        return ()
+    found: list[str] = []
+    for entry in entries:
+        if isinstance(entry, dict) and isinstance(entry.get(HIT_PATH_KEY), str):
+            found.append(entry[HIT_PATH_KEY])
+    return tuple(found)

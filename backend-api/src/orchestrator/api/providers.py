@@ -29,9 +29,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from functools import partial
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import Request
+from fastapi import Query, Request
 
 from orchestrator.application.use_cases.create_run import CreateRunPorts, RunReadPorts
 from orchestrator.application.use_cases.harness_readiness import HarnessReadinessPorts
@@ -39,7 +39,11 @@ from orchestrator.application.use_cases.harnesses import HarnessPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.queue import QueuePorts
-from orchestrator.application.use_cases.run_files import RunFilesPorts, RunFilesWritePorts
+from orchestrator.application.use_cases.run_files import (
+    RunFilesDiffPorts,
+    RunFilesPorts,
+    RunFilesWritePorts,
+)
 from orchestrator.application.use_cases.run_views import RunViewPorts
 from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.application.use_cases.signals import SignalEffectPorts
@@ -292,6 +296,37 @@ def run_files_write_ports(request: Request) -> Iterator[RunFilesWritePorts]:
             records=SQLAlchemyGateRecordRepository(uow.session),
             clock=SystemClock(),
             uow=uow,
+        )
+
+
+def run_files_diff_ports(
+    request: Request, diff: Annotated[bool, Query()] = False
+) -> Iterator[RunFilesDiffPorts | None]:
+    """The ports `GET /runs/{id}/files?diff=1` reads through (6.6). Writes nothing.
+
+    No `Workspace`: the diff is `Git`'s own answer over the worktree, and the scope gate is
+    the park's recorded hit list rather than the spec folder — see
+    `application/use_cases/run_files.py`'s own docstring for why.
+
+    **It reads the mode's own query parameter, and it has to.** FastAPI resolves every
+    dependency a handler declares, on every request to it — so a dependency that opened a
+    session unconditionally would make the two reads that share this route (the file and the
+    tree) require adapters they have never needed, and would break every existing test that
+    overrides only `run_files_ports`. That is the same trap `application/use_cases/
+    run_views.py` documents for `board_view`. Answering `None` for the modes that did not
+    ask is what keeps this route's other two answers exactly as they were.
+    """
+    if not diff:
+        yield None
+        return
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield RunFilesDiffPorts(
+            runs=SQLAlchemyRunRepository(uow.session),
+            steps=SQLAlchemyStepRunRepository(uow.session),
+            attempts=SQLAlchemyAttemptRepository(uow.session),
+            records=SQLAlchemyGateRecordRepository(uow.session),
+            git=_required_git(request, "run_files"),
         )
 
 

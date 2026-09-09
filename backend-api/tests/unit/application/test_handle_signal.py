@@ -29,7 +29,6 @@ from tests.unit.fakes.process import FakeProcessRunner
 
 BUILD = "stories[0].build"
 VERIFY = "stories[0].verify"
-COMMIT_GUARD = "stories[0].commit-guard"
 CHECKPOINT_ROW = "stories[1].after"
 WORK_DIR = "/work"
 
@@ -194,17 +193,6 @@ def test_continue_on_plan_stale_resumes_the_row_itself() -> None:
 # ── out of scope: refused after `validate` passes, nothing written ──────────────────────
 
 
-def test_continue_on_protected_path_is_refused_not_available_yet() -> None:
-    world = parked("protected_path", COMMIT_GUARD, "error")
-    ports = effect_ports(world)
-
-    with pytest.raises(Conflict, match="continue not available yet"):
-        send(world, ports, "continue")
-
-    assert world.status_of(COMMIT_GUARD) == "error"
-    assert world.engine.calls == []
-
-
 def test_answer_moves_the_blocked_row_and_resumes_the_run() -> None:
     """`answer` was refused here until SPEC CAP-1 (6.1) built the `agent` row's own resume —
     the archive, the re-dispatch and the prompt clause. It is in scope from that story on:
@@ -230,13 +218,11 @@ def _terminal_resume_world() -> World:
 @pytest.mark.parametrize(
     ("world_factory", "kind", "payload"),
     [
-        (lambda: parked("budget", BUILD, "blocked"), "budget_raise", {"budget_usd": "50"}),
         (lambda: parked("misconfigured", "push", "error"), "terminal_start", {}),
         (_terminal_release_world, "terminal_release", {}),
         (_terminal_resume_world, "terminal_resume", {}),
     ],
     ids=[
-        "budget_raise",
         "terminal_start",
         "terminal_release",
         "terminal_resume",

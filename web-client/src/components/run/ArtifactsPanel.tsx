@@ -17,6 +17,7 @@ import type { RunDetailOut } from '../../lib/run/detail';
 import {
   canEditFile,
   isListFile,
+  isFile,
   isTree,
   readOnlyLine as readOnlyLineText,
   treeRequestPath,
@@ -72,7 +73,7 @@ export default function ArtifactsPanel({ runId, run, folder }: Props) {
       params: { path: { run_id: runId }, query: { path } },
     });
     if (seq !== fileSeqRef.current) return;
-    if (error || !data || isTree(data)) return;
+    if (error || !data || !isFile(data)) return;
     setSelected(data);
     setEditing(false);
     setSaveError(null);

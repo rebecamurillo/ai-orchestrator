@@ -13,8 +13,11 @@ runs.py`") is an implementation note, not a binding rule; this is the honest alt
 that keeps the frozen test true. Mounted after `signals.router` in `main.py`.
 
 **No `plan-diff` or any third operation here** (story 6-3's own Never list): this module
-stays at exactly `GET` (read one file, or list the tree with no `path`) and `PUT` (write
-one file while parked).
+stays at exactly `GET` (read one file, list the tree with no `path`, or — with `diff=1`,
+story 6-6 — answer one protected path's unified diff) and `PUT` (write one file while
+parked). The diff is a *mode* on the read, not a route of its own, for the same reason the
+tree is one: `test_run_files_router.py` pins this router at two operations, and a third
+would be a route on a resource that has no room for one.
 """
 
 from __future__ import annotations
@@ -30,16 +33,23 @@ from orchestrator.api.errors import (
     PROBLEM_SCHEMA_REF,
     ProblemDetail,
 )
-from orchestrator.api.providers import run_files_ports, run_files_write_ports
+from orchestrator.api.providers import (
+    run_files_diff_ports,
+    run_files_ports,
+    run_files_write_ports,
+)
 from orchestrator.api.schemas.run_files import (
+    RunFileDiffOut,
     RunFileEntryOut,
     RunFileIn,
     RunFileOut,
     RunFilesTreeOut,
 )
 from orchestrator.application.use_cases.run_files import (
+    RunFilesDiffPorts,
     RunFilesPorts,
     RunFilesWritePorts,
+    diff_run_file,
     list_files_tree,
     read_run_file,
     write_run_file,
@@ -49,6 +59,9 @@ router = APIRouter(tags=["runs"])
 
 Ports = Annotated[RunFilesPorts, Depends(run_files_ports)]
 WritePorts = Annotated[RunFilesWritePorts, Depends(run_files_write_ports)]
+#: `None` unless `diff=1` was asked for — the provider reads the mode itself, so an
+#: ordinary read never opens the session a diff would need (`api/providers.py`).
+DiffPorts = Annotated[RunFilesDiffPorts | None, Depends(run_files_diff_ports)]
 
 
 def _refusal(description: str) -> dict[str, object]:
@@ -60,8 +73,14 @@ def _refusal(description: str) -> dict[str, object]:
 
 
 GET_REFUSALS = {
-    403: _refusal("The path is well formed but outside the Run's own spec folder."),
-    404: _refusal("No Run has that id, or no file is there."),
+    403: _refusal(
+        "The path is well formed but outside the Run's own spec folder — or, with "
+        "`diff=1`, is not one of the protected paths this Run's park recorded."
+    ),
+    404: _refusal(
+        "No Run has that id, no file is there, or — with `diff=1` — the parked step "
+        "recorded no start commit to diff against."
+    ),
     HTTP_UNPROCESSABLE_CONTENT: _refusal("The path escapes the workspace (`..`, or absolute)."),
 }
 
@@ -78,18 +97,26 @@ PUT_REFUSALS = {
 
 @router.get(
     "/runs/{run_id}/files",
-    response_model=RunFileOut | RunFilesTreeOut,
-    summary="Read one file inside a Run's own spec folder, or list its tree",
+    response_model=RunFileOut | RunFilesTreeOut | RunFileDiffOut,
+    summary="Read one file inside a Run's own spec folder, list its tree, or diff a hit",
     responses=GET_REFUSALS,
 )
 def get_file(
-    run_id: UUID, ports: Ports, path: Annotated[str | None, Query()] = None
-) -> RunFileOut | RunFilesTreeOut:
+    run_id: UUID,
+    ports: Ports,
+    diff_ports: DiffPorts,
+    path: Annotated[str | None, Query()] = None,
+    diff: Annotated[bool, Query()] = False,
+) -> RunFileOut | RunFilesTreeOut | RunFileDiffOut:
     """`path` omitted (6-3): every entry under the Run's own scope folder, recursively.
-    `path` given (6-2, unchanged): a single-segment glob is resolved here — see the use
-    case's own docstring for the exact refusal order."""
+    `path` with `diff=1` (6-6): that protected path's unified diff, from the parked
+    attempt's `start_sha` to the worktree. `path` alone (6-2, unchanged): the file, with a
+    single-segment glob resolved here — see the use case's own docstring for each mode's
+    refusal order."""
     if path is None:
         return RunFilesTreeOut.of(list_files_tree(ports, run_id))
+    if diff and diff_ports is not None:
+        return RunFileDiffOut.of(diff_run_file(diff_ports, run_id, path))
     return RunFileOut.of(read_run_file(ports, run_id, path))
 
 

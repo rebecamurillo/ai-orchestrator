@@ -178,6 +178,20 @@ class Git(Protocol):
         """
         ...
 
+    def diff(self, worktree: Path, from_sha: str, path: str) -> str:
+        """The unified diff of **one path** between `from_sha` and the worktree as it stands.
+
+        Text, not a parsed structure: this is what a person reads to judge whether a change
+        to a protected file is right (AD-17, FR-31), and every consumer of it renders it
+        verbatim. `diff_names`/`diff_changes` answer the machine's question — which paths,
+        and how — and are unaffected.
+
+        A path git has nothing to say about is the empty string, per the second convention
+        above: a file that did not change between the ref and the tree is an ordinary
+        answer, not an error.
+        """
+        ...
+
     def push(self, worktree: Path, branch: str, set_upstream: bool) -> str:
         """Push the branch to `origin`, setting its upstream when this Run created it.
 

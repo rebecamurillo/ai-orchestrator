@@ -210,13 +210,33 @@ def _skip_epic(
 
 
 def _budget_raise(
-    _p: WriterPorts, _run: Run, _rows: Sequence[StepRun], park_row: StepRun | None, s: Signal
+    ports: WriterPorts, _run: Run, _rows: Sequence[StepRun], park_row: StepRun | None, s: Signal
 ) -> Effect:
-    """The budget rises. A row that was `blocked | checkpoint` keeps the Run parked there."""
+    """The budget rises. A row that was `blocked | checkpoint` keeps the Run parked there;
+    any other parked row resumes from itself — a Retry for the one AD-13 leaves `error`, a
+    step-over to the next row for the one it leaves `done`.
+
+    **The resume is not optional, and until 6.6 it was missing.** `run_update` alone moves
+    the Run to `running` without putting any row on a queue, and `use_cases/walk.py::
+    next_row` has exactly three ways of finding work: `first_queued`, a row a signal left
+    `running`, and — only while every row is `planned`/`done`/`skipped` — the plan's first
+    `planned` row. A budget park on a `done` row satisfies the third by accident. One on an
+    `error` row, which is FR-17's retry path (`steps/agent_tail.py::_spend_and_budget` parks
+    `budget` on top of the status the row reached), satisfies none of them: the walk fell
+    through to `close_run`, which read it as a stall and parked `internal` — a stop that
+    admits nothing but `cancel`, on a Run whose only fault was costing money.
+
+    `resume_from` is the call every other resuming effect already makes, and its own rule —
+    the parked row is the first candidate — is AD-13's two cases in one line.
+    """
     update: dict[str, Any] = {"budget_usd": signals.raised_budget(s.payload)}
-    if park_row is not None and park_row.status in ("blocked", "checkpoint"):
+    if park_row is None:
+        # A Run parked without a row (`Park.path` is optional) has no routed status to keep
+        # and no row to resume from; `next_row` starts the plan, as it does from `queued`.
+        return Effect(run_update=update)
+    if park_row.status in ("blocked", "checkpoint"):
         return Effect(run_update={**update, "park_kind": park_row.status}, resume=False)
-    return Effect(run_update=update)
+    return Effect(run_update=update, finished=not resume_from(ports, park_row))
 
 
 def _cancel(

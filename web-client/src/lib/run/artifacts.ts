@@ -14,6 +14,9 @@ import type { RunDetailOut } from './detail';
 export type RunFileOut = components['schemas']['RunFileOut'];
 export type RunFileEntryOut = components['schemas']['RunFileEntryOut'];
 export type RunFilesTreeOut = components['schemas']['RunFilesTreeOut'];
+export type RunFileDiffOut = components['schemas']['RunFileDiffOut'];
+/** Every shape `GET /runs/{id}/files` can answer with, as the generated contract has it. */
+export type FilesResponse = RunFileOut | RunFilesTreeOut | RunFileDiffOut;
 type RunSummary = RunDetailOut['run'];
 
 /** `GET /runs/{id}/files` with no `path` — the tree. */
@@ -82,8 +85,19 @@ export function canEditFile(run: RunSummary, path: string, folder: string): bool
   return run.status === 'needs_you' && !run.terminal_session && !isListFile(folder, path);
 }
 
-/** The GET response is `RunFileOut | RunFilesTreeOut` (no `path` given answers the tree) —
- * this is the one place that tells them apart, by the field only the tree carries. */
-export function isTree(data: RunFileOut | RunFilesTreeOut): data is RunFilesTreeOut {
+/**
+ * The GET response is `RunFileOut | RunFilesTreeOut | RunFileDiffOut` — no `path` answers the
+ * tree, `path` with `diff=1` answers a unified diff (6.6), `path` alone answers the file.
+ * These two are the one place the three are told apart, each by a field only it carries.
+ *
+ * Both are needed rather than one: a caller that asked for the tree wants to know it got the
+ * tree, and a caller that asked for a file wants to know it got the file. Narrowing "not the
+ * tree" was enough while there were two members, and stopped being enough at three.
+ */
+export function isTree(data: FilesResponse): data is RunFilesTreeOut {
   return 'entries' in data;
+}
+
+export function isFile(data: FilesResponse): data is RunFileOut {
+  return 'content' in data;
 }

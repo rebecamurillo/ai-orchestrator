@@ -681,3 +681,80 @@ table.wf-steps tr[data-current='true'] td {
   color: var(--color-text-secondary);
   font-size: var(--type-meta);
 }
+
+/* The budget stop's own body (6.6, FR-17): the promoted cost, the field, the button. */
+.wf-budget-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-block: var(--space-6);
+  align-items: flex-start;
+}
+
+.wf-budget-cost {
+  font-family: var(--font-mono);
+  font-size: var(--type-meta);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.wf-budget-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.wf-budget-label {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+}
+
+.wf-budget-input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+  width: var(--space-16);
+}
+
+.wf-budget-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+/* The protected-path stop's own body (6.6, FR-31): the files, their diffs, the accept. */
+.wf-accept-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-block: var(--space-6);
+  align-items: flex-start;
+}
+
+.wf-accept-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+}
+
+.wf-accept-files li {
+  display: flex;
+  gap: var(--space-3);
+  padding-block: var(--space-1);
+}
+
+.wf-accept-mark {
+  color: var(--color-text-tertiary);
+  width: 1ch;
+}
+
+.wf-accept-line {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+}

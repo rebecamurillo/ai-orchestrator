@@ -19,8 +19,8 @@ double would pass here and fail against a real process:
   `seconds` would be zero for every scenario and nothing would be asserting them.
 
 4.8 completed the port, so the worktree half is scripted the same way: `worktree_add`,
-`sync`, `status`, `stage`, `commit`, `diff_names`, `diff_changes`, `push`, `head_sha`,
-`remove_worktree` and `delete_branch` each take a list, an entry that is an exception is
+`sync`, `status`, `stage`, `commit`, `diff_names`, `diff_changes`, `diff` (6.6), `push`,
+`head_sha`, `remove_worktree` and `delete_branch` each take a list, an entry that is an exception is
 raised, and every call is logged with its arguments — which is what lets "the spec folder was
 staged before everything else" and "no push command ran" be assertions rather than hopes.
 
@@ -68,6 +68,7 @@ class FakeGit:
         commit: list[Any] | None = None,
         diff_names: list[Any] | None = None,
         diff_changes: list[Any] | None = None,
+        diff: list[Any] | None = None,
         push: list[Any] | None = None,
         head_sha: list[Any] | None = None,
         remove_worktree: list[Any] | None = None,
@@ -97,6 +98,7 @@ class FakeGit:
             "commit": commit or [DEFAULT_SHA],
             "diff_names": diff_names or [()],
             "diff_changes": diff_changes or [()],
+            "diff": diff or [""],
             "push": push or [""],
             "head_sha": head_sha or [DEFAULT_SHA],
             "remove_worktree": remove_worktree or [None],
@@ -169,6 +171,10 @@ class FakeGit:
 
     def diff_changes(self, worktree: Path, from_sha: str, to_sha: str) -> tuple[Change, ...]:
         answer: tuple[Change, ...] = self._answer("diff_changes", (worktree, from_sha, to_sha))
+        return answer
+
+    def diff(self, worktree: Path, from_sha: str, path: str) -> str:
+        answer: str = self._answer("diff", (worktree, from_sha, path))
         return answer
 
     def push(self, worktree: Path, branch: str, set_upstream: bool) -> str:
