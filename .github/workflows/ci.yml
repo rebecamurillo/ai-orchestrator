@@ -151,11 +151,18 @@ jobs:
         # `scripts/check_e2e_target.sh` refuses any database whose name does not end in
         # `_e2e` — here and on a developer's machine alike. This runner's postgres is as
         # disposable as `make e2e`'s, and says so in its name.
+        #
+        # ORCH_TEST_MODE registers the `fake` harness and seeds its row (6.1). This job
+        # composes its own environment rather than going through `make e2e`, which gets the
+        # flag from `docker-compose.e2e.yml` — so without this line every scenario driving a
+        # scripted harness fails here while passing locally. It is a test-only switch and no
+        # credential: `.env.example` ships it unset, and production never sets it.
         run: |
           cp .env.example .env
           key=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
           sed -i "s|^ORCHESTRATOR_SECRET_KEY=.*|ORCHESTRATOR_SECRET_KEY=$key|" .env
           sed -i "s|^POSTGRES_DB=.*|POSTGRES_DB=orchestrator_e2e|" .env
+          sed -i "s|^ORCH_TEST_MODE=.*|ORCH_TEST_MODE=1|" .env
       - name: Start postgres
         run: docker compose up -d --wait postgres
       - name: Start backend-api from source

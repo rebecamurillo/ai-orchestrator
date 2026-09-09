@@ -27,6 +27,12 @@ export default getViteConfig({
     include: ['tests/unit/**/*.test.ts'],
     // Playwright specs are the `e2e-ui` gate and are driven by `pnpm e2e`, never by Vitest
     exclude: ['node_modules/**', 'dist/**', 'tests/e2e/**'],
+    // `lint.test.ts` runs eslint over every real source in-process, so its cost grows with the
+    // codebase rather than with the suite. It passed at Vitest's 5 s default until Epic 6, then
+    // began timing out on CI's slower runner while staying green on a developer machine — a
+    // false red that says nothing about the code. The budget is per test, so this buys the one
+    // test that needs it without hiding a genuine hang anywhere else.
+    testTimeout: 30_000,
     // AD-18: the modules that hold web-client rules are gated at 90 % lines. `src/stores/**`
     // is listed before it exists so the store an island reads from lands under the gate on
     // the day it is written, rather than after someone remembers to widen this list.
