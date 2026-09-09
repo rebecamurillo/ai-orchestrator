@@ -25,5 +25,10 @@ class Conflict(DomainError):
     """The request is well formed but not valid for the entity's current state."""
 
 
+class Forbidden(DomainError):
+    """The request names a path or entity that exists but is outside the caller's reach —
+    story 6-2's `GET /runs/{id}/files`, a path outside the Run's own spec folder."""
+
+
 class Invalid(DomainError):
     """The request's content breaks a rule the schema alone cannot express."""

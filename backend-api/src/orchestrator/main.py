@@ -63,6 +63,7 @@ from orchestrator.api.routers import (
     repository_init,
     run,
     run_detail,
+    run_files,
     runs,
     signals,
     templates,
@@ -290,7 +291,14 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
     # `templates.router` is: `GET /runs/{run_id}` and `GET /runs/preflight` are the same
     # shape to Starlette, which matches registration order, so the literal path has to be
     # checked first (`api/routers/run.py`'s own docstring; `test_run_router.py` pins it)
-    for router in (run.router, run_detail.router, signals.router, harnesses.router, queue.router):
+    for router in (
+        run.router,
+        run_detail.router,
+        signals.router,
+        run_files.router,
+        harnesses.router,
+        queue.router,
+    ):
         _mount(app, router)
     _mount(app, harness_readiness.router)
 

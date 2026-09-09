@@ -66,7 +66,6 @@ from orchestrator.application.steps.registry import register
 from orchestrator.application.story_file import after_verify
 from orchestrator.application.templates.agent_row import (
     PROMPT_EXTRA_KEY,
-    SPEC_CHECKPOINT_KEY,
     SPEC_FOLDER_KEY,
     STORY_ID_KEY,
 )
@@ -156,9 +155,9 @@ def compose_prompt(
 ) -> str:
     """What the harness is asked, from the row the planner resolved (FR-14, AD-7): the
     dispatch sentence, the Template's `prompt_extra`, the halt a spec checkpoint asks for,
-    and the Operator's answer when one resumed this row. The halt is gated on
-    `resume_signal is None` because that is exactly "a first dispatch or a re-plan": a
-    `retry` never reaches this function, and a resume must not halt twice."""
+    and the Operator's answer when one resumed this row. `agent_answer.halts_after_planning`
+    is the one place that decides the halt: a first dispatch or a re-plan, and once more on
+    a Reject (6.2) — never on a `continue`, which is the plan already approved."""
     parts = [
         DISPATCH.format(
             skill=resolved_text(with_resolved, SKILL_KEY),
@@ -170,11 +169,11 @@ def compose_prompt(
     extra = resolved_text(with_resolved, PROMPT_EXTRA_KEY)
     if extra:
         parts.append(f" {extra}")
-    if with_resolved.get(SPEC_CHECKPOINT_KEY) and resume_signal is None:
-        parts.append(HALT)
     if resume_signal is not None and resume_signal.event == ANSWER_EVENT:
         condition, answer = payload.get(CONDITION_KEY, ""), payload.get(ANSWER_KEY, "")
         parts.append(ANSWER.format(condition=condition, answer=answer))
+    if agent_answer.halts_after_planning(with_resolved, resume_signal):
+        parts.append(HALT)
     return "".join(parts)
 
 

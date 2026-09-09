@@ -336,6 +336,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one file inside a Run's own spec folder
+         * @description Read-only (6.3 adds the write): `path` may be a single-segment glob, resolved here —
+         *     see the use case's own docstring for the exact refusal order.
+         */
+        get: operations["get_file_api_v1_runs__run_id__files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/graph": {
         parameters: {
             query?: never;
@@ -541,10 +562,13 @@ export interface components {
         /** AlertOut */
         AlertOut: {
             attribution?: components["schemas"]["AttributionOut"] | null;
+            checkpoint_story?: components["schemas"]["CheckpointStoryOut"] | null;
             /** Park Kind */
             park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | null;
             /** Reason */
             reason: string | null;
+            /** Row Kind */
+            row_kind?: string | null;
             /** Token */
             token: string;
         };
@@ -630,6 +654,23 @@ export interface components {
             token: string;
             /** Version */
             version: number;
+        };
+        /**
+         * CheckpointStoryOut
+         * @description The done-checkpoint's own summary line (story 6-2): `story {id} · {title} ·
+         *     {attempts} attempts · ${cost} · verify {done|skipped}`.
+         */
+        CheckpointStoryOut: {
+            /** Attempts */
+            attempts: number;
+            /** Cost Usd */
+            cost_usd: string;
+            /** Story Id */
+            story_id: string;
+            /** Title */
+            title: string;
+            /** Verify */
+            verify: string;
         };
         /**
          * CloneCheckLineOut
@@ -1505,6 +1546,22 @@ export interface components {
             worktree_path: string | null;
             /** Worktrees */
             worktrees: components["schemas"]["WorktreeOut"][];
+        };
+        /**
+         * RunFileOut
+         * @description `{path, content, size, mtime}` — the resolved path (a glob is expanded server-side,
+         *     so this is never the pattern the request named), the file's whole text, its byte length
+         *     and its `mtime` (`Workspace.mtime`'s own POSIX timestamp).
+         */
+        RunFileOut: {
+            /** Content */
+            content: string;
+            /** Mtime */
+            mtime: number;
+            /** Path */
+            path: string;
+            /** Size */
+            size: number;
         };
         /**
          * RunGraphOut
@@ -2938,6 +2995,70 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_file_api_v1_runs__run_id__files_get: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunFileOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The path is well formed but outside the Run's own spec folder. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id, or no file is there. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The path escapes the workspace (`..`, or absolute). */
             422: {
                 headers: {
                     [name: string]: unknown;

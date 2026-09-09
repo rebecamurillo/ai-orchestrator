@@ -13,6 +13,16 @@
               }
             ]
           },
+          "checkpoint_story": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CheckpointStoryOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "park_kind": {
             "anyOf": [
               {
@@ -46,6 +56,17 @@
               }
             ],
             "title": "Reason"
+          },
+          "row_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Kind"
           },
           "token": {
             "title": "Token",
@@ -334,6 +355,40 @@
           "needs_you_since"
         ],
         "title": "CardOut",
+        "type": "object"
+      },
+      "CheckpointStoryOut": {
+        "description": "The done-checkpoint's own summary line (story 6-2): `story {id} \u00b7 {title} \u00b7\n{attempts} attempts \u00b7 ${cost} \u00b7 verify {done|skipped}`.",
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "string"
+          },
+          "story_id": {
+            "title": "Story Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "verify": {
+            "title": "Verify",
+            "type": "string"
+          }
+        },
+        "required": [
+          "story_id",
+          "title",
+          "attempts",
+          "cost_usd",
+          "verify"
+        ],
+        "title": "CheckpointStoryOut",
         "type": "object"
       },
       "CloneCheckLineOut": {
@@ -2758,6 +2813,35 @@
           "accepted_paths"
         ],
         "title": "RunDetailSummaryOut",
+        "type": "object"
+      },
+      "RunFileOut": {
+        "description": "`{path, content, size, mtime}` \u2014 the resolved path (a glob is expanded server-side,\nso this is never the pattern the request named), the file's whole text, its byte length\nand its `mtime` (`Workspace.mtime`'s own POSIX timestamp).",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "mtime": {
+            "title": "Mtime",
+            "type": "number"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "content",
+          "size",
+          "mtime"
+        ],
+        "title": "RunFileOut",
         "type": "object"
       },
       "RunGraphOut": {
@@ -5343,6 +5427,114 @@
           }
         ],
         "summary": "Read one Run's full detail",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/files": {
+      "get": {
+        "description": "Read-only (6.3 adds the write): `path` may be a single-segment glob, resolved here \u2014\nsee the use case's own docstring for the exact refusal order.",
+        "operationId": "get_file_api_v1_runs__run_id__files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunFileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The path is well formed but outside the Run's own spec folder."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id, or no file is there."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The path escapes the workspace (`..`, or absolute)."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one file inside a Run's own spec folder",
         "tags": [
           "runs"
         ]

@@ -31,12 +31,14 @@ import StepsTable from '../components/run/StepsTable';
 import StopBody from '../components/run/StopBody';
 import StoriesStrip from '../components/run/StoriesStrip';
 import { answerBody } from '../lib/run/answer';
-import { detailRequestPath, runToken, type RunDetailOut } from '../lib/run/detail';
+import { isSpecCheckpoint, plannedFilePath } from '../lib/run/checkpoint';
+import { detailRequestPath, runToken, stopKind, type RunDetailOut } from '../lib/run/detail';
 import { signalBody, signalsRequestPath, type SignalIn, type SignalKind } from '../lib/run/signals';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
 import '../styles/run-detail.css';
 
 type ProblemDetail = components['schemas']['ProblemDetail'];
+type RunFileOut = components['schemas']['RunFileOut'];
 
 interface Props {
   runId: string;
@@ -50,6 +52,7 @@ export default function RunDetail({ runId }: Props) {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [posting, setPosting] = useState<SignalKind | null>(null);
   const [signalError, setSignalError] = useState<ProblemDetail | null>(null);
+  const [plannedFile, setPlannedFile] = useState<RunFileOut | null>(null);
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
@@ -86,6 +89,30 @@ export default function RunDetail({ runId }: Props) {
     if (pollTick === mountedTickRef.current) return;
     void fetchDetail();
   }, [pollTick]);
+
+  // The planned story file a spec checkpoint shows inline (6.2, `GET /runs/{id}/files`) —
+  // a second read beside the polled detail, the same way `Header`'s own `now` prop is a
+  // second fact this island supplies rather than one aggregated into the detail response
+  // (AD-8: `run_detail` never reads a Workspace, so this can only ever be a second call).
+  useEffect(() => {
+    if (!detail) return;
+    const token = runToken(detail.run, detail.alert);
+    const path = isSpecCheckpoint(detail, stopKind(detail, token)) ? plannedFilePath(detail) : null;
+    if (!path) {
+      setPlannedFile(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data } = await api.GET('/runs/{run_id}/files', {
+        params: { path: { run_id: runId }, query: { path } },
+      });
+      if (!cancelled) setPlannedFile(data ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [detail, runId]);
 
   async function sendSignal(kind: SignalKind, body?: SignalIn): Promise<void> {
     setPosting(kind);
@@ -141,6 +168,7 @@ export default function RunDetail({ runId }: Props) {
             posting={posting}
             error={signalError}
             onAnswer={(text) => void sendSignal('answer', answerBody(text))}
+            plannedFile={plannedFile}
           />
           <div>
             <h2 className="wf-section-head">STEPS</h2>

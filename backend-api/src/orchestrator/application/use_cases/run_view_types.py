@@ -135,12 +135,32 @@ class Attribution:
 
 
 @dataclass(frozen=True)
+class CheckpointStory:
+    """The done-checkpoint's own summary line (story 6-2, SPEC CAP-2): `story {id} · {title}
+    · {attempts} attempts · ${cost} · verify {done|skipped}`. `None` on `Alert` for every
+    stop but a `checkpoint` park on a row that is not itself `agent` — a spec checkpoint
+    shows the planned file inline instead (`run_files.py`), not this summary."""
+
+    story_id: str
+    title: str
+    attempts: int
+    cost_usd: Decimal
+    verify: str
+
+
+@dataclass(frozen=True)
 class Alert:
     token: str
     reason: str | None
     park_kind: ParkKind | None
     #: `None` predates this story; every `blocked` park now carries one (5.10).
     attribution: Attribution | None = None
+    #: The parked row's own `kind` (story 6-2): a `checkpoint` park's `StopBody` case is
+    #: `agent` (spec checkpoint, the planned file inline) or anything else (done checkpoint,
+    #: `checkpoint_story` below). `None` predates this story.
+    row_kind: str | None = None
+    #: Set only for a done checkpoint (`row_kind` not `agent`, `park_kind == "checkpoint"`).
+    checkpoint_story: CheckpointStory | None = None
 
 
 @dataclass(frozen=True)

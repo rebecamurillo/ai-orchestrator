@@ -39,7 +39,7 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
-from orchestrator.domain.errors import Conflict, DomainError, Invalid, NotFound
+from orchestrator.domain.errors import Conflict, DomainError, Forbidden, Invalid, NotFound
 
 log = structlog.get_logger(__name__)
 
@@ -58,6 +58,7 @@ WHOLE_BODY = "body"
 #: The one place a domain outcome becomes a status code.
 DOMAIN_STATUS: tuple[tuple[type[DomainError], int, str], ...] = (
     (NotFound, HTTPStatus.NOT_FOUND, "not found"),
+    (Forbidden, HTTPStatus.FORBIDDEN, "forbidden"),
     (Conflict, HTTPStatus.CONFLICT, "conflict"),
     (Invalid, HTTP_UNPROCESSABLE_CONTENT, "invalid"),
 )

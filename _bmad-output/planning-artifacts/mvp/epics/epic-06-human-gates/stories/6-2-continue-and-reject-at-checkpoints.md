@@ -1,126 +1,169 @@
 ---
-status: blocked
+status: done
+date: 2026-09-09
 ---
 
 # Continue and Reject at checkpoints
 
-## Auto Run Result
+Story 6-2 (SPEC CAP-2, FR-19, NFR-8, UX-DR10, UX-DR18; binds AD-9, AD-13).
 
-Status: blocked
-Blocking condition: anchor conflict — a frozen assertion landed by story 6-1 forbids the
-exact prompt behavior this story's brief requires for Reject at a spec checkpoint.
+## Anchor conflict, authorised by the operator
 
-### The conflict
+Investigation before implementation found that `test_agent_answer_dispatch.py::
+test_a_spec_checkpoint_answer_quotes_spec_rejected_and_does_not_halt_again` (landed by 6-1)
+asserted the opposite of this story's own AC: a Reject's redispatch prompt could never carry
+`" Halt after planning."`, while the brief requires exactly that suffix after the Answer
+clause (so a rejected, re-planned spec pauses again instead of running straight through to
+implementation). The work halted and the conflict was reported in full (file, test, both
+assertions, why no additive alternative existed). The operator ruled: 6-1 had guessed wrong
+about behaviour this story's own brief governs, and authorised the minimal edit — rename the
+test, extend its `.endswith(...)`, drop the `not in prompt` assertion, correct the docstring
+— with strictly-exceeding coverage in a new file in the same commit. That ruling also set a
+standing rule for the rest of Epic 6: a story may correct an earlier story's frozen test when
+the earlier story reached into this story's own governed behaviour and got it wrong, under
+the same minimal-edit-plus-new-coverage discipline.
 
-- **File:** `backend-api/tests/unit/application/steps/test_agent_answer_dispatch.py`
-  (committed by 6-1 at `a48e13d`, clean on disk — a genuine anchor, not a scratch file).
-- **Test:** `test_a_spec_checkpoint_answer_quotes_spec_rejected_and_does_not_halt_again`
-  (lines 127-135).
-- **Assertions (lines 134-135):**
-  ```python
-  assert prompt.endswith(f'blocking condition "spec rejected": {ANSWER}')
-  assert "Halt after planning." not in prompt
-  ```
-  built over `an_answered_world(spec_checkpoint=True)`, whose `resume` is
-  `a_gate_record(row, "answer", {ANSWER_KEY: ANSWER})` — i.e. exactly the scenario this
-  story's brief calls Reject: an `answer` signal on an agent row with `spec_checkpoint`
-  true. The `.endswith(...)` assertion pins the composed prompt to end at the Answer
-  clause, with nothing after it; the second assertion says the same thing again by name.
+## What landed
 
-- **What the brief requires (`briefs/6-2-continue-and-reject-at-checkpoints.md`), verbatim:**
-  - Binding rule: *"Reject with a reason... the story is re-planned with the reason (and,
-    because `spec_checkpoint` is still true, the re-plan halts again at the checkpoint)."*
-  - Acceptance criterion:
-    > **Given** the same Run
-    > **When** `answer {text: "split the endpoint in two"}` is signalled
-    > **Then** the file is archived with the reason, the prompt suffix reads `Answer from
-    > the operator to the blocking condition "spec rejected": split the endpoint in two`
-    > **followed by** ` Halt after planning.`, and the record has `answer`.
+**1 — the halt decision, corrected.** `agent_answer.halts_after_planning(with_resolved,
+resume_signal)` (`backend-api/src/orchestrator/application/steps/agent_answer.py`) is the
+one place `compose_prompt` asks: a first dispatch or re-plan at a spec checkpoint
+(`resume_signal is None`), and once more on a Reject there (`resume_signal.event ==
+ANSWER_EVENT`) — never on `continue`, which is the plan already approved. `agent.py`'s own
+`compose_prompt` shrank to one call (net zero line growth, at 397/400) and its Answer-then-
+Halt ordering was corrected to match the brief's AC exactly (`Answer from the operator ...
+Halt after planning.`, concatenated, no extra separator). The authorised edit landed in
+`test_agent_answer_dispatch.py` (renamed, corrected); strictly-exceeding coverage landed in
+two new files: `test_agent_reject_halts_again.py` (the full composed prompt for Reject, and
+the two contrast cases — a `blocked` Answer never halts, `continue` never halts) and
+`test_agent_continue_dispatch.py` (the whole executor dispatch: new session, no archive, no
+halt suffix, for `continue` at a spec checkpoint).
 
-  `compose_prompt` (`backend-api/src/orchestrator/application/steps/agent.py:152-178`)
-  is pure over `with_resolved`/`resume_signal`; today its `HALT` clause
-  (line 173-174) is gated on `resume_signal is None` only, which already matches the
-  frozen test (no halt on any resume). Making the brief's AC pass requires the halt
-  clause to *also* fire when `resume_signal.event == ANSWER_EVENT` **and**
-  `with_resolved.get(SPEC_CHECKPOINT_KEY)` — which appends `" Halt after planning."`
-  after the Answer clause on exactly the case the frozen test builds, breaking both of
-  its assertions. There is no accepted-equivalent phrasing that satisfies both: the
-  brief pins the literal trailing string, and the frozen test asserts nothing may follow
-  the Answer clause at all.
+**2 — `Alert.row_kind` and `Alert.checkpoint_story`, and the `run_views.py` split.**
+`application/use_cases/run_view_types.py` gained both fields (`str | None = None`, backward
+compatible) plus a new `CheckpointStory` dataclass (`story_id`, `title`, `attempts`,
+`cost_usd`, `verify`). `run_views.py` sat at exactly 400/400 lines before this story, so
+`_run_token`/`_attribution`/`_alert` moved to a new `application/use_cases/
+run_views_alert.py` (the same seam 6-1 used for `agent.py` → `agent_answer.py`), which also
+computes `checkpoint_story` for a done checkpoint: `title` is read back out of the
+commit-guard row's own `with_resolved["message"]` (`"story {id}: {title} (orchestrator)"` —
+the one place a Story's title reaches stored state), `attempts` off the frame's `build` row,
+`cost_usd` summed across the whole frame, `verify` off the frame's `verify` row status. No
+test imported the moved private helpers directly, so the split touched no assertion.
+`api/schemas/run_views.py` gained `AlertOut.row_kind`/`checkpoint_story` and a new
+`CheckpointStoryOut`, both `_drop_default`-guarded so a pre-story response keeps compiling.
 
-### Why no honest alternative was found
+**3 — `GET /runs/{id}/files`, net new.** `application/use_cases/run_files.py::
+read_run_file` reads a literal path or resolves a single-segment glob (the brief's own
+`{spec_folder}/stories/{id}-*.md`) server-side, taking the newest match on ambiguity (AD-13's
+own de-ambiguation precedent). Three refusals, checked in an order that keeps `path=../x` a
+422 even though it would also fail the narrower spec-folder scope check: an escaping path
+(`..`, absolute) is `Invalid`; a well-formed path outside the Run's own `spec_folder`/
+`initiative_folder` is a new `Forbidden` domain error (`domain/errors.py`, mapped to 403 in
+`api/errors.py`'s `DOMAIN_STATUS`); a path inside scope that names nothing is `NotFound`. The
+brief's own implementation note places the endpoint in `api/routers/runs.py`, but that
+router carries `test_runs_router.py::test_the_router_declares_exactly_the_two_operations`,
+frozen to `GET`/`POST /runs/preflight` — the honest alternative, precedented twice already by
+`run_detail.py` and `signals.py`, is the new sibling `api/routers/run_files.py`, mounted
+after `signals.router` in `main.py`. `api/providers.py::run_files_ports` wires `FsWorkspace`
+itself (the class, a factory) the same way `StepPorts.workspace` already does, since the
+route cannot root a Workspace before it has read the Run's own `worktree_path`.
 
-I swept for one before concluding this (per the epic's standing rules): there is no
-additive design — every implementation of "append ` Halt after planning.` after the
-Answer clause on a spec-checkpoint Reject" is, by construction, an implementation that
-makes `prompt.endswith(f'blocking condition "spec rejected": {ANSWER}')` false. The two
-requirements are the literal negation of each other over the identical scenario.
+**4 — the checkpoint bodies.** `web-client/src/lib/run/checkpoint.ts` (new): `isSpecCheckpoint`/
+`isDoneCheckpoint` off `alert.row_kind` (missing entirely — a response predating this story —
+resolves to neither, so the old generic `checkpoint` banner stays exactly as it was),
+`offersReject`, `checkpointSignals` (the `continue`/`skip_story`/`skip_epic` button set a
+checkpoint stop offers — `stopSignals`'s three `EFFECTIVE_KINDS` never included the two
+skips, so this is a new sibling filter, not a widening of the frozen one), `plannedFilePath`/
+`plannedEyebrow`, `checkpointSummaryLine` (verbatim: `story {id} · {title} · {attempts}
+attempts · ${cost} · verify {done|skipped}`). `RejectBox.tsx` (new) mirrors `AnswerBox.tsx`
+with the one difference the brief asks for: a "Reject with a reason" toggle collapses the
+textarea by default. `StoryFileBlock.tsx` (new) renders the planned file inline, read-only —
+`QuestionBlock.tsx`'s own block renderer duplicated (small, local, no `dangerouslySetInnerHTML`
+anywhere). `StopBody.tsx` gained both bodies, gated on `alert.row_kind`, additive around the
+existing generic `checkpoint` paragraph so the frozen `run-stop-body.test.ts` case is
+untouched. `RunDetail.tsx` gained one more `useEffect` fetching the planned file via
+`GET /runs/{id}/files` when the stop is a spec checkpoint; Reject reuses the exact same
+`onAnswer` callback 6.1 already threads through, since the wire signal is identical.
 
-### The minimal edit, if the operator authorises it
+**5 — the gates fixture's own gap.** `fixtures/gates-repo/.fake-harness/2/attempt-1.yaml`
+is new: story 2's only prior scenario (`default.yaml`) wrote `status: done` on every
+dispatch, which `rules/routing.py::route` never turns into a `checkpoint` park (that needs
+`status: ready-for-dev` and `spec_checkpoint` both) — so the spec checkpoint this story needs
+to prove end to end was, before this file, unreachable by any e2e test. `attempt-1.yaml`
+plans and halts (`status: ready-for-dev`, no `files`, no `commit`, mirroring story 1's own
+`attempt-1.yaml`); `default.yaml` is unchanged and now correctly represents only the
+Continue's second dispatch. Additive; `test_gates_fixture.py`'s frozen assertions (including
+the one keying scenarios by story id, which two files per story now satisfies identically
+since both carry the same `slug: plan`) all still pass.
 
-In `test_agent_answer_dispatch.py`:
-- Rename `test_a_spec_checkpoint_answer_quotes_spec_rejected_and_does_not_halt_again` to
-  reflect the corrected behavior (e.g.
-  `test_a_spec_checkpoint_answer_quotes_spec_rejected_and_halts_again`).
-- Replace line 134's `.endswith(...)` with
-  `.endswith(f'blocking condition "spec rejected": {ANSWER} Halt after planning.')`.
-- Delete line 135's `assert "Halt after planning." not in prompt`.
-- Update the docstring (currently "the clause is the one difference") to state the halt
-  also differs.
+**6 — the e2e proof.** `tests/e2e/test_checkpoint_signals.py` (new): a Run walked past
+story 1's own block (Answer) to story 2's spec checkpoint, Continue re-dispatching without
+archiving (attempt 2, same story file, `commit-guard` reaches `done`) and without a halt,
+the gate record holding exactly one `continue` for it; on to story 3's done checkpoint
+(`alert.row_kind == "checkpoint"`, `checkpoint_story` summarising story 3 exactly), admitting
+`continue` but not `answer`; a final Continue resuming the Run through `push`/`link` to
+`done` — `pr.link` correctly records no compare URL for the fixture's own `file://` origin
+(`no compare link for this host`, `application/steps/pr_link.py`'s own documented rule), so
+the assertion there is that the Run finished clean, not that a GitHub-only link appeared.
 
-This is not self-authorised here: two anchor edits were granted to story 6-1 for its own
-named lines only, and the epic's standing rules are explicit that they do not extend to
-this story. No code was changed; the working tree is otherwise exactly as this story's
-dispatch found it (no scratch files).
+## Anchor edit (operator-authorised, strictly-exceeding coverage in the same commit)
 
-### Everything else investigated, for whoever picks this back up
+| File | Lines | Was | Is | New coverage |
+| --- | --- | --- | --- | --- |
+| `backend-api/tests/unit/application/steps/test_agent_answer_dispatch.py` | 127-135 | `test_..._does_not_halt_again`; `.endswith(...clause)`; `"Halt after planning." not in prompt` | `test_..._and_halts_again`; `.endswith(...clause + " Halt after planning.")`; second assertion dropped | `test_agent_reject_halts_again.py` (3 tests), `test_agent_continue_dispatch.py` (3 tests) |
 
-- **Continue on a `checkpoint`-status agent row** (re-dispatch without halt, new
-  session): already fully implemented by 6-1/4.9 —
-  `agent.py:173-174`'s existing gate, `_planned` (`agent.py:326-336`, new `session_id`
-  whenever no Template `retry:` resumes one), `signal_effects.py:155-170 _continue`. Only
-  a fresh unit test asserting the AC's specific "attempt 2, new session, gate record has
-  `continue`" combination was outstanding — trivial once unblocked.
-- **`GET /runs/{id}/files`**: does not exist yet. The brief places it in
-  `api/routers/runs.py`, but that router carries its own frozen route-count test
-  (`tests/unit/test_runs_router.py::test_the_router_declares_exactly_the_two_operations`,
-  pinned to `GET`/`POST /runs/preflight` only) — adding a third operation there breaks
-  it. The honest alternative, precedented twice already (`run_detail.py`, `signals.py`,
-  both split from `run.py`/`runs.py` for the identical reason, with the reasoning spelled
-  out in their own docstrings): a new sibling router module, e.g.
-  `api/routers/run_files.py`, mounted in `main.py:293`'s tuple. `Workspace.read` already
-  exists on the port (`domain/ports/workspace.py:34-36`); `FsWorkspace._reject_escape`
-  (`infrastructure/workspace/fs.py:96-100`) already refuses `..`/absolute paths — the
-  natural 422. A 403 for "well-formed but outside `{spec_folder}`" has no existing
-  vocabulary (`domain/errors.py` has `NotFound`/`Conflict`/`Invalid` only); the idiomatic
-  fix is a new `Forbidden(DomainError)` plus a `DOMAIN_STATUS` row in `api/errors.py`
-  (`Invalid` already maps to 422, so the malformed-path case is free).
-- **`Alert.row_kind`** (spec- vs done-checkpoint body dispatch): missing from
-  `application/use_cases/run_view_types.py:138-143` (`Alert`) and
-  `api/schemas/run_views.py:164-179` (`AlertOut`); `run_detail()`
-  (`application/use_cases/run_views.py:213-235`) already computes `park_row.kind` for
-  `admitted_signals` and just needs to thread it into `_alert(...)` too. **Blocker for
-  that specific edit:** `application/use_cases/run_views.py` is at exactly 400/400 lines
-  (the repo's hard cap, `tests/unit/test_source_limits.py`) with zero headroom, so the
-  field cannot land without a split. The clean seam (mirrors 6-1's
-  `agent.py → agent_answer.py`, and `run_views.py`'s own precedent of splitting
-  `board_view` schemas into `api/schemas/board_view.py`): pull `_run_token`,
-  `_attribution`, `_alert` into a new `application/use_cases/run_views_alert.py`
-  (no test imports these private helpers directly — confirmed by grep — so this is a
-  safe, non-anchor move) and re-export/call from `run_views.py`, freeing ~35 lines.
-- **Web-client** `StopBody.tsx` (173/300-line convention cap, plenty of room): the
-  existing frozen `tests/unit/run-stop-body.test.ts` `StopBody · checkpoint` case (uses
-  no `alert.row_kind`, expects `wf-stop-checkpoint` + literal `'story checkpoint'` text +
-  `wf-signal-continue`) is **not** in conflict — it can stay satisfied by keeping the
-  existing generic banner/reason paragraph unconditionally and adding the spec-/done-
-  checkpoint-specific bodies as additional, `row_kind`-gated content, same pattern 6.1
-  used for the Answer box (additive, no edit to that test). `continue` itself is already
-  fully wired client-side (`src/lib/run/detail.ts::EFFECTIVE_KINDS`/`stopSignals`,
-  `RunDetail.tsx`'s `sendSignal`) — only the Reject textarea (model on
-  `AnswerBox.tsx`, needs a new reveal-toggle state it doesn't have) and the two new
-  checkpoint bodies are net-new. `GET /runs/{id}/files` has no existing inline viewer to
-  reuse cleanly; closest precedent is `QuestionBlock.tsx`'s markdown block renderer (no
-  `dangerouslySetInnerHTML`).
+Nothing else in that file changed.
 
-No code was written or modified for this story. `git status` is clean except this one
-new planning artifact.
+## Splits (no comment deleted to buy space)
+
+- `application/use_cases/run_views.py` 400 → 137 of 400: `_run_token`/`_attribution`/
+  `_alert`'s bodies moved to the new `application/use_cases/run_views_alert.py` (48 lines),
+  which also gained `checkpoint_story`'s computation. `_run_token`/`_alert` stay callable
+  under those names in `run_views.py` (`_run_token = run_token`; `_alert` now a thin
+  positional-to-keyword adapter), so every existing call site kept working unchanged.
+
+## Decisions the brief left open
+
+- **The done-checkpoint compare link**: the brief's binding rule lists "the compare link if
+  the epic is already pushed" among the done-checkpoint body's contents. `CostBlock.tsx`
+  already renders `run.compare_urls` unconditionally on every Run detail screen regardless of
+  stop kind (5.10), so this is already always visible beside the done-checkpoint body rather
+  than duplicated inside it — no new code, and nothing in `StopBody.tsx` repeats it.
+- **The done-checkpoint's `title`/`attempts`/`verify`**: none of these three facts was
+  previously derivable from the wire — see item 2 above (title parsed from the commit-guard's
+  own commit message; attempts and verify read off the frame's own rows). Scoped to
+  `Alert.checkpoint_story` (computed only for a done checkpoint) rather than widening
+  `StoryCellOut` (used by every story cell on every screen), since the summary line is a
+  checkpoint-stop-specific fact, not a general per-story one.
+- **A glob with more than one match** (`GET /runs/{id}/files?path=...-*.md`): answers the
+  newest by `Workspace.mtime`, the same de-ambiguation AD-13 already uses elsewhere, rather
+  than a new `misconfigured`-style refusal — this is a read, not a routing decision.
+
+## Gates — all run from a clean tree, all green
+
+| Gate | Result |
+| --- | --- |
+| `make lint` | pass — ruff, mypy (domain/application strict), import-linter (4 contracts kept), env contract, test pairs (188 backend modules / 78 web modules), `gen:api --check` (no drift), eslint, prettier, `tsc --noEmit`, astro check (0 errors) |
+| `make test` | pass — 5150 backend passed, 1 skipped; `domain/`+`application/` **100 %** branch coverage; web-client 1045 passed in 77 files |
+| `make openapi` | pass — `contracts/openapi.json` and `schema.d.ts` regenerated with `RunFileOut`, `CheckpointStoryOut`, `AlertOut.row_kind`/`checkpoint_story`, `/runs/{run_id}/files`; `gen:api --check` clean afterward |
+| `make e2e` | pass — 162 passed, 11 deselected, 37 subtests, on the disposable `aio-e2e` stack, `ORCH_TEST_MODE=1` |
+| `make e2e-ui` | pass — 124 passed |
+
+## Notes for the next story (6-3, inline spec editing)
+
+- **`GET /runs/{id}/files` is the endpoint to extend.** It already lives in its own router
+  (`api/routers/run_files.py`) for the same reason 6-3's own `PUT` will have to: `runs.py`'s
+  frozen route count leaves no room on that resource either. The use case
+  (`application/use_cases/run_files.py::read_run_file`) already does the three-way refusal
+  (422 escape / 403 out-of-scope / 404 missing) a `PUT` will need too — the scope check
+  (`_within_spec_folder`) and the escape check (`_escapes`) are both free functions, reusable
+  as they are.
+- **The glob-resolution convention.** A `*`-bearing `path` resolves server-side to the
+  newest match (`Workspace.mtime`); a tree endpoint (6-3's own `GET .../files` widened to a
+  tree) has `Workspace.tree(prefix)` already on the port, unused by this story.
+- **`RejectBox`/`AnswerBox`/`StoryFileBlock`** are all read-only or single-field; 6-3's own
+  editor is a materially different component (multi-line, syntax-aware, a real Save action)
+  and should not try to extend any of these three.
+- **Still deferred to Epic 7, untouched by this story either:** a resumed dispatch records
+  no `pgid`, and `Harness.resume` takes neither `model` nor `budget_usd_remaining`.

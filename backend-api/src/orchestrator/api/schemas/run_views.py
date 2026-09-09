@@ -34,6 +34,7 @@ from orchestrator.api.schemas.runs import RunSummaryOut
 from orchestrator.application.use_cases.run_views import (
     Alert,
     Attribution,
+    CheckpointStory,
     Cost,
     Header,
     LatestAttempt,
@@ -161,21 +162,53 @@ class AttributionOut(BaseModel):
         )
 
 
+class CheckpointStoryOut(BaseModel):
+    """The done-checkpoint's own summary line (story 6-2): `story {id} · {title} ·
+    {attempts} attempts · ${cost} · verify {done|skipped}`."""
+
+    story_id: str
+    title: str
+    attempts: int
+    cost_usd: MoneyStr
+    verify: str
+
+    @classmethod
+    def of(cls, story: CheckpointStory) -> CheckpointStoryOut:
+        return cls(
+            story_id=story.story_id,
+            title=story.title,
+            attempts=story.attempts,
+            cost_usd=str(story.cost_usd),
+            verify=story.verify,
+        )
+
+
 class AlertOut(BaseModel):
     token: str
     reason: str | None
     park_kind: ParkKind | None
     #: `.of()` always sets the real value; see `_drop_default` — predates this field (5.10).
     attribution: AttributionOut | None = Field(default=None, json_schema_extra=_drop_default)
+    #: `None` predates story 6-2. The parked row's own `kind`: a `checkpoint` park's
+    #: `StopBody` case is `agent` (spec checkpoint) or anything else (done checkpoint).
+    row_kind: str | None = Field(default=None, json_schema_extra=_drop_default)
+    #: Set only for a done checkpoint. `None` predates story 6-2.
+    checkpoint_story: CheckpointStoryOut | None = Field(
+        default=None, json_schema_extra=_drop_default
+    )
 
     @classmethod
     def of(cls, alert: Alert) -> AlertOut:
         attribution = None if alert.attribution is None else AttributionOut.of(alert.attribution)
+        checkpoint_story = alert.checkpoint_story
+        story = None if checkpoint_story is None else CheckpointStoryOut.of(checkpoint_story)
         return cls(
             token=alert.token,
             reason=alert.reason,
             park_kind=alert.park_kind,
             attribution=attribution,
+            row_kind=alert.row_kind,
+            checkpoint_story=story,
         )
 
 

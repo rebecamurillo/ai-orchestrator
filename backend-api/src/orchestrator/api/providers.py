@@ -39,6 +39,7 @@ from orchestrator.application.use_cases.harnesses import HarnessPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.queue import QueuePorts
+from orchestrator.application.use_cases.run_files import RunFilesPorts
 from orchestrator.application.use_cases.run_views import RunViewPorts
 from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.application.use_cases.signals import SignalEffectPorts
@@ -62,6 +63,7 @@ from orchestrator.infrastructure.db.environment import read_run_environment
 from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.process.runner import RealProcessRunner
 from orchestrator.infrastructure.tracing import LangfuseTracer
+from orchestrator.infrastructure.workspace.fs import FsWorkspace
 
 #: The attributes `create_app` stores its adapters under.
 SESSION_FACTORY = "session_factory"
@@ -262,6 +264,18 @@ def queue_ports(request: Request) -> Iterator[QueuePorts]:
             clock=SystemClock(),
             max_active_runs=settings.max_active_runs,
         )
+
+
+def run_files_ports(request: Request) -> Iterator[RunFilesPorts]:
+    """The ports `GET /runs/{id}/files` reads through (6.2). Writes nothing.
+
+    `workspace` is `FsWorkspace` itself — a factory, not an instance — the same "port is
+    the class" shape `infrastructure/dbos/startup.py` already wires `StepPorts.workspace`
+    with: the use case cannot root one until it has read the Run's own `worktree_path`.
+    """
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield RunFilesPorts(runs=SQLAlchemyRunRepository(uow.session), workspace=FsWorkspace)
 
 
 def signal_effect_ports(request: Request) -> Iterator[SignalEffectPorts]:

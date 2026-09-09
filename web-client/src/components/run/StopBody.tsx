@@ -27,11 +27,22 @@ import {
   stopSignals,
 } from '../../lib/run/detail';
 import { answerTarget, offersAnswer } from '../../lib/run/answer';
+import {
+  checkpointSignals,
+  checkpointSummaryLine,
+  isDoneCheckpoint,
+  isSpecCheckpoint,
+  offersReject,
+  plannedEyebrow,
+} from '../../lib/run/checkpoint';
 import { signalLabel, type SignalKind } from '../../lib/run/signals';
 import AnswerBox from './AnswerBox';
 import QuestionBlock from './QuestionBlock';
+import RejectBox from './RejectBox';
+import StoryFileBlock from './StoryFileBlock';
 
 type ProblemDetail = components['schemas']['ProblemDetail'];
+type RunFileOut = components['schemas']['RunFileOut'];
 
 interface Props {
   detail: RunDetailOut;
@@ -40,11 +51,16 @@ interface Props {
   onCancelClick: () => void;
   posting: SignalKind | null;
   error: ProblemDetail | null;
-  /** The Answer (6.1, FR-18) — the one signal that carries a payload, so it is reported
-   * with its text rather than by kind alone. Optional because the box appears only on a
-   * `blocked` stop whose Run admits `answer`, and a caller that renders no such stop has
-   * nothing to hand it. */
+  /** The Answer (6.1, FR-18) and the Reject (6.2, FR-19) — the two signals that carry a
+   * payload, so they are reported with their text rather than by kind alone. Both post the
+   * same `answer` signal (`AnswerBox`/`RejectBox`'s own precedent), so one callback serves
+   * both boxes. Optional because neither box appears outside the one stop that admits it,
+   * and a caller that renders no such stop has nothing to hand it. */
   onAnswer?: (text: string) => void;
+  /** The planned story file a spec checkpoint shows inline (`GET /runs/{id}/files`) —
+   * fetched by the island, since `StopBody` itself stays stateless. `undefined` while it
+   * has not resolved yet, `null` on a failed fetch. */
+  plannedFile?: RunFileOut | null;
 }
 
 const RESOLVE_LINE = 'resolve on the remote, then Retry — Retry fetches first';
@@ -58,6 +74,7 @@ export default function StopBody({
   posting,
   error,
   onAnswer = () => {},
+  plannedFile = null,
 }: Props) {
   const kind = stopKind(detail, token);
   if (kind === null) return null;
@@ -65,7 +82,9 @@ export default function StopBody({
   const isQuestion = kind === 'blocked' || kind === 'misconfigured';
   const signals = isQuestion
     ? blockedSignals(detail.admitted_signals)
-    : stopSignals(detail.admitted_signals);
+    : kind === 'checkpoint'
+      ? checkpointSignals(detail.admitted_signals)
+      : stopSignals(detail.admitted_signals);
   const canCancel = detail.admitted_signals.includes('cancel');
   const tail = logTail(detail);
   const path = currentStepPath(detail);
@@ -94,6 +113,29 @@ export default function StopBody({
       {kind === 'plan_stale' ? <PlanStaleBody detail={detail} /> : null}
       {kind === 'push_rejected' ? <p className="wf-stop-reason">{RESOLVE_LINE}</p> : null}
       {kind === 'checkpoint' ? <p className="wf-stop-reason">{bannerText(detail)}</p> : null}
+      {isSpecCheckpoint(detail, kind) ? (
+        <>
+          {plannedFile ? (
+            <StoryFileBlock
+              eyebrow={plannedEyebrow(detail.alert?.attribution)}
+              content={plannedFile.content}
+            />
+          ) : null}
+          {offersReject(detail, kind) ? (
+            <RejectBox
+              target={answerTarget(detail)}
+              onReject={onAnswer}
+              posting={posting !== null}
+              error={posting === null && error ? error : null}
+            />
+          ) : null}
+        </>
+      ) : null}
+      {isDoneCheckpoint(detail, kind) && detail.alert?.checkpoint_story ? (
+        <p className="wf-checkpoint-summary" data-testid="wf-checkpoint-summary">
+          {checkpointSummaryLine(detail.alert.checkpoint_story)}
+        </p>
+      ) : null}
       {kind === 'failed' ? (
         <p className="wf-stop-reason">{row ? `${row.path} · ${row.label}` : ''}</p>
       ) : null}

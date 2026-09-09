@@ -45,6 +45,7 @@ from orchestrator.application.use_cases.run_view_types import (
     BoardCounts,
     BoardView,
     Card,
+    CheckpointStory,
     Cost,
     Header,
     LatestAttempt,
@@ -55,6 +56,7 @@ from orchestrator.application.use_cases.run_view_types import (
     StoryCell,
     Summary,
 )
+from orchestrator.application.use_cases.run_views_alert import build_alert, run_token
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import Repository
@@ -62,7 +64,6 @@ from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import NotFound
 from orchestrator.domain.ports.tracer import Tracer
-from orchestrator.domain.statuses import RunStatus
 
 __all__ = [
     "Alert",
@@ -71,6 +72,7 @@ __all__ = [
     "BoardCounts",
     "BoardView",
     "Card",
+    "CheckpointStory",
     "Cost",
     "Header",
     "LatestAttempt",
@@ -97,24 +99,9 @@ _SETTLED: tuple[str, ...] = ("done", "skipped")
 
 _BRACKET_INDEX = re.compile(r"\[(\d+)\]$")
 
-#: The Run's own UI token (Consistency Conventions — Status tokens): `BLK`/`CHK` while
-#: parked, off `park_kind`, the fixed table otherwise. Duplicated from `application/
-#: use_cases/project_runs.py::_token` and `application/graph.py::_run_token` — each reader's
-#: own small pure function, the established precedent for a handful of lines (see
-#: `project_runs.py`'s own docstring on `_current_step_label`).
-_RUN_TOKENS: dict[RunStatus, str] = {
-    "queued": "QUE",
-    "running": "RUN",
-    "done": "DON",
-    "failed": "ERR",
-    "cancelled": "CAN",
-}
-
-
-def _run_token(run: Run) -> str:
-    if run.status == "needs_you":
-        return "CHK" if run.park_kind == "checkpoint" else "BLK"
-    return _RUN_TOKENS[run.status]
+#: `run_token`/`build_alert` live in `run_views_alert.py` now (line count alone — see that
+#: module's own docstring); `_run_token` stays the name every call site here uses.
+_run_token = run_token
 
 
 def _progress(run: Run, rows: Sequence[StepRun]) -> Progress | None:
@@ -225,7 +212,7 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
     return RunDetailView(
         run=run,
         header=_header(run, project, repository),
-        alert=_alert(run, _latest_of(park_attempts)),
+        alert=_alert(run, _latest_of(park_attempts), rows, park_row, attempts_by_row),
         steps=[_step_row(ports, row, attempts_by_row[row.id]) for row in rows],
         stories=_story_cells(run, rows, attempts_by_row),
         cost=_cost(run, attempts_by_row, now=ports.clock.now(), tracer=ports.tracer),
@@ -249,20 +236,22 @@ def _header(run: Run, project: Project | None, repository: Repository | None) ->
     )
 
 
-def _alert(run: Run, attempt: Attempt | None) -> Alert | None:
-    if run.status != "needs_you":
-        return None
-    attribution = None if attempt is None else _attribution(attempt)
-    return Alert(
-        token=_run_token(run),
-        reason=run.park_reason,
-        park_kind=run.park_kind,
-        attribution=attribution,
+def _alert(
+    run: Run,
+    attempt: Attempt | None,
+    rows: Sequence[StepRun],
+    park_row: StepRun | None,
+    attempts_by_row: Mapping[UUID, Sequence[Attempt]],
+) -> Alert | None:
+    row_kind = park_row.kind if park_row is not None else None
+    return build_alert(
+        run,
+        attempt,
+        row_kind=row_kind,
+        rows=rows,
+        park_row=park_row,
+        attempts_by_row=attempts_by_row,
     )
-
-
-def _attribution(attempt: Attempt) -> Attribution:
-    return Attribution(harness=attempt.harness, model=attempt.model, ended_at=attempt.ended_at)
 
 
 def _latest_of(attempts: Sequence[Attempt]) -> Attempt | None:

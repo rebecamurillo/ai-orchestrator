@@ -34,6 +34,7 @@ export type StoryCellOut = components['schemas']['StoryCellOut'];
 export type CostOut = components['schemas']['CostOut'];
 export type AlertOut = components['schemas']['AlertOut'];
 export type AttributionOut = components['schemas']['AttributionOut'];
+export type CheckpointStoryOut = components['schemas']['CheckpointStoryOut'];
 export type ParkKind = NonNullable<AlertOut['park_kind']>;
 export type SignalKind = RunDetailOut['admitted_signals'][number];
 export type RunStatus = RunDetailOut['run']['status'];

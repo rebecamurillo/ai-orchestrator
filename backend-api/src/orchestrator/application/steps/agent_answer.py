@@ -40,7 +40,9 @@ never stored — the gate record the Operator's signal wrote is append-only (AD-
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 
@@ -150,6 +152,21 @@ def previous_n(ctx: StepContext) -> int:
     """
     previous = ctx.previous_attempt
     return previous.n if previous is not None else max(ctx.attempt.n - 1, 1)
+
+
+def halts_after_planning(
+    with_resolved: Mapping[str, Any], resume_signal: GateRecord | None
+) -> bool:
+    """Whether `compose_prompt` appends `HALT` (story 6-2, FR-19): a first dispatch or a
+    re-plan at a spec checkpoint (`resume_signal is None`), and once more on a Reject there
+    — the same `answer` signal this module's archive already fires on, at a row whose
+    `spec_checkpoint` is still true because the Operator sent the plan back rather than
+    approving it. `continue` and every other resume must not halt twice, which is why this
+    is not simply "any resume at a spec checkpoint": a Continue means the plan was approved,
+    and halting again would park the Run on the stop it just left."""
+    if not with_resolved.get(SPEC_CHECKPOINT_KEY):
+        return False
+    return resume_signal is None or resume_signal.event == ANSWER_EVENT
 
 
 def resolved_signal(ctx: StepContext) -> GateRecord | None:

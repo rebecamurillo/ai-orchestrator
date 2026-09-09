@@ -124,12 +124,13 @@ def test_the_glob_is_empty_when_the_harness_is_dispatched_so_it_plans_fresh() ->
     assert world.workspace.read(ARCHIVED) is not None
 
 
-def test_a_spec_checkpoint_answer_quotes_spec_rejected_and_does_not_halt_again() -> None:
-    """6.2 sends a Reject as this same signal; the clause is the one difference."""
+def test_a_spec_checkpoint_answer_quotes_spec_rejected_and_halts_again() -> None:
+    """6.2's Reject: the plan was sent back, not approved, so `spec_checkpoint` is still
+    true and the re-plan halts again — a rejected spec that re-planned straight through to
+    implementation would make a declared spec checkpoint fire once instead of every time."""
     world = an_answered_world(spec_checkpoint=True)
 
     AgentExecutor().execute(world.ctx)
 
     prompt = prompts(world)[0]
-    assert prompt.endswith(f'blocking condition "spec rejected": {ANSWER}')
-    assert "Halt after planning." not in prompt
+    assert prompt.endswith(f'blocking condition "spec rejected": {ANSWER} Halt after planning.')
