@@ -219,10 +219,6 @@ def test_answer_moves_the_blocked_row_and_resumes_the_run() -> None:
     assert outcome.run.status == "running"
 
 
-def _skip_epic_world() -> World:
-    return parked("push_rejected", "push", "error")
-
-
 def _terminal_release_world() -> World:
     return parked("misconfigured", "push", "error", terminal_session=True)
 
@@ -234,14 +230,12 @@ def _terminal_resume_world() -> World:
 @pytest.mark.parametrize(
     ("world_factory", "kind", "payload"),
     [
-        (_skip_epic_world, "skip_epic", {}),
         (lambda: parked("budget", BUILD, "blocked"), "budget_raise", {"budget_usd": "50"}),
         (lambda: parked("misconfigured", "push", "error"), "terminal_start", {}),
         (_terminal_release_world, "terminal_release", {}),
         (_terminal_resume_world, "terminal_resume", {}),
     ],
     ids=[
-        "skip_epic",
         "budget_raise",
         "terminal_start",
         "terminal_release",

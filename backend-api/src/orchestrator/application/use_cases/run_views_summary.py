@@ -98,7 +98,10 @@ def summary(run: Run, rows: Sequence[StepRun]) -> Summary | None:
     if run.status != "done":
         return None
     return Summary(
-        progress=progress(run, rows), links=list(run.compare_urls), skipped=skipped_stories(rows)
+        progress=progress(run, rows),
+        links=list(run.compare_urls),
+        skipped=skipped_stories(rows),
+        skipped_epics=skipped_epics(rows),
     )
 
 
@@ -121,6 +124,33 @@ def skipped_stories(rows: Sequence[StepRun]) -> list[str]:
         frame = story_frame(row.path)
         if row.status == "skipped" or (frame is not None and _operator_skipped(rows, frame)):
             listed.append(row.story_id)
+    return listed
+
+
+def skipped_epics(rows: Sequence[StepRun]) -> list[int]:
+    """Every epic number `skip_epic` gave up the push on, in plan order (6.5, FR-20).
+
+    Mirrors `skipped_stories`'s own read of the reason, not only the status: `cancel` also
+    marks every unstarted row `skipped` under the same `SKIPPED_BY_OPERATOR` reason, and
+    `summary` is the only caller — it already answers `None` for a Run that is not `done`,
+    which is what keeps a cancelled Run's own unstarted `push` rows out of this list too.
+
+    Numbered `bracket_index(epic) + 1` — the brief's own 1-based convention (`epics[0]` is
+    "epic 1"), distinct from `StoryCell.epic_index`'s pre-existing 0-based one. A plain
+    `epic`-template Run's own `push` row carries no `epics[n]` frame at all
+    (`epic_frame` answers `None`), so it is never numbered here — consistent with `progress
+    ()`'s own `epics_total=None` treatment of that Template: `skip_epic` still skips such a
+    Run's push (`signal_effects.py::_skip_remote_rows`), this list just cannot count it.
+    """
+    listed: list[int] = []
+    for row in rows:
+        if row.kind != PUSH_KIND:
+            continue
+        epic = epic_frame(row.path)
+        if epic is None:
+            continue
+        if row.status == "skipped" and row.reason == SKIPPED_BY_OPERATOR:
+            listed.append(bracket_index(epic) + 1)
     return listed
 
 

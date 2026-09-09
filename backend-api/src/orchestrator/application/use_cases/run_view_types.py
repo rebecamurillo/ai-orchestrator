@@ -8,7 +8,7 @@ every private helper stay there; only the shapes they build live here, the same 
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -222,6 +222,10 @@ class Summary:
     progress: Progress | None
     links: list[str]
     skipped: list[str]
+    #: The 1-based epic numbers `skip_epic` gave up the push on (6.5, FR-20) — defaulted so
+    #: `tests/unit/test_run_view_schemas.py`'s existing `Summary(...)` construction, which
+    #: predates this field, keeps compiling unedited.
+    skipped_epics: list[int] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

@@ -1814,6 +1814,8 @@ export interface components {
             progress: components["schemas"]["ProgressOut"] | null;
             /** Skipped */
             skipped: string[];
+            /** Skipped Epics */
+            skipped_epics?: number[];
         };
         /**
          * TemplateRefOut

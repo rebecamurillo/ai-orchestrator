@@ -130,7 +130,11 @@ export function logTail(detail: RunDetailOut): string[] {
   return (step?.latest?.log_tail ?? []).slice(-40);
 }
 
-/** `{progress} · {links} · skipped: {ids}` — the `done` summary line replacing the banner. */
+/** `{progress} · {links} · skipped: {ids} · epics skipped: {ns}` — the `done` summary line
+ * replacing the banner. `summary.skipped_epics` (6.5) is optional on the wire
+ * (`_drop_default`-guarded, `api/schemas/run_views.py::SummaryOut`) so a fixture built before
+ * this story, which carries no such field, still reads as "nothing skipped" rather than
+ * throwing. */
 export function summaryLine(detail: RunDetailOut): string {
   const summary = detail.summary;
   if (!summary) return '';
@@ -141,8 +145,11 @@ export function summaryLine(detail: RunDetailOut): string {
     parts.push(`${p.stories_done}/${p.stories_total} stories`);
   }
   parts.push(`${summary.links.length} link${summary.links.length === 1 ? '' : 's'}`);
-  const head = parts.join(' · ');
-  return summary.skipped.length > 0 ? `${head} · skipped: ${summary.skipped.join(', ')}` : head;
+  let line = parts.join(' · ');
+  if (summary.skipped.length > 0) line += ` · skipped: ${summary.skipped.join(', ')}`;
+  const skippedEpics = summary.skipped_epics ?? [];
+  if (skippedEpics.length > 0) line += ` · epics skipped: ${skippedEpics.join(', ')}`;
+  return line;
 }
 
 /** `$4.18 / $15.00` — a ratio, never a percentage or a bar (`KvTable.astro`'s own rule). */

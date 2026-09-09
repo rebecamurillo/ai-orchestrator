@@ -92,10 +92,9 @@ def test_an_answer_on_a_row_that_is_not_an_agent_is_refused() -> None:
 @pytest.mark.parametrize(
     ("park_kind", "path", "row_status", "kind", "payload"),
     [
-        ("push_rejected", "push", "error", "skip_epic", {}),
         ("budget", BUILD, "blocked", "budget_raise", {"budget_usd": "50"}),
     ],
-    ids=["skip_epic", "budget_raise"],
+    ids=["budget_raise"],
 )
 def test_the_kinds_this_story_did_not_land_still_answer_not_available_yet(
     park_kind: str, path: str, row_status: str, kind: str, payload: dict[str, object]

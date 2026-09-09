@@ -3470,6 +3470,13 @@
             },
             "title": "Skipped",
             "type": "array"
+          },
+          "skipped_epics": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Skipped Epics",
+            "type": "array"
           }
         },
         "required": [

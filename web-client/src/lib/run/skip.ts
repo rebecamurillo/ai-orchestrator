@@ -15,6 +15,7 @@
  * their own to put a control on.
  */
 import type { RunDetailOut, SignalKind } from './detail';
+import { currentStepPath } from './detail';
 
 /** The stop bodies FR-20 puts *Skip story* on, verbatim from the brief's own binding rule. */
 export const SKIP_STORY_STOP_KINDS: readonly string[] = [
@@ -76,4 +77,77 @@ export function skippedIds(detail: RunDetailOut): string[] {
 export function compareLinkText(detail: RunDetailOut, url: string): string {
   const ids = skippedIds(detail);
   return ids.length > 0 ? `${url} · skipped: ${ids.join(', ')}` : url;
+}
+
+/**
+ * *Skip epic*'s own facts (6.5, FR-20, NFR-8, UX-DR10) — deliberately **not** symmetric
+ * with the Skip-story predicates above.
+ *
+ * `admitted_signals(park_kind, row_kind)` cannot run AD-13's own `extra` predicate for this
+ * kind either (`rules/signals.py::_has_epic_frame`), but that predicate's two branches are
+ * both answerable client-side without a new field: the whole Run is one epic
+ * (`run.template_name == "epic"`, published verbatim as `run.template`), or the parked
+ * row's own path carries an `epics[n]` frame — the exact same fact `currentEpicNumber`
+ * below already reads off `currentStepPath` for the confirm line's own number, reused here
+ * rather than approximated by the Run's `template` name a second time (a custom-named copy
+ * of an initiative-shaped Template would defeat a name check but not a path one).
+ * `offersSkipStory` needed a per-current-Story id because `_has_story_frame` can genuinely
+ * be false at a stop that still admits this kind's sibling — reading the path here is both
+ * more precise and correct where copying that predicate would refuse the button exactly at
+ * `push_rejected`, the one stop this kind adds its own confirm sentence for.
+ */
+export const SKIP_EPIC_STOP_KINDS: readonly string[] = [
+  'blocked',
+  'checkpoint',
+  'verify_failed',
+  'timeout',
+  'push_rejected',
+  'protected_path',
+  'misconfigured',
+  'internal',
+];
+
+export const SKIP_EPIC_LABEL = 'Skip epic';
+
+//: The bracket `run_views_summary.py::bracket_index` reads off an `epics[n]` frame, read the
+//: same way client-side — the parked row's own path is already on the wire
+//: (`currentStepPath`, read for `logTail`), so no new field is needed for this.
+const EPIC_BRACKET = /epics\[(\d+)\]/;
+
+/** Whether this stop shows *Skip epic*: one of the eight bodies AD-13 admits it on, the Run
+ * admits the kind, and `_has_epic_frame`'s own two branches — the whole Run is one epic, or
+ * the parked row's own path carries an `epics[n]` frame. */
+export function offersSkipEpic(
+  detail: RunDetailOut,
+  kind: string | null,
+  admitted: readonly SignalKind[],
+): boolean {
+  if (kind === null || !SKIP_EPIC_STOP_KINDS.includes(kind) || !admitted.includes('skip_epic')) {
+    return false;
+  }
+  if (detail.run.template === 'epic') return true;
+  const path = currentStepPath(detail);
+  return path !== null && EPIC_BRACKET.test(path);
+}
+
+/** The 1-based epic number the confirm line names — the brief's own convention
+ * (`epics[0]` is "epic 1"), matching `summary.skipped_epics`'s own numbering. `1` for an
+ * `epic`-template Run (no bracket at all: it is the one epic) or when no current row path
+ * is known yet. */
+export function currentEpicNumber(detail: RunDetailOut): number {
+  const path = currentStepPath(detail);
+  const match = path ? EPIC_BRACKET.exec(path) : null;
+  return match ? Number(match[1]) + 1 : 1;
+}
+
+/** The inline confirm line, verbatim (NFR-8): the ordinary tail, or the `push_rejected`
+ * variant that names what is skipped instead of what still ships. */
+export function skipEpicConfirmLine(epicNumber: number, pushRejected: boolean): string {
+  const tail = pushRejected
+    ? 'the push is skipped'
+    : 'done work is pushed and the compare link recorded';
+  return (
+    `skip epic ${epicNumber}: remaining stories are marked skipped, the quality gate ` +
+    `re-runs, ${tail}`
+  );
 }

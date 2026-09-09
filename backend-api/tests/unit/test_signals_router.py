@@ -160,12 +160,12 @@ async def test_cancel_answers_the_cancelled_run_with_no_admitted_signals(
 async def test_a_kind_outside_this_epics_scope_is_a_409_not_available_yet(api: Api) -> None:
     async with api.client() as client:
         response = await client.post(
-            f"{RUNS}/{api.world.run.id}/signals", json={"kind": "skip_epic"}
+            f"{RUNS}/{api.world.run.id}/signals", json={"kind": "terminal_start"}
         )
 
     assert response.status_code == HTTP_CONFLICT, response.text
     assert response.headers["content-type"].startswith("application/problem+json")
-    assert response.json()["detail"] == "skip_epic not available yet"
+    assert response.json()["detail"] == "terminal_start not available yet"
 
 
 async def test_a_signal_ad13_refuses_is_a_409_with_ad13s_own_text(api: Api) -> None:

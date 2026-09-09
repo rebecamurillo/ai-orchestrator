@@ -1,7 +1,7 @@
 /**
  * The stop body (4.15, UX-DR10): what stopped the Run, in words and — where the park kind
  * has one — a log tail, then the buttons `admitted_signals` and the effects that have landed
- * (`cancel`, `retry`, `continue`; `answer` 6.1, `skip_story` 6.4) both allow.
+ * (`cancel`, `retry`, `continue`; `answer` 6.1, `skip_story` 6.4, `skip_epic` 6.5) both allow.
  * `park_kind`-keyed rather than
  * a name-per-component split: every variant but `plan_stale` renders the same shape (a
  * reason, an optional command block, the button row), so one switch reads truer than seven
@@ -39,8 +39,12 @@ import {
 import { signalLabel, type SignalKind } from '../../lib/run/signals';
 import {
   KEEP_LABEL,
+  SKIP_EPIC_LABEL,
   SKIP_STORY_LABEL,
+  currentEpicNumber,
+  offersSkipEpic,
   offersSkipStory,
+  skipEpicConfirmLine,
   skipStoryConfirmLine,
 } from '../../lib/run/skip';
 import AnswerBox from './AnswerBox';
@@ -98,11 +102,20 @@ export default function StopBody({
   // wherever it appears. Appending rather than widening any of them keeps each one's own
   // frozen test true; `offersSkipStory` reads `admitted_signals`, so the server still decides.
   const skipStoryId = answerTarget(detail).storyId;
-  const signals =
+  const withSkipStory =
     offersSkipStory(kind, detail.admitted_signals, skipStoryId) && !offered.includes('skip_story')
       ? [...offered, 'skip_story' as SignalKind]
       : offered;
   const skipStoryLine = skipStoryConfirmLine(skipStoryId);
+  // *Skip epic* already renders as a plain button on three of the eight stops it is
+  // admitted on (`blockedSignals`/`checkpointSignals`, 5.10/6.2) — this appends it, as a
+  // confirm, on the remaining five (`verify_failed`, `timeout`, `protected_path`,
+  // `internal`, `push_rejected`), the same sibling-filter pattern `offersSkipStory` uses.
+  const signals =
+    offersSkipEpic(detail, kind, detail.admitted_signals) && !withSkipStory.includes('skip_epic')
+      ? [...withSkipStory, 'skip_epic' as SignalKind]
+      : withSkipStory;
+  const skipEpicLine = skipEpicConfirmLine(currentEpicNumber(detail), kind === 'push_rejected');
   const canCancel = detail.admitted_signals.includes('cancel');
   const tail = logTail(detail);
   const path = currentStepPath(detail);
@@ -181,6 +194,17 @@ export default function StopBody({
                 label={SKIP_STORY_LABEL}
                 line={skipStoryLine}
                 confirmLabel={SKIP_STORY_LABEL}
+                keepLabel={KEEP_LABEL}
+                disabled={posting !== null}
+                onConfirm={() => onSignal(s)}
+              />
+            ) : s === 'skip_epic' ? (
+              <ConfirmAction
+                key={s}
+                kind={s}
+                label={SKIP_EPIC_LABEL}
+                line={skipEpicLine}
+                confirmLabel={SKIP_EPIC_LABEL}
                 keepLabel={KEEP_LABEL}
                 disabled={posting !== null}
                 onConfirm={() => onSignal(s)}

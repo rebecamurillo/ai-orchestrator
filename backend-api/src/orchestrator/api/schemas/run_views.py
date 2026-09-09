@@ -339,6 +339,10 @@ class SummaryOut(BaseModel):
     progress: ProgressOut | None
     links: list[str]
     skipped: list[str]
+    #: The epic numbers `skip_epic` gave up the push on (6.5). `_drop_default`-guarded like
+    #: `cost_provisional`/`row_kind` above: an existing web-client test fixture predates this
+    #: field and must keep compiling without it.
+    skipped_epics: list[int] = Field(default_factory=list, json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, summary: Summary) -> SummaryOut:
@@ -346,6 +350,7 @@ class SummaryOut(BaseModel):
             progress=None if summary.progress is None else ProgressOut.of(summary.progress),
             links=list(summary.links),
             skipped=list(summary.skipped),
+            skipped_epics=list(summary.skipped_epics),
         )
 
 
