@@ -1,179 +1,114 @@
 ---
-status: blocked
+status: done
+date: 2026-09-09
 ---
 
 # Answer a blocked story, with a scripted test harness
 
-## Auto Run Result
+Story 6-1 (SPEC CAP-1, FR-18, NFR-8, UX-DR10, UX-DR17, AR-14; binds AD-9, AD-10, AD-13).
 
-Status: blocked
-Blocking condition: a second, distinct anchor conflict — `backend-api/tests/unit/application/
-test_handle_signal.py::test_answer_is_refused_not_available_yet_once_validation_passes`
-asserts that `answer` is refused `"answer not available yet"` on exactly the park this story
-must make it work on. It is a different file from the two the operator authorised, the ruling
-covers "these four lines only", and it does not name a later story, so hard rule 1's
-placeholder exception does not reach it. Halting rather than extending the ruling by analogy.
+## What landed
 
-### Round 1 (resolved by the operator)
+**1 — the Answer's effect in the agent executor.**
+`backend-api/src/orchestrator/application/steps/agent_answer.py` (new, 200 lines) moves the
+one `{spec_folder}/stories/{id}-*.md` match to `stories/.answers/{id}-attempt-{n}.md` where
+`n` is the previous attempt's number, appends `## Human Answer` with an ISO-8601-Z time from
+the `Clock` port and the Operator's text, and returns **both** ends of the rename so
+`agent.py::_prepare_writes` stages them into the prepare commit — an unstaged move would be
+in the tree at `start_sha` and read as the agent's own edit (AD-17, FR-31). The glob is empty
+afterwards, so the re-dispatch is a first dispatch and `bmad-build-auto` plans fresh.
+Exactly one match is archived: none is logged `no file to archive` and proceeds as a first
+dispatch, and two is the `ambiguous story file` misconfiguration only a Retry's
+de-ambiguation may resolve.
 
-The web-client conflict is **authorised**: invert
-`web-client/tests/unit/run-stop-body-blocked.test.ts` lines 110-111 and
-`web-client/tests/e2e/run-detail-story-additions.spec.ts` lines 177-178, correct the e2e's
-line-173 comment, leave everything else in both files — including the `misconfigured`
-assertions at unit 166 and e2e 264 — untouched, and land
-`run-stop-body-answer.test.ts` + `run-detail-answer.spec.ts` in the same commit. Recorded so
-the next dispatch applies it without re-deciding.
+**2 — the prompt clause, without touching `compose_prompt`'s frozen tests.**
+`compose_prompt` is pure over the values the planner resolved and holds no `Workspace`, so it
+cannot read the archived file's `Blocking condition:` line. `agent_answer.resolved_signal`
+resolves both facts — the condition from the archived file (or `spec rejected` at a spec
+checkpoint) and the text from `rules/signals.py::ANSWER_KEY` — into a `model_copy` of the
+resume record under the keys `agent.py` already declares, and `_planned` passes that. The
+signal contract is untouched and `test_agent_prompt.py` stayed frozen. *(Operator-approved
+deviation from the ruling's wording, which had `compose_prompt` read `ANSWER_KEY` itself.)*
 
-### Round 2 — the blocking conflict
+**3 — the Answer box.** `web-client/src/components/run/AnswerBox.tsx` renders under
+`QuestionBlock` when the stop is `blocked` **and** `answer` is in `admitted_signals` — the
+read model decides, nothing is hardcoded. `web-client/src/lib/run/answer.ts` holds the
+verbatim UX-DR17 hint, reads the archive path off the response (`stories` strip's `current`
+cell, the parked row's `latest.n`), and builds the `{kind: answer, payload: {text}}` body.
+`RunDetail.tsx` gained a payload-carrying `sendSignal`. First `<textarea>` on the surface;
+still no `dangerouslySetInnerHTML` anywhere.
 
-**File:** `backend-api/tests/unit/application/test_handle_signal.py`
-**Test:** `test_answer_is_refused_not_available_yet_once_validation_passes` (lines 209-221)
-**Assertions:**
+**4 — the scripted `fake` harness (AR-14).**
+`backend-api/src/orchestrator/infrastructure/harness/fake/` — `scenario.py` reads
+`{worktree}/.fake-harness/{story_id}/attempt-{k}.yaml` (falling back to `default.yaml`) and
+never raises on a malformed one; `adapter.py` applies the writes in `start`, then runs one
+real `ProcessRunner` process (`sh` on a generated script: the sleep, the `fake <fake@local>`
+commit, the result envelope, the exit code) so `pgid` is a group `kill_group` can reach
+(AD-14) and `run` stays `wait(start(...))`. `usage` is read back out of the log through
+`claude/result.py`'s parser, so the path under test is the production one.
 
-```python
-world = parked("blocked", BUILD, "blocked")          # BUILD = "stories[0].build"
-with pytest.raises(Conflict, match="answer not available yet"):
-    send(world, ports, "answer", text="use the psycopg adapter")
-assert world.status_of(BUILD) == "blocked"
-assert world.stored_run().status == "needs_you"
-```
+**5 — the conditional an Operator never sees.** A bound `harness` value is never checked
+against a Template's enum (`templates/inputs.py` reads `values` only to validate a default;
+`api/schemas/runs.py` types it `str | None`), so the real gate is pre-flight's harness line.
+`fake` is registered in `build_harnesses` and its `harness` row seeded **enabled** only under
+`ORCH_TEST_MODE`; with test mode off there is no row, `create_run` refuses the name, and
+`templates/{epic,story,initiative}.yaml` are byte-identical. `fake` is not in `HARNESS_NAMES`
+and not in `HARNESS_VERSION_SETTINGS`.
 
-**Why it is unavoidable.** `application/use_cases/signals.py::handle_signal` is the single seam
-between the router and `signal_run`; `_in_scope` (line 70) admits only `cancel`, `retry`, and
-`continue` on `{checkpoint, plan_stale}`, and raises `Conflict("{kind} not available yet")` for
-everything else. Story 6-1's first AC requires `answer` on a `blocked` agent row to move the row
-to `queued` and resume the engine, which means passing that gate. `signal_effects.py` already
-implements the `answer` effect correctly (4.5 built all ten kinds), so the only change needed is
-widening `_in_scope` — and that is exactly what this test forbids. There is no second seam: the
-router calls `handle_signal` and nothing else.
+**6 — the fixture and the e2e.** `fixtures/gates-repo/` (three stories, `check.sh` reading a
+committed `GATE_OK`, `.fake-harness/` scenarios); `backend-api/tests/e2e/helpers/gates_fixture.py`
+materialises it as a `file://` origin on either topology and reads the branch back;
+`backend-api/tests/e2e/test_answer_signal.py` walks blocked → Answer → done on the compose
+stack and asserts the archived question, the re-planned Story file, the echoed Answer clause
+and `NOTIFY.md` on the branch.
 
-**Why it is not covered by the round-1 ruling.** Different file, and the ruling says "This
-authorisation covers these four lines only… Do not extend this ruling by analogy."
+## Anchor edits (both authorised, each with strictly-exceeding coverage in the same commit)
 
-**Minimal edit requested.** Invert the one test to assert the landed behaviour, keeping its two
-state assertions inverted with it — nothing else in the file changes, and the parametrized
-`test_every_kind_outside_this_epics_scope_is_refused_not_available_yet` (lines 236-262) does not
-list `answer` and stays exactly as it is:
+| File | Lines | Was | Is | New coverage |
+| --- | --- | --- | --- | --- |
+| `web-client/tests/unit/run-stop-body-blocked.test.ts` | 110-111 | `not.toContain` answer/textarea | `toContain` both | `tests/unit/run-stop-body-answer.test.ts` (17 tests) |
+| `web-client/tests/e2e/run-detail-story-additions.spec.ts` | 173, 177-178 | comment + `toHaveCount(0)` ×2 | corrected comment + `toBeVisible()` / `toHaveCount(1)` | `tests/e2e/run-detail-answer.spec.ts` (4 tests) |
+| `backend-api/tests/unit/application/test_handle_signal.py` | 209-221 | `answer not available yet` | the row reaches `queued`, the Run `running` | `tests/unit/application/test_answer_signal_scope.py` (9 tests) |
 
-```python
-def test_answer_moves_the_blocked_row_and_resumes_the_run() -> None:
-    world = parked("blocked", BUILD, "blocked")
-    ports = effect_ports(world)
-    outcome = send(world, ports, "answer", text="use the psycopg adapter")
-    assert world.status_of(BUILD) == "queued"
-    assert outcome.run.status == "running"
-```
+The `misconfigured` siblings (unit 166, e2e 264) and
+`test_every_kind_outside_this_epics_scope_is_refused_not_available_yet` with its `ids` list
+were not touched.
 
-Strictly-exceeding coverage lands beside it in a new
-`backend-api/tests/unit/application/test_answer_signal_scope.py`: the gate record's `answer`
-event and its `text`, that `answer` on a `timeout` park still gets AD-13's own refusal text
-(the brief's fourth AC), and that the three kinds still outside scope keep the
-`"not available yet"` refusal.
+## Splits (no comment deleted to buy space)
 
-### Conflicts checked and found NOT to be conflicts
+- `application/steps/agent.py` 396 → 397 of 400: the archive went to a new
+  `application/steps/agent_answer.py`, which re-exports `ANSWER_EVENT`/`ANSWER_KEY`/
+  `CONDITION_KEY` back through `agent.py` so every existing import path still resolves.
+- `main.py` 399 → 357 of 400: `HARNESS_VERSION_SETTINGS` and `seed_harness_table` moved to
+  `infrastructure/db/seed.py`, re-exported from `main.py` (the `registry.py` precedent), so
+  `run_migrations` still names one collaborator and the frozen monkeypatches still bind.
 
-Swept before halting, so the next dispatch needs no further rulings:
+## Gates — all run from a clean tree, all green
 
-- `tests/unit/application/steps/test_agent_prompt.py:66-81` pins `compose_prompt`'s `answer`
-  branch to payload keys `condition`/`answer`, while `signal_run` stores the operator's text
-  under `rules/signals.py::ANSWER_KEY == "text"`. **Avoided without an edit**: `compose_prompt`
-  is a pure function over resolved values and holds no `Workspace`, so it cannot read the
-  archived file's `Blocking condition:` line anyway. The new `application/steps/agent_answer.py`
-  resolves both facts — the condition from the archived file (or `spec rejected` at a spec
-  checkpoint) and the text from `ANSWER_KEY` — and `_planned` passes `compose_prompt` a
-  `resume_signal.model_copy` whose payload carries them under the keys `agent.py:86-87` already
-  declares. `compose_prompt`'s contract is unchanged and still true, so the file stays frozen.
-  This is a deliberate deviation from the ruling's wording ("read the operator text from
-  `ANSWER_KEY`" *inside* `compose_prompt`) that keeps its intent and avoids a third anchor edit.
-- `tests/unit/application/steps/test_agent_retry_dispatch.py:292-302`
-  (`test_a_resume_that_is_not_a_retry_archives_nothing`, parametrized over `answer`/`continue`)
-  stays green: the brief scopes the answer archive to **exactly one** `stories/{id}-*.md` match,
-  and that test's world is the ambiguous one with two. Two matches archive nothing and the row
-  parks `misconfigured`, which is also the honest reading of the brief.
-- `tests/unit/test_signals_router.py:170-177` posts `answer` and expects AD-13's own
-  `"invalid for status"` refusal — its Run is not parked `blocked`, so `validate` refuses before
-  the scope gate either way.
-- `tests/unit/test_harness_registry.py:43,58,76` and `tests/unit/test_main_harness_registry.py:25,32,43`
-  pin `build_harnesses` to `["claude"]` and to a subset of `HARNESS_VERSION_SETTINGS`. Safe: the
-  unit `env` fixture derives from `.env.example`, so with `ORCH_TEST_MODE=0` there the `fake`
-  adapter is never registered.
-- `tests/unit/test_main_templates_seed.py:85` (`recorder.order == ["migrate", "seed", "harness"]`)
-  is about `run_migrations`'s three collaborators; seeding a fourth *row* inside
-  `seed_harness_table` does not touch it.
-- `tests/unit/test_e2e_isolation.py:164` forbids `ports` on `backend-api` in the overlay, not
-  `environment`, so `ORCH_TEST_MODE=1` can go there.
-- `tests/unit/test_env_contract.py` and `test_settings.py` derive every count from
-  `Settings.model_fields` and the contract file, so adding `ORCH_TEST_MODE` to both passes.
-- `web-client/tests/unit/run-detail-lib-blocked.test.ts:72` and `run-detail-lib.test.ts:275`
-  pin `blockedSignals` to exclude `answer` and `hasEffect('answer')` to be `false`. Neither
-  changes: the Answer box is its own component with its own payload-carrying post, not a member
-  of the plain button row.
+| Gate | Result |
+| --- | --- |
+| `make lint` | pass — ruff, mypy, import-linter (4 contracts kept), env contract, test pairs (184 backend / 75 web), gen:api `--check`, eslint, prettier, astro check (0 errors) |
+| `make test` | pass — 5098 passed, 1 skipped; `domain/` + `application/` **100 %** branch coverage; web 1031 passed in 76 files |
+| `make openapi` | pass — no drift; `contracts/openapi.json` and `schema.d.ts` unchanged (the read model already published `answer`) |
+| `make e2e` | pass — 154 passed, 11 deselected, 36 subtests, on the disposable `aio-e2e` stack with `ORCH_TEST_MODE=1` |
+| `make e2e-ui` | pass — 124 passed |
 
-### The `fake` harness enum — resolved without touching the shipped templates
+## Notes for the next story
 
-The operator ruled `fake` must be admitted only under `ORCH_TEST_MODE=1`, with the conditional in
-plan-time validation and the shipped templates unchanged. Investigation shows that is already the
-shape of the system: a bound `harness` value is **never** checked against a template's enum
-`values` — `templates/inputs.py` uses `values` only to validate a declared *default*, and
-`api/schemas/runs.py:58` types `harness` as `str | None`. The real admission gate is pre-flight's
-`harness_line` (`application/preflight/checks.py:242-259`), which fails for a harness with no
-`harness` row or a disabled one, and `create_run` refuses on that failing line
-(`create_run.py:190-195`). So seeding the `fake` row `enabled: true` **only** in test mode is
-itself the conditional: without test mode there is no row, `create_run` 409s, and New Workflow —
-which renders the template's declared `values` — never offers `fake`. `templates/epic.yaml`,
-`templates/story.yaml` and `templates/initiative.yaml` stay exactly as they are.
-
-### Code Map (carried forward; still current)
-
-- `application/steps/agent.py` (396/400 lines) — `compose_prompt` at line 151 with `ANSWER`
-  at line 95 and `CONDITION_KEY`/`ANSWER_KEY` at 86-87; `_prepare_writes` at line 224 is the
-  extension point, running `agent_tail.archive_ambiguous` first and making one
-  `PREPARE_MESSAGE` commit over everything staged. Four lines of headroom, so the archive goes
-  in a new `application/steps/agent_answer.py` (the `walk.py → walk_frame.py` precedent), which
-  also owns the resolved-payload helper described above.
-- `application/steps/agent_tail.py` (exactly 400) — `ANSWERS_DIRECTORY` at line 86,
-  `story_files` at 274, `archive_ambiguous` at 290 (the model for reporting **both** ends of a
-  move so `_prepare_writes` stages them; an unstaged move is attributed to the agent by AD-17).
-  No headroom: add nothing here.
-- `application/story_file.py` — `blocking_condition` (109) reads the archived file's condition;
-  `appended` (144) writes the `## Human Answer` block.
-- `application/use_cases/signals.py:70` `_in_scope` — the one-line widening this halt is about.
-- `application/rules/signals.py:141-148` — `answer` already admitted on `{blocked, checkpoint}`
-  × `{agent}`, `text_key = ANSWER_KEY = "text"`; `admitted_signals` already publishes it, so no
-  read-model change is needed for the button to appear.
-- `infrastructure/harness/fake/adapter.py` (new), shaped on
-  `infrastructure/harness/claude/adapter.py` (371 lines): `run` = `wait(start(...))`, scripted
-  file effects in `start` before the process exists, then one real `ProcessRunner` process
-  (`sh` on a generated script: `sleep`, optional `git commit` as `fake <fake@local>`, `exit`),
-  so `pgid` is a real group `kill_group` can reach and `timed_out` is the runner's. Capabilities
-  `preassign_session=True, resume=True, native_tracing=False`. Per-story attempt counter under
-  `settings.work_dir`, never inside the worktree (`_wip_commit`, agent.py:214, would commit it).
-- `infrastructure/harness/registry.py:48` `build_harnesses` — add `fake` behind
-  `settings.orch_test_mode`.
-- `main.py:173-210` `seed_harness_table` / `HARNESS_VERSION_SETTINGS` — seed the `fake` row and
-  enable it, in test mode only. `domain/entities/harness.py:26` `HARNESS_NAMES` stays
-  `("claude", "codex", "local")`.
-- `infrastructure/settings.py` — `orch_test_mode: bool`, plus `ORCH_TEST_MODE=0` in
-  `/.env.example` in the same change (hard rule 8).
-- `docker-compose.e2e.yml` — `environment: ORCH_TEST_MODE=1` on `backend-api` (compose
-  `environment` beats `env_file`; `scripts/generate-env.sh` never rewrites an existing
-  `.env.e2e`).
-- `fixtures/gates-repo/` on the `fixtures/readiness-repo/` shape, plus a
-  `_bmad/_config/manifest.yaml` written at materialisation time exactly as
-  `tests/e2e/test_clone_check.py::manifest_stating` does — pre-flight (AD-16) needs the pinned
-  `BMAD_VERSION` there, and the fake harness never plans, so no `npx bmad-method install`.
-- `backend-api/tests/e2e/helpers/gates_fixture.py` on
-  `tests/e2e/test_clone_check.py::Fixtures` (lines 76-135): one `sh` script run on the host or
-  through `docker compose exec -T backend-api`, bare origin under `$WORK_DIR/e2e-fixtures`,
-  registered by `file://`.
-- Web: `src/components/run/StopBody.tsx` (157/300) renders `QuestionBlock` at line 69 — the
-  Answer box is a new `src/components/run/AnswerBox.tsx` under it, gated on
-  `kind === 'blocked' && detail.admitted_signals.includes('answer')`. The archived filename's
-  `{id}` comes from `detail.stories.find(s => s.state === 'current').story_id` and `{n}` from
-  `stepAt(detail.steps, currentStepPath(detail))?.latest?.n`. `src/islands/RunDetail.tsx`
-  (163 lines) owns the in-flight and 409 state, as it already does for `onSignal`.
-
-### Gates
-
-Not run. No implementation was attempted this round either; the working tree holds only this
-record.
+- **6-2 reuses the archive helper.** `agent_answer.archive_with_answer` fires on
+  `resume_signal.event == "answer"` regardless of the park kind, and
+  `agent_answer.condition` already answers `spec rejected` when the row carries
+  `spec_checkpoint` — so a Reject at a spec checkpoint needs no new archive code, only the
+  button and the park's own body. `compose_prompt` already suppresses `Halt after planning.`
+  for any resume.
+- **6-2 reuses the fake harness.** `fixtures/gates-repo/` already ships story `2`
+  (`spec_checkpoint: true`) and story `3` (`done_checkpoint: true`) with `default.yaml`
+  scenarios that finish in one pass — deliberately `default.yaml` rather than `attempt-1.yaml`,
+  because a Continue makes the *second* dispatch for that story and both must write the same
+  finished file. `tests/e2e/helpers/gates_fixture.py::epic_template_as` is how an e2e runs the
+  epic plan without pinning `epic@1` (`test_templates.py` asserts `pinned_by == 0` for it).
+- **`ORCH_TEST_MODE` defaults to `false`.** It is the only `Settings` field with a default,
+  because `scripts/generate-env.sh` writes `.env.e2e` once and never rewrites it; a required
+  field broke 79 e2e fixtures before this was found.
+- **Still deferred to Epic 7, untouched:** a resumed dispatch records no `pgid`, and
+  `Harness.resume` takes neither `model` nor `budget_usd_remaining`.
