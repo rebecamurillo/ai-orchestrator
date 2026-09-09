@@ -28,7 +28,7 @@ import httpx
 import pytest
 
 from orchestrator.infrastructure.settings import Settings
-from tests.e2e.helpers.gates_fixture import GatesFixture
+from tests.e2e.helpers.gates_fixture import GatesFixture, epic_template_as
 from tests.e2e.test_run_creation import (
     PROJECTS,
     RUNS,
@@ -124,10 +124,17 @@ def parked(api: httpx.Client, gates: GatesFixture, test_mode: None) -> Iterator[
     repository_id = str(created.json()["id"])
     clone_check(api, repository_id)
 
+    template_name = f"e2e-gates-{uuid4().hex}"
+    saved = api.post(
+        f"/api/v1/templates/{template_name}/versions",
+        json={"yaml": epic_template_as(template_name)},
+    )
+    assert saved.status_code == HTTP_CREATED, saved.text
+
     started = api.post(
         RUNS,
         json={
-            "template_name": "epic",
+            "template_name": template_name,
             "template_version": 1,
             "project_id": project_id,
             "repository_id": repository_id,
@@ -164,10 +171,10 @@ def poll_until(api: httpx.Client, run_id: str, done: Any, what: str) -> dict[str
             return detail
         time.sleep(POLL_INTERVAL_SECONDS)
         detail = detail_of(api, run_id)
-    run = detail["run"]
+    alert = detail["alert"] or {}
     pytest.fail(
         f"{what} did not happen within {RUN_TIMEOUT_SECONDS:.0f}s — the Run is "
-        f"{run['status']} at {run.get('park_kind')} on {run.get('park_path')}; "
+        f"{detail['run']['status']} at {alert.get('park_kind')}: {alert.get('reason')}; "
         f"rows: {[(step['path'], step['status']) for step in detail['steps']]}"
     )
 
@@ -187,12 +194,16 @@ def wait_for_park(api: httpx.Client, run_id: str) -> dict[str, Any]:
 
 
 def test_the_run_parks_blocked_with_the_agents_own_question(parked: dict[str, Any]) -> None:
+    """The stop the Operator sees: the park kind, and the agent's own words under it —
+    `alert.reason` is the `## Auto Run Result` section the scripted harness wrote."""
     detail = parked["detail"]
 
-    assert detail["run"]["park_kind"] == "blocked"
-    assert detail["run"]["park_path"] == BUILD
+    assert detail["run"]["status"] == "needs_you"
     assert detail["alert"]["park_kind"] == "blocked"
     assert CONDITION in detail["alert"]["reason"]
+    assert [entry["path"] for entry in detail["gate_record"] if entry["event"] == "blocked"] == [
+        BUILD
+    ]
 
 
 def test_the_park_admits_the_answer(parked: dict[str, Any]) -> None:

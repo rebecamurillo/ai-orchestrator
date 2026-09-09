@@ -123,7 +123,14 @@ class Settings(BaseSettings):
     #: row seeded `enabled` only while this is on. Off is the shipped contract, and off is
     #: what every unit test sees — `tests/unit/conftest.py` builds its environment from
     #: `.env.example`, so the registry a test reads is the production one.
-    orch_test_mode: bool
+    #:
+    #: The one field here with a default, and deliberately: it is test-only, and an
+    #: environment that predates it — an operator's `.env`, the `.env.e2e`
+    #: `scripts/generate-env.sh` writes once and never rewrites — must keep working
+    #: unchanged rather than refusing to start over a variable that only turns a fake on.
+    #: The AD-20 contract is unaffected: the field still has its line in `.env.example`, and
+    #: `scripts/check_env_contract.py` still checks both directions.
+    orch_test_mode: bool = False
     backend_api_port: Annotated[int, Field(ge=MIN_TCP_PORT, le=MAX_TCP_PORT)]
 
     @field_validator("work_dir", "agent_home")
