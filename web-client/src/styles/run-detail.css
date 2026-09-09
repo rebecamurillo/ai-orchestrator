@@ -495,3 +495,173 @@ table.wf-steps tr[data-current='true'] td {
   align-items: center;
   gap: var(--space-6);
 }
+
+/* ── the ARTIFACTS column (6.3, FR-19, FR-23, UX-DR9) ────────────────────── */
+
+.wf-artifacts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* A failed fetch is not the red ERR token (`FailedFetch.tsx`'s own docstring: "a plain,
+   factual command line") — a neutral tone, states the fact, carries no signal colour. */
+.wf-artifacts-error {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.wf-artifacts-tree {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-line);
+}
+
+.wf-artifacts-row {
+  border-bottom: 1px solid var(--color-line);
+  border-left: 1px solid var(--color-line-strong);
+}
+
+.wf-artifacts-dir,
+.wf-artifacts-file {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+  text-align: left;
+}
+
+.wf-artifacts-file {
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+.wf-artifacts-file[aria-current='true'] {
+  background: var(--color-surface-raised);
+  color: var(--color-accent);
+}
+
+.wf-artifacts-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-artifacts-mtime {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-micro);
+}
+
+/* One rule per depth: `ArtifactsTree.tsx`'s own reason for `data-depth` over an inline
+   style — `web-client/AGENTS.md` forbids the latter. */
+.wf-artifacts-row[data-depth='0'] {
+  padding-left: 0;
+}
+.wf-artifacts-row[data-depth='1'] {
+  padding-left: 14px;
+}
+.wf-artifacts-row[data-depth='2'] {
+  padding-left: 28px;
+}
+.wf-artifacts-row[data-depth='3'] {
+  padding-left: 42px;
+}
+.wf-artifacts-row[data-depth='4'] {
+  padding-left: 56px;
+}
+.wf-artifacts-row[data-depth='5'] {
+  padding-left: 70px;
+}
+.wf-artifacts-row[data-depth='6'] {
+  padding-left: 84px;
+}
+.wf-artifacts-row[data-depth='7'] {
+  padding-left: 98px;
+}
+.wf-artifacts-row[data-depth='8'] {
+  padding-left: 112px;
+}
+
+.wf-artifacts-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-surface-inset);
+  border: 1px solid var(--color-line-strong);
+}
+
+.wf-artifacts-viewer-body {
+  color: var(--color-text);
+  font-size: var(--type-body);
+  line-height: var(--type-body-line);
+  overflow-x: auto;
+}
+
+.wf-artifacts-viewer-body pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+}
+
+.wf-artifacts-readonly {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.wf-editor-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.wf-editor {
+  width: 100%;
+  min-height: 240px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+  resize: vertical;
+}
+
+.wf-editor:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.wf-editor-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+}
+
+.wf-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.wf-editor-cancel {
+  padding: var(--space-3) var(--space-6);
+  border: 1px solid var(--color-line-strong);
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  cursor: pointer;
+}

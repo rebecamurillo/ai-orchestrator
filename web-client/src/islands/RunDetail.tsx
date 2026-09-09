@@ -22,6 +22,7 @@ import { useStore } from '@nanostores/react';
 import { api } from '../api/client';
 import type { components } from '../api/schema';
 import FailedFetch from '../components/FailedFetch';
+import ArtifactsPanel from '../components/run/ArtifactsPanel';
 import Banner from '../components/run/Banner';
 import CancelModal from '../components/run/CancelModal';
 import CostBlock from '../components/run/CostBlock';
@@ -31,6 +32,7 @@ import StepsTable from '../components/run/StepsTable';
 import StopBody from '../components/run/StopBody';
 import StoriesStrip from '../components/run/StoriesStrip';
 import { answerBody } from '../lib/run/answer';
+import { isTree } from '../lib/run/artifacts';
 import { isSpecCheckpoint, plannedFilePath } from '../lib/run/checkpoint';
 import { detailRequestPath, runToken, stopKind, type RunDetailOut } from '../lib/run/detail';
 import { signalBody, signalsRequestPath, type SignalIn, type SignalKind } from '../lib/run/signals';
@@ -107,7 +109,10 @@ export default function RunDetail({ runId }: Props) {
       const { data } = await api.GET('/runs/{run_id}/files', {
         params: { path: { run_id: runId }, query: { path } },
       });
-      if (!cancelled) setPlannedFile(data ?? null);
+      // `path` was given, so this is always `RunFileOut` (6.3 widened the response type to
+      // `RunFileOut | RunFilesTreeOut` only for the no-`path` tree branch) — `isTree` is the
+      // one place that tells the two apart.
+      if (!cancelled) setPlannedFile(data && !isTree(data) ? data : null);
     })();
     return () => {
       cancelled = true;
@@ -179,6 +184,7 @@ export default function RunDetail({ runId }: Props) {
           <StoriesStrip stories={detail.stories} />
           <CostBlock detail={detail} />
           <GateRecord detail={detail} token={token} />
+          <ArtifactsPanel runId={runId} run={detail.run} folder={detail.header.meta.folder} />
         </div>
       </div>
       {cancelOpen ? (

@@ -19,6 +19,10 @@ from orchestrator.domain.ports.workspace import TreeEntry, WorkspaceError
 NO_ROOT = "workspace unavailable: no worktree yet"
 #: What an absolute path or a `..` segment is refused with, naming the path asked for.
 OUTSIDE_ROOT = "path outside the workspace: {path}"
+#: What `write` refuses with when `path` already names a directory — `write_text` raises a
+#: plain `IsADirectoryError` (an `OSError`, not this port's `WorkspaceError`), which would
+#: otherwise leak past every caller's `except WorkspaceError`.
+IS_A_DIRECTORY = "path names a directory: {path}"
 
 
 class FsWorkspace:
@@ -35,6 +39,8 @@ class FsWorkspace:
 
     def write(self, path: str, text: str) -> None:
         target = self._resolve(path)
+        if target.is_dir():
+            raise WorkspaceError(IS_A_DIRECTORY.format(path=path))
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text)
 
@@ -69,10 +75,17 @@ class FsWorkspace:
         assert root is not None  # `_resolve` above already refused `None`
         if not base.exists():
             return ()
-        return tuple(
-            TreeEntry(path=_posix(entry.relative_to(root)), is_dir=entry.is_dir())
-            for entry in sorted(base.rglob("*"))
-        )
+        entries: list[TreeEntry] = []
+        for candidate in sorted(base.rglob("*")):
+            try:
+                entries.append(_entry(candidate, root))
+            except OSError:
+                # Gone between the `rglob` listing and this stat/is_dir — a concurrent
+                # sweep or commit is not this read's failure (AD-14's "already gone is not
+                # a failure", the same discipline `remove`/`mtime` already keep on this
+                # port) — the entry is simply not reported rather than crashing the walk.
+                continue
+        return tuple(entries)
 
     def remove(self, path: str) -> None:
         target = self._resolve(path)
@@ -103,3 +116,15 @@ def _reject_escape(path: str) -> None:
 def _posix(relative: Path) -> str:
     """A relative path in the one separator every caller and every test compares by."""
     return relative.as_posix()
+
+
+def _entry(entry: Path, root: Path) -> TreeEntry:
+    """One `tree()` row: `0`/`0.0` for a directory, `entry.stat()` for a file — the same
+    `stat` call `rglob` already needed to sort, read once rather than per field."""
+    is_dir = entry.is_dir()
+    if is_dir:
+        return TreeEntry(path=_posix(entry.relative_to(root)), is_dir=True)
+    stat = entry.stat()
+    return TreeEntry(
+        path=_posix(entry.relative_to(root)), is_dir=False, size=stat.st_size, mtime=stat.st_mtime
+    )

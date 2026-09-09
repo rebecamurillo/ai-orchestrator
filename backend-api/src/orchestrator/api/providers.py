@@ -39,7 +39,7 @@ from orchestrator.application.use_cases.harnesses import HarnessPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.queue import QueuePorts
-from orchestrator.application.use_cases.run_files import RunFilesPorts
+from orchestrator.application.use_cases.run_files import RunFilesPorts, RunFilesWritePorts
 from orchestrator.application.use_cases.run_views import RunViewPorts
 from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.application.use_cases.signals import SignalEffectPorts
@@ -276,6 +276,23 @@ def run_files_ports(request: Request) -> Iterator[RunFilesPorts]:
     session_factory = from_state(request, SESSION_FACTORY)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
         yield RunFilesPorts(runs=SQLAlchemyRunRepository(uow.session), workspace=FsWorkspace)
+
+
+def run_files_write_ports(request: Request) -> Iterator[RunFilesWritePorts]:
+    """The ports `PUT /runs/{id}/files` writes through (6.3): `run_files_ports`'s own shape,
+    plus `Git` to stage and commit the Operator's edit, a `GateRecordRepository` for the
+    `spec_edit` line, a `Clock`, and the `UnitOfWork` itself so the use case can `commit()`.
+    """
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield RunFilesWritePorts(
+            runs=SQLAlchemyRunRepository(uow.session),
+            workspace=FsWorkspace,
+            git=_required_git(request, "run_files"),
+            records=SQLAlchemyGateRecordRepository(uow.session),
+            clock=SystemClock(),
+            uow=uow,
+        )
 
 
 def signal_effect_ports(request: Request) -> Iterator[SignalEffectPorts]:

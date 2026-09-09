@@ -87,10 +87,10 @@ def api(env: dict[str, str]) -> Api:
     return Api(env, {STORY_PATH: CONTENT})
 
 
-def test_the_router_declares_exactly_one_operation() -> None:
+def test_the_router_declares_exactly_the_two_operations() -> None:
     routes = [(sorted(route.methods), route.path) for route in router_module.router.routes]
 
-    assert routes == [(["GET"], "/runs/{run_id}/files")]
+    assert routes == [(["GET"], "/runs/{run_id}/files"), (["PUT"], "/runs/{run_id}/files")]
     for route in router_module.router.routes:
         assert route.dependencies == []
 
@@ -154,14 +154,17 @@ async def test_a_path_outside_the_spec_folder_is_a_403(api: Api) -> None:
     assert response.headers["content-type"].startswith(PROBLEM_MEDIA_TYPE)
 
 
-async def test_a_missing_path_query_param_is_a_422(api: Api) -> None:
+async def test_a_missing_path_query_param_answers_the_tree(api: Api) -> None:
     run = a_run()
     api.runs.add(run)
 
     async with api.client() as client:
         response = await client.get(f"{RUNS}/{run.id}/files")
 
-    assert response.status_code == HTTP_UNPROCESSABLE
+    assert response.status_code == HTTP_OK
+    body = response.json()
+    assert body["root"] == SPEC_FOLDER
+    assert any(entry["path"] == STORY_PATH for entry in body["entries"])
 
 
 async def test_without_the_bearer_it_is_a_401(api: Api) -> None:

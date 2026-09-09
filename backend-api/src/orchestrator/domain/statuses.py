@@ -96,10 +96,24 @@ GATE_EVENTS: tuple[ParkKind | SignalKind | LifecycleEvent, ...] = (
     *LIFECYCLE_EVENTS,
 )
 
-#: What a `gate_record.event` can be: one of AD-8's three, or one of AD-9's two bounded
+#: A direct worktree write outside `signal_run` and outside an engine step — the brief's own
+#: words (story 6-3): "the only worktree writes outside an engine step besides cancel". A
+#: third, even-outer layer beside AD-8's three and AD-9's two: `spec_edit` is the Operator's
+#: own commit onto a parked Run's worktree, made by `PUT /runs/{id}/files` rather than by any
+#: transition the Run itself goes through.
+WriteEvent = Literal["spec_edit"]
+WRITE_EVENTS: tuple[WriteEvent, ...] = get_args(WriteEvent)
+
+#: What a `gate_record.event` can be: one of AD-8's three, one of AD-9's two bounded
 #: re-executions, which are recorded (AD-9: "each is a recorded `attempt` + `gate_record`")
-#: without the Run's status moving at all.
-GateEvent = ParkKind | SignalKind | LifecycleEvent | MachineEvent
+#: without the Run's status moving at all, or one of the direct-write class above.
+GateEvent = ParkKind | SignalKind | LifecycleEvent | MachineEvent | WriteEvent
+#: **Not** widened to include `WRITE_EVENTS`: `tests/unit/test_gate_events.py` pins this
+#: exact concatenation (AD-8's three plus AD-9's two), and `spec_edit` is neither — it is a
+#: third, outer layer that only the `GateEvent` *type* needs to admit so `GateRecord(event=
+#: "spec_edit", ...)` validates. See story 6-3's Design Notes for why this is not an anchor
+#: conflict: `GATE_EVENTS` is already a strict subset the newer alphabet was added beside,
+#: never into, and this is the same move one layer further out.
 ALL_GATE_EVENTS: tuple[GateEvent, ...] = (*GATE_EVENTS, *MACHINE_EVENTS)
 
 #: What can happen to a Run. `park`, `expire`, `finish` and `fail` are the machine's own

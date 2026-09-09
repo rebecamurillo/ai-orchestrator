@@ -771,6 +771,10 @@
                   "retry_auto"
                 ],
                 "type": "string"
+              },
+              {
+                "const": "spec_edit",
+                "type": "string"
               }
             ],
             "title": "Event"
@@ -2815,6 +2819,58 @@
         "title": "RunDetailSummaryOut",
         "type": "object"
       },
+      "RunFileEntryOut": {
+        "description": "One row of a `RunFilesTreeOut`, or the result of a `PUT` (6-3) \u2014 the same shape\neither way: `path`, `kind` (`\"file\"`/`\"dir\"`, from `TreeEntry.is_dir`), `size`, `mtime`.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "file",
+              "dir"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "mtime": {
+            "title": "Mtime",
+            "type": "number"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "size",
+          "mtime"
+        ],
+        "title": "RunFileEntryOut",
+        "type": "object"
+      },
+      "RunFileIn": {
+        "description": "`PUT /runs/{id}/files`'s own body (6-3): the path to write, and its whole new text.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "title": "RunFileIn",
+        "type": "object"
+      },
       "RunFileOut": {
         "description": "`{path, content, size, mtime}` \u2014 the resolved path (a glob is expanded server-side,\nso this is never the pattern the request named), the file's whole text, its byte length\nand its `mtime` (`Workspace.mtime`'s own POSIX timestamp).",
         "properties": {
@@ -2842,6 +2898,28 @@
           "mtime"
         ],
         "title": "RunFileOut",
+        "type": "object"
+      },
+      "RunFilesTreeOut": {
+        "description": "`GET /runs/{id}/files` with no `path` (6-3): `{root, entries[]}` over the Run's own\nscope folder.",
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/RunFileEntryOut"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root",
+          "entries"
+        ],
+        "title": "RunFilesTreeOut",
         "type": "object"
       },
       "RunGraphOut": {
@@ -5434,7 +5512,7 @@
     },
     "/api/v1/runs/{run_id}/files": {
       "get": {
-        "description": "Read-only (6.3 adds the write): `path` may be a single-segment glob, resolved here \u2014\nsee the use case's own docstring for the exact refusal order.",
+        "description": "`path` omitted (6-3): every entry under the Run's own scope folder, recursively.\n`path` given (6-2, unchanged): a single-segment glob is resolved here \u2014 see the use\ncase's own docstring for the exact refusal order.",
         "operationId": "get_file_api_v1_runs__run_id__files_get",
         "parameters": [
           {
@@ -5450,10 +5528,17 @@
           {
             "in": "query",
             "name": "path",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Path",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Path"
             }
           }
         ],
@@ -5462,7 +5547,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunFileOut"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RunFileOut"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RunFilesTreeOut"
+                    }
+                  ],
+                  "title": "Response Get File Api V1 Runs  Run Id  Files Get"
                 }
               }
             },
@@ -5534,7 +5627,129 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Read one file inside a Run's own spec folder",
+        "summary": "Read one file inside a Run's own spec folder, or list its tree",
+        "tags": [
+          "runs"
+        ]
+      },
+      "put": {
+        "description": "Commits `body.content` at `body.path` as `spec: operator edit (orchestrator)`,\nappends one `spec_edit` gate record, and answers the written row \u2014 see the use case's\nown docstring for the five checks and their order.",
+        "operationId": "put_file_api_v1_runs__run_id__files_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunFileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunFileEntryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The path is well formed but outside the Run's own spec folder."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The path names a list file the plan already read, or the Run is not parked without a terminal session."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The path escapes the workspace (`..`, or absolute)."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Write one file inside a Run's own spec folder while parked",
         "tags": [
           "runs"
         ]
