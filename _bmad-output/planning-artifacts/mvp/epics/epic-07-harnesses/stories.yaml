@@ -1,5 +1,11 @@
 # Epic 7 — built unattended by Sonnet-class agents through bmad-build-auto (folder+id dispatch),
 # except the two readiness proofs, which need the host services and pause for the operator.
+#
+# This epic is run by the orchestrator itself. Stories 7-2 and 7-4 are operator-run: a coding agent
+# writes the code and the runbook, halts `blocked` naming what the operator must run, and — resumed
+# with the operator's Answer — records what they observed. An agent never runs a real harness, never
+# reconfigures the host, and never records an outcome nobody saw. Each of those two briefs opens with
+# an "Operator and agent split" section stating exactly where the line falls.
 - id: "7-1"
   title: Codex adapter and script
   description: >-
@@ -23,6 +29,10 @@
     Read _bmad-output/planning-artifacts/mvp/epics/epic-07-harnesses/briefs/7-2-codex-readiness-end-to-end.md
     before planning. It is this story's complete requirements. Do not read the other briefs. This story
     needs the host LiteLLM and Langfuse reachable; halt blocked with the reason if they are not.
+    Read its "Operator and agent split" section first: you write the code, the fallbacks and the runbook,
+    then halt blocked naming exactly what the operator must run and the facts to report back. You never
+    run the real harness yourself, and you record nothing in the addendum that the operator did not
+    observe.
 - id: "7-3"
   title: OpenCode adapter and script for local models
   description: >-
@@ -45,6 +55,10 @@
     before planning. It is this story's complete requirements. Do not read the other briefs. This story
     needs the host LiteLLM, Langfuse, and the local model server reachable; halt blocked with the reason if
     they are not.
+    Read its "Operator and agent split" section first: you write the proposed host config and the runbook,
+    then halt blocked naming what the operator must start, restart and run. You never apply host changes
+    or run the real harness yourself, and you record nothing in the addendum that the operator did not
+    observe. Recording the PRD 6.1 fallback is an acceptable outcome for this story.
 - id: "7-5"
   title: Runs history
   description: >-
