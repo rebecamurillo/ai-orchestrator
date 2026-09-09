@@ -1,0 +1,31 @@
+# Story 3, second dispatch: the redispatch a failed `verify` sends back (FR-10, SPEC CAP-8).
+#
+# Only ever read by a Run that dispatches story 3 twice, which only the verify-failure path
+# does — a suite that walks story 3 once never reaches this file and keeps `default.yaml`.
+#
+# It writes the same finished Story file, because the agent believes it is done; the gate
+# file `default.yaml` deleted is already gone and already committed, so `verify` fails a
+# second time and the Run parks `verify_failed · verify failed 2/2`.
+#
+# `commit:` is deliberately absent. What this dispatch leaves is uncommitted, so the
+# commit-guard that runs after the Operator's *Skip story* has something real to commit and
+# does it under the message `signal_effects.py::SKIP_MESSAGE` rewrote —
+# `story 3: skipped by operator` — rather than ending `no changes` with the message unused.
+story_file:
+  slug: ship
+  content: |
+    ---
+    status: done
+    ---
+
+    # Story 3 — Record the shipment
+
+    ## Auto Run Result
+
+    Status: done
+files:
+  - path: SHIP_NOTES.md
+    content: |
+      Left uncommitted by the agent; the commit guard is what puts it on the branch.
+exit_code: 0
+usage: { tokens_in: 70, tokens_out: 110, cost_usd: "0.01" }

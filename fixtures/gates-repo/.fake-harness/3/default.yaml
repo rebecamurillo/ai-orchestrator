@@ -1,5 +1,13 @@
-# Story 3, every dispatch: the last story, which the epic pauses after (SPEC CAP-2's done
-# checkpoint). One dispatch is enough — nothing stops this story itself.
+# Story 3, first dispatch: the last story, which the epic pauses after (SPEC CAP-2's done
+# checkpoint). One dispatch is enough for a Run whose quality gate is `sh check.sh` —
+# nothing stops this story itself there.
+#
+# `delete:` removes the spec-folder gate file (SPEC CAP-8, story 6-8). It is deliberately
+# *not* the root `GATE_OK` that `check.sh` reads, so this key changes nothing for the suites
+# that use that gate: story 3 still verifies green for them. A Run registered with
+# `quality_gate_command: sh check-spec.sh` reads `specs/gates/GATE_OK` instead, so for that
+# Run this deletion is what makes `verify` fail — twice, once here and once on the
+# redispatch `attempt-2.yaml` scripts — which is the stop UJ-3's scenario C skips from.
 story_file:
   slug: ship
   content: |
@@ -16,6 +24,8 @@ files:
   - path: SHIP.md
     content: |
       Shipped.
+delete:
+  - specs/gates/GATE_OK
 commit: true
 exit_code: 0
 usage: { tokens_in: 80, tokens_out: 120, cost_usd: "0.01" }

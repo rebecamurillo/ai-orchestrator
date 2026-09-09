@@ -29,6 +29,14 @@ and `resume` is `wait` over the same private start — the same three-way split
 `claude/result.py`'s parser rather than out of a field kept in memory: the envelope this
 harness prints is the same shape a real one prints, so the path under test is the real one.
 
+**`delete:` is applied before anything is written** (6.8). `scenario.py`'s schema carries a
+list of worktree-relative paths this dispatch removes, which is how a scenario makes the
+target repository's own quality gate fail: the gate reads a file, and a `verify` failure is
+that file being *gone*, not being different. Deletes run first so a scenario that deletes and
+re-creates the same path ends with the write; a path that names a directory or is already
+absent is skipped rather than reported, the same silence every other scenario key keeps.
+`scenario._deletes` has already dropped anything that could reach outside the worktree.
+
 **It reads no model and never leaves the worktree.** `model` and `budget_usd_remaining` are
 accepted because the port declares them and ignored because a scenario decides everything;
 `native_tracing` is `False`, so the attempt's span is the orchestrator's own (AD-11).
@@ -227,6 +235,8 @@ def _apply(
     document: shelling it out would make every scenario a quoting problem, and the point of
     this harness is that a test can write what it means.
     """
+    for path in scenario.delete:
+        _remove(cwd / path)
     for spec in scenario.files:
         _write(cwd / spec.path, spec.content)
     story = scenario.story_file
@@ -244,6 +254,19 @@ def _apply(
 def _write(target: Path, content: str) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding=ENCODING)
+
+
+def _remove(target: Path) -> None:
+    """One `delete:` entry, if it names a file that is there (6.8).
+
+    Files only, and never a directory: a scenario removing a tree would be removing the
+    `.fake-harness/` directory it is itself read from one typo later, and no scenario this
+    harness exists for needs it. `missing_ok` covers the second dispatch of a scenario that
+    already deleted the path, which is the ordinary case for a `default.yaml`.
+    """
+    if target.is_dir():
+        return
+    target.unlink(missing_ok=True)
 
 
 def _script(cwd: Path, story_id: str, scenario: scenarios.Scenario) -> str:

@@ -9,12 +9,21 @@ it in the fixture repository is what makes the loop testable end to end: a test 
 ```yaml
 story_file: { slug: notify, content: "---\\nstatus: blocked\\n---\\n..." }
 files: [{ path: src/notify.py, content: "..." }]
+delete: [GATE_OK]
 commit: true
 exit_code: 0
 sleep_seconds: 0
 echo_prompt: true
 usage: { tokens_in: 120, tokens_out: 340, cost_usd: "0.02" }
 ```
+
+**`delete:` is the one effect `files:` cannot express** (6.8). A scenario that has to make a
+repository's own quality gate *fail* has to remove the file the gate reads: writing it with
+different contents is a different scenario, and every gate command is free to decide what
+"present" means. Paths are relative to the worktree and are dropped, not refused, when they
+are absolute or carry a `..` part — a scenario is test input inside a Run's worktree, and a
+delete that could reach outside it is a mistake this harness declines to carry out rather
+than a traceback in a durable step.
 
 **Nothing here raises.** A missing file, YAML that does not load, a document that is not a
 mapping, a key of the wrong type: every one of them is the field's default, because a
@@ -38,7 +47,7 @@ import hashlib
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 
@@ -94,6 +103,9 @@ class Scenario:
 
     story_file: StoryFileSpec | None = None
     files: tuple[FileSpec, ...] = field(default_factory=tuple)
+    #: Worktree-relative paths removed before anything is written (6.8) — how a scenario
+    #: makes the repository's own quality gate fail.
+    delete: tuple[str, ...] = field(default_factory=tuple)
     #: `git add -A && git commit` as `fake <fake@local>` after the files are written.
     commit: bool = False
     exit_code: int = 0
@@ -139,6 +151,7 @@ def parse(text: str) -> Scenario:
     return Scenario(
         story_file=_story_file(loaded.get("story_file")),
         files=_files(loaded.get("files")),
+        delete=_deletes(loaded.get("delete")),
         commit=loaded.get("commit") is True,
         exit_code=_int(loaded.get("exit_code"), 0),
         sleep_seconds=_float(loaded.get("sleep_seconds"), 0.0),
@@ -196,6 +209,33 @@ def _files(value: object) -> tuple[FileSpec, ...]:
         if isinstance(path, str) and path.strip():
             kept.append(FileSpec(path=path.strip(), content=_text(entry.get("content"))))
     return tuple(kept)
+
+
+def _deletes(value: object) -> tuple[str, ...]:
+    """The `delete:` list, keeping only worktree-relative paths (6.8).
+
+    Same shape as `_files`, and the same silence: a document that is not a list, an entry
+    that is not a string, a blank one, and one that escapes the worktree are all dropped.
+    """
+    if not isinstance(value, list):
+        return ()
+    kept = [
+        entry.strip()
+        for entry in value
+        if isinstance(entry, str) and entry.strip() and not _escapes(entry.strip())
+    ]
+    return tuple(kept)
+
+
+def _escapes(path: str) -> bool:
+    """Whether `path` could reach outside the worktree it is resolved against.
+
+    `application/use_cases/run_files.py::_escapes` restated: that one guards an Operator's
+    own path over HTTP, this one guards a scenario file's, and neither may import the other
+    (AD-2 — `infrastructure/` does not reach into `application/` for a helper).
+    """
+    pure = PurePosixPath(path)
+    return pure.is_absolute() or ".." in pure.parts
 
 
 def _usage(value: object) -> HarnessUsage | None:

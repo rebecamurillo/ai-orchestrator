@@ -20,6 +20,9 @@ diagram has no route from `running` to `queued` — so this is where such a row 
 Without it the walk fell straight through to `close_run`, which read the same row as a stall
 and parked `internal`, a park that admits no signal but `cancel`.
 
+**And with the `verify` row a redispatch sent it back from** (6.8) — the same stall one row
+later, and FR-10's own second turn, which had never happened. `_sent_back` says why.
+
 **`close_run` is what "nothing to run" means.** All `done`/`skipped` rows finishes the Run;
 no queued row plus an unfinished one is a stall, reported as an `internal` park naming the
 row rather than a Run quietly reaching `done`. A Run no longer `running` here is neither —
@@ -123,6 +126,9 @@ NEEDS_YOU = "needs_you"
 #: The status a Run has to be in for either of `close_run`'s two endings to apply.
 RUNNING = "running"
 
+#: The status a row a redispatch sent the walk back from is left in — see `_sent_back`.
+ERROR = "error"
+
 #: The line a close that arrives after the Run already moved leaves, and nothing else.
 LATE_CLOSE = "close ignored"
 
@@ -138,6 +144,8 @@ def next_row(ports: WalkPorts, run_id: UUID) -> int | None:
         row = writers.steps.first_queued(run_id)
         if row is None:
             row = _resumed_in_place(writers, run_id)
+        if row is None:
+            row = _sent_back(writers, run_id)
         if row is None:
             row = _start_the_plan(writers, run_id)
         writers.uow.commit()
@@ -155,6 +163,46 @@ def _resumed_in_place(ports: WriterPorts, run_id: UUID) -> StepRun | None:
     """
     rows = ports.steps.list_for_run(run_id)
     return next((row for row in rows if row.status == RUNNING), None)
+
+
+def _sent_back(ports: WriterPorts, run_id: UUID) -> StepRun | None:
+    """The row a redispatch sent the walk back from, once its target has finished (FR-10).
+
+    `on_fail: {redispatch, max}` is the second half of FR-10: a failed `verify` sends the
+    Run back to the Story's `build` row, the agent gets its file back at `in-progress` with
+    `## Verify Failure`, and the gate then runs **again** — AD-9's "exhaustion parks the
+    Run" is only reachable if it does.
+
+    Nothing put it back on the queue. `apply_step_result::_redispatch` writes the *target*
+    `queued` and deliberately leaves every row between it and the sender as it stands
+    (AD-9); the sender itself is the row the caller has just written `error`. When the
+    re-dispatched target finishes, `_advance` looks at its successor — the sender — sees a
+    row that is neither `planned` nor `skipped`, and correctly declines to touch it. So the
+    walk fell through to `close_run`, which reads an unfinished row as a stall and parks
+    `internal`: a stop that admits no signal but `cancel`. Every Run whose quality gate
+    failed once was unrecoverable, and the `verify failed {n}/{n}` park AD-9 specifies could
+    never be reached at all.
+
+    This is `_resumed_in_place`'s twin, one row later in the same walk and for the same
+    reason. `queue_row` reaches AD-8's own `("error", "retry") -> "queued"` pair, so no new
+    transition is invented; the bound stays `redispatch_count` on the target, which
+    `_redispatch` has already counted, and this call adds nothing to it.
+
+    **Only while the Run is `running`, and that guard is the whole of the bound here.** An
+    exhausted redispatch leaves exactly the same rows behind — the target `done`, the gate
+    `error` — and differs only in that `_redispatch` parked the Run on it. `_start_the_plan`
+    keeps a parked Run still by reading the rows (`STARTABLE`), which cannot tell these two
+    states apart, so this one reads the Run itself: without it, `verify failed 2/2` would
+    resume of its own accord and the Operator's stop would never hold.
+    """
+    if require_run(ports, run_id).status != RUNNING:
+        return None
+    rows = ports.steps.list_for_run(run_id)
+    done = [row.seq for row in rows if row.status in FINISHED]
+    for row in rows:
+        if row.status == ERROR and any(_redispatches_to(row, seq) for seq in done):
+            return queue_row(ports, row)
+    return None
 
 
 def _start_the_plan(ports: WriterPorts, run_id: UUID) -> StepRun | None:
