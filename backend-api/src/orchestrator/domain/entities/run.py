@@ -90,6 +90,14 @@ class Run(BaseModel):
     #: The Langfuse trace this Run's attempt spans hang under (AD-11).
     trace_id: str | None = None
     terminal_session: bool = False
+    #: How many consecutive `terminal_poll` fires have found the Story file `done` and the
+    #: tree clean (AD-13, AD-14, FR-21). Two is the threshold; anything unclean resets it to
+    #: zero, and sending `terminal_resume` spends it back to zero, so a second terminal
+    #: session on the same Run starts counting from nothing. An `int` and not a timestamp:
+    #: `tests/unit/test_run_repository_adapter.py`'s closed set of nullable `run` columns is
+    #: frozen, and a `NOT NULL` column with a default reaches the same place without joining
+    #: it — the same reasoning `worktrees_removed` records above.
+    terminal_clean_polls: int = 0
     #: Seconds the Operator had this Run open, batched from the activity endpoint.
     active_seconds: int = 0
     last_opened_at: datetime | None = None

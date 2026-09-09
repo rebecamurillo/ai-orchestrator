@@ -29,7 +29,6 @@ from tests.unit.fakes.process import FakeProcessRunner
 
 BUILD = "stories[0].build"
 VERIFY = "stories[0].verify"
-COMMIT_GUARD = "stories[0].commit-guard"
 CHECKPOINT_ROW = "stories[1].after"
 WORK_DIR = "/work"
 
@@ -194,71 +193,18 @@ def test_continue_on_plan_stale_resumes_the_row_itself() -> None:
 # ── out of scope: refused after `validate` passes, nothing written ──────────────────────
 
 
-def test_continue_on_protected_path_is_refused_not_available_yet() -> None:
-    world = parked("protected_path", COMMIT_GUARD, "error")
-    ports = effect_ports(world)
-
-    with pytest.raises(Conflict, match="continue not available yet"):
-        send(world, ports, "continue")
-
-    assert world.status_of(COMMIT_GUARD) == "error"
-    assert world.engine.calls == []
-
-
-def test_answer_is_refused_not_available_yet_once_validation_passes() -> None:
-    """The brief's own AC: `answer` on a `blocked` Run in this epic validates and is then
-    refused — `detail` says so, and nothing about the row or the Run moved."""
+def test_answer_moves_the_blocked_row_and_resumes_the_run() -> None:
+    """`answer` was refused here until SPEC CAP-1 (6.1) built the `agent` row's own resume —
+    the archive, the re-dispatch and the prompt clause. It is in scope from that story on:
+    the blocked row goes back to `queued` and the Run leaves `needs_you`, which is FR-18's
+    "the Run leaves `needs_you` as soon as `signal_run` commits"."""
     world = parked("blocked", BUILD, "blocked")
     ports = effect_ports(world)
 
-    with pytest.raises(Conflict, match="answer not available yet"):
-        send(world, ports, "answer", text="use the psycopg adapter")
+    outcome = send(world, ports, "answer", text="use the psycopg adapter")
 
-    assert world.status_of(BUILD) == "blocked"
-    assert world.stored_run().status == "needs_you"
-
-
-def _skip_epic_world() -> World:
-    return parked("push_rejected", "push", "error")
-
-
-def _terminal_release_world() -> World:
-    return parked("misconfigured", "push", "error", terminal_session=True)
-
-
-def _terminal_resume_world() -> World:
-    return parked("blocked", BUILD, "blocked", terminal_session=True)
-
-
-@pytest.mark.parametrize(
-    ("world_factory", "kind", "payload"),
-    [
-        (lambda: parked("verify_failed", VERIFY, "error"), "skip_story", {}),
-        (_skip_epic_world, "skip_epic", {}),
-        (lambda: parked("budget", BUILD, "blocked"), "budget_raise", {"budget_usd": "50"}),
-        (lambda: parked("misconfigured", "push", "error"), "terminal_start", {}),
-        (_terminal_release_world, "terminal_release", {}),
-        (_terminal_resume_world, "terminal_resume", {}),
-    ],
-    ids=[
-        "skip_story",
-        "skip_epic",
-        "budget_raise",
-        "terminal_start",
-        "terminal_release",
-        "terminal_resume",
-    ],
-)
-def test_every_kind_outside_this_epics_scope_is_refused_not_available_yet(
-    world_factory: object, kind: str, payload: dict[str, object]
-) -> None:
-    world = world_factory()  # type: ignore[operator]
-    ports = effect_ports(world)
-
-    with pytest.raises(Conflict, match=f"{kind} not available yet"):
-        send(world, ports, kind, **payload)
-
-    assert world.engine.calls == []
+    assert world.status_of(BUILD) == "queued"
+    assert outcome.run.status == "running"
 
 
 def test_a_signal_ad13_itself_refuses_keeps_ad13s_own_refusal_text() -> None:

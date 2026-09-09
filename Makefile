@@ -67,6 +67,7 @@ e2e:
 	set -e; \
 	set -a; . ./$(E2E_ENV); set +a; \
 	trap '$(E2E_COMPOSE) down -v' EXIT; \
+	$(E2E_COMPOSE) down -v; \
 	$(E2E_COMPOSE) up -d --build --wait backend-api; \
 	COMPOSE_PROJECT_NAME=aio-e2e; \
 	COMPOSE_FILE=docker-compose.yml:docker-compose.e2e.yml; \

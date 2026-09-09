@@ -1,8 +1,11 @@
 /**
  * The Run detail island (4.15, SPEC CAP-15, FR-23): one poll of `GET /runs/{id}/detail`,
  * `Header`/`Banner`/`StopBody`/`StepsTable`/`StoriesStrip`/`CostBlock`/`GateRecord`
- * composed from it, the Cancel confirm, and the two effects this epic gives a signal button
- * (`retry`, `continue` — `cancel` is its own always-present control). A screen reads one
+ * composed from it, the Cancel confirm, and the effects a signal button has (`retry`,
+ * `continue`, and the three that carry a payload: 6.1's `answer` and 6.6's `budget_raise`
+ * and Accept (`continue` with the files the park recorded); 6.7's `terminal_start` and
+ * `terminal_release` come off the command block — `cancel` is its own
+ * always-present control). A screen reads one
  * endpoint and aggregates nothing (AD-8): every status shown here is `run.status`/`alert.
  * park_kind`/`admitted_signals`, verbatim off the response, never derived by this island.
  *
@@ -21,6 +24,7 @@ import { useStore } from '@nanostores/react';
 import { api } from '../api/client';
 import type { components } from '../api/schema';
 import FailedFetch from '../components/FailedFetch';
+import ArtifactsPanel from '../components/run/ArtifactsPanel';
 import Banner from '../components/run/Banner';
 import CancelModal from '../components/run/CancelModal';
 import CostBlock from '../components/run/CostBlock';
@@ -29,12 +33,19 @@ import Header from '../components/run/Header';
 import StepsTable from '../components/run/StepsTable';
 import StopBody from '../components/run/StopBody';
 import StoriesStrip from '../components/run/StoriesStrip';
-import { detailRequestPath, runToken, type RunDetailOut } from '../lib/run/detail';
-import { signalBody, signalsRequestPath, type SignalKind } from '../lib/run/signals';
+import { acceptBody } from '../lib/run/accept';
+import { answerBody } from '../lib/run/answer';
+import { budgetRaiseBody } from '../lib/run/budget';
+import { isFile } from '../lib/run/artifacts';
+import { isSpecCheckpoint, plannedFilePath } from '../lib/run/checkpoint';
+import { detailRequestPath, runToken, stopKind, type RunDetailOut } from '../lib/run/detail';
+import { signalBody, signalsRequestPath, type SignalIn, type SignalKind } from '../lib/run/signals';
+import { TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
 import '../styles/run-detail.css';
 
 type ProblemDetail = components['schemas']['ProblemDetail'];
+type RunFileOut = components['schemas']['RunFileOut'];
 
 interface Props {
   runId: string;
@@ -48,6 +59,7 @@ export default function RunDetail({ runId }: Props) {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [posting, setPosting] = useState<SignalKind | null>(null);
   const [signalError, setSignalError] = useState<ProblemDetail | null>(null);
+  const [plannedFile, setPlannedFile] = useState<RunFileOut | null>(null);
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
@@ -85,13 +97,40 @@ export default function RunDetail({ runId }: Props) {
     void fetchDetail();
   }, [pollTick]);
 
-  async function sendSignal(kind: SignalKind): Promise<void> {
+  // The planned story file a spec checkpoint shows inline (6.2, `GET /runs/{id}/files`) —
+  // a second read beside the polled detail, the same way `Header`'s own `now` prop is a
+  // second fact this island supplies rather than one aggregated into the detail response
+  // (AD-8: `run_detail` never reads a Workspace, so this can only ever be a second call).
+  useEffect(() => {
+    if (!detail) return;
+    const token = runToken(detail.run, detail.alert);
+    const path = isSpecCheckpoint(detail, stopKind(detail, token)) ? plannedFilePath(detail) : null;
+    if (!path) {
+      setPlannedFile(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data } = await api.GET('/runs/{run_id}/files', {
+        params: { path: { run_id: runId }, query: { path } },
+      });
+      // `path` was given and `diff` was not, so this is always `RunFileOut` — 6.3 widened
+      // the response type for the no-`path` tree branch and 6.6 for the diff mode, and
+      // `isFile` is the one place the three are told apart.
+      if (!cancelled) setPlannedFile(data && isFile(data) ? data : null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [detail, runId]);
+
+  async function sendSignal(kind: SignalKind, body?: SignalIn): Promise<void> {
     setPosting(kind);
     setSignalError(null);
     try {
       const { error } = await api.POST('/runs/{run_id}/signals', {
         params: { path: { run_id: runId } },
-        body: signalBody(kind),
+        body: body ?? signalBody(kind),
       });
       if (error) {
         setSignalError(error);
@@ -138,6 +177,13 @@ export default function RunDetail({ runId }: Props) {
             onCancelClick={() => setCancelOpen(true)}
             posting={posting}
             error={signalError}
+            onAnswer={(text) => void sendSignal('answer', answerBody(text))}
+            onRaiseBudget={(amount) => void sendSignal('budget_raise', budgetRaiseBody(amount))}
+            onAccept={(paths) => void sendSignal('continue', acceptBody(paths))}
+            runId={runId}
+            onTerminalStart={() => void sendSignal(TERMINAL_START)}
+            onTerminalRelease={() => void sendSignal(TERMINAL_RELEASE)}
+            plannedFile={plannedFile}
           />
           <div>
             <h2 className="wf-section-head">STEPS</h2>
@@ -148,6 +194,7 @@ export default function RunDetail({ runId }: Props) {
           <StoriesStrip stories={detail.stories} />
           <CostBlock detail={detail} />
           <GateRecord detail={detail} token={token} />
+          <ArtifactsPanel runId={runId} run={detail.run} folder={detail.header.meta.folder} />
         </div>
       </div>
       {cancelOpen ? (

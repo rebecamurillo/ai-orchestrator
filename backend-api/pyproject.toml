@@ -154,8 +154,12 @@ addopts = "--strict-markers"
 # container and brings it back, so it needs a compose stack rather than any running backend.
 # `make e2e-api` deselects it (`E2E_MARKER`), `make durability` selects it; declaring it here
 # is what lets both express the selection as a marker instead of a path.
+# `uj3` is the whole journey (SPEC CAP-8): it is inside the default selection, so `make e2e`
+# runs it like any other module, and naming it is what lets `E2E_MARKER=uj3 make e2e-api`
+# drive UJ-3 alone against a stack that is already up.
 markers = [
     "durability: kills and restarts the backend-api container; needs a compose stack",
+    "uj3: the UJ-3 journey end to end on the `fake` harness; needs ORCH_TEST_MODE=1",
 ]
 
 # ── coverage — AD-18 "the gates are checkable" ───────────────────────────────

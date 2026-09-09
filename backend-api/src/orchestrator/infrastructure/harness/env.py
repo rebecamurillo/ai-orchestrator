@@ -91,6 +91,19 @@ DEFAULT_LANG = "C.UTF-8"
 #: The five tag positions, in the order AD-11 pins them.
 TAG_POSITIONS = ("run", "attempt", "story", "harness", "project")
 
+#: The contract names whose values are *identifiers of this attempt* rather than
+#: configuration or credentials: the Run, the Attempt, the Story, the harness, the Project,
+#: the two tag renderings and the traceparent. They are the leading eight of the contract,
+#: and this slice is what says so — a name inserted into `HARNESS_ENV_CONTRACT` before
+#: `LITELLM_BASE_URL` would join them, which is the right answer for an identifier and the
+#: wrong one for anything else, so `tests/unit/test_terminal_command.py` pins the membership
+#: as a set rather than trusting the arithmetic.
+#:
+#: **This is the AD-5 boundary for FR-21's resume command.** Everything in this tuple may be
+#: printed on a screen; nothing outside it ever may.
+IDENTIFIER_COUNT = 8
+IDENTIFIER_NAMES: tuple[str, ...] = HARNESS_ENV_CONTRACT[:IDENTIFIER_COUNT]
+
 #: What an adapter supplies to turn the contract into its own native names: the contract
 #: environment in, the harness-native additions out.
 AliasBuilder = Callable[[Mapping[str, str]], Mapping[str, str]]
@@ -160,17 +173,25 @@ def _base_names(settings: Settings) -> dict[str, str]:
     }
 
 
-def _contract(  # noqa: PLR0913 — the contract is one value per name, by construction
+def identifiers(
     attempt: Attempt,
     *,
     run: Run,
     project_slug: str,
-    log_content: bool,
-    settings: Settings,
     story_id: str | None,
     traceparent: str,
 ) -> dict[str, str]:
-    """Exactly `HARNESS_ENV_CONTRACT`, in its order, with the values AD-10 and AD-11 pin."""
+    """The eight `IDENTIFIER_NAMES`, in the contract's own order, with AD-10/AD-11's values.
+
+    Its own function because two callers need exactly these eight and no more: `_contract`
+    below, which then adds the configuration and the credentials for a harness process, and
+    `terminal_contract`, which adds *references* to those instead for a command an Operator
+    reads. One statement of the eight, so the two orders and the two tag renderings cannot
+    come apart.
+
+    **It takes no `Settings`, and that is a property, not an accident** (AD-5): nothing here
+    can reach a credential, so nothing built from it can carry one.
+    """
     tags = tag_list(
         {
             "run": str(run.id),
@@ -192,6 +213,64 @@ def _contract(  # noqa: PLR0913 — the contract is one value per name, by const
         "ORCH_TAGS": ",".join(tags),
         "ORCH_LANGFUSE_TAGS": json.dumps(tags),
         "TRACEPARENT": traceparent,
+    }
+
+
+def shell_reference(name: str) -> str:
+    """`$NAME` — how a credential travels in a command an Operator reads (AD-5, FR-21)."""
+    return f"${name}"
+
+
+def terminal_contract(
+    attempt: Attempt,
+    *,
+    run: Run,
+    project_slug: str,
+    story_id: str | None,
+    traceparent: str,
+) -> dict[str, str]:
+    """The contract as a *command string* may state it: identifiers by value, the rest by name.
+
+    Handed to the same `AliasBuilder` the real environment uses, so the alias list a terminal
+    command exports is the harness's own `HARNESS_ENV_ALIASES` and never a second copy of it
+    — and `ANTHROPIC_AUTH_TOKEN` comes back as the literal `$LITELLM_API_KEY` because that is
+    what this mapping says `LITELLM_API_KEY` is.
+
+    **`ORCH_LOG_CONTENT` arrives as a reference too, so it is never the string `"1"`, so a
+    terminal session exports no content-logging switch.** That is the right default and not a
+    gap: the switch is per Project and per attempt, the container's own environment holds no
+    such variable, and turning prompt logging on for a session the orchestrator is not
+    recording would be a decision this command has no standing to make.
+
+    Like `identifiers`, it takes no `Settings` — the whole AD-5 argument for FR-21's command
+    is that a value it was never given cannot appear in it.
+    """
+    known = identifiers(
+        attempt, run=run, project_slug=project_slug, story_id=story_id, traceparent=traceparent
+    )
+    referenced = {name: shell_reference(name) for name in HARNESS_ENV_CONTRACT if name not in known}
+    return {**known, **referenced}
+
+
+def _contract(  # noqa: PLR0913 — the contract is one value per name, by construction
+    attempt: Attempt,
+    *,
+    run: Run,
+    project_slug: str,
+    log_content: bool,
+    settings: Settings,
+    story_id: str | None,
+    traceparent: str,
+) -> dict[str, str]:
+    """Exactly `HARNESS_ENV_CONTRACT`, in its order, with the values AD-10 and AD-11 pin."""
+    return {
+        **identifiers(
+            attempt,
+            run=run,
+            project_slug=project_slug,
+            story_id=story_id,
+            traceparent=traceparent,
+        ),
         "LITELLM_BASE_URL": settings.litellm_base_url,
         "LITELLM_API_KEY": settings.litellm_api_key.get_secret_value(),
         "LANGFUSE_BASE_URL": settings.langfuse_base_url,

@@ -59,6 +59,7 @@ from uuid import UUID
 import structlog
 
 from orchestrator.application.rules.frames import rows_after
+from orchestrator.application.rules.signals import REBASELINE_FAILED
 from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
 from orchestrator.application.use_cases.record_trajectory import record_trajectory
@@ -119,8 +120,9 @@ RESULT_EVENTS: dict[StepStatus, StepEvent] = {
 #: The park a redispatch turns into once the Template's bound is used up (AD-9).
 VERIFY_FAILED = "verify failed {n}/{n}"
 
-#: The park a redispatch turns into when the row it would go back to was never run.
-REBASELINE_FAILED = "re-baseline failed after skip"
+#: The park a redispatch turns into when the row it would go back to was never run. Stated
+#: in `rules/signals.py`, which also reads it: the stop that reason names offers no second
+#: *Skip story* (6.4), and a rules module may not import a use case to learn its own text.
 
 #: What the gate record says when a redispatch fires.
 REDISPATCHED = "verify failed, story re-dispatched {n}/{max}"

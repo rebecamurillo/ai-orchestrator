@@ -96,7 +96,7 @@ development_status:
   5-11-claude-readiness-passes-end-to-end: in-progress
   epic-5-retrospective: optional
 
-  epic-6: backlog
+  epic-6: done
   6-1-answer-a-blocked-story-with-a-scripted-test-harness: done
   6-2-continue-and-reject-at-checkpoints: done
   6-3-inline-spec-editing-while-parked: done

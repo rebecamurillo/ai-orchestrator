@@ -111,8 +111,29 @@ def read_list(
     entries = _entries(text)
     if entries is None:
         raise _refuse(frame, LIST_FILE_NOT_A_LIST, path, line)
-    reader.record(path, ref_used, branch=frame.branch)
+    reader.record(path, ref_used, branch=_recorded_branch(reader, frame))
     return entries, ref_used
+
+
+def _recorded_branch(reader: PlanReader, frame: Frame) -> str | None:
+    """The branch a fresh copy of this frame's list file would come from, or `None`.
+
+    `PlanReader.record`'s own contract: `None` means the base branch, "which is exactly what
+    a Template naming no branch, or naming one the remote does not hold yet, resolves to".
+    The frame carries the branch the Template *declared*, which `plan_ref` resolves the same
+    way — so a branch the remote does not hold is one this Run is about to create, and the
+    commit its list file was actually read at came off the base branch.
+
+    Recording the declared name regardless is what parked `plan.check` on `plan_stale` at
+    row 1 of the first Run of every new branch: `ls_remote(url, branch)` answers `None` for
+    a branch that is not there, so the "current" content is nothing and never matches.
+
+    `reader.sha` is memoised, and `plan_ref` has already asked this exact question, so the
+    answer costs no second `Git` call however many list files the walk reads (FR-10).
+    """
+    if frame.branch is None:
+        return None
+    return frame.branch if reader.sha(frame.branch) is not None else None
 
 
 def check_entries(items: Sequence[Entry], kind: str | None, frame: Frame, *, line: int) -> None:

@@ -336,6 +336,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one file inside a Run's own spec folder, list its tree, or diff a hit
+         * @description `path` omitted (6-3): every entry under the Run's own scope folder, recursively.
+         *     `path` with `diff=1` (6-6): that protected path's unified diff, from the parked
+         *     attempt's `start_sha` to the worktree. `path` alone (6-2, unchanged): the file, with a
+         *     single-segment glob resolved here — see the use case's own docstring for each mode's
+         *     refusal order.
+         */
+        get: operations["get_file_api_v1_runs__run_id__files_get"];
+        /**
+         * Write one file inside a Run's own spec folder while parked
+         * @description Commits `body.content` at `body.path` as `spec: operator edit (orchestrator)`,
+         *     appends one `spec_edit` gate record, and answers the written row — see the use case's
+         *     own docstring for the five checks and their order.
+         */
+        put: operations["put_file_api_v1_runs__run_id__files_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/graph": {
         parameters: {
             query?: never;
@@ -541,10 +571,17 @@ export interface components {
         /** AlertOut */
         AlertOut: {
             attribution?: components["schemas"]["AttributionOut"] | null;
+            checkpoint_story?: components["schemas"]["CheckpointStoryOut"] | null;
             /** Park Kind */
             park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
             /** Reason */
             reason: string | null;
+            /** Row Kind */
+            row_kind?: string | null;
             /** Token */
             token: string;
         };
@@ -630,6 +667,23 @@ export interface components {
             token: string;
             /** Version */
             version: number;
+        };
+        /**
+         * CheckpointStoryOut
+         * @description The done-checkpoint's own summary line (story 6-2): `story {id} · {title} ·
+         *     {attempts} attempts · ${cost} · verify {done|skipped}`.
+         */
+        CheckpointStoryOut: {
+            /** Attempts */
+            attempts: number;
+            /** Cost Usd */
+            cost_usd: string;
+            /** Story Id */
+            story_id: string;
+            /** Title */
+            title: string;
+            /** Verify */
+            verify: string;
         };
         /**
          * CloneCheckLineOut
@@ -778,7 +832,7 @@ export interface components {
             /** Attempt N */
             attempt_n: number | null;
             /** Event */
-            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume") | ("start" | "done" | "failed" | "cancelled") | ("redispatch" | "retry_auto");
+            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume") | ("start" | "done" | "failed" | "cancelled") | ("redispatch" | "retry_auto") | "spec_edit";
             /**
              * Id
              * Format: uuid
@@ -1497,6 +1551,7 @@ export interface components {
             status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
             /** Template */
             template: string;
+            terminal?: components["schemas"]["TerminalOut"] | null;
             /** Terminal Session */
             terminal_session: boolean;
             /** Version */
@@ -1505,6 +1560,74 @@ export interface components {
             worktree_path: string | null;
             /** Worktrees */
             worktrees: components["schemas"]["WorktreeOut"][];
+        };
+        /**
+         * RunFileDiffOut
+         * @description `GET /runs/{id}/files?path=&diff=1` (6.6): one protected path's unified diff, and the
+         *     attempt `start_sha` it is measured from. The diff is git's own text, rendered verbatim.
+         */
+        RunFileDiffOut: {
+            /** Diff */
+            diff: string;
+            /** From Sha */
+            from_sha: string;
+            /** Path */
+            path: string;
+        };
+        /**
+         * RunFileEntryOut
+         * @description One row of a `RunFilesTreeOut`, or the result of a `PUT` (6-3) — the same shape
+         *     either way: `path`, `kind` (`"file"`/`"dir"`, from `TreeEntry.is_dir`), `size`, `mtime`.
+         */
+        RunFileEntryOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "file" | "dir";
+            /** Mtime */
+            mtime: number;
+            /** Path */
+            path: string;
+            /** Size */
+            size: number;
+        };
+        /**
+         * RunFileIn
+         * @description `PUT /runs/{id}/files`'s own body (6-3): the path to write, and its whole new text.
+         */
+        RunFileIn: {
+            /** Content */
+            content: string;
+            /** Path */
+            path: string;
+        };
+        /**
+         * RunFileOut
+         * @description `{path, content, size, mtime}` — the resolved path (a glob is expanded server-side,
+         *     so this is never the pattern the request named), the file's whole text, its byte length
+         *     and its `mtime` (`Workspace.mtime`'s own POSIX timestamp).
+         */
+        RunFileOut: {
+            /** Content */
+            content: string;
+            /** Mtime */
+            mtime: number;
+            /** Path */
+            path: string;
+            /** Size */
+            size: number;
+        };
+        /**
+         * RunFilesTreeOut
+         * @description `GET /runs/{id}/files` with no `path` (6-3): `{root, entries[]}` over the Run's own
+         *     scope folder.
+         */
+        RunFilesTreeOut: {
+            /** Entries */
+            entries: components["schemas"]["RunFileEntryOut"][];
+            /** Root */
+            root: string;
         };
         /**
          * RunGraphOut
@@ -1711,6 +1834,8 @@ export interface components {
             progress: components["schemas"]["ProgressOut"] | null;
             /** Skipped */
             skipped: string[];
+            /** Skipped Epics */
+            skipped_epics?: number[];
         };
         /**
          * TemplateRefOut
@@ -1765,6 +1890,23 @@ export interface components {
             version: number;
             /** Yaml */
             yaml: string;
+        };
+        /**
+         * TerminalOut
+         * @description The resume command block (6.7, FR-21, UX-DR5).
+         *
+         *     **`command` never carries a secret value** (AD-5): it is built from this attempt's
+         *     identifiers, and every credential in it is a shell reference the container resolves —
+         *     `application/use_cases/terminal.py` states the mechanism, and
+         *     `tests/unit/test_terminal_command.py` asserts the absence.
+         */
+        TerminalOut: {
+            /** Command */
+            command: string;
+            /** In Progress */
+            in_progress: boolean;
+            /** Session Lifetime Ends At */
+            session_lifetime_ends_at: string | null;
         };
         /**
          * ValidateIn
@@ -2938,6 +3080,147 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_file_api_v1_runs__run_id__files_get: {
+        parameters: {
+            query?: {
+                path?: string | null;
+                diff?: boolean;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunFileOut"] | components["schemas"]["RunFilesTreeOut"] | components["schemas"]["RunFileDiffOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The path is well formed but outside the Run's own spec folder — or, with `diff=1`, is not one of the protected paths this Run's park recorded. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id, no file is there, or — with `diff=1` — the parked step recorded no start commit to diff against. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The path escapes the workspace (`..`, or absolute). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    put_file_api_v1_runs__run_id__files_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunFileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunFileEntryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The path is well formed but outside the Run's own spec folder. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The path names a list file the plan already read, or the Run is not parked without a terminal session. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The path escapes the workspace (`..`, or absolute). */
             422: {
                 headers: {
                     [name: string]: unknown;

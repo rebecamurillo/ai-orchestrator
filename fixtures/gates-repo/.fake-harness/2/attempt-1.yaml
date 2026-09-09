@@ -1,0 +1,24 @@
+# Story 2, first dispatch: the agent plans and halts (story 6-2, SPEC CAP-2's spec
+# checkpoint).
+#
+# `status: ready-for-dev`, no `files:`, no `commit:` — exactly what a real `Halt after
+# planning.` leaves behind: only the Story file, uncommitted (the prepare commit stages it,
+# `application/steps/agent.py::_prepare_writes`). `rules/routing.py::route` turns this into
+# a `checkpoint` park because `spec_checkpoint: true` names this story in `stories.yaml`
+# (`READY_FOR_DEV and spec_checkpoint -> status="checkpoint"`) — a `status: done` file, which
+# is all `default.yaml` ever wrote before this story, can never park here at all. `default.
+# yaml` is what the Continue's second dispatch falls back to and writes instead.
+story_file:
+  slug: plan
+  content: |
+    ---
+    status: ready-for-dev
+    ---
+
+    # Story 2 — Record the plan
+
+    ## Plan
+
+    Create PLAN.md at the repository root.
+exit_code: 0
+usage: { tokens_in: 60, tokens_out: 90, cost_usd: "0.005" }

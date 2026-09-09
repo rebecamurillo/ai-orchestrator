@@ -69,3 +69,19 @@ Findings surfaced by review that are real but belong to a later story. Append-on
 The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred` frontmatter under
 `_bmad-output/planning-artifacts/mvp/epics/epic-04-runs/stories/`, summarised in
 `epic-4-handoff.md` §4. Only the two cross-epic ones are repeated here.
+
+- source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-06-human-gates/stories/6-8-uj3-proven-end-to-end.md`
+  summary: `E2E_BACKEND=real make e2e-ui` is not a whole-suite gate — 43 of 159 specs read stub-backend fixtures server-side and fail against a real stack, so only the UJ-3 journey runs that way.
+  evidence: Those specs mock `GET /runs/{id}/detail` with `page.route()`, which cannot intercept an SSR fetch. Closing it means adding `test.skip(USE_REAL_BACKEND, …)` to ten spec files, every one of them an anchor, so it needs an operator ruling rather than a story's own judgement. Until then `make e2e-ui` proves rendering against stubs and exactly one spec proves it against the product.
+
+- source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-06-human-gates/stories/6-5-skip-epic.md`
+  summary: `skip_epic` has no compose-stack proof; it is covered only at the unit level over fakes.
+  evidence: The e2e must save `templates/epic.yaml` under a name of its own, because `test_templates.py` asserts `pinned_by == 0` for `epic@1` and a Run pins every version it uses. That rename means a fixture Run can never satisfy `_has_epic_frame`'s literal `template_name == "epic"` branch, and no initiative-shaped fixture exists to exercise the frame-based branch. Building one is fixture engineering no story owned. The same gap leaves *Reject* at a spec checkpoint, the `protected_path` Accept and its hit-list 409, the `re-baseline failed after skip` park, and the whole terminal path proven only over fakes.
+
+- source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-06-human-gates/stories/6-8-uj3-proven-end-to-end.md`
+  summary: `tests/e2e/test_queue.py`'s cleanup can still leak a global Run slot, which turns one timeout into a cascade that starves the rest of the suite.
+  evidence: Its `finally` does `cancel(first)` → `wait_for(second)` → `cancel(second)`, so a timeout in the middle skips the second cancel and leaves a Run occupying one of `MAX_ACTIVE_RUNS=2`. Commit `aaa45d6` removed the contamination *source* — `make e2e` now tears its stack down before bringing it up, so a killed run no longer poisons the next — but the latent leak remains. It is an anchor file, so wrapping that `wait_for` needs an operator ruling.
+
+- source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-05-dev-loop/stories/5-11-claude-readiness-passes-end-to-end.md`
+  summary: The harness-readiness Run structurally cannot reach `enabled`: it now dies on its `baseline` row, before any agent row is dispatched.
+  evidence: Found when the Epic 6 pre-story fixed handoff defects 1 and 2, which let the Run get one row further. `harness_readiness_seed.py:123` seeds the readiness Repository with `quality_gate_command="sh check.sh"`, and `fixtures/readiness-repo/check.sh` exits 1 until `HELLO.md` exists — which is what the readiness Story is *for*. `epic@1`'s `baseline` carries `on_fail: fail`, so the Run ends `failed` first. This bites *before* Epic 5's own defect 5 (`READINESS_MODEL`), because no agent is ever dispatched and so no model is ever asked for. The fix is an unmade design decision: `baseline`'s `on_fail` for a template whose gate is meant to be red at baseline, or seeding readiness with no `quality_gate_command`, or shipping a passing baseline fixture.

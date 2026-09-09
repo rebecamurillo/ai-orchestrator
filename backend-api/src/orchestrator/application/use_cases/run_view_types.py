@@ -8,11 +8,13 @@ every private helper stay there; only the shapes they build live here, the same 
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
+from orchestrator.application.use_cases.terminal import Terminal, TerminalPorts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.clock import Clock
@@ -45,6 +47,10 @@ class RunViewPorts:
     #: construction predating this story (`test_run_views.py`'s own `harness` fixture)
     #: keeps working unchanged. Production wiring always sets one.
     tracer: Tracer | None = None
+    #: `None` degrades to `terminal = None` (FR-21, 6.7), for the same reason and with the
+    #: same precedent: a read that was not wired for the resume command simply publishes no
+    #: `terminal` block, and every `RunViewPorts(...)` written before this story compiles.
+    terminal: TerminalPorts | None = None
 
 
 @dataclass(frozen=True)
@@ -135,12 +141,36 @@ class Attribution:
 
 
 @dataclass(frozen=True)
+class CheckpointStory:
+    """The done-checkpoint's own summary line (story 6-2, SPEC CAP-2): `story {id} · {title}
+    · {attempts} attempts · ${cost} · verify {done|skipped}`. `None` on `Alert` for every
+    stop but a `checkpoint` park on a row that is not itself `agent` — a spec checkpoint
+    shows the planned file inline instead (`run_files.py`), not this summary."""
+
+    story_id: str
+    title: str
+    attempts: int
+    cost_usd: Decimal
+    verify: str
+
+
+@dataclass(frozen=True)
 class Alert:
     token: str
     reason: str | None
     park_kind: ParkKind | None
     #: `None` predates this story; every `blocked` park now carries one (5.10).
     attribution: Attribution | None = None
+    #: The parked row's own `kind` (story 6-2): a `checkpoint` park's `StopBody` case is
+    #: `agent` (spec checkpoint, the planned file inline) or anything else (done checkpoint,
+    #: `checkpoint_story` below). `None` predates this story.
+    row_kind: str | None = None
+    #: Set only for a done checkpoint (`row_kind` not `agent`, `park_kind == "checkpoint"`).
+    checkpoint_story: CheckpointStory | None = None
+    #: The payload of the gate record that parked this Run (6.6) — `{}` for every stop that
+    #: kept none. AD-17's hit list is what travels on one today, and the protected-path body
+    #: renders each file's added/deleted/modified mark and diff link from these entries.
+    payload: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -202,6 +232,10 @@ class Summary:
     progress: Progress | None
     links: list[str]
     skipped: list[str]
+    #: The 1-based epic numbers `skip_epic` gave up the push on (6.5, FR-20) — defaulted so
+    #: `tests/unit/test_run_view_schemas.py`'s existing `Summary(...)` construction, which
+    #: predates this field, keeps compiling unedited.
+    skipped_epics: list[int] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -215,3 +249,8 @@ class RunDetailView:
     gate_record: list[GateRecord]
     admitted_signals: tuple[SignalKind, ...]
     summary: Summary | None
+    #: The paste-able resume command and its session state (6.7, FR-21), or `None` for every
+    #: stop the terminal escape hatch does not apply to. Defaulted, so `run_detail`'s own
+    #: existing constructions and the tests that build a `RunDetailView` by hand keep
+    #: compiling — `use_cases/terminal.py`'s docstring lists the five `None` cases.
+    terminal: Terminal | None = None

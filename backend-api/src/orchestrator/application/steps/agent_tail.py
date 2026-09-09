@@ -98,7 +98,7 @@ PATH_SEPARATOR = ", "
 
 #: Where the hit list travels to the gate record: `StepResult.payload["hits"]`, one entry per
 #: file, so the Operator's `continue` can name exactly the paths the Run reported (AD-9).
-HITS_KEY = "hits"
+HITS_KEY = protected_paths.HITS_KEY
 
 #: The signal a person answers a `protected_path` park with (AD-13). It carries the accepted
 #: files under `rules/signals.py::FILES_KEY`; a `continue` on a checkpoint carries none.
@@ -122,7 +122,7 @@ def finish(
     without routing, so a dispatch that edited an anchor and then hung would escape the check
     permanently rather than only this once: the Operator's *Retry* opens attempt 2, whose WIP
     commit commits that edit, and that commit falls *between* attempt 1's `end_sha` and
-    attempt 2's `start_sha` — inside no agent range `walk._agent_ranges` collects, and gone
+    attempt 2's `start_sha` — inside no agent range `walk_frame.py` collects, and gone
     from the tree the commit-guard reads. FR-31's "a modified anchor wins over every route"
     is the same sentence for this stop as for the routed ones.
     """
@@ -244,7 +244,7 @@ def protected(ctx: StepContext, attempt: Attempt) -> StepResult | None:
         gate=ctx.row.gate,
         reason=reason,
         park=Park(kind="protected_path", reason=reason, path=ctx.row.path),
-        payload={HITS_KEY: [{"path": hit.path, "kind": hit.kind} for hit in hits]},
+        payload=protected_paths.hits_payload(hits),
     )
 
 

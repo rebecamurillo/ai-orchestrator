@@ -21,10 +21,17 @@ class WorkspaceError(Exception):
 
 @dataclass(frozen=True)
 class TreeEntry:
-    """One file or directory `tree` found, named relative to the Workspace's own root."""
+    """One file or directory `tree` found, named relative to the Workspace's own root.
+
+    `size`/`mtime` (story 6-3) are defaulted rather than required: they describe a *file*
+    (`0`/`0.0` for a directory), and every caller that predates this story built one from
+    only `path`/`is_dir` and still does.
+    """
 
     path: str
     is_dir: bool
+    size: int = 0
+    mtime: float = 0.0
 
 
 @runtime_checkable

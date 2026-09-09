@@ -29,9 +29,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from functools import partial
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import Request
+from fastapi import Query, Request
 
 from orchestrator.application.use_cases.create_run import CreateRunPorts, RunReadPorts
 from orchestrator.application.use_cases.harness_readiness import HarnessReadinessPorts
@@ -39,10 +39,16 @@ from orchestrator.application.use_cases.harnesses import HarnessPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.queue import QueuePorts
+from orchestrator.application.use_cases.run_files import (
+    RunFilesDiffPorts,
+    RunFilesPorts,
+    RunFilesWritePorts,
+)
 from orchestrator.application.use_cases.run_views import RunViewPorts
 from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.application.use_cases.signals import SignalEffectPorts
 from orchestrator.application.use_cases.templates import TemplatePorts
+from orchestrator.application.use_cases.terminal import TerminalPorts
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
@@ -59,9 +65,11 @@ from orchestrator.infrastructure.db import (
     open_writer_ports,
 )
 from orchestrator.infrastructure.db.environment import read_run_environment
+from orchestrator.infrastructure.harness.registry import build_harnesses, build_terminal_env
 from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.process.runner import RealProcessRunner
 from orchestrator.infrastructure.tracing import LangfuseTracer
+from orchestrator.infrastructure.workspace.fs import FsWorkspace
 
 #: The attributes `create_app` stores its adapters under.
 SESSION_FACTORY = "session_factory"
@@ -232,7 +240,14 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
     module docstring for why it cannot share this one.
 
     `tracer` (5.2) is what `cost.trace_url` reads through — built fresh per request, the
-    same reasoning as `create_run_ports`'s own `LangfuseTracer`."""
+    same reasoning as `create_run_ports`'s own `LangfuseTracer`.
+
+    `terminal` (6.7) is what the resume command is built through. The registry it carries is
+    built with a `RealProcessRunner` of its own, unlike the walker's — AD-14 wants one runner
+    able to kill every group *this process started*, and this read starts none: it asks the
+    registry for `capabilities.resume` and `resume_command`, neither of which touches a
+    process. `build_terminal_env` reads one boolean off `Settings` and no credential at all
+    (AD-5)."""
     session_factory = from_state(request, SESSION_FACTORY)
     settings = from_state(request, SETTINGS)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
@@ -246,6 +261,10 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
             logs=RealLogReader(),
             clock=SystemClock(),
             tracer=LangfuseTracer(settings),
+            terminal=TerminalPorts(
+                env=build_terminal_env(settings),
+                harnesses=build_harnesses(settings, RealProcessRunner()),
+            ),
         )
 
 
@@ -261,6 +280,66 @@ def queue_ports(request: Request) -> Iterator[QueuePorts]:
             steps=SQLAlchemyStepRunRepository(uow.session),
             clock=SystemClock(),
             max_active_runs=settings.max_active_runs,
+        )
+
+
+def run_files_ports(request: Request) -> Iterator[RunFilesPorts]:
+    """The ports `GET /runs/{id}/files` reads through (6.2). Writes nothing.
+
+    `workspace` is `FsWorkspace` itself — a factory, not an instance — the same "port is
+    the class" shape `infrastructure/dbos/startup.py` already wires `StepPorts.workspace`
+    with: the use case cannot root one until it has read the Run's own `worktree_path`.
+    """
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield RunFilesPorts(runs=SQLAlchemyRunRepository(uow.session), workspace=FsWorkspace)
+
+
+def run_files_write_ports(request: Request) -> Iterator[RunFilesWritePorts]:
+    """The ports `PUT /runs/{id}/files` writes through (6.3): `run_files_ports`'s own shape,
+    plus `Git` to stage and commit the Operator's edit, a `GateRecordRepository` for the
+    `spec_edit` line, a `Clock`, and the `UnitOfWork` itself so the use case can `commit()`.
+    """
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield RunFilesWritePorts(
+            runs=SQLAlchemyRunRepository(uow.session),
+            workspace=FsWorkspace,
+            git=_required_git(request, "run_files"),
+            records=SQLAlchemyGateRecordRepository(uow.session),
+            clock=SystemClock(),
+            uow=uow,
+        )
+
+
+def run_files_diff_ports(
+    request: Request, diff: Annotated[bool, Query()] = False
+) -> Iterator[RunFilesDiffPorts | None]:
+    """The ports `GET /runs/{id}/files?diff=1` reads through (6.6). Writes nothing.
+
+    No `Workspace`: the diff is `Git`'s own answer over the worktree, and the scope gate is
+    the park's recorded hit list rather than the spec folder — see
+    `application/use_cases/run_files.py`'s own docstring for why.
+
+    **It reads the mode's own query parameter, and it has to.** FastAPI resolves every
+    dependency a handler declares, on every request to it — so a dependency that opened a
+    session unconditionally would make the two reads that share this route (the file and the
+    tree) require adapters they have never needed, and would break every existing test that
+    overrides only `run_files_ports`. That is the same trap `application/use_cases/
+    run_views.py` documents for `board_view`. Answering `None` for the modes that did not
+    ask is what keeps this route's other two answers exactly as they were.
+    """
+    if not diff:
+        yield None
+        return
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield RunFilesDiffPorts(
+            runs=SQLAlchemyRunRepository(uow.session),
+            steps=SQLAlchemyStepRunRepository(uow.session),
+            attempts=SQLAlchemyAttemptRepository(uow.session),
+            records=SQLAlchemyGateRecordRepository(uow.session),
+            git=_required_git(request, "run_files"),
         )
 
 

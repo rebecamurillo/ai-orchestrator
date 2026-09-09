@@ -212,6 +212,16 @@ class WorktreeCommands:
             index += 2
         return tuple(changes)
 
+    def diff(self: _Runner, worktree: Path, from_sha: str, path: str) -> str:
+        """`git diff {from_sha} -- {path}` — the unified diff of one path against the tree.
+
+        `END_OF_OPTIONS` before the path for the reason every other command here has it: the
+        pathspec comes from a stored hit list, and a file whose name begins with a dash must
+        not become a flag. `_attempt`, so a ref this worktree does not hold answers `""`
+        rather than failing the read (the port's second convention).
+        """
+        return self._attempt("-C", str(worktree), "diff", from_sha, END_OF_OPTIONS, path) or ""
+
     def push(self: _Runner, worktree: Path, branch: str, set_upstream: bool) -> str:
         """`git push origin {branch}`, with `-u` when this Run created the branch. Never forced."""
         upstream = ("--set-upstream",) if set_upstream else ()

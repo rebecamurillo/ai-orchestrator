@@ -7,6 +7,14 @@
   only its `version_pin` is refreshed, so a redeployed image with a new pinned version is
   reflected without disturbing what readiness already found. A name not yet stored is inserted
   disabled, with no readiness recorded.
+- **`seed_test_harness`** is SPEC CAP-1's own row: the scripted `fake` harness, stored
+  *enabled*. It is the one harness readiness never proves, because there is nothing to
+  prove — it runs no model, spends nothing, and exports no trace, so every line AD-10's
+  readiness run checks would be vacuous for it. Enabling it by fiat is therefore the honest
+  record, and it is written on every start under `ORCH_TEST_MODE` so an instance that has
+  test mode on always has a usable row, whatever a previous start left. `main.py` calls it
+  only in that mode, so an Operator's instance has no such row at all and pre-flight refuses
+  the name — which is what keeps `fake` off every screen without touching a Template.
 """
 
 from __future__ import annotations
@@ -47,3 +55,20 @@ def _seed_one(harnesses: HarnessRepository, name: str, pin: str) -> Harness:
     updated = stored.model_copy(update={"version_pin": pin})
     harnesses.update(updated)
     return updated
+
+
+def seed_test_harness(ports: HarnessPorts, name: str, pin: str) -> Harness:
+    """Store `name` enabled, inserting or replacing (SPEC CAP-1). Test mode only.
+
+    Unlike `seed_harnesses` this *does* write `enabled`, and deliberately: readiness is the
+    authority for a harness whose readiness can be run, and this is the one whose cannot.
+    `failing_check` and `last_readiness_at` are left at their defaults for the same reason —
+    there is no readiness run to report, and stating one would be a fact this never observed.
+    """
+    harness = Harness(name=name, enabled=True, version_pin=pin)
+    if ports.harnesses.get(name) is None:
+        ports.harnesses.add(harness)
+    else:
+        ports.harnesses.update(harness)
+    ports.uow.commit()
+    return harness

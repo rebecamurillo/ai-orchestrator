@@ -40,6 +40,14 @@ composition root binds those and passes the closure down as a port.
 `resume_command` is the operator's escape hatch (FR-21): a line to paste into a terminal,
 not a command this system runs. The read model prefixes it with the container's own `docker
 compose exec`, which is why it returns text and not an argv.
+
+`TerminalEnv` is the other half of that escape hatch, and it is a *separate* port from
+`HarnessEnv` for one reason: AD-5. `HarnessEnv` returns the real environment, credentials
+included, and hands it straight to a child process that nobody reads. What the read model
+publishes is a command *string* on a screen, so it may carry identifiers and nothing else —
+the credentials are named there and resolved inside the container. Two ports rather than one
+filtered result: a filter can be forgotten, whereas a builder that was never given a secret
+cannot leak one, and `TerminalEnvironment` is what that builder returns.
 """
 
 from __future__ import annotations
@@ -137,6 +145,43 @@ class HarnessEnv(Protocol):
         traceparent: str,
     ) -> dict[str, str]:
         """Exactly `HARNESS_ENV_CONTRACT`, the harness's aliases, and the Project's own."""
+        ...
+
+
+@dataclass(frozen=True)
+class TerminalEnvironment:
+    """What one attempt's paste-able resume command may state (AD-5, FR-21).
+
+    Two ordered lists rather than two mappings, because both are rendered into a shell line
+    and the order is the line: `identifiers` is the `-e NAME=value` list, in
+    `HARNESS_ENV_CONTRACT`'s own order, and `exports` is the harness's own
+    `HARNESS_ENV_ALIASES`, in the order that array declares them.
+
+    **Neither list ever holds a secret value.** `identifiers` carries this attempt's own ids —
+    the Run, the Attempt, the Story, the harness, the Project, the tags and the traceparent —
+    and `exports` carries alias names against *shell references* (`$LITELLM_API_KEY`), which
+    the container resolves from its own environment when the Operator pastes the line.
+    `GITHUB_TOKEN` is in neither, as it is in no harness environment at all.
+    """
+
+    identifiers: tuple[tuple[str, str], ...]
+    exports: tuple[tuple[str, str], ...]
+
+
+@runtime_checkable
+class TerminalEnv(Protocol):
+    """Builds the identifiers and alias exports one attempt's terminal command carries."""
+
+    def __call__(
+        self,
+        attempt: Attempt,
+        *,
+        run: Run,
+        project_slug: str,
+        story_id: str | None,
+        traceparent: str,
+    ) -> TerminalEnvironment:
+        """Identifiers by value, every other contract name by shell reference (AD-5)."""
         ...
 
 

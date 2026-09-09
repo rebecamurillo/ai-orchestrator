@@ -25,6 +25,7 @@ Operator's last decision left there. This module never composes one.
 
 from __future__ import annotations
 
+from orchestrator.application.rules import protected_paths
 from orchestrator.application.steps.context import StepContext, require_cwd, require_env
 from orchestrator.application.steps.registry import register
 from orchestrator.domain.values import Park, StepResult
@@ -70,6 +71,10 @@ class GitCommitExecutor:
                 gate=ctx.row.gate,
                 reason=reason,
                 park=Park(kind="protected_path", reason=reason, path=ctx.row.path),
+                # The Accept (6.6) compares the Operator's `files` against the list the Run
+                # reported, so this park has to record one too. Paths only: `ProtectedPaths.
+                # check` answers no kinds and its member set is frozen (its own docstring).
+                payload=protected_paths.hits_payload(hits),
             )
         sha = git.commit(worktree, str(ctx.with_resolved[MESSAGE_KEY]))
         return StepResult(status="done", gate=ctx.row.gate, output_ref=sha)
