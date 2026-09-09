@@ -48,6 +48,7 @@ from orchestrator.application.use_cases.run_views import RunViewPorts
 from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.application.use_cases.signals import SignalEffectPorts
 from orchestrator.application.use_cases.templates import TemplatePorts
+from orchestrator.application.use_cases.terminal import TerminalPorts
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
@@ -64,6 +65,7 @@ from orchestrator.infrastructure.db import (
     open_writer_ports,
 )
 from orchestrator.infrastructure.db.environment import read_run_environment
+from orchestrator.infrastructure.harness.registry import build_harnesses, build_terminal_env
 from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.process.runner import RealProcessRunner
 from orchestrator.infrastructure.tracing import LangfuseTracer
@@ -238,7 +240,14 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
     module docstring for why it cannot share this one.
 
     `tracer` (5.2) is what `cost.trace_url` reads through — built fresh per request, the
-    same reasoning as `create_run_ports`'s own `LangfuseTracer`."""
+    same reasoning as `create_run_ports`'s own `LangfuseTracer`.
+
+    `terminal` (6.7) is what the resume command is built through. The registry it carries is
+    built with a `RealProcessRunner` of its own, unlike the walker's — AD-14 wants one runner
+    able to kill every group *this process started*, and this read starts none: it asks the
+    registry for `capabilities.resume` and `resume_command`, neither of which touches a
+    process. `build_terminal_env` reads one boolean off `Settings` and no credential at all
+    (AD-5)."""
     session_factory = from_state(request, SESSION_FACTORY)
     settings = from_state(request, SETTINGS)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
@@ -252,6 +261,10 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
             logs=RealLogReader(),
             clock=SystemClock(),
             tracer=LangfuseTracer(settings),
+            terminal=TerminalPorts(
+                env=build_terminal_env(settings),
+                harnesses=build_harnesses(settings, RealProcessRunner()),
+            ),
         )
 
 

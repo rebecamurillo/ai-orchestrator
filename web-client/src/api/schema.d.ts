@@ -1551,6 +1551,7 @@ export interface components {
             status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
             /** Template */
             template: string;
+            terminal?: components["schemas"]["TerminalOut"] | null;
             /** Terminal Session */
             terminal_session: boolean;
             /** Version */
@@ -1889,6 +1890,23 @@ export interface components {
             version: number;
             /** Yaml */
             yaml: string;
+        };
+        /**
+         * TerminalOut
+         * @description The resume command block (6.7, FR-21, UX-DR5).
+         *
+         *     **`command` never carries a secret value** (AD-5): it is built from this attempt's
+         *     identifiers, and every credential in it is a shell reference the container resolves —
+         *     `application/use_cases/terminal.py` states the mechanism, and
+         *     `tests/unit/test_terminal_command.py` asserts the absence.
+         */
+        TerminalOut: {
+            /** Command */
+            command: string;
+            /** In Progress */
+            in_progress: boolean;
+            /** Session Lifetime Ends At */
+            session_lifetime_ends_at: string | null;
         };
         /**
          * ValidateIn

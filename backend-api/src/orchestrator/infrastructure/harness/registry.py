@@ -21,14 +21,24 @@ from collections.abc import Mapping
 
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
-from orchestrator.domain.ports.harness import Harness, HarnessEnv
+from orchestrator.domain.ports.harness import (
+    Harness,
+    HarnessEnv,
+    TerminalEnv,
+    TerminalEnvironment,
+)
 from orchestrator.domain.ports.process import ProcessRunner
 from orchestrator.infrastructure.harness.claude import (
     ClaudeHarness,
     claude_aliases,
     claude_subscription_aliases,
 )
-from orchestrator.infrastructure.harness.env import AliasBuilder, env_for
+from orchestrator.infrastructure.harness.env import (
+    IDENTIFIER_NAMES,
+    AliasBuilder,
+    env_for,
+    terminal_contract,
+)
 from orchestrator.infrastructure.harness.fake import FakeHarness
 from orchestrator.infrastructure.settings import Settings
 
@@ -107,3 +117,49 @@ def build_harness_env(settings: Settings) -> HarnessEnv:
         )
 
     return harness_env
+
+
+def build_terminal_env(settings: Settings) -> TerminalEnv:
+    """`terminal_contract` with the same alias table `build_harness_env` binds (AD-5, FR-21).
+
+    The whole point of routing the terminal command through the *same* `AliasBuilder` is that
+    the export list it prints is the harness's own `HARNESS_ENV_ALIASES` by construction —
+    `tests/unit/test_harness_env_contract.py` already holds that builder against the bash
+    array, so a name added to `scripts/harness/claude.sh` and not to `claude_aliases` fails
+    there rather than silently going missing from a pasted command.
+
+    What makes it safe to run that builder for a screen is what it is fed: `terminal_contract`
+    states every credential as `$NAME`, so `claude_aliases` returns `ANTHROPIC_AUTH_TOKEN` =
+    `$LITELLM_API_KEY` and builds `ANTHROPIC_CUSTOM_HEADERS` out of identifiers alone.
+    Subscription mode needs no special case for the same reason: its extra header renders
+    `x-litellm-api-key: Bearer $LITELLM_API_KEY`.
+
+    The only thing this function reads off `Settings` is `claude_subscription_auth`, a bool.
+    It never touches a `SecretStr`, and `tests/unit/test_terminal_command.py` asserts that no
+    value of any secret setting occurs in the command it produces.
+    """
+    table = SUBSCRIPTION_ALIASES if settings.claude_subscription_auth else ALIASES
+
+    def terminal_env(
+        attempt: Attempt,
+        *,
+        run: Run,
+        project_slug: str,
+        story_id: str | None,
+        traceparent: str,
+    ) -> TerminalEnvironment:
+        contract = terminal_contract(
+            attempt,
+            run=run,
+            project_slug=project_slug,
+            story_id=story_id,
+            traceparent=traceparent,
+        )
+        builder = table.get(attempt.harness or "")
+        exports: Mapping[str, str] = {} if builder is None else builder(contract)
+        return TerminalEnvironment(
+            identifiers=tuple((name, contract[name]) for name in IDENTIFIER_NAMES),
+            exports=tuple(exports.items()),
+        )
+
+    return terminal_env

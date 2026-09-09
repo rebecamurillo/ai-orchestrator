@@ -3,7 +3,8 @@
  * `Header`/`Banner`/`StopBody`/`StepsTable`/`StoriesStrip`/`CostBlock`/`GateRecord`
  * composed from it, the Cancel confirm, and the effects a signal button has (`retry`,
  * `continue`, and the three that carry a payload: 6.1's `answer` and 6.6's `budget_raise`
- * and Accept (`continue` with the files the park recorded) — `cancel` is its own
+ * and Accept (`continue` with the files the park recorded); 6.7's `terminal_start` and
+ * `terminal_release` come off the command block — `cancel` is its own
  * always-present control). A screen reads one
  * endpoint and aggregates nothing (AD-8): every status shown here is `run.status`/`alert.
  * park_kind`/`admitted_signals`, verbatim off the response, never derived by this island.
@@ -39,6 +40,7 @@ import { isFile } from '../lib/run/artifacts';
 import { isSpecCheckpoint, plannedFilePath } from '../lib/run/checkpoint';
 import { detailRequestPath, runToken, stopKind, type RunDetailOut } from '../lib/run/detail';
 import { signalBody, signalsRequestPath, type SignalIn, type SignalKind } from '../lib/run/signals';
+import { TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
 import '../styles/run-detail.css';
 
@@ -179,6 +181,8 @@ export default function RunDetail({ runId }: Props) {
             onRaiseBudget={(amount) => void sendSignal('budget_raise', budgetRaiseBody(amount))}
             onAccept={(paths) => void sendSignal('continue', acceptBody(paths))}
             runId={runId}
+            onTerminalStart={() => void sendSignal(TERMINAL_START)}
+            onTerminalRelease={() => void sendSignal(TERMINAL_RELEASE)}
             plannedFile={plannedFile}
           />
           <div>

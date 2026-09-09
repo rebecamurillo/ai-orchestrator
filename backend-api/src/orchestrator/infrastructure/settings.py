@@ -61,10 +61,13 @@ class Settings(BaseSettings):
     #: How long a terminal Run's worktrees and logs are kept before `worktree_gc` sweeps
     #: them (SPEC CAP-11, FR-9).
     worktree_retention_days: Annotated[int, Field(ge=1)]
-    #: The two scheduled jobs' own crons (SPEC CAP-11, FR-4, FR-9); `engine.schedule` reads
-    #: these, never a constant, so an e2e scenario can run either sooner.
+    #: The scheduled jobs' own crons (SPEC CAP-11, FR-4, FR-9, FR-21); `engine.schedule`
+    #: reads these, never a constant, so an e2e scenario can run any of them sooner.
+    #: `terminal_poll_cron` is a six-field cron because its period is seconds, not minutes
+    #: (`*/30 * * * * *`), which is the form the DBOS scheduler takes.
     clone_check_cron: str
     worktree_gc_cron: str
+    terminal_poll_cron: str
     #: `harness_readiness.start`'s own `budget_usd` (SPEC CAP-8) — the fixture's one story
     #: is small, so a low ceiling still leaves room for a retry or two.
     readiness_budget_usd: Annotated[Decimal, Field(gt=0)]

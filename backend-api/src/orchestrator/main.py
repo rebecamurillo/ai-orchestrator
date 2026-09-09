@@ -90,7 +90,13 @@ from orchestrator.infrastructure.db.seed import (  # noqa: F401
     HARNESS_VERSION_SETTINGS,
     seed_harness_table,
 )
-from orchestrator.infrastructure.dbos import build_engine, launch_engine, schedule_jobs, serving
+from orchestrator.infrastructure.dbos import (
+    build_engine,
+    launch_engine,
+    schedule_engine_jobs,
+    schedule_jobs,
+    serving,
+)
 from orchestrator.infrastructure.git import SubprocessGit
 
 # the registry moved to `infrastructure/harness/registry.py`, beside the adapter it names,
@@ -189,6 +195,9 @@ def run_migrations(settings: Settings) -> str:
     # after the launch: `engine.schedule` writes to the database the launch just opened
     # (SPEC CAP-11), the same reason `register_queue` runs after `start` inside it.
     schedule_jobs(settings)
+    # the jobs that signal a Run rather than sweep one, and so need the engine itself
+    # (SPEC CAP-7, FR-21) — `infrastructure/terminal_jobs.py` says why they register apart
+    schedule_engine_jobs(settings)
     return head
 
 

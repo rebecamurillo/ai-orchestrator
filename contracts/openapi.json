@@ -2773,6 +2773,16 @@
             "title": "Template",
             "type": "string"
           },
+          "terminal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TerminalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "terminal_session": {
             "title": "Terminal Session",
             "type": "boolean"
@@ -3644,6 +3654,37 @@
           "inputs"
         ],
         "title": "TemplateVersionOut",
+        "type": "object"
+      },
+      "TerminalOut": {
+        "description": "The resume command block (6.7, FR-21, UX-DR5).\n\n**`command` never carries a secret value** (AD-5): it is built from this attempt's\nidentifiers, and every credential in it is a shell reference the container resolves \u2014\n`application/use_cases/terminal.py` states the mechanism, and\n`tests/unit/test_terminal_command.py` asserts the absence.",
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "in_progress": {
+            "title": "In Progress",
+            "type": "boolean"
+          },
+          "session_lifetime_ends_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Lifetime Ends At"
+          }
+        },
+        "required": [
+          "command",
+          "session_lifetime_ends_at",
+          "in_progress"
+        ],
+        "title": "TerminalOut",
         "type": "object"
       },
       "ValidateIn": {

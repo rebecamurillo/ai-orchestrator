@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from orchestrator.application.use_cases.terminal import Terminal, TerminalPorts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.clock import Clock
@@ -46,6 +47,10 @@ class RunViewPorts:
     #: construction predating this story (`test_run_views.py`'s own `harness` fixture)
     #: keeps working unchanged. Production wiring always sets one.
     tracer: Tracer | None = None
+    #: `None` degrades to `terminal = None` (FR-21, 6.7), for the same reason and with the
+    #: same precedent: a read that was not wired for the resume command simply publishes no
+    #: `terminal` block, and every `RunViewPorts(...)` written before this story compiles.
+    terminal: TerminalPorts | None = None
 
 
 @dataclass(frozen=True)
@@ -244,3 +249,8 @@ class RunDetailView:
     gate_record: list[GateRecord]
     admitted_signals: tuple[SignalKind, ...]
     summary: Summary | None
+    #: The paste-able resume command and its session state (6.7, FR-21), or `None` for every
+    #: stop the terminal escape hatch does not apply to. Defaulted, so `run_detail`'s own
+    #: existing constructions and the tests that build a `RunDetailView` by hand keep
+    #: compiling — `use_cases/terminal.py`'s docstring lists the five `None` cases.
+    terminal: Terminal | None = None

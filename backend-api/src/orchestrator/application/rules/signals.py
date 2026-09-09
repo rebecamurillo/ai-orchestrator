@@ -1,278 +1,81 @@
-"""AD-13's signal table, as data: what each Signal is admitted on, and what it records.
+"""The questions asked of AD-13's signal table: is this signal admitted here, what does this
+stop offer, and what does its gate record say.
 
-`signal_run` validates against `VALID` **before** it touches a state machine. That order is
-the reason `InvalidTransition` is not a `DomainError` (4.1): an operator sending a signal
-the table refuses gets a `Conflict` — 409 with the sentence below — and never reaches a
-transition function, so a raised `InvalidTransition` always means a bug rather than a
-described outcome.
+The table itself — `Rule`, its predicates, its text builders, `VALID`, `INVALID` and the two
+payload readers — is `rules/signals_table.py`, split out on line count alone when 6.7 added
+the terminal narrowing below to a module already at 397 of its 400 lines. Every public name
+of that module is re-exported here, so `apply_step_result.py`'s `REBASELINE_FAILED`,
+`signal_run.py`'s `Rule`, `signal_effects.py`'s `signals.accepted_files` and every other
+existing import of this module resolves exactly as it did.
 
-`admitted_signals(park_kind, row_kind)` is the same table read the other way: the set of
-actions a stop offers, which is PRD §4.6's *Signals admitted* column and what the Run detail
-will render (Epic 4.15). It answers from the park kind and the parked row's kind alone, so
-two rules of the table are written here in a form that question can answer:
-
-- **`retry` lists `protected_path` among its park kinds.** The brief writes the rule as
-  "`park_kind ∈ {timeout, push_rejected, misconfigured, internal, verify_failed}` or park
-  row `error`". Every park kind whose row is left `error` is already in that set except
-  `protected_path` — and `plan_stale` (row `error`, Continue and Cancel only) and `budget`
-  (which keeps the row's routed status, so possibly `error`) would both be wrongly admitted
-  by the "or park row `error`" half. AD-13 calls PRD §4.6 "the reason-text and
-  admitted-signal contract", so the park-kind set is the one written here.
-- **The `∉` rows are stored expanded.** `skip_story` and `skip_epic` are stated as
-  exclusions; `PARK_KINDS` minus the excluded set is the same rule and is one lookup.
-
-What the columns cannot say is written as `Rule.extra`: a raised budget has to exceed the
-spend, a skip has to have a frame to act on, and the terminal kinds turn on
-`run.terminal_session`. Each is a named predicate, so the table stays readable.
+`admitted_signals(park_kind, row_kind)` is the table read the other way: the set of actions a
+stop offers, which is PRD §4.6's *Signals admitted* column and what the Run detail renders.
+It answers from the park kind and the parked row's kind alone — see `signals_table.py`'s own
+docstring for the two rules of the table that are written in a form that question can answer.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from collections.abc import Sequence
 from typing import Any
 
-from orchestrator.application.rules.frames import EPIC_TEMPLATE, epic_frame, story_frame
+from orchestrator.application.rules.signals_table import (
+    ACCEPTED,
+    ACCEPTED_SEPARATOR,
+    ANSWER_KEY,
+    ANY_PARK,
+    BUDGET_KEY,
+    BUDGET_RAISED,
+    BUDGET_TOO_LOW,
+    FILES_KEY,
+    INVALID,
+    NON_TERMINAL,
+    PARKED,
+    REBASELINE_FAILED,
+    TERMINAL_RESUMED,
+    VALID,
+    Rule,
+    accepted_files,
+    raised_budget,
+)
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import Conflict
-from orchestrator.domain.statuses import (
-    PARK_KINDS,
-    RUN_STATUSES,
-    TERMINAL_RUN,
-    Actor,
-    ParkKind,
-    RunEvent,
-    RunStatus,
-    SignalKind,
-    StepStatus,
-)
+from orchestrator.domain.statuses import TERMINAL_RUN, ParkKind, SignalKind
 from orchestrator.domain.values import Signal
 
-#: The `Run.status` values a signal that is not `cancel` is sent to.
-PARKED: frozenset[RunStatus] = frozenset({"needs_you"})
+__all__ = [
+    "ACCEPTED",
+    "ACCEPTED_SEPARATOR",
+    "ANSWER_KEY",
+    "ANY_PARK",
+    "BUDGET_KEY",
+    "BUDGET_RAISED",
+    "BUDGET_TOO_LOW",
+    "FILES_KEY",
+    "INVALID",
+    "NON_TERMINAL",
+    "PARKED",
+    "REBASELINE_FAILED",
+    "TERMINAL_RESUMED",
+    "TERMINAL_SESSION_SIGNALS",
+    "VALID",
+    "Rule",
+    "accepted_files",
+    "admitted_signals",
+    "raised_budget",
+    "record_text",
+    "row_at",
+    "run_admitted_signals",
+    "validate",
+]
 
-#: Every non-terminal Run status — what `cancel` and the terminal kinds are admitted in.
-#: Derived rather than listed, so a new Run status is admitted or refused by AD-8's own
-#: two tables and never by a copy of them that went stale here.
-NON_TERMINAL: frozenset[RunStatus] = frozenset(RUN_STATUSES) - TERMINAL_RUN
-
-#: Every park kind: the rules whose admission does not depend on why the Run stopped.
-ANY_PARK: frozenset[ParkKind] = frozenset(PARK_KINDS)
-
-#: The payload key a raised budget arrives under.
-BUDGET_KEY = "budget_usd"
-
-#: The payload key an Answer's text arrives under.
-ANSWER_KEY = "text"
-
-#: The payload key `continue` on a `protected_path` park carries the accepted files under.
-FILES_KEY = "files"
-
-#: The sentence a raised budget's own gate record carries (AD-13). It names the new figure
-#: rather than the fact that a person raised it, at the two decimal places
-#: `rules/budget.py::forced` already renders a budget park's own reason to.
-BUDGET_RAISED = "budget raised to ${budget}"
-
-#: What a `budget_raise` that does not clear the spend is refused with. `Rule.extra_refusal`
-#: is why this reaches the Operator instead of `INVALID`: the table's columns all admit the
-#: signal here, and `_raises_the_budget` alone says no, so the sentence that says *why* is
-#: the useful one (NFR-8).
-BUDGET_TOO_LOW = "new budget must exceed spend ${spend}"
-
-#: The sentence a `continue` that accepted files carries (FR-31, 6.6): the paths, in the
-#: order they arrived. A `continue` at a `checkpoint` or `plan_stale` park accepts none and
-#: keeps the fixed phrase instead.
-ACCEPTED = "accepted: {paths}"
-ACCEPTED_SEPARATOR = ", "
-
-#: The park reason `apply_step_result` leaves when a skipped Story's re-baseline fails —
-#: AD-9's redispatch onto a target that was never run (`use_cases/apply_step_result.py`
-#: imports it from here, so the sentence has one definition and this module can read it
-#: without importing a use case). It is stated here because it is an *admission* fact:
-#: PRD §4.6 is "the reason-text and admitted-signal contract", and the Story that park is
-#: about has already been skipped, so `skip_story` has nothing left to skip.
-REBASELINE_FAILED = "re-baseline failed after skip"
-
-
-@dataclass(frozen=True)
-class Rule:
-    """When one `Signal.kind` is admitted, and what its gate record says."""
-
-    #: The park kinds this signal is admitted on, read only while the Run is `needs_you`.
-    park_kinds: frozenset[ParkKind]
-    #: The Run statuses it is admitted in.
-    run_statuses: frozenset[RunStatus] = PARKED
-    #: The parked row's `kind`, or `None` when any kind is admitted.
-    row_kinds: frozenset[str] | None = None
-    #: The parked row's `status`, or `None` when any status is admitted.
-    row_statuses: frozenset[StepStatus] | None = None
-    #: What the table states in words rather than in columns; `None` when it states nothing.
-    extra: Callable[[Run, StepRun | None, Signal], bool] | None = None
-    #: The refusal `extra` alone earns, where the table has a better sentence than `INVALID`.
-    #: Formatted with the Run, so a `budget_raise` can name the spend it has to beat.
-    extra_refusal: str | None = None
-    #: The Run transition this signal applies, or `None` when the Run's status is unchanged.
-    run_event: RunEvent | None = None
-    #: Who the gate record names.
-    actor: Actor = "operator"
-    #: The sentence the gate record carries when the payload supplies none.
-    text: str = ""
-    #: The payload key whose value is the gate record's text instead of `text`.
-    text_key: str | None = None
-    #: The gate record's text, built from the payload — for a sentence that has to quote a
-    #: *validated* value, which is what `text_key` (the payload's own string, verbatim)
-    #: cannot do. `None` from the builder falls through to `text`.
-    text_from: Callable[[dict[str, Any]], str | None] | None = None
-    #: True for the actions a person takes on the Run detail — what `admitted_signals`
-    #: answers with. The terminal kinds are driven by the browser and the poll job.
-    operator_action: bool = True
-
-
-def _raised_budget(payload: dict[str, Any]) -> Decimal | None:
-    """The `budget_usd` a `budget_raise` carries, or `None` when it carries no number."""
-    try:
-        return Decimal(str(payload[BUDGET_KEY]))
-    except KeyError, InvalidOperation, ValueError:
-        return None
-
-
-def _raises_the_budget(run: Run, _row: StepRun | None, signal: Signal) -> bool:
-    """AD-13: a raised budget has to be a real number, more than the Run has spent.
-
-    `is_finite` is not decoration: `Decimal("NaN") > spend` *raises* `InvalidOperation`,
-    which would leave the operator with a 500 where the table promises a 409, and
-    `Decimal("Infinity")` would be accepted as a budget no spend can ever exceed.
-    """
-    budget = _raised_budget(signal.payload)
-    return budget is not None and budget.is_finite() and budget > run.spend_usd
-
-
-def _has_story_frame(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
-    """`skip_story` needs a `…stories[n]` frame under `park_path` to skip."""
-    return run.park_path is not None and story_frame(run.park_path) is not None
-
-
-def _has_epic_frame(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
-    """`skip_epic` needs an `epics[n]` frame — or a Run that is itself one epic."""
-    if run.template_name == EPIC_TEMPLATE:
-        return True
-    return run.park_path is not None and epic_frame(run.park_path) is not None
-
-
-def _budget_raised_text(payload: dict[str, Any]) -> str:
-    """`budget raised to $60.00`, off the validated figure rather than the payload's string.
-
-    `raised_budget` asserts the payload holds a number, which is safe here for
-    `signal_run`'s own reason: the table is validated first and unconditionally, so a
-    payload that reaches a gate record has already cleared `_raises_the_budget`.
-    """
-    return BUDGET_RAISED.format(budget=f"{raised_budget(payload):.2f}")
-
-
-def _accepted_text(payload: dict[str, Any]) -> str | None:
-    """`accepted: tests/api/test_runs.py` for an Accept, `None` for every other `continue`.
-
-    One kind, two sentences: AD-13 gives `continue` three park kinds, and only the
-    `protected_path` one carries files. `None` is what falls the record back to
-    "continued by the operator" for the other two, which is what they still mean.
-    """
-    files = accepted_files(payload)
-    if not files:
-        return None
-    return ACCEPTED.format(paths=ACCEPTED_SEPARATOR.join(files))
-
-
-def _no_terminal_session(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
-    return not run.terminal_session
-
-
-def _in_terminal_session(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
-    return run.terminal_session
-
-
-#: AD-13's table. Every `Signal.kind` there is has exactly one row here.
-VALID: dict[SignalKind, Rule] = {
-    "answer": Rule(
-        park_kinds=frozenset({"blocked", "checkpoint"}),
-        row_kinds=frozenset({"agent"}),
-        run_event="answer",
-        text="answer from the operator",
-        text_key=ANSWER_KEY,
-    ),
-    "continue": Rule(
-        park_kinds=frozenset({"checkpoint", "protected_path", "plan_stale"}),
-        run_event="continue",
-        text="continued by the operator",
-        text_from=_accepted_text,
-    ),
-    "retry": Rule(
-        park_kinds=frozenset(
-            {
-                "timeout",
-                "push_rejected",
-                "misconfigured",
-                "internal",
-                "verify_failed",
-                "protected_path",
-            }
-        ),
-        run_event="retry",
-        text="retried by the operator",
-    ),
-    "skip_story": Rule(
-        park_kinds=ANY_PARK - frozenset({"budget", "plan_stale", "push_rejected"}),
-        extra=_has_story_frame,
-        run_event="skip_story",
-        text="story skipped by the operator",
-    ),
-    "skip_epic": Rule(
-        park_kinds=ANY_PARK - frozenset({"budget", "plan_stale"}),
-        extra=_has_epic_frame,
-        run_event="skip_epic",
-        text="epic skipped by the operator",
-    ),
-    "budget_raise": Rule(
-        park_kinds=frozenset({"budget"}),
-        extra=_raises_the_budget,
-        extra_refusal=BUDGET_TOO_LOW,
-        run_event="budget_raise",
-        text="budget raised by the operator",
-        text_from=_budget_raised_text,
-    ),
-    "cancel": Rule(
-        park_kinds=ANY_PARK,
-        run_statuses=NON_TERMINAL,
-        run_event="cancel",
-        text="cancelled by the operator",
-    ),
-    "terminal_start": Rule(
-        park_kinds=ANY_PARK,
-        extra=_no_terminal_session,
-        text="terminal session started",
-        operator_action=False,
-    ),
-    "terminal_release": Rule(
-        park_kinds=ANY_PARK,
-        run_statuses=NON_TERMINAL,
-        extra=_in_terminal_session,
-        text="terminal session released",
-        operator_action=False,
-    ),
-    "terminal_resume": Rule(
-        park_kinds=frozenset({"blocked"}),
-        row_statuses=frozenset({"blocked"}),
-        extra=_in_terminal_session,
-        run_event="terminal_resume",
-        actor="terminal",
-        text="resumed from the terminal session",
-        operator_action=False,
-    ),
-}
-
-#: The refusal sentence, verbatim from the brief.
-INVALID = "signal {kind} invalid for status {status} / park {park}"
+#: What a Run with a terminal session in progress offers instead of its stop's own actions
+#: (FR-21, 6.7): the two the brief keeps, in `VALID`'s own order. `terminal_release` cannot
+#: come out of `admitted_signals` — its `Rule.operator_action` is `False`, and flipping that
+#: would offer a Release on every stop, session or no session — so it is named here, where
+#: the Run's own `terminal_session` is what makes it true.
+TERMINAL_SESSION_SIGNALS: tuple[SignalKind, ...] = ("cancel", "terminal_release")
 
 
 def validate(run: Run, park_row: StepRun | None, signal: Signal) -> Rule:
@@ -331,9 +134,18 @@ def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKin
     would find nothing left to skip and merely re-queue the row Retry re-queues. `validate`
     is deliberately not narrowed with it: AD-13's table is keyed on the park *kind*, and a
     `skip_story` posted here is admissible and harmless. This is what the stop *offers*.
+
+    **A terminal session replaces the whole set** (6.7, FR-21). While `run.terminal_session`
+    is true the Operator is working in the agent's own session in a terminal, and every
+    action that would move the same row from here — Answer, Continue, Skip story, Skip epic,
+    Retry — is dropped; `cancel` and `terminal_release` are what is left. It is read before
+    the status tests below rather than after them, so the answer does not depend on which
+    status a Run happens to be in while the flag is set.
     """
     if run.status in TERMINAL_RUN:
         return ()
+    if run.terminal_session:
+        return TERMINAL_SESSION_SIGNALS
     if run.status != "needs_you":
         return ("cancel",)
     if run.park_kind is None:
@@ -355,31 +167,6 @@ def record_text(rule: Rule, payload: dict[str, Any]) -> str:
         if supplied:
             return str(supplied)
     return rule.text
-
-
-def raised_budget(payload: dict[str, Any]) -> Decimal:
-    """The validated `budget_usd` of a `budget_raise`.
-
-    Asserted rather than re-checked: `validate` refuses a `budget_raise` whose payload
-    carries no number at all, so a `None` here would be a caller that skipped validation —
-    the same invariant `create_run` states about its own plan.
-    """
-    budget = _raised_budget(payload)
-    assert budget is not None
-    return budget
-
-
-def accepted_files(payload: dict[str, Any]) -> tuple[str, ...]:
-    """The files a `continue` on a `protected_path` park accepted, in the order they came.
-
-    A payload that is not a sequence of files accepts none: a bare string would otherwise
-    be spread one character per "file" into `run.accepted_paths`, and anything else would
-    raise where the table describes no outcome.
-    """
-    supplied = payload.get(FILES_KEY)
-    if not isinstance(supplied, list | tuple):
-        return ()
-    return tuple(str(entry) for entry in supplied)
 
 
 def _refuse(run: Run, signal: Signal) -> Conflict:

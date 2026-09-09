@@ -30,11 +30,9 @@ from orchestrator.api.schemas.board_view import (
     ProgressOut,
 )
 from orchestrator.api.schemas.common import MoneyStr, UtcTimestamp
+from orchestrator.api.schemas.run_alert import AlertOut, AttributionOut, CheckpointStoryOut
 from orchestrator.api.schemas.runs import RunSummaryOut
 from orchestrator.application.use_cases.run_views import (
-    Alert,
-    Attribution,
-    CheckpointStory,
     Cost,
     Header,
     LatestAttempt,
@@ -42,17 +40,21 @@ from orchestrator.application.use_cases.run_views import (
     StepRowView,
     StoryCell,
     Summary,
+    Terminal,
 )
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
-from orchestrator.domain.statuses import Actor, GateEvent, ParkKind, SignalKind
+from orchestrator.domain.statuses import Actor, GateEvent, SignalKind
 from orchestrator.domain.values import Worktree
 
 __all__ = [
+    "AlertOut",
+    "AttributionOut",
     "BoardColumnsOut",
     "BoardCountsOut",
     "BoardOut",
     "CardOut",
+    "CheckpointStoryOut",
     "ProgressOut",
     "RunDetailOut",
 ]
@@ -84,6 +86,28 @@ def _drop_default(schema: dict[str, Any]) -> None:
 # ── the Run detail (SPEC CAP-12, CAP-15) ──────────────────────────────────────────────────
 
 
+class TerminalOut(BaseModel):
+    """The resume command block (6.7, FR-21, UX-DR5).
+
+    **`command` never carries a secret value** (AD-5): it is built from this attempt's
+    identifiers, and every credential in it is a shell reference the container resolves —
+    `application/use_cases/terminal.py` states the mechanism, and
+    `tests/unit/test_terminal_command.py` asserts the absence.
+    """
+
+    command: str
+    session_lifetime_ends_at: UtcTimestamp | None
+    in_progress: bool
+
+    @classmethod
+    def of(cls, terminal: Terminal) -> TerminalOut:
+        return cls(
+            command=terminal.command,
+            session_lifetime_ends_at=terminal.session_lifetime_ends_at,
+            in_progress=terminal.in_progress,
+        )
+
+
 class RunDetailSummaryOut(RunSummaryOut):
     """`RunSummaryOut` plus what only the detail's own `run` field carries."""
 
@@ -94,13 +118,28 @@ class RunDetailSummaryOut(RunSummaryOut):
     compare_urls: list[str]
     terminal_session: bool
     accepted_paths: list[str]
+    #: FR-21's resume command, beside the flag that says whether a session is already open
+    #: (6.7). It belongs to the Run rather than to the screen's own sections: `in_progress`
+    #: *is* `terminal_session` one line above, and a block whose whole subject is a field of
+    #: `run` reads truer here than as a tenth top-level key. `null` for every stop the
+    #: escape hatch does not apply to; `_drop_default`-guarded like `skipped_epics`, so the
+    #: web-client fixtures that predate it keep compiling without it (AD-3).
+    terminal: TerminalOut | None = Field(default=None, json_schema_extra=_drop_default)
 
     @classmethod
-    def of_run(cls, run: Run, *, admitted_signals: tuple[SignalKind, ...]) -> RunDetailSummaryOut:
+    def of_run(
+        cls,
+        run: Run,
+        *,
+        admitted_signals: tuple[SignalKind, ...],
+        terminal: Terminal | None = None,
+    ) -> RunDetailSummaryOut:
         """Built on `RunSummaryOut.of` rather than a second, hand-listed field mapping —
         this stays in step with that one automatically if it ever changes. `admitted_signals`
         is recomputed by the caller (`run_detail`, off the parked row's own `kind`) rather
-        than `RunSummaryOut.of`'s own `park_row_kind=None` default, so it is overridden here."""
+        than `RunSummaryOut.of`'s own `park_row_kind=None` default, so it is overridden here.
+        `terminal` is the caller's for the same reason: it is built from the parked row's own
+        attempt and the harness registry, neither of which a `Run` carries."""
         base = RunSummaryOut.of(run).model_dump()
         base["admitted_signals"] = admitted_signals
         return cls(
@@ -112,6 +151,7 @@ class RunDetailSummaryOut(RunSummaryOut):
             compare_urls=list(run.compare_urls),
             terminal_session=run.terminal_session,
             accepted_paths=list(run.accepted_paths),
+            terminal=None if terminal is None else TerminalOut.of(terminal),
         )
 
 
@@ -144,77 +184,6 @@ class HeaderOut(BaseModel):
                 started_at=header.started_at,
                 worktree_path=header.worktree_path,
             )
-        )
-
-
-class AttributionOut(BaseModel):
-    """The blocked Question's eyebrow (5.10, SPEC CAP-10): `Agent · {harness} · {model} ·
-    {ended_at}`."""
-
-    harness: str | None
-    model: str | None
-    ended_at: UtcTimestamp | None
-
-    @classmethod
-    def of(cls, attribution: Attribution) -> AttributionOut:
-        return cls(
-            harness=attribution.harness, model=attribution.model, ended_at=attribution.ended_at
-        )
-
-
-class CheckpointStoryOut(BaseModel):
-    """The done-checkpoint's own summary line (story 6-2): `story {id} · {title} ·
-    {attempts} attempts · ${cost} · verify {done|skipped}`."""
-
-    story_id: str
-    title: str
-    attempts: int
-    cost_usd: MoneyStr
-    verify: str
-
-    @classmethod
-    def of(cls, story: CheckpointStory) -> CheckpointStoryOut:
-        return cls(
-            story_id=story.story_id,
-            title=story.title,
-            attempts=story.attempts,
-            cost_usd=str(story.cost_usd),
-            verify=story.verify,
-        )
-
-
-class AlertOut(BaseModel):
-    token: str
-    reason: str | None
-    park_kind: ParkKind | None
-    #: `.of()` always sets the real value; see `_drop_default` — predates this field (5.10).
-    attribution: AttributionOut | None = Field(default=None, json_schema_extra=_drop_default)
-    #: `None` predates story 6-2. The parked row's own `kind`: a `checkpoint` park's
-    #: `StopBody` case is `agent` (spec checkpoint) or anything else (done checkpoint).
-    row_kind: str | None = Field(default=None, json_schema_extra=_drop_default)
-    #: Set only for a done checkpoint. `None` predates story 6-2.
-    checkpoint_story: CheckpointStoryOut | None = Field(
-        default=None, json_schema_extra=_drop_default
-    )
-    #: The parking gate record's own payload (6.6) — AD-17's `{"hits": [{path, kind}]}` on a
-    #: `protected_path` stop, `{}` on every other. `dict[str, Any]`, the type `GateRecord.
-    #: payload` itself carries: a typed model here would fix a shape the record deliberately
-    #: leaves open ("whatever the event needs kept", its own docstring).
-    payload: dict[str, Any] = Field(default_factory=dict, json_schema_extra=_drop_default)
-
-    @classmethod
-    def of(cls, alert: Alert) -> AlertOut:
-        attribution = None if alert.attribution is None else AttributionOut.of(alert.attribution)
-        checkpoint_story = alert.checkpoint_story
-        story = None if checkpoint_story is None else CheckpointStoryOut.of(checkpoint_story)
-        return cls(
-            token=alert.token,
-            reason=alert.reason,
-            park_kind=alert.park_kind,
-            attribution=attribution,
-            row_kind=alert.row_kind,
-            checkpoint_story=story,
-            payload=alert.payload,
         )
 
 
@@ -376,7 +345,11 @@ class RunDetailOut(BaseModel):
     @classmethod
     def of(cls, detail: RunDetailView) -> RunDetailOut:
         return cls(
-            run=RunDetailSummaryOut.of_run(detail.run, admitted_signals=detail.admitted_signals),
+            run=RunDetailSummaryOut.of_run(
+                detail.run,
+                admitted_signals=detail.admitted_signals,
+                terminal=detail.terminal,
+            ),
             header=HeaderOut.of(detail.header),
             alert=None if detail.alert is None else AlertOut.of(detail.alert),
             steps=[StepRowOut.of(row) for row in detail.steps],

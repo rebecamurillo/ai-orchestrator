@@ -65,6 +65,7 @@ from orchestrator.application.use_cases.run_views_summary import (
     story_cells,
     summary,
 )
+from orchestrator.application.use_cases.terminal import Terminal, resume_command
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.project import Project
@@ -91,6 +92,7 @@ __all__ = [
     "StepRowView",
     "StoryCell",
     "Summary",
+    "Terminal",
     "board_view",
     "run_detail",
     "run_graph_for",
@@ -206,6 +208,32 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
         gate_record=records,
         admitted_signals=admitted,
         summary=_summary(run, rows),
+        terminal=_terminal(ports, run, park_row, _latest_of(park_attempts), project),
+    )
+
+
+def _terminal(
+    ports: RunViewPorts,
+    run: Run,
+    park_row: StepRun | None,
+    attempt: Attempt | None,
+    project: Project | None,
+) -> Terminal | None:
+    """FR-21's resume command, or `None` when this read was not wired for one.
+
+    The unwired case is the `tracer` precedent one layer on: a `RunViewPorts` built without
+    `terminal` publishes no `terminal` block rather than failing, which is what keeps every
+    frozen construction of that dataclass compiling. `use_cases/terminal.py` owns the five
+    reasons a *wired* read still answers `None`.
+    """
+    if ports.terminal is None:
+        return None
+    return resume_command(
+        ports.terminal,
+        run,
+        park_row,
+        attempt,
+        project_slug=project.slug if project is not None else "",
     )
 
 

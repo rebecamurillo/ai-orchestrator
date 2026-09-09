@@ -207,39 +207,6 @@ def test_answer_moves_the_blocked_row_and_resumes_the_run() -> None:
     assert outcome.run.status == "running"
 
 
-def _terminal_release_world() -> World:
-    return parked("misconfigured", "push", "error", terminal_session=True)
-
-
-def _terminal_resume_world() -> World:
-    return parked("blocked", BUILD, "blocked", terminal_session=True)
-
-
-@pytest.mark.parametrize(
-    ("world_factory", "kind", "payload"),
-    [
-        (lambda: parked("misconfigured", "push", "error"), "terminal_start", {}),
-        (_terminal_release_world, "terminal_release", {}),
-        (_terminal_resume_world, "terminal_resume", {}),
-    ],
-    ids=[
-        "terminal_start",
-        "terminal_release",
-        "terminal_resume",
-    ],
-)
-def test_every_kind_outside_this_epics_scope_is_refused_not_available_yet(
-    world_factory: object, kind: str, payload: dict[str, object]
-) -> None:
-    world = world_factory()  # type: ignore[operator]
-    ports = effect_ports(world)
-
-    with pytest.raises(Conflict, match=f"{kind} not available yet"):
-        send(world, ports, kind, **payload)
-
-    assert world.engine.calls == []
-
-
 def test_a_signal_ad13_itself_refuses_keeps_ad13s_own_refusal_text() -> None:
     """A genuinely inadmissible signal — `answer` on a `running` Run — never reaches this
     module's own refusal: `validate` raises first, with AD-13's own sentence."""

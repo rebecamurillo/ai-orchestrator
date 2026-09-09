@@ -52,7 +52,9 @@ import {
   skipEpicConfirmLine,
   skipStoryConfirmLine,
 } from '../../lib/run/skip';
+import { offersRelease, terminalBlock } from '../../lib/run/terminal';
 import AcceptBox from './AcceptBox';
+import CommandBlock from './CommandBlock';
 import AnswerBox from './AnswerBox';
 import BudgetRaiseBox from './BudgetRaiseBox';
 import ConfirmAction from './ConfirmAction';
@@ -84,6 +86,11 @@ interface Props {
   onAccept?: (paths: string[]) => void;
   /** This Run's id, for the per-file diff links the protected-path body renders. */
   runId?: string;
+  /** The terminal resume block's two controls (6.7, FR-21): Copy posts `terminal_start`,
+   * *Release* posts `terminal_release`. Optional like the payload callbacks above — a caller
+   * rendering a Run with no `terminal` block has nothing to hand them. */
+  onTerminalStart?: () => void;
+  onTerminalRelease?: () => void;
   /** The planned story file a spec checkpoint shows inline (`GET /runs/{id}/files`) —
    * fetched by the island, since `StopBody` itself stays stateless. `undefined` while it
    * has not resolved yet, `null` on a failed fetch. */
@@ -104,6 +111,8 @@ export default function StopBody({
   onRaiseBudget = () => {},
   onAccept = () => {},
   runId = '',
+  onTerminalStart = () => {},
+  onTerminalRelease = () => {},
   plannedFile = null,
 }: Props) {
   const kind = stopKind(detail, token);
@@ -144,6 +153,11 @@ export default function StopBody({
   const path = currentStepPath(detail);
   const row = stepAt(detail.steps, path);
   const files = kind === 'misconfigured' ? misconfiguredFiles(detail.alert?.reason) : [];
+  // FR-21's second path; `null` hides the section. *Release* lives inside the block rather
+  // than in the button row: it belongs to the session the block opened, and the row is
+  // `admitted_signals`' — `cancel` alone while a session is open, the server having dropped
+  // every other action (`application/rules/signals.py::run_admitted_signals`).
+  const terminal = terminalBlock(detail);
 
   return (
     <div className="wf-stop" data-testid={`wf-stop-${kind}`}>
@@ -211,6 +225,16 @@ export default function StopBody({
       ) : null}
       {kind === 'failed' ? (
         <p className="wf-stop-reason">{row ? `${row.path} · ${row.label}` : ''}</p>
+      ) : null}
+
+      {terminal ? (
+        <CommandBlock
+          terminal={terminal}
+          onCopy={onTerminalStart}
+          onRelease={onTerminalRelease}
+          canRelease={offersRelease(detail.admitted_signals)}
+          disabled={posting !== null}
+        />
       ) : null}
 
       {tail.length > 0 ? (

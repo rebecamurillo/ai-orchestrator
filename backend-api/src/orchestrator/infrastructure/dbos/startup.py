@@ -65,6 +65,7 @@ from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.process import RealProcessRunner
 from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.settings import Settings
+from orchestrator.infrastructure.terminal_jobs import engine_jobs
 from orchestrator.infrastructure.tracing import LangfuseTracer
 from orchestrator.infrastructure.workspace import FsWorkspace
 
@@ -205,4 +206,25 @@ def schedule_jobs(settings: Settings) -> None:
         if session_factory is None or git is None:
             continue
         for name, cron, job in scheduled_jobs(settings, session_factory, git):
+            engine.schedule(name, cron, job)
+
+
+def schedule_engine_jobs(settings: Settings) -> None:
+    """Register the scheduled jobs that signal a Run through the engine (SPEC CAP-7, FR-21).
+
+    A second registration function beside `schedule_jobs`, and not a third entry in it, for a
+    reason that is about arguments rather than tidiness: `infrastructure/jobs.py::
+    scheduled_jobs(settings, session_factory, git)` is never handed a `WorkflowEngine`, and
+    `terminal_poll` needs one — its whole output is a `signal_run` call, and `SignalPorts`
+    takes the engine. `_SERVING` is where the engine already is, so this is where the job that
+    needs it is built.
+
+    Guarded exactly as `schedule_jobs` is guarded: a process that is not serving (every unit
+    test) has nothing in `_SERVING`, and a `serving(engine)` call with no adapters registers
+    nothing, because a real schedule needs a real session factory and a real `Git`.
+    """
+    for engine, session_factory, git in _SERVING:
+        if session_factory is None or git is None:
+            continue
+        for name, cron, job in engine_jobs(settings, session_factory, git, engine):
             engine.schedule(name, cron, job)
