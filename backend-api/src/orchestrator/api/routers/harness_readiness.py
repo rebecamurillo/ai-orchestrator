@@ -48,7 +48,10 @@ def _refusal(description: str) -> dict[str, object]:
     }
 
 
-CONFLICT_RESPONSE = _refusal("A non-terminal readiness Run for this harness already exists.")
+CONFLICT_RESPONSE = _refusal(
+    "A non-terminal readiness Run for this harness already exists, or this instance's "
+    "READINESS_MODELS binds no model for it."
+)
 NOT_FOUND_RESPONSE = _refusal("The readiness Project or Repository is not seeded.")
 NO_SUCH_HARNESS_RESPONSE = _refusal("No harness has that name.")
 # undeclared, FastAPI would publish its own `HTTPValidationError` schema for the path

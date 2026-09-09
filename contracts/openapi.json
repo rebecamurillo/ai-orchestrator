@@ -3962,7 +3962,7 @@
                 }
               }
             },
-            "description": "A non-terminal readiness Run for this harness already exists."
+            "description": "A non-terminal readiness Run for this harness already exists, or this instance's READINESS_MODELS binds no model for it."
           },
           "422": {
             "content": {

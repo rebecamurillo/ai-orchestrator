@@ -2068,7 +2068,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description A non-terminal readiness Run for this harness already exists. */
+            /** @description A non-terminal readiness Run for this harness already exists, or this instance's READINESS_MODELS binds no model for it. */
             409: {
                 headers: {
                     [name: string]: unknown;

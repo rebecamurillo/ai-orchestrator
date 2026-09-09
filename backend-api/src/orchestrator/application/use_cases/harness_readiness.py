@@ -15,9 +15,11 @@ length.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from types import MappingProxyType
 from uuid import UUID
 
 from orchestrator.application.use_cases.create_run import (
@@ -32,6 +34,22 @@ from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.errors import Conflict, NotFound
 from orchestrator.domain.ports.repositories import RepositoryRepository
+
+#: The model each harness's readiness Run binds when nothing overrides it — the committed
+#: `READINESS_MODELS` contract, which `api/providers.py` passes in from
+#: `Settings.readiness_models` on every real dispatch.
+#:
+#: One model per harness because a single value cannot be right: `codex` cannot run an
+#: Anthropic model and `local` is pointed at the host's own model server. These three are
+#: the cheapest route on each harness that can finish the fixture's one story, which is the
+#: honest choice for a Run that exists to prove plumbing — session capture, tracing, spend
+#: attribution — rather than to produce code.
+#:
+#: A default at all, rather than a required field, because a port built without one would
+#: otherwise bind *no* model, which is the exact defect this mapping exists to remove.
+DEFAULT_READINESS_MODELS: Mapping[str, str] = MappingProxyType(
+    {"claude": "claude-sonnet-4-6", "codex": "gpt-5.4", "local": "local-coder"}
+)
 
 #: The one Repository the readiness fixture lives in, under the `readiness` Project.
 READINESS_REPOSITORY_SLUG = "readiness-repo"
@@ -62,6 +80,10 @@ class HarnessReadinessPorts:
     create_run: CreateRunPorts
     #: `Settings.readiness_budget_usd` (AD-20) — read once, by the composition root.
     budget_usd: Decimal
+    #: `Settings.readiness_models` (AD-20), harness name → the model that harness's
+    #: readiness Run binds. Defaults to the committed contract so a port built without it
+    #: still binds something real; see `DEFAULT_READINESS_MODELS`.
+    models: Mapping[str, str] = DEFAULT_READINESS_MODELS
 
 
 def start(ports: HarnessReadinessPorts, name: str) -> CreateRunResult:
@@ -77,10 +99,21 @@ def start(ports: HarnessReadinessPorts, name: str) -> CreateRunResult:
 
     `Conflict` (409) when a non-terminal readiness Run for `name` already exists — one
     harness readiness Run in flight at a time, so two `re-run readiness` clicks can never
-    race each other onto the same branch.
+    race each other onto the same branch — and `Conflict` again when `ports.models` binds no
+    model for `name`. That second refusal is checked second, before any seed is read,
+    because a readiness Run that binds no model is the failure this whole path exists to
+    avoid: `{{model}}` would resolve to the empty string and the harness would fall back to
+    its own built-in default, which is not a route the operator's Gateway serves. 409 rather
+    than 404 or 422: the name is real and the request is well formed, so what refuses is
+    this instance's own state — that harness is not dispatchable as configured. `Settings`
+    refuses a `READINESS_MODELS` that misses a harness at start-up, so this is the second
+    of two gates, not the only one.
     """
     if name not in HARNESS_NAMES:
         raise NotFound(f"no harness named {name!r}")
+    model = ports.models.get(name)
+    if not model:
+        raise Conflict(f"no readiness model is configured for {name!r} (READINESS_MODELS)")
     preflight = ports.create_run.preflight
     project = preflight.projects.get_by_slug(READINESS_PROJECT_SLUG)
     if project is None:
@@ -104,6 +137,7 @@ def start(ports: HarnessReadinessPorts, name: str) -> CreateRunResult:
         budget_usd=ports.budget_usd,
         inputs={BRANCH_INPUT: branch, "spec_folder": READINESS_SPEC_FOLDER},
         harness=name,
+        model=model,
     )
     return create_run(ports.create_run, request)
 

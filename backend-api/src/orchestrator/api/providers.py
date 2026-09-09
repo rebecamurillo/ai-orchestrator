@@ -217,6 +217,7 @@ def readiness_ports(request: Request) -> Iterator[HarnessReadinessPorts]:
                 tracer=LangfuseTracer(settings),
             ),
             budget_usd=settings.readiness_budget_usd,
+            models=settings.readiness_models,
         )
 
 

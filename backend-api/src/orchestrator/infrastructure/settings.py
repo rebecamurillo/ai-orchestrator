@@ -21,6 +21,8 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from orchestrator.domain.entities.harness import HARNESS_NAMES
+
 LogLevel = Literal["debug", "info", "warning", "error", "critical"]
 
 MIN_TCP_PORT = 1
@@ -38,6 +40,34 @@ CommaSeparated = Annotated[
     list[str],
     NoDecode,
     BeforeValidator(_split_csv),
+    Field(min_length=1),
+]
+
+
+def _split_pairs(value: object) -> object:
+    """Read `name=value,name=value` as a mapping, leaving mappings alone.
+
+    `_split_csv`'s shape for a setting that binds something *per* name. Every failure is
+    raised here rather than tolerated, because each of them is a name that would silently
+    bind nothing: a pair with no `=`, no name, or no value.
+    """
+    if not isinstance(value, str):
+        return value
+    pairs: dict[str, str] = {}
+    for item in value.split(","):
+        if not item.strip():
+            continue
+        name, separator, bound = item.partition("=")
+        if not separator or not name.strip() or not bound.strip():
+            raise ValueError(f"{item.strip()!r} is not a `name=value` pair")
+        pairs[name.strip()] = bound.strip()
+    return pairs
+
+
+CommaSeparatedPairs = Annotated[
+    dict[str, str],
+    NoDecode,
+    BeforeValidator(_split_pairs),
     Field(min_length=1),
 ]
 
@@ -71,6 +101,16 @@ class Settings(BaseSettings):
     #: `harness_readiness.start`'s own `budget_usd` (SPEC CAP-8) — the fixture's one story
     #: is small, so a low ceiling still leaves room for a retry or two.
     readiness_budget_usd: Annotated[Decimal, Field(gt=0)]
+    #: `harness_readiness.start`'s own `model`, one per harness (SPEC CAP-8, AD-10):
+    #: `claude=…,codex=…,local=…`, each naming a `model_name` the Gateway's `model_list`
+    #: serves. One value per harness because a single one cannot be right — `codex` cannot
+    #: run an Anthropic model, and `local` is pointed at the host's own model server.
+    #:
+    #: Bound rather than left empty because an unbound `{{model}}` resolves to the empty
+    #: string and the harness falls back to its own built-in default, which the Gateway
+    #: serves no route for. `_covers_every_harness` below is why a half-filled line refuses
+    #: at start-up instead of at the dispatch that would have bound nothing.
+    readiness_models: CommaSeparatedPairs
 
     # ── Git (AD-5) — never handed to a harness process ───────────────────────
     github_token: SecretStr
@@ -135,6 +175,26 @@ class Settings(BaseSettings):
     #: `scripts/check_env_contract.py` still checks both directions.
     orch_test_mode: bool = False
     backend_api_port: Annotated[int, Field(ge=MIN_TCP_PORT, le=MAX_TCP_PORT)]
+
+    @field_validator("readiness_models")
+    @classmethod
+    def _covers_every_harness(cls, value: dict[str, str]) -> dict[str, str]:
+        """Exactly the three harnesses the image installs, no more and no fewer.
+
+        Missing: that harness's readiness Run would bind no model, which is the failure the
+        setting exists to remove — refused here, at start-up, rather than at the dispatch,
+        because a partly-filled line looks configured. Extra: a name that is not a harness
+        is a typo (`opencode` for `local`), and ignoring it would leave the harness it was
+        meant for unbound while the line looks complete.
+        """
+        missing = [name for name in HARNESS_NAMES if name not in value]
+        unknown = sorted(name for name in value if name not in HARNESS_NAMES)
+        if missing or unknown:
+            raise ValueError(
+                f"missing {missing or 'nothing'}, unknown {unknown or 'nothing'} — "
+                "one `name=model` pair for each harness the image installs, and no other"
+            )
+        return value
 
     @field_validator("work_dir", "agent_home")
     @classmethod
