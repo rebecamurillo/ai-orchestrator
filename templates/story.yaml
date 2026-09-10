@@ -35,7 +35,7 @@ steps:
     gate: liveness
 
   - id: verify
-    run: "{{repository.quality_gate_command}}"
+    run: "{{repository.unit_test_command}}"
     on_fail: { redispatch: build, max: 1 }
     timeout_min: 30
     gate: deterministic

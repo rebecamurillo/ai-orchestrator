@@ -1,6 +1,6 @@
 name: epic
 version: 1
-description: all stories of one epic on one branch, pushed
+description: all stories of one epic on one branch, verified end to end, pushed
 inputs:
   project:     { type: project,    required: true }
   repository:  { type: repository, required: true }
@@ -15,9 +15,12 @@ steps:
     uses: git.worktree
     with: { base: "{{base_branch}}", branch: "{{branch}}" }
     gate: deterministic
-
+  - id: setup
+    run: "{{repository.install_command}}"
+    timeout_min: 20
+    gate: deterministic
   - id: baseline
-    run: "{{repository.quality_gate_command}}"
+    run: "{{repository.unit_test_command}}"
     on_fail: fail
     gate: deterministic
 
@@ -39,6 +42,10 @@ steps:
             story: "{{story}}"
             harness: "{{harness}}"
             model: "{{model}}"
+  - id: e2e
+    run: "{{repository.quality_gate_command}}"
+    timeout_min: 45
+    gate: deterministic
 
   - id: push
     uses: git.push
