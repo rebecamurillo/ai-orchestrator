@@ -114,4 +114,5 @@ def test_harness_out_of_renders_every_field() -> None:
         "version_pin": "2.1.258",
         "last_readiness_run_id": None,
         "lines": [],
+        "models": [],
     }

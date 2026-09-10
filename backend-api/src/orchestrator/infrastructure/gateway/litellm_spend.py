@@ -24,6 +24,18 @@ read outside `infrastructure/settings.py`.
 an HTTP error, a bad body — every one of them is logged and answered as a provisional zero,
 the same shape `tests/unit/fakes/gateway.py::PROVISIONAL_ZERO` gives an unscripted pair, so
 a caller never has to tell "the Gateway has nothing yet" from "the Gateway is unreachable".
+
+**Two ways to find an attempt's rows** (`Settings.litellm_spend_match`, 7.2). `session` is
+everything above and is the default. `attempt_tag` is the fallback 5.3 left as a swap-in, for
+a request path that does not carry `x-litellm-session-id` into the log's `session_id` column
+— Codex reaches the Gateway over the `responses` wire API through `env_http_headers`, and
+whether that path keeps the header is what 7.2's runbook has the Operator measure. In that
+mode the rows are asked for by `end_user` alone, because `/spend/logs/v2` offers no tag filter
+(`research/spend.md`), and narrowed here to the ones whose `request_tags` carry
+`attempt:{attempt_id}` — one of the five positions `infrastructure/harness/env.py::tag_list`
+writes into `x-litellm-tags`. The mode is a setting and never an automatic second query: an
+automatic one would be a silent retry (hard rule 7) and would hide the very finding the
+runbook exists to record.
 """
 
 from __future__ import annotations
@@ -38,6 +50,7 @@ import httpx
 import structlog
 
 from orchestrator.domain.ports.gateway import AttemptSpend, ModelSpend
+from orchestrator.infrastructure.harness.env import attempt_tag
 from orchestrator.infrastructure.settings import Settings
 
 log = structlog.get_logger(__name__)
@@ -48,6 +61,11 @@ SPEND_LOGS_PATH = "/spend/logs/v2"
 #: A fixed, wide window — see the module docstring on why no `Clock` is needed for it.
 START_DATE = "2020-01-01"
 END_DATE = "2099-12-31"
+
+#: The two values of `Settings.litellm_spend_match`, named here because this is the module
+#: that acts on them (`infrastructure/settings.py::SpendMatch` declares the type).
+MATCH_SESSION = "session"
+MATCH_ATTEMPT_TAG = "attempt_tag"
 
 #: Logged whenever `spend_for_attempt` answers a provisional zero (empty rows, an HTTP
 #: error, or a body the adapter could not read) — never raised.
@@ -86,26 +104,31 @@ class LiteLLMSpend:
     def _rows(self, run_id: UUID, attempt_id: UUID) -> list[dict[str, Any]]:
         """Every row across every page — `/spend/logs/v2` pages, and this reads them all —
         narrowed to the ones that actually match, per `_matches`'s own docstring."""
+        by_tag = self._settings.litellm_spend_match == MATCH_ATTEMPT_TAG
         rows: list[dict[str, Any]] = []
         page = 1
         total_pages = 1
         while page <= total_pages:
-            body = self._page(run_id, attempt_id, page)
+            body = self._page(run_id, attempt_id, page, by_tag=by_tag)
             rows.extend(body.get("data") or [])
             total_pages = int(body.get("total_pages") or 1)
             page += 1
-        return [row for row in rows if _matches(row, run_id, attempt_id)]
+        return [row for row in rows if _matches(row, run_id, attempt_id, by_tag=by_tag)]
 
-    def _page(self, run_id: UUID, attempt_id: UUID, page: int) -> dict[str, Any]:
+    def _page(self, run_id: UUID, attempt_id: UUID, page: int, *, by_tag: bool) -> dict[str, Any]:
+        """One page of the Run's rows. In `attempt_tag` mode the query names no session: the
+        route has no tag filter, so the narrowing to this attempt happens in `_matches`."""
+        params: dict[str, Any] = {
+            "end_user": str(run_id),
+            "start_date": START_DATE,
+            "end_date": END_DATE,
+            "page": page,
+        }
+        if not by_tag:
+            params["session_id"] = str(attempt_id)
         response = self._http.get(
             SPEND_LOGS_PATH,
-            params={
-                "end_user": str(run_id),
-                "session_id": str(attempt_id),
-                "start_date": START_DATE,
-                "end_date": END_DATE,
-                "page": page,
-            },
+            params=params,
             headers={
                 "Authorization": f"Bearer {self._settings.litellm_spend_key.get_secret_value()}"
             },
@@ -117,15 +140,33 @@ class LiteLLMSpend:
         return body
 
 
-def _matches(row: Mapping[str, Any], run_id: UUID, attempt_id: UUID) -> bool:
+def _matches(row: Mapping[str, Any], run_id: UUID, attempt_id: UUID, *, by_tag: bool) -> bool:
     """`session_id` on `/spend/logs/v2` is a `LIKE %value%` partial match, not equality
     (verified live against LiteLLM `v1.99.1`'s own source — the module docstring says so);
     `end_user` is exact already, but is checked here too for symmetry. A row whose
     `session_id` merely contains `attempt_id` as a substring, rather than equalling it, is
-    dropped client-side before it ever reaches a money or budget-park figure."""
-    session_matches = str(row.get("session_id")) == str(attempt_id)
+    dropped client-side before it ever reaches a money or budget-park figure.
+
+    In `attempt_tag` mode the attempt is identified by the tag instead, and the check is
+    equality against one whole tag rather than a substring for exactly the same reason: two
+    attempts of the same Run come back in one query there, and `attempt:{id}` being a prefix
+    of `attempt:{id}-2` would put one attempt's money on the other."""
     end_user_matches = str(row.get("end_user")) == str(run_id)
-    return session_matches and end_user_matches
+    if by_tag:
+        return end_user_matches and attempt_tag(str(attempt_id)) in _tags(row.get("request_tags"))
+    return end_user_matches and str(row.get("session_id")) == str(attempt_id)
+
+
+def _tags(value: Any) -> list[str]:
+    """A row's `request_tags`, as the list of whole tags it is. `x-litellm-tags` is sent
+    comma-joined and stored as a JSON array; whether a given proxy version hands back the
+    array or the string it received is its own business, so both read the same way here.
+    Anything else — absent, a number, an object — is no tags at all, never a partial match."""
+    if isinstance(value, list):
+        return [tag for tag in value if isinstance(tag, str)]
+    if isinstance(value, str):
+        return [tag.strip() for tag in value.split(",") if tag.strip()]
+    return []
 
 
 @dataclass

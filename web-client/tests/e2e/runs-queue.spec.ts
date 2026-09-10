@@ -245,9 +245,7 @@ test.describe('/runs (QUEUE section)', () => {
       page.getByTestId('runs-filter-project').getByRole('link', { name: 'all' }),
     ).toHaveAttribute('aria-current', 'true');
 
-    await expect(page.getByTestId('runs-history')).toContainText(
-      'history arrives with the harness comparison epic',
-    );
+    await expect(page.getByTestId('runs-history')).toContainText('HISTORY');
   });
 
   test('a status filter link carries the right href and flips aria-current; a project param already in the URL survives on every status link', async ({

@@ -19,6 +19,11 @@
 export const MIXED_ID = '00000000-0000-4000-8000-0000000000a1';
 export const CLEAN_ID = '00000000-0000-4000-8000-0000000000b1';
 export const NO_REPOS_ID = '00000000-0000-4000-8000-0000000000c1';
+//: 7.6's own, dedicated fixture — never shared with `MIXED_ID`, the same reasoning
+//: `MIXED_RECHECK_REPO_ID` gives its own (`fullyParallel: true`; a fixture whose stub route
+//: this story's own spec reads by its `trajectory_count` stays untouched by every other
+//: scenario in `projects.spec.ts`, frozen or not).
+export const EXPORT_ID = '00000000-0000-4000-8000-0000000000d1';
 export const UNKNOWN_ID = '00000000-0000-4000-8000-000000009999';
 
 export const MIXED_OK_REPO_ID = '00000000-0000-4000-8000-0000000000a2';
@@ -80,6 +85,9 @@ function project(overrides) {
     //: 4.10 — the real contract always carries this key; `[]` reads exactly like the
     //: pre-4.10 fixtures did when `index.astro` falls back on a missing one.
     runs: [],
+    //: 7.6 — the real contract always carries this key too; `0` reads exactly like the
+    //: pre-7.6 fixtures did when `index.astro` falls back on a missing one (`?? 0`).
+    trajectory_count: 0,
     created_at: CREATED_AT,
     updated_at: UPDATED_AT,
     ...overrides,
@@ -248,10 +256,26 @@ export const NO_REPOS = project({
   repositories: [],
 });
 
+//: 7.6's own fixture (SPEC CAP-6): `trajectory_count` is what the Project screen's *Export
+//: trajectories* hint reads, and `stub-backend.mjs`'s new `.../trajectories.jsonl` route
+//: answers exactly this many sample lines for this id — the two have to agree by
+//: construction, not by a second constant either could drift from.
+export const EXPORT_TRAJECTORY_COUNT = 3;
+
+export const EXPORT = project({
+  id: EXPORT_ID,
+  slug: 'trajectory-source',
+  name: 'Trajectory Source',
+  context_text: '',
+  repositories: [],
+  trajectory_count: EXPORT_TRAJECTORY_COUNT,
+});
+
 export const PROJECTS_BY_ID = {
   [MIXED_ID]: MIXED,
   [CLEAN_ID]: CLEAN,
   [NO_REPOS_ID]: NO_REPOS,
+  [EXPORT_ID]: EXPORT,
 };
 
 /**

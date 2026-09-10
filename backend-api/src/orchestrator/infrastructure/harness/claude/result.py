@@ -11,51 +11,37 @@ carries the object on whole, and 5.7 reads the budget-cap field out of it.
 
 from __future__ import annotations
 
-import json
-from decimal import Decimal, InvalidOperation
-from pathlib import Path
 from typing import Any
 
 from orchestrator.domain.ports.harness import HarnessUsage
+from orchestrator.infrastructure.harness.jsonl import (
+    ENCODING,
+    as_decimal,
+    as_int,
+    json_objects,
+    objects_with,
+    read_text,
+)
+
+#: What this module still owns, plus what it re-exports from `jsonl.py`. The tolerant
+#: primitives moved there in 7.1, when `codex/` needed the same four; every name this module
+#: was reachable under stays reachable here, because `adapter.py`, `fake/adapter.py` and
+#: `tests/unit/test_claude_result_parsing.py` all import them from this path.
+__all__ = [
+    "ENCODING",
+    "RESULT_TYPE",
+    "RESULT_TYPE_FIELD",
+    "json_objects",
+    "read_text",
+    "result_object",
+    "usage_from",
+]
 
 #: The envelope field `claude -p --output-format json` puts on its own final object, and the
 #: value that marks it. Reading it is the same class of read as `session_id` — the harness's
 #: own framing, not anything the model produced (AD-10).
 RESULT_TYPE_FIELD = "type"
 RESULT_TYPE = "result"
-
-#: The one encoding every log and prompt file is written and read in, so the container's
-#: locale never decides what is parsed out of an attempt's own record.
-ENCODING = "utf-8"
-
-
-def read_text(log_path: Path) -> str:
-    """The log's text, or nothing at all — a process killed before it wrote has no log."""
-    if not log_path.is_file():
-        return ""
-    return log_path.read_text(encoding=ENCODING, errors="replace")
-
-
-def json_objects(text: str) -> list[dict[str, Any]]:
-    """Every top-level JSON object in `text`, in the order they appear.
-
-    Scanning rather than `json.loads`: the log holds stdout and stderr interleaved, so the
-    result object is normally surrounded by whatever the tooling printed. Each `{` is
-    offered to `raw_decode`, and a successful decode advances past the whole object, so a
-    nested one is never mistaken for a top-level one.
-    """
-    decoder = json.JSONDecoder()
-    found: list[dict[str, Any]] = []
-    index = text.find("{")
-    while index != -1:
-        try:
-            value, end = decoder.raw_decode(text, index)
-        except ValueError:
-            index = text.find("{", index + 1)
-            continue
-        found.append(value)
-        index = text.find("{", end)
-    return found
 
 
 def result_object(text: str) -> dict[str, Any] | None:
@@ -72,34 +58,10 @@ def result_object(text: str) -> dict[str, Any] | None:
     inside the envelope is read here; `raw_result` carries it on whole.
     """
     objects = json_objects(text)
-    envelopes = [item for item in objects if item.get(RESULT_TYPE_FIELD) == RESULT_TYPE]
+    envelopes = objects_with(objects, RESULT_TYPE_FIELD, RESULT_TYPE)
     if envelopes:
         return envelopes[-1]
     return objects[-1] if objects else None
-
-
-def _as_int(value: Any) -> int | None:
-    """A token count, or `None` when the field is there but is not one.
-
-    `bool` is rejected explicitly because it is an `int` in Python, and `True` tokens is a
-    reading error rather than one token.
-    """
-    if isinstance(value, bool) or not isinstance(value, int | float | str):
-        return None
-    try:
-        return int(value)
-    except TypeError, ValueError:
-        return None
-
-
-def _as_decimal(value: Any) -> Decimal | None:
-    """A USD amount, or `None` when the field is there but is not one."""
-    if isinstance(value, bool) or not isinstance(value, int | float | str):
-        return None
-    try:
-        return Decimal(str(value))
-    except InvalidOperation:
-        return None
 
 
 def usage_from(result: dict[str, Any] | None) -> HarnessUsage | None:
@@ -117,9 +79,9 @@ def usage_from(result: dict[str, Any] | None) -> HarnessUsage | None:
     usage = result.get("usage")
     if not isinstance(usage, dict):
         return None
-    cost = _as_decimal(result.get("total_cost_usd"))
-    tokens_in = _as_int(usage.get("input_tokens"))
-    tokens_out = _as_int(usage.get("output_tokens"))
+    cost = as_decimal(result.get("total_cost_usd"))
+    tokens_in = as_int(usage.get("input_tokens"))
+    tokens_out = as_int(usage.get("output_tokens"))
     if cost is None or tokens_in is None or tokens_out is None:
         return None
     return HarnessUsage(tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost)

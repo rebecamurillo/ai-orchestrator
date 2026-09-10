@@ -15,10 +15,12 @@ from orchestrator.infrastructure.harness.claude import (
     claude_aliases,
     claude_subscription_aliases,
 )
+from orchestrator.infrastructure.harness.codex import CodexHarness, codex_aliases
 from orchestrator.infrastructure.harness.env import HARNESS_ENV_CONTRACT, env_for
 from orchestrator.infrastructure.harness.registry import (
     ALIASES,
     SUBSCRIPTION_ALIASES,
+    alias_table,
     build_harness_env,
     build_harnesses,
 )
@@ -28,9 +30,12 @@ __all__ = [
     "HARNESS_ENV_CONTRACT",
     "SUBSCRIPTION_ALIASES",
     "ClaudeHarness",
+    "CodexHarness",
+    "alias_table",
     "build_harness_env",
     "build_harnesses",
     "claude_aliases",
     "claude_subscription_aliases",
+    "codex_aliases",
     "env_for",
 ]

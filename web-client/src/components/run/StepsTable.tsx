@@ -6,14 +6,21 @@
  * own three-hue map, reused rather than redefined so a card and a step row never disagree on
  * what a token means. `gate` and `SKP`/`unvalidated` stay plain words (binding rule).
  *
+ * Every row carries `id="step-{seq}"` (7.5): that is the fragment a Runs history row links
+ * to (`lib/run/anchor.ts`), and `anchoredSeq` is the row the Run detail scrolled to and
+ * promotes briefly on arrival. `data-anchored` is a neutral promotion — the status token is
+ * still the only signal-coloured cell in the row (NFR-6).
+ *
  * Stateless (`renderToStaticMarkup`).
  */
 import type { RunDetailOut, StepRowOut } from '../../lib/run/detail';
 import { currentStepPath, stepStatusText } from '../../lib/run/detail';
 import { ageText, tokenSignal } from '../../lib/board/format';
+import { stepAnchorId } from '../../lib/run/anchor';
 
 interface Props {
   detail: RunDetailOut;
+  anchoredSeq?: number | null;
 }
 
 const COLUMNS = ['path', 'kind', 'gate', 'status', 'time', 'harness', 'cost'];
@@ -34,7 +41,7 @@ function attemptsSuffix(step: StepRowOut): string {
   return step.attempts > 1 ? ` · ${step.attempts} attempts` : '';
 }
 
-export default function StepsTable({ detail }: Props) {
+export default function StepsTable({ detail, anchoredSeq = null }: Props) {
   const current = currentStepPath(detail);
   return (
     <div className="wf-steps-scroll">
@@ -52,8 +59,10 @@ export default function StepsTable({ detail }: Props) {
           {detail.steps.map((step) => (
             <tr
               key={step.seq}
+              id={stepAnchorId(step.seq)}
               data-testid={`wf-step-${step.seq}`}
               data-current={step.path === current}
+              data-anchored={step.seq === anchoredSeq}
             >
               <td>{step.path}</td>
               <td>{step.kind}</td>

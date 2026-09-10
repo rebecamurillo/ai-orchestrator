@@ -49,13 +49,15 @@ from orchestrator.api.errors import (
     ProblemDetail,
 )
 from orchestrator.api.providers import project_ports
+from orchestrator.api.providers_trajectories import trajectory_repository
 from orchestrator.api.schemas.common import Page
 from orchestrator.api.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
 from orchestrator.application.use_cases import clone_check as clone_check_use_cases
-from orchestrator.application.use_cases import project_runs
+from orchestrator.application.use_cases import project_runs, trajectory_export
 from orchestrator.application.use_cases import projects as use_cases
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.domain.entities.project import ProjectView
+from orchestrator.domain.ports.trajectories import TrajectoryRepository
 from orchestrator.infrastructure.settings import Settings
 
 router = APIRouter(tags=["projects"])
@@ -85,14 +87,22 @@ UPDATE_REFUSALS = {**READ_REFUSALS, HTTP_CONFLICT: CONFLICT_RESPONSE}
 
 Ports = Annotated[ProjectPorts, Depends(project_ports)]
 Config = Annotated[Settings, Depends(get_settings)]
+#: `None` when this application (or a test harness predating SPEC CAP-6) was built without a
+#: database session factory — `trajectory_export.trajectory_count` reads that as "not wired"
+#: and answers `0` (`api/providers_trajectories.py::trajectory_repository`'s own docstring).
+Trajectories = Annotated[TrajectoryRepository | None, Depends(trajectory_repository)]
 
 
-def _read(ports: ProjectPorts, view: ProjectView) -> ProjectRead:
-    """`ProjectRead.of`, given the Repositories and the Runs this Project has right now."""
+def _read(
+    ports: ProjectPorts, view: ProjectView, trajectories: TrajectoryRepository | None
+) -> ProjectRead:
+    """`ProjectRead.of`, given the Repositories, the Runs and the trajectory count this
+    Project has right now."""
     return ProjectRead.of(
         view,
         use_cases.embedded_repositories(ports, view.id),
         project_runs.embedded_runs(ports.runs, ports.steps, view.id),
+        trajectory_export.trajectory_count(trajectories, view.id),
     )
 
 
@@ -108,13 +118,13 @@ def _check_repositories(ports: ProjectPorts, view: ProjectView, settings: Settin
     response_model=Page[ProjectRead],
     summary="List every Project",
 )
-def list_projects(ports: Ports) -> Page[ProjectRead]:
+def list_projects(ports: Ports, trajectories: Trajectories) -> Page[ProjectRead]:
     """Every Project, ordered by name, each with its variables masked and Repositories embedded.
 
     One page: the whole list is small enough that a cursor would be ceremony. The envelope
     is the same one every list in this API uses, so paging can arrive without a break.
     """
-    items = [_read(ports, view) for view in use_cases.list_projects(ports)]
+    items = [_read(ports, view, trajectories) for view in use_cases.list_projects(ports)]
     return Page[ProjectRead](items=items, next_cursor=None)
 
 
@@ -125,7 +135,9 @@ def list_projects(ports: Ports) -> Page[ProjectRead]:
     summary="Create a Project",
     responses=CREATE_REFUSALS,
 )
-def create_project(payload: ProjectCreate, ports: Ports, settings: Config) -> ProjectRead:
+def create_project(
+    payload: ProjectCreate, ports: Ports, settings: Config, trajectories: Trajectories
+) -> ProjectRead:
     """Store a Project. Every variable value is encrypted before it is written (AD-5)."""
     view = use_cases.create_project(
         ports,
@@ -133,7 +145,7 @@ def create_project(payload: ProjectCreate, ports: Ports, settings: Config) -> Pr
         log_prompt_content_default=settings.log_prompt_content_default,
     )
     _check_repositories(ports, view, settings)
-    return _read(ports, view)
+    return _read(ports, view, trajectories)
 
 
 @router.get(
@@ -142,10 +154,10 @@ def create_project(payload: ProjectCreate, ports: Ports, settings: Config) -> Pr
     summary="Read one Project, with its Repositories",
     responses=READ_REFUSALS,
 )
-def get_project(project_id: UUID, ports: Ports) -> ProjectRead:
+def get_project(project_id: UUID, ports: Ports, trajectories: Trajectories) -> ProjectRead:
     """One Project, with every variable masked and its Repositories embedded, in creation
     order. An unknown id is a 404 problem document."""
-    return _read(ports, use_cases.get_project(ports, project_id))
+    return _read(ports, use_cases.get_project(ports, project_id), trajectories)
 
 
 @router.put(
@@ -155,7 +167,11 @@ def get_project(project_id: UUID, ports: Ports) -> ProjectRead:
     responses=UPDATE_REFUSALS,
 )
 def update_project(
-    project_id: UUID, payload: ProjectUpdate, ports: Ports, settings: Config
+    project_id: UUID,
+    payload: ProjectUpdate,
+    ports: Ports,
+    settings: Config,
+    trajectories: Trajectories,
 ) -> ProjectRead:
     """Replace a Project's editable fields, and with them its whole variable set.
 
@@ -168,4 +184,4 @@ def update_project(
     """
     view = use_cases.update_project(ports, project_id, payload.as_draft())
     _check_repositories(ports, view, settings)
-    return _read(ports, view)
+    return _read(ports, view, trajectories)

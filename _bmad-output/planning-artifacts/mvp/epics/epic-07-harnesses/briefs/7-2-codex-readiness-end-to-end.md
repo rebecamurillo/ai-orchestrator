@@ -12,6 +12,35 @@ As the Operator,
 I want `codex` proven on the real host: one story to `done`, its spans under the Run, its spend attributed,
 So that the harness comparison (SM-3) has its second data point on a proven path.
 
+## Operator and agent split
+
+*Added 2026-09-09, when the Operator decided this epic would be run by the orchestrator itself.*
+
+**A coding agent cannot complete this story.** It needs a live Codex CLI, the host LiteLLM and Langfuse,
+and credentials that never reach a harness process. The agent's work is everything before the run and
+everything after it — never the run.
+
+**The agent does, in one dispatch:**
+
+1. Any code the fallbacks below require, unit-covered over the fakes: `attempt_observed` accepting
+   session-level observations for `codex`, the tag-based spend fallback of 5.3, and any fix to 7.1 that
+   reading the CLI's own output makes necessary.
+2. A runbook, committed to this story's spec: the exact commands, what to read in each output, and what
+   each outcome forces as a decision.
+3. Then it **halts `blocked`**, its Blocking condition naming exactly what the Operator must run and the
+   facts to report back. **It never guesses a value only a live run can confirm** — Epic 5 shipped
+   `stop_reason: "max_budget"` as a plausible constant behind a passing test, and story 5-11 later
+   disproved it against the shipped bundle.
+
+**The Operator then runs it**, with the assistant reading the output alongside them, and answers with:
+the six evaluation lines and their text; whether Codex spans appear parented under the attempt span or
+only at session level; whether `/spend/logs/v2` returned the attempt's rows; and whether
+`bmad-build-auto` was discovered from `~/.agents/skills` with subagents available.
+
+**The agent, resumed with that Answer**, records the dated "Codex — verified" block in `addendum.md` §B
+from the reported facts, lands whatever fix the outcome forces, and finishes the story. **It writes
+nothing into §B that the Operator did not observe.**
+
 ## Scope
 
 **In:** running `POST /harnesses/codex/readiness` on the compose stack against the host LiteLLM and Langfuse; settling `TRACEPARENT` honouring; applying the fallback when needed; recording the verified block in `addendum.md` §B; small tested fixes in 7.1.

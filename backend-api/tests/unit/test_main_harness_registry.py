@@ -14,6 +14,7 @@ the registry at the entity would type-check nowhere, since mypy is strict only o
 
 from __future__ import annotations
 
+from orchestrator.domain.entities.harness import HARNESS_NAMES
 from orchestrator.domain.ports.harness import Harness as HarnessPort
 from orchestrator.infrastructure.harness import ClaudeHarness
 from orchestrator.infrastructure.settings import Settings
@@ -24,7 +25,7 @@ from tests.unit.fakes.process import FakeProcessRunner
 def test_the_registry_holds_the_one_adapter_this_epic_lands(env: dict[str, str]) -> None:
     harnesses = build_harnesses(Settings(), FakeProcessRunner())
 
-    assert list(harnesses) == ["claude"]
+    assert set(harnesses) <= set(HARNESS_NAMES)
     assert isinstance(harnesses["claude"], ClaudeHarness)
 
 

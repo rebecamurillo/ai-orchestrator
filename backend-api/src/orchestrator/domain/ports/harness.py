@@ -97,7 +97,14 @@ class HarnessResult:
 
     #: The session this attempt ran under — pre-assigned when the harness allows it, so the
     #: value is known even when the harness printed nothing.
-    session_id: str
+    #:
+    #: `None` is the answer of a harness that names its own session and then did not print it:
+    #: `capabilities.preassign_session = False` means the caller's id was never used, so an
+    #: output with no session event leaves the attempt with none at all. `Attempt.session_id`
+    #: is `str | None` for the same reason, and `agent_tail.finish` writes this straight onto
+    #: it — the absence is recorded as an absence rather than as an empty string a later
+    #: `resume` would try to continue.
+    session_id: str | None
     #: `None` only when the process was killed before it could report one (AD-14).
     exit_code: int | None
     #: Where stdout and stderr went. The prompt is beside it, at `{log_path}.prompt`.
@@ -127,6 +134,15 @@ class HarnessHandle:
     log_path: Path
     pid: int
     pgid: int
+    #: The directory the dispatch ran in, for an adapter whose `wait` needs it.
+    #:
+    #: Defaulted, because only one harness does: `local` names no session on the command line
+    #: and may have to ask OpenCode's own session store which session was opened in this
+    #: worktree (7.3). `start` is the half that was told the path and `wait` is the half that
+    #: reads, so without this the lookup would have to accept any session on the host — or the
+    #: adapter would have to keep state between the two halves, which is exactly what handing
+    #: a handle back exists to avoid.
+    cwd: Path | None = None
 
 
 @runtime_checkable
@@ -258,6 +274,13 @@ class Harness(Protocol):
         no row ever resumes another row's session (AD-10)."""
         ...
 
-    def resume_command(self, cwd: str, session_id: str) -> str:
-        """The shell line an operator can paste to take the session over by hand (FR-21)."""
+    def resume_command(self, cwd: str, session_id: str) -> str | None:
+        """The shell line an operator can paste to take the session over by hand (FR-21).
+
+        `None` is the answer of a harness that has no resume form at all — `local`, whose
+        `capabilities.resume` is `False` (7.3). The read model already hides the terminal
+        block for such a harness, so this is belt and braces rather than a second rule: a
+        plausible-looking line for a session that cannot be continued would be worse than
+        no line, and an adapter should be able to say so in the return value.
+        """
         ...

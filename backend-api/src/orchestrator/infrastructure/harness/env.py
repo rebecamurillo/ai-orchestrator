@@ -90,6 +90,8 @@ DEFAULT_LANG = "C.UTF-8"
 
 #: The five tag positions, in the order AD-11 pins them.
 TAG_POSITIONS = ("run", "attempt", "story", "harness", "project")
+#: The one of them that names the attempt — see `attempt_tag` for who reads it back.
+ATTEMPT_TAG_POSITION = "attempt"
 
 #: The contract names whose values are *identifiers of this attempt* rather than
 #: configuration or credentials: the Run, the Attempt, the Story, the harness, the Project,
@@ -122,6 +124,19 @@ def tag_list(values: Mapping[str, str]) -> list[str]:
     LiteLLM's tag list two shapes to parse instead of one.
     """
     return [f"{position}:{values[position]}" for position in TAG_POSITIONS]
+
+
+def attempt_tag(attempt_id: str) -> str:
+    """The `attempt:` position of `tag_list`, built on its own from an attempt id.
+
+    Two adapters read this tag back rather than write it: `LiteLLMSpend` in `attempt_tag`
+    mode narrows spend rows by it when the Gateway's `session_id` column was never filled,
+    and `LangfuseTracer`'s session-level fallback (7.2) asks Langfuse for the traces of a
+    Run's session that carry it. Both need the format `tag_list` writes, and neither should
+    own a second copy of it — `tests/unit/test_attempt_tag.py` binds this function to
+    `tag_list`'s own output so the three cannot drift apart.
+    """
+    return f"{ATTEMPT_TAG_POSITION}:{attempt_id}"
 
 
 def env_for(  # noqa: PLR0913 — one argument per fact; the brief fixes the first four

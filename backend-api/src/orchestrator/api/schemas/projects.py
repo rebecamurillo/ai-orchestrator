@@ -253,6 +253,14 @@ class ProjectRead(BaseModel):
     builtin: bool | None = None
     repositories: list[RepositoryOut]
     runs: list[ProjectRunOut]
+    #: How many trajectories this Project has stored (SPEC CAP-6, UX-DR12) — the figure
+    #: *Export trajectories* shows beside itself on the Project screen. Nullable for the
+    #: same reason `builtin` is: a defaulted *non-nullable* field is still `required` in the
+    #: generated TypeScript (`openapi-typescript`'s own behaviour), and two frozen
+    #: web-client fixtures (`newwf-state.test.ts`, `newwf-fields.test.ts`) construct
+    #: `ProjectRead` object literals that predate this field. `.of()` always resolves a real
+    #: `int`; nothing this API serves is ever actually `null` here.
+    trajectory_count: int | None = None
     created_at: UtcTimestamp
     updated_at: UtcTimestamp
 
@@ -262,18 +270,21 @@ class ProjectRead(BaseModel):
         view: ProjectView,
         repositories: list[Repository] | None = None,
         runs: list[ProjectRunSummary] | None = None,
+        trajectory_count: int = 0,
     ) -> ProjectRead:
-        """Render the use case's masked read model plus its Repositories and Runs, freshly
-        queried.
+        """Render the use case's masked read model plus its Repositories, Runs and
+        trajectory count, freshly queried.
 
         `repositories` and `runs` default to none stored: the frozen `test_project_schemas.py`
-        calls this with only a view, from before a Project could have either.
+        calls this with only a view, from before a Project could have either. `trajectory_count`
+        defaults to `0` the same way, for a Project 7.6 predates or one that has none yet.
         """
         return cls.model_validate(
             {
                 **view.model_dump(),
                 "repositories": [RepositoryOut.of(r) for r in repositories or []],
                 "runs": [ProjectRunOut.of(r) for r in runs or []],
+                "trajectory_count": trajectory_count,
             }
         )
 

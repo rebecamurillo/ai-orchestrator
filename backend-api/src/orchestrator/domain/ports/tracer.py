@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
@@ -77,8 +78,34 @@ class Tracer(Protocol):
         """
         ...
 
-    def attempt_observed(self, run_id: UUID, attempt_id: UUID) -> bool:
-        """Whether the harness's own span for this attempt has reported in yet (5.8)."""
+    def attempt_observed(
+        self,
+        run_id: UUID,
+        attempt_id: UUID,
+        *,
+        harness: str | None = None,
+        started_at: datetime | None = None,
+        ended_at: datetime | None = None,
+    ) -> bool:
+        """Whether the harness's own span for this attempt has reported in yet (5.8).
+
+        `harness` is what the answer is allowed to depend on, and it is keyword-only and
+        defaulted so that a caller who cannot name one still asks the strict question.
+        AD-10 states a different rule per harness: `claude` and `codex` are proven by spans
+        under the attempt's own span, `local` by generations under the Run's session. 7.2
+        adds the one exception the spine's "Open at handoff" 1 anticipated — a `codex`
+        attempt whose spans did not parent, because `codex exec` did not honour the inbound
+        `TRACEPARENT`, is still proven by AD-11's universal floor: a trace under the Run's
+        session carrying the attempt's own tag. Which rule answered is the adapter's to
+        report; this port answers only whether one did.
+
+        `started_at`/`ended_at` are the attempt's own window, and they are here for the same
+        reason `harness` is: `local`'s rule needs them. The OpenCode Langfuse plugin carries
+        no attempt id — one trace per turn, keyed by OpenCode's own session, with `userId`
+        from the Run — so the only thing separating this attempt's generations from another
+        attempt of the same Run is when they happened (7.3). Keyword-only and defaulted, so
+        a caller with no window still asks a question the adapter can refuse to widen.
+        """
         ...
 
     def trace_url(self, trace_id: str) -> str:

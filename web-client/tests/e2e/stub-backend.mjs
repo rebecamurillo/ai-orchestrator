@@ -41,6 +41,22 @@
  * own precedent above, needed for the same reason: the frozen `shell.spec.ts` asserts
  * `NO RUNS` at bare `/runs` against this same stub. `runs-queue.spec.ts`'s own real-content
  * scenarios mock this route with `page.route()` instead, `board.spec.ts`'s own precedent.
+ *
+ * 7.5 adds `GET /api/v1/steps`, unconditionally empty for exactly the same reason one step
+ * on: `/runs` now mounts a second island beside the queue, and without this route that
+ * island would answer every bare visit with its own failed-fetch readout — a second
+ * `fetch-failed` element on a page where `runs-queue.spec.ts` (frozen) asserts on one under
+ * Playwright's strict mode. `runs-history.spec.ts`'s real-content scenarios mock it with
+ * `page.route()`, the same way.
+ *
+ * 7.6 adds `GET /api/v1/projects/{id}/trajectories.jsonl`. Unlike every route above, this one
+ * is deliberately *not* mocked with `page.route()` in `trajectory-export.spec.ts`: the point
+ * of that spec is that a real browser download crosses the real Astro proxy
+ * (`src/pages/api/[...path].ts`) with `Content-Disposition` intact, and `page.route()` would
+ * intercept the request before the proxy ever saw it. It answers `count` sample ndjson lines
+ * for whichever fixture id was asked for, `count` read straight off that fixture's own
+ * `trajectory_count` (`EXPORT_TRAJECTORY_COUNT`, `projects-fixtures.mjs`) so the two can never
+ * drift apart, and 404s any id `PROJECTS_BY_ID` does not hold.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -285,6 +301,38 @@ function send(response, status, type, body, headers = {}) {
 
 function notFound(response, title) {
   send(response, 404, PROBLEM, JSON.stringify({ type: 'about:blank', title, status: 404 }));
+}
+
+/** One `trajectories.jsonl` line (SPEC CAP-6), field-complete but content-arbitrary — the
+ * download scenario reads its filename and its line count, not what any field says. */
+function sampleTrajectoryLine(project, n) {
+  return {
+    id: randomUUID(),
+    run_id: randomUUID(),
+    project_id: project.id,
+    repository_id: randomUUID(),
+    story_id: `${n}-1`,
+    epic_index: n,
+    frame: `stories[${n}]`,
+    harness: 'claude',
+    model: 'sonnet',
+    attempts: [],
+    gate_results: {
+      build: 'liveness',
+      verify: 'done',
+      commit_guard: 'done',
+      protected_paths: { hits: [], accepted: [] },
+    },
+    cost_usd: '0.000000',
+    tokens_in: 0,
+    tokens_out: 0,
+    wall_clock_seconds: 0,
+    story_file: '',
+    start_sha: null,
+    end_sha: null,
+    human_actions: [],
+    recorded_at: '2026-09-10T12:00:00Z',
+  };
 }
 
 /** Flip the recheck target's stored result from `failed` to `ok`, in place. */
@@ -661,6 +709,11 @@ createServer(async (request, response) => {
     );
     return;
   }
+  if (pathname === '/api/v1/steps' && request.method === 'GET') {
+    // forced empty unconditionally, `GET /api/v1/queue`'s own precedent directly above
+    send(response, 200, JSON_TYPE, JSON.stringify({ items: [], next_cursor: null }));
+    return;
+  }
   if (pathname === '/api/v1/projects' && request.method === 'GET') {
     send(response, 200, JSON_TYPE, JSON.stringify({ items: [], next_cursor: null }));
     return;
@@ -681,6 +734,19 @@ createServer(async (request, response) => {
     const project = updateProject(projectMatch[1], await readJsonBody(request));
     if (!project) return notFound(response, 'no Project has that id');
     send(response, 200, JSON_TYPE, JSON.stringify(project));
+    return;
+  }
+  const exportMatch = pathname.match(/^\/api\/v1\/projects\/([^/]+)\/trajectories\.jsonl$/);
+  if (exportMatch && request.method === 'GET') {
+    const project = projects[exportMatch[1]];
+    if (!project) return notFound(response, 'no Project has that id');
+    const lines = Array.from({ length: project.trajectory_count ?? 0 }, (_unused, n) =>
+      JSON.stringify(sampleTrajectoryLine(project, n)),
+    );
+    const today = new Date().toISOString().slice(0, 10);
+    send(response, 200, 'application/x-ndjson', lines.map((line) => `${line}\n`).join(''), {
+      'Content-Disposition': `attachment; filename="trajectories-${project.slug}-${today}.jsonl"`,
+    });
     return;
   }
   const addRepositoryMatch = pathname.match(/^\/api\/v1\/projects\/([^/]+)\/repositories$/);

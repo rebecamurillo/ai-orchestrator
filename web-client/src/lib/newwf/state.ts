@@ -96,6 +96,35 @@ export function withInput(state: FormState, key: string, value: string): FormSta
   return { ...state, inputs: { ...state.inputs, [key]: value } };
 }
 
+/**
+ * The models this instance offers for one harness, from `GET /harnesses` (7.3).
+ *
+ * `[]` for a harness that publishes none — which is every harness but `local`, and is the
+ * statement that it takes a free-text model name rather than a gap in the response. `models`
+ * is optional in the generated type, so a backend that predates the field reads the same as a
+ * harness that has none: the text field, exactly as before.
+ */
+export function modelsFor(harnesses: HarnessOut[], harness: string): string[] {
+  return harnesses.find((candidate) => candidate.name === harness)?.models ?? [];
+}
+
+/**
+ * Selecting a harness keeps a model only if the new harness still offers it.
+ *
+ * `local` turns the model field into a select over `LOCAL_MODELS`, and a select cannot show a
+ * value that is not one of its options: a model typed for `claude` and carried into `local`
+ * would leave the control blank while the form still submitted the old string. Clearing it is
+ * the honest state — the field then reads "harness default", which is what an unset model is.
+ *
+ * A harness offering no models keeps whatever was typed, because there is nothing to check it
+ * against and the Operator's own text is the value.
+ */
+export function withHarness(state: FormState, harness: string, harnesses: HarnessOut[]): FormState {
+  const models = modelsFor(harnesses, harness);
+  const keep = models.length === 0 || models.includes(state.model);
+  return { ...state, harness, model: keep ? state.model : '' };
+}
+
 /** The Repositories of the selected Project, or none while nothing is selected. */
 export function repositoriesFor(
   projects: components['schemas']['ProjectRead'][],

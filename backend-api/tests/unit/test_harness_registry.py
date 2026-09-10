@@ -13,12 +13,14 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.harness import HARNESS_NAMES
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.harness import Harness as HarnessPort
 from orchestrator.infrastructure.harness import ClaudeHarness, build_harness_env, build_harnesses
 from orchestrator.infrastructure.harness.claude.adapter import claude_aliases
 from orchestrator.infrastructure.harness.env import HARNESS_ENV_CONTRACT
+from orchestrator.infrastructure.harness.opencode.adapter import local_aliases
 from orchestrator.infrastructure.harness.registry import ALIASES
 from orchestrator.infrastructure.settings import Settings
 from tests.unit.fakes.process import FakeProcessRunner
@@ -57,7 +59,7 @@ def an_attempt(run: Run, harness: str | None) -> Attempt:
 def test_the_registry_is_built_here_now(env: dict[str, str]) -> None:
     harnesses = build_harnesses(Settings(), FakeProcessRunner())
 
-    assert list(harnesses) == ["claude"]
+    assert set(harnesses) <= set(HARNESS_NAMES)
     assert isinstance(harnesses["claude"], ClaudeHarness)
     assert isinstance(harnesses["claude"], HarnessPort)
 
@@ -73,7 +75,7 @@ def test_the_registry_uses_the_runner_it_is_handed(env: dict[str, str]) -> None:
 
 
 def test_the_alias_table_is_keyed_the_way_the_registry_is(env: dict[str, str]) -> None:
-    assert ALIASES == {"claude": claude_aliases}
+    assert ALIASES == {"claude": claude_aliases, "local": local_aliases}
     assert set(ALIASES) <= set(build_harnesses(Settings(), FakeProcessRunner()))
 
 

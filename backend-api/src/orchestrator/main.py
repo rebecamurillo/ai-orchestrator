@@ -56,6 +56,7 @@ from orchestrator.api.routers import (
     graph_text,
     harness_readiness,
     harnesses,
+    history,
     ping,
     projects,
     queue,
@@ -67,6 +68,7 @@ from orchestrator.api.routers import (
     runs,
     signals,
     templates,
+    trajectories,
 )
 from orchestrator.application.use_cases.templates import SeedResult, TemplatePorts, seed_shipped
 from orchestrator.domain.ports.crypto import Crypto
@@ -307,6 +309,8 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         run_files.router,
         harnesses.router,
         queue.router,
+        history.router,
+        trajectories.router,
     ):
         _mount(app, router)
     _mount(app, harness_readiness.router)

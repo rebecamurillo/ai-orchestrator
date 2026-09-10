@@ -1,0 +1,5 @@
+npm warn deprecated a-package@1.0.0: no longer supported
+{"type":"session.updated","sessionID":"ses_7f3c1a0b9d2e4f5a"}
+warning: OTLP exporter could not reach the collector
+{"type":"message.completed","sessionID":"ses_7f3c1a0b9d2e4f5a","role":"assistant","tokens":{"input":880,"output":210}}
+{"error":"otel exporter shutdown failed"}

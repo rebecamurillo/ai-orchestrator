@@ -12,6 +12,33 @@ As the Operator,
 I want the local harness proven against a model actually served on the Mac mini, or the fallback recorded honestly,
 So that the MVP's definition of done for `local` is met or explicitly deferred (PRD §6.1).
 
+## Operator and agent split
+
+*Added 2026-09-09, when the Operator decided this epic would be run by the orchestrator itself.*
+
+**A coding agent cannot complete this story**, and it is the most operator-heavy in the MVP: it needs a
+model server actually running on the Mac mini, the host LiteLLM reconfigured and restarted, and a
+judgement about whether a local model can finish the fixture story at all.
+
+**The agent does, in one dispatch:**
+
+1. The proposed `host/litellm.config.yaml` entries for each `LOCAL_MODELS` alias (`openai/<served model>`,
+   `api_base` the local server, `use_chat_completions_api: true`), the `langfuse_otel` callback line, and
+   the `host/README.md` model section including the restart command — **written, not applied.** The host
+   is the Operator's machine; changing what it serves is their action, not an agent's.
+2. Any code the fallbacks require, unit-covered over the fakes.
+3. A runbook, committed to this story's spec.
+4. Then it **halts `blocked`**, naming what the Operator must start, restart, and run.
+
+**The Operator then runs it** and answers with: whether the model server is serving each alias, the six
+evaluation lines, observed throughput, and — the real decision — whether the fixture story reached `done`
+within the readiness budget.
+
+**The agent, resumed with that Answer**, records the "OpenCode — verified" block in `addendum.md` §B, or,
+if the story could not pass, records the PRD §6.1 fallback as the decision with the Operator's stated
+reason and leaves `local` reading `disabled: {line}` on New workflow — **which is the honest state, and a
+perfectly acceptable outcome for this story.** It writes nothing into §B that the Operator did not observe.
+
 ## Scope
 
 **In:** `host/README.md` and `host/litellm.config.yaml` entries for the local model server (oMLX) and the `LOCAL_MODELS` aliases as `openai/<alias>` with `use_chat_completions_api: true`; running `POST /harnesses/local/readiness`; recording results in `addendum.md` §B; if the run cannot pass, recording the PRD's fallback (Codex CLI pointed at the Gateway for local models, addendum §C) as the decision, with the reason.

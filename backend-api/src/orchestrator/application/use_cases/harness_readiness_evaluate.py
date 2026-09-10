@@ -9,6 +9,15 @@ and `failing_check` is the first failing line's own `"{check}: {text}"` — the 
 `last_readiness_at`/`last_readiness_run_id` are written every time, pass or fail: a readiness
 Run that could not even start still has to leave `GET /harnesses` telling the Operator so.
 
+The fifth line is the one that reads two ways. The readiness fixture declares no
+`quality_gate_command` (`harness_readiness_seed.py` says why), so its `verify` row is
+planned away as `skipped · no quality_gate_command` and no gate ever runs. That is not a
+failure, and the line is `ok` — but it is named `no quality gate to run`, not `verify exit
+0`, because nothing exited 0. `enabled` therefore means "this harness works": it starts,
+finishes, records a session, emits a trace, and its spend is attributable. It does not mean
+"this harness can turn a red repository green" — that is the `gates-repo` fixture's job
+(`tests/unit/test_gates_fixture_uj3.py`, `tests/e2e` UJ-3).
+
 Called from the walker's own `on_terminal` hook (`infrastructure/dbos/walker.py`,
 `infrastructure/db/harness_readiness.py`) for every terminal Run, not only `done` ones — a
 Run that is not Project `readiness`, or whose harness is not stored, is a silent no-op,
@@ -22,6 +31,8 @@ from pathlib import Path
 from uuid import UUID
 
 from orchestrator.application.templates.lists import _states_done
+from orchestrator.application.templates.plan_model import REASON_NO_QUALITY_GATE
+from orchestrator.application.templates.rows import SKIPPED
 from orchestrator.application.use_cases.clone_check import _base
 from orchestrator.application.use_cases.harness_readiness import (
     READINESS_SPEC_FOLDER,
@@ -57,6 +68,15 @@ CHECK_TRACE_OBSERVED = "trace observed"
 CHECK_SPEND_ATTRIBUTABLE = "spend attributable"
 CHECK_VERIFY_EXIT_0 = "verify exit 0"
 CHECK_RUN_DONE = "run done"
+
+#: What the fifth line is called instead when the Repository declared no quality gate, so
+#: the planner skipped the frame's `verify` row before it could exit anything. The readiness
+#: fixture is seeded exactly that way (`harness_readiness_seed.py`): readiness proves the
+#: harness, not the repository. The line is `ok` — nothing failed — but it is deliberately
+#: **not** called `verify exit 0`, because no gate exited 0 here; there was no gate. A check
+#: that claimed a passing gate it never ran would tell the Operator something untrue about
+#: what `enabled` means.
+CHECK_NO_QUALITY_GATE = "no quality gate to run"
 
 
 @dataclass(frozen=True)
@@ -180,7 +200,21 @@ def _trace_line(
         return EvaluationLine(check=CHECK_TRACE_OBSERVED, ok=False, text="no attempt recorded")
     if ports.tracer is None:
         return EvaluationLine(check=CHECK_TRACE_OBSERVED, ok=False, text="no tracer wired")
-    observed = ports.tracer.attempt_observed(run_id, build_attempt.id)
+    # the attempt's own harness, because the rule differs per harness (AD-10, AD-11): a
+    # `codex` attempt whose spans did not parent is still proven by the session-level
+    # evidence AD-11's universal floor leaves (7.2). The line's wording does not change.
+    #
+    # ...and the attempt's own window, because `local`'s rule *is* one (7.3): the OpenCode
+    # Langfuse plugin carries no attempt id, so the only thing separating this attempt's
+    # generations from another attempt of the same Run is when they happened. Both halves are
+    # keyword-only on the port; this is the one caller that holds the attempt they come from.
+    observed = ports.tracer.attempt_observed(
+        run_id,
+        build_attempt.id,
+        harness=build_attempt.harness,
+        started_at=build_attempt.started_at,
+        ended_at=build_attempt.ended_at,
+    )
     text = (
         f"spans observed for attempt {build_attempt.id}"
         if observed
@@ -203,9 +237,24 @@ def _spend_line(
 
 
 def _verify_line(verify_row: StepRun | None) -> EvaluationLine:
-    ok = verify_row is not None and verify_row.status == DONE
-    text = "verify exited 0" if ok else "verify did not pass"
-    return EvaluationLine(check=CHECK_VERIFY_EXIT_0, ok=ok, text=text)
+    """What the frame's `verify` row proved — or that there was nothing for it to prove.
+
+    Three outcomes, not two. A `done` row ran the gate and it exited 0. A row the planner
+    skipped because the Repository declares no `quality_gate_command` ran nothing, and says
+    so under its own check name: the absence of a gate is not the pass of one. Anything
+    else — failed, errored, or skipped for any other reason, including `skipped by
+    operator` — is a readiness failure and keeps the `verify exit 0` wording, because that
+    is the check the Operator was owed and did not get.
+    """
+    if verify_row is not None and verify_row.status == DONE:
+        return EvaluationLine(check=CHECK_VERIFY_EXIT_0, ok=True, text="verify exited 0")
+    if verify_row is not None and verify_row.reason == REASON_NO_QUALITY_GATE:
+        return EvaluationLine(
+            check=CHECK_NO_QUALITY_GATE,
+            ok=True,
+            text=f"{SKIPPED} · {REASON_NO_QUALITY_GATE}",
+        )
+    return EvaluationLine(check=CHECK_VERIFY_EXIT_0, ok=False, text="verify did not pass")
 
 
 def _run_done_line(run: Run) -> EvaluationLine:

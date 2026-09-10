@@ -69,3 +69,93 @@ table.runs-queue-table a {
   letter-spacing: var(--type-surface-title-tracking);
   text-transform: var(--type-surface-title-transform);
 }
+
+/* HISTORY (7.5, UX-DR14). The same dense-table shape the queue uses — one hairline per row,
+   no radius, no shadow — with two differences UX-DR14 asks for: the status token is the only
+   signal-coloured cell in the row (NFR-6), and a row that is currently executing, or that the
+   Run detail was opened at, is promoted with weight rather than with hue. */
+
+.runs-history {
+  padding-top: var(--section-gap);
+}
+
+.runs-history-scroll {
+  overflow-x: auto;
+}
+
+table.runs-history-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.runs-history-table th {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-rail);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  text-transform: var(--type-column-head-transform);
+  text-align: left;
+  white-space: nowrap;
+}
+
+table.runs-history-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+  white-space: nowrap;
+}
+
+table.runs-history-table a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+table.runs-history-table tr[data-current='true'] td {
+  color: var(--color-text);
+}
+
+/* the one coloured cell in the row (NFR-6); `neutral` covers SKP and every other plain word */
+.runs-history-token[data-signal='run'] {
+  color: var(--color-signal-run);
+}
+
+.runs-history-token[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.runs-history-token[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.runs-history-token[data-signal='neutral'] {
+  color: var(--color-text-tertiary);
+}
+
+.runs-history-more {
+  padding: var(--space-4) var(--space-8);
+}
+
+.runs-history-more button {
+  background: none;
+  border: 1px solid var(--color-line);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  padding: var(--space-2) var(--space-4);
+  text-transform: var(--type-control-transform);
+}
+
+.runs-history-more button[disabled] {
+  color: var(--color-text-tertiary);
+  cursor: default;
+}
+
+.runs-history-end {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}

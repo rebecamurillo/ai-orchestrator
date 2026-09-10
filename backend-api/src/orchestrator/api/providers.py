@@ -36,6 +36,7 @@ from fastapi import Query, Request
 from orchestrator.application.use_cases.create_run import CreateRunPorts, RunReadPorts
 from orchestrator.application.use_cases.harness_readiness import HarnessReadinessPorts
 from orchestrator.application.use_cases.harnesses import HarnessPorts
+from orchestrator.application.use_cases.history import HistoryPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.queue import QueuePorts
@@ -56,6 +57,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyAttemptRepository,
     SQLAlchemyGateRecordRepository,
     SQLAlchemyHarnessRepository,
+    SQLAlchemyHistoryQuery,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
     SQLAlchemyRunRepository,
@@ -65,6 +67,7 @@ from orchestrator.infrastructure.db import (
     open_writer_ports,
 )
 from orchestrator.infrastructure.db.environment import read_run_environment
+from orchestrator.infrastructure.harness.models import model_table
 from orchestrator.infrastructure.harness.registry import build_harnesses, build_terminal_env
 from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.process.runner import RealProcessRunner
@@ -135,6 +138,17 @@ def harness_ports(request: Request) -> Iterator[HarnessPorts]:
     session_factory = from_state(request, SESSION_FACTORY)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
         yield HarnessPorts(uow=uow, harnesses=SQLAlchemyHarnessRepository(uow.session))
+
+
+def harness_models(request: Request) -> dict[str, tuple[str, ...]]:
+    """The models this instance offers per harness (7.3) — configuration, not a port.
+
+    Its own dependency rather than a field on `HarnessPorts`: nothing here opens a
+    transaction, no use case reads it, and it is composed from `Settings` on every request
+    precisely so an Operator's `.env` edit reaches the New workflow's select at the next
+    restart without a migration (`infrastructure/harness/models.py`).
+    """
+    return model_table(from_state(request, SETTINGS))
 
 
 def _required_git(request: Request, needed_by: str) -> Git:
@@ -217,6 +231,7 @@ def readiness_ports(request: Request) -> Iterator[HarnessReadinessPorts]:
                 tracer=LangfuseTracer(settings),
             ),
             budget_usd=settings.readiness_budget_usd,
+            models=settings.readiness_models,
         )
 
 
@@ -280,6 +295,22 @@ def queue_ports(request: Request) -> Iterator[QueuePorts]:
             steps=SQLAlchemyStepRunRepository(uow.session),
             clock=SystemClock(),
             max_active_runs=settings.max_active_runs,
+        )
+
+
+def history_ports(request: Request) -> Iterator[HistoryPorts]:
+    """The ports `GET /steps` reads through (7.5). Writes nothing.
+
+    `tracer` is built fresh per request, the same reasoning `run_view_ports` gives for its
+    own: it answers a URL by string format and opens nothing. The link it builds is the
+    *Run's* trace, because nothing stores a per-attempt trace id — see
+    `application/use_cases/history.py`'s own docstring.
+    """
+    session_factory = from_state(request, SESSION_FACTORY)
+    settings = from_state(request, SETTINGS)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield HistoryPorts(
+            history=SQLAlchemyHistoryQuery(uow.session), tracer=LangfuseTracer(settings)
         )
 
 

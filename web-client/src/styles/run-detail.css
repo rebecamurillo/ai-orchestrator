@@ -304,6 +304,14 @@ table.wf-steps tr[data-current='true'] td {
   color: var(--color-text);
 }
 
+/* the row a Runs history link arrived at (7.5), promoted briefly on arrival. Weight and a
+   rail-coloured ground, never a hue: the status token stays the only signal-coloured cell
+   in the row (NFR-6). */
+table.wf-steps tr[data-anchored='true'] td {
+  background: var(--color-surface-rail);
+  color: var(--color-text);
+}
+
 .wf-step-token[data-signal='run'] {
   color: var(--color-signal-run);
 }

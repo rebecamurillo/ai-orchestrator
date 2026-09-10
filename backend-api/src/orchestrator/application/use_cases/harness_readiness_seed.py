@@ -120,7 +120,20 @@ def _seed_repository(
         url=f"file://{work_dir}/readiness/origin.git",
         default_branch=READINESS_BASE_BRANCH,
         install_command="",
-        quality_gate_command="sh check.sh",
+        # Readiness proves the harness, not the repository, so the fixture declares no
+        # quality gate at all. It used to declare `sh check.sh`, which the fixture's own
+        # story is what makes pass — so `epic@1`'s `baseline` row ran it before any agent
+        # had touched the tree, failed, and `on_fail: fail` ended the Run. No agent row was
+        # ever dispatched and no harness could ever reach `enabled`. `baseline` is right to
+        # fail a Run whose repository was already red: that is how the Operator learns the
+        # break predates the agent. What was wrong is asking a harness-readiness fixture to
+        # be green before the work it exists to do. With no command declared, the planner
+        # skips `baseline` and the frame's `verify` as `skipped · no quality_gate_command`
+        # (`Repository.verify_skipped`), and readiness proves what it is named for: the
+        # harness starts, reaches `done`, records a session id, emits a trace, and its spend
+        # is attributable. The quality-gate mechanics stay proven end to end by the
+        # `gates-repo` fixture and `tests/unit/test_gates_fixture_uj3.py`.
+        quality_gate_command="",
         unit_test_command="",
         test_globs=DEFAULT_TEST_GLOBS,
         package_manager=DEFAULT_PACKAGE_MANAGER,

@@ -21,7 +21,17 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from orchestrator.domain.entities.harness import HARNESS_NAMES
+
 LogLevel = Literal["debug", "info", "warning", "error", "critical"]
+
+#: How `infrastructure/gateway/litellm_spend.py` finds one attempt's rows in the Gateway's
+#: spend log (AD-11). `session` is 5.3's verified query — `x-litellm-session-id` lands in the
+#: log's `session_id` column and the route filters on it. `attempt_tag` is 5.3's own
+#: documented fallback for a request path that does not keep that header: the rows are asked
+#: for by `end_user` alone and narrowed to the ones whose `request_tags` carry
+#: `attempt:{id}`, since `/spend/logs/v2` has no tag filter of its own (`research/spend.md`).
+SpendMatch = Literal["session", "attempt_tag"]
 
 MIN_TCP_PORT = 1
 MAX_TCP_PORT = 65535
@@ -38,6 +48,34 @@ CommaSeparated = Annotated[
     list[str],
     NoDecode,
     BeforeValidator(_split_csv),
+    Field(min_length=1),
+]
+
+
+def _split_pairs(value: object) -> object:
+    """Read `name=value,name=value` as a mapping, leaving mappings alone.
+
+    `_split_csv`'s shape for a setting that binds something *per* name. Every failure is
+    raised here rather than tolerated, because each of them is a name that would silently
+    bind nothing: a pair with no `=`, no name, or no value.
+    """
+    if not isinstance(value, str):
+        return value
+    pairs: dict[str, str] = {}
+    for item in value.split(","):
+        if not item.strip():
+            continue
+        name, separator, bound = item.partition("=")
+        if not separator or not name.strip() or not bound.strip():
+            raise ValueError(f"{item.strip()!r} is not a `name=value` pair")
+        pairs[name.strip()] = bound.strip()
+    return pairs
+
+
+CommaSeparatedPairs = Annotated[
+    dict[str, str],
+    NoDecode,
+    BeforeValidator(_split_pairs),
     Field(min_length=1),
 ]
 
@@ -71,6 +109,16 @@ class Settings(BaseSettings):
     #: `harness_readiness.start`'s own `budget_usd` (SPEC CAP-8) — the fixture's one story
     #: is small, so a low ceiling still leaves room for a retry or two.
     readiness_budget_usd: Annotated[Decimal, Field(gt=0)]
+    #: `harness_readiness.start`'s own `model`, one per harness (SPEC CAP-8, AD-10):
+    #: `claude=…,codex=…,local=…`, each naming a `model_name` the Gateway's `model_list`
+    #: serves. One value per harness because a single one cannot be right — `codex` cannot
+    #: run an Anthropic model, and `local` is pointed at the host's own model server.
+    #:
+    #: Bound rather than left empty because an unbound `{{model}}` resolves to the empty
+    #: string and the harness falls back to its own built-in default, which the Gateway
+    #: serves no route for. `_covers_every_harness` below is why a half-filled line refuses
+    #: at start-up instead of at the dispatch that would have bound nothing.
+    readiness_models: CommaSeparatedPairs
 
     # ── Git (AD-5) — never handed to a harness process ───────────────────────
     github_token: SecretStr
@@ -80,6 +128,20 @@ class Settings(BaseSettings):
     litellm_api_key: SecretStr
     litellm_spend_key: SecretStr
     local_models: CommaSeparated
+    #: Which query attributes an attempt's spend (AD-11) — see `SpendMatch`.
+    #:
+    #: Defaulted, like `orch_test_mode` and for the same reason: an operator's existing
+    #: `.env`, and the `.env.e2e` `scripts/generate-env.sh` writes once and never rewrites,
+    #: must keep starting unchanged. The default is the mode 5.3 verified live, so an
+    #: environment that never sets it behaves exactly as it did before this field existed.
+    #: The AD-20 contract is unaffected: the field has its line in `.env.example` and
+    #: `scripts/check_env_contract.py` still checks both directions.
+    #:
+    #: `attempt_tag` is switched on only once the Operator has *observed* a request path
+    #: dropping `x-litellm-session-id` while keeping `x-litellm-tags` — story 7.2's runbook
+    #: is where that measurement is made. Switching automatically on an empty result would
+    #: be a silent retry (hard rule 7) and would hide the finding.
+    litellm_spend_match: SpendMatch = "session"
 
     # ── Tracing (AD-11) ──────────────────────────────────────────────────────
     langfuse_base_url: str
@@ -135,6 +197,26 @@ class Settings(BaseSettings):
     #: `scripts/check_env_contract.py` still checks both directions.
     orch_test_mode: bool = False
     backend_api_port: Annotated[int, Field(ge=MIN_TCP_PORT, le=MAX_TCP_PORT)]
+
+    @field_validator("readiness_models")
+    @classmethod
+    def _covers_every_harness(cls, value: dict[str, str]) -> dict[str, str]:
+        """Exactly the three harnesses the image installs, no more and no fewer.
+
+        Missing: that harness's readiness Run would bind no model, which is the failure the
+        setting exists to remove — refused here, at start-up, rather than at the dispatch,
+        because a partly-filled line looks configured. Extra: a name that is not a harness
+        is a typo (`opencode` for `local`), and ignoring it would leave the harness it was
+        meant for unbound while the line looks complete.
+        """
+        missing = [name for name in HARNESS_NAMES if name not in value]
+        unknown = sorted(name for name in value if name not in HARNESS_NAMES)
+        if missing or unknown:
+            raise ValueError(
+                f"missing {missing or 'nothing'}, unknown {unknown or 'nothing'} — "
+                "one `name=model` pair for each harness the image installs, and no other"
+            )
+        return value
 
     @field_validator("work_dir", "agent_home")
     @classmethod
