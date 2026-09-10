@@ -247,6 +247,38 @@ that can report one; an attempt whose backend dies between `start` and `wait` th
 session to resume, which is a property of a harness that names its own thread and not of the
 adapter.
 
+### OpenCode (`local`) — flags NOT verified 2026-09-10 (story 7.3)
+
+The brief requires the record whether or not anything changed. **Nothing was verified against a
+running CLI, and that is the record.** OpenCode is not installed on the development host, no
+local model server is running, and story 7.3 does not run a harness — running it, against a real
+model served on the Mac mini, is 7.4's by the brief's own scope. What was re-read is the
+documentation this section's 2026-08-26 pass and `research/tracing.md` §OpenCode already cite;
+nothing in either contradicted the shapes below, and nothing in either *confirms* them either.
+
+| Value | Where it lives | Status |
+|---|---|---|
+| `opencode run --format json --dir <worktree> -m litellm/<model> "<prompt>"` | `opencode/adapter.py` module docstring + `FORMAT_FLAG`/`DIR_FLAG`/`MODEL_FLAG` | provisional |
+| `sessionID` — the field the session is captured from | `opencode/events.py` `SESSION_ID_FIELD` | provisional |
+| `tokens.input` / `tokens.output` — the usage envelope | `opencode/events.py` `TOKENS`, `INPUT_TOKENS`, `OUTPUT_TOKENS` | provisional |
+| `~/.local/share/opencode/opencode.db` — the session store's path | `opencode/sessions.py` `STORE_RELATIVE_PATH` | provisional |
+| table `session`, columns `id` / `directory` / `time_created` | `opencode/sessions.py` `SESSION_TABLE`, `ID_COLUMN`, `DIRECTORY_COLUMN`, `ORDER_COLUMN` | provisional |
+| "newest row for this directory" as the attempt's session | `opencode/sessions.py::session_for_directory` | assumption |
+| the plugin has **no content switch** | recorded, per the brief's `[verify; else record "no content switch"]`; `local_aliases` adds none | recorded, unverified |
+| `api.observations.get_many(user_id=, from_start_time=, to_start_time=)` — the parameter names | `tracing/user_level.py::user_level_observed` | provisional |
+| time-window attribution of a generation to one attempt | `tracing/user_level.py` module docstring | assumption (the brief's own `[ASSUMPTION]`) |
+| `LANGFUSE_USER_ID` is what the plugin reads its `userId` from | `opencode/adapter.py` `LANGFUSE_USER_ID_ALIAS`, and `scripts/harness/opencode.sh` | doc-sourced, unverified |
+
+Two things here are *not* provisional, because they follow from the spine and the PRD rather
+than from the CLI. **Cost is zero and that is the recorded figure** (`opencode/events.py::
+STREAM_COST_USD`, PRD §11): unlike Codex's identically-valued constant, this is not a placeholder
+for a number the Gateway will replace — the Gateway's own spend rows for these models carry
+`spend 0` too, and `record_attempt_spend` keeps them non-provisional because rows *existed*.
+**All three capabilities are `False`**: OpenCode names its own session, has no resume form this
+system uses, and honours no inbound `TRACEPARENT` (`research/tracing.md` §OpenCode: "no
+traceparent/seed input"), so `resume_command` answers `None` and the Run detail hides FR-21's
+terminal block for this harness.
+
 ## C. Rejected alternatives (MVP)
 | Rejected | Why |
 |---|---|

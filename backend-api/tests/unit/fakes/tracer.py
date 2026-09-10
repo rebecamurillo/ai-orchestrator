@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from uuid import UUID
 
 from orchestrator.domain.entities.attempt import Attempt
@@ -44,6 +45,11 @@ class FakeTracer:
         #: to a harness is the adapter's own concern (AD-11, 7.2) and not a port behaviour a
         #: use case may depend on. Recorded so a test can assert the name reached the port.
         self.observed_calls: list[tuple[UUID, UUID, str | None]] = []
+        #: The `(started_at, ended_at)` window of every one of those calls, in the same order
+        #: (7.3). A second list rather than two more members of the tuple above: that tuple's
+        #: shape is asserted by tests written before this argument existed, and a fake is not
+        #: a place to make an unrelated suite red.
+        self.observed_windows: list[tuple[datetime | None, datetime | None]] = []
         self._span_n = 0
 
     def create_run_trace(
@@ -63,9 +69,16 @@ class FakeTracer:
         yield self._span(run.id)
 
     def attempt_observed(
-        self, run_id: UUID, attempt_id: UUID, *, harness: str | None = None
+        self,
+        run_id: UUID,
+        attempt_id: UUID,
+        *,
+        harness: str | None = None,
+        started_at: datetime | None = None,
+        ended_at: datetime | None = None,
     ) -> bool:
         self.observed_calls.append((run_id, attempt_id, harness))
+        self.observed_windows.append((started_at, ended_at))
         return self.observed.get((run_id, attempt_id), False)
 
     def trace_url(self, trace_id: str) -> str:

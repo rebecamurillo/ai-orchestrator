@@ -1,0 +1,4 @@
+{"type":"session.updated","sessionID":"ses_7f3c1a0b9d2e4f5a"}
+{"type":"message.updated","sessionID":"ses_7f3c1a0b9d2e4f5a","role":"user"}
+{"type":"tool.completed","sessionID":"ses_7f3c1a0b9d2e4f5a","tool":"bash","command":"make test"}
+{"type":"message.completed","sessionID":"ses_7f3c1a0b9d2e4f5a","role":"assistant","tokens":{"input":880,"output":210,"reasoning":0,"cache":{"read":0,"write":0}}}

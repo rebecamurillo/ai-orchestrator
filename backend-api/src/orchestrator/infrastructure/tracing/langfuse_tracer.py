@@ -84,8 +84,9 @@ from __future__ import annotations
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import structlog
 from langfuse import Langfuse, propagate_attributes
@@ -102,6 +103,12 @@ from orchestrator.infrastructure.tracing.session_level import (
     SESSION_LEVEL_HARNESSES,
     session_level_observed,
 )
+from orchestrator.infrastructure.tracing.spans import fallback_span_ref, span_ref
+from orchestrator.infrastructure.tracing.user_level import (
+    PATH_USER,
+    USER_LEVEL_HARNESSES,
+    user_level_observed,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -116,11 +123,6 @@ OBSERVATION_PAGE_LIMIT = 100
 #: the default response omits it (verified live).
 OBSERVATION_FIELDS = "core,basic,metadata"
 
-#: The two constant positions of a W3C `traceparent`: version, then flags. `env_for`'s own
-#: `traceparent` keyword (5.1) takes the joined string verbatim.
-_TP_VERSION = "00"
-_TP_FLAGS = "01"
-
 #: The metadata key `attempt_span` writes and `attempt_observed` matches on.
 _ATTEMPT_ID_KEY = "attempt_id"
 
@@ -129,10 +131,11 @@ _ATTEMPT_ID_KEY = "attempt_id"
 TRACER_CALL_FAILED = "langfuse tracer call failed; degrading gracefully (SM-3)"
 
 #: Logged by every `attempt_observed` call, carrying which rule answered (`path=parented`,
-#: `path=session`, `path=none`). It is the only place that difference is visible: the port
-#: returns a bool, and the readiness line's own wording is pinned by
+#: `path=session`, `path=user`, `path=none`). It is the only place that difference is visible:
+#: the port returns a bool, and the readiness line's own wording is pinned by
 #: `tests/e2e/test_harnesses.py`. 7.2's runbook has the Operator grep for exactly this event
-#: to record whether `TRACEPARENT` was honoured or the fallback carried the check.
+#: to record whether `TRACEPARENT` was honoured or the fallback carried the check, and 7.4's
+#: does the same for `local`, where `path=user` is the only path that can ever answer.
 TRACE_OBSERVED = "attempt trace observed"
 
 
@@ -204,12 +207,12 @@ class LangfuseTracer:
                 metadata=metadata,
             ) as span:
                 entered = True
-                yield _span_ref(span)
+                yield span_ref(span)
         except Exception:
             if entered:
                 raise
             log.exception(TRACER_CALL_FAILED, method="step_span", run_id=str(run.id))
-            yield _fallback_span_ref(trace_id)
+            yield fallback_span_ref(trace_id)
         finally:
             self._safe_flush()
 
@@ -237,25 +240,35 @@ class LangfuseTracer:
                 metadata=metadata,
             ) as span:
                 entered = True
-                yield _span_ref(span)
+                yield span_ref(span)
         except Exception:
             if entered:
                 raise
             log.exception(TRACER_CALL_FAILED, method="attempt_span", run_id=str(run.id))
-            yield _fallback_span_ref(trace_id)
+            yield fallback_span_ref(trace_id)
         finally:
             self._safe_flush()
 
     def attempt_observed(
-        self, run_id: UUID, attempt_id: UUID, *, harness: str | None = None
+        self,
+        run_id: UUID,
+        attempt_id: UUID,
+        *,
+        harness: str | None = None,
+        started_at: datetime | None = None,
+        ended_at: datetime | None = None,
     ) -> bool:
-        """The parented question first, then — for a harness whose adapter may not be able
-        to answer it — the session-level one (`session_level.py` says which and why).
+        """The parented question first, then the one rule the named harness allows.
+
+        Three rules, one per harness family, and the two fallbacks are exclusive: `codex` may
+        be proven by a trace of the Run's session carrying the attempt's tag
+        (`session_level.py`), `local` by a generation of the Run inside the attempt's own
+        window (`user_level.py`), and everything else by parented spans alone (AD-10).
 
         Which one answered is logged rather than returned: the port is a bool and the
         readiness line's text is frozen, so `TRACE_OBSERVED` is the one record that tells the
         Operator whether `codex exec` honoured the inbound `TRACEPARENT` (`path=parented`) or
-        the fallback carried the check (`path=session`).
+        a fallback carried the check (`path=session`, `path=user`).
         """
         if self._parented(run_id, attempt_id):
             self._log_path(run_id, attempt_id, harness, PATH_PARENTED)
@@ -264,6 +277,11 @@ class LangfuseTracer:
             self._client_ref, run_id, attempt_id
         ):
             self._log_path(run_id, attempt_id, harness, PATH_SESSION)
+            return True
+        if harness in USER_LEVEL_HARNESSES and user_level_observed(
+            self._client_ref, run_id, started_at=started_at, ended_at=ended_at
+        ):
+            self._log_path(run_id, attempt_id, harness, PATH_USER)
             return True
         self._log_path(run_id, attempt_id, harness, PATH_NONE)
         return False
@@ -339,30 +357,6 @@ class LangfuseTracer:
 
 def _trace_id(run_id: UUID) -> str:
     return Langfuse.create_trace_id(seed=str(run_id))
-
-
-def _span_ref(span: Any) -> SpanRef:
-    """A `SpanRef` off whatever the SDK actually recorded — `span.trace_id`/`span.id`,
-    not a value this adapter computed itself, so a nested `attempt_span` (which never names
-    a trace id of its own) reports the trace it was really attached to."""
-    return SpanRef(
-        trace_id=span.trace_id,
-        span_id=span.id,
-        traceparent=f"{_TP_VERSION}-{span.trace_id}-{span.id}-{_TP_FLAGS}",
-    )
-
-
-def _fallback_span_ref(trace_id: str) -> SpanRef:
-    """A schema-valid `SpanRef` for when opening the real span failed — the module
-    docstring's "side channel, never a hard dependency" section says why the row still
-    executes normally either way, since nothing downstream depends on the span having
-    actually reached Langfuse."""
-    span_id = uuid4().hex[:16]
-    return SpanRef(
-        trace_id=trace_id,
-        span_id=span_id,
-        traceparent=f"{_TP_VERSION}-{trace_id}-{span_id}-{_TP_FLAGS}",
-    )
 
 
 def _attempt_id_of(observation: Any) -> str | None:

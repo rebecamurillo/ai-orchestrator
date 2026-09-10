@@ -20,12 +20,12 @@ are exported comes from `HARNESS_ENV_ALIASES` through the `AliasBuilder`
 `NAME="value"` in the order that array declares them, and nothing else.
 
 **Why a Run may have no terminal at all.** A `terminal: null` is the ordinary answer for
-every stop the escape hatch does not apply to, and there are five of them: a park row that is
+every stop the escape hatch does not apply to, and there are six of them: a park row that is
 not an `agent` row, a Run with no worktree, an attempt that never got a session id, a harness
-the registry does not hold (Epic 7's `codex` and `local`), and a harness whose
-`capabilities.resume` is `False`. Each is asked in that order, and each answers `None` rather
-than raising: a read model that 500s because a Run parked somewhere unusual would be worse
-than one that hides an optional section.
+the registry does not hold, a harness whose `capabilities.resume` is `False`, and a harness
+whose adapter answers no resume line at all (7.3's `local` does both). Each is asked in that
+order, and each answers `None` rather than raising: a read model that 500s because a Run
+parked somewhere unusual would be worse than one that hides an optional section.
 """
 
 from __future__ import annotations
@@ -121,6 +121,12 @@ def resume_command(
         traceparent=run.trace_id or "",
     )
     inner = harness.resume_command(run.worktree_path, attempt.session_id or "")
+    if inner is None:
+        # the sixth case, and the only one the harness itself decides: an adapter with no
+        # resume form answers `None` (7.3). A harness reaching here should already have been
+        # turned away by `capabilities.resume`, so this is the same answer stated twice — and
+        # the one that holds if an adapter ever claims the capability and cannot print a line.
+        return None
     return Terminal(
         command=_command(environment, inner),
         session_lifetime_ends_at=_lifetime_ends_at(harness.name, attempt.started_at),

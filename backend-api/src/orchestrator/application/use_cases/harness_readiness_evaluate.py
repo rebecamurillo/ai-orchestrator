@@ -203,8 +203,17 @@ def _trace_line(
     # the attempt's own harness, because the rule differs per harness (AD-10, AD-11): a
     # `codex` attempt whose spans did not parent is still proven by the session-level
     # evidence AD-11's universal floor leaves (7.2). The line's wording does not change.
+    #
+    # ...and the attempt's own window, because `local`'s rule *is* one (7.3): the OpenCode
+    # Langfuse plugin carries no attempt id, so the only thing separating this attempt's
+    # generations from another attempt of the same Run is when they happened. Both halves are
+    # keyword-only on the port; this is the one caller that holds the attempt they come from.
     observed = ports.tracer.attempt_observed(
-        run_id, build_attempt.id, harness=build_attempt.harness
+        run_id,
+        build_attempt.id,
+        harness=build_attempt.harness,
+        started_at=build_attempt.started_at,
+        ended_at=build_attempt.ended_at,
     )
     text = (
         f"spans observed for attempt {build_attempt.id}"
