@@ -283,6 +283,20 @@ Then open Claude Code in the repository and type `/bmad-help`. It reads the plan
 - To change an install answer (name, language), re-run the same `install` command with the new flags; prior answers are the defaults.
 - Copies of the skills under `~/.claude/skills/` are optional. This repository relies on the project-level ones in `.claude/skills/`.
 
+## Project brain template
+
+Published as [OptimAI-labs/project-brain-template](https://github.com/OptimAI-labs/project-brain-template):
+a GitHub **template repository** for a multi-repo product's planning hub — planning truth
+(PRD, architecture spine, contracts), business knowledge, per-initiative spec folders in the
+exact shape `templates/initiative.yaml` consumes, member code repos as lazy submodules, and
+two committed agents (a non-technical Product Partner and a Project Architect).
+`templates/project-brain/` holds the source copy; when it changes, push the same changes to
+the template repo, which is canonical for "Use this template". A generated repo
+onboards two ways: `scripts/init.sh` (guided questions: name, org, member repos → submodules
++ `repos.yaml`; non-interactive with args) or any harness agent, which `CLAUDE.md`/`AGENTS.md`
+route to `skills/onboard.md` while the repo is uninitialised. Design and risk analysis:
+`_bmad-output/planning-artifacts/project-brain/DESIGN.md`.
+
 ## Where the work stands
 
 Epics and stories are complete (`mvp/epics/`). Next: `bmad-sprint-planning` to generate the tracking file, then build Epic 1 (repository foundation and quality gates) with `bmad-build`; Epics 2 to 8 are written for unattended `bmad-build-auto` dispatch, one brief per story.
