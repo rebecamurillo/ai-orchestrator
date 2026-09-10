@@ -78,13 +78,43 @@ def test_repo_init_plans_from_the_base_when_its_branch_is_not_on_the_remote(
     assert repo_init.plan_ref == fixtures.BASE_SHA
 
 
-def test_repo_init_is_six_rows_in_file_order(repo_init: Plan) -> None:
-    assert paths(repo_init) == ["plan", "checkout", "install", "commit", "push", "link"]
-    assert [row.seq for row in repo_init.rows] == [1, 2, 3, 4, 5, 6]
+def test_repo_init_is_eight_rows_in_file_order(repo_init: Plan) -> None:
+    assert paths(repo_init) == [
+        "plan",
+        "checkout",
+        "install",
+        "context",
+        "context-review",
+        "commit",
+        "push",
+        "link",
+    ]
+    assert [row.seq for row in repo_init.rows] == [1, 2, 3, 4, 5, 6, 7, 8]
 
 
-def test_repo_init_gates_are_five_deterministic_and_then_the_live_one(repo_init: Plan) -> None:
-    assert [row.gate for row in repo_init.rows] == ["deterministic"] * 5 + ["liveness"]
+def test_repo_init_gates_name_the_dispatch_the_stop_and_the_link(repo_init: Plan) -> None:
+    """The `context` dispatch is live, the stop after it is the Operator's, and the rest are
+    the git kinds' own — `pr.link` last, which talks to a host that may not answer."""
+    assert [row.gate for row in repo_init.rows] == [
+        *["deterministic"] * 3,
+        "liveness",
+        "human",
+        *["deterministic"] * 2,
+        "liveness",
+    ]
+
+
+def test_repo_init_declares_the_agents_file_the_context_step_writes(repo_init: Plan) -> None:
+    """AD-17: the Template said so up front, so the tail subtracts it instead of parking."""
+    assert row(repo_init, "context").with_resolved["writes"] == ["AGENTS.md"]
+
+
+def test_repo_init_stops_for_the_operator_after_the_context_step(repo_init: Plan) -> None:
+    stop = row(repo_init, "context-review")
+
+    assert stop.kind == "checkpoint"
+    assert stop.gate == "human"
+    assert stop.status == "planned"
 
 
 def test_repo_init_checkout_substitutes_the_base_branch_and_the_literal_branch(

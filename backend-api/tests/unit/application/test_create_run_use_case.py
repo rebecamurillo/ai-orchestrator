@@ -41,7 +41,9 @@ from tests.unit.fakes.runs import FakeRunRepository, FakeStepRunRepository
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
-REPO_INIT_ROW_COUNT = 6
+#: `repo-init@1`'s own rows plus AD-7's `plan` row: seven steps since the `context`
+#: dispatch and the stop after it landed.
+REPO_INIT_ROW_COUNT = 8
 BUDGET = Decimal("10")
 
 
@@ -131,7 +133,7 @@ class Harness:
 # ── AC1: a passing pre-flight for repo-init@1 ────────────────────────────────────────────
 
 
-def test_repo_init_persists_six_rows_pins_one_version_and_enqueues_once() -> None:
+def test_repo_init_persists_eight_rows_pins_one_version_and_enqueues_once() -> None:
     harness = Harness(git=fixtures.repo_init_git())
 
     result = harness.create(base_request())

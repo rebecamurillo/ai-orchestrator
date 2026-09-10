@@ -36,7 +36,9 @@ PROBLEM_MEDIA_TYPE = "application/problem+json"
 PREFLIGHT = "/api/v1/runs/preflight"
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
-REPO_INIT_ROW_COUNT = 6
+#: `repo-init@1`'s own rows plus AD-7's `plan` row: seven steps since the `context`
+#: dispatch and the stop after it landed.
+REPO_INIT_ROW_COUNT = 8
 
 
 def project() -> Project:

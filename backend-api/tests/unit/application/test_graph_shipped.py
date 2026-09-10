@@ -33,8 +33,8 @@ NAMES = ("repo-init", "story", "epic", "initiative")
 TEXTS: dict[str, str] = {name: (TEMPLATES_DIR / f"{name}.yaml").read_text() for name in NAMES}
 
 #: `repo-init@1`'s five steps, in file order.
-REPO_INIT_NODES = ("checkout", "install", "commit", "push", "link")
-REPO_INIT_STEPS = 5
+REPO_INIT_NODES = ("checkout", "install", "context", "context-review", "commit", "push", "link")
+REPO_INIT_STEPS = 7
 
 
 @pytest.fixture
@@ -81,10 +81,10 @@ def node(graph: Graph, node_id: str) -> Node:
     return {found.id: found for found in graph.nodes}[node_id]
 
 
-# --- repo-init@1: five steps, one chain, no group, no call ---------------------------------
+# --- repo-init@1: seven steps, one chain, no group, no call --------------------------------
 
 
-def test_repo_init_is_five_nodes_in_file_order(
+def test_repo_init_is_seven_nodes_in_file_order(
     templates: FakeTemplateVersionRepository,
 ) -> None:
     graph = graph_of("repo-init", templates)
@@ -93,18 +93,29 @@ def test_repo_init_is_five_nodes_in_file_order(
     assert len(graph.nodes) == REPO_INIT_STEPS
 
 
-def test_repo_init_chains_its_five_steps_and_declares_no_group(
+def test_repo_init_chains_its_seven_steps_and_declares_no_group(
     templates: FakeTemplateVersionRepository,
 ) -> None:
     graph = graph_of("repo-init", templates)
 
     assert edge_pairs(graph) == (
         ("checkout", "install"),
-        ("install", "commit"),
+        ("install", "context"),
+        ("context", "context-review"),
+        ("context-review", "commit"),
         ("commit", "push"),
         ("push", "link"),
     )
     assert graph.groups == ()
+
+
+def test_the_repo_init_stop_is_the_one_node_a_person_decides(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    """`application/graph.py::_is_human`: the `checkpoint` kind, and the `human` gate."""
+    graph = graph_of("repo-init", templates)
+
+    assert [found.id for found in graph.nodes if found.human] == ["context-review"]
 
 
 def test_no_repo_init_node_carries_a_call(templates: FakeTemplateVersionRepository) -> None:

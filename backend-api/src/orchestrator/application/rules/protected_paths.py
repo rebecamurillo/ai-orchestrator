@@ -25,7 +25,7 @@ already makes, unchanged.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -51,6 +51,12 @@ EPICS_FILENAME = "epics.yaml"
 
 #: The constitution, protected wherever it is and whether or not it exists yet.
 AGENTS_FILENAME = "AGENTS.md"
+
+#: The `agent` row key naming what the Template asked this dispatch to write
+#: (`templates/table.py::WRITES_KEY`, resolved onto the row by `templates/agent_row.py`).
+#: Read here rather than imported from the planner: the rule answers about paths, and a
+#: dependency on the module that builds plans would be the wrong way round.
+WRITES_KEY = "writes"
 
 #: What `git status --porcelain` separates its status letters from the path with: `XY path`.
 STATUS_PREFIX = 3
@@ -89,6 +95,25 @@ def build(
     if initiative_folder:
         anchors.add(f"{initiative_folder}/{EPICS_FILENAME}")
     return frozenset(anchors)
+
+
+def declared(with_resolved: Mapping[str, Any]) -> tuple[str, ...]:
+    """The paths an `agent` row was asked to write, as `check` takes them (AD-17).
+
+    AD-17 protects an anchor from an agent that went somewhere nobody sent it. A Template
+    that named a path under `writes` sent it there in as many words, before anything ran, so
+    the path is subtracted the same way an Operator's *Accept* is — the difference is only
+    who said so and when. `repo-init@1`'s `context` step is the one shipped declaration: the
+    whole point of that dispatch is to write the repository's `AGENTS.md`.
+
+    Nothing is declared by a row that carries no key, a row whose key is not a list, or an
+    entry that is not a path — the parser refuses those shapes, and a row from before this
+    existed simply has none.
+    """
+    paths = with_resolved.get(WRITES_KEY)
+    if not isinstance(paths, Sequence) or isinstance(paths, str):
+        return ()
+    return tuple(path for path in paths if isinstance(path, str))
 
 
 def uncommitted(status: str) -> tuple[Change, ...]:

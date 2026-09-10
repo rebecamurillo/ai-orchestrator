@@ -36,7 +36,9 @@ NOW = datetime(2026, 1, 1, tzinfo=UTC)
 WORK_DIR = Path("/work")
 MANIFEST_PATH = "_bmad/_config/manifest.yaml"
 #: `repo-init@1`'s row count (4.2's own AC): plan, checkout, install, commit, push, link.
-REPO_INIT_ROW_COUNT = 6
+#: `repo-init@1`'s own rows plus AD-7's `plan` row: seven steps since the `context`
+#: dispatch and the stop after it landed.
+REPO_INIT_ROW_COUNT = 8
 
 
 def project() -> Project:

@@ -17,8 +17,11 @@ already proves the three lines it knows about are appended correctly, but it can
 that those are the only lines the installer's actual output needed.
 
 **What is allowed to be new on `chore/bmad-init` besides `_bmad/`.** This Run declares no
-`spec_folder` (`repo-init`'s inputs are `project`, `repository`, `base_branch` only), so there
-are no spec folders to allow here. `.gitignore` is the one other file the row is meant to
+`spec_folder` — `repo-init`'s inputs are `project`, `repository`, `base_branch`, and the
+`harness` and `model` its `context` step dispatches on — so there are no spec folders to
+allow here. The `context` step writes `AGENTS.md` when a real harness runs it; the scripted
+one this suite dispatches writes nothing, which is why that file is not in `ALSO_ALLOWED`.
+`.gitignore` is the one other file the row is meant to
 touch — `bmad.install` appends the ignore lines to it itself (AD-16) — and `README.md` is the
 one file `tests/e2e/test_clone_check.py::Fixtures.make` already committed to `main` before the
 Run ever started, carried onto the branch rather than added by it.
@@ -34,7 +37,15 @@ import pytest
 from orchestrator.application.steps.bmad_install import GITIGNORE
 from orchestrator.infrastructure.settings import Settings
 from tests.e2e.test_clone_check import Fixtures
-from tests.e2e.test_repo_init import TEMPLATE, name_of, read_back, wait_until_terminal
+from tests.e2e.test_repo_init import (
+    NEEDS_YOU,
+    SCRIPTED_HARNESS,
+    TEMPLATE,
+    continued,
+    name_of,
+    read_back,
+    wait_until_terminal,
+)
 from tests.e2e.test_run_creation import (
     RUNS,
     clone_check,
@@ -75,15 +86,27 @@ def origin(api: httpx.Client, fixtures: Fixtures) -> str:
 
 @pytest.fixture(scope="module")
 def initialised(api: httpx.Client, origin: str, settings: Settings) -> dict[str, Any]:
-    """`repo-init@1`, run to completion, exactly as `test_repo_init.py` runs it."""
+    """`repo-init@1`, run to completion, exactly as `test_repo_init.py` runs it.
+
+    Including its one stop: the `context-review` checkpoint parks the Run before the commit
+    this module reads, so a fixture that only waited would read a branch that was never
+    pushed. `continued` is that module's own helper, so the two cannot drift.
+    """
     project_id = create_project(api)
     repository_id = create_repository(api, project_id, origin)
     clone_check(api, repository_id)
-    payload = run_payload(TEMPLATE, repository_id, project_id=project_id_of(api, repository_id))
+    payload = run_payload(
+        TEMPLATE,
+        repository_id,
+        project_id=project_id_of(api, repository_id),
+        harness=SCRIPTED_HARNESS,
+    )
     created = api.post(RUNS, json=payload)
     assert created.status_code == HTTP_CREATED, created.text
     run_id = str(created.json()["run"]["id"])
-    return {"id": run_id, "status": wait_until_terminal(api, run_id), "origin": origin}
+    parked = wait_until_terminal(api, run_id)
+    status = continued(api, run_id) if parked == NEEDS_YOU else parked
+    return {"id": run_id, "status": status, "origin": origin}
 
 
 def test_the_commit_adds_nothing_outside_bmad_and_the_spec_folders(

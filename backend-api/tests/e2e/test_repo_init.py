@@ -22,6 +22,14 @@ ends `done` with `no compare link for this host`. That the compare URL itself is
 correctly is asserted against a `github.com` URL in `tests/unit/test_pr_link_executor.py`,
 where it can be checked without owning a GitHub repository.
 
+**The Run stops once, on purpose.** `repo-init@1`'s `context` step dispatches
+`bmad-project-context`, whose output is the repository's `AGENTS.md`, and the
+`context-review` step after it is a `checkpoint`: the Operator reads the block before it is
+committed. So this module does not wait for a Run that runs straight through — it waits for
+the park, answers it with *Continue*, and only then waits for `done`. The dispatch itself is
+the `fake` harness: what the real skill would write is a conversation, and what this gate is
+for is the order of the rows, the stop, and the branch that exists afterwards.
+
 This module leaves its Run terminal, so it holds neither its slot nor its Repository
 partition afterwards (AD-12).
 """
@@ -69,7 +77,29 @@ INIT_BRANCH = f"{DECLARED_BRANCH}-1"
 COMMIT_SUBJECT = "chore: initialise BMAD method (orchestrator)"
 
 #: The rows `repo-init@1` plans, in order (`templates/repo-init.yaml` plus AD-7's row 1).
-ROWS = ("plan", "checkout", "install", "commit", "push", "link")
+ROWS = (
+    "plan",
+    "checkout",
+    "install",
+    "context",
+    "context-review",
+    "commit",
+    "push",
+    "link",
+)
+
+#: The row the Run stops on, and what it stops with.
+STOP_ROW = "context-review"
+STOP_KIND = "checkpoint"
+#: What the Run's status is while it waits there (AD-8's operator half).
+NEEDS_YOU = "needs_you"
+
+#: The harness this suite dispatches on. The `context` step runs `bmad-project-context`,
+#: which is a conversation with an Operator; the scripted harness writes what its scenario
+#: says and, with no scenario in this fixture, writes nothing and exits 0
+#: (`infrastructure/harness/fake/scenario.py`). What is under test here is the plan, the
+#: stop and the branch — not what the skill would have said.
+SCRIPTED_HARNESS = "fake"
 
 #: `bmad.install` fetches a package from the npm registry and writes a whole method into the
 #: worktree; the Template gives it 30 minutes. This is the gate's own patience, not a claim
@@ -122,6 +152,23 @@ def sessions(settings: Settings) -> Iterator[Any]:
 
 
 @pytest.fixture(scope="module")
+def test_mode(api: httpx.Client) -> None:
+    """Fail by name when the stack is not in test mode, rather than timing out later.
+
+    `repo-init@1` dispatches an agent since its `context` step landed, and the one harness
+    this suite can run is the scripted one — the real skill is a conversation.
+    """
+    response = api.get("/api/v1/harnesses")
+    assert response.status_code == HTTP_OK, response.text
+    rows = {item["name"]: item for item in response.json()["items"]}
+    assert SCRIPTED_HARNESS in rows, (
+        f"the `{SCRIPTED_HARNESS}` harness is not seeded: this gate needs ORCH_TEST_MODE=1 "
+        "on the stack (docker-compose.e2e.yml sets it; `make e2e` is the target that uses it)"
+    )
+    assert rows[SCRIPTED_HARNESS]["enabled"] is True, rows[SCRIPTED_HARNESS]
+
+
+@pytest.fixture(scope="module")
 def origin(api: httpx.Client, fixtures: Fixtures) -> str:
     """A bare repository with `main` and no `_bmad/` — what `repo-init` is for."""
     return fixtures.make()
@@ -158,16 +205,45 @@ def read_back(work_dir: Path, name: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def initialised(api: httpx.Client, origin: str, settings: Settings) -> dict[str, Any]:
+def initialised(
+    api: httpx.Client, origin: str, settings: Settings, test_mode: None
+) -> dict[str, Any]:
     """The whole story in one fixture: a Repository with no method, initialised."""
     project_id = create_project(api)
     repository_id = create_repository(api, project_id, origin)
     clone_check(api, repository_id)
-    payload = run_payload(TEMPLATE, repository_id, project_id=project_id_of(api, repository_id))
+    payload = run_payload(
+        TEMPLATE,
+        repository_id,
+        project_id=project_id_of(api, repository_id),
+        harness=SCRIPTED_HARNESS,
+    )
     created = api.post(RUNS, json=payload)
     assert created.status_code == HTTP_CREATED, created.text
     run_id = str(created.json()["run"]["id"])
-    return {"id": run_id, "status": wait_until_terminal(api, run_id), "origin": origin}
+    parked = wait_until_terminal(api, run_id)
+    stop = park_of(api, run_id) if parked == NEEDS_YOU else None
+    return {
+        "id": run_id,
+        "parked": parked,
+        "stop": stop,
+        "status": continued(api, run_id) if parked == NEEDS_YOU else parked,
+        "origin": origin,
+    }
+
+
+def park_of(client: httpx.Client, run_id: str) -> dict[str, Any]:
+    """What the Run says it is waiting for, as the Operator's screen reads it."""
+    response = client.get(f"{RUNS}/{run_id}")
+    assert response.status_code == HTTP_OK, response.text
+    return dict(response.json())
+
+
+def continued(client: httpx.Client, run_id: str) -> str:
+    """Answer the one declared stop, then wait for the Run to finish (AD-13)."""
+    response = client.post(f"{RUNS}/{run_id}/signals", json={"kind": "continue"})
+    assert response.status_code in (HTTP_OK, HTTP_CREATED), response.text
+    return wait_until_terminal(client, run_id)
 
 
 def wait_until_terminal(client: httpx.Client, run_id: str) -> str:
@@ -194,6 +270,33 @@ def rows_of(sessions: Any, run_id: str) -> list[Any]:
 def run_of(sessions: Any, run_id: str) -> Any:
     with sessions() as session:
         return SQLAlchemyRunRepository(session).get(UUID(run_id))
+
+
+def test_the_run_stops_for_the_operator_at_the_context_review(
+    initialised: dict[str, Any], sessions: Any
+) -> None:
+    """The declared stop, before anything is committed: the Operator reads the block the
+    `context` step wrote and answers it. A Run that never stopped would have committed an
+    `AGENTS.md` nobody looked at."""
+    assert initialised["parked"] == NEEDS_YOU, initialised
+
+    run = run_of(sessions, initialised["id"])
+
+    assert run is not None
+    assert run.park_kind == STOP_KIND
+    assert run.park_path == STOP_ROW
+
+
+def test_the_context_step_wrote_its_agents_file_without_parking_on_it(
+    initialised: dict[str, Any], sessions: Any
+) -> None:
+    """AD-17 protects every `AGENTS.md`, and `repo-init@1` declares this one under `writes`
+    — so the dispatch that was sent to write it is not a dispatch that went where nobody
+    sent it. Without the declaration the Run would park `protected_path` on the `context`
+    row instead of reaching its own checkpoint."""
+    context = next(row for row in rows_of(sessions, initialised["id"]) if row.path == "context")
+
+    assert context.status == "done"
 
 
 def test_the_run_reaches_done(initialised: dict[str, Any], sessions: Any) -> None:

@@ -19,7 +19,12 @@ from orchestrator.application.templates.model import (
     STATUS_TOKENS,
     ValidationError,
 )
-from orchestrator.application.templates.table import SUB_MAPS, problem, unknown_keys
+from orchestrator.application.templates.table import (
+    SUB_MAPS,
+    WRITES_KEY,
+    problem,
+    unknown_keys,
+)
 
 #: The `retry` sub-keys `parse()` builds `AgentExtras` from, and the type each must be.
 RETRY_SHAPES: tuple[tuple[str, type], ...] = (
@@ -47,6 +52,7 @@ def check_agent_extras(node: LinedMap) -> list[ValidationError]:
         errors += unknown_keys(sub, allowed)
     errors += _check_status_tokens(node)
     errors += _check_expect_files(node)
+    errors += _check_writes(node)
     return errors + _check_retry_shapes(node)
 
 
@@ -71,6 +77,22 @@ def _check_expect_files(node: LinedMap) -> list[ValidationError]:
         if not isinstance(glob, str):
             errors.append(problem(line, INVALID_VALUE))
     return errors
+
+
+def _check_writes(node: LinedMap) -> list[ValidationError]:
+    """`writes` is a list of paths, and a path that is not text is not a path (AD-17).
+
+    The same boundary `expect.files` is held to: shape, and nothing about meaning. A path
+    naming something this dispatch never touches costs nothing — the rule subtracts what was
+    declared from what changed, so a declaration nothing matches is simply never used.
+    """
+    if WRITES_KEY not in node:
+        return []
+    line = key_line(node, WRITES_KEY, node.line)
+    paths = as_seq(node[WRITES_KEY])
+    if paths is None:
+        return [problem(line, INVALID_VALUE)]
+    return [problem(line, INVALID_VALUE) for path in paths if not isinstance(path, str)]
 
 
 def _check_retry_shapes(node: LinedMap) -> list[ValidationError]:

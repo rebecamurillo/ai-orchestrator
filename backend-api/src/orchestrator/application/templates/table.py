@@ -25,7 +25,13 @@ SLUG = re.compile(r"^[a-z][a-z0-9-]*$")
 TEMPLATE_KEYS = frozenset({"name", "version", "description", "inputs", STEPS_KEY})
 INPUT_KEYS = frozenset({"type", "required", "default", "values"})
 STEP_KEYS = frozenset({"id", "uses", "run", "with", "gate", "timeout_min", "on_fail"})
-AGENT_KEYS = frozenset({"expect", "retry", "escalate_when", "pause_when"})
+#: The agent extra naming what this dispatch is allowed to write, and the key the planner
+#: writes it onto the row under. Named once here because three readers need the same word:
+#: `agent.py` checks its shape, `agent_row.py` resolves it onto `with_resolved`, and
+#: `steps/agent_tail.py` subtracts it from what the attempt changed (AD-17).
+WRITES_KEY = "writes"
+
+AGENT_KEYS = frozenset({"expect", "retry", "escalate_when", "pause_when", WRITES_KEY})
 FOR_EACH_KEYS = frozenset(
     {
         "id",
