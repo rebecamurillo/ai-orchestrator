@@ -415,6 +415,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the history: one row per attempt, newest first
+         * @description One page of executed attempts. Writes nothing; derives no status (AD-8).
+         */
+        get: operations["read_history_api_v1_steps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/templates": {
         parameters: {
             query?: never;
@@ -942,6 +962,75 @@ export interface components {
             status: string;
             /** Version */
             version: string;
+        };
+        /**
+         * HistoryPageOut
+         * @description `GET /steps`'s body: one page of rows, and the cursor for the page after it.
+         */
+        HistoryPageOut: {
+            /** Items */
+            items: components["schemas"]["HistoryRowOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /**
+         * HistoryRowOut
+         * @description One executed attempt: the ten columns the table prints, and what they link to.
+         *
+         *     `harness`, `model`, `session_id`, the two token counts and `cost_usd` are `null` on a
+         *     non-agent row — a `git.commit` or a `shell` attempt has no harness to name (binding
+         *     rule). `trace_url` is the *Run's* trace and `log_tail_url` is the Run detail read; see
+         *     `application/use_cases/history.py`'s own docstring for why neither is per-attempt.
+         */
+        HistoryRowOut: {
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Cost Provisional */
+            cost_provisional: boolean;
+            /** Cost Usd */
+            cost_usd: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /** Harness */
+            harness: string | null;
+            /** Kind */
+            kind: string;
+            /** Log Tail Url */
+            log_tail_url: string;
+            /** Model */
+            model: string | null;
+            /** Path */
+            path: string;
+            /** Project Name */
+            project_name: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Run Label */
+            run_label: string;
+            /** Seconds */
+            seconds: number | null;
+            /** Seq */
+            seq: number;
+            /** Session Id */
+            session_id: string | null;
+            /** Started At */
+            started_at: string;
+            /** Status */
+            status: string;
+            /** Token */
+            token: string;
+            /** Tokens In */
+            tokens_in: number | null;
+            /** Tokens Out */
+            tokens_out: number | null;
+            /** Trace Url */
+            trace_url: string | null;
         };
         /**
          * InputDeclOut
@@ -3398,6 +3487,53 @@ export interface operations {
                 };
             };
             /** @description The posted body does not match the shape below. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_history_api_v1_steps_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                /** @description One of BLK DON ERR QUE RUN. Omitted means every status. */
+                status?: string | null;
+                harness?: string | null;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryPageOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `status` is not one of the tokens this endpoint offers, `cursor` is not one it issued, or `limit` is outside its bounds. */
             422: {
                 headers: {
                     [name: string]: unknown;

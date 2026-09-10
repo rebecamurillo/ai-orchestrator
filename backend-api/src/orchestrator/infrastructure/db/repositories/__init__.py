@@ -12,6 +12,7 @@ from orchestrator.infrastructure.db.repositories.gate_records import (
     SQLAlchemyGateRecordRepository,
 )
 from orchestrator.infrastructure.db.repositories.harnesses import SQLAlchemyHarnessRepository
+from orchestrator.infrastructure.db.repositories.history import SQLAlchemyHistoryQuery
 from orchestrator.infrastructure.db.repositories.projects import SQLAlchemyProjectRepository
 from orchestrator.infrastructure.db.repositories.repository import (
     SQLAlchemyRepositoryRepository,
@@ -31,6 +32,7 @@ __all__ = [
     "SQLAlchemyAttemptRepository",
     "SQLAlchemyGateRecordRepository",
     "SQLAlchemyHarnessRepository",
+    "SQLAlchemyHistoryQuery",
     "SQLAlchemyProjectRepository",
     "SQLAlchemyRepositoryRepository",
     "SQLAlchemyRunRepository",

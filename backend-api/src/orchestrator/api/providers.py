@@ -36,6 +36,7 @@ from fastapi import Query, Request
 from orchestrator.application.use_cases.create_run import CreateRunPorts, RunReadPorts
 from orchestrator.application.use_cases.harness_readiness import HarnessReadinessPorts
 from orchestrator.application.use_cases.harnesses import HarnessPorts
+from orchestrator.application.use_cases.history import HistoryPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.queue import QueuePorts
@@ -56,6 +57,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyAttemptRepository,
     SQLAlchemyGateRecordRepository,
     SQLAlchemyHarnessRepository,
+    SQLAlchemyHistoryQuery,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
     SQLAlchemyRunRepository,
@@ -293,6 +295,22 @@ def queue_ports(request: Request) -> Iterator[QueuePorts]:
             steps=SQLAlchemyStepRunRepository(uow.session),
             clock=SystemClock(),
             max_active_runs=settings.max_active_runs,
+        )
+
+
+def history_ports(request: Request) -> Iterator[HistoryPorts]:
+    """The ports `GET /steps` reads through (7.5). Writes nothing.
+
+    `tracer` is built fresh per request, the same reasoning `run_view_ports` gives for its
+    own: it answers a URL by string format and opens nothing. The link it builds is the
+    *Run's* trace, because nothing stores a per-attempt trace id — see
+    `application/use_cases/history.py`'s own docstring.
+    """
+    session_factory = from_state(request, SESSION_FACTORY)
+    settings = from_state(request, SETTINGS)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield HistoryPorts(
+            history=SQLAlchemyHistoryQuery(uow.session), tracer=LangfuseTracer(settings)
         )
 
 

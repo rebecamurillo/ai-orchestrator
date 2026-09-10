@@ -41,6 +41,13 @@
  * own precedent above, needed for the same reason: the frozen `shell.spec.ts` asserts
  * `NO RUNS` at bare `/runs` against this same stub. `runs-queue.spec.ts`'s own real-content
  * scenarios mock this route with `page.route()` instead, `board.spec.ts`'s own precedent.
+ *
+ * 7.5 adds `GET /api/v1/steps`, unconditionally empty for exactly the same reason one step
+ * on: `/runs` now mounts a second island beside the queue, and without this route that
+ * island would answer every bare visit with its own failed-fetch readout — a second
+ * `fetch-failed` element on a page where `runs-queue.spec.ts` (frozen) asserts on one under
+ * Playwright's strict mode. `runs-history.spec.ts`'s real-content scenarios mock it with
+ * `page.route()`, the same way.
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -659,6 +666,11 @@ createServer(async (request, response) => {
       JSON_TYPE,
       JSON.stringify({ items: [], next_cursor: null, max_active_runs: 2 }),
     );
+    return;
+  }
+  if (pathname === '/api/v1/steps' && request.method === 'GET') {
+    // forced empty unconditionally, `GET /api/v1/queue`'s own precedent directly above
+    send(response, 200, JSON_TYPE, JSON.stringify({ items: [], next_cursor: null }));
     return;
   }
   if (pathname === '/api/v1/projects' && request.method === 'GET') {

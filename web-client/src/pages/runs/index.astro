@@ -1,25 +1,26 @@
 ---
 /**
- * Runs (4.16, SPEC CAP-16, FR-13, FR-25, UX-DR14): the Bar's project and status filters, the
- * QUEUE section (`RunsQueue.tsx`, `client:load`, its own poll of `GET /queue`), and the
- * HISTORY section head — the table itself is Epic 7 (this story's own scope: "render the
- * section head ... render it now").
+ * Runs (4.16 + 7.5, SPEC CAP-16 + CAP-5, FR-13, FR-25, UX-DR14): the Bar's project and
+ * status filters, the QUEUE section (`RunsQueue.tsx`, `client:load`, its own poll of
+ * `GET /queue`), and the HISTORY section (`RunsHistory.tsx`, `client:load`, its own poll of
+ * `GET /steps`).
  *
  * The project filter mirrors `src/pages/index.astro`'s own SSR read of `GET /projects` for
- * its filter chrome (`?project=` full navigation). Neither filter changes the QUEUE section:
- * `GET /queue` (4.11) takes no query parameters and is not widened here (this story's own
- * operating rule); filtering it by project would also hide exactly the "another project is
- * holding the global concurrency slot" fact CAP-16 exists to state (AD-12's queue is a
- * system-wide partition, not a per-project one). The brief states this deferral outright for
- * the status filter ("status filter applies to the history section arriving in Epic 7;
- * render it now"); the project filter is deferred to the same, unbuilt HISTORY table for the
- * same reason — "a screen reads one endpoint and aggregates nothing" (AD-8) rules out a
- * client-side join against a second `GET /projects` read to filter the QUEUE section by.
- * Both filters still write `?project=`/`?status=` so the History story can read them.
+ * its filter chrome (`?project=` full navigation).
+ *
+ * **The filters apply to HISTORY; the QUEUE section ignores them** (7.5's own binding rule,
+ * and 4.16's behaviour unchanged). `GET /queue` (4.11) takes no query parameters and is not
+ * widened: filtering it by project would hide exactly the "another project is holding the
+ * global concurrency slot" fact CAP-16 exists to state (AD-12's queue is a system-wide
+ * partition, not a per-project one), and filtering it by an *attempt* status token would ask
+ * it a question about a Run it does not answer. Both filters are handed to `RunsHistory` as
+ * props rather than read from `location` inside it: a filter click is a full navigation, so
+ * the page already knows them and the island never parses a URL.
  */
 import type { components } from '../../api/schema';
 import Shell from '../../layouts/Shell.astro';
 import RunsQueue from '../../islands/RunsQueue';
+import RunsHistory from '../../islands/RunsHistory';
 import { backend } from '../../api/server';
 
 export const prerender = false;
@@ -34,8 +35,9 @@ function isStatusFilter(value: string): value is StatusFilter {
 }
 
 const selectedProjectId = Astro.url.searchParams.get('project');
-// an unrecognized `?status=` (a stale link, or a token History's own story adds later) falls
-// back to `ALL` rather than persisting silently with no filter link ever marked current
+// an unrecognized `?status=` (a stale link, or a hand-edited one) falls back to `ALL` rather
+// than persisting silently with no filter link ever marked current — and, since 7.5, rather
+// than reaching `GET /steps` as a token it would refuse
 const rawStatus = Astro.url.searchParams.get('status');
 const selectedStatus: StatusFilter = rawStatus && isStatusFilter(rawStatus) ? rawStatus : 'ALL';
 
@@ -99,9 +101,7 @@ function filterHref(projectId: string | null, status: string): string {
 
   <RunsQueue client:load />
 
-  <h2 class="runs-history-head" data-testid="runs-history">
-    HISTORY · history arrives with the harness comparison epic
-  </h2>
+  <RunsHistory client:load projectId={selectedProjectId} status={selectedStatus} />
 </Shell>
 
 <style>
@@ -124,18 +124,5 @@ function filterHref(projectId: string | null, status: string): string {
   .runs-filter-project a[aria-current='true'],
   .runs-filter-status a[aria-current='true'] {
     color: var(--color-text);
-  }
-
-  /* Same box model as `runs.css`'s own `.runs-section-head` (padding, not margin, for the
-     horizontal edge) — `--section-gap` stands in for that rule's `--space-8` top padding,
-     since this head needs the product's largest vertical interval above it, not the queue
-     section's own tighter one. */
-  .runs-history-head {
-    padding: var(--section-gap) var(--space-8) var(--space-3);
-    border-bottom: 1px solid var(--color-line);
-    color: var(--color-text-tertiary);
-    font-size: var(--type-section-head);
-    letter-spacing: var(--type-section-head-tracking);
-    text-transform: var(--type-section-head-transform);
   }
 </style>

@@ -1,104 +1,150 @@
 ---
-status: blocked
+status: done
 ---
 
 # Runs history
 
+`GET /api/v1/steps` — one row per attempt, newest first, cursor-paged, filtered by project,
+status token and harness — and the **HISTORY** table on `/runs` that reads it, whose rows
+link to the Run detail scrolled to the step they name.
+
+## Anchor ruling
+
+**Granted by the Operator, in session, on 2026-09-10.** The story halted `blocked` first;
+nothing was implemented until the ruling came back.
+
+- **File:** `web-client/tests/e2e/runs-queue.spec.ts`, landed by `a7bf037 story 4-16: Runs
+  screen queue section (orchestrator)` on 2026-09-07.
+- **Assertion:** the tail of the test *the bar carries the project and status filters, and
+  the History section head* asserted that `data-testid="runs-history"` contained the
+  deferral copy `history arrives with the harness comparison epic`.
+- **What replaced it:** `await expect(page.getByTestId('runs-history')).toContainText('HISTORY');`
+  — the section head is *served*, which is what a placeholder test is supposed to assert
+  (root `AGENTS.md` hard rule 1, second exception, and its own "do not write the assertion
+  that needs it" note). Exactly that assertion changed. Nothing else in the file did: no
+  other test, no docstring, no reordering, no deletion, no skip.
+- **Why a ruling was needed:** the copy named the *epic* rather than a story, so the
+  exception's own precondition ("names a later story") was not met by the letter. The
+  Operator read "the harness comparison epic" as naming this story — Epic 7 has exactly one
+  story that owns CAP-5, and `runs/index.astro`'s own docstring already said "the table
+  itself is Epic 7".
+- **Strictly-exceeding coverage, in the same commit:** `web-client/tests/e2e/runs-history.spec.ts`
+  (new, 9 scenarios) pins the section head, the ten columns, an agent row and a non-agent
+  row cell by cell, the signal rule, the row link to `/workflows/{run_id}#step-{seq}`, the
+  detail scrolling to and briefly promoting that row (both by click and by direct arrival),
+  *more* appending the next page with the cursor in the request, the two filters reaching
+  the history request while the queue's request carries neither, the section's own empty
+  reading, and its own failed-read readout with Retry.
+
+## Code Map
+
+**backend-api — a new router/use-case/schema trio, the Epic 6 `run_files.py` pattern:**
+
+- `src/orchestrator/domain/ports/history.py` (new) — `HistoryQuery`, `HistoryQuerySpec`,
+  `HistoryCursor`, `HistoryEntry`. A query port rather than a fifth `AttemptRepository`
+  method: the unit of this read is the attempt, its order spans every Run, and each row needs
+  attempt + `step_run` + `run` + project name at once. Keyset, not offset.
+- `src/orchestrator/application/use_cases/history.py` (new) — `list_history`,
+  `HistoryFilters`, `HistoryRow`, `HistoryPage`, `STATUS_FILTERS`, `encode_cursor` /
+  `decode_cursor`.
+- `src/orchestrator/api/schemas/history.py` (new) — `HistoryRowOut`, `HistoryPageOut`
+  (`Page` with nothing added).
+- `src/orchestrator/api/routers/history.py` (new) — `GET /steps`, and the `history_filters`
+  dependency that parses its five query parameters.
+- `src/orchestrator/infrastructure/db/repositories/history.py` (new) —
+  `SQLAlchemyHistoryQuery`: one statement, four inner joins, `started_at IS NOT NULL`, the
+  filters, `tuple_(started_at, id) < tuple_(...)`, `ORDER BY started_at DESC, id DESC`.
+- `src/orchestrator/api/providers.py` — `history_ports`.
+- `src/orchestrator/main.py` — mounts `history.router` after `queue.router`.
+- `src/orchestrator/infrastructure/db/{__init__.py,repositories/__init__.py}` — the export.
+- `tests/unit/fakes/history.py` (new) — `FakeHistoryQuery`, the one double for the new port.
+- New tests: `tests/unit/application/test_history.py`, `tests/unit/test_history_port.py`,
+  `tests/unit/test_history_router.py`, `tests/unit/test_history_schema.py`,
+  `tests/unit/test_history_repository_adapter.py`, `tests/e2e/test_history.py`.
+
+**web-client:**
+
+- `src/lib/runs/history.ts` (new) — the ten columns, each cell's text, `rowHref`, the query
+  and request path, `promoted`.
+- `src/lib/run/anchor.ts` (new) — `stepAnchorId`, `anchoredSeq`, `PROMOTED_MS`.
+- `src/components/runs/HistoryTable.tsx` (new) — the dense table.
+- `src/islands/RunsHistory.tsx` (new) — the poll, the *more* control, the empty reading, the
+  failed read.
+- `src/pages/runs/index.astro` — the placeholder head is replaced by the island, with the
+  bar's two filters passed as props.
+- `src/components/run/StepsTable.tsx` — `id="step-{seq}"` on every row, `data-anchored`.
+- `src/islands/RunDetail.tsx` — the one-shot `#step-{seq}` arrival (235 lines, under the 300
+  cap; nothing needed splitting).
+- `src/styles/runs.css`, `src/styles/run-detail.css` — the table and the promotion.
+- `tests/e2e/stub-backend.mjs` — `GET /api/v1/steps` answers empty unconditionally.
+- New tests: `tests/unit/runs-history-lib.test.ts`, `runs-history-table.test.ts`,
+  `runs-history-island.test.ts`, `run-anchor-lib.test.ts`, `run-steps-table-anchor.test.ts`,
+  `tests/e2e/runs-history.spec.ts`.
+
+## Design Notes
+
+**The six findings the Operator settled, as built.**
+
+1. **`seq` is on `HistoryRow`.** The brief's field list omits it; its own link rule
+   (`/workflows/{run_id}#step-{seq}`) cannot be built from one read without it.
+2. **The history's empty reading is `runs-history-empty`,** never `runs-empty` — that id
+   belongs to the queue section, and `shell.spec.ts` and `runs-queue.spec.ts` each assert a
+   single match for it under Playwright's strict mode.
+3. **The history's failed read is `runs-history-failed`,** for the same reason, and
+   `stub-backend.mjs` answers `GET /api/v1/steps` empty unconditionally so a bare `/runs`
+   never produces a second `fetch-failed` element.
+4. **`GET /steps` is its own trio.** `tests/unit/test_runs_router.py` pins `runs.py` at two
+   operations; nothing was added there.
+5. **`log_tail_url` resolves to `/api/v1/runs/{run_id}/detail`, and the gap is documented at
+   the field.** No per-attempt log resource is served anywhere in this system — the tail
+   lives inside the Run detail read as `StepRowOut.latest.log_tail` — so the brief names a
+   resource that does not exist. No route was invented for it (Scope: "Out: nothing else").
+   Carried to the Epic 7 handoff for Epic 8, the read-model epic.
+6. **`trace_url` is the *Run's* trace, and says so at the field.** Nothing stores a
+   per-attempt trace id; `Run.trace_id` is the only one there is.
+
+**Two decisions this story had to take on its own:**
+
+- **`BLK` selects `blocked` *and* `error`,** which is the brief's own acceptance ("only
+  attempts whose row ended `blocked` or `error`"), and `ERR` narrows to the errored ones.
+  The tokens are therefore not a partition — deliberately, and documented at
+  `STATUS_FILTERS`. The bar offers no `CHK` and no `SKP`, so a `checkpoint` or `skipped`
+  attempt is reachable only with no status filter at all. That is a gap in the bar UX-DR14
+  fixed for *Run* statuses, not a gap in this endpoint.
+- **A full page always carries a cursor; a short one never does.** The brief's first
+  acceptance is "the third page is empty with `next_cursor null`", which a `limit + 1`
+  look-ahead cannot produce — a look-ahead reports the end on page two. The cost is one
+  empty read at the end of a history whose length divides exactly by the page size, and the
+  *more* control surviving one click past the end. Stated in `list_history`'s docstring.
+
+**One regression this story caused and fixed properly.** `/runs` is the first screen with
+two islands on the shared `$poll` loop, and `configurePolling` is last-writer-wins: a
+history reporting "nothing executing" slowed the queue beside it from 5 s to 30 s and broke
+`runs-queue.spec.ts`'s frozen poll-tick scenario. The fix is that `RunsHistory` subscribes to
+`$poll` and never re-times it — the queue is the right authority anyway, since an executing
+attempt belongs to a Run `GET /queue` already reports as `running`. No frozen test was
+touched to accommodate it.
+
+## Verification
+
+Every gate run in the foreground, exit code observed directly.
+
+- `make lint` — exit 0. ruff check/format, `mypy --strict` over `domain/` + `application/`
+  (121 files), import-linter 4/4 contracts kept, env contract (37 settings / 43 vars),
+  `check_test_pairs` 209 backend + 95 web-client modules paired, `gen:api --check` no drift,
+  astro check 0 errors, eslint, prettier, tsc.
+- `make test` — exit 0. 5934 backend unit tests passed, 1 skipped; `domain/` + `application/`
+  at 100 % branch coverage (`--fail-under=100`); 1286 web-client vitest tests passed.
+- `make openapi` — exit 0; `contracts/openapi.json` and `web-client/src/api/schema.d.ts`
+  regenerated and committed.
+- `make e2e-api` — exit 0, via `make e2e` in its own disposable `aio-e2e` stack: 215 passed,
+  11 deselected, 39 subtests, including this story's own `tests/e2e/test_history.py` and
+  schemathesis over the new route.
+- `make e2e-ui` — exit 0: 177 passed, 1 skipped, including the 9 new `runs-history.spec.ts`
+  scenarios. The Epic 5/6 deliverable PNGs it rewrites were restored; none is committed.
+
 ## Auto Run Result
 
-Status: blocked
-Blocking condition: frozen placeholder assertion pins `data-testid="runs-history"` to the
-deferral copy this story must replace — `web-client/tests/e2e/runs-queue.spec.ts:248`.
-
-Nothing was implemented. The working tree carries only this record.
-
-## The anchor
-
-**File** — `web-client/tests/e2e/runs-queue.spec.ts`, landed by `a7bf037 story 4-16: Runs
-screen queue section (orchestrator)` on 2026-09-07. An existing test file, therefore frozen
-under root `AGENTS.md` hard rule 1.
-
-**Assertion** — lines 234–251, the tail of the test
-`the bar carries the project and status filters, and the History section head`:
-
-```ts
-    await expect(page.getByTestId('runs-history')).toContainText(
-      'history arrives with the harness comparison epic',
-    );
-```
-
-**What it pins** — that the element carrying `data-testid="runs-history"` on `/runs`
-renders the sentence `history arrives with the harness comparison epic`. Today that element
-is the deferral heading in `web-client/src/pages/runs/index.astro:102-104`:
-
-```astro
-  <h2 class="runs-history-head" data-testid="runs-history">
-    HISTORY · history arrives with the harness comparison epic
-  </h2>
-```
-
-**Why story 7-5 cannot land beside it** — the brief
-(`briefs/7-5-runs-history.md`) fixes both the test-id and the copy this story must put
-there:
-
-- *Test-ids:* `runs-history`, `runs-history-row-<attempt_id>`, `runs-history-more`. The
-  HISTORY table itself is required to carry `runs-history`; the row and *more* test-ids are
-  namespaced beneath it, so it is the table's id and not a wrapper's.
-- *Table (UX-DR14):* "Section head `HISTORY`". The head is exactly the word `HISTORY`, with
-  no deferral clause after it.
-
-The two cannot both hold. Any element carrying `runs-history` after this story is the
-history table (or its section), and the only way `toContainText('history arrives with the
-harness comparison epic')` still passes is to keep that sentence on the screen — a statement
-of fact that would be false the moment the table renders, which root `AGENTS.md` forbids
-independently ("Product copy states facts and mechanisms"). Re-parenting the id onto a
-wrapper that still contains the old heading has the same effect and is the same false copy.
-There is no arrangement of markup that satisfies the brief and the assertion at once.
-
-**Which exception it is near, and why the agent did not take it.** Root `AGENTS.md` hard
-rule 1's second exception covers "a placeholder assertion: where a test names a later story
-as the thing that replaces what it asserts, exactly that story may revise that assertion,
-and only if the same commit adds coverage that strictly exceeds it." The same rule adds:
-"Do not write the assertion that needs the second exception: a test covering a placeholder
-asserts that the route is served, not the placeholder's copy" — which is exactly the shape
-of this assertion.
-
-It falls one word short of the exception's own precondition: the copy names *the harness
-comparison epic* (Epic 7), not a story. Epic 7 contains exactly one story that replaces it —
-7-5, the CAP-5 owner — and `src/pages/runs/index.astro`'s own module docstring already says
-"the table itself is Epic 7". So the exception's intent is met and its letter is not. That
-is a ruling, and only the Operator makes it.
-
-## What a ruling would unblock
-
-If the Operator authorises the revision, the same commit lands coverage that strictly
-exceeds the assertion: a new `web-client/tests/e2e/runs-history.spec.ts` asserting the ten
-columns, the row link to `/workflows/{run_id}#step-{seq}`, the *more* control appending the
-next page, and the status filter reaching the history section — and the frozen test's own
-line becomes a `HISTORY` section-head reading rather than a deferral reading.
-
-## Neighbouring constraints found while confirming the conflict
-
-These are **not** anchor conflicts — they are solvable inside the story — but they shape the
-implementation and are recorded so the next dispatch does not rediscover them:
-
-- `web-client/tests/e2e/shell.spec.ts:18` (frozen) visits bare `/runs` and asserts a single
-  `data-testid="runs-empty"` reading `NO RUNS`, and `runs-queue.spec.ts:299-303` asserts the
-  same element also contains `nothing queued`. The history section's own empty reading must
-  therefore carry a **different** test-id, or Playwright's strict mode fails both.
-- `runs-queue.spec.ts:204-231` (frozen) asserts a single `data-testid="fetch-failed"` while
-  `GET /api/queue` 500s. `tests/e2e/stub-backend.mjs` must answer `GET /api/v1/steps` with an
-  empty page unconditionally — the precedent story 4-16 set for `GET /api/v1/queue` — or the
-  history island's own `FailedFetch` becomes a second match and breaks that test too.
-- `backend-api/tests/unit/test_runs_router.py` pins `api/routers/runs.py` at exactly two
-  operations, so `GET /steps` needs its own router module beside it — Epic 6's
-  `run_files.py` / `use_cases/run_files.py` / `schemas/run_files.py` trio is the pattern.
-- `HistoryRow` as the brief lists it has no `seq`, yet the brief's own link rule is
-  `/workflows/{run_id}#step-{seq}`. The row needs `seq` for the link to be buildable without
-  a second read; that addition should be confirmed rather than assumed.
-- No attempt-level trace id is stored (`domain/entities/attempt.py`); `Tracer.trace_url`
-  takes a trace id and `Run.trace_id` is the only one there is. `trace_url` on a history row
-  therefore resolves per Run, not per attempt.
-- There is no endpoint serving an attempt's log tail; `log_tail_url` in the brief's field
-  list has no existing referent, and the brief's own Scope is "Out: nothing else". What that
-  field should point at needs deciding before the schema is written.
+Status: done
+Blocking condition: none. The one anchor conflict was ruled on by the Operator on
+2026-09-10 and applied exactly as ruled.

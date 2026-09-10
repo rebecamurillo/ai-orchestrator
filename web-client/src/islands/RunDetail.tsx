@@ -17,6 +17,14 @@
  * A signal click always re-fetches on success (the binding rule: "each posts ... and
  * re-fetches") rather than patching local state — `signal_run`/`apply_step_result` are the
  * only writers of Run/Step state (AD-8), so this island never predicts what the write did.
+ *
+ * **`#step-{seq}` (7.5).** A Runs history row links here with a fragment naming one Steps
+ * row (`lib/runs/history.ts::rowHref`). The browser cannot honour it: this island renders
+ * nothing until its first fetch resolves, so the row does not exist while the browser is
+ * still looking for it. The effect below scrolls to it once the first detail has rendered
+ * and promotes it for `PROMOTED_MS` (`lib/run/anchor.ts`). It reads `location.hash` once,
+ * on arrival — a later poll must not yank the page back to the anchor while the Operator is
+ * reading somewhere else.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
@@ -37,6 +45,7 @@ import { acceptBody } from '../lib/run/accept';
 import { answerBody } from '../lib/run/answer';
 import { budgetRaiseBody } from '../lib/run/budget';
 import { isFile } from '../lib/run/artifacts';
+import { anchoredSeq, PROMOTED_MS, stepAnchorId } from '../lib/run/anchor';
 import { isSpecCheckpoint, plannedFilePath } from '../lib/run/checkpoint';
 import { detailRequestPath, runToken, stopKind, type RunDetailOut } from '../lib/run/detail';
 import { signalBody, signalsRequestPath, type SignalIn, type SignalKind } from '../lib/run/signals';
@@ -60,6 +69,7 @@ export default function RunDetail({ runId }: Props) {
   const [posting, setPosting] = useState<SignalKind | null>(null);
   const [signalError, setSignalError] = useState<ProblemDetail | null>(null);
   const [plannedFile, setPlannedFile] = useState<RunFileOut | null>(null);
+  const [anchored, setAnchored] = useState<number | null>(null);
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
@@ -124,6 +134,21 @@ export default function RunDetail({ runId }: Props) {
     };
   }, [detail, runId]);
 
+  // The `#step-{seq}` arrival (7.5). `arrived` guards the one-shot: the effect depends on
+  // `detail` because the row it scrolls to only exists once the first one has rendered, and
+  // without the guard every poll would re-scroll the page.
+  const arrivedRef = useRef(false);
+  useEffect(() => {
+    if (!detail || arrivedRef.current) return;
+    arrivedRef.current = true;
+    const seq = anchoredSeq(window.location.hash);
+    if (seq === null) return;
+    setAnchored(seq);
+    document.getElementById(stepAnchorId(seq))?.scrollIntoView({ block: 'center' });
+    const clear = window.setTimeout(() => setAnchored(null), PROMOTED_MS);
+    return () => window.clearTimeout(clear);
+  }, [detail]);
+
   async function sendSignal(kind: SignalKind, body?: SignalIn): Promise<void> {
     setPosting(kind);
     setSignalError(null);
@@ -187,7 +212,7 @@ export default function RunDetail({ runId }: Props) {
           />
           <div>
             <h2 className="wf-section-head">STEPS</h2>
-            <StepsTable detail={detail} />
+            <StepsTable detail={detail} anchoredSeq={anchored} />
           </div>
         </div>
         <div className="wf-right">
