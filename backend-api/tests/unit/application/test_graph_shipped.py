@@ -177,9 +177,11 @@ def test_epic_is_the_golden_shape(templates: FakeTemplateVersionRepository) -> N
 
     assert node_ids(graph) == (
         "checkout",
+        "setup",
         "baseline",
         "stories.story",
         "stories.after",
+        "e2e",
         "push",
         "link",
     )
@@ -187,12 +189,39 @@ def test_epic_is_the_golden_shape(templates: FakeTemplateVersionRepository) -> N
         Group(id="stories", label="stories", members=("stories.story", "stories.after")),
     )
     assert edge_pairs(graph) == (
-        ("checkout", "baseline"),
+        ("checkout", "setup"),
+        ("setup", "baseline"),
         ("baseline", "stories.story"),
         ("stories.story", "stories.after"),
-        ("stories.after", "push"),
+        ("stories.after", "e2e"),
+        ("e2e", "push"),
         ("push", "link"),
     )
+
+
+def test_the_epics_slow_gate_runs_once_and_before_the_push(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    """The tiering, as a graph claim rather than as a row list.
+
+    `e2e` is the 24-minute gate: once per epic rather than once per Story, and *before*
+    `push`, because a branch is not handed over carrying a red integration suite. Both
+    halves are read off the chain, so moving the row past `push` fails here.
+    """
+    ids = node_ids(graph_of("epic", templates))
+
+    assert ids.count("e2e") == 1
+    assert ids.index("e2e") < ids.index("push")
+    assert ("e2e", "push") in edge_pairs(graph_of("epic", templates))
+
+
+def test_the_epic_installs_its_toolchain_before_anything_reads_it(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    """A fresh worktree has no virtualenv: `setup` precedes the first row that needs one."""
+    ids = node_ids(graph_of("epic", templates))
+
+    assert ids.index("setup") < ids.index("baseline") < ids.index("stories.story")
 
 
 def test_epic_collapses_its_call_to_story_into_one_node(

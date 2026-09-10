@@ -30,7 +30,12 @@ import pytest
 
 from orchestrator.application.preflight.model import PreflightRequest
 from orchestrator.application.templates.plan import plan_run
-from orchestrator.application.templates.plan_model import ON_FAIL_KEY, REASON_NO_QUALITY_GATE, Plan
+from orchestrator.application.templates.plan_model import (
+    ON_FAIL_KEY,
+    REASON_NO_QUALITY_GATE,
+    Plan,
+    reason_no_field,
+)
 from orchestrator.application.use_cases.harness_readiness import (
     READINESS_BASE_BRANCH,
     READINESS_REPOSITORY_SLUG,
@@ -68,16 +73,20 @@ STORIES_YAML = (
 READINESS_ROWS = [
     "plan",
     "checkout",
+    "setup",
     "baseline",
     "stories[0].sync",
     "stories[0].build",
     "stories[0].verify",
     "stories[0].commit-guard",
+    "e2e",
     "push",
     "link",
 ]
 
+SETUP = "setup"
 BASELINE = "baseline"
+E2E = "e2e"
 BUILD = "stories[0].build"
 VERIFY = "stories[0].verify"
 
@@ -174,10 +183,25 @@ def test_the_readiness_plan_is_the_one_story_frame_in_file_order(readiness_plan:
 
 
 def test_baseline_is_skipped_at_plan_time_and_says_why(readiness_plan: Plan) -> None:
+    """`baseline` runs the fast gate now, so the reason names that command and not the slow
+    one. The fixture states none of the three, which is what makes every shell row skip."""
     baseline = row(readiness_plan, BASELINE)
 
     assert baseline.status == "skipped"
-    assert baseline.reason == REASON_NO_QUALITY_GATE
+    assert baseline.reason == reason_no_field("unit_test_command")
+
+
+def test_every_skipped_shell_row_names_the_command_it_asked_for(readiness_plan: Plan) -> None:
+    """One reason per row, each naming its own field — the fixture declares no command at
+    all, so this is where the three tiers are visible side by side (FR-8)."""
+    reasons = {path: row(readiness_plan, path).reason for path in (SETUP, BASELINE, VERIFY, E2E)}
+
+    assert reasons == {
+        SETUP: reason_no_field("install_command"),
+        BASELINE: reason_no_field("unit_test_command"),
+        VERIFY: reason_no_field("unit_test_command"),
+        E2E: REASON_NO_QUALITY_GATE,
+    }
 
 
 def test_baseline_still_declares_on_fail_fail(readiness_plan: Plan) -> None:
@@ -197,18 +221,20 @@ def test_the_readiness_run_reaches_its_agent_row(readiness_plan: Plan) -> None:
     assert build.story_id == READINESS_STORY_ID
     before_build = READINESS_ROWS[: READINESS_ROWS.index(BUILD)]
     assert [row(readiness_plan, path).status for path in before_build] == [
-        "planned",
-        "planned",
-        "skipped",
-        "planned",
+        "planned",  # plan
+        "planned",  # checkout
+        "skipped",  # setup — the fixture states no install_command
+        "skipped",  # baseline — nor a unit_test_command
+        "planned",  # stories[0].sync
     ]
 
 
 def test_the_frames_verify_is_skipped_with_the_same_reason(readiness_plan: Plan) -> None:
+    """The Story's own gate is the fast one, so it skips for the same reason `baseline` does."""
     verify = row(readiness_plan, VERIFY)
 
     assert verify.status == "skipped"
-    assert verify.reason == REASON_NO_QUALITY_GATE
+    assert verify.reason == reason_no_field("unit_test_command")
 
 
 def test_no_row_of_the_readiness_plan_is_born_failed(readiness_plan: Plan) -> None:
