@@ -55,4 +55,5 @@ def test_the_response_is_the_one_list_envelope(authenticated: httpx.Client) -> N
             "version_pin",
             "last_readiness_run_id",
             "lines",
+            "models",
         }

@@ -29,11 +29,13 @@ import PreflightLines from '../components/PreflightLines';
 import { formStateToQuery } from '../lib/newwf/query';
 import {
   cloneCheckNote,
+  modelsFor,
   preflightBody,
   repositoriesFor,
   repositoryById,
   runBody,
   usesHarness,
+  withHarness,
   type FormState,
 } from '../lib/newwf/state';
 import '../styles/new-workflow.css';
@@ -168,6 +170,7 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
             state={state}
             projects={projects}
             repositories={repositories}
+            models={modelsFor(harnesses, state.harness)}
             note={note}
             onChange={update}
           />
@@ -175,7 +178,7 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
             <HarnessList
               harnesses={harnesses}
               selected={state.harness}
-              onSelect={(name) => update({ ...state, harness: name })}
+              onSelect={(name) => update(withHarness(state, name, harnesses))}
             />
           ) : null}
         </form>

@@ -15,7 +15,12 @@ export interface paths {
         };
         /**
          * List every harness
-         * @description The three seeded rows, and whatever Epic 5's readiness use case has written onto them.
+         * @description The three seeded rows, whatever Epic 5's readiness use case has written onto them, and
+         *     the models this instance offers for each (7.3).
+         *
+         *     The models are joined here rather than inside the use case because they are not the row's:
+         *     a harness with no entry answers `()`, which the schema renders as the empty list that says
+         *     "this harness takes a free-text model name".
          */
         get: operations["list_harnesses_api_v1_harnesses_get"];
         put?: never;
@@ -896,6 +901,8 @@ export interface components {
             last_readiness_run_id?: string | null;
             /** Lines */
             lines?: components["schemas"]["EvaluationLineOut"][];
+            /** Models */
+            models?: string[];
             /** Name */
             name: string;
             /** Version Pin */

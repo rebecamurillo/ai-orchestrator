@@ -2,7 +2,7 @@
 title: 'OpenCode adapter and script for local models'
 type: 'feature'
 created: '2026-09-10'
-status: 'blocked'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: true
 context: []
@@ -223,14 +223,13 @@ builders are moved out whole — a split, not a trim; no comment or docstring is
 
 ## Auto Run Result
 
-Status: blocked
-Blocking condition: **two frozen assertions the Operator must rule on.** Registering `local` and
-exposing `models` on `GET /harnesses` each turn an existing test red, and neither is covered by
-the ruling story 7.1 obtained. The dispatch's own rule 3 says halt and hand them over rather than
-edit them, so the adapter, its tracing rule and every test landed; the registration and the API
-field did not.
+Status: done
+Blocking condition: none. The story halted once, `blocked`, on two frozen assertions; the Operator
+ruled on both in session on **2026-09-10**, granted both, and the rest of the scope landed in the
+follow-up commit. What follows records the conflicts as they were raised, then the rulings and the
+edits made under them.
 
-### The anchor conflicts, in full
+### The anchor conflicts, as raised (now ruled on — see the next section)
 
 **A — `ALIASES` (two files, one assertion).** `local` declares two aliases,
 `LANGFUSE_BASEURL=LANGFUSE_BASE_URL` and `LANGFUSE_USER_ID=ORCH_RUN_ID`. Both are derived from
@@ -320,11 +319,8 @@ New test files (nothing existing was edited): `tests/unit/test_local_adapter.py`
 
 ### What did **not** land, and why
 
-- **`local` is not in `build_harnesses`.** Registering it without its aliases would ship a
-  harness whose process reaches Langfuse un-keyed — the one failure this story exists to
-  prevent. It lands with conflict A's ruling, in one commit.
-- **`HarnessOut.models` and the New workflow select.** Conflict B. The web-client half is
-  entirely downstream of the contract field (AD-3), so nothing of it could land ahead of it.
+- ~~**`local` is not in `build_harnesses`.**~~ Landed under ruling A.
+- ~~**`HarnessOut.models` and the New workflow select.**~~ Landed under ruling B.
 - **`scripts/harness/opencode.sh` is unchanged.** It was re-read against the documented shapes
   and nothing in them contradicted it; the brief asks for changes to be recorded in §B, and the
   record is that there were none to make without a running CLI.
@@ -357,3 +353,78 @@ New test files (nothing existing was edited): `tests/unit/test_local_adapter.py`
 - **The store fallback approximates.** "Newest session for this worktree" is right for the
   attempt that just ran and wrong if a second OpenCode ran in the same worktree concurrently —
   which this system never does, but nothing in the store says so.
+
+### Anchor authorisations granted (Operator, 2026-09-10, story 7-3)
+
+Three rulings, and one defect the Operator asked to be fixed. Every authorised edit is an exact
+closed-set equality that **gained a name** — none was weakened, reordered, or removed — and every
+one ships coverage that strictly exceeds it, in a new file, in the same commit.
+
+| # | File | Was | Now |
+|---|---|---|---|
+| A | `backend-api/tests/unit/test_harness_registry.py:78` | `assert ALIASES == {"claude": claude_aliases}` | `assert ALIASES == {"claude": claude_aliases, "local": local_aliases}` |
+| A | `backend-api/tests/unit/test_harness_env_subscription.py:194` | the same equality | the same, plus the `local` key. `SUBSCRIPTION_ALIASES == {"claude": claude_subscription_aliases}` on the next line is **untouched** |
+| B | `backend-api/tests/unit/test_harnesses_router.py:117` | seven names in `model_dump()` | the same seven plus `"models": []` |
+| B | `backend-api/tests/e2e/test_harnesses.py:57` | seven names in `set(item)` | the same seven plus `"models"` |
+| C | `backend-api/tests/unit/test_codex_registry.py:59` | `REGISTERED = {"claude", "codex"}` | `REGISTERED = {"claude", "codex", "local"}` |
+| C | `backend-api/tests/unit/test_codex_registry.py:187` | `assert set(table) == {"claude", "codex"}` | `assert set(table) == {"claude", "codex", "local"}` |
+
+Two of the four files also gain **one import line** — `from …harness.opencode.adapter import
+local_aliases` — which is what the replacement assertion is written in terms of, the same shape
+7.1's ruling took. Nothing else in any of the six locations changed: no docstring, no ordering, no
+deletion, no skip. The one prose edit the Operator asked for is in production code, not a test:
+`api/schemas/harnesses.py`'s note now records this ruling beside the CAP-8 one.
+
+**A** was granted because `local_aliases` needs no `Settings` and so belongs in the static table
+by the design's own rule; after it, `ALIASES` is complete for all three harnesses (`codex`
+declares none by design), so neither assertion should need touching again.
+
+**C** was hard rule 1's second exception all along — `test_codex_registry.py` is 7.1's own file
+and its docstring names *this* story as the reviser. The Operator confirmed rather than granted.
+
+**D — the `SUBSCRIPTION_ALIASES` defect, found while halted and fixed under the same ruling.**
+`alias_table` swapped tables wholesale while `SUBSCRIPTION_ALIASES`' docstring promised a
+per-harness fallback to `ALIASES`. Invisible while `claude` was the only key in either; with
+`local` in one, an instance running `CLAUDE_SUBSCRIPTION_AUTH=true` would have handed OpenCode no
+`LANGFUSE_BASEURL` and no `LANGFUSE_USER_ID` — the plugin would still run, still export, and every
+generation would arrive keyed to no Run. No error, no failed gate, and `attempt_observed` for
+`local` answering `False` forever. `alias_table` now merges per harness, so the code does what the
+table already documented, and `SUBSCRIPTION_ALIASES` needs no `local` entry — which is why the
+second half of that assertion is untouched.
+
+### What the new test files pin
+
+| File | What it pins |
+|---|---|
+| `backend-api/tests/unit/test_local_registry.py` (13 tests) | everything A and C's revisions stopped guaranteeing, and more: the registry is now exactly `HARNESS_NAMES`; `local` is a `LocalHarness`, satisfies the port under its own key, runs on the runner the registry was handed, is seeded in the `harness` table, and reaches the walker; `ALIASES` is keyed the way the registry is and every builder in it takes the contract alone; a `local` attempt's environment really carries the plugin's two names and neither Claude's token nor `CODEX_HOME`; the terminal exports are the script's own array and hold no secret; and a parked `local` attempt has no terminal **because the adapter cannot resume**, which is the reason that answer is still true now that the registry holds the name. |
+| `backend-api/tests/unit/test_alias_table_merge.py` (10 tests) | D. Both modes bind the same harnesses; subscription mode overrides only `claude`; `codex` stays bound by the instance table in both; a `local` process is keyed to its Run in **both** modes, with the same key set either way; and subscription mode still drops `ANTHROPIC_AUTH_TOKEN`. |
+| `backend-api/tests/unit/test_harnesses_models_field.py` (13 tests) | B. The table has only `local`, every key is a declared harness, it reads the shipped `.env.example` value and follows the environment rather than a row, and it is immutable; the field defaults empty, is rendered always, keeps its order, and is a copy; over the route, `local` lists the aliases, the others list none, the models come from the dependency rather than the row, and the row's own fields are untouched. |
+| `web-client/tests/unit/newwf-model-select.test.ts` (16 tests) | the web-client half — see below. |
+
+### The web-client half
+
+| File | What changed |
+|---|---|
+| `web-client/src/api/schema.d.ts` | `models?: string[]` on `HarnessOut`. **Generated only** through `make openapi` / `pnpm gen:api` (AD-3); never hand-edited. `contracts/openapi.json` moved with it. |
+| `web-client/src/lib/newwf/state.ts` | `modelsFor(harnesses, harness)` — the models a harness publishes, `[]` for one that takes a free-text name and for a backend predating the field. `withHarness(state, harness, harnesses)` — selecting a harness keeps a model only if the new harness still offers it. |
+| `web-client/src/components/NewWorkflowFields.tsx` | the MODEL field is a `<select>` over the given models when there are any, and the text input otherwise. The `models` prop is **optional and defaults to `[]`**, on the same precedent the backend field follows, so the frozen `newwf-fields.test.ts` compiles and passes unchanged. |
+| `web-client/src/islands/NewWorkflow.tsx` | passes `modelsFor(harnesses, state.harness)` and routes harness selection through `withHarness`. |
+
+Why `withHarness` exists: a select cannot display a value that is not one of its options, so a
+model typed for `claude` and carried into `local` would leave the control blank while the form
+still submitted the old string. Clearing it renders "harness default", which is what an unset
+model is. NFR-6 holds either way — a model list is nothing to report, so neither shape paints a
+signal colour, and the test asserts it.
+
+### Gates, after the rulings
+
+- `make lint` — exit 0. `Contracts: 4 kept, 0 broken` · `gen:api: src/api/schema.d.ts matches
+  contracts/openapi.json` · astro check `231 files, 0 errors` · `test pairs: 91 modules under src`.
+- `make test` — exit 0. Backend `5854 passed, 1 skipped`; web-client `Test Files 95 passed (95) /
+  Tests 1241 passed (1241)`. Coverage gate on `domain/` + `application/` at 100%.
+- `make openapi` — exit 0; the contract moved by exactly the `models` field.
+- `make e2e-ui` — exit 0, `168 passed, 1 skipped`. It rewrites the Epic 5/6 deliverable PNGs under
+  `_bmad-output/implementation-artifacts/`; those were restored, not committed, both times.
+- `make e2e-api` — still not run: it needs the compose stack this dispatch does not bring up.
+  `tests/e2e/test_harnesses.py`'s field set was updated under ruling B and will be exercised by
+  the next stack run.

@@ -65,6 +65,7 @@ from orchestrator.infrastructure.db import (
     open_writer_ports,
 )
 from orchestrator.infrastructure.db.environment import read_run_environment
+from orchestrator.infrastructure.harness.models import model_table
 from orchestrator.infrastructure.harness.registry import build_harnesses, build_terminal_env
 from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.process.runner import RealProcessRunner
@@ -135,6 +136,17 @@ def harness_ports(request: Request) -> Iterator[HarnessPorts]:
     session_factory = from_state(request, SESSION_FACTORY)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
         yield HarnessPorts(uow=uow, harnesses=SQLAlchemyHarnessRepository(uow.session))
+
+
+def harness_models(request: Request) -> dict[str, tuple[str, ...]]:
+    """The models this instance offers per harness (7.3) — configuration, not a port.
+
+    Its own dependency rather than a field on `HarnessPorts`: nothing here opens a
+    transaction, no use case reads it, and it is composed from `Settings` on every request
+    precisely so an Operator's `.env` edit reaches the New workflow's select at the next
+    restart without a migration (`infrastructure/harness/models.py`).
+    """
+    return model_table(from_state(request, SETTINGS))
 
 
 def _required_git(request: Request, needed_by: str) -> Git:

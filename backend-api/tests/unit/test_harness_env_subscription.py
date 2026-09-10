@@ -45,6 +45,7 @@ from orchestrator.infrastructure.harness.claude.adapter import (
     claude_aliases,
     claude_subscription_aliases,
 )
+from orchestrator.infrastructure.harness.opencode.adapter import local_aliases
 from orchestrator.infrastructure.harness.registry import ALIASES, SUBSCRIPTION_ALIASES
 from orchestrator.infrastructure.settings import Settings
 
@@ -190,7 +191,7 @@ def test_content_logging_stays_off_when_the_project_did_not_ask() -> None:
 
 
 def test_the_default_table_is_not_the_subscription_one() -> None:
-    assert ALIASES == {"claude": claude_aliases}
+    assert ALIASES == {"claude": claude_aliases, "local": local_aliases}
     assert SUBSCRIPTION_ALIASES == {"claude": claude_subscription_aliases}
 
 

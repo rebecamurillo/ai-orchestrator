@@ -20,6 +20,7 @@ from orchestrator.domain.ports.harness import Harness as HarnessPort
 from orchestrator.infrastructure.harness import ClaudeHarness, build_harness_env, build_harnesses
 from orchestrator.infrastructure.harness.claude.adapter import claude_aliases
 from orchestrator.infrastructure.harness.env import HARNESS_ENV_CONTRACT
+from orchestrator.infrastructure.harness.opencode.adapter import local_aliases
 from orchestrator.infrastructure.harness.registry import ALIASES
 from orchestrator.infrastructure.settings import Settings
 from tests.unit.fakes.process import FakeProcessRunner
@@ -74,7 +75,7 @@ def test_the_registry_uses_the_runner_it_is_handed(env: dict[str, str]) -> None:
 
 
 def test_the_alias_table_is_keyed_the_way_the_registry_is(env: dict[str, str]) -> None:
-    assert ALIASES == {"claude": claude_aliases}
+    assert ALIASES == {"claude": claude_aliases, "local": local_aliases}
     assert set(ALIASES) <= set(build_harnesses(Settings(), FakeProcessRunner()))
 
 

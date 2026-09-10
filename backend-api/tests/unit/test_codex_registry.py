@@ -56,7 +56,7 @@ from tests.unit.fakes.process import FakeProcessRunner
 
 #: What the registry holds as of story 7.1. `local` is 7.3's and is deliberately absent: an
 #: assertion that expected it would sit red between the two stories.
-REGISTERED = {"claude", "codex"}
+REGISTERED = {"claude", "codex", "local"}
 
 NOW = datetime(2026, 9, 10, tzinfo=UTC)
 TRACEPARENT = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
@@ -184,7 +184,7 @@ def test_the_instance_alias_table_binds_codex_on_top_of_the_static_one(
 ) -> None:
     table = alias_table(Settings())
 
-    assert set(table) == {"claude", "codex"}
+    assert set(table) == {"claude", "codex", "local"}
     assert table["claude"] is ALIASES["claude"]
 
 

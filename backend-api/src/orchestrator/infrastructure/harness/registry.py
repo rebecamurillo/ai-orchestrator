@@ -41,19 +41,33 @@ from orchestrator.infrastructure.harness.env import (
     terminal_contract,
 )
 from orchestrator.infrastructure.harness.fake import FakeHarness
+from orchestrator.infrastructure.harness.opencode import LocalHarness, local_aliases
 from orchestrator.infrastructure.settings import Settings
 
 #: The harness-native name builders, keyed the way the registry itself is (AD-5, AD-10).
-ALIASES: dict[str, AliasBuilder] = {ClaudeHarness.name: claude_aliases}
+#:
+#: Complete as of 7.3, and it should stay one line per harness that declares aliases at all:
+#: `claude` has two (`scripts/harness/claude.sh`), `local` has two (`opencode.sh`), and `codex`
+#: has none by design — it reads the contract names directly through `env_key` and
+#: `env_http_headers`, so it is absent here rather than mapped to an empty builder. `CODEX_HOME`
+#: is not an alias and reaches the process through `alias_table` below, for the reason stated
+#: there: its value is a `Settings` field, and an `AliasBuilder` takes the contract alone.
+ALIASES: dict[str, AliasBuilder] = {
+    ClaudeHarness.name: claude_aliases,
+    LocalHarness.name: local_aliases,
+}
 
 #: The same table for an instance authenticating on a Claude subscription
 #: (`CLAUDE_SUBSCRIPTION_AUTH`). A second table rather than a setting read inside
 #: `claude_aliases`: the builder's signature is `AliasBuilder`, which takes the contract and
 #: nothing else, and that is what keeps `env.py` harness-agnostic and lets
 #: `test_harness_env_contract.py` compare a builder against the bash arrays by calling it.
-#: A harness with no entry here falls back to `ALIASES` — Epic 7's `codex` and `local` reach
-#: LiteLLM by `env_key` and a config file, so neither has an `Authorization` header of
-#: Claude's kind to displace, and neither needs a second builder to get one.
+#: A harness with no entry here falls back to its `ALIASES` entry, which `alias_table` below is
+#: what actually implements — Epic 7's `codex` and `local` reach LiteLLM by `env_key` and a
+#: config file, so neither has an `Authorization` header of Claude's kind to displace, and
+#: neither needs a second builder to get one. `local` still needs the *first* table's builder in
+#: this mode, because its two names are the Langfuse plugin's and have nothing to do with how
+#: Claude Code authenticates.
 SUBSCRIPTION_ALIASES: dict[str, AliasBuilder] = {ClaudeHarness.name: claude_subscription_aliases}
 
 
@@ -68,12 +82,22 @@ def alias_table(settings: Settings) -> dict[str, AliasBuilder]:
     so `codex_aliases` is a factory and the path is bound here, once, where `Settings` is
     already in hand.
 
-    That is also why the static tables stay claude-only rather than growing a `codex` line: a
-    builder that needed a setting could not be stated as a module-level constant without
-    reading one inside itself, which is exactly the coupling `AliasBuilder`'s signature exists
-    to prevent.
+    That is also why `codex` is absent from the static tables rather than growing a line in
+    them: a builder that needed a setting could not be stated as a module-level constant
+    without reading one inside itself, which is exactly the coupling `AliasBuilder`'s signature
+    exists to prevent. `local` needs no setting, so it is a line in `ALIASES` like `claude`.
+
+    **Subscription mode merges rather than swaps** (7.3). `SUBSCRIPTION_ALIASES` describes one
+    harness's authentication and says so — "a harness with no entry here falls back to
+    `ALIASES`" — and a wholesale swap did not do that. It made no observable difference while
+    `claude` was the only key in either table; the moment `local` was in one of them, an
+    instance with `CLAUDE_SUBSCRIPTION_AUTH=true` would have handed OpenCode no
+    `LANGFUSE_USER_ID` at all, and every generation the Langfuse plugin sent would have arrived
+    keyed to no Run — AD-11 attribution broken for a whole harness, silently, with every gate
+    still green. Merging per harness is what makes the code do what the table's own docstring
+    already promised.
     """
-    table = SUBSCRIPTION_ALIASES if settings.claude_subscription_auth else ALIASES
+    table = {**ALIASES, **SUBSCRIPTION_ALIASES} if settings.claude_subscription_auth else ALIASES
     return {**table, CodexHarness.name: codex_aliases(settings.agent_home)}
 
 
@@ -99,6 +123,7 @@ def build_harnesses(settings: Settings, runner: ProcessRunner) -> dict[str, Harn
     built: dict[str, Harness] = {
         ClaudeHarness.name: ClaudeHarness(runner, settings),
         CodexHarness.name: CodexHarness(runner, settings),
+        LocalHarness.name: LocalHarness(runner, settings),
     }
     if settings.orch_test_mode:
         built[FakeHarness.name] = FakeHarness(runner, settings)
