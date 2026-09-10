@@ -18,6 +18,7 @@ from typing import Any
 
 from orchestrator.application.steps.agent import KIND, AgentExecutor
 from orchestrator.application.steps.registry import EXECUTORS
+from orchestrator.domain.entities.harness import HARNESS_NAMES
 from orchestrator.domain.ports.harness import Harness, HarnessEnv
 from orchestrator.infrastructure.dbos.startup import walker_deps
 from orchestrator.infrastructure.harness import ClaudeHarness
@@ -41,7 +42,7 @@ def test_the_walker_is_handed_the_harness_registry(env: dict[str, str]) -> None:
     ports = walker_deps(Settings(), sessions(), FakeGit()).step_ports
 
     assert ports.harnesses is not None
-    assert list(ports.harnesses) == ["claude"]
+    assert set(ports.harnesses) <= set(HARNESS_NAMES)
     assert isinstance(ports.harnesses["claude"], Harness)
 
 

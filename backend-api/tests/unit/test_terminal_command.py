@@ -522,7 +522,7 @@ def test_a_run_with_no_worktree_has_no_terminal(settings: Settings) -> None:
     )
 
 
-@pytest.mark.parametrize("harness", ["local", "codex", ""])
+@pytest.mark.parametrize("harness", ["local", ""])
 def test_a_harness_the_registry_does_not_hold_has_no_terminal(
     harness: str, settings: Settings
 ) -> None:

@@ -2,7 +2,7 @@
 title: 'Codex adapter and script'
 type: 'feature'
 created: '2026-09-09'
-status: 'blocked'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
@@ -69,21 +69,21 @@ widening `HARNESS_NAMES` (it already names `codex`); parsing model output.
 - `backend-api/src/orchestrator/infrastructure/harness/env.py` -- `env_for`, `AliasBuilder`,
   `HARNESS_ENV_CONTRACT`, `BASE_NAMES`. `CODEX_HOME` reaches the process through an
   `AliasBuilder`; `env.py` itself does not change.
-- `backend-api/src/orchestrator/infrastructure/harness/registry.py:59` -- `build_harnesses`,
-  `ALIASES`, `build_harness_env`: where registration would go. **Blocked** — see below.
+- `backend-api/src/orchestrator/infrastructure/harness/registry.py` -- `build_harnesses` gains
+  `codex`; the new `alias_table(settings)` binds `codex_aliases(settings.agent_home)` on top of
+  the static `ALIASES` / `SUBSCRIPTION_ALIASES`, which both env builders now read.
 - `scripts/harness/codex.sh` -- normative for `HARNESS_ENV_ALIASES=()`, `CODEX_HOME`, the
   `config.toml` this adapter must not write, and the invocation comment.
 - `backend-api/tests/unit/fakes/process.py` -- `FakeProcessRunner`, the one fake for that port.
 - `backend-api/tests/unit/test_harness_env_contract.py` -- the shape the new codex contract test
   copies (bash-array parsing, key-set equality). **Frozen**; a sibling module is added instead.
 
-**Read-only evidence (anchor conflict).** Four existing assertions pin the registry to the
-adapters Epic 5 landed, so `codex` cannot be added to `build_harnesses`:
-`tests/unit/test_main_harness_registry.py:27`, `tests/unit/test_harness_registry.py:60`,
-`tests/unit/test_dbos_startup_agent.py:44` (`list(...) == ["claude"]`) and
-`tests/unit/test_fake_harness_registry.py:52` (`sorted(built) == ["claude", NAME]`). None names
-a later story, so hard rule 1's exceptions do not reach them. The adapter lands; the
-registration line does not, and the story halts `blocked` on it.
+**Anchor evidence.** Four existing assertions pinned the registry to the adapters Epic 5 landed
+(`tests/unit/test_main_harness_registry.py`, `test_harness_registry.py`,
+`test_dbos_startup_agent.py`, `test_fake_harness_registry.py`). The story halted `blocked` on
+them; the Operator ruled on 2026-09-10 that each be bound to `HARNESS_NAMES` rather than widened
+per story. See `## Auto Run Result` for the exact lines and for the fifth conflict registration
+exposed in `test_terminal_command.py`.
 
 ## Tasks & Acceptance
 
@@ -178,29 +178,58 @@ the `turn.completed` usage fields, the `codex exec resume` form, and `-c otel.lo
 
 ## Auto Run Result
 
-Status: blocked
-Blocking condition: anchor conflict — `codex` cannot be registered in `build_harnesses`
+Status: done
+Blocking condition: none — the anchor conflict was ruled on and the registration landed
 
-The adapter, its parser, the contract test and the fixtures all landed and both gates are green.
-The one part of the brief's scope that did **not** land is the registration line, because four
-existing test assertions pin the harness registry to the adapters Epic 5 shipped:
+The story first halted `blocked` on an anchor conflict (commit `f3ac6e0`, adapter + tests, no
+registration). The Operator ruled in session on **2026-09-10** and the registration then landed
+in the follow-up commit.
 
-| File | Assertion | What it pins |
+### Anchor authorisation granted (Operator, 2026-09-10, story 7-1) — the registration arc
+
+Four frozen assertions pinned the harness registry to the literal list of what Epic 5 shipped, so
+`codex` could not be registered. The Operator authorised **binding each assertion to the domain's
+own declaration instead of widening the literal**, explicitly so that the arc costs one anchor
+edit for the whole epic rather than one per adapter — `local` lands in 7.3 and must not need a
+second pass over these files. Exactness is restored, and strictly exceeded, in a new file.
+
+| File | Was | Now |
 |---|---|---|
-| `backend-api/tests/unit/test_main_harness_registry.py:27` | `assert list(harnesses) == ["claude"]` | the registry `main.py` re-exports holds exactly one adapter |
-| `backend-api/tests/unit/test_harness_registry.py:60` | `assert list(harnesses) == ["claude"]` | the same, in the registry's own home |
-| `backend-api/tests/unit/test_dbos_startup_agent.py:44` | `assert list(ports.harnesses) == ["claude"]` | the walker's `StepPorts.harnesses` |
-| `backend-api/tests/unit/test_fake_harness_registry.py:52` | `assert sorted(built) == ["claude", NAME]` | test mode adds `fake` *beside* `claude` and nothing else |
+| `backend-api/tests/unit/test_main_harness_registry.py:28` | `assert list(harnesses) == ["claude"]` | `assert set(harnesses) <= set(HARNESS_NAMES)` |
+| `backend-api/tests/unit/test_harness_registry.py:61` | `assert list(harnesses) == ["claude"]` | `assert set(harnesses) <= set(HARNESS_NAMES)` |
+| `backend-api/tests/unit/test_dbos_startup_agent.py:45` | `assert list(ports.harnesses) == ["claude"]` | `assert set(ports.harnesses) <= set(HARNESS_NAMES)` |
+| `backend-api/tests/unit/test_fake_harness_registry.py:52` | `assert sorted(built) == ["claude", NAME]` | `assert sorted(built) == sorted([*build_harnesses(Settings(), FakeProcessRunner()), NAME])` |
 
-Adding `CodexHarness` to `build_harnesses` makes all four red. **Why the story cannot land beside
-them:** the brief's Scope puts "registration as `codex`" In, and `build_harnesses` is the one place
-an adapter class is named (its own docstring says so) — there is no second seam. Hard rule 1's
-exceptions do not reach these four: none is a pending-*gate* registry entry, and none names a later
-story as the thing that replaces it (`test_the_registry_holds_the_one_adapter_this_epic_lands` says
-"this epic", meaning Epic 5, the same wording the operator ruled insufficient for story 6-1). A
-fifth assertion, `ALIASES == {"claude": claude_aliases}`
-(`test_harness_registry.py:76`, `test_harness_env_subscription.py:193`), is **not** in conflict:
-`codex_aliases` is a factory over `AGENT_HOME` and could never have been a line in that table.
+Each of the first three also gains one import line — `from orchestrator.domain.entities.harness
+import HARNESS_NAMES` — which is what the replacement assertion is written in terms of; nothing
+else in any of the four files changed. None of the four needs touching again when `local` lands.
 
-An operator ruling is required. Nothing was edited, skipped or worked around.
+### A fifth conflict, acted on under hard rule 1's first exception — flag for review
 
+Registering `codex` also turned `backend-api/tests/unit/test_terminal_command.py:525` red:
+
+```python
+@pytest.mark.parametrize("harness", ["local", "codex", ""])   # was
+@pytest.mark.parametrize("harness", ["local", ""])            # now
+def test_a_harness_the_registry_does_not_hold_has_no_terminal(...)
+```
+
+It is a **list of not-yet-landed targets** — its docstring calls them "Epic 7's harnesses" — which
+is the shape hard rule 1's first exception covers and which the Operator generalised to
+parametrized rows in Epic 6 (story 6-6). Only the `codex` row was removed, the test keeps two
+rows and is not vacuous, `local` is still the docstring's own example, and the same commit adds
+strictly-exceeding coverage: `codex` now *has* a terminal, it is the adapter's own line, it holds
+no secret, and `local` still answers `None`. This one was **not** in the inventory the Operator
+ruled on — it could only go red once `codex` was registered — so it is called out here for
+reversal if they disagree.
+
+### What the new file pins
+
+`backend-api/tests/unit/test_codex_registry.py` (17 tests) restores every guarantee `<=` drops and
+adds the ones the literals could not state: the registry is exactly `{"claude", "codex"}` as of
+this story; `codex` is a `CodexHarness`, satisfies the port under its own key, and runs on the
+runner the registry was handed; the key is in `HARNESS_VERSION_SETTINGS` and `HARNESS_NAMES`; the
+walker's `StepPorts.harnesses` is that same mapping; test mode adds `fake` beside it and nothing
+else; `ALIASES` stays claude-only while `alias_table(settings)` binds `codex`; a `codex` attempt's
+environment carries `CODEX_HOME` and no Claude alias; and FR-21's terminal command for `codex`
+carries no secret value and no `GITHUB_TOKEN` reference.

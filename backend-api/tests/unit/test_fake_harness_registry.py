@@ -49,7 +49,7 @@ def test_the_contracts_own_default_registers_no_fake_harness(env: dict[str, str]
 def test_test_mode_registers_it_beside_the_claude_adapter(env: dict[str, str]) -> None:
     built = build_harnesses(Settings(orch_test_mode=True), FakeProcessRunner())
 
-    assert sorted(built) == ["claude", NAME]
+    assert sorted(built) == sorted([*build_harnesses(Settings(), FakeProcessRunner()), NAME])
     assert isinstance(built[NAME], FakeHarness)
 
 

@@ -33,6 +33,7 @@ from orchestrator.infrastructure.harness.claude import (
     claude_aliases,
     claude_subscription_aliases,
 )
+from orchestrator.infrastructure.harness.codex import CodexHarness, codex_aliases
 from orchestrator.infrastructure.harness.env import (
     IDENTIFIER_NAMES,
     AliasBuilder,
@@ -56,6 +57,26 @@ ALIASES: dict[str, AliasBuilder] = {ClaudeHarness.name: claude_aliases}
 SUBSCRIPTION_ALIASES: dict[str, AliasBuilder] = {ClaudeHarness.name: claude_subscription_aliases}
 
 
+def alias_table(settings: Settings) -> dict[str, AliasBuilder]:
+    """The alias builders this instance uses: the static tables, plus the ones a setting binds.
+
+    Two joins in one place, and they are different in kind. Which of `ALIASES` /
+    `SUBSCRIPTION_ALIASES` applies is the *instance's* choice of how its Claude Code
+    authenticates (`CLAUDE_SUBSCRIPTION_AUTH`), which cannot differ between two attempts of the
+    same process. `codex` is in neither table, because its one native name is `CODEX_HOME` and
+    the value is `AGENT_HOME`'s — an `AliasBuilder` takes the contract and nothing else (AD-5),
+    so `codex_aliases` is a factory and the path is bound here, once, where `Settings` is
+    already in hand.
+
+    That is also why the static tables stay claude-only rather than growing a `codex` line: a
+    builder that needed a setting could not be stated as a module-level constant without
+    reading one inside itself, which is exactly the coupling `AliasBuilder`'s signature exists
+    to prevent.
+    """
+    table = SUBSCRIPTION_ALIASES if settings.claude_subscription_auth else ALIASES
+    return {**table, CodexHarness.name: codex_aliases(settings.agent_home)}
+
+
 def build_harnesses(settings: Settings, runner: ProcessRunner) -> dict[str, Harness]:
     """The harness registry, keyed by the name a Template writes (AD-10).
 
@@ -75,7 +96,10 @@ def build_harnesses(settings: Settings, runner: ProcessRunner) -> dict[str, Harn
     Templates keep their `values: [claude, codex, local]` byte for byte — an Operator is
     never offered a harness that only exists to make the gates deterministic.
     """
-    built: dict[str, Harness] = {ClaudeHarness.name: ClaudeHarness(runner, settings)}
+    built: dict[str, Harness] = {
+        ClaudeHarness.name: ClaudeHarness(runner, settings),
+        CodexHarness.name: CodexHarness(runner, settings),
+    }
     if settings.orch_test_mode:
         built[FakeHarness.name] = FakeHarness(runner, settings)
     return built
@@ -92,7 +116,7 @@ def build_harness_env(settings: Settings) -> HarnessEnv:
     attempt's: `CLAUDE_SUBSCRIPTION_AUTH` describes how *this deployment's* Claude Code is
     logged in, which cannot differ between two attempts of the same process.
     """
-    table = SUBSCRIPTION_ALIASES if settings.claude_subscription_auth else ALIASES
+    table = alias_table(settings)
 
     def harness_env(  # noqa: PLR0913 — the port's own signature
         attempt: Attempt,
@@ -138,7 +162,7 @@ def build_terminal_env(settings: Settings) -> TerminalEnv:
     It never touches a `SecretStr`, and `tests/unit/test_terminal_command.py` asserts that no
     value of any secret setting occurs in the command it produces.
     """
-    table = SUBSCRIPTION_ALIASES if settings.claude_subscription_auth else ALIASES
+    table = alias_table(settings)
 
     def terminal_env(
         attempt: Attempt,

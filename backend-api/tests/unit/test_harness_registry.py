@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.harness import HARNESS_NAMES
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.harness import Harness as HarnessPort
@@ -57,7 +58,7 @@ def an_attempt(run: Run, harness: str | None) -> Attempt:
 def test_the_registry_is_built_here_now(env: dict[str, str]) -> None:
     harnesses = build_harnesses(Settings(), FakeProcessRunner())
 
-    assert list(harnesses) == ["claude"]
+    assert set(harnesses) <= set(HARNESS_NAMES)
     assert isinstance(harnesses["claude"], ClaudeHarness)
     assert isinstance(harnesses["claude"], HarnessPort)
 
