@@ -80,12 +80,6 @@ def _check_expect_files(node: LinedMap) -> list[ValidationError]:
 
 
 def _check_writes(node: LinedMap) -> list[ValidationError]:
-    """`writes` is a list of paths, and a path that is not text is not a path (AD-17).
-
-    The same boundary `expect.files` is held to: shape, and nothing about meaning. A path
-    naming something this dispatch never touches costs nothing — the rule subtracts what was
-    declared from what changed, so a declaration nothing matches is simply never used.
-    """
     if WRITES_KEY not in node:
         return []
     line = key_line(node, WRITES_KEY, node.line)

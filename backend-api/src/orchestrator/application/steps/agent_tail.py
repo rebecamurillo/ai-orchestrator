@@ -226,12 +226,11 @@ def protected(ctx: StepContext, attempt: Attempt) -> StepResult | None:
     before it started and the SHA recorded when it exited — unioned with whatever it left
     uncommitted, so a file written and never committed is as much a hit as a committed one.
     Nothing else is in scope: an operator commit and the orchestrator's own WIP and prepare
-    commits are outside those two ends, which is what makes this deterministic.
+    commits are outside those two ends by construction, which is what makes this check
+    deterministic rather than a guess about who wrote what.
 
     A hit is never retried. `apply_step_result` parks the Run on it (AD-8) and the Operator
-    answers with *Accept* or a skip; `re_check` below is what an Accept comes back to, and
-    the row's own `writes` are subtracted beside it — a path the Template sent this dispatch
-    to is not one nobody sent it to.
+    answers with *Accept* or a skip; `re_check` below is what an Accept comes back to.
     """
     environment = require_env(ctx)
     allowed = (*environment.accepted_paths, *protected_paths.declared(ctx.row.with_resolved))

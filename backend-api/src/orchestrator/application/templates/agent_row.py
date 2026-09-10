@@ -68,9 +68,6 @@ def agent_extras(agent: AgentExtras, frame: Frame) -> dict[str, Any]:
         SPEC_FOLDER_KEY: frame.scope.get(SPEC_FOLDER_KEY),
         SPEC_CHECKPOINT_KEY: paused(agent.pause_when, frame.scope),
         ESCALATE_WHEN_KEY: agent.escalate_when,
-        # `writes`, resolved: what this dispatch was asked to write, so AD-17 does not park
-        # the Run on the work the Template ordered (`steps/agent_tail.py::protected`). A
-        # step that declared none writes the empty list, which subtracts nothing.
         WRITES_KEY: [resolve(path, frame.scope) for path in agent.writes],
         EXPECT_KEY: {
             "files": [resolve(glob, frame.scope) for glob in agent.expect_files],
@@ -88,22 +85,6 @@ def agent_extras(agent: AgentExtras, frame: Frame) -> dict[str, Any]:
 
 
 def _has_story_contract(agent: AgentExtras, frame: Frame) -> bool:
-    """Whether this row has a Story file to route on at all (FR-16, AD-7).
-
-    A Template that declared `expect` said so itself. A Template that declared none still
-    gets FR-16's own glob — `{spec_folder}/stories/{story_id}-*.md`, which
-    `steps/agent_tail.py::_globs` builds — but only where there is a Story to name it after.
-
-    **The frameless dispatch is the case this exists for.** `repo-init@1`'s `context` step
-    runs a skill against the repository itself: no Spec folder, no list entry, no Story file
-    to write, and the three keys that describe one read `None` (this module's own header).
-    Formatting the glob from those blanks yields `/stories/-*.md`, an absolute path the
-    Workspace rightly refuses as outside its root — the row raised rather than routed, and
-    the Run parked `internal` on a dispatch that had done nothing wrong. Saying it here
-    rather than at the glob keeps AD-7's promise: the *plan* decides what a row evaluates,
-    and a row with no contract carries none, which is the shape `agent_tail.tail` already
-    answers by reporting exactly what the dispatch did.
-    """
     if agent.expect_files or agent.expect_status_in:
         return True
     return bool(frame.story_id) and bool(frame.scope.get(SPEC_FOLDER_KEY))

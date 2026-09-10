@@ -158,17 +158,6 @@ def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKin
 
 
 def _skippable(run: Run, offered: tuple[SignalKind, ...]) -> tuple[SignalKind, ...]:
-    """The offer, without a skip that would find nothing to skip (FR-20's own rule).
-
-    AD-13 keys its table on the park *kind*, so a `checkpoint` admits both skips wherever it
-    happens — and `validate` still does, deliberately, exactly as it does for the
-    re-baseline above. But a stop outside every loop has no `stories[n]` and no `epics[n]`
-    under `park_path`, and `signals_table.py::_has_story_frame` would refuse the very button
-    this set put on the Operator's screen. `repo-init@1`'s `context-review` is the first such
-    stop: a `checkpoint` a Template declared at the top of its own file, with no Story behind
-    it. What the two skips need is what `_has_story_frame` and `_has_epic_frame` need, read
-    the same way, so the offer and the refusal cannot disagree.
-    """
     path = run.park_path
     dropped: set[SignalKind] = set()
     if path is None or story_frame(path) is None:

@@ -41,8 +41,6 @@ from tests.unit.fakes.runs import FakeRunRepository, FakeStepRunRepository
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
-#: `repo-init@1`'s own rows plus AD-7's `plan` row: seven steps since the `context`
-#: dispatch and the stop after it landed.
 REPO_INIT_ROW_COUNT = 8
 BUDGET = Decimal("10")
 

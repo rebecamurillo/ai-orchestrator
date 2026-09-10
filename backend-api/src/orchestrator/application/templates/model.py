@@ -119,11 +119,6 @@ class AgentExtras(BaseModel):
     retry_resume_session: bool = True
     escalate_when: str | None = None
     pause_when: str | None = None
-    #: The paths this dispatch is declared to write. AD-17's anchors are read-only to an
-    #: agent *that was not asked to write them*: a Template naming a path here has said so
-    #: up front, so the check subtracts it rather than parking the Run on the work it
-    #: ordered. Empty on every step that declares none, which is every shipped one but
-    #: `repo-init@1`'s `context`.
     writes: tuple[str, ...] = ()
 
 
