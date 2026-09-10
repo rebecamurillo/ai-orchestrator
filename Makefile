@@ -15,7 +15,25 @@ PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
 # --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
 NODE_RUN := $(PNPM) --dir $(WEB) run
 
-.PHONY: lint test coverage e2e e2e-api e2e-ui durability images openapi env up down logs host-up host-down host-logs host-doctor host-env-sync
+.PHONY: install install-e2e doctor lint test coverage e2e e2e-api e2e-ui durability images openapi env up down logs host-up host-down host-logs host-doctor host-env-sync
+
+## install — a fresh checkout to a machine the gates run on (scripts/install.sh)
+## Syncs backend-api's virtualenv from uv.lock, installs web-client from pnpm-lock.yaml at
+## the pinned pnpm, and writes `.env` and `.env.e2e` if they are absent. Every step is a
+## no-op the second time, so this is the first line of a session, not a one-time ritual.
+## What it deliberately does NOT do: install uv, Node or Docker. Those are the machine's,
+## and it names the exact command for each one it finds missing rather than guessing.
+install:
+	./scripts/install.sh
+
+## install-e2e — the same, plus the Playwright chromium build (~95 MB) that `make e2e-ui` needs
+install-e2e:
+	./scripts/install.sh --e2e
+
+## doctor — report what is missing without installing anything; exits non-zero when the
+## machine is not ready. This is the target to run before blaming a red gate on the code.
+doctor:
+	./scripts/install.sh --check
 
 ## lint — ruff · mypy (strict on domain/ and application/) · import-linter · env-contract check
 ##        · test pairs · contract drift · eslint · prettier --check · tsc --noEmit · astro check

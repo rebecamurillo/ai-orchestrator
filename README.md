@@ -16,6 +16,26 @@ The product is specified, not yet built. Everything that decides what gets built
 This section is the development stack. Deploying to the machine that does real work —
 images from GHCR, upgrades, rollback and the drain rule — is `DEPLOY.md`.
 
+### Setting up a fresh checkout
+
+One command turns a clone into a machine the gates run on, and it is the same command on the
+second day as on the first — every step is a no-op when it is already done:
+
+```bash
+make install                # backend .venv from uv.lock, web-client from pnpm-lock.yaml, .env files
+make install-e2e            # the same, plus the Playwright chromium build make e2e-ui needs
+make doctor                 # report only: what is missing and the command that fixes it
+```
+
+`make install` deliberately installs no *machine* prerequisite — uv, Node, Docker are yours —
+but it names the exact command for each one it finds missing, and it reports every problem
+before exiting rather than stopping at the first. It also does what it can when something is
+missing: a machine with the wrong Node still gets its backend virtualenv synced. The exit code
+follows the report, so a half-installed machine never reads as a ready one.
+
+Run `make doctor` before blaming a red gate on the code: `uv: command not found` and
+`Cannot find module 'astro'` are setup failures wearing a test failure's clothes.
+
 Configuration is the environment (AD-20): `.env.example` is the contract, `make lint` fails when a
 setting exists in one place and not the other. Copy it once, fill it in, and never commit the result.
 
