@@ -157,6 +157,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/trajectories.jsonl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export a Project's trajectories as JSON lines, newest first
+         * @description The stream `Export trajectories` (UX-DR12) downloads. Writes nothing, derives no
+         *     status (AD-8) — every field is read straight off the stored `Trajectory` rows (5.9).
+         */
+        get: operations["export_trajectories_api_v1_projects__project_id__trajectories_jsonl_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/queue": {
         parameters: {
             query?: never;
@@ -1387,6 +1408,8 @@ export interface components {
             runs: components["schemas"]["ProjectRunOut"][];
             /** Slug */
             slug: string;
+            /** Trajectory Count */
+            trajectory_count?: number | null;
             /** Updated At */
             updated_at: string;
         };
@@ -2525,6 +2548,58 @@ export interface operations {
                 };
             };
             /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_trajectories_api_v1_projects__project_id__trajectories_jsonl_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `project_id` is not a UUID. */
             422: {
                 headers: {
                     [name: string]: unknown;

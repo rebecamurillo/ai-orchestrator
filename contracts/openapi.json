@@ -2373,6 +2373,17 @@
             "title": "Slug",
             "type": "string"
           },
+          "trajectory_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Count"
+          },
           "updated_at": {
             "title": "Updated At",
             "type": "string"
@@ -4747,6 +4758,88 @@
         "summary": "Register a Repository under a Project",
         "tags": [
           "repositories"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/trajectories.jsonl": {
+      "get": {
+        "description": "The stream `Export trajectories` (UX-DR12) downloads. Writes nothing, derives no\nstatus (AD-8) \u2014 every field is read straight off the stored `Trajectory` rows (5.9).",
+        "operationId": "export_trajectories_api_v1_projects__project_id__trajectories_jsonl_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`project_id` is not a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export a Project's trajectories as JSON lines, newest first",
+        "tags": [
+          "trajectories"
         ]
       }
     },

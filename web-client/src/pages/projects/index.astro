@@ -29,6 +29,7 @@ import SectionHead from '../../components/SectionHead.astro';
 import type { Token } from '../../components/StatusToken.astro';
 import Shell from '../../layouts/Shell.astro';
 import { backend } from '../../api/server';
+import { trajectoryCountText } from '../../lib/projects/export';
 import { ageText, latestRepoInitRun } from '../../lib/projects/runs';
 
 export const prerender = false;
@@ -147,7 +148,14 @@ function pluralize(count: number, noun: string): string {
     <Button label="+ New project" href="/projects/new" testId="projects-new" />
     {
       project && (
-        <Button label="Edit" href={`/projects/${project.id}/edit`} testId="projects-edit" />
+        <>
+          <Button label="Edit" href={`/projects/${project.id}/edit`} testId="projects-edit" />
+          <Button
+            label="Export trajectories"
+            href={`/api/projects/${project.id}/trajectories.jsonl`}
+            testId="projects-export"
+          />
+        </>
       )
     }
   </Fragment>
@@ -196,6 +204,10 @@ function pluralize(count: number, noun: string): string {
         <p class="meta">
           {project.slug} · created {project.created_at.slice(0, 10)} · log_prompt_content{' '}
           {project.log_prompt_content ? 'on' : 'off'}
+        </p>
+        <p class="hint" data-testid="projects-export-hint">
+          one line per done story · newest first · JSON lines ·{' '}
+          {trajectoryCountText(project.trajectory_count ?? 0)}
         </p>
 
         <SectionHead label="CONTEXT" />
