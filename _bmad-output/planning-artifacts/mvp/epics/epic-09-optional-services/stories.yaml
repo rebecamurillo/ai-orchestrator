@@ -1,0 +1,70 @@
+# Epic 9 — built unattended by Sonnet-class agents through bmad-build-auto (folder+id dispatch),
+# except 9-6, which needs an Operator with a harness login and pauses for them.
+#
+# Every story here is TDD against anchors that must not move: `.env.example` keeps its variable
+# names, `HARNESS_ENV_CONTRACT` keeps its list, and no existing test file is edited. A story that
+# cannot pass a landed gate without editing an anchor halts `blocked` and says which anchor.
+- id: "9-1"
+  title: The gateway and tracing switches
+  description: >-
+    Settings.gateway_enabled and Settings.tracing_enabled derived from a blank base URL, the
+    half-configured states refused at start-up, one start-up line naming what is off, and the
+    .env.example comments that document the mode (SPEC CAP-1, AD-20, NFR-7).
+  spec_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-09-optional-services/briefs/9-1-the-two-switches.md
+    before planning. It is this story's complete requirements: scope, binding rules, acceptance criteria,
+    and implementation notes. Do not read the other briefs.
+- id: "9-2"
+  title: Tracing off — NullTracer behind the port
+  description: >-
+    infrastructure/tracing/null.py and build_tracer(settings), the Tracer port's trace_url widened to
+    str | None, and the api/providers.py and infrastructure/dbos/startup.py call sites wired through the
+    factory (SPEC CAP-2, AD-2, AD-11).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-09-optional-services/briefs/9-2-null-tracer.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "9-3"
+  title: Gateway off — unknown spend, never free
+  description: >-
+    infrastructure/gateway/disabled.py and build_gateway(settings, http), the walker wired through it, and
+    the proof that an unpriced attempt stays provisional rather than settling at zero (SPEC CAP-3, AD-11,
+    PRD §11).
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-09-optional-services/briefs/9-3-disabled-gateway.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "9-4"
+  title: Harness environment and registry in off-mode
+  description: >-
+    alias_table's gateway-off branch, claude's native-auth aliases, opencode's Langfuse aliases gated on
+    tracing, and `local` disabled with a stated reason when the Gateway is off (SPEC CAP-4, AD-5, AD-10).
+  spec_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-09-optional-services/briefs/9-4-harness-env-off-mode.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "9-5"
+  title: Harness scripts configure and doctor what exists
+  description: >-
+    _common.sh gains the two enabled tests, require_harness_env keeps its literal refusals for the unset
+    case, and the three configure bodies and doctors write and probe only the services that are on
+    (SPEC CAP-5, AD-10, AD-20).
+  spec_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-09-optional-services/briefs/9-5-harness-scripts-off-mode.md
+    before planning. It is this story's complete requirements. Do not read the other briefs.
+- id: "9-6"
+  title: Running without the host services, proven and documented
+  description: >-
+    The DEPLOY.md and host/README.md runbook, the web-client checks that an absent trace and a provisional
+    cost read as facts rather than placeholders, and one real Run on an instance with both services blank
+    (SPEC CAP-6, NFR-7, NFR-8).
+  spec_checkpoint: true
+  done_checkpoint: true
+  invoke_dev_with: >-
+    Read _bmad-output/planning-artifacts/mvp/epics/epic-09-optional-services/briefs/9-6-off-mode-proven.md
+    before planning. It is this story's complete requirements. Do not read the other briefs. This story
+    needs an Operator with a harness login on the machine; halt blocked with the reason if there is none.
+    Read its "Operator and agent split" section first: you write the code, the runbook and the checks,
+    then halt blocked naming exactly what the Operator must run and the facts to report back. You never
+    run a real harness yourself, you never write a credential anywhere, and you record nothing that the
+    Operator did not observe.
