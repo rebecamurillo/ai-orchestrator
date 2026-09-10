@@ -25,6 +25,14 @@ from orchestrator.domain.entities.harness import HARNESS_NAMES
 
 LogLevel = Literal["debug", "info", "warning", "error", "critical"]
 
+#: How `infrastructure/gateway/litellm_spend.py` finds one attempt's rows in the Gateway's
+#: spend log (AD-11). `session` is 5.3's verified query — `x-litellm-session-id` lands in the
+#: log's `session_id` column and the route filters on it. `attempt_tag` is 5.3's own
+#: documented fallback for a request path that does not keep that header: the rows are asked
+#: for by `end_user` alone and narrowed to the ones whose `request_tags` carry
+#: `attempt:{id}`, since `/spend/logs/v2` has no tag filter of its own (`research/spend.md`).
+SpendMatch = Literal["session", "attempt_tag"]
+
 MIN_TCP_PORT = 1
 MAX_TCP_PORT = 65535
 
@@ -120,6 +128,20 @@ class Settings(BaseSettings):
     litellm_api_key: SecretStr
     litellm_spend_key: SecretStr
     local_models: CommaSeparated
+    #: Which query attributes an attempt's spend (AD-11) — see `SpendMatch`.
+    #:
+    #: Defaulted, like `orch_test_mode` and for the same reason: an operator's existing
+    #: `.env`, and the `.env.e2e` `scripts/generate-env.sh` writes once and never rewrites,
+    #: must keep starting unchanged. The default is the mode 5.3 verified live, so an
+    #: environment that never sets it behaves exactly as it did before this field existed.
+    #: The AD-20 contract is unaffected: the field has its line in `.env.example` and
+    #: `scripts/check_env_contract.py` still checks both directions.
+    #:
+    #: `attempt_tag` is switched on only once the Operator has *observed* a request path
+    #: dropping `x-litellm-session-id` while keeping `x-litellm-tags` — story 7.2's runbook
+    #: is where that measurement is made. Switching automatically on an empty result would
+    #: be a silent retry (hard rule 7) and would hide the finding.
+    litellm_spend_match: SpendMatch = "session"
 
     # ── Tracing (AD-11) ──────────────────────────────────────────────────────
     langfuse_base_url: str

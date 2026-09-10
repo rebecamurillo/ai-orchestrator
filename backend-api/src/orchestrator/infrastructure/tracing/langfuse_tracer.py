@@ -95,6 +95,13 @@ from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.tracer import SpanRef, TraceRef
 from orchestrator.infrastructure.settings import Settings
+from orchestrator.infrastructure.tracing.session_level import (
+    PATH_NONE,
+    PATH_PARENTED,
+    PATH_SESSION,
+    SESSION_LEVEL_HARNESSES,
+    session_level_observed,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -120,6 +127,13 @@ _ATTEMPT_ID_KEY = "attempt_id"
 #: Logged (never raised) whenever the SDK itself fails inside one of this adapter's calls —
 #: see the module docstring's own "side channel, never a hard dependency" section.
 TRACER_CALL_FAILED = "langfuse tracer call failed; degrading gracefully (SM-3)"
+
+#: Logged by every `attempt_observed` call, carrying which rule answered (`path=parented`,
+#: `path=session`, `path=none`). It is the only place that difference is visible: the port
+#: returns a bool, and the readiness line's own wording is pinned by
+#: `tests/e2e/test_harnesses.py`. 7.2's runbook has the Operator grep for exactly this event
+#: to record whether `TRACEPARENT` was honoured or the fallback carried the check.
+TRACE_OBSERVED = "attempt trace observed"
 
 
 class LangfuseTracer:
@@ -232,7 +246,40 @@ class LangfuseTracer:
         finally:
             self._safe_flush()
 
-    def attempt_observed(self, run_id: UUID, attempt_id: UUID) -> bool:
+    def attempt_observed(
+        self, run_id: UUID, attempt_id: UUID, *, harness: str | None = None
+    ) -> bool:
+        """The parented question first, then — for a harness whose adapter may not be able
+        to answer it — the session-level one (`session_level.py` says which and why).
+
+        Which one answered is logged rather than returned: the port is a bool and the
+        readiness line's text is frozen, so `TRACE_OBSERVED` is the one record that tells the
+        Operator whether `codex exec` honoured the inbound `TRACEPARENT` (`path=parented`) or
+        the fallback carried the check (`path=session`).
+        """
+        if self._parented(run_id, attempt_id):
+            self._log_path(run_id, attempt_id, harness, PATH_PARENTED)
+            return True
+        if harness in SESSION_LEVEL_HARNESSES and session_level_observed(
+            self._client_ref, run_id, attempt_id
+        ):
+            self._log_path(run_id, attempt_id, harness, PATH_SESSION)
+            return True
+        self._log_path(run_id, attempt_id, harness, PATH_NONE)
+        return False
+
+    def _log_path(self, run_id: UUID, attempt_id: UUID, harness: str | None, path: str) -> None:
+        log.info(
+            TRACE_OBSERVED,
+            run_id=str(run_id),
+            attempt_id=str(attempt_id),
+            harness=harness,
+            path=path,
+        )
+
+    def _parented(self, run_id: UUID, attempt_id: UUID) -> bool:
+        """AD-10's own rule: the attempt's span is on the Run's trace and something hangs
+        under it. Unchanged from 5.2 but for its name."""
         trace_id = _trace_id(run_id)
         try:
             observations = (

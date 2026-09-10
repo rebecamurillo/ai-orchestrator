@@ -77,8 +77,21 @@ class Tracer(Protocol):
         """
         ...
 
-    def attempt_observed(self, run_id: UUID, attempt_id: UUID) -> bool:
-        """Whether the harness's own span for this attempt has reported in yet (5.8)."""
+    def attempt_observed(
+        self, run_id: UUID, attempt_id: UUID, *, harness: str | None = None
+    ) -> bool:
+        """Whether the harness's own span for this attempt has reported in yet (5.8).
+
+        `harness` is what the answer is allowed to depend on, and it is keyword-only and
+        defaulted so that a caller who cannot name one still asks the strict question.
+        AD-10 states a different rule per harness: `claude` and `codex` are proven by spans
+        under the attempt's own span, `local` by generations under the Run's session. 7.2
+        adds the one exception the spine's "Open at handoff" 1 anticipated — a `codex`
+        attempt whose spans did not parent, because `codex exec` did not honour the inbound
+        `TRACEPARENT`, is still proven by AD-11's universal floor: a trace under the Run's
+        session carrying the attempt's own tag. Which rule answered is the adapter's to
+        report; this port answers only whether one did.
+        """
         ...
 
     def trace_url(self, trace_id: str) -> str:

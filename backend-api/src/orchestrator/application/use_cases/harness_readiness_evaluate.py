@@ -200,7 +200,12 @@ def _trace_line(
         return EvaluationLine(check=CHECK_TRACE_OBSERVED, ok=False, text="no attempt recorded")
     if ports.tracer is None:
         return EvaluationLine(check=CHECK_TRACE_OBSERVED, ok=False, text="no tracer wired")
-    observed = ports.tracer.attempt_observed(run_id, build_attempt.id)
+    # the attempt's own harness, because the rule differs per harness (AD-10, AD-11): a
+    # `codex` attempt whose spans did not parent is still proven by the session-level
+    # evidence AD-11's universal floor leaves (7.2). The line's wording does not change.
+    observed = ports.tracer.attempt_observed(
+        run_id, build_attempt.id, harness=build_attempt.harness
+    )
     text = (
         f"spans observed for attempt {build_attempt.id}"
         if observed
