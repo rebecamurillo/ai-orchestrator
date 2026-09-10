@@ -1,0 +1,58 @@
+name: epic
+version: 1
+description: all stories of one epic on one branch, verified end to end, pushed
+inputs:
+  project:     { type: project,    required: true }
+  repository:  { type: repository, required: true }
+  base_branch: { type: string,     required: true }
+  branch:      { type: string,     required: true }
+  spec_folder: { type: path,       required: true }   # holds SPEC.md, stories.yaml, stories/
+  epic:        { type: item,       required: false }  # bound when called from initiative
+  harness:     { type: enum, values: [claude, codex, local], default: claude }
+  model:       { type: string,     required: false }
+steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "{{branch}}" }
+    gate: deterministic
+  - id: setup
+    run: "{{repository.install_command}}"
+    timeout_min: 20
+    gate: deterministic
+  - id: baseline
+    run: "{{repository.unit_test_command}}"
+    on_fail: fail
+    gate: deterministic
+
+  - id: stories
+    for_each: "{{spec_folder}}/stories.yaml"
+    as: story
+    pause_after_item_when: "story.done_checkpoint"
+    steps:
+      - id: story
+        uses: template
+        with:
+          name: story
+          version: 1
+          inputs:
+            project: "{{project}}"
+            repository: "{{repository}}"
+            branch: "{{branch}}"
+            spec_folder: "{{spec_folder}}"
+            story: "{{story}}"
+            harness: "{{harness}}"
+            model: "{{model}}"
+  - id: e2e
+    run: "{{repository.quality_gate_command}}"
+    timeout_min: 45
+    gate: deterministic
+
+  - id: push
+    uses: git.push
+    with: { branch: "{{branch}}" }
+    gate: deterministic
+
+  - id: link
+    uses: pr.link
+    with: { branch: "{{branch}}" }
+    gate: liveness

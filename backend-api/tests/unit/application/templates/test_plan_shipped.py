@@ -1,4 +1,4 @@
-"""The four shipped Templates, planned: the story's acceptance criteria, row by row.
+"""The four exemplar Templates, planned: the story's acceptance criteria, row by row.
 
 This is the module that says what a Run *is*. `repo-init@1`, `epic@1` and `initiative@1`
 are expanded against a scripted `Git`, and what is asserted is the whole row list — paths,
@@ -6,8 +6,10 @@ labels, gates, statuses and the commit each list file was read at — because AD
 is that *What will run* is exactly what runs, and a promise about a list is only kept by
 asserting the list.
 
-Nothing here is a second reading of the Template files: `plan_fixtures` runs the same text
-`make lint` ships through the same `validate()` the API calls (AD-15).
+The Templates are `plan_fixtures`' frozen exemplars, run through the same `validate()` the
+API calls (AD-15) — a snapshot of the shipped files taken when the suite was decoupled
+from `templates/*.yaml`, so the shipped files evolve freely without breaking the planner
+coverage here. The shipped files themselves are covered by `test_shipped_smoke.py`.
 """
 
 from __future__ import annotations

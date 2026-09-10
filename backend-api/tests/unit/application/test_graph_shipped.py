@@ -1,14 +1,16 @@
-"""The four shipped Templates, as graphs (3.4 acceptance criteria).
+"""The four exemplar Templates, as graphs (3.4 acceptance criteria).
 
 `test_graph.py` proves the rules against templates written for the rule they exercise. This
-module proves the *result* against the files that actually ship, asserted as exact ordered
+module proves the *result* against full-sized realistic files, asserted as exact ordered
 tuples — the ordering is the whole point of a graph the diagram draws left to right, and a
 set comparison would pass on a reversed chain.
 
-The fixture is the one `tests/unit/application/templates/test_shipped_templates.py` uses:
-each file's text read off disk, against a fake repository holding all four with `calls`
-pinned exactly as saving them would pin them. Read here rather than imported from that
-module, which is an anchor.
+The files are the frozen copies under `templates/fixtures/exemplars/` — a snapshot of the
+shipped Templates taken when the suite was decoupled from `templates/*.yaml`, so the
+shipped files evolve freely without breaking the graph coverage here (the shipped files
+themselves are covered by `templates/test_shipped_smoke.py`). Each file's text sits in a
+fake repository holding all four with `calls` pinned exactly as saving them would pin them.
+Read here rather than imported from `test_shipped_templates.py`, which is an anchor.
 """
 
 from __future__ import annotations
@@ -24,9 +26,8 @@ from orchestrator.application.templates.validate import validate
 from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
-#: `tests/unit/application/test_graph_shipped.py` -> repository root.
-REPO_ROOT = Path(__file__).resolve().parents[4]
-TEMPLATES_DIR = REPO_ROOT / "templates"
+#: The frozen exemplar Templates — never the shipped `templates/*.yaml`.
+TEMPLATES_DIR = Path(__file__).resolve().parent / "templates" / "fixtures" / "exemplars"
 
 NAMES = ("repo-init", "story", "epic", "initiative")
 
