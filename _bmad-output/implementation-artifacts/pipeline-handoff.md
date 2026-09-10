@@ -1,12 +1,14 @@
 # Running an epic through the orchestrator itself
 
-Written 2026-09-09, after Epic 6. This is the handoff for the first epic the orchestrator builds
-rather than an assistant — Epic 7, then Epic 8. It records what must be true before a Run can start,
-where the line falls between what an agent does and what the Operator does, and what to expect the
-first time.
+Written 2026-09-09, after Epic 6. Corrected 2026-09-10, after Epic 7. This is the handoff for the
+first epic the orchestrator builds rather than an assistant. It records what must be true before a Run
+can start, where the line falls between what an agent does and what the Operator does, and what to
+expect the first time.
 
-Epics 1–6 were each built by an assistant dispatching one sub-agent per story. Everything below is
-what changes when the product runs its own backlog.
+**Correction.** This was written expecting Epic 7 to be that first epic. It was not: the Operator
+chose to have Epic 7 built the established way and to test the pipeline on **Epic 8** alone. Epics 1–7
+were each built by an assistant dispatching one sub-agent per story. Everything below is what changes
+when the product runs its own backlog, and it now applies to Epic 8.
 
 ---
 
@@ -45,7 +47,10 @@ fine — it copies `.env.example`.
 records an outcome nobody observed.**
 
 Three stories are Operator-run: **5-11** (Claude readiness, still open), **7-2** (Codex readiness) and
-**7-4** (OpenCode readiness plus host model serving). Their briefs each open with an *Operator and agent
+**7-4** (OpenCode readiness plus host model serving). All three are open as of 2026-09-10; 7-2 and 7-4
+each landed their code and a runbook and then halted `blocked`, exactly as described below. The two
+runbooks are in their story specs under `epics/epic-07-harnesses/stories/`, and they are what the
+Operator session follows. Their briefs each open with an *Operator and agent
 split* section. The shape is the same in all three, and it uses the gates Epic 6 built rather than
 inventing a mechanism:
 
@@ -112,17 +117,24 @@ story's brief when it is relevant:
 
 ## 4. The order of work
 
+Superseded 2026-09-10. Steps 1, 2 and 4 happened differently: PR #6 merged, the readiness fixes went
+to their own PR, and Epic 7 was built the established way rather than by the orchestrator. What
+remains:
+
 ```
-1. Merge PR #6                       Epic 6, green
-2. Merge the readiness fixes         this branch — seed + READINESS_MODELS
-3. Operator session · story 5-11     claude → enabled            ← blocks everything below
-4. Orchestrator runs Epic 7          7-1, 7-3, 7-5, 7-6 unattended
-5. Operator session · 7-2, 7-4       codex and local readiness
-6. Orchestrator runs Epic 8          no session needed
+1. ✅ Merge PR #6                     Epic 6, green
+2. ✅ Epic 7 built                    7-1, 7-3, 7-5, 7-6 landed; 7-2, 7-4 halted blocked
+3. Host change · Langfuse             leave events_only mode      ← blocks everything below
+4. Operator session · 5-11, 7-2, 7-4  claude, codex, local readiness — one sitting
+5. Orchestrator runs Epic 8           the first epic the product builds itself
 ```
 
-Step 3 is the gate. Until a harness is `enabled`, the orchestrator cannot start a Run at all — so
-there is no way to test the pipeline before that session happens.
+**Step 3 is the real gate, and it is new.** Story 7-4 found the host Langfuse in v4 `events_only`
+mode: every public read API answers 404, so `attempt_observed` can only ever return `False` and the
+`trace observed` evaluation line cannot pass for *any* harness. Until that changes, no readiness Run
+can reach `enabled` — and until a harness is `enabled`, `preflight/checks.py::harness_line` refuses
+every Run, so the orchestrator cannot start one at all. See `epic-7-handoff.md` §2.
 
-Steps 3 and 5 can be one sitting if the host is configured for all three harnesses, which is what the
-Operator chose: batch the real-harness runs rather than interrupt the pipeline three times.
+Step 4 is one sitting for all three harnesses, which is what the Operator chose: batch the
+real-harness runs rather than interrupt the pipeline three times. `oMLX` must be running for `local`;
+`host/litellm.config.yaml` already carries both `LOCAL_MODELS` aliases and needs no change.
