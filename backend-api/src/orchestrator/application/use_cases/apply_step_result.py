@@ -9,9 +9,11 @@ The order is AD-8's and it matters, because each step can change what the next o
    executor no way to write one. It returns the values and they are written here, first, in
    the same unit of work: the next row's environment is read after this commits, and
    `cancel` needs the worktree recorded even when the row that made it then failed.
-1. **Close the Attempt.** `ended_at`, the status the row reached through it, `output_ref`.
-   `exit_code`, `session_id` and the usage columns are not written here: `StepResult` carries
-   none of them, and AD-8 has the `agent` executor record them through
+1. **Close the Attempt.** `ended_at`, the status the row reached through it, `output_ref`,
+   and `log_path` when the result names one — the spine puts that column on every row's
+   attempt, and a kind that starts a process has no `AttemptRepository` to write it with.
+   `exit_code`, `session_id` and the usage columns are not written here: `StepResult`
+   carries none of them, and AD-8 has the `agent` executor record them through
    `AttemptRepository.mark_finished` the moment the harness exits, so a restart finds them.
 2. **Write the row**: `result.status` through `step_transition`, `reason` beside it.
    `StepResult.gate` is deliberately not written back: the row's gate is what the planner
@@ -193,13 +195,15 @@ def _close_attempt(ports: WriterPorts, row: StepRun, result: StepResult) -> Atte
     attempt = ports.attempts.get_latest(row.id)
     if attempt is None:
         return None
-    closed = attempt.model_copy(
-        update={
-            "ended_at": ports.clock.now(),
-            "status": result.status,
-            "output_ref": result.output_ref,
-        }
-    )
+    named: dict[str, Any] = {
+        "ended_at": ports.clock.now(),
+        "status": result.status,
+        "output_ref": result.output_ref,
+    }
+    # Only when named: `agent` wrote its own through `mark_finished`, and this would blank it.
+    if result.log_path is not None:
+        named["log_path"] = result.log_path
+    closed = attempt.model_copy(update=named)
     ports.attempts.mark_finished(closed)
     return closed
 

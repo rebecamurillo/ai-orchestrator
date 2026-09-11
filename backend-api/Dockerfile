@@ -39,6 +39,7 @@ ENV PYTHONUNBUFFERED=1 \
     NPM_CONFIG_PREFIX=/opt/npm-global \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     NPM_CONFIG_FUND=false \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     PATH=/app/backend-api/.venv/bin:/opt/npm-global/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
 RUN apt-get update \
@@ -46,6 +47,7 @@ RUN apt-get update \
       ca-certificates \
       curl \
       git \
+      make \
       xz-utils \
  && rm -rf /var/lib/apt/lists/*
 
@@ -87,7 +89,8 @@ COPY --from=uv /uv /usr/local/bin/uv
 # `agent-home` are mounted here, and a named volume takes its ownership from the image.
 RUN set -eux; \
     useradd --create-home --home-dir "${AGENT_HOME}" --shell /bin/bash --uid 1000 agent; \
-    mkdir -p "${WORK_DIR}" /opt/npm-global /app; \
+    mkdir -p "${WORK_DIR}" /opt/npm-global/bin /app; \
+    corepack enable --install-directory /opt/npm-global/bin; \
     chown -R agent:agent "${WORK_DIR}" "${AGENT_HOME}" /opt/npm-global /app
 
 USER agent

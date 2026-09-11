@@ -123,8 +123,9 @@ else
 		echo "activating pnpm ${pnpm_pin} …"
 		# corepack resolves `packageManager` from the working directory and this repository
 		# has no root package.json, so the pinned version is activated explicitly.
-		corepack enable
+		corepack enable || note "corepack could not write its shims here; using the ones on PATH"
 		corepack prepare "pnpm@${pnpm_pin}" --activate
+		have pnpm || problem "pnpm is missing — corepack enabled no shim this user can run"
 
 		echo "installing web-client (pnpm install --frozen-lockfile) …"
 		pnpm --dir web-client install --frozen-lockfile
