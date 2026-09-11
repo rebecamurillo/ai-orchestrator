@@ -31,6 +31,10 @@ A pain to solve, found in the first full test run before production. Two gaps: a
   - **intent:** No unit or e2e test fails because a shipped `templates/*.yaml` changed. Content-level coverage (rows, ordering, parameters) runs against frozen exemplar copies; tests that read the real `templates/` dir assert invariants only (seeds, validates, graph self-contained, trees resolve). The strategy holds when templates become versioned: a new version seeded by `seed_shipped` must not fail any existing unit or e2e test.
   - **success:** Editing any shipped template's steps (add, remove, reorder, reparameterize) leaves `make test` and `make e2e-api` green without touching a test file; the e2e suite no longer pins `repo-init@1`'s row order or stop row.
 
+- **CAP-5** — per-story push for progress visibility
+  - **intent:** Every Story that passes its gate and commit-guard is pushed to the Run's branch immediately, so the Operator watches progress on the remote while later Stories still run; the pull request still appears once, at the end of the epic.
+  - **success:** After Story N's commit-guard, the remote branch tip carries Story N's commit while Story N+1 is still running; the epic still ends with exactly one PR link; a failed push is reported like any failed step, never silently retried.
+
 ## Constraints
 
 - CAP-1's signal is an output-file contract mirroring Story files: the context step declares an artifact plus a status (`open-questions` | `done`) the routing can read, `escalate_when` parks the Run, and the Operator's reply travels the existing Epic 6 Answer path (AD-13, FR-18) into the redispatch — no new park kinds. The `context-review` checkpoint fires even when there were zero question rounds. AD-8's two status writers hold throughout.

@@ -21,13 +21,17 @@
     repository.unit_test_command and its redispatch context adds the investigate-and-fix
     framing to the FR-10 block; the epic template gains setup (install_command), a unit
     baseline, and an e2e step running quality_gate_command after the stories; a row whose
-    Repository command is empty reads skipped with the missing field named.
+    Repository command is empty reads skipped with the missing field named. Also SPEC
+    CAP-5: the story template pushes the run branch right after commit-guard so progress
+    is visible remotely, while the PR link stays a single end-of-epic step.
   invoke_dev_with: >-
     Read brownfield.md beside SPEC.md before planning. The FR-10 Verify Failure block already
     carries command, exit code and log tail — extend its copy, do not build a parallel channel.
     Framing copy states facts and mechanisms (NFR-8); the operator's quoted sentence in SPEC
-    CAP-2 is normative in meaning, not exact copy. Story 1's invariant-only suites must stay
-    green through every template edit here.
+    CAP-2 is normative in meaning, not exact copy. For CAP-5 reuse the existing git.push
+    step kind; keep the epic's end push (a cheap final guarantee) and pr.link as the only
+    link step. Story 1's invariant-only suites must stay green through every template edit
+    here.
 - id: "3"
   title: Frameless agent dispatch
   description: >-
