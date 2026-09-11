@@ -176,6 +176,7 @@ def _install(
         status="done",
         gate=ctx.row.gate,
         output_ref=str(output),
+        log_path=str(output),
         reason=opened,
         run_updates=updates,
     )
@@ -194,6 +195,7 @@ def _failed(
         status="error",
         gate=ctx.row.gate,
         output_ref=str(output),
+        log_path=str(output),
         reason=reason,
         park=Park(kind=kind, reason=reason, path=ctx.row.path),
         run_updates=updates,

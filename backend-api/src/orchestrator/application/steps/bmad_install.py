@@ -99,6 +99,7 @@ class BmadInstallExecutor:
             status="done",
             gate=ctx.row.gate,
             output_ref=str(output),
+            log_path=str(output),
             reason=None if added else ALREADY_IGNORED,
         )
 
@@ -122,6 +123,7 @@ def _parked(ctx: StepContext, reason: str, output: str, kind: ParkKind) -> StepR
         status="error",
         gate=ctx.row.gate,
         output_ref=output,
+        log_path=output,
         reason=reason,
         park=Park(kind=kind, reason=reason, path=ctx.row.path),
     )

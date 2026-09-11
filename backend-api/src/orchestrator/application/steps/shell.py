@@ -78,11 +78,14 @@ class ShellExecutor:
                 status="error",
                 gate=ctx.row.gate,
                 output_ref=str(log),
+                log_path=str(log),
                 reason=reason,
                 park=Park(kind="timeout", reason=reason, path=ctx.row.path),
             )
         if outcome.exit_code == 0:
-            return StepResult(status="done", gate=ctx.row.gate, output_ref=str(log))
+            return StepResult(
+                status="done", gate=ctx.row.gate, output_ref=str(log), log_path=str(log)
+            )
         return _on_fail(ctx, resolved.get(ON_FAIL_KEY), outcome.exit_code, log)
 
 
@@ -93,6 +96,7 @@ def _on_fail(ctx: StepContext, action: object, exit_code: int | None, log: Path)
             status="error",
             gate=ctx.row.gate,
             output_ref=str(log),
+            log_path=str(log),
             reason=EXIT_WITH_PATH.format(path=ctx.row.path, code=exit_code),
         )
     if action == CONTINUE:
@@ -100,6 +104,7 @@ def _on_fail(ctx: StepContext, action: object, exit_code: int | None, log: Path)
             status="done",
             gate=ctx.row.gate,
             output_ref=str(log),
+            log_path=str(log),
             reason=EXIT_CONTINUED.format(code=exit_code),
         )
     if isinstance(action, dict):
@@ -107,6 +112,7 @@ def _on_fail(ctx: StepContext, action: object, exit_code: int | None, log: Path)
             status="error",
             gate=ctx.row.gate,
             output_ref=str(log),
+            log_path=str(log),
             reason=EXIT_ONLY.format(code=exit_code),
             redispatch=Redispatch(
                 target_seq=action[REDISPATCH_TARGET_SEQ], max=action[REDISPATCH_MAX]
@@ -118,6 +124,7 @@ def _on_fail(ctx: StepContext, action: object, exit_code: int | None, log: Path)
         status="error",
         gate=ctx.row.gate,
         output_ref=str(log),
+        log_path=str(log),
         reason=reason,
         park=Park(kind="verify_failed", reason=reason, path=ctx.row.path),
     )
