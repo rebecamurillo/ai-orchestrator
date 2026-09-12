@@ -84,7 +84,6 @@ def test_the_router_declares_exactly_the_expected_operations() -> None:
     routes = [(sorted(route.methods), route.path) for route in router_module.router.routes]
 
     assert routes == [
-        (["GET"], "/runs/{run_id}/activity"),
         (["POST"], "/runs/{run_id}/activity"),
     ]
     for route in router_module.router.routes:

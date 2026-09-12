@@ -21,7 +21,6 @@ from orchestrator.api.errors import (
 )
 from orchestrator.api.providers import activity_ports
 from orchestrator.application.use_cases.activity import ActivityPorts, record_activity
-from orchestrator.domain.errors import NotFound
 
 router = APIRouter(tags=["runs"])
 
@@ -50,20 +49,6 @@ class ActivityIn(BaseModel):
 
 class ActivityOut(BaseModel):
     active_seconds: int
-
-
-@router.get(
-    "/runs/{run_id}/activity",
-    response_model=ActivityOut,
-    summary="Read accumulated active seconds for a Run",
-    responses=REFUSALS,
-)
-def read_activity(run_id: UUID, ports: Ports) -> ActivityOut:
-    """Return `run.active_seconds` as accumulated so far (readable at any status)."""
-    run = ports.runs.get(run_id)
-    if run is None:
-        raise NotFound(f"no run with id {run_id}")
-    return ActivityOut(active_seconds=run.active_seconds)
 
 
 @router.post(

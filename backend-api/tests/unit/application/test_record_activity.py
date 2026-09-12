@@ -66,15 +66,6 @@ def test_accumulation_adds_to_existing() -> None:
     assert runs.runs[run.id].active_seconds == DOUBLE_BATCH
 
 
-def test_returns_new_total() -> None:
-    run = a_run(active_seconds=0)
-    ports, _ = ports_with(run)
-
-    result = record_activity(ports, run.id, BATCH_SMALL)
-
-    assert result == BATCH_SMALL
-
-
 def test_any_run_status_accepted() -> None:
     for status in ("done", "failed", "cancelled", "running", "queued", "needs_you"):
         run = a_run(active_seconds=0, status=status)

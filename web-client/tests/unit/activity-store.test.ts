@@ -68,10 +68,9 @@ function firePagehide(): void {
 let postSpy: ReturnType<typeof vi.fn>;
 let beaconSpy: ReturnType<typeof vi.fn>;
 
-// We must import `startTracking`/`stopTracking` lazily (after globals are set) or
-// rely on vitest module isolation. Using the dynamic import pattern here keeps the
-// module fresh for each test suite run without needing `vi.resetModules()`, because
-// the store module-level `_runId` etc. are reset by `stopTracking()` in `afterEach`.
+// Static top-level import: the store's module-level state (_runId, _accumulated, etc.) is
+// reset by `stopTracking()` in `afterEach`, so each test starts clean without needing
+// `vi.resetModules()`.
 import { startTracking, stopTracking } from '../../src/stores/activity';
 
 beforeEach(() => {
@@ -198,5 +197,27 @@ describe('activity store', () => {
 
     expect(beaconSpy).not.toHaveBeenCalled();
     expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  it('falls back to api.POST({keepalive:true}) on pagehide when sendBeacon is unavailable', async () => {
+    vi.stubGlobal('navigator', {}); // no sendBeacon property
+
+    startTracking(RUN_ID);
+
+    for (let i = 0; i < 15; i++) {
+      firePointerEvent();
+      vi.advanceTimersByTime(1_000);
+    }
+
+    firePagehide();
+
+    expect(beaconSpy).not.toHaveBeenCalled();
+    expect(postSpy).toHaveBeenCalledOnce();
+    const [, opts] = postSpy.mock.calls[0] as [
+      string,
+      { body: { focused_seconds: number }; keepalive?: boolean },
+    ];
+    expect(opts.keepalive).toBe(true);
+    expect(opts.body).toEqual({ focused_seconds: 15 });
   });
 });

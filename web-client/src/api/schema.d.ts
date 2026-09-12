@@ -349,11 +349,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Read accumulated active seconds for a Run
-         * @description Return `run.active_seconds` as accumulated so far (readable at any status).
-         */
-        get: operations["read_activity_api_v1_runs__run_id__activity_get"];
+        get?: never;
         put?: never;
         /**
          * Report Operator focus time for a Run
@@ -3233,58 +3229,6 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID. */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    read_activity_api_v1_runs__run_id__activity_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActivityOut"];
-                };
-            };
-            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-            /** @description No Run has that id. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-            /** @description `run_id` does not parse as a UUID, or `focused_seconds` is outside [1, 3600]. */
             422: {
                 headers: {
                     [name: string]: unknown;

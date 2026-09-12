@@ -1,12 +1,12 @@
 /**
- * Activity tracking smoke test (8.2): intercepts `POST /api/runs/{id}/activity` and
- * asserts that loading the Run detail page causes at least one POST to fire with a numeric
- * `focused_seconds` field, after advancing the clock 65 s with `page.clock`.
+ * Activity tracking smoke tests (8.2): intercepts `POST /api/runs/{id}/activity` and
+ * asserts that loading the Run detail or diagram page causes a POST to fire with
+ * `focused_seconds: 60` after advancing the clock 65 s with `page.clock`.
  *
  * `page.clock.install()` / `page.clock.fastForward()` replace the browser's own timers so
  * the test advances 65 s without waiting real seconds — the same mechanism `board.spec.ts`
- * uses for its polling assertions. The detail endpoint is mocked with `page.route()` so no
- * real stack is required.
+ * uses for its polling assertions. The backend endpoints are mocked with `page.route()` so
+ * no real stack is required.
  */
 
 import { expect, test, type Page, type Route } from '@playwright/test';
@@ -117,7 +117,47 @@ test.describe('activity tracking (8.2)', () => {
     await page.waitForTimeout(500);
 
     expect(activityPosts.length).toBeGreaterThanOrEqual(1);
-    expect(typeof activityPosts[0].focusedSeconds).toBe('number');
-    expect(activityPosts[0].focusedSeconds).toBeGreaterThan(0);
+    expect(activityPosts[0].focusedSeconds).toBe(60);
+  });
+
+  test('POST /activity fires with focused_seconds: 60 after 65 s on the diagram view', async ({
+    page,
+  }) => {
+    await mockDetail(page, detail());
+    // Minimal graph — RunDiagram mounts and startTracking fires regardless of graph content.
+    await page.route(`**/api/runs/${RUN_ID}/graph`, (route: Route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '{"nodes":[],"groups":[],"edges":[],"now_path":null}',
+      }),
+    );
+
+    const activityPosts: { focusedSeconds: number }[] = [];
+    await page.route(`**/api/runs/${RUN_ID}/activity`, async (route: Route) => {
+      const body = route.request().postDataJSON() as { focused_seconds: number };
+      activityPosts.push({ focusedSeconds: body.focused_seconds });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '{"active_seconds":60}',
+      });
+    });
+
+    // Install fake clock before navigation so setInterval is captured.
+    await page.clock.install();
+    const graphLoaded = page.waitForResponse(`**/api/runs/${RUN_ID}/graph`);
+    await page.goto(`${URL}?view=diagram`);
+    await graphLoaded;
+
+    // Give the page focus (document.hasFocus() must be true for ticks to count).
+    await page.locator('body').click({ force: true });
+
+    // Advance 65 s — enough to trigger the 60 s batch interval.
+    await page.clock.fastForward(65_000);
+    await page.waitForTimeout(500);
+
+    expect(activityPosts.length).toBeGreaterThanOrEqual(1);
+    expect(activityPosts[0].focusedSeconds).toBe(60);
   });
 });

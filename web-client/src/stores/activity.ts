@@ -58,15 +58,23 @@ async function _flush(): Promise<void> {
 
 function _flushBeacon(): void {
   if (!_runId || _accumulated < 1) return;
+  const runId = _runId;
   const seconds = _accumulated;
   _accumulated = 0;
-  const url = `${API_BASE}/runs/${_runId}/activity`;
-  const body = JSON.stringify({ focused_seconds: seconds });
   if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-    navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
+    const url = `${API_BASE}/runs/${runId}/activity`;
+    navigator.sendBeacon(
+      url,
+      new Blob([JSON.stringify({ focused_seconds: seconds })], { type: 'application/json' }),
+    );
+  } else {
+    // sendBeacon unavailable (e.g. sandboxed browser): use api client with keepalive.
+    void api.POST('/runs/{run_id}/activity', {
+      params: { path: { run_id: runId } },
+      body: { focused_seconds: seconds },
+      keepalive: true,
+    });
   }
-  // No fetch fallback: sendBeacon is supported in all modern browsers. If unavailable,
-  // the pagehide flush is skipped; the 60 s interval covers the common case.
 }
 
 async function _post(seconds: number): Promise<void> {
@@ -106,9 +114,8 @@ export function startTracking(runId: string): void {
 }
 
 /**
- * Stop tracking and remove all listeners. Does not flush — the caller is responsible for
- * ensuring the island unmounts cleanly. The `pagehide` listener fires independently of
- * `stopTracking`.
+ * Stop tracking and remove all listeners, including the `pagehide` listener. Does not
+ * flush — any accumulated seconds since the last batch are discarded (fire-and-forget).
  */
 export function stopTracking(): void {
   if (_tickHandle !== undefined) clearInterval(_tickHandle);

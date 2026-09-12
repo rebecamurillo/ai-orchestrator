@@ -2,13 +2,14 @@
 title: 'Active Operator time'
 type: 'feature'
 created: '2026-09-11'
-status: 'in-review'
+status: 'blocked'
 baseline_revision: '9882dc04aea4ffe78b4d735a0f6dbb24d6d7c9e0'
-review_loop_iteration: 0
+review_loop_iteration: 1
 followup_review_recommended: false
 context: []
 warnings: ['oversized']
 deferred: []
+blocking_condition: 'test_bearer_auth.py::test_the_contract_declares_the_401_and_its_media_type hardcodes document[path]["get"] but the story-required POST-only activity endpoint has no "get" key — AGENTS.md §1 prohibits editing existing test files and none of the three exceptions apply'
 ---
 
 <intent-contract>
@@ -114,6 +115,22 @@ deferred: []
 
 ## Review Triage Log
 
+**Iteration 1 (review_loop_iteration: 0 → 1)**
+
+Patch findings applied (6):
+1. `run_activity.py` — removed unspecified GET `/runs/{run_id}/activity` handler (`read_activity`) and unused `NotFound` import
+2. `test_run_activity_router.py` — updated `test_the_router_declares_exactly_the_expected_operations` to assert POST-only (GET removed)
+3. `test_record_activity.py` — removed duplicate `test_returns_new_total` (identical to `test_accumulation_from_zero`)
+4. `activity.ts` `_flushBeacon` — replaced bare `fetch(url, {keepalive:true})` with `api.POST('/runs/{run_id}/activity', {keepalive:true})` to satisfy AD-1 `no-restricted-globals`; fixed `Blob` constructor arg order
+5. `activity.ts` `stopTracking` docstring — corrected misleading "pagehide listener fires independently" → "including the pagehide listener; does not flush"
+6. `run-activity.spec.ts` — fixed existing test assertion from `toBeGreaterThan(0)` to `toBe(60)`; removed redundant type assertion; added RunDiagram test case
+
+Deferred findings (0): none
+
+Rejected findings (0): none
+
+Verification result: `make lint` — PASSED. `make test` — BLOCKED (see `## Auto Run Result`).
+
 ## Design Notes
 
 **`run_activity.py` as a new module:** `test_run_router.py::test_the_router_declares_exactly_three_operations` pins `run.py` to exactly 3 routes; `test_run_detail_router.py::test_the_router_declares_exactly_one_operation` pins `run_detail.py` to exactly 1 route. The activity route goes in its own module — the same precedent 4.12 set when placing the detail route in `run_detail.py` (see `run_detail.py` docstring).
@@ -132,4 +149,22 @@ deferred: []
 - `make lint` — expected: zero ruff/mypy/import-linter/eslint/tsc errors
 - `make test` — expected: all unit tests pass including `test_run_activity_router.py`, `test_record_activity.py`, `run-cost-block-active-time.test.ts`, `activity-store.test.ts`, and revised `run-cost-block.test.ts`
 - `make openapi` — expected: `contracts/openapi.json` includes `POST /api/v1/runs/{run_id}/activity`; `schema.d.ts` regenerated
-- `make e2e-ui` — expected: `run-activity.spec.ts` smoke test passes
+- `make e2e-api` — expected: schemathesis covers the new `POST /api/v1/runs/{run_id}/activity` endpoint
+- `make e2e-ui` — expected: `run-activity.spec.ts` smoke tests pass (detail view + diagram view)
+
+## Auto Run Result
+
+**Status:** blocked
+
+**Blocking condition:** `backend-api/tests/unit/test_bearer_auth.py::test_the_contract_declares_the_401_and_its_media_type` hardcodes `document["paths"][path]["get"]["responses"]` (line 276). The function `_versioned_operations` returns all `(method, path)` pairs including `("post", "/api/v1/runs/{run_id}/activity")`. Because the activity endpoint is POST-only, looking up `["get"]` on that path raises `KeyError`.
+
+This is a pre-existing bug in `test_bearer_auth.py` (the loop variable is `_method` — underscore-prefixed, intentionally unused — while the body hardcodes `"get"`). The bug was latent until story 8-2 added the first POST-only path in the API. AGENTS.md §1 prohibits editing existing test files; none of the three narrow exceptions (pending-gate registry, placeholder assertion, nondeterministic assertion) apply.
+
+**Verification gates run:**
+- `make lint` — PASSED (all ruff/mypy/import-linter/eslint/tsc/prettier/env-contract/test-pairs checks clean)
+- `make openapi` — PASSED (GET handler removed; contracts regenerated correctly)
+- `make test` — FAILED: 1 test in pre-existing `test_bearer_auth.py` (6015 passed, 1 failed, 23 skipped)
+
+**Patches applied this iteration:** 6 (see Review Triage Log)
+
+**Human action required:** Fix `test_bearer_auth.py` line 276 — change `document["paths"][path]["get"]["responses"]` to `document["paths"][path][_method]["responses"]` (use the actual loop variable). This is a one-character rename that restores the test's intended semantics and covers the new POST-only endpoint.
