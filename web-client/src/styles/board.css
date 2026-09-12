@@ -236,3 +236,109 @@
   text-transform: var(--type-control-transform);
   cursor: pointer;
 }
+
+/* Board list view (story 8-4) */
+
+.board-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-5);
+  padding: var(--space-7) var(--space-8) 0;
+}
+
+.board-toggle button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.board-toggle button[aria-current='true'] {
+  color: var(--color-text);
+  cursor: default;
+}
+
+.board-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-8);
+}
+
+.board-list-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.board-list-group-head {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.board-list-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-line);
+  color: inherit;
+  text-decoration: none;
+}
+
+.board-list-token {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-status-token);
+  letter-spacing: var(--type-status-token-tracking);
+  min-width: 3.5rem;
+  flex-shrink: 0;
+}
+
+.board-list-token[data-signal='run'] {
+  color: var(--color-signal-run);
+}
+
+.board-list-token[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.board-list-token[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.board-list-chip {
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.board-list-project,
+.board-list-repo,
+.board-list-branch,
+.board-list-step,
+.board-list-progress {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.board-list-age {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-micro);
+  margin-left: auto;
+}
+
+.board-list-age[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
