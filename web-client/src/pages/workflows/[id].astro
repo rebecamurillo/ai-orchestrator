@@ -1,22 +1,33 @@
 ---
 /**
- * Run detail (4.15, SPEC CAP-15, FR-23): the header, the alert banner, the Steps table, the
- * gate record, the cost block, the links, the Cancel confirm, and the Retry/Continue stop
- * bodies this epic has.
+ * Run detail (4.15, SPEC CAP-15, FR-23) and Run diagram (8.1): the header, the alert banner,
+ * the Steps table, the gate record, the cost block, the links, the Cancel confirm, and the
+ * Retry/Continue stop bodies; OR the four-column diagram view of the planned execution graph.
  *
- * No server-side read of its own — `RunDetail.tsx` does its own polled
- * `GET /runs/{id}/detail` client:load, the same split `index.astro` draws for `Board.tsx`
- * (that page's own module doc: "the island renders the response as is"). The only thing
- * this page supplies is the id the URL already carries.
+ * The active island is chosen by `?view=`: `diagram` mounts `RunDiagram`, anything else
+ * (including the default with no param) mounts `RunDetail`. The Astro SSR page re-renders
+ * on each navigation so the correct island is hydrated — no JS router needed.
+ *
+ * No server-side read of its own — each island does its own polled fetch client:load, the
+ * same split `index.astro` draws for `Board.tsx`. The only thing this page supplies is the
+ * id the URL already carries.
  */
 import Shell from '../../layouts/Shell.astro';
 import RunDetail from '../../islands/RunDetail';
+import RunDiagram from '../../islands/RunDiagram';
 
 export const prerender = false;
 
 const { id } = Astro.params;
+const view = Astro.url.searchParams.get('view') ?? 'detail';
 ---
 
 <Shell active="workflows" title="RUN DETAIL">
-  <RunDetail client:load runId={id as string} />
+  {
+    view === 'diagram' ? (
+      <RunDiagram client:load runId={id as string} />
+    ) : (
+      <RunDetail client:load runId={id as string} />
+    )
+  }
 </Shell>

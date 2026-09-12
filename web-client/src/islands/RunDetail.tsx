@@ -191,7 +191,7 @@ export default function RunDetail({ runId }: Props) {
 
   return (
     <div data-testid="wf-detail">
-      <Header detail={detail} token={token} now={Date.now()} />
+      <Header detail={detail} token={token} now={Date.now()} view="detail" />
       <Banner detail={detail} token={token} />
       <div className="wf-body">
         <div className="wf-left">
