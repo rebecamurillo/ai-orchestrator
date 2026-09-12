@@ -2,13 +2,21 @@
 title: 'Per-Project monthly spend'
 type: 'feature'
 created: '2026-09-12'
-status: 'in-review'
+status: 'done'
 baseline_revision: '5dfb18e632fae48a01f6b1f5840f0a9a3b00db24'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: []
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      runs.list() performs an unbounded in-memory scan per project per request with no
+      pagination guard.
+    evidence: |-
+      RunRepository.list(project_id=...) returns list[Run] — every run for a project in one
+      call. project_spend.project_metrics() calls this once per request. On long-lived
+      projects this is an unbounded in-process scan. Acceptable at MVP per the spine.
+    severity: low
 ---
 
 <intent-contract>
@@ -142,3 +150,66 @@ deferred: []
 - `make test` — expected: all unit tests pass, including `test_project_spend.py`, `test_project_schemas_monthly_spend.py`, `test_projects_router_monthly_spend.py`, `project-list-row-counts.test.ts`
 - `make openapi` — expected: `contracts/openapi.json` updated with four new `ProjectRead` fields; no drift after `pnpm gen:api`
 - `make e2e-ui` — expected: `projects-spend.spec.ts` passes; `projects.spec.ts` unaffected
+
+## Review Triage Log
+
+### 2026-09-12 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 1: (high 1, medium 0, low 0)
+- defer: 1: (high 0, medium 0, low 1)
+- reject: 13
+- addressed_findings:
+  - `[high]` `[patch]` `record_attempt_spend` sets `spend_provisional` on the stored run but no test verified this path — a broken accumulator would silently make `monthly_spend_provisional` always False; added `test_record_attempt_spend_spend_provisional.py` (3 tests: provisional-true, settled-false, provisional-cleared-on-settle).
+
+## Auto Run Result
+
+Status: done
+
+### Implemented change
+
+Added per-project monthly spend visibility: `spend_provisional: bool` on the `Run` entity
+and DB model; new `project_spend.project_metrics()` use case computing four metrics from one
+`runs.list(project_id=...)` call; four nullable fields added to `ProjectRead`; router calls
+the use case on every `_read()` and list projection; web-client meta line shows
+`· this month $X.XX [provisional]` and list rows show the priority count badge
+(`needs_you` amber > `failed` red > nothing).
+
+### Files changed
+- `backend-api/alembic/versions/0012_run_spend_provisional.py` — new migration adding `spend_provisional` Boolean NOT NULL DEFAULT FALSE
+- `backend-api/src/orchestrator/domain/entities/run.py` — added `spend_provisional: bool = False`
+- `backend-api/src/orchestrator/infrastructure/db/models/run.py` — mapped column + `to_entity` + `row_values`
+- `backend-api/src/orchestrator/infrastructure/db/repositories/runs.py` — `to_entity` reads column; `row_values` writes it
+- `backend-api/src/orchestrator/application/use_cases/spend.py` — `_run_spend` renamed to `_run_spend_and_provisional` returning `tuple[Decimal, bool]`; `record_attempt_spend` also sets `spend_provisional`
+- `backend-api/src/orchestrator/application/use_cases/project_spend.py` — new use case with `ProjectMetrics` dataclass
+- `backend-api/src/orchestrator/api/schemas/projects.py` — four nullable fields; `of()` extended
+- `backend-api/src/orchestrator/api/routers/projects.py` — `_read()` calls `project_spend.project_metrics()`
+- `contracts/openapi.json` — regenerated with four new fields
+- `web-client/src/api/schema.d.ts` — regenerated
+- `web-client/src/components/ProjectListRow.astro` — `needsYouCount` prop, priority conditional, `.needs-you` CSS
+- `web-client/src/pages/projects/index.astro` — `runFailedCount`/`runNeedsYouCount` helpers, meta line spend
+- `web-client/tests/e2e/projects-fixtures.mjs` — three new spend fixtures
+- `web-client/tests/e2e/projects-spend.spec.ts` — new e2e tests (detail pane spend display)
+- `web-client/tests/unit/project-list-row-counts.test.ts` — new component unit tests (count priority)
+- `backend-api/tests/unit/application/test_project_spend.py` — new use case unit tests (14 cases)
+- `backend-api/tests/unit/test_project_schemas_monthly_spend.py` — new schema unit tests (9 cases)
+- `backend-api/tests/unit/test_projects_router_monthly_spend.py` — new router unit tests (6 cases)
+- `backend-api/tests/unit/application/test_record_attempt_spend_spend_provisional.py` — new test (3 cases; patch from this review)
+- `_bmad-output/planning-artifacts/mvp/epics/epic-08-readouts/stories/8-6-per-project-monthly-spend.md` — this spec
+
+### Review findings
+- Patches applied: 1 high (missing test for `record_attempt_spend` → `spend_provisional` propagation; added `test_record_attempt_spend_spend_provisional.py`)
+- Items deferred: 1 low (`runs.list()` unbounded scan — pre-existing architecture, MVP-accepted)
+- Items rejected: 13 (timezone awareness disproven by `DateTime(timezone=True)` on all columns; `created_at` non-nullable disproven; `cost_provisional` pre-exists on `Attempt`; `_run_spend` rename safe as private function; `runs=None` guard intentional for legacy harnesses; zero-spend display is by spec; `runs.list()` returns `list[Run]`, no pagination envelope; `or False` guard necessary for test compatibility with non-DB RunRow construction; semantics of `runFailedCount` fallback and `runNeedsYouCount` absence are by design; remaining style/documentation observations)
+
+### Follow-up review recommendation
+1 high-severity patch applied → `followup_review_recommended: true`
+Scores: high=1, medium=0, low=0.
+
+### Verification
+- `make lint` — passed: zero ruff/mypy/import-linter/eslint/prettier/tsc errors
+- `make test` — 6079 passed, 23 skipped, 0 failed (3 new tests from review patch included)
+- `make openapi` — verified by `make lint` (gen:api --check passes, no drift)
+
+### Residual risks
+- `runs.list()` performs one unbounded query per project per `_read()` call; deferred, acceptable at MVP.
