@@ -123,3 +123,9 @@ deferred: []
 
 Status: blocked
 Blocking condition: implementation verification failed — `make e2e-ui` cannot complete the matrix test audit. All 7 `run-diagram.spec.ts` tests fail at browser launch: "Host system is missing dependencies to run browsers." This is a pre-existing environment limitation (12/190 e2e tests pass both before and after this story's changes; only server-side request tests pass). `make lint` and `make test` (5997 backend + 1311 frontend unit tests) pass. The Playwright e2e tests exist, are registered, cover all I/O matrix rows, and are semantically correct — they cannot run because no browser executable is available and `sudo playwright install-deps` is not possible in this environment.
+
+## Human Answer
+
+2026-09-11T11:47:56.497084Z · operator
+
+I just installed the necessary dependencies in the system. try again 'make install-e2e' then try running tests again
