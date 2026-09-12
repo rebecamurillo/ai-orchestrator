@@ -2,13 +2,103 @@
 title: 'Login lockout'
 type: 'feature'
 created: '2026-09-11'
-status: 'in-progress'
+status: 'done'
 baseline_revision: '45630153fe9fd810f2cf2c13869fb3015b4bf255'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      "1 attempts left" is grammatically wrong when n=1; should be "1 attempt left"
+    evidence: |-
+      The spec prescribes the exact format string `token rejected — {n} attempts left` with no
+      singular form, so the message "token rejected — 1 attempts left" is spec-compliant but
+      grammatically incorrect. Fixing it requires amending the intent-contract.
+    severity: low
+  - summary: >-
+      `workers: 1` makes the pre-existing `fullyParallel: true` a misleading no-op
+    evidence: |-
+      With one Playwright worker all tests are sequentially scheduled regardless of fullyParallel.
+      The setting was pre-existing (workers was 2 before this story); reducing workers to 1 made
+      it inoperative. Removing fullyParallel would be a cleanup-only change.
+    severity: low
+  - summary: >-
+      `data-lockout` attribute on the form element is not queried by any test
+    evidence: |-
+      The spec's Code Map planned to use it for e2e assertions; the actual e2e tests instead rely
+      on `data-testid="login-locked"` and the `disabled` property. The attribute is harmless but
+      dead markup.
+    severity: low
+  - summary: >-
+      `locked_until` returns `entries[MAX-1]` without sorting; non-monotonic clock gives wrong expiry
+    evidence: |-
+      `windowEntries` preserves insertion order. If `record_failure` were called with a
+      non-monotonic `now`, the 5th stored entry would not be the most-recent failure and the
+      computed expiry would be wrong. Production uses `Date.now()` (monotonic); unit tests use
+      explicit increasing timestamps. Theoretical risk only.
+    severity: low
+  - summary: >-
+      `clearIpCounter` in beforeEach does not assert the login succeeded
+    evidence: |-
+      If the IP were locked when clearIpCounter runs, the correct-token submit receives FORBIDDEN
+      and does not call clear(ip); the function returns without having reset the counter, and the
+      next test starts from a dirty state with no warning. The current test order (locking test is
+      last) prevents this, but it is fragile if more tests are added after the locking test.
+    severity: low
+  - summary: >-
+      A successful login from any source clears the shared '0.0.0.0' fallback bucket
+    evidence: |-
+      When context.clientAddress is undefined (e.g. reverse proxy that strips X-Forwarded-For),
+      all clients share the '0.0.0.0' key. A single successful login from any one of them calls
+      clear('0.0.0.0') and resets the lockout counter for every other client in that bucket,
+      including potentially locked ones. The fallback is spec-prescribed; documenting this
+      limitation would help operators who deploy behind a proxy.
+    severity: medium
+  - summary: >-
+      In-memory counters are not shared across process instances; multi-instance deployments allow up to 5 wrong tokens per instance
+    evidence: |-
+      The module is intentionally in-process only (spec constraint). Each process independently
+      counts failures; an attacker targeting a multi-instance cluster could make up to
+      5 × N attempts before any instance locks the IP. The module comment documents the
+      per-process constraint but not its security implication for clustered deployments.
+    severity: low
+  - summary: >-
+      The `other` Playwright project has no dependency on `login-lockout`; parallelism risk if workers > 1 in the future
+    evidence: |-
+      With workers: 1 all projects run sequentially and there is no contamination. If workers
+      is ever raised, the `other` project could run concurrently with `login-lockout` and
+      accumulate failures on the shared 127.0.0.1 counter. Adding
+      `dependencies: ['login-lockout']` to the `other` project would make the ordering
+      explicit.
+    severity: low
+  - summary: >-
+      No e2e test submits a correct token while the IP is locked
+    evidence: |-
+      Matrix row "Correct token while locked" is not exercised as a standalone e2e scenario.
+      The action's early-exit on non-null locked_until prevents reaching the token comparison,
+      so a correct token receives the same FORBIDDEN response. Testing this directly requires
+      reaching the locked state and then bypassing the disabled UI, which the clearIpCounter
+      mechanism cannot support (it is called before the lock, and calling it after locks the IP
+      indefinitely). The Design Notes document this structural limitation.
+    severity: low
+  - summary: >-
+      Button.astro href-variant ignores the disabled prop; link buttons remain fully clickable when disabled
+    evidence: |-
+      The disabled prop is applied to the <button> branch only. An <a> link rendered by Button
+      when href is provided is not given aria-disabled or pointer-events:none when disabled is
+      true. Current usage in the login page passes no href, so this does not affect story 8-5;
+      it is a pre-existing gap exposed by the new prop.
+    severity: low
+  - summary: >-
+      Adding further wrong-token tests to login.spec.ts could push the shared IP counter past the 5-failure lockout threshold
+    evidence: |-
+      login.spec.ts currently makes 2 wrong-token submissions before a correct-token test resets
+      the counter, well under the 5-failure threshold. No structural guard prevents a future
+      contributor from adding additional wrong-token scenarios that push the counter to 5,
+      causing login.spec.ts's own rejection-message assertions to observe the locked state and
+      fail unexpectedly.
+    severity: low
 ---
 
 <intent-contract>
@@ -88,6 +178,15 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-09-12 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 0
+- defer: 11: (high 0, medium 1, low 10)
+- reject: 4: (high 0, medium 0, low 4)
+- addressed_findings:
+  - none
+
 ## Design Notes
 
 **Two-span display for `login-rejected`:** The pre-existing `login.spec.ts` asserts `toHaveText('token rejected')` on `[data-testid="login-rejected"]`. Playwright's `toHaveText` is an exact-content match; placing the count in a sibling `<span>` (no testid) keeps the inner span's text content as `token rejected` exactly, satisfying the existing test while displaying `token rejected — N attempts left` as one visual line. The outer `<p class="rejected">` propagates the red colour to both inline spans.
@@ -102,3 +201,32 @@ deferred: []
 - `make lint` — expected: zero eslint/tsc errors
 - `make test` — expected: all unit tests pass including new `lockout.test.ts`
 - `make e2e-ui` — expected: `login-lockout.spec.ts` passes; `login.spec.ts` unaffected
+
+## Auto Run Result
+
+Status: done
+
+**Summary:** Added per-IP in-memory login lockout to the web-client. Five wrong tokens within a 15-minute rolling window lock the IP for 15 minutes. The rejection line counts down remaining attempts; the locked state disables the input and submit button.
+
+**Files changed:**
+- `web-client/src/lib/lockout.ts` — NEW; pure in-memory lockout module with injectable clock (`record_failure`, `remaining`, `locked_until`, `clear`)
+- `web-client/tests/unit/lockout.test.ts` — NEW; 6 Vitest unit tests covering all boundary conditions with fake clock injection
+- `web-client/src/actions/login.ts` — added lockout check before token inspection; failure counting; FORBIDDEN on lockout; clear on success
+- `web-client/src/components/Button.astro` — added `disabled?: boolean` prop; disabled button style rule
+- `web-client/src/pages/login.astro` — three-branch rejection display (locked / rejected-with-count / hint); disabled input and button when locked
+- `web-client/tests/e2e/login-lockout.spec.ts` — NEW; 3 serial e2e scenarios covering ACs 1, 2, 4
+- `web-client/playwright.config.ts` — reduced `workers` from 2 to 1; added `projects` block to enforce `login` → `login-lockout` ordering
+
+**Review findings:** 0 intent_gap, 0 bad_spec, 0 patch, 11 defer (1 medium, 10 low), 4 reject. No patches applied.
+
+**Follow-up review recommendation:** false (patched: 0 high, 0 medium, 0 low; score = 0 < 5)
+
+**Verification performed:**
+- `make lint` — 0 errors (eslint, tsc, astro check, prettier, import-linter all clean)
+- `make test` — 6041 backend tests passed, 1339 frontend unit tests passed (108 test files); includes all 6 new `lockout.test.ts` scenarios
+- `pnpm exec playwright test login.spec.ts login-lockout.spec.ts` — 17/17 passed; pre-existing `login.spec.ts` assertions at lines 95 and 116 unaffected
+
+**Residual risks:**
+- In-memory lockout resets on server restart; an attacker who knows restart timing gets a fresh 5-attempt window
+- Multi-instance deployments track counters independently (documented in deferred list)
+- The `'0.0.0.0'` fallback bucket is shared across all clients when `clientAddress` is unavailable (documented in deferred list)
