@@ -27,6 +27,7 @@ import { ageText } from '../lib/board/format';
 import { buildRunTree, findCurrentStep } from '../lib/diagram/tree';
 import { runToken, stateAgeSeconds, type RunDetailOut, type StepRowOut } from '../lib/run/detail';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
+import { startTracking, stopTracking } from '../stores/activity';
 import '../styles/run-detail.css';
 import '../styles/diagram.css';
 
@@ -132,6 +133,12 @@ export default function RunDiagram({ runId }: Props) {
     void fetchBoth();
     return () => stopPolling();
     // fires once on mount; every later fetch is driven by the `$poll` effect below
+  }, [runId]);
+
+  // Activity tracking (8.2, brief CAP-2): count focused seconds while this view is open.
+  useEffect(() => {
+    startTracking(runId);
+    return () => stopTracking();
   }, [runId]);
 
   useEffect(() => {

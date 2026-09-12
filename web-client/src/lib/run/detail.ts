@@ -168,6 +168,17 @@ export function wallClockText(cost: CostOut): string {
   return ageText(cost.wall_clock_seconds);
 }
 
+/** Active Operator time as `hh:mm:ss` (zero-padded). `active_seconds: 0` renders
+ * `00:00:00` — the store never posts 0, so this only appears on Runs with no tracked
+ * activity (8.2). */
+export function activeTimeText(cost: CostOut): string {
+  const total = cost.active_seconds;
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':');
+}
+
 /** The three kinds this epic's signals have any effect for (SPEC Non-goals: "No answer,
  * skip, budget raise, accept, or terminal signals"; `signal_run` accepts and then refuses
  * every other kind with `"{kind} not available yet"`). A control for a kind with no effect

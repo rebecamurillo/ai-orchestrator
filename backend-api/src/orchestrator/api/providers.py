@@ -33,6 +33,7 @@ from typing import Annotated, Any
 
 from fastapi import Query, Request
 
+from orchestrator.application.use_cases.activity import ActivityPorts
 from orchestrator.application.use_cases.create_run import CreateRunPorts, RunReadPorts
 from orchestrator.application.use_cases.harness_readiness import HarnessReadinessPorts
 from orchestrator.application.use_cases.harnesses import HarnessPorts
@@ -341,6 +342,13 @@ def run_files_write_ports(request: Request) -> Iterator[RunFilesWritePorts]:
             clock=SystemClock(),
             uow=uow,
         )
+
+
+def activity_ports(request: Request) -> Iterator[ActivityPorts]:
+    """The ports `GET/POST /runs/{id}/activity` reads and writes through (8.2)."""
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield ActivityPorts(runs=SQLAlchemyRunRepository(uow.session), uow=uow)
 
 
 def run_files_diff_ports(

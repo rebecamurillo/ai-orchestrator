@@ -51,6 +51,7 @@ import { detailRequestPath, runToken, stopKind, type RunDetailOut } from '../lib
 import { signalBody, signalsRequestPath, type SignalIn, type SignalKind } from '../lib/run/signals';
 import { TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
+import { startTracking, stopTracking } from '../stores/activity';
 import '../styles/run-detail.css';
 
 type ProblemDetail = components['schemas']['ProblemDetail'];
@@ -100,6 +101,12 @@ export default function RunDetail({ runId }: Props) {
     void fetchDetail();
     return () => stopPolling();
     // fires once on mount; every later fetch is driven by the `$poll` effect below
+  }, [runId]);
+
+  // Activity tracking (8.2): count focused seconds while the Operator has this view open.
+  useEffect(() => {
+    startTracking(runId);
+    return () => stopTracking();
   }, [runId]);
 
   useEffect(() => {
