@@ -2,7 +2,7 @@
 title: 'Active Operator time'
 type: 'feature'
 created: '2026-09-11'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: '9882dc04aea4ffe78b4d735a0f6dbb24d6d7c9e0'
 review_loop_iteration: 0
 followup_review_recommended: false
