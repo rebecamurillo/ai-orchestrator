@@ -101,6 +101,7 @@ class Run(BaseModel):
     #: Seconds the Operator had this Run open, batched from the activity endpoint.
     active_seconds: int = 0
     last_opened_at: datetime | None = None
+    last_opened_before: datetime | None = None
     created_at: datetime
     started_at: datetime | None = None
     ended_at: datetime | None = None

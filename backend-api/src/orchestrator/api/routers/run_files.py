@@ -43,7 +43,7 @@ from orchestrator.api.schemas.run_files import (
     RunFileEntryOut,
     RunFileIn,
     RunFileOut,
-    RunFilesTreeOut,
+    RunFilesTreeChangedOut,
 )
 from orchestrator.application.use_cases.run_files import (
     RunFilesDiffPorts,
@@ -97,7 +97,7 @@ PUT_REFUSALS = {
 
 @router.get(
     "/runs/{run_id}/files",
-    response_model=RunFileOut | RunFilesTreeOut | RunFileDiffOut,
+    response_model=RunFileOut | RunFilesTreeChangedOut | RunFileDiffOut,
     summary="Read one file inside a Run's own spec folder, list its tree, or diff a hit",
     responses=GET_REFUSALS,
 )
@@ -107,14 +107,15 @@ def get_file(
     diff_ports: DiffPorts,
     path: Annotated[str | None, Query()] = None,
     diff: Annotated[bool, Query()] = False,
-) -> RunFileOut | RunFilesTreeOut | RunFileDiffOut:
-    """`path` omitted (6-3): every entry under the Run's own scope folder, recursively.
+) -> RunFileOut | RunFilesTreeChangedOut | RunFileDiffOut:
+    """`path` omitted (6-3, 8-3): every entry under the Run's own scope folder, recursively,
+    with `changed` marks computed from `run.last_opened_before`.
     `path` with `diff=1` (6-6): that protected path's unified diff, from the parked
     attempt's `start_sha` to the worktree. `path` alone (6-2, unchanged): the file, with a
     single-segment glob resolved here — see the use case's own docstring for each mode's
     refusal order."""
     if path is None:
-        return RunFilesTreeOut.of(list_files_tree(ports, run_id))
+        return RunFilesTreeChangedOut.of(list_files_tree(ports, run_id))
     if diff and diff_ports is not None:
         return RunFileDiffOut.of(diff_run_file(diff_ports, run_id, path))
     return RunFileOut.of(read_run_file(ports, run_id, path))

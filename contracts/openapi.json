@@ -2973,6 +2973,18 @@
             "title": "Inputs",
             "type": "object"
           },
+          "last_opened_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Opened At"
+          },
           "manual_estimate_h": {
             "anyOf": [
               {
@@ -3111,6 +3123,44 @@
         "title": "RunFileDiffOut",
         "type": "object"
       },
+      "RunFileEntryChangedOut": {
+        "description": "`RunFileEntryOut` plus `changed: bool` for the 8-3 changed-marks feature.\n\n`RunFileEntryOut` is not modified (frozen tests assert its exact `model_dump()` shape):\nthe subclass approach keeps the base class untouched, and only the tree branch and\n`RunFilesTreeChangedOut.of()` use this type.",
+        "properties": {
+          "changed": {
+            "default": false,
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "file",
+              "dir"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "mtime": {
+            "title": "Mtime",
+            "type": "number"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "size",
+          "mtime"
+        ],
+        "title": "RunFileEntryChangedOut",
+        "type": "object"
+      },
       "RunFileEntryOut": {
         "description": "One row of a `RunFilesTreeOut`, or the result of a `PUT` (6-3) \u2014 the same shape\neither way: `path`, `kind` (`\"file\"`/`\"dir\"`, from `TreeEntry.is_dir`), `size`, `mtime`.",
         "properties": {
@@ -3192,12 +3242,12 @@
         "title": "RunFileOut",
         "type": "object"
       },
-      "RunFilesTreeOut": {
-        "description": "`GET /runs/{id}/files` with no `path` (6-3): `{root, entries[]}` over the Run's own\nscope folder.",
+      "RunFilesTreeChangedOut": {
+        "description": "`GET /runs/{id}/files` with no `path` (8-3): `{root, entries[]}` with `changed` marks.\n\nThe tree branch of `GET /runs/{run_id}/files` returns this type instead of\n`RunFilesTreeOut`; all other branches are unchanged.",
         "properties": {
           "entries": {
             "items": {
-              "$ref": "#/components/schemas/RunFileEntryOut"
+              "$ref": "#/components/schemas/RunFileEntryChangedOut"
             },
             "title": "Entries",
             "type": "array"
@@ -3211,7 +3261,7 @@
           "root",
           "entries"
         ],
-        "title": "RunFilesTreeOut",
+        "title": "RunFilesTreeChangedOut",
         "type": "object"
       },
       "RunGraphOut": {
@@ -5934,7 +5984,7 @@
     },
     "/api/v1/runs/{run_id}/detail": {
       "get": {
-        "description": "Everything the Run detail screen shows, from one read (SPEC CAP-12 \"one per screen\").",
+        "description": "Everything the Run detail screen shows, from one read (SPEC CAP-12 \"one per screen\").\n\nWhen `?opened=1`, records the visit via `open_run` before building the detail so the\nresponse's `run.last_opened_at` reflects the just-updated timestamp (8-3).",
         "operationId": "detail_api_v1_runs__run_id__detail_get",
         "parameters": [
           {
@@ -5945,6 +5995,16 @@
               "format": "uuid",
               "title": "Run Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "opened",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Opened",
+              "type": "boolean"
             }
           }
         ],
@@ -6018,7 +6078,7 @@
     },
     "/api/v1/runs/{run_id}/files": {
       "get": {
-        "description": "`path` omitted (6-3): every entry under the Run's own scope folder, recursively.\n`path` with `diff=1` (6-6): that protected path's unified diff, from the parked\nattempt's `start_sha` to the worktree. `path` alone (6-2, unchanged): the file, with a\nsingle-segment glob resolved here \u2014 see the use case's own docstring for each mode's\nrefusal order.",
+        "description": "`path` omitted (6-3, 8-3): every entry under the Run's own scope folder, recursively,\nwith `changed` marks computed from `run.last_opened_before`.\n`path` with `diff=1` (6-6): that protected path's unified diff, from the parked\nattempt's `start_sha` to the worktree. `path` alone (6-2, unchanged): the file, with a\nsingle-segment glob resolved here \u2014 see the use case's own docstring for each mode's\nrefusal order.",
         "operationId": "get_file_api_v1_runs__run_id__files_get",
         "parameters": [
           {
@@ -6068,7 +6128,7 @@
                       "$ref": "#/components/schemas/RunFileOut"
                     },
                     {
-                      "$ref": "#/components/schemas/RunFilesTreeOut"
+                      "$ref": "#/components/schemas/RunFilesTreeChangedOut"
                     },
                     {
                       "$ref": "#/components/schemas/RunFileDiffOut"

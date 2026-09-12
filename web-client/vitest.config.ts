@@ -24,7 +24,7 @@ export default getViteConfig({
   },
   test: {
     environment: 'node',
-    include: ['tests/unit/**/*.test.ts'],
+    include: ['tests/unit/**/*.test.{ts,tsx}'],
     // Playwright specs are the `e2e-ui` gate and are driven by `pnpm e2e`, never by Vitest
     exclude: ['node_modules/**', 'dist/**', 'tests/e2e/**'],
     // `lint.test.ts` runs eslint over every real source in-process, so its cost grows with the

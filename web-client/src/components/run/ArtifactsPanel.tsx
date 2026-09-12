@@ -22,7 +22,7 @@ import {
   readOnlyLine as readOnlyLineText,
   treeRequestPath,
   type RunFileOut,
-  type RunFilesTreeOut,
+  type RunFilesTreeChangedOut,
 } from '../../lib/run/artifacts';
 import ArtifactsTree from './ArtifactsTree';
 import FileEditor from './FileEditor';
@@ -38,7 +38,7 @@ interface Props {
 }
 
 export default function ArtifactsPanel({ runId, run, folder }: Props) {
-  const [tree, setTree] = useState<RunFilesTreeOut | null>(null);
+  const [tree, setTree] = useState<RunFilesTreeChangedOut | null>(null);
   const [treeError, setTreeError] = useState(false);
   const [selected, setSelected] = useState<RunFileOut | null>(null);
   const [editing, setEditing] = useState(false);

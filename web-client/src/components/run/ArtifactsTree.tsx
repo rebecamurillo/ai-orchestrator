@@ -11,8 +11,12 @@
  */
 import { fileName, mtimeText, treeDepth, type RunFileEntryOut } from '../../lib/run/artifacts';
 
+//: `changed` is optional so pre-8-3 callers (and the frozen unit test) that pass plain
+//: `RunFileEntryOut[]` without the field still type-check; `=== true` guards the template.
+type TreeEntry = RunFileEntryOut & { changed?: boolean };
+
 interface Props {
-  entries: RunFileEntryOut[];
+  entries: TreeEntry[];
   root: string;
   selectedPath: string | null;
   onSelect: (path: string) => void;
@@ -38,9 +42,11 @@ export default function ArtifactsTree({ entries, root, selectedPath, onSelect }:
                 type="button"
                 className="wf-artifacts-file"
                 data-testid={`artifacts-file-${entry.path}`}
+                data-changed={entry.changed ? 'true' : undefined}
                 aria-current={selectedPath === entry.path}
                 onClick={() => onSelect(entry.path)}
               >
+                {entry.changed ? <span className="wf-artifacts-chip" aria-hidden="true" /> : null}
                 <span className="wf-artifacts-name">{fileName(entry.path)}</span>
                 <span className="wf-artifacts-mtime">{mtimeText(entry)}</span>
               </button>

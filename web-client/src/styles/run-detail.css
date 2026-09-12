@@ -563,10 +563,23 @@ table.wf-steps tr[data-anchored='true'] td {
   color: var(--color-accent);
 }
 
+.wf-artifacts-chip {
+  width: 7px;
+  height: 7px;
+  clip-path: circle(50%);
+  background: var(--color-accent);
+  flex-shrink: 0;
+}
+
 .wf-artifacts-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Text promotion for changed files (8-3): changed filename renders at full text weight. */
+.wf-artifacts-file[data-changed='true'] .wf-artifacts-name {
+  color: var(--color-text);
 }
 
 .wf-artifacts-mtime {

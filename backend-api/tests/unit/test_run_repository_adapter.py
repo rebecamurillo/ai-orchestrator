@@ -333,6 +333,7 @@ NULLABLE = {
         "worktree_path",
         "trace_id",
         "last_opened_at",
+        "last_opened_before",
         "started_at",
         "ended_at",
     },

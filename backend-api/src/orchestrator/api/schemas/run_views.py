@@ -16,6 +16,7 @@ on line count alone (5.10) — imported back below so every existing import of `
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -125,6 +126,10 @@ class RunDetailSummaryOut(RunSummaryOut):
     #: escape hatch does not apply to; `_drop_default`-guarded like `skipped_epics`, so the
     #: web-client fixtures that predate it keep compiling without it (AD-3).
     terminal: TerminalOut | None = Field(default=None, json_schema_extra=_drop_default)
+    #: When the detail was last opened via `?opened=1` (8-3). `null` on first ever open or
+    #: when the Run was never fetched with `?opened=1`. `_drop_default`-guarded so every
+    #: existing web-client fixture that predates this field keeps compiling without it.
+    last_opened_at: datetime | None = Field(default=None, json_schema_extra=_drop_default)
 
     @classmethod
     def of_run(
@@ -152,6 +157,7 @@ class RunDetailSummaryOut(RunSummaryOut):
             terminal_session=run.terminal_session,
             accepted_paths=list(run.accepted_paths),
             terminal=None if terminal is None else TerminalOut.of(terminal),
+            last_opened_at=run.last_opened_at,
         )
 
 

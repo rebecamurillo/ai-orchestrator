@@ -372,6 +372,9 @@ export interface paths {
         /**
          * Read one Run's full detail
          * @description Everything the Run detail screen shows, from one read (SPEC CAP-12 "one per screen").
+         *
+         *     When `?opened=1`, records the visit via `open_run` before building the detail so the
+         *     response's `run.last_opened_at` reflects the just-updated timestamp (8-3).
          */
         get: operations["detail_api_v1_runs__run_id__detail_get"];
         put?: never;
@@ -391,7 +394,8 @@ export interface paths {
         };
         /**
          * Read one file inside a Run's own spec folder, list its tree, or diff a hit
-         * @description `path` omitted (6-3): every entry under the Run's own scope folder, recursively.
+         * @description `path` omitted (6-3, 8-3): every entry under the Run's own scope folder, recursively,
+         *     with `changed` marks computed from `run.last_opened_before`.
          *     `path` with `diff=1` (6-6): that protected path's unified diff, from the parked
          *     attempt's `start_sha` to the worktree. `path` alone (6-2, unchanged): the file, with a
          *     single-segment glob resolved here — see the use case's own docstring for each mode's
@@ -1677,6 +1681,8 @@ export interface components {
             inputs: {
                 [key: string]: unknown;
             };
+            /** Last Opened At */
+            last_opened_at?: string | null;
             /** Manual Estimate H */
             manual_estimate_h: string | null;
             /** Plan Ref */
@@ -1724,6 +1730,32 @@ export interface components {
             path: string;
         };
         /**
+         * RunFileEntryChangedOut
+         * @description `RunFileEntryOut` plus `changed: bool` for the 8-3 changed-marks feature.
+         *
+         *     `RunFileEntryOut` is not modified (frozen tests assert its exact `model_dump()` shape):
+         *     the subclass approach keeps the base class untouched, and only the tree branch and
+         *     `RunFilesTreeChangedOut.of()` use this type.
+         */
+        RunFileEntryChangedOut: {
+            /**
+             * Changed
+             * @default false
+             */
+            changed: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "file" | "dir";
+            /** Mtime */
+            mtime: number;
+            /** Path */
+            path: string;
+            /** Size */
+            size: number;
+        };
+        /**
          * RunFileEntryOut
          * @description One row of a `RunFilesTreeOut`, or the result of a `PUT` (6-3) — the same shape
          *     either way: `path`, `kind` (`"file"`/`"dir"`, from `TreeEntry.is_dir`), `size`, `mtime`.
@@ -1768,13 +1800,15 @@ export interface components {
             size: number;
         };
         /**
-         * RunFilesTreeOut
-         * @description `GET /runs/{id}/files` with no `path` (6-3): `{root, entries[]}` over the Run's own
-         *     scope folder.
+         * RunFilesTreeChangedOut
+         * @description `GET /runs/{id}/files` with no `path` (8-3): `{root, entries[]}` with `changed` marks.
+         *
+         *     The tree branch of `GET /runs/{run_id}/files` returns this type instead of
+         *     `RunFilesTreeOut`; all other branches are unchanged.
          */
-        RunFilesTreeOut: {
+        RunFilesTreeChangedOut: {
             /** Entries */
-            entries: components["schemas"]["RunFileEntryOut"][];
+            entries: components["schemas"]["RunFileEntryChangedOut"][];
             /** Root */
             root: string;
         };
@@ -3298,7 +3332,9 @@ export interface operations {
     };
     detail_api_v1_runs__run_id__detail_get: {
         parameters: {
-            query?: never;
+            query?: {
+                opened?: boolean;
+            };
             header?: never;
             path: {
                 run_id: string;
@@ -3368,7 +3404,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunFileOut"] | components["schemas"]["RunFilesTreeOut"] | components["schemas"]["RunFileDiffOut"];
+                    "application/json": components["schemas"]["RunFileOut"] | components["schemas"]["RunFilesTreeChangedOut"] | components["schemas"]["RunFileDiffOut"];
                 };
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
