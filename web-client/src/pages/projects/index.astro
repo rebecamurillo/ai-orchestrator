@@ -129,9 +129,16 @@ function runRow(run: components['schemas']['ProjectRunOut']) {
 }
 const runRows = runs.map(runRow);
 
-function failedCount(entry: ProjectListItem): number {
-  return entry.repositories.filter((repository) => repository.clone_check.status === 'failed')
-    .length;
+function runFailedCount(entry: ProjectListItem): number {
+  //: Story 8-6 drives this from `failed_recent_count` once the API sets it. Fixtures
+  //: predating this field have it `null`, so fall back to the repository clone-check count
+  //: — the same source the frozen `projects-page.test.ts` still exercises.
+  if (entry.failed_recent_count != null) return entry.failed_recent_count;
+  return entry.repositories.filter((r) => r.clone_check.status === 'failed').length;
+}
+
+function runNeedsYouCount(entry: ProjectListItem): number {
+  return entry.needs_you_count ?? 0;
 }
 
 function pluralize(count: number, noun: string): string {
@@ -188,7 +195,8 @@ function pluralize(count: number, noun: string): string {
             slug={entry.slug}
             name={entry.name}
             repositoryCount={entry.repositories.length}
-            failedCount={failedCount(entry)}
+            failedCount={runFailedCount(entry)}
+            needsYouCount={runNeedsYouCount(entry)}
             selected={entry.id === selectedId}
             href={`/projects/${entry.id}/edit`}
           />
@@ -204,6 +212,8 @@ function pluralize(count: number, noun: string): string {
         <p class="meta">
           {project.slug} · created {project.created_at.slice(0, 10)} · log_prompt_content{' '}
           {project.log_prompt_content ? 'on' : 'off'}
+          {project.monthly_spend_usd != null &&
+            ` · this month $${project.monthly_spend_usd}${project.monthly_spend_provisional ? ' provisional' : ''}`}
         </p>
         <p class="hint" data-testid="projects-export-hint">
           one line per done story · newest first · JSON lines ·{' '}

@@ -2370,6 +2370,17 @@
             "title": "Env Vars",
             "type": "array"
           },
+          "failed_recent_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed Recent Count"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -2379,9 +2390,42 @@
             "title": "Log Prompt Content",
             "type": "boolean"
           },
+          "monthly_spend_provisional": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Spend Provisional"
+          },
+          "monthly_spend_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Spend Usd"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "needs_you_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needs You Count"
           },
           "repositories": {
             "items": {

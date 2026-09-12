@@ -261,23 +261,33 @@ class ProjectRead(BaseModel):
     #: `ProjectRead` object literals that predate this field. `.of()` always resolves a real
     #: `int`; nothing this API serves is ever actually `null` here.
     trajectory_count: int | None = None
+    #: This month's total run cost in USD, 2 d.p. (e.g. `"12.30"`).
+    #: Nullable — same pattern as `trajectory_count`.
+    monthly_spend_usd: str | None = None
+    monthly_spend_provisional: bool | None = None
+    #: Count of all Runs for this Project currently in `needs_you` status (no time window).
+    needs_you_count: int | None = None
+    #: Count of Runs in `failed` status whose reference timestamp is within the last 7 days.
+    failed_recent_count: int | None = None
     created_at: UtcTimestamp
     updated_at: UtcTimestamp
 
     @classmethod
-    def of(
+    def of(  # noqa: PLR0913, PLR0917
         cls,
         view: ProjectView,
         repositories: list[Repository] | None = None,
         runs: list[ProjectRunSummary] | None = None,
         trajectory_count: int = 0,
+        monthly_spend_usd: str = "0.00",
+        monthly_spend_provisional: bool = False,
+        needs_you_count: int = 0,
+        failed_recent_count: int = 0,
     ) -> ProjectRead:
-        """Render the use case's masked read model plus its Repositories, Runs and
-        trajectory count, freshly queried.
+        """Render the use case's masked read model plus its Repositories, Runs and metrics.
 
-        `repositories` and `runs` default to none stored: the frozen `test_project_schemas.py`
-        calls this with only a view, from before a Project could have either. `trajectory_count`
-        defaults to `0` the same way, for a Project 7.6 predates or one that has none yet.
+        All list/count/spend parameters default to zero-valued for frozen fixture compatibility
+        (see `trajectory_count` field docstring for the pattern).
         """
         return cls.model_validate(
             {
@@ -285,6 +295,10 @@ class ProjectRead(BaseModel):
                 "repositories": [RepositoryOut.of(r) for r in repositories or []],
                 "runs": [ProjectRunOut.of(r) for r in runs or []],
                 "trajectory_count": trajectory_count,
+                "monthly_spend_usd": monthly_spend_usd,
+                "monthly_spend_provisional": monthly_spend_provisional,
+                "needs_you_count": needs_you_count,
+                "failed_recent_count": failed_recent_count,
             }
         )
 

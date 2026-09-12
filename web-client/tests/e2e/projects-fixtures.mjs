@@ -271,11 +271,51 @@ export const EXPORT = project({
   trajectory_count: EXPORT_TRAJECTORY_COUNT,
 });
 
+// 8-6: Spend fixtures — each is a dedicated project for one spend scenario; none of them
+// appears in `GET /api/v1/projects` (still unconditionally empty); they are served only by
+// `GET /api/v1/projects/{id}` when the spec navigates to `?id=<SPEND_ID>`.
+export const SPEND_ID = '00000000-0000-4000-8000-0000000000e1';
+export const SPEND_PROVISIONAL_ID = '00000000-0000-4000-8000-0000000000e2';
+export const SPEND_FAILED_ID = '00000000-0000-4000-8000-0000000000e3';
+
+export const SPEND = project({
+  id: SPEND_ID,
+  slug: 'spend-settled',
+  name: 'Spend Settled',
+  monthly_spend_usd: '3.50',
+  monthly_spend_provisional: false,
+  needs_you_count: 1,
+  failed_recent_count: 0,
+});
+
+export const SPEND_PROVISIONAL = project({
+  id: SPEND_PROVISIONAL_ID,
+  slug: 'spend-provisional',
+  name: 'Spend Provisional',
+  monthly_spend_usd: '5.40',
+  monthly_spend_provisional: true,
+  needs_you_count: 0,
+  failed_recent_count: 0,
+});
+
+export const SPEND_FAILED = project({
+  id: SPEND_FAILED_ID,
+  slug: 'spend-failed',
+  name: 'Spend Failed',
+  monthly_spend_usd: '0.00',
+  monthly_spend_provisional: false,
+  needs_you_count: 0,
+  failed_recent_count: 2,
+});
+
 export const PROJECTS_BY_ID = {
   [MIXED_ID]: MIXED,
   [CLEAN_ID]: CLEAN,
   [NO_REPOS_ID]: NO_REPOS,
   [EXPORT_ID]: EXPORT,
+  [SPEND_ID]: SPEND,
+  [SPEND_PROVISIONAL_ID]: SPEND_PROVISIONAL,
+  [SPEND_FAILED_ID]: SPEND_FAILED,
 };
 
 /**

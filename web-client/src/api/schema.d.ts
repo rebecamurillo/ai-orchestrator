@@ -1427,6 +1427,8 @@ export interface components {
             created_at: string;
             /** Env Vars */
             env_vars: components["schemas"]["MaskedEnvVarOut"][];
+            /** Failed Recent Count */
+            failed_recent_count?: number | null;
             /**
              * Id
              * Format: uuid
@@ -1434,8 +1436,14 @@ export interface components {
             id: string;
             /** Log Prompt Content */
             log_prompt_content: boolean;
+            /** Monthly Spend Provisional */
+            monthly_spend_provisional?: boolean | null;
+            /** Monthly Spend Usd */
+            monthly_spend_usd?: string | null;
             /** Name */
             name: string;
+            /** Needs You Count */
+            needs_you_count?: number | null;
             /** Repositories */
             repositories: components["schemas"]["RepositoryOut"][];
             /** Runs */

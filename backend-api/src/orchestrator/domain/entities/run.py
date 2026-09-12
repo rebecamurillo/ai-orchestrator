@@ -64,6 +64,7 @@ class Run(BaseModel):
     engine_ref: dict[str, Any] = Field(default_factory=dict)
     budget_usd: Decimal
     spend_usd: Decimal = Decimal("0")
+    spend_provisional: bool = False
     #: Hours the Operator estimated the same work would take by hand. Immutable after start.
     manual_estimate_h: Decimal | None = None
     re_review_done: bool = False
