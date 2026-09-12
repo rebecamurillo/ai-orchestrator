@@ -11,8 +11,8 @@
  */
 import { fileName, mtimeText, treeDepth, type RunFileEntryOut } from '../../lib/run/artifacts';
 
-//: `changed` is optional so pre-8-3 callers (and the frozen unit test) that pass plain
-//: `RunFileEntryOut[]` without the field still type-check; `=== true` guards the template.
+// `changed` is optional so pre-8-3 callers (and the frozen unit test) that pass plain
+// `RunFileEntryOut[]` without the field still type-check; `=== true` guards the template.
 type TreeEntry = RunFileEntryOut & { changed?: boolean };
 
 interface Props {

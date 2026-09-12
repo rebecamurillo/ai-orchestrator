@@ -373,7 +373,7 @@ export interface paths {
          * Read one Run's full detail
          * @description Everything the Run detail screen shows, from one read (SPEC CAP-12 "one per screen").
          *
-         *     When `?opened=1`, records the visit via `open_run` before building the detail so the
+         *     When `?opened=true`, records the visit via `open_run` before building the detail so the
          *     response's `run.last_opened_at` reflects the just-updated timestamp (8-3).
          */
         get: operations["detail_api_v1_runs__run_id__detail_get"];

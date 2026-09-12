@@ -77,13 +77,18 @@ def _view_ports(runs: FakeRunRepository) -> RunViewPorts:
 
 
 class ApiWithOpen:
-    """`open_run_ports` wired: simulates `?opened=1` (provider yields the ports)."""
+    """`open_run_ports` wired: simulates `?opened=true` (provider yields the ports).
+
+    `open_uow` is entered on construction to mirror what the real provider does before
+    yielding — `open_run` now calls `commit()` directly without re-entering the UoW.
+    """
 
     def __init__(self, env: dict[str, str]) -> None:
         self.settings = Settings(**{key.lower(): value for key, value in env.items()})
         self.runs = FakeRunRepository()
         self.clock = FakeClock(NOW)
         self.open_uow = FakeUnitOfWork()
+        self.open_uow.__enter__()  # mirrors what the real open_run_ports provider does
         self.open_ports = OpenRunPorts(runs=self.runs, uow=self.open_uow, clock=self.clock)
         self.app: FastAPI = create_app(self.settings)
         self.app.dependency_overrides[run_view_ports] = lambda: _view_ports(self.runs)
@@ -128,7 +133,7 @@ def api_no_open(env: dict[str, str]) -> ApiWithoutOpen:
 
 
 async def test_opened_true_updates_last_opened_at(api_open: ApiWithOpen) -> None:
-    """When `open_ports` is provided (simulating `?opened=1`), `open_run` runs and
+    """When `open_ports` is provided (simulating `?opened=true`), `open_run` runs and
     `run.last_opened_at` advances to `NOW`."""
     run = a_run(last_opened_at=PRIOR)
     api_open.runs.add(run)

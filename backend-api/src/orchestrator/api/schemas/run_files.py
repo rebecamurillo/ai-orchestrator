@@ -1,9 +1,10 @@
 """`RunFileOut`/`RunFileEntryOut`/`RunFilesTreeOut`/`RunFileIn` (story 6-2 read, story 6-3
 tree + write) — the wire projections of `run_files.py`'s own use-case types.
 
-`RunFileEntryChangedOut` and `RunFilesTreeChangedOut` (story 8-3) are subclasses of the
-frozen schema types: `RunFileEntryOut` is not modified (frozen tests assert its exact
-`model_dump()` shape); the changed flag lives only on the new subclass."""
+`RunFileEntryChangedOut` (story 8-3) is a subclass of `RunFileEntryOut`; `RunFileEntryOut`
+is not modified (frozen tests assert its exact `model_dump()` shape); the `changed` flag
+lives only on the subclass. `RunFilesTreeChangedOut` is a new `BaseModel` (not a subclass
+of `RunFilesTreeOut`) and is the type the tree branch of `GET /files` now returns."""
 
 from __future__ import annotations
 

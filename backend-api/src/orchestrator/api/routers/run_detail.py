@@ -33,7 +33,7 @@ from orchestrator.application.use_cases.run_views import run_detail as build_det
 router = APIRouter(tags=["runs"])
 
 Ports = Annotated[RunViewPorts, Depends(run_view_ports)]
-#: `None` unless `?opened=1` was asked for — the provider reads the mode itself so an
+#: `None` unless `?opened=true` was asked for — the provider reads the mode itself so an
 #: ordinary detail fetch never opens the UoW a visit recording would need (same as
 #: `run_files.py`'s `DiffPorts`).
 OpenPorts = Annotated[OpenRunPorts | None, Depends(open_run_ports)]
@@ -62,7 +62,7 @@ REFUSALS = {
 def detail(run_id: UUID, ports: Ports, open_ports: OpenPorts) -> RunDetailOut:
     """Everything the Run detail screen shows, from one read (SPEC CAP-12 "one per screen").
 
-    When `?opened=1`, records the visit via `open_run` before building the detail so the
+    When `?opened=true`, records the visit via `open_run` before building the detail so the
     response's `run.last_opened_at` reflects the just-updated timestamp (8-3).
     """
     if open_ports is not None:

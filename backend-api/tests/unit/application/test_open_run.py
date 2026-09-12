@@ -46,6 +46,7 @@ def a_run(**overrides: object) -> Run:
 def ports_with(run: Run, now: datetime) -> tuple[OpenRunPorts, FakeRunRepository]:
     runs = FakeRunRepository([run])
     uow = FakeUnitOfWork()
+    uow.__enter__()  # mirrors what the real open_run_ports provider does before yielding
     clock = FakeClock(now)
     return OpenRunPorts(runs=runs, uow=uow, clock=clock), runs
 
@@ -89,6 +90,7 @@ def test_third_open_advances_both_fields() -> None:
 def test_open_run_commits_the_unit_of_work() -> None:
     run = a_run()
     uow = FakeUnitOfWork()
+    uow.__enter__()  # mirrors provider entering before yielding
     runs = FakeRunRepository([run])
     clock = FakeClock(T2)
     ports = OpenRunPorts(runs=runs, uow=uow, clock=clock)

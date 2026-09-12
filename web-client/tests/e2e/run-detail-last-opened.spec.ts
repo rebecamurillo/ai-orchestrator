@@ -19,7 +19,7 @@ const SPEC_FILE = `${SPEC_FOLDER}/SPEC.md`;
 const OLD_FILE = `${SPEC_FOLDER}/old.md`;
 
 const LAST_OPENED_AT = '2026-09-11T10:00:00Z';
-const MTIME_AFTER = 1_757_592_001; // 1 second after 2026-09-11T10:00:01Z (> cutoff)
+const MTIME_AFTER = 1_757_592_001; // 1 second after the cutoff (2026-09-11T10:00:00Z)
 const MTIME_BEFORE = 1_757_588_399; // before LAST_OPENED_AT
 
 function run(overrides: Record<string, unknown> = {}): Record<string, unknown> {

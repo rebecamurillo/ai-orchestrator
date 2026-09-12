@@ -74,17 +74,19 @@ export default function RunDetail({ runId }: Props) {
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
-  // 8-3: fire `?opened=true` once per navigation (on mount) as a parallel side-effect so
-  // `last_opened_before` rotates server-side without the main data fetch carrying the param.
-  // Keeping it separate means existing `page.route('**/detail')` mocks in e2e tests still
-  // intercept the data fetch; the side-effect call's response is intentionally discarded.
+  // 8-3: on the first navigation fetch, append `?opened=true` so `open_run` records the
+  // visit server-side before `build_detail` runs — the response's `last_opened_at` then
+  // reflects the just-updated timestamp, and the files fetch sees the freshly committed
+  // `last_opened_before` for changed-marks computation.
   const openedRef = useRef(false);
 
   async function fetchDetail(): Promise<void> {
     const seq = ++requestSeqRef.current;
+    const opened = !openedRef.current;
+    if (opened) openedRef.current = true;
     try {
       const { data, error, response } = await api.GET('/runs/{run_id}/detail', {
-        params: { path: { run_id: runId } },
+        params: { path: { run_id: runId }, query: opened ? { opened: true } : undefined },
       });
       if (seq !== requestSeqRef.current) return;
       if (error || !data) {
@@ -103,13 +105,8 @@ export default function RunDetail({ runId }: Props) {
   }
 
   useEffect(() => {
+    openedRef.current = false; // reset so ?opened=true fires again on navigation to a new Run
     void fetchDetail();
-    if (!openedRef.current) {
-      openedRef.current = true;
-      void api.GET('/runs/{run_id}/detail', {
-        params: { path: { run_id: runId }, query: { opened: true } },
-      });
-    }
     return () => stopPolling();
     // fires once on mount; every later fetch is driven by the `$poll` effect below
   }, [runId]);

@@ -5984,7 +5984,7 @@
     },
     "/api/v1/runs/{run_id}/detail": {
       "get": {
-        "description": "Everything the Run detail screen shows, from one read (SPEC CAP-12 \"one per screen\").\n\nWhen `?opened=1`, records the visit via `open_run` before building the detail so the\nresponse's `run.last_opened_at` reflects the just-updated timestamp (8-3).",
+        "description": "Everything the Run detail screen shows, from one read (SPEC CAP-12 \"one per screen\").\n\nWhen `?opened=true`, records the visit via `open_run` before building the detail so the\nresponse's `run.last_opened_at` reflects the just-updated timestamp (8-3).",
         "operationId": "detail_api_v1_runs__run_id__detail_get",
         "parameters": [
           {

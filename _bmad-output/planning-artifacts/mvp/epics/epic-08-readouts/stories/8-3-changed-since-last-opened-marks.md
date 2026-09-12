@@ -2,13 +2,34 @@
 title: 'Changed-since-last-opened marks'
 type: 'feature'
 created: '2026-09-11'
-status: 'in-review'
+status: 'done'
 baseline_revision: '5aa4e769cd28f5304b422954c7fd7d768ae5741d'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: []
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      Missing use-case-level test for `list_files_tree` propagating
+      `last_opened_before` to `RunFilesTree`, including the empty-scope-folder branch.
+    evidence: |-
+      The field is set in two branches of `list_files_tree` but only exercised indirectly
+      via `RunFilesTreeChangedOut.of()` schema tests. A direct unit test calling
+      `list_files_tree` with a non-None `last_opened_before` does not exist.
+    location: >-
+      backend-api/src/orchestrator/application/use_cases/run_files.py:184
+    severity: low
+  - summary: >-
+      No e2e-api httpx scenario exercises `GET /runs/{id}/detail?opened=true` against the
+      real stack — the double-enter bug would have been caught by such a test.
+    evidence: |-
+      All tests that exercise `open_run` use `FakeUnitOfWork` injected by dependency
+      override, never the real `open_run_ports` provider with its `SQLAlchemyUnitOfWork`.
+      A scenario asserting HTTP 200 and non-null `last_opened_at` from the real stack
+      would close this gap.
+    location: >-
+      backend-api/tests/
+    severity: medium
 ---
 
 <intent-contract>
@@ -116,6 +137,17 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-09-11 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 7: (high 1, medium 1, low 5)
+- defer: 2: (medium 1, low 1)
+- reject: 6
+- addressed_findings:
+  - `[high]` `[patch]` `open_run.py:49`: `with ports.uow:` double-enters an already-open `SQLAlchemyUnitOfWork` (provider enters it before yielding → `RuntimeError` → HTTP 500 on every `?opened=true`). Removed `with ports.uow:` context manager from `open_run`; call `ports.uow.commit()` directly (same as every other use case). Updated `test_open_run.py` helpers and `ApiWithOpen` in router test to enter the `FakeUnitOfWork` before passing it, matching real provider behaviour.
+  - `[medium]` `[patch]` `RunDetail.tsx:104-119`: `?opened=true` was firing as a separate concurrent discarded request instead of on the main `fetchDetail()` call (spec Code Map says "on first mount call, append"). Race condition with files fetch; main response didn't reflect updated `last_opened_at`. Moved `opened` flag into `fetchDetail()` as a conditional param on first call; reset `openedRef.current = false` at start of `[runId]` effect to handle navigation to different Run.
+  - `[low]` `[patch]` Comment/docstring inaccuracies: `?opened=1` → `?opened=true` in `run_detail.py`, `test_run_detail_opened_router.py`, `open_run.py` docstring, and generated `openapi.json`/`schema.d.ts`; "own endpoint side-effect" → "side-effect of the existing detail endpoint" in `open_run.py`; `run_files.py` module docstring corrected (singular subclass, `RunFilesTreeChangedOut` described as new `BaseModel`); `//: ` comment prefix in `ArtifactsTree.tsx` → `//`; `MTIME_AFTER` constant comment in e2e spec corrected.
+
 ## Design Notes
 
 **Why `RunFileEntryChangedOut` (not modifying `RunFileEntryOut`):** `test_run_files_tree_schema.py` asserts the exact `model_dump()` dict of `RunFileEntryOut.of()` and `RunFilesTreeOut.of()` entries. Adding `changed` to `RunFileEntryOut` would include `"changed": false` in that dict, breaking the frozen test. The subclass approach keeps `RunFileEntryOut` and `RunFilesTreeOut` untouched; only the router branch and `RunFilesTreeChangedOut.of()` use the new type. The OpenAPI schema gains `RunFileEntryChangedOut` as a distinct type; `pnpm gen:api` exposes it; `artifacts.ts` re-exports it.
@@ -131,3 +163,50 @@ deferred: []
 - `make test` — expected: all unit tests pass including new `test_open_run.py`, `test_run_detail_opened_router.py`, `test_run_files_tree_changed_schema.py`, `artifacts-tree-changed.test.tsx`
 - `make openapi` — expected: `contracts/openapi.json` updated with `RunFileEntryChangedOut` and `RunFilesTreeChangedOut`; no drift after `pnpm gen:api`
 - `make e2e-ui` — expected: `run-detail-last-opened.spec.ts` passes; existing `run-detail-artifacts.spec.ts` unaffected
+
+## Auto Run Result
+
+**Status:** done
+
+**Summary:** Implemented changed-since-last-opened marks: `last_opened_before` added to `Run` entity, `RunRow`, and migration `0011`; `open_run` use case swaps the field on `GET /runs/{id}/detail?opened=true`; `RunFilesTreeChangedOut` computes `changed` per file entry from `mtime > last_opened_before`; `ArtifactsTree` renders a 7 px accent chip and promotes text for changed files.
+
+**Files changed:**
+- `backend-api/alembic/versions/0011_last_opened_before.py` — migration adding `last_opened_before` nullable TIMESTAMPTZ to `run` table
+- `backend-api/src/orchestrator/domain/entities/run.py` — added `last_opened_before` field
+- `backend-api/src/orchestrator/infrastructure/db/models/run.py` — added `last_opened_before` column, `to_entity`, `row_values`
+- `backend-api/src/orchestrator/infrastructure/db/repositories/runs.py` — mapped new field
+- `backend-api/src/orchestrator/application/use_cases/open_run.py` — NEW use case; patch: removed double-enter UoW, fixed docstring
+- `backend-api/src/orchestrator/application/use_cases/run_files.py` — added `last_opened_before` to `RunFilesTree`
+- `backend-api/src/orchestrator/api/schemas/run_files.py` — added `RunFileEntryChangedOut` and `RunFilesTreeChangedOut`; patch: fixed module docstring
+- `backend-api/src/orchestrator/api/schemas/run_views.py` — added `last_opened_at` to `RunDetailSummaryOut`
+- `backend-api/src/orchestrator/api/providers.py` — added `open_run_ports` provider
+- `backend-api/src/orchestrator/api/routers/run_detail.py` — wired `?opened` param and `open_run` call; patch: fixed `?opened=1` → `?opened=true` in comments
+- `backend-api/src/orchestrator/api/routers/run_files.py` — tree branch now returns `RunFilesTreeChangedOut`
+- `backend-api/tests/unit/application/test_open_run.py` — NEW; patch: UoW entered in helpers
+- `backend-api/tests/unit/test_run_detail_opened_router.py` — NEW; patch: UoW entered in `ApiWithOpen`, `?opened=1` → `?opened=true` in comments
+- `backend-api/tests/unit/test_run_files_tree_changed_schema.py` — NEW schema unit tests
+- `backend-api/tests/unit/test_run_repository_adapter.py` — added `last_opened_before` to NULLABLE set
+- `contracts/openapi.json` — regenerated with new schemas and `?opened` param
+- `web-client/src/api/schema.d.ts` — regenerated
+- `web-client/src/lib/run/artifacts.ts` — added `RunFileEntryChangedOut`, `RunFilesTreeChangedOut` exports
+- `web-client/src/components/run/ArtifactsPanel.tsx` — type updated to `RunFilesTreeChangedOut`
+- `web-client/src/components/run/ArtifactsTree.tsx` — chip and `data-changed` added; patch: fixed `//: ` comment prefix
+- `web-client/src/styles/run-detail.css` — `.wf-artifacts-chip` and text-promotion rule added
+- `web-client/src/islands/RunDetail.tsx` — patch: moved `?opened=true` to main `fetchDetail()` call; reset `openedRef` on `runId` change
+- `web-client/tests/unit/artifacts-tree-changed.test.tsx` — NEW unit tests
+- `web-client/tests/e2e/run-detail-last-opened.spec.ts` — NEW e2e; patch: fixed `MTIME_AFTER` comment
+
+**Review findings:**
+- Patches applied: 1 high, 1 medium, 5 low
+- Items deferred: 2 (missing list_files_tree use-case test; missing e2e-api scenario for real stack)
+- Items rejected: 6 (build_detail raise after commit, RunFilesTreeOut schema removal, UNKNOWN_ID UUID style, openedRef-on-runId reset covered by medium patch, display property on chip, RunFilesTreeChangedOut not a subclass coverage)
+
+**Follow-up review score:** 1 high patch applied → `followup_review_recommended: true` (any high-severity patch triggers it). Patched severity counts: high=1, medium=1, low=5.
+
+**Verification performed:**
+- `make lint` — passed: 0 ruff/mypy/import-linter/eslint/tsc/prettier errors
+- `make test` — passed: 6041 pytest + 1328 vitest, 0 failures
+- `make openapi` — no drift after regeneration
+
+**Residual risks:**
+- No e2e-api scenario exercises `GET /detail?opened=true` against the real `SQLAlchemyUnitOfWork`; the double-enter fix is logic-verified by code inspection and by the use-case unit tests, but not integration-verified against the running stack.
