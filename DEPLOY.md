@@ -50,9 +50,11 @@ credential a *process* holds is still `ORCHESTRATOR_TOKEN`.
 ## 2. The compose invocation
 
 Production is `docker-compose.yml` plus the `docker-compose.prod.yml` overlay, under a
-project name of its own. Rather than repeat the flags on every line, export the three
-variables compose reads — the same three `make e2e` exports for the gate's stack — once per
-shell session on the host:
+project name of its own. Note what the base file gives every stack that runs real agents,
+production included: a harness may `sudo apt-get` what a target repository's install
+script needs (the `backend-api` block in `docker-compose.yml` states the trade). Rather
+than repeat the flags on every line, export the three variables compose reads — the same
+three `make e2e` exports for the gate's stack — once per shell session on the host:
 
 ```bash
 cd /path/to/ai-orchestrator

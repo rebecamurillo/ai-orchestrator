@@ -12,7 +12,11 @@ What is asserted, and why each is worth a test rather than a review comment:
 - **The web-client receives exactly four variables (AD-5).** This is the whole of "a
   credential stops at the process that needs it" on the front-end side. A fifth line — the
   database URL, the git token, the spend key — is the failure this test exists to catch.
-- **Both app services drop every capability and refuse privilege escalation (NFR-3).**
+- **The web-client drops every capability and refuses privilege escalation (NFR-3); the
+  backend deliberately does neither.** Operator decision, 2026-09-11: a harness may
+  `sudo apt-get` what a target repository's install script needs, wherever real agents
+  run — the base stack and production. The e2e overlay re-hardens its own stack
+  (`test_compose_sandbox.py` holds that half).
 - **`depends_on … service_healthy`**, not `started`: the backend migrates on start, and a
   web-client that came up first would proxy to a socket that is not listening.
 - **The volumes the brief names are declared and mounted where the contract says.**
@@ -160,14 +164,24 @@ def test_the_backend_env_file_is_optional_so_config_still_validates_without_one(
 # ── NFR-3 hardening ──────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("name", APP_SERVICES)
-def test_the_service_drops_every_capability(name: str) -> None:
-    assert re.search(r"cap_drop:\s*\n\s*- ALL", service(name)), name
+def test_the_web_client_drops_every_capability() -> None:
+    assert re.search(r"cap_drop:\s*\n\s*- ALL", service("web-client"))
 
 
-@pytest.mark.parametrize("name", APP_SERVICES)
-def test_the_service_refuses_privilege_escalation(name: str) -> None:
-    assert "no-new-privileges:true" in service(name), name
+def test_the_web_client_refuses_privilege_escalation() -> None:
+    assert "no-new-privileges:true" in service("web-client")
+
+
+def test_the_backend_is_not_hardened_here() -> None:
+    """Operator decision, 2026-09-11 (revising the original NFR-3 assertion): the backend
+    is the sandbox real agents run in, so `sudo apt-get` must work in every stack that
+    runs them — the base stack and production. The e2e gate's stack is the one that never
+    does, and `docker-compose.e2e.yml` re-hardens it; `test_compose_sandbox.py` asserts
+    that half, so the hardening moved rather than vanished."""
+    body = service("backend-api")
+
+    assert "cap_drop" not in body
+    assert "no-new-privileges" not in body
 
 
 @pytest.mark.parametrize("name", APP_SERVICES)

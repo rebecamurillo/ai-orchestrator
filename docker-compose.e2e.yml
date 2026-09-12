@@ -39,3 +39,11 @@ services:
     # holds however old the generated file is. The dev stack reads `.env` and is unaffected.
     environment:
       ORCH_TEST_MODE: "1"
+    # The gate's stack is the one that never runs a real agent (the scripted `fake`
+    # harness), so the hardening the base file gives up for sudo lives here: the image's
+    # `sudo` binary is inert under `no-new-privileges`, and nothing in this stack misses
+    # it. `tests/unit/test_compose_sandbox.py` asserts both halves of that split.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

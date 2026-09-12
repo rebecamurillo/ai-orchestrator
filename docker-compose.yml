@@ -67,10 +67,11 @@ services:
       - work:${WORK_DIR:?set it in .env, copied from .env.example}
       # ~/.claude ~/.codex ~/.config/opencode: the harness configs and the BMAD skill stubs
       - agent-home:${AGENT_HOME:?set it in .env, copied from .env.example}
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
+    # DISABLED to allow container to install apt packages in a target repository's worktree
+    # cap_drop:
+    #   - ALL
+    # security_opt:
+    #   - no-new-privileges:true
     # the worktrees and the harness configs are written at run time (NFR-3)
     read_only: false
     depends_on:

@@ -24,6 +24,7 @@ FROM ${PYTHON_IMAGE}
 # Pins nothing outside this file reads at runtime, so they are not contract variables.
 ARG NODE_VERSION=24.20.0
 ARG GH_VERSION=2.100.0
+ARG PLAYWRIGHT_VERSION=1.62.1
 # Defaults matching `.env.example`; compose passes the real values through `env_file`.
 ARG AGENT_HOME=/home/agent
 ARG WORK_DIR=/work
@@ -48,6 +49,7 @@ RUN apt-get update \
       curl \
       git \
       make \
+      sudo \
       xz-utils \
  && rm -rf /var/lib/apt/lists/*
 
@@ -83,12 +85,23 @@ RUN set -eux; \
     rm -f "${archive}" gh_checksums.txt; \
     gh --version
 
+# Chromium's shared system libraries, for the UI gate (`make e2e-ui`) a harness runs in a
+# target repository's worktree. Libraries only, as root — the browser itself needs no root
+# and comes from `make install-e2e`, onto the persistent `agent-home` volume.
+RUN set -eux; \
+    export HOME=/root; \
+    apt-get update; \
+    npx -y "playwright@${PLAYWRIGHT_VERSION}" install-deps chromium; \
+    rm -rf /var/lib/apt/lists/* /root/.npm
+
 COPY --from=uv /uv /usr/local/bin/uv
 
 # One non-root user for the process and for every harness it spawns (NFR-3). `work` and
 # `agent-home` are mounted here, and a named volume takes its ownership from the image.
 RUN set -eux; \
     useradd --create-home --home-dir "${AGENT_HOME}" --shell /bin/bash --uid 1000 agent; \
+    echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent; \
+    chmod 0440 /etc/sudoers.d/agent; \
     mkdir -p "${WORK_DIR}" /opt/npm-global/bin /app; \
     corepack enable --install-directory /opt/npm-global/bin; \
     chown -R agent:agent "${WORK_DIR}" "${AGENT_HOME}" /opt/npm-global /app
