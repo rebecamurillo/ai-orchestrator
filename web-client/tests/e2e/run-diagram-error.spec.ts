@@ -133,7 +133,8 @@ test.describe('/workflows/[id]?view=diagram — graph fetch error', () => {
       expect(graphCallCount).toBeGreaterThan(1);
     }).toPass({ timeout: 5000 });
 
-    // Error cleared after successful retry
+    // Error cleared after successful retry, diagram visible
     await expect(page.locator('[data-testid="fetch-failed"]')).not.toBeVisible();
+    await expect(page.locator('[data-testid="wf-diagram"]')).toBeVisible({ timeout: 5000 });
   });
 });

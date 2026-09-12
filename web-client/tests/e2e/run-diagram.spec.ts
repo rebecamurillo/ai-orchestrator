@@ -404,9 +404,12 @@ test.describe('/workflows/[id]?view=diagram — Run diagram', () => {
     await expect(story41).toBeVisible();
     await expect(story41).toHaveAttribute('data-current', 'true');
 
-    // Footer is present and contains story count
-    await expect(page.getByTestId('wf-diagram-footer')).toBeVisible();
-    await expect(page.getByTestId('wf-diagram-footer')).toContainText('stories');
+    // Footer is present and contains story count, step-seq prefix, and separator
+    const footer = page.getByTestId('wf-diagram-footer');
+    await expect(footer).toBeVisible();
+    await expect(footer).toContainText('stories');
+    await expect(footer).toContainText('step');
+    await expect(footer).toContainText('·');
   });
 
   test('(b) exactly one element inside wf-diagram carries the amber needs-you signal', async ({

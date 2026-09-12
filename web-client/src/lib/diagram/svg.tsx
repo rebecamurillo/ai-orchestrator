@@ -117,7 +117,16 @@ export function DiagramNode({
       data-status={status ?? undefined}
       data-current={current ? 'true' : undefined}
       data-signal={token ? tokenSignal(token) : undefined}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') onClick();
+            }
+          : undefined
+      }
     >
       <rect className="diagram-node-box" x={x} y={y} width={width} height={height} />
       <text className="diagram-node-eyebrow" x={x + TEXT_INSET} y={y + EYEBROW_BASELINE}>

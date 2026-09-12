@@ -40,7 +40,10 @@ interface Props {
   runId: string;
 }
 
-type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'error'; status: number | null };
+type Phase =
+  | { kind: 'loading' }
+  | { kind: 'ready' }
+  | { kind: 'error'; status: number | null; endpoint: 'detail' | 'graph' };
 
 /** Map a Run token to a lower-case status word for the footer. */
 const TOKEN_WORD: Record<string, string> = {
@@ -97,12 +100,20 @@ export default function RunDiagram({ runId }: Props) {
 
       if (detailResult.error || !detailResult.data) {
         stopPolling();
-        setPhase({ kind: 'error', status: detailResult.response?.status ?? null });
+        setPhase({
+          kind: 'error',
+          status: detailResult.response?.status ?? null,
+          endpoint: 'detail',
+        });
         return;
       }
       if (graphResult.error || !graphResult.data) {
         stopPolling();
-        setPhase({ kind: 'error', status: graphResult.response?.status ?? null });
+        setPhase({
+          kind: 'error',
+          status: graphResult.response?.status ?? null,
+          endpoint: 'graph',
+        });
         return;
       }
 
@@ -113,7 +124,7 @@ export default function RunDiagram({ runId }: Props) {
     } catch {
       if (seq !== requestSeqRef.current) return;
       stopPolling();
-      setPhase({ kind: 'error', status: null });
+      setPhase({ kind: 'error', status: null, endpoint: 'graph' });
     }
   }
 
@@ -143,7 +154,7 @@ export default function RunDiagram({ runId }: Props) {
     return (
       <FailedFetch
         method="GET"
-        path={`/api/runs/${runId}/graph`}
+        path={`/api/runs/${runId}/${phase.endpoint}`}
         status={phase.status}
         onRetry={() => void fetchBoth()}
       />
@@ -177,7 +188,7 @@ export default function RunDiagram({ runId }: Props) {
   const stepsDone = detail.steps.filter((s) => s.status === 'done').length;
 
   return (
-    <div data-testid="wf-detail">
+    <div>
       <Header detail={detail} token={token} now={now} view="diagram" />
       <Banner detail={detail} token={token} />
       <div className="wf-diagram-heads">
