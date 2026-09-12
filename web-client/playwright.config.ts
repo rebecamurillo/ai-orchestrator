@@ -48,6 +48,9 @@ const preview = {
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // The stub backend is single-threaded Node.js; more than 2 concurrent workers saturate
+  // it and cause 30 s timeouts. Cap at 2 so `make e2e-ui` is reliable on any host.
+  workers: 2,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   reporter: [['list']],

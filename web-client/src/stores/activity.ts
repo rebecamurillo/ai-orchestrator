@@ -5,8 +5,8 @@
  *
  * **Idle exclusion.** Pointer and keydown events reset `lastEventAt`. The per-second tick
  * only increments `accumulated` when `Date.now() - lastEventAt ≤ IDLE_TIMEOUT_MS` *and*
- * the tab is both visible and focused. This handles resumption implicitly: the next event
- * resets the timer and the next tick counts again — no separate "paused" flag is needed.
+ * the tab is visible. This handles resumption implicitly: the next event resets the timer
+ * and the next tick counts again — no separate "paused" flag is needed.
  *
  * **Tab-hidden.** When `document.visibilityState === 'hidden'`, the per-second tick skips
  * incrementing. `accumulated` is still flushed on `pagehide`.
@@ -39,7 +39,7 @@ function _resetIdleTimer(): void {
 }
 
 function _isActive(): boolean {
-  return document.visibilityState === 'visible' && document.hasFocus();
+  return document.visibilityState === 'visible';
 }
 
 function _tick(): void {

@@ -111,7 +111,7 @@ test.describe('activity tracking (8.2)', () => {
     await page.locator('[data-testid="wf-header"]').click({ force: true });
 
     // Advance 65 s — enough to trigger the 60 s batch interval.
-    await page.clock.fastForward(65_000);
+    await page.clock.runFor(65_000);
 
     // Give any pending microtasks (the fetch promise) time to settle.
     await page.waitForTimeout(500);
@@ -154,7 +154,7 @@ test.describe('activity tracking (8.2)', () => {
     await page.locator('body').click({ force: true });
 
     // Advance 65 s — enough to trigger the 60 s batch interval.
-    await page.clock.fastForward(65_000);
+    await page.clock.runFor(65_000);
     await page.waitForTimeout(500);
 
     expect(activityPosts.length).toBeGreaterThanOrEqual(1);
