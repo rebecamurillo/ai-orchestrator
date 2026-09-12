@@ -168,3 +168,9 @@ This is a pre-existing bug in `test_bearer_auth.py` (the loop variable is `_meth
 **Patches applied this iteration:** 6 (see Review Triage Log)
 
 **Human action required:** Fix `test_bearer_auth.py` line 276 — change `document["paths"][path]["get"]["responses"]` to `document["paths"][path][_method]["responses"]` (use the actual loop variable). This is a one-character rename that restores the test's intended semantics and covers the new POST-only endpoint.
+
+## Human Answer
+
+2026-09-11T16:04:32.667680Z · operator
+
+You can go ahead and fix the existing test, if that falls within the new requirements.
