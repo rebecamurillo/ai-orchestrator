@@ -56,6 +56,7 @@ class Api:
         self.settings = Settings(**{key.lower(): value for key, value in env.items()})
         self.runs = FakeRunRepository()
         self.uow = FakeUnitOfWork()
+        self.uow.__enter__()  # mirrors what the real activity_ports provider does
         self.ports = ActivityPorts(runs=self.runs, uow=self.uow)
         self.app: FastAPI = create_app(self.settings)
         self.app.dependency_overrides[activity_ports] = lambda: self.ports

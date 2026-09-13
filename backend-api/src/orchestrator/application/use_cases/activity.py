@@ -7,6 +7,12 @@ The `SpendPorts` pattern in `spend.py` is the precedent.
 
 `active_seconds` increments only here and is never decremented. The endpoint is allowed for
 any Run status — a terminal Run still counts Operator time spent reading it.
+
+The UoW is entered by `activity_ports` before yielding (same as every other provider in
+`api/providers.py`, which must enter to have a session to build the repository around);
+this function calls `commit()` directly rather than re-entering the context manager, the
+same shape `open_run` uses. `spend.py` reads the other way round because its ports come
+from `open_spend_ports`, which hands over a `SessionUnitOfWork` it has not entered.
 """
 
 from __future__ import annotations
@@ -34,11 +40,10 @@ def record_activity(ports: ActivityPorts, run_id: UUID, focused_seconds: int) ->
     `focused_seconds` must be in `[1, 3600]` — enforced at the API boundary by Pydantic.
     `None` from the repository → `NotFound`, which `api/errors.py` maps to 404.
     """
-    with ports.uow:
-        run = ports.runs.get(run_id)
-        if run is None:
-            raise NotFound(f"no run with id {run_id}")
-        updated = run.model_copy(update={"active_seconds": run.active_seconds + focused_seconds})
-        ports.runs.update(updated)
-        ports.uow.commit()
-        return updated.active_seconds
+    run = ports.runs.get(run_id)
+    if run is None:
+        raise NotFound(f"no run with id {run_id}")
+    updated = run.model_copy(update={"active_seconds": run.active_seconds + focused_seconds})
+    ports.runs.update(updated)
+    ports.uow.commit()
+    return updated.active_seconds

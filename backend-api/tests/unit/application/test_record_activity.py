@@ -44,6 +44,7 @@ def a_run(**overrides: object) -> Run:
 def ports_with(run: Run) -> tuple[ActivityPorts, FakeRunRepository]:
     runs = FakeRunRepository([run])
     uow = FakeUnitOfWork()
+    uow.__enter__()  # mirrors what the real activity_ports provider does
     return ActivityPorts(runs=runs, uow=uow), runs
 
 
@@ -79,6 +80,7 @@ def test_any_run_status_accepted() -> None:
 def test_unknown_run_raises_not_found() -> None:
     runs = FakeRunRepository()
     uow = FakeUnitOfWork()
+    uow.__enter__()  # mirrors what the real activity_ports provider does
     ports = ActivityPorts(runs=runs, uow=uow)
     unknown_id = new_id()
 
@@ -96,6 +98,7 @@ def test_active_seconds_is_never_decremented() -> None:
     # Re-read the updated run for the second call
     runs2 = FakeRunRepository([runs.runs[run.id]])
     uow2 = FakeUnitOfWork()
+    uow2.__enter__()  # mirrors what the real activity_ports provider does
     ports2 = ActivityPorts(runs=runs2, uow=uow2)
     result = record_activity(ports2, run.id, BATCH)
 
