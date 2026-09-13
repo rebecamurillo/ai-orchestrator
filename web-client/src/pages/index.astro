@@ -14,8 +14,8 @@
  * UNAVAILABLE` readout is not one of the two states the brief names, but conflating it with
  * either would tell the Operator something false).
  *
- * The project filter, the `BOARD`/`LIST` toggle (`LIST` stays disabled — Epic 8) and
- * *+ New workflow* are static, server-rendered links in the `filters` slot: switching
+ * The project filter and *+ New workflow* are static, server-rendered links in the
+ * `filters` slot: switching
  * Project is a full navigation to `/?project=`, never client-side state, so `Board.tsx`
  * only ever needs to read `project_id` once, at mount.
  *
@@ -35,6 +35,7 @@ export const prerender = false;
 type ProjectListItem = components['schemas']['ProjectRead'];
 
 const selectedProjectId = Astro.url.searchParams.get('project');
+const view = Astro.url.searchParams.get('view') === 'list' ? 'list' : 'board';
 
 let projects: ProjectListItem[] = [];
 let listUnavailable = false;
@@ -84,12 +85,6 @@ if (!listUnavailable && projects.length === 0 && selectedProjectId) {
             </a>
           ))}
         </div>
-        <div class="board-toggle" data-testid="board-toggle-view">
-          <span aria-current="true">BOARD</span>
-          <span class="board-toggle-list" data-testid="board-toggle-list" aria-disabled="true">
-            LIST
-          </span>
-        </div>
         <Button label="+ New workflow" href="/workflows/new" testId="board-new" />
       </Fragment>
     )
@@ -117,21 +112,19 @@ if (!listUnavailable && projects.length === 0 && selectedProjectId) {
         action={{ label: 'register a project to start', href: '/projects' }}
       />
     ) : (
-      <Board client:load initialProjectId={selectedProjectId} />
+      <Board client:load initialProjectId={selectedProjectId} initialView={view} />
     )
   }
 </Shell>
 
 <style>
-  .board-filter,
-  .board-toggle {
+  .board-filter {
     display: flex;
     align-items: baseline;
     gap: var(--space-5);
   }
 
-  .board-filter a,
-  .board-toggle span {
+  .board-filter a {
     color: var(--color-text-tertiary);
     font-size: var(--type-control);
     letter-spacing: var(--type-control-tracking);
@@ -139,12 +132,7 @@ if (!listUnavailable && projects.length === 0 && selectedProjectId) {
     text-decoration: none;
   }
 
-  .board-filter a[aria-current='true'],
-  .board-toggle span[aria-current='true'] {
+  .board-filter a[aria-current='true'] {
     color: var(--color-text);
-  }
-
-  .board-toggle-list[aria-disabled='true'] {
-    color: var(--color-text-tertiary);
   }
 </style>

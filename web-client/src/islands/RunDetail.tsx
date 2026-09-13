@@ -51,6 +51,7 @@ import { detailRequestPath, runToken, stopKind, type RunDetailOut } from '../lib
 import { signalBody, signalsRequestPath, type SignalIn, type SignalKind } from '../lib/run/signals';
 import { TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
+import { startTracking, stopTracking } from '../stores/activity';
 import '../styles/run-detail.css';
 
 type ProblemDetail = components['schemas']['ProblemDetail'];
@@ -73,12 +74,19 @@ export default function RunDetail({ runId }: Props) {
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
+  // 8-3: on the first navigation fetch, append `?opened=true` so `open_run` records the
+  // visit server-side before `build_detail` runs — the response's `last_opened_at` then
+  // reflects the just-updated timestamp, and the files fetch sees the freshly committed
+  // `last_opened_before` for changed-marks computation.
+  const openedRef = useRef(false);
 
   async function fetchDetail(): Promise<void> {
     const seq = ++requestSeqRef.current;
+    const opened = !openedRef.current;
+    if (opened) openedRef.current = true;
     try {
       const { data, error, response } = await api.GET('/runs/{run_id}/detail', {
-        params: { path: { run_id: runId } },
+        params: { path: { run_id: runId }, query: opened ? { opened: true } : undefined },
       });
       if (seq !== requestSeqRef.current) return;
       if (error || !data) {
@@ -97,9 +105,16 @@ export default function RunDetail({ runId }: Props) {
   }
 
   useEffect(() => {
+    openedRef.current = false; // reset so ?opened=true fires again on navigation to a new Run
     void fetchDetail();
     return () => stopPolling();
     // fires once on mount; every later fetch is driven by the `$poll` effect below
+  }, [runId]);
+
+  // Activity tracking (8.2): count focused seconds while the Operator has this view open.
+  useEffect(() => {
+    startTracking(runId);
+    return () => stopTracking();
   }, [runId]);
 
   useEffect(() => {
@@ -191,7 +206,7 @@ export default function RunDetail({ runId }: Props) {
 
   return (
     <div data-testid="wf-detail">
-      <Header detail={detail} token={token} now={Date.now()} />
+      <Header detail={detail} token={token} now={Date.now()} view="detail" />
       <Banner detail={detail} token={token} />
       <div className="wf-body">
         <div className="wf-left">

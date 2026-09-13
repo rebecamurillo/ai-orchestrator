@@ -66,7 +66,8 @@ def record_attempt_spend(
         priced = _priced_attempt(attempt, spend, harness_usage)
         if priced is not attempt:
             ports.attempts.update(priced)
-        updated = run.model_copy(update={"spend_usd": _run_spend(ports, run)})
+        total, provisional = _run_spend_and_provisional(ports, run)
+        updated = run.model_copy(update={"spend_usd": total, "spend_provisional": provisional})
         ports.runs.update(updated)
         ports.uow.commit()
         return updated
@@ -113,11 +114,15 @@ def _dominant_model(by_model: tuple[ModelSpend, ...]) -> str | None:
     return max(by_model, key=lambda model_spend: (model_spend.usd, model_spend.model)).model
 
 
-def _run_spend(ports: SpendPorts, run: Run) -> Decimal:
-    """Every attempt of every row of this Run, summed. Recomputed, never incremented — see
+def _run_spend_and_provisional(ports: SpendPorts, run: Run) -> tuple[Decimal, bool]:
+    """Every attempt of every row of this Run, summed, plus a flag that is `True` when any
+    attempt carries `cost_provisional=True`. Recomputed in one pass, never incremented — see
     the module docstring."""
     total = _ZERO
+    provisional = False
     for row in ports.steps.list_for_run(run.id):
         for row_attempt in ports.attempts.list_for_row(row.id):
             total += row_attempt.cost_usd or _ZERO
-    return total
+            if row_attempt.cost_provisional:
+                provisional = True
+    return total, provisional

@@ -1,8 +1,8 @@
 /**
  * The COST & TRACE kv (4.15, right column; provisional marker and trace row 5.10): spent/
  * budget as a ratio with `provisional` after it when any attempt's cost is still an estimate,
- * tokens in/out, wall-clock, `your active time —` (Epic 8 is out of this story's scope, per
- * its own Out list), a `trace` row linking `open in Langfuse` to `cost.trace_url` when one
+ * tokens in/out, wall-clock, `your active time` as `hh:mm:ss` (8.2), a `trace` row linking
+ * `open in Langfuse` to `cost.trace_url` when one
  * exists (absent — no row at all — when it does not), the compare links, and the branch link.
  *
  * A `done` Run that gave up on a Story names it on the compare line itself — `{url} · skipped:
@@ -15,7 +15,13 @@
  * Stateless (`renderToStaticMarkup`).
  */
 import type { RunDetailOut } from '../../lib/run/detail';
-import { branchLinkHref, moneyRatio, tokensText, wallClockText } from '../../lib/run/detail';
+import {
+  activeTimeText,
+  branchLinkHref,
+  moneyRatio,
+  tokensText,
+  wallClockText,
+} from '../../lib/run/detail';
 import { compareLinkText } from '../../lib/run/skip';
 
 interface Props {
@@ -50,7 +56,7 @@ export default function CostBlock({ detail }: Props) {
           </tr>
           <tr>
             <th scope="row">your active time</th>
-            <td>—</td>
+            <td>{activeTimeText(cost)}</td>
           </tr>
           {cost.trace_url ? (
             <tr>

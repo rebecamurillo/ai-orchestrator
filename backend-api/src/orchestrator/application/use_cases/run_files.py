@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 from uuid import UUID
 
@@ -93,6 +94,9 @@ class RunFilesTree:
 
     root: str
     entries: tuple[TreeEntry, ...]
+    #: The Run's prior visit timestamp — the cutoff for changed-marks computation (story 8-3).
+    #: `None` when the Run has never been opened before (`last_opened_before` is `None`).
+    last_opened_before: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -180,13 +184,13 @@ def list_files_tree(ports: RunFilesPorts, run_id: UUID) -> RunFilesTree:
         raise NotFound(f"no run {run_id}")
     folder = _scope_folder(run)
     if not folder:
-        return RunFilesTree(root="", entries=())
+        return RunFilesTree(root="", entries=(), last_opened_before=run.last_opened_before)
     workspace = ports.workspace(run.worktree_path)
     try:
         entries = workspace.tree(folder)
     except WorkspaceError as error:
         raise Invalid(str(error)) from error
-    return RunFilesTree(root=folder, entries=entries)
+    return RunFilesTree(root=folder, entries=entries, last_opened_before=run.last_opened_before)
 
 
 def write_run_file(ports: RunFilesWritePorts, run_id: UUID, path: str, content: str) -> TreeEntry:

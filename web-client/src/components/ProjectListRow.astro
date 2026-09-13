@@ -5,8 +5,8 @@
  * Project, whose row states its own repository count and failed count instead. The
  * one-link-target and hover conventions are the same as `RecordRow`'s.
  *
- * The failed count is the only colour this row can carry, and it is absent — not zero — when
- * there is nothing failed: NFR-6 keeps a healthy list free of amber or red pixels.
+ * At most one coloured count per row (NFR-6): `needsYouCount` amber takes priority over
+ * `failedCount` red; both absent means no colour element at all.
  */
 interface Props {
   id: string;
@@ -14,18 +14,23 @@ interface Props {
   name: string;
   repositoryCount: number;
   failedCount: number;
+  needsYouCount?: number;
   selected: boolean;
   href: string;
 }
 
-const { slug, name, repositoryCount, failedCount, selected, href } = Astro.props;
+const { slug, name, repositoryCount, failedCount, needsYouCount = 0, selected, href } = Astro.props;
 ---
 
 <a class="row" data-testid={`projects-row-${slug}`} data-selected={String(selected)} href={href}>
   <span class="name">{name}</span>
   <span class="meta">
     {repositoryCount} repositories · 0 runs{
-      failedCount > 0 && <span class="failed"> · {failedCount} failed</span>
+      needsYouCount > 0 ? (
+        <span class="needs-you"> · {needsYouCount} need you</span>
+      ) : (
+        failedCount > 0 && <span class="failed"> · {failedCount} failed</span>
+      )
     }
   </span>
 </a>
@@ -63,5 +68,9 @@ const { slug, name, repositoryCount, failedCount, selected, href } = Astro.props
 
   .failed {
     color: var(--color-signal-failed);
+  }
+
+  .needs-you {
+    color: var(--color-signal-needs-you);
   }
 </style>

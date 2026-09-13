@@ -16,6 +16,7 @@
  * word, which is what marks a stop a person answers without spending a signal hue on it.
  */
 import type { components } from '../../api/schema';
+import { tokenSignal } from '../board/format';
 import { type PlacedEdge, type PlacedGroup, type PlacedNode } from './layout';
 
 type NodeOut = components['schemas']['NodeOut'];
@@ -37,6 +38,14 @@ const GROUP_LABEL_OFFSET = 4;
 /** The arrow head's length back along the connector, and its half-width. */
 const HEAD_LENGTH = 6;
 const HEAD_HALF_WIDTH = 3;
+
+/** Right-margin for the token chip and text. */
+const TOKEN_INSET = TEXT_INSET;
+const CHIP_RADIUS = 3;
+const CHIP_OFFSET_Y = 5;
+
+/** Sub-step words baseline inside the node box (near the bottom). */
+const SUBSTEPS_BASELINE = 44;
 
 /** The longest label a box can hold before it is cut; the boxes are a fixed width. */
 const LABEL_LIMIT = 17;
@@ -80,9 +89,22 @@ export interface DiagramNodeProps {
   status?: string | null;
   /** Whether this node is the step a Run is on. Epic 8's, for the same reason. */
   current?: boolean;
+  /** The display token for this node (e.g. "BLK", "DON"). Sets `data-signal` on the `<g>`. */
+  token?: string | null;
+  /** Sub-step words to render inside the node (Epic 8's story-aggregate nodes). */
+  substeps?: string[] | null;
+  /** Click handler for node navigation (Epic 8's run diagram). */
+  onClick?: () => void;
 }
 
-export function DiagramNode({ placed, status, current }: DiagramNodeProps) {
+export function DiagramNode({
+  placed,
+  status,
+  current,
+  token,
+  substeps,
+  onClick,
+}: DiagramNodeProps) {
   const { node, x, y, width, height } = placed;
   const word = gateWord(node);
 
@@ -94,10 +116,21 @@ export function DiagramNode({ placed, status, current }: DiagramNodeProps) {
       data-human={node.human ? 'true' : undefined}
       data-status={status ?? undefined}
       data-current={current ? 'true' : undefined}
+      data-signal={token ? tokenSignal(token) : undefined}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') onClick();
+            }
+          : undefined
+      }
     >
       <rect className="diagram-node-box" x={x} y={y} width={width} height={height} />
       <text className="diagram-node-eyebrow" x={x + TEXT_INSET} y={y + EYEBROW_BASELINE}>
-        {fit(kindWord(node.kind))}
+        {current ? 'now' : fit(kindWord(node.kind))}
       </text>
       <text className="diagram-node-title" x={x + TEXT_INSET} y={y + TITLE_BASELINE}>
         {fit(node.label)}
@@ -118,11 +151,36 @@ export function DiagramNode({ placed, status, current }: DiagramNodeProps) {
           y2={y + HAIRLINE_BASELINE}
         />
       ) : null}
+      {/* Run-status chip and token: right-aligned, only when the node carries a token */}
+      {token ? (
+        <>
+          <circle
+            className="diagram-node-chip"
+            cx={x + width - TOKEN_INSET - CHIP_RADIUS}
+            cy={y + EYEBROW_BASELINE - CHIP_OFFSET_Y}
+            r={CHIP_RADIUS}
+          />
+          <text
+            className="diagram-node-token"
+            x={x + width - TOKEN_INSET}
+            y={y + EYEBROW_BASELINE}
+            textAnchor="end"
+          >
+            {token}
+          </text>
+        </>
+      ) : null}
+      {/* Sub-step words: the steps this story node summarises */}
+      {substeps && substeps.length > 0 ? (
+        <text className="diagram-node-substeps" x={x + TEXT_INSET} y={y + SUBSTEPS_BASELINE}>
+          {substeps.join(' · ')}
+        </text>
+      ) : null}
     </g>
   );
 }
 
-export function DiagramGroup({ placed }: { placed: PlacedGroup }) {
+export function DiagramGroup({ placed, status }: { placed: PlacedGroup; status?: string | null }) {
   const { group, x, y, width, height } = placed;
 
   return (
@@ -131,6 +189,17 @@ export function DiagramGroup({ placed }: { placed: PlacedGroup }) {
       <text className="diagram-group-label" x={x} y={y - GROUP_LABEL_OFFSET}>
         {fit(group.label)}
       </text>
+      {/* Group status token: only when the run assigns one (null = absent, e.g. cancelled) */}
+      {status !== null && status !== undefined ? (
+        <text
+          className="diagram-group-token"
+          x={x + width}
+          y={y - GROUP_LABEL_OFFSET}
+          textAnchor="end"
+        >
+          {status}
+        </text>
+      ) : null}
     </g>
   );
 }

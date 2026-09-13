@@ -53,7 +53,7 @@ from orchestrator.api.providers_trajectories import trajectory_repository
 from orchestrator.api.schemas.common import Page
 from orchestrator.api.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
 from orchestrator.application.use_cases import clone_check as clone_check_use_cases
-from orchestrator.application.use_cases import project_runs, trajectory_export
+from orchestrator.application.use_cases import project_runs, project_spend, trajectory_export
 from orchestrator.application.use_cases import projects as use_cases
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.domain.entities.project import ProjectView
@@ -98,11 +98,16 @@ def _read(
 ) -> ProjectRead:
     """`ProjectRead.of`, given the Repositories, the Runs and the trajectory count this
     Project has right now."""
+    m = project_spend.project_metrics(ports.runs, view.id, ports.clock.now())
     return ProjectRead.of(
         view,
         use_cases.embedded_repositories(ports, view.id),
         project_runs.embedded_runs(ports.runs, ports.steps, view.id),
         trajectory_export.trajectory_count(trajectories, view.id),
+        monthly_spend_usd=m.monthly_spend_usd,
+        monthly_spend_provisional=m.monthly_spend_provisional,
+        needs_you_count=m.needs_you_count,
+        failed_recent_count=m.failed_recent_count,
     )
 
 

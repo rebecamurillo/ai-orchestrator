@@ -13,10 +13,13 @@ import type { RunDetailOut } from './detail';
 
 export type RunFileOut = components['schemas']['RunFileOut'];
 export type RunFileEntryOut = components['schemas']['RunFileEntryOut'];
-export type RunFilesTreeOut = components['schemas']['RunFilesTreeOut'];
 export type RunFileDiffOut = components['schemas']['RunFileDiffOut'];
+/** 8-3: the entry subtype that carries `changed: boolean`. */
+export type RunFileEntryChangedOut = components['schemas']['RunFileEntryChangedOut'];
+/** 8-3: the tree type returned by `GET /runs/{id}/files` (no `path`). */
+export type RunFilesTreeChangedOut = components['schemas']['RunFilesTreeChangedOut'];
 /** Every shape `GET /runs/{id}/files` can answer with, as the generated contract has it. */
-export type FilesResponse = RunFileOut | RunFilesTreeOut | RunFileDiffOut;
+export type FilesResponse = RunFileOut | RunFilesTreeChangedOut | RunFileDiffOut;
 type RunSummary = RunDetailOut['run'];
 
 /** `GET /runs/{id}/files` with no `path` — the tree. */
@@ -86,7 +89,7 @@ export function canEditFile(run: RunSummary, path: string, folder: string): bool
 }
 
 /**
- * The GET response is `RunFileOut | RunFilesTreeOut | RunFileDiffOut` — no `path` answers the
+ * The GET response is `RunFileOut | RunFilesTreeChangedOut | RunFileDiffOut` — no `path` answers the
  * tree, `path` with `diff=1` answers a unified diff (6.6), `path` alone answers the file.
  * These two are the one place the three are told apart, each by a field only it carries.
  *
@@ -94,7 +97,7 @@ export function canEditFile(run: RunSummary, path: string, folder: string): bool
  * tree, and a caller that asked for a file wants to know it got the file. Narrowing "not the
  * tree" was enough while there were two members, and stopped being enough at three.
  */
-export function isTree(data: FilesResponse): data is RunFilesTreeOut {
+export function isTree(data: FilesResponse): data is RunFilesTreeChangedOut {
   return 'entries' in data;
 }
 

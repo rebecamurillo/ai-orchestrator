@@ -15,9 +15,15 @@ interface Props {
   detail: RunDetailOut;
   token: Token;
   now: number;
+  /**
+   * Which view is active. When provided, the toggle renders functional `<a href>` links with
+   * `aria-current` on the active one. When absent, falls back to the pre-Epic-8 disabled stub
+   * so that callers that have not yet been updated keep passing their existing tests.
+   */
+  view?: 'diagram' | 'detail';
 }
 
-export default function Header({ detail, token, now }: Props) {
+export default function Header({ detail, token, now, view }: Props) {
   const signal = tokenSignal(token);
   return (
     <header className="wf-header" data-testid="wf-header">
@@ -34,8 +40,21 @@ export default function Header({ detail, token, now }: Props) {
         {metaLine(detail)}
       </p>
       <div className="wf-toggle" data-testid="wf-toggle-diagram">
-        <span aria-disabled="true">DIAGRAM</span>
-        <span aria-current="true">DETAIL</span>
+        {view !== undefined ? (
+          <>
+            <a href="?view=diagram" aria-current={view === 'diagram' ? 'true' : undefined}>
+              DIAGRAM
+            </a>
+            <a href="?view=detail" aria-current={view === 'detail' ? 'true' : undefined}>
+              DETAIL
+            </a>
+          </>
+        ) : (
+          <>
+            <span aria-disabled="true">DIAGRAM</span>
+            <span aria-current="true">DETAIL</span>
+          </>
+        )}
       </div>
     </header>
   );

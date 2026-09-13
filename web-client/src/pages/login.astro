@@ -23,14 +23,17 @@ export const prerender = false;
 const result = Astro.getActionResult(actions.login);
 if (result && !result.error) return Astro.redirect('/');
 
-const rejected = Boolean(result?.error);
+const locked = result?.error?.code === 'FORBIDDEN';
+const rejected = Boolean(result?.error) && !locked;
+const message = result?.error?.message ?? '';
+const attemptsText = message.replace(/^token rejected/, '');
 
 // Astro maps the Action's `UNAUTHORIZED` onto a 401 for this render. That would describe a
 // whole HTML screen as an error document, and this product answers errors as
 // `application/problem+json`; 401 is reserved for the proxy refusing an API call, and 302
 // for "go and log in". The page itself rendered — it is the login attempt that failed, and
 // the screen says so in the line the Operator can read.
-if (rejected) Astro.response.status = 200;
+if (rejected || locked) Astro.response.status = 200;
 ---
 
 <html lang="en">
@@ -47,7 +50,7 @@ if (rejected) Astro.response.status = 200;
           <span class="subtitle">MVP · single operator</span>
         </div>
 
-        <form class="form" method="POST" action={actions.login}>
+        <form class="form" method="POST" action={actions.login} data-lockout={locked}>
           <label class="label" for="login-token">ACCESS TOKEN</label>
           <input
             class="input"
@@ -57,14 +60,26 @@ if (rejected) Astro.response.status = 200;
             name="token"
             autocomplete="off"
             autofocus
+            disabled={locked}
           />
-          <Button label="ENTER" variant="primary" type="submit" testId="login-submit" />
+          <Button
+            label="ENTER"
+            variant="primary"
+            type="submit"
+            testId="login-submit"
+            disabled={locked}
+          />
         </form>
 
         {
-          rejected ? (
-            <p class="rejected" data-testid="login-rejected">
-              token rejected
+          locked ? (
+            <p class="rejected" data-testid="login-locked">
+              {message}
+            </p>
+          ) : rejected ? (
+            <p class="rejected">
+              <span data-testid="login-rejected">token rejected</span>
+              <span data-testid="login-attempts">{attemptsText}</span>
             </p>
           ) : (
             <p class="hint" data-testid="login-hint">

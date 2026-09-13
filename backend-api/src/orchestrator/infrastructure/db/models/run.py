@@ -26,7 +26,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, Text, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, Text, Uuid, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -84,6 +84,7 @@ class RunRow(Base):
     engine_ref: Mapped[dict[str, Any]] = mapped_column(JSONB())
     budget_usd: Mapped[Decimal] = mapped_column(MONEY)
     spend_usd: Mapped[Decimal] = mapped_column(MONEY)
+    spend_provisional: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
     manual_estimate_h: Mapped[Decimal | None] = mapped_column(HOURS, nullable=True)
     re_review_done: Mapped[bool] = mapped_column(Boolean())
     park_kind: Mapped[str | None] = mapped_column(Text(), nullable=True)
@@ -98,6 +99,9 @@ class RunRow(Base):
     terminal_clean_polls: Mapped[int] = mapped_column(Integer())
     active_seconds: Mapped[int] = mapped_column(Integer())
     last_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_opened_before: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -1,6 +1,6 @@
 /**
- * `CostBlock.tsx` (4.15): spent/budget as a ratio, tokens, wall-clock, active time as `—`,
- * the trace link only when one exists, the compare links, and the branch link
+ * `CostBlock.tsx` (4.15, 8.2): spent/budget as a ratio, tokens, wall-clock, active time as
+ * `hh:mm:ss`, the trace link only when one exists, the compare links, and the branch link
  * (`renderToStaticMarkup`, stateless).
  */
 import { createElement } from 'react';
@@ -70,14 +70,14 @@ function detail(
 }
 
 describe('CostBlock', () => {
-  it('shows the ratio, tokens, wall-clock and active time as an em dash', () => {
+  it('shows the ratio, tokens, wall-clock and active time as hh:mm:ss', () => {
     const html = renderToStaticMarkup(createElement(CostBlock, { detail: detail() }));
 
     expect(html).toContain('data-testid="wf-cost"');
     expect(html).toContain('$4.18 / $15.00');
     expect(html).toContain('100 in / 200 out');
     expect(html).toContain('1m');
-    expect(html).toContain('—');
+    expect(html).toContain('00:00:30');
   });
 
   it('omits the trace link this epic (always null)', () => {

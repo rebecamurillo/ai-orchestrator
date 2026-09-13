@@ -48,9 +48,22 @@ const preview = {
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // The stub backend is single-threaded Node.js; more than 1 concurrent worker saturates it
+  // and causes 30 s timeouts. login.spec.ts and login-lockout.spec.ts share an in-memory IP
+  // counter; running them in parallel contaminates failure counts.
+  workers: 1,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   reporter: [['list']],
   use: { baseURL: PREVIEW_URL, storageState: authenticatedStorageState() },
   webServer: USE_REAL_BACKEND ? [preview] : [stubBackend, preview],
+  // login-lockout.spec.ts may leave the IP locked after its final test; a locked IP causes
+  // login.spec.ts wrong-token assertions to see login-locked instead of login-rejected.
+  // The `dependencies` constraint ensures login.spec.ts always finishes before
+  // login-lockout.spec.ts starts.
+  projects: [
+    { name: 'login', testMatch: '**/login.spec.ts' },
+    { name: 'login-lockout', testMatch: '**/login-lockout.spec.ts', dependencies: ['login'] },
+    { name: 'other', testMatch: '**/!(login|login-lockout).spec.ts' },
+  ],
 });

@@ -34,6 +34,7 @@ import type { components } from '../api/schema';
 import { api } from '../api/client';
 import BoardColumn from '../components/BoardColumn';
 import FailedFetch from '../components/FailedFetch';
+import RunListRow from '../components/RunListRow';
 import {
   boardRequestPath,
   clockText,
@@ -47,9 +48,11 @@ import { $poll, configurePolling, forceTick, stopPolling } from '../stores/poll'
 import '../styles/board.css';
 
 type BoardOut = components['schemas']['BoardOut'];
+type CardOut = components['schemas']['CardOut'];
 
 interface Props {
   initialProjectId: string | null;
+  initialView?: 'board' | 'list';
 }
 
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'error'; status: number | null };
@@ -114,12 +117,25 @@ function syncRail(board: BoardOut): void {
   }
 }
 
-export default function Board({ initialProjectId }: Props) {
+export default function Board({ initialProjectId, initialView }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
+  const [view, setView] = useState<'board' | 'list'>(initialView ?? 'board');
   const board = useStore($board);
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
+
+  function switchView(v: 'board' | 'list'): void {
+    const params = new URLSearchParams(window.location.search);
+    if (v === 'list') {
+      params.set('view', 'list');
+    } else {
+      params.delete('view');
+    }
+    const qs = params.toString();
+    history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
+    setView(v);
+  }
 
   async function fetchBoard(): Promise<void> {
     const seq = ++requestSeqRef.current;
@@ -205,8 +221,33 @@ export default function Board({ initialProjectId }: Props) {
       ]
     : [];
 
+  const listGroups: { label: string; cards: CardOut[] }[] = [
+    { label: 'Needs you', cards: board?.columns.needs_you ?? [] },
+    { label: 'Running', cards: board?.columns.running ?? [] },
+    { label: 'Queued', cards: board?.columns.queued ?? [] },
+    { label: 'Done', cards: board?.columns.done ?? [] },
+    { label: 'Failed', cards: board?.columns.failed ?? [] },
+  ].filter((g) => g.cards.length > 0);
+
   return (
     <div className="board" data-testid="board">
+      <div className="board-toggle" data-testid="board-toggle-view">
+        <button
+          type="button"
+          aria-current={view === 'board' ? 'true' : undefined}
+          onClick={() => switchView('board')}
+        >
+          BOARD
+        </button>
+        <button
+          type="button"
+          data-testid="board-toggle-list"
+          aria-current={view === 'list' ? 'true' : undefined}
+          onClick={() => switchView('list')}
+        >
+          LIST
+        </button>
+      </div>
       <p className="board-readout" data-testid="board-readout">
         {surfaceReadoutText(total, needsYou, oldestWaitSeconds(allCards))}
       </p>
@@ -218,13 +259,38 @@ export default function Board({ initialProjectId }: Props) {
       >
         refresh
       </button>
-      <div className="board-columns">
-        <BoardColumn status="queued" label="Queued" cards={board?.columns.queued ?? []} />
-        <BoardColumn status="running" label="Running" cards={board?.columns.running ?? []} />
-        <BoardColumn status="needs_you" label="Needs you" cards={board?.columns.needs_you ?? []} />
-        <BoardColumn status="done" label="Done" cards={board?.columns.done ?? []} cap={20} />
-        <BoardColumn status="failed" label="Failed" cards={board?.columns.failed ?? []} cap={20} />
-      </div>
+      {view === 'list' ? (
+        <div data-testid="board-list" className="board-list">
+          {listGroups.map((group) => {
+            const sorted = [...group.cards].sort((a, b) => a.age_seconds - b.age_seconds);
+            return (
+              <div key={group.label} className="board-list-group">
+                <div className="board-list-group-head">{group.label}</div>
+                {sorted.map((card) => (
+                  <RunListRow key={card.id} card={card} />
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="board-columns">
+          <BoardColumn status="queued" label="Queued" cards={board?.columns.queued ?? []} />
+          <BoardColumn status="running" label="Running" cards={board?.columns.running ?? []} />
+          <BoardColumn
+            status="needs_you"
+            label="Needs you"
+            cards={board?.columns.needs_you ?? []}
+          />
+          <BoardColumn status="done" label="Done" cards={board?.columns.done ?? []} cap={20} />
+          <BoardColumn
+            status="failed"
+            label="Failed"
+            cards={board?.columns.failed ?? []}
+            cap={20}
+          />
+        </div>
+      )}
     </div>
   );
 }

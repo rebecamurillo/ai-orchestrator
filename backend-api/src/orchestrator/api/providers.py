@@ -1,28 +1,18 @@
 """Where a request gets its ports.
 
-`deps.py` holds the one credential check and nothing else — `tests/unit/test_bearer_auth.py`
-ast-scans that module and fails on any comparison mentioning a token — so the wiring a
-feature router needs lives here instead.
+`deps.py` holds the one credential check only — `tests/unit/test_bearer_auth.py` ast-scans
+that module and fails on any token comparison — so feature wiring lives here instead.
 
-One dependency per feature, and each of them owns a transaction: `project_ports` opens a
-`SQLAlchemyUnitOfWork`, builds the repository on *that* session, and hands the use case a
-scope it only has to `commit()`. Leaving the dependency without a commit rolls back, so a
-use case that raised — or a response model that refused the payload — persists nothing.
+One dependency per feature, each owning a transaction: yielding without `commit()` rolls
+back, so a use case that raised — or a response model that refused the payload — persists
+nothing.  Adapters are read off `app.state`; this module names no `DATABASE_URL` and no key.
 
-The adapters themselves are built by `main.py` and read off `app.state`: this module names
-no `DATABASE_URL` and no key. `crypto` is a *factory* rather than an adapter, because
-`ORCHESTRATOR_SECRET_KEY` is only validated when it is first used (see `main.py`), which
-keeps a misconfigured instance startable and `/healthz` answerable.
+`crypto` is a factory, not a singleton: `ORCHESTRATOR_SECRET_KEY` is validated on first use,
+so a misconfigured key refuses the first request that needs it (a `ValueError` → bare
+`internal server error` — the body names nothing, because naming the variable would be the
+leak) rather than failing startup.
 
-It does not keep it usable. The factory is called here, on every request that needs these
-ports, so an unusable key fails a `GET` exactly as it fails a `POST`. The refusal is a
-`ValueError` naming the variable, and this module deliberately does not catch it: it
-reaches `api/errors.py` as an unhandled exception, which logs the traceback — variable name
-included — and answers a bare `internal server error` problem document. The body says
-nothing, because a body that named the misconfigured secret would be the leak.
-
-Nothing here asserts. `python -O` strips `assert`, and an application built without its
-ports must answer a problem document, not silently dereference `None`.
+Nothing here asserts. `python -O` strips `assert`.
 """
 
 from __future__ import annotations
@@ -33,10 +23,12 @@ from typing import Annotated, Any
 
 from fastapi import Query, Request
 
+from orchestrator.application.use_cases.activity import ActivityPorts
 from orchestrator.application.use_cases.create_run import CreateRunPorts, RunReadPorts
 from orchestrator.application.use_cases.harness_readiness import HarnessReadinessPorts
 from orchestrator.application.use_cases.harnesses import HarnessPorts
 from orchestrator.application.use_cases.history import HistoryPorts
+from orchestrator.application.use_cases.open_run import OpenRunPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.queue import QueuePorts
@@ -191,9 +183,8 @@ def create_run_ports(request: Request) -> Iterator[CreateRunPorts]:
     """The ports `create_run` (4.4) runs on: pre-flight's own, plus what only creation
     writes (`steps`, `engine`), plus a `Tracer` (5.2) so every Run's trace opens.
 
-    `LangfuseTracer(settings)` is built fresh per request rather than read off
-    `app.state`: its own client is lazy (built only once a call actually opens a span), and
-    `main.py` has no room left for a fourth adapter singleton — see 5.2's Design Notes.
+    `LangfuseTracer(settings)` is built fresh per request: its client is lazy and `main.py`
+    has no room for a fourth adapter singleton — see 5.2's Design Notes.
     """
     session_factory = from_state(request, SESSION_FACTORY)
     engine: WorkflowEngine = from_state(request, ENGINE)
@@ -212,9 +203,8 @@ def create_run_ports(request: Request) -> Iterator[CreateRunPorts]:
 def readiness_ports(request: Request) -> Iterator[HarnessReadinessPorts]:
     """The ports `POST /harnesses/{name}/readiness` runs `start` on (SPEC CAP-8).
 
-    `create_run_ports`'s own wiring, over `skip_harness_check=True`: AD-10's carried-forward
-    flag, whose one caller this endpoint is — a harness that has never passed readiness can
-    still run the readiness Run that would enable it.
+    `create_run_ports`'s own wiring, over `skip_harness_check=True` (AD-10): a harness that
+    has never passed readiness can still run the readiness Run that would enable it.
     """
     session_factory = from_state(request, SESSION_FACTORY)
     engine: WorkflowEngine = from_state(request, ENGINE)
@@ -257,12 +247,8 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
     `tracer` (5.2) is what `cost.trace_url` reads through — built fresh per request, the
     same reasoning as `create_run_ports`'s own `LangfuseTracer`.
 
-    `terminal` (6.7) is what the resume command is built through. The registry it carries is
-    built with a `RealProcessRunner` of its own, unlike the walker's — AD-14 wants one runner
-    able to kill every group *this process started*, and this read starts none: it asks the
-    registry for `capabilities.resume` and `resume_command`, neither of which touches a
-    process. `build_terminal_env` reads one boolean off `Settings` and no credential at all
-    (AD-5)."""
+    `terminal` (6.7): built with `build_terminal_env` and `build_harnesses` — neither starts
+    a process (AD-14), and `build_terminal_env` reads no credential (AD-5)."""
     session_factory = from_state(request, SESSION_FACTORY)
     settings = from_state(request, SETTINGS)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
@@ -343,22 +329,45 @@ def run_files_write_ports(request: Request) -> Iterator[RunFilesWritePorts]:
         )
 
 
+def activity_ports(request: Request) -> Iterator[ActivityPorts]:
+    """The ports `GET/POST /runs/{id}/activity` reads and writes through (8.2)."""
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield ActivityPorts(runs=SQLAlchemyRunRepository(uow.session), uow=uow)
+
+
+def open_run_ports(
+    request: Request, opened: Annotated[bool, Query()] = False
+) -> Iterator[OpenRunPorts | None]:
+    """The ports `open_run` writes through (8.3): `runs`, `uow`, and a `Clock`.
+
+    Reads `?opened` itself and yields `None` when absent — same pattern as
+    `run_files_diff_ports`'s `?diff` — so the dependency only opens a session on demand.
+    """
+    if not opened:
+        yield None
+        return
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield OpenRunPorts(
+            runs=SQLAlchemyRunRepository(uow.session),
+            uow=uow,
+            clock=SystemClock(),
+        )
+
+
 def run_files_diff_ports(
     request: Request, diff: Annotated[bool, Query()] = False
 ) -> Iterator[RunFilesDiffPorts | None]:
     """The ports `GET /runs/{id}/files?diff=1` reads through (6.6). Writes nothing.
 
-    No `Workspace`: the diff is `Git`'s own answer over the worktree, and the scope gate is
-    the park's recorded hit list rather than the spec folder — see
-    `application/use_cases/run_files.py`'s own docstring for why.
+    No `Workspace`: the diff is `Git`'s own answer over the worktree; the scope gate is the
+    park's recorded hit list — see `application/use_cases/run_files.py`'s own docstring for
+    why.
 
-    **It reads the mode's own query parameter, and it has to.** FastAPI resolves every
-    dependency a handler declares, on every request to it — so a dependency that opened a
-    session unconditionally would make the two reads that share this route (the file and the
-    tree) require adapters they have never needed, and would break every existing test that
-    overrides only `run_files_ports`. That is the same trap `application/use_cases/
-    run_views.py` documents for `board_view`. Answering `None` for the modes that did not
-    ask is what keeps this route's other two answers exactly as they were.
+    Reads `?diff` itself and yields `None` when absent: FastAPI resolves every dependency on
+    every request, so opening a session unconditionally would break the file and tree modes
+    that share this route (same trap `run_views.py` documents for `board_view`).
     """
     if not diff:
         yield None

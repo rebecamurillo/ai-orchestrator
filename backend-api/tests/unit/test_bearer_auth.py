@@ -273,7 +273,7 @@ async def test_the_contract_declares_the_401_and_its_media_type(env: dict[str, s
     document = await _document(env)
 
     for _method, path in _versioned_operations(document):
-        responses = document["paths"][path]["get"]["responses"]
+        responses = document["paths"][path][_method]["responses"]
 
         assert "401" in responses, path
         content = responses["401"]["content"]

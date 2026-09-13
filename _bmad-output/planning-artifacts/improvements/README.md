@@ -59,3 +59,4 @@ worth deleting.
 | --- | --- | --- | --- | --- |
 | [IMP-001](IMP-001-single-story-run.md) | Start a Run for one Story | candidate | template-dsl | M |
 | [IMP-002](IMP-002-issue-sized-change.md) | Run an issue-sized change through the BMAD plan gate | candidate | template-dsl | S–M |
+| [IMP-003](IMP-003-answer-reply-in-session.md) | Answer a blocked Story in the same session, or restart | candidate | backend-api | S–M |

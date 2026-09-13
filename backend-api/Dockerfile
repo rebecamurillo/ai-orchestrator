@@ -104,7 +104,10 @@ RUN set -eux; \
     chmod 0440 /etc/sudoers.d/agent; \
     mkdir -p "${WORK_DIR}" /opt/npm-global/bin /app; \
     corepack enable --install-directory /opt/npm-global/bin; \
-    chown -R agent:agent "${WORK_DIR}" "${AGENT_HOME}" /opt/npm-global /app
+    # Node's default global location is also agent-owned: `corepack enable` and any tool
+    # that ignores NPM_CONFIG_PREFIX writes here, and the agent user must install freely.
+    chown -R agent:agent "${WORK_DIR}" "${AGENT_HOME}" /opt/npm-global /app \
+        /usr/local/bin /usr/local/lib/node_modules
 
 USER agent
 WORKDIR /app/backend-api
