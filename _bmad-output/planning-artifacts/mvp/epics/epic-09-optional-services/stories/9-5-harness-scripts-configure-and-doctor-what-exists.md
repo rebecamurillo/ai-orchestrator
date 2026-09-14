@@ -2,12 +2,13 @@
 title: 'Harness scripts configure and doctor what exists'
 type: 'feature'
 created: '2026-09-13'
-status: 'ready-for-dev'
+status: 'in-progress'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: []
 deferred: []
+baseline_revision: 'b2799748e6e590a6c36d599295f8af63d09028d6'
 ---
 
 <intent-contract>
