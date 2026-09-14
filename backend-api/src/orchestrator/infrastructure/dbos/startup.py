@@ -59,7 +59,7 @@ from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
 from orchestrator.infrastructure.dbos.config import engine_config
 from orchestrator.infrastructure.dbos.facade import RealEngine
 from orchestrator.infrastructure.dbos.walker import WalkerDeps
-from orchestrator.infrastructure.gateway.litellm_spend import LiteLLMSpend
+from orchestrator.infrastructure.gateway import build_gateway
 from orchestrator.infrastructure.harness import build_harness_env, build_harnesses
 from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.process import RealProcessRunner
@@ -106,14 +106,15 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
     failed `verify` row's log for the Story the redispatch hands back (FR-10). `spend_writes`
     (5.7) is its own scope for the same reason `attempt_writes` cannot serve it: the budget
     read needs `runs`/`steps`, which the agent kind's own writes may never touch (AD-8).
-    `LiteLLMSpend` is built once here, over one shared `httpx.Client` an explicit timeout —
-    `SPEND_TIMEOUT_SECONDS` — rather than httpx's own 5 s default. `open_ports` (`apply_step_
+    `build_gateway` produces the adapter once here, over one shared `httpx.Client` with an
+    explicit timeout — `SPEND_TIMEOUT_SECONDS` — rather than httpx's own 5 s default; when
+    the gateway is off, `DisabledGateway` never calls the client. `open_ports` (`apply_step_
     result`'s own scope) carries `git` too (5.9): `record_trajectory` reads the committed
     story file and `HEAD` through it, and needs no adapter `attempt_writes` does not already
     have wired elsewhere.
     """
     runner = RealProcessRunner()
-    gateway = LiteLLMSpend(
+    gateway = build_gateway(
         settings, httpx.Client(base_url=settings.litellm_base_url, timeout=SPEND_TIMEOUT_SECONDS)
     )
     return WalkerDeps(

@@ -1,4 +1,4 @@
-"""`NullTracer` — the off-path behind the `Tracer` port when `tracing_enabled` is False (AD-11, 9-2).
+"""`NullTracer` — the off-path behind the `Tracer` port when `tracing_enabled` is False (9-2).
 
 No `langfuse` symbol is imported here.  The module must be importable in an environment
 that has no Langfuse credentials at all (SM-3), and `NullTracer.__init__` must never

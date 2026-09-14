@@ -10,13 +10,13 @@ other module in `application/` or `domain/` branches on this flag (AD-2).
 
 from __future__ import annotations
 
-from orchestrator.infrastructure.tracing.langfuse_tracer import LangfuseTracer
-from orchestrator.infrastructure.tracing.null import NullTracer
+from orchestrator.domain.ports.tracer import Tracer
 
 # `Settings` lives in the same layer (both are `infrastructure/`), so this import
 # does not violate the AD-2 dependency direction.
 from orchestrator.infrastructure.settings import Settings
-from orchestrator.domain.ports.tracer import Tracer
+from orchestrator.infrastructure.tracing.langfuse_tracer import LangfuseTracer
+from orchestrator.infrastructure.tracing.null import NullTracer
 
 
 def build_tracer(settings: Settings) -> Tracer:
