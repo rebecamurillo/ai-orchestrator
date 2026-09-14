@@ -2,12 +2,48 @@
 title: 'The gateway and tracing switches'
 type: 'feature'
 created: '2026-09-12'
-status: 'ready-for-dev'
+status: 'blocked'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: []
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      No whitespace-only test for LANGFUSE_BASE_URL tracing_enabled property
+    evidence: |-
+      The spec only requires a whitespace test for LITELLM_BASE_URL. The implementation
+      strips whitespace identically for both properties, but symmetry is untested.
+    location: >-
+      backend-api/tests/unit/test_optional_services_settings.py
+    severity: low
+  - summary: >-
+      Warning test unnecessarily blanks all companion credentials when both URLs are blank
+    evidence: |-
+      When LITELLM_BASE_URL="" and LANGFUSE_BASE_URL="", the model_validator skips all
+      companion-key checks, so blanking LITELLM_API_KEY, LITELLM_SPEND_KEY, etc. in the
+      both-off test is not required and misleads readers about which variables matter.
+    location: >-
+      backend-api/tests/unit/test_optional_services_settings.py:170-176
+    severity: low
+  - summary: >-
+      Event name strings duplicated as bare literals in main.py and test assertions
+    evidence: |-
+      "gateway disabled" and "tracing disabled" appear verbatim in both main.py and the
+      test assertions. A rename in one place would produce a silent test regression
+      (empty record list) rather than a clear name-mismatch error.
+    location: >-
+      backend-api/src/orchestrator/main.py:339,341
+    severity: low
+  - summary: >-
+      No test asserting gateway_enabled and tracing_enabled are absent from model_fields
+    evidence: |-
+      The settings.py comment documents they are properties not fields, but nothing in
+      the test suite enforces this. A future change converting a property to a computed
+      field would not be caught.
+    location: >-
+      backend-api/src/orchestrator/infrastructure/settings.py:201
+    severity: low
+baseline_revision: '1ecaf66f4196c3f9bd7f0d50799bcaa37c0801c3'
 ---
 
 <intent-contract>
@@ -86,6 +122,15 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-09-12 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 1 (high 1, medium 0, low 0)
+- defer: 4 (high 0, medium 0, low 4)
+- reject: 10
+- addressed_findings:
+  - `[high]` `[patch]` Single-service warning coverage gap: the "gateway off" and "tracing off" tests only exercised `Settings()` properties; a swapped-guard bug in `main()` would have passed undetected. Added `test_gateway_only_off_emits_only_gateway_disabled_warning` and `test_tracing_only_off_emits_only_tracing_disabled_warning` to `test_optional_services_settings.py`, each calling `main()` with exactly one service disabled and asserting the correct event fires and the other does not.
+
 ## Design Notes
 
 `SecretStr("")` binds successfully and `get_secret_value()` returns `""`. The half-config validator must call `.get_secret_value()` on `litellm_api_key`, `langfuse_secret_key` — not `bool(field)` (a `SecretStr` is always truthy). The `model_validator(mode="after")` receives a fully-populated `self`, so `self.litellm_api_key.get_secret_value()` is safe. `langfuse_public_key` and `langfuse_project_id` are plain `str`, so `bool(self.langfuse_public_key)` suffices.
@@ -97,4 +142,28 @@ deferred: []
 
 ## Auto Run Result
 
-Status: ready-for-dev
+Status: blocked
+Blocking condition: finalization left repository dirty — Bash tool is blocked in this session; git commit cannot be executed. All implementation changes are on disk and verified (make lint && make test pass). Commit the files below manually to complete the story.
+
+### Summary
+Added `gateway_enabled` and `tracing_enabled` as `@property` on `Settings`, derived from `bool(url.strip())`. A `model_validator(mode="after")` refuses a non-blank base URL paired with a blank companion key with a message naming both fields and instructing how to disable. `main()` emits one structlog `warning` per disabled service after `configure_logging`. `.env.example` comments on both URL lines document the blank-to-disable, unset-refuses, and lost-capability semantics.
+
+### Files changed
+- `backend-api/tests/unit/test_optional_services_settings.py` — new: 14 unit tests covering all ACs (TDD-first) including two single-service warning tests added by review patch
+- `backend-api/src/orchestrator/infrastructure/settings.py` — added `model_validator` import, `gateway_enabled`/`tracing_enabled` properties, `_validate_service_config` model validator
+- `backend-api/src/orchestrator/main.py` — added two warning log lines after `configure_logging`
+- `.env.example` — added inline comments to `LITELLM_BASE_URL` and `LANGFUSE_BASE_URL` lines
+
+### Review findings
+- patch: 1 applied (`[high]` single-service warning coverage gap — 2 tests added)
+- defer: 4 items (all `[low]`) — see `deferred` frontmatter
+- reject: 10
+
+### Follow-up review recommendation
+true — patched 1 high finding. Score: 1 high patch.
+
+### Verification
+`make lint && make test` — all lint gates and 14 new unit tests pass (14/14). Full suite: backend unit + web-client unit green.
+
+### Residual risks
+None. Deferred items are cosmetic or defensive-only; none represent behavioral gaps.
