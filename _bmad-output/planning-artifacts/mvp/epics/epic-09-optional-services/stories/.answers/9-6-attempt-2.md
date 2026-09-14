@@ -97,3 +97,9 @@ Status: blocked
 Blocking condition: Operator run required: (1) in `.env` set `LITELLM_BASE_URL=` and `LANGFUSE_BASE_URL=` (blank, not deleted); (2) log in the harness — either `docker exec -it <backend-api-container> claude login` (interactive terminal required) or create a Project with `ANTHROPIC_API_KEY` set; (3) `docker compose restart backend-api`; (4) create a new workflow Run via the UI using the claude harness; (5) let a story run to done. Report back: which harness and which auth method; that backend-api startup logs showed `"gateway disabled"` and `"tracing disabled"`; that New workflow offered claude and codex but refused local with a stated reason; that a Story reached done; and what the Run detail showed for cost (was the `"provisional"` marker present?) and for the trace row (was it absent?). Record nothing that was not observed.
 
 Verification result (2026-09-14): make lint passed (0 errors); make test passed (6129 pytest, 103 vitest files / 1293 tests); make e2e-ui 163 passed, 1 pre-existing failure (run-detail-skip-story.spec.ts:121, last modified story 6-4, unrelated). All four new tests ran and passed. Matrix Test Audit: all four I/O matrix rows covered by new tests.
+
+## Human Answer
+
+2026-09-14T05:17:14.589632Z · operator
+
+human will test after story is done. no need to run real test on your side, since requires modifying env variables in your sandbox, to be done by human. continue and finish the story so pipeline can continue to next step
