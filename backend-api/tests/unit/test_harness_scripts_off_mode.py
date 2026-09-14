@@ -101,6 +101,7 @@ def test_ac1_configure_refuses_with_nothing_configured(name: str, tmp_path: Path
 def test_ac2_gateway_off_claude_exits_zero(tmp_path: Path) -> None:
     result = run_configure("claude", {"LITELLM_BASE_URL": ""}, tmp_path)
     assert result.returncode == 0, result.stderr
+    assert "gateway disabled" in result.stderr
 
 
 def test_ac2_gateway_off_claude_no_anthropic_base_url(tmp_path: Path) -> None:
@@ -118,6 +119,7 @@ def test_ac2_gateway_off_claude_has_otel(tmp_path: Path) -> None:
 def test_ac2_gateway_off_codex_exits_zero(tmp_path: Path) -> None:
     result = run_configure("codex", {"LITELLM_BASE_URL": ""}, tmp_path)
     assert result.returncode == 0, result.stderr
+    assert "gateway disabled" in result.stderr
 
 
 def test_ac2_gateway_off_codex_no_model_provider(tmp_path: Path) -> None:
@@ -136,6 +138,7 @@ def test_ac2_gateway_off_codex_has_otel(tmp_path: Path) -> None:
 def test_ac2_gateway_off_opencode_exits_zero(tmp_path: Path) -> None:
     result = run_configure("opencode", {"LITELLM_BASE_URL": ""}, tmp_path)
     assert result.returncode == 0, result.stderr
+    assert "gateway disabled" in result.stderr
 
 
 def test_ac2_gateway_off_opencode_no_provider(tmp_path: Path) -> None:
@@ -157,6 +160,7 @@ def test_ac2_gateway_off_opencode_has_plugin_and_experimental(tmp_path: Path) ->
 def test_ac3_tracing_off_claude_exits_zero(tmp_path: Path) -> None:
     result = run_configure("claude", {"LANGFUSE_BASE_URL": ""}, tmp_path)
     assert result.returncode == 0, result.stderr
+    assert "tracing disabled" in result.stderr
 
 
 def test_ac3_tracing_off_claude_no_otlp(tmp_path: Path) -> None:
@@ -174,6 +178,7 @@ def test_ac3_tracing_off_claude_has_gateway(tmp_path: Path) -> None:
 def test_ac3_tracing_off_codex_exits_zero(tmp_path: Path) -> None:
     result = run_configure("codex", {"LANGFUSE_BASE_URL": ""}, tmp_path)
     assert result.returncode == 0, result.stderr
+    assert "tracing disabled" in result.stderr
 
 
 def test_ac3_tracing_off_codex_no_otel(tmp_path: Path) -> None:
@@ -186,11 +191,13 @@ def test_ac3_tracing_off_codex_has_model_provider(tmp_path: Path) -> None:
     run_configure("codex", {"LANGFUSE_BASE_URL": ""}, tmp_path)
     cfg = read_codex(tmp_path)
     assert "model_provider" in cfg
+    assert "model_providers" in cfg
 
 
 def test_ac3_tracing_off_opencode_exits_zero(tmp_path: Path) -> None:
     result = run_configure("opencode", {"LANGFUSE_BASE_URL": ""}, tmp_path)
     assert result.returncode == 0, result.stderr
+    assert "tracing disabled" in result.stderr
 
 
 def test_ac3_tracing_off_opencode_no_plugin_or_experimental(tmp_path: Path) -> None:
@@ -215,6 +222,8 @@ _BOTH_OFF = {"LITELLM_BASE_URL": "", "LANGFUSE_BASE_URL": ""}
 def test_ac4_both_off_exits_zero(name: str, tmp_path: Path) -> None:
     result = run_configure(name, _BOTH_OFF, tmp_path)
     assert result.returncode == 0, result.stderr
+    assert "gateway disabled" in result.stderr
+    assert "tracing disabled" in result.stderr
 
 
 def test_ac4_both_off_claude_parses_no_gateway_no_tracing(tmp_path: Path) -> None:
