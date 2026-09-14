@@ -66,7 +66,7 @@ from orchestrator.infrastructure.process import RealProcessRunner
 from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.terminal_jobs import engine_jobs
-from orchestrator.infrastructure.tracing import LangfuseTracer
+from orchestrator.infrastructure.tracing import build_tracer
 from orchestrator.infrastructure.workspace import FsWorkspace
 
 #: `LiteLLMSpend`'s own client timeout (5.7): httpx's 5 s default is tight for a paginated
@@ -124,7 +124,7 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
             work_dir=str(settings.work_dir),
             process=runner,
             workspace=FsWorkspace,
-            tracer=LangfuseTracer(settings),
+            tracer=build_tracer(settings),
             harnesses=build_harnesses(settings, runner),
             harness_env=build_harness_env(settings),
             attempt_writes=partial(open_writer_ports, session_factory),
@@ -145,7 +145,7 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
             readiness_evaluate_hook,
             session_factory,
             git,
-            LangfuseTracer(settings),
+            build_tracer(settings),
             gateway,
             settings.work_dir,
         ),

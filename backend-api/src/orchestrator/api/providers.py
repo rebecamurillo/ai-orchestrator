@@ -63,7 +63,7 @@ from orchestrator.infrastructure.harness.models import model_table
 from orchestrator.infrastructure.harness.registry import build_harnesses, build_terminal_env
 from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.process.runner import RealProcessRunner
-from orchestrator.infrastructure.tracing import LangfuseTracer
+from orchestrator.infrastructure.tracing import build_tracer
 from orchestrator.infrastructure.workspace.fs import FsWorkspace
 
 #: The attributes `create_app` stores its adapters under.
@@ -183,8 +183,9 @@ def create_run_ports(request: Request) -> Iterator[CreateRunPorts]:
     """The ports `create_run` (4.4) runs on: pre-flight's own, plus what only creation
     writes (`steps`, `engine`), plus a `Tracer` (5.2) so every Run's trace opens.
 
-    `LangfuseTracer(settings)` is built fresh per request: its client is lazy and `main.py`
-    has no room for a fourth adapter singleton — see 5.2's Design Notes.
+    `build_tracer(settings)` is built fresh per request rather than read off
+    `app.state`: its own client is lazy (built only once a call actually opens a span), and
+    `main.py` has no room left for a fourth adapter singleton — see 5.2's Design Notes.
     """
     session_factory = from_state(request, SESSION_FACTORY)
     engine: WorkflowEngine = from_state(request, ENGINE)
@@ -196,7 +197,7 @@ def create_run_ports(request: Request) -> Iterator[CreateRunPorts]:
             steps=SQLAlchemyStepRunRepository(uow.session),
             uow=uow,
             clock=SystemClock(),
-            tracer=LangfuseTracer(settings),
+            tracer=build_tracer(settings),
         )
 
 
@@ -218,7 +219,7 @@ def readiness_ports(request: Request) -> Iterator[HarnessReadinessPorts]:
                 uow=uow,
                 clock=SystemClock(),
                 skip_harness_check=True,
-                tracer=LangfuseTracer(settings),
+                tracer=build_tracer(settings),
             ),
             budget_usd=settings.readiness_budget_usd,
             models=settings.readiness_models,
@@ -245,7 +246,7 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
     module docstring for why it cannot share this one.
 
     `tracer` (5.2) is what `cost.trace_url` reads through — built fresh per request, the
-    same reasoning as `create_run_ports`'s own `LangfuseTracer`.
+    same reasoning as `create_run_ports`'s own `build_tracer` call.
 
     `terminal` (6.7): built with `build_terminal_env` and `build_harnesses` — neither starts
     a process (AD-14), and `build_terminal_env` reads no credential (AD-5)."""
@@ -261,7 +262,7 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
             repositories=SQLAlchemyRepositoryRepository(uow.session),
             logs=RealLogReader(),
             clock=SystemClock(),
-            tracer=LangfuseTracer(settings),
+            tracer=build_tracer(settings),
             terminal=TerminalPorts(
                 env=build_terminal_env(settings),
                 harnesses=build_harnesses(settings, RealProcessRunner()),
@@ -296,7 +297,7 @@ def history_ports(request: Request) -> Iterator[HistoryPorts]:
     settings = from_state(request, SETTINGS)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
         yield HistoryPorts(
-            history=SQLAlchemyHistoryQuery(uow.session), tracer=LangfuseTracer(settings)
+            history=SQLAlchemyHistoryQuery(uow.session), tracer=build_tracer(settings)
         )
 
 
