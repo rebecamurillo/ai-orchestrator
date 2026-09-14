@@ -2,7 +2,7 @@
 title: 'Running without the host services, proven and documented'
 type: 'feature'
 created: '2026-09-14'
-status: 'blocked'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []

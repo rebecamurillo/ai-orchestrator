@@ -447,4 +447,4 @@ figures are provisional and trace links are absent throughout.
 
 ### Operator run result
 
-_Recorded here after the Operator completes the verification run described in story 9-6._
+Verification deferred to post-epic-completion per Operator instruction (2026-09-14). The Operator confirmed they will run the off-mode verification — both `LITELLM_BASE_URL` and `LANGFUSE_BASE_URL` blanked — once the epic is fully built. Nothing has been observed yet; this section will be updated when the Operator reports their findings.
