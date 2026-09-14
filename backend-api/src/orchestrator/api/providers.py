@@ -12,6 +12,11 @@ so a misconfigured key refuses the first request that needs it (a `ValueError` �
 `internal server error` — the body names nothing, because naming the variable would be the
 leak) rather than failing startup.
 
+At the 400-line cap (`test_source_limits.py`) this module splits rather than trims: the
+`app.state` attribute names and accessors live in `providers_base.py`, the run-files feature
+in `providers_run_files.py`, trajectories in `providers_trajectories.py`. `__all__` below
+re-exports what the frozen router tests and `routers/run_files.py` import from here.
+
 Nothing here asserts. `python -O` strips `assert`.
 """
 
@@ -19,10 +24,25 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from functools import partial
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import Query, Request
 
+from orchestrator.api.providers_base import (
+    CRYPTO,
+    ENGINE,
+    GIT,
+    SESSION_FACTORY,
+    SETTINGS,
+    from_state,
+    git_adapter,
+    required_git,
+)
+from orchestrator.api.providers_run_files import (
+    run_files_diff_ports,
+    run_files_ports,
+    run_files_write_ports,
+)
 from orchestrator.application.use_cases.activity import ActivityPorts
 from orchestrator.application.use_cases.create_run import CreateRunPorts, RunReadPorts
 from orchestrator.application.use_cases.harness_readiness import HarnessReadinessPorts
@@ -32,18 +52,12 @@ from orchestrator.application.use_cases.open_run import OpenRunPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.queue import QueuePorts
-from orchestrator.application.use_cases.run_files import (
-    RunFilesDiffPorts,
-    RunFilesPorts,
-    RunFilesWritePorts,
-)
 from orchestrator.application.use_cases.run_views import RunViewPorts
 from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.application.use_cases.signals import SignalEffectPorts
 from orchestrator.application.use_cases.templates import TemplatePorts
 from orchestrator.application.use_cases.terminal import TerminalPorts
 from orchestrator.domain.ports.engine import WorkflowEngine
-from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
     SQLAlchemyAttemptRepository,
@@ -64,37 +78,15 @@ from orchestrator.infrastructure.harness.registry import build_harnesses, build_
 from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.process.runner import RealProcessRunner
 from orchestrator.infrastructure.tracing import build_tracer
-from orchestrator.infrastructure.workspace.fs import FsWorkspace
 
-#: The attributes `create_app` stores its adapters under.
-SESSION_FACTORY = "session_factory"
-CRYPTO = "crypto"
-GIT = "git"
-ENGINE = "engine"
-SETTINGS = "settings"
-
-
-def from_state(request: Request, attribute: str) -> Any:
-    """One adapter off `app.state`, or a failure that says which one is missing."""
-    value = getattr(request.app.state, attribute, None)
-    if value is None:
-        raise RuntimeError(
-            f"app.state.{attribute} is not set: this application was built without it, "
-            "and only main() wires the adapters"
-        )
-    return value
-
-
-def git_adapter(request: Request) -> Git | None:
-    """The git adapter, read tolerantly rather than through `from_state`.
-
-    Every other adapter here is required, because no route can answer without it. This one
-    is not: an application built without it still serves every Project and Repository
-    operation, and only the clone check needs it — which then refuses loudly, naming the
-    port, rather than this dependency refusing a read that never touches git.
-    """
-    adapter: Git | None = getattr(request.app.state, GIT, None)
-    return adapter
+#: Re-exports: the frozen router tests and `routers/run_files.py` import these names from
+#: here; the wiring itself lives in the capped-module siblings named in the docstring.
+__all__ = [
+    "GIT",
+    "run_files_diff_ports",
+    "run_files_ports",
+    "run_files_write_ports",
+]
 
 
 def project_ports(request: Request) -> Iterator[ProjectPorts]:
@@ -143,23 +135,12 @@ def harness_models(request: Request) -> dict[str, tuple[str, ...]]:
     return model_table(from_state(request, SETTINGS))
 
 
-def _required_git(request: Request, needed_by: str) -> Git:
-    """`git_adapter`, refusing loudly by name — pre-flight and `create_run` both need it."""
-    git = git_adapter(request)
-    if git is None:
-        raise RuntimeError(
-            f"app.state.git is not set: this application was built without it, "
-            f"and {needed_by} needs a git port"
-        )
-    return git
-
-
 def _preflight_ports(request: Request, uow: SQLAlchemyUnitOfWork, needed_by: str) -> PreflightPorts:
     """The `PreflightPorts` pre-flight and `create_run` (4.4) both run on, over one session
     — `create_run` reuses pre-flight's own resolution rather than building a second one."""
     settings = from_state(request, SETTINGS)
     return PreflightPorts(
-        git=_required_git(request, needed_by),
+        git=required_git(request, needed_by),
         templates=SQLAlchemyTemplateVersionRepository(uow.session),
         runs=SQLAlchemyRunRepository(uow.session),
         harnesses=SQLAlchemyHarnessRepository(uow.session),
@@ -301,35 +282,6 @@ def history_ports(request: Request) -> Iterator[HistoryPorts]:
         )
 
 
-def run_files_ports(request: Request) -> Iterator[RunFilesPorts]:
-    """The ports `GET /runs/{id}/files` reads through (6.2). Writes nothing.
-
-    `workspace` is `FsWorkspace` itself — a factory, not an instance — the same "port is
-    the class" shape `infrastructure/dbos/startup.py` already wires `StepPorts.workspace`
-    with: the use case cannot root one until it has read the Run's own `worktree_path`.
-    """
-    session_factory = from_state(request, SESSION_FACTORY)
-    with SQLAlchemyUnitOfWork(session_factory) as uow:
-        yield RunFilesPorts(runs=SQLAlchemyRunRepository(uow.session), workspace=FsWorkspace)
-
-
-def run_files_write_ports(request: Request) -> Iterator[RunFilesWritePorts]:
-    """The ports `PUT /runs/{id}/files` writes through (6.3): `run_files_ports`'s own shape,
-    plus `Git` to stage and commit the Operator's edit, a `GateRecordRepository` for the
-    `spec_edit` line, a `Clock`, and the `UnitOfWork` itself so the use case can `commit()`.
-    """
-    session_factory = from_state(request, SESSION_FACTORY)
-    with SQLAlchemyUnitOfWork(session_factory) as uow:
-        yield RunFilesWritePorts(
-            runs=SQLAlchemyRunRepository(uow.session),
-            workspace=FsWorkspace,
-            git=_required_git(request, "run_files"),
-            records=SQLAlchemyGateRecordRepository(uow.session),
-            clock=SystemClock(),
-            uow=uow,
-        )
-
-
 def activity_ports(request: Request) -> Iterator[ActivityPorts]:
     """The ports `GET/POST /runs/{id}/activity` reads and writes through (8.2)."""
     session_factory = from_state(request, SESSION_FACTORY)
@@ -357,33 +309,6 @@ def open_run_ports(
         )
 
 
-def run_files_diff_ports(
-    request: Request, diff: Annotated[bool, Query()] = False
-) -> Iterator[RunFilesDiffPorts | None]:
-    """The ports `GET /runs/{id}/files?diff=1` reads through (6.6). Writes nothing.
-
-    No `Workspace`: the diff is `Git`'s own answer over the worktree; the scope gate is the
-    park's recorded hit list — see `application/use_cases/run_files.py`'s own docstring for
-    why.
-
-    Reads `?diff` itself and yields `None` when absent: FastAPI resolves every dependency on
-    every request, so opening a session unconditionally would break the file and tree modes
-    that share this route (same trap `run_views.py` documents for `board_view`).
-    """
-    if not diff:
-        yield None
-        return
-    session_factory = from_state(request, SESSION_FACTORY)
-    with SQLAlchemyUnitOfWork(session_factory) as uow:
-        yield RunFilesDiffPorts(
-            runs=SQLAlchemyRunRepository(uow.session),
-            steps=SQLAlchemyStepRunRepository(uow.session),
-            attempts=SQLAlchemyAttemptRepository(uow.session),
-            records=SQLAlchemyGateRecordRepository(uow.session),
-            git=_required_git(request, "run_files"),
-        )
-
-
 def signal_effect_ports(request: Request) -> Iterator[SignalEffectPorts]:
     """The ports `handle_signal` (4.9) runs on: `signal_run`'s own writers, plus `cancel`'s
     cleanup — a `Git`, a `ProcessRunner`, `WORK_DIR`, and one Run's environment, read the
@@ -394,7 +319,7 @@ def signal_effect_ports(request: Request) -> Iterator[SignalEffectPorts]:
     with open_writer_ports(session_factory) as writers:
         yield SignalEffectPorts(
             signal=SignalPorts(writers=writers, engine=engine),
-            git=_required_git(request, "signals"),
+            git=required_git(request, "signals"),
             process=RealProcessRunner(),
             work_dir=settings.work_dir,
             read_environment=partial(read_run_environment, session_factory, settings.bmad_version),
