@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any
 from orchestrator.application.templates.expressions import ITEM_TYPE
 from orchestrator.application.templates.model import AgentExtras
 from orchestrator.application.templates.substitute import paused, resolve
+from orchestrator.application.templates.table import WRITES_KEY
 
 if TYPE_CHECKING:  # a frame is the walker's; naming it here would be a second one
     from orchestrator.application.templates.rows import Frame
@@ -61,12 +62,13 @@ INVOKE_DEV_WITH = "invoke_dev_with"
 def agent_extras(agent: AgentExtras, frame: Frame) -> dict[str, Any]:
     """Everything an `agent` row carries beside the `with` its Template wrote."""
     entry = item(frame)
-    return {
+    extras: dict[str, Any] = {
         STORY_KEY: entry,
         STORY_ID_KEY: frame.story_id,
         SPEC_FOLDER_KEY: frame.scope.get(SPEC_FOLDER_KEY),
         SPEC_CHECKPOINT_KEY: paused(agent.pause_when, frame.scope),
         ESCALATE_WHEN_KEY: agent.escalate_when,
+        WRITES_KEY: [resolve(path, frame.scope) for path in agent.writes],
         EXPECT_KEY: {
             "files": [resolve(glob, frame.scope) for glob in agent.expect_files],
             "status_in": list(agent.expect_status_in),
@@ -77,6 +79,15 @@ def agent_extras(agent: AgentExtras, frame: Frame) -> dict[str, Any]:
             "resume_session": agent.retry_resume_session,
         },
     }
+    if not _has_story_contract(agent, frame):
+        del extras[EXPECT_KEY]
+    return extras
+
+
+def _has_story_contract(agent: AgentExtras, frame: Frame) -> bool:
+    if agent.expect_files or agent.expect_status_in:
+        return True
+    return bool(frame.story_id) and bool(frame.scope.get(SPEC_FOLDER_KEY))
 
 
 def prompt_extra(resolved: Mapping[str, Any], frame: Frame) -> str:

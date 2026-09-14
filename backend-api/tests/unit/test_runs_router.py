@@ -36,7 +36,7 @@ PROBLEM_MEDIA_TYPE = "application/problem+json"
 PREFLIGHT = "/api/v1/runs/preflight"
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
-REPO_INIT_ROW_COUNT = 6
+REPO_INIT_ROW_COUNT = 8
 
 
 def project() -> Project:

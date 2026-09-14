@@ -1,13 +1,17 @@
 """The scripted repositories the plan tests share.
 
 `plan_run` is pure apart from three `Git` calls, so a plan test is a fixture repository:
-the four shipped Template files, a `stories.yaml` / `epics.yaml` text, a story file or two,
+four exemplar Template files, a `stories.yaml` / `epics.yaml` text, a story file or two,
 and the branches the remote is said to hold. They live here rather than in each test module
 because the same repository answers several questions — the row list, the labels, the
 skipped rules — and a second copy of it is how two of those answers would drift apart.
 
-The Templates are the shipped files read verbatim off disk and run through the one
-validator (AD-15), so a fixture can never describe a Template the repository does not ship.
+The Templates are the frozen copies under `fixtures/exemplars/` — a snapshot of the shipped
+files taken when the suite was decoupled from `templates/*.yaml`, run through the one
+validator (AD-15). They are fixtures, not a second reading of what ships: the shipped files
+evolve freely without breaking the planner tests here, and are themselves covered by the
+invariant-only `test_shipped_smoke.py`. Do not sync the exemplars to the shipped files;
+change one only when a planner mechanism needs a construct no exemplar exercises yet.
 """
 
 from __future__ import annotations
@@ -29,9 +33,9 @@ from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
 from tests.unit.fakes.git import FakeGit
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
-#: `tests/unit/application/templates/plan_fixtures.py` -> the repository root.
+#: The frozen exemplar Templates this suite plans — never the shipped `templates/*.yaml`.
 REPO_ROOT = Path(__file__).resolve().parents[5]
-TEMPLATES_DIR = REPO_ROOT / "templates"
+TEMPLATES_DIR = Path(__file__).resolve().parent / "fixtures" / "exemplars"
 
 NAMES = ("repo-init", "story", "epic", "initiative")
 

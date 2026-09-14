@@ -28,7 +28,9 @@ from orchestrator.application.templates.plan_model import (
     ID_NOT_PREFIX_FREE,
     Plan,
     PlanError,
+    ResolvedTree,
 )
+from orchestrator.application.templates.validate import validate
 from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.entities.repository import CloneCheck, Repository
 from orchestrator.domain.entities.run import Run
@@ -424,7 +426,45 @@ def test_harness_skips_without_a_repository() -> None:
     assert line.text == "no repository"
 
 
+#: A Template that dispatches nothing, which is the subject of the skip below. Written here
+#: rather than borrowed from a shipped Template: `repo-init@1` was the one with no `agent`
+#: step until its `context` dispatch landed, and the check's rule is about what a tree holds
+#: and not about which file the tree came from.
+NO_AGENT_TEMPLATE = """
+name: no-agent
+version: 1
+description: a Template that dispatches nothing
+inputs:
+  project:    { type: project,    required: true }
+  repository: { type: repository, required: true }
+steps:
+  - id: verify
+    run: "{{repository.quality_gate_command}}"
+    gate: deterministic
+"""
+
+
+def a_tree_with_no_agent_step() -> ResolvedTree:
+    result = validate(NO_AGENT_TEMPLATE, templates=fixtures.repository_of_versions())
+    assert result.template is not None, result.errors
+    return ResolvedTree(root=result.template)
+
+
 def test_harness_skips_when_the_tree_has_no_agent_step() -> None:
+    line = checks.harness_line(
+        ctx(
+            req=PreflightRequest(harness="claude"),
+            repository=repo(),
+            tree=a_tree_with_no_agent_step(),
+        )
+    )
+
+    assert line == Line(CHECK_HARNESS, "skip", "no agent step", None)
+
+
+def test_harness_is_asked_about_the_repo_init_tree_now_that_it_dispatches() -> None:
+    """The counterpart: `repo-init@1`'s `context` step is an `agent` step, so the harness is
+    a real question for it — a disabled one fails the check rather than skipping it."""
     line = checks.harness_line(
         ctx(
             req=PreflightRequest(harness="claude"),
@@ -433,7 +473,7 @@ def test_harness_skips_when_the_tree_has_no_agent_step() -> None:
         )
     )
 
-    assert line == Line(CHECK_HARNESS, "skip", "no agent step", None)
+    assert line.status == "fail"
 
 
 def test_harness_fails_when_unknown() -> None:

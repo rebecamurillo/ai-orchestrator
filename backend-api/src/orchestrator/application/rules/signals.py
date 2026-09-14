@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from orchestrator.application.rules.frames import EPIC_TEMPLATE, epic_frame, story_frame
 from orchestrator.application.rules.signals_table import (
     ACCEPTED,
     ACCEPTED_SEPARATOR,
@@ -152,8 +153,18 @@ def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKin
         return ()
     offered = admitted_signals(run.park_kind, park_row_kind or "")
     if run.park_reason == REBASELINE_FAILED:
-        return tuple(kind for kind in offered if kind != "skip_story")
-    return offered
+        offered = tuple(kind for kind in offered if kind != "skip_story")
+    return _skippable(run, offered)
+
+
+def _skippable(run: Run, offered: tuple[SignalKind, ...]) -> tuple[SignalKind, ...]:
+    path = run.park_path
+    dropped: set[SignalKind] = set()
+    if path is None or story_frame(path) is None:
+        dropped.add("skip_story")
+    if run.template_name != EPIC_TEMPLATE and (path is None or epic_frame(path) is None):
+        dropped.add("skip_epic")
+    return tuple(kind for kind in offered if kind not in dropped)
 
 
 def record_text(rule: Rule, payload: dict[str, Any]) -> str:

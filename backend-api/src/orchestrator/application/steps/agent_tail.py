@@ -233,9 +233,8 @@ def protected(ctx: StepContext, attempt: Attempt) -> StepResult | None:
     answers with *Accept* or a skip; `re_check` below is what an Accept comes back to.
     """
     environment = require_env(ctx)
-    hits = protected_paths.check(
-        _changes(ctx, attempt), environment.anchors, environment.accepted_paths
-    )
+    allowed = (*environment.accepted_paths, *protected_paths.declared(ctx.row.with_resolved))
+    hits = protected_paths.check(_changes(ctx, attempt), environment.anchors, allowed)
     if not hits:
         return None
     reason = PROTECTED.format(paths=PATH_SEPARATOR.join(hit.path for hit in hits))

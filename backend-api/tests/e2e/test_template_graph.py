@@ -25,8 +25,16 @@ TEMPLATES = "/api/v1/templates"
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 
-#: `repo-init@1` ships five steps and no loop.
-REPO_INIT_NODES = ["checkout", "install", "commit", "push", "link"]
+#: `repo-init@1` ships seven steps and no loop.
+REPO_INIT_NODES = [
+    "checkout",
+    "install",
+    "context",
+    "context-review",
+    "commit",
+    "push",
+    "link",
+]
 
 
 def test_epic_1_answers_the_golden_shape(authenticated: httpx.Client) -> None:
@@ -86,7 +94,7 @@ def test_story_1_marks_its_agent_step(authenticated: httpx.Client) -> None:
     assert build["gate"] == "liveness"
 
 
-def test_repo_init_1_is_five_nodes_chained_with_no_group(authenticated: httpx.Client) -> None:
+def test_repo_init_1_is_seven_nodes_chained_with_no_group(authenticated: httpx.Client) -> None:
     body = authenticated.get(f"{TEMPLATES}/repo-init/1/graph").json()
 
     assert [node["id"] for node in body["nodes"]] == REPO_INIT_NODES

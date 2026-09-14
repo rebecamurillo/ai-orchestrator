@@ -31,7 +31,7 @@ from pathlib import Path
 from uuid import UUID
 
 from orchestrator.application.templates.lists import _states_done
-from orchestrator.application.templates.plan_model import REASON_NO_QUALITY_GATE
+from orchestrator.application.templates.plan_model import names_a_field
 from orchestrator.application.templates.rows import SKIPPED
 from orchestrator.application.use_cases.clone_check import _base
 from orchestrator.application.use_cases.harness_readiness import (
@@ -240,19 +240,24 @@ def _verify_line(verify_row: StepRun | None) -> EvaluationLine:
     """What the frame's `verify` row proved — or that there was nothing for it to prove.
 
     Three outcomes, not two. A `done` row ran the gate and it exited 0. A row the planner
-    skipped because the Repository declares no `quality_gate_command` ran nothing, and says
-    so under its own check name: the absence of a gate is not the pass of one. Anything
+    skipped because the Repository declares no command for it ran nothing, and says so
+    under its own check name: the absence of a gate is not the pass of one. Anything
     else — failed, errored, or skipped for any other reason, including `skipped by
     operator` — is a readiness failure and keeps the `verify exit 0` wording, because that
     is the check the Operator was owed and did not get.
+
+    Which command is missing is the row's to say, not this function's. `verify` ran
+    `{{repository.quality_gate_command}}` when this was written and runs
+    `{{repository.unit_test_command}}` now; both are "the Repository states no command for
+    this row", so the test is `names_a_field` and the text is the row's own reason.
     """
     if verify_row is not None and verify_row.status == DONE:
         return EvaluationLine(check=CHECK_VERIFY_EXIT_0, ok=True, text="verify exited 0")
-    if verify_row is not None and verify_row.reason == REASON_NO_QUALITY_GATE:
+    if verify_row is not None and names_a_field(verify_row.reason or ""):
         return EvaluationLine(
             check=CHECK_NO_QUALITY_GATE,
             ok=True,
-            text=f"{SKIPPED} · {REASON_NO_QUALITY_GATE}",
+            text=f"{SKIPPED} · {verify_row.reason}",
         )
     return EvaluationLine(check=CHECK_VERIFY_EXIT_0, ok=False, text="verify did not pass")
 

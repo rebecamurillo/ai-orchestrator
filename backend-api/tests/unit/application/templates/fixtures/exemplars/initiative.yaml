@@ -1,0 +1,31 @@
+name: initiative
+version: 1
+description: every epic of one initiative, in order, on one repository
+inputs:
+  project:           { type: project,    required: true }
+  repository:        { type: repository, required: true }
+  base_branch:       { type: string,     required: true }
+  initiative_folder: { type: path,       required: true }  # holds epics.yaml + one spec folder per epic
+  harness:           { type: enum, values: [claude, codex, local], default: claude }
+  model:             { type: string,     required: false }
+steps:
+  - id: epics
+    for_each: "{{initiative_folder}}/epics.yaml"
+    as: epic
+    pause_after_item_when: "epic.done_checkpoint"
+    # parallel: reserved; sequential in the MVP, list order is the dependency
+    steps:
+      - id: epic
+        uses: template
+        with:
+          name: epic
+          version: 1
+          inputs:
+            project: "{{project}}"
+            repository: "{{repository}}"
+            base_branch: "{{base_branch}}"
+            branch: "{{epic.branch}}"
+            spec_folder: "{{initiative_folder}}/{{epic.spec_folder}}"
+            epic: "{{epic}}"
+            harness: "{{harness}}"
+            model: "{{model}}"

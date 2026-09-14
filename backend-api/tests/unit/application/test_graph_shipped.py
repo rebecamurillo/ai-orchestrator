@@ -1,14 +1,16 @@
-"""The four shipped Templates, as graphs (3.4 acceptance criteria).
+"""The four exemplar Templates, as graphs (3.4 acceptance criteria).
 
 `test_graph.py` proves the rules against templates written for the rule they exercise. This
-module proves the *result* against the files that actually ship, asserted as exact ordered
+module proves the *result* against full-sized realistic files, asserted as exact ordered
 tuples — the ordering is the whole point of a graph the diagram draws left to right, and a
 set comparison would pass on a reversed chain.
 
-The fixture is the one `tests/unit/application/templates/test_shipped_templates.py` uses:
-each file's text read off disk, against a fake repository holding all four with `calls`
-pinned exactly as saving them would pin them. Read here rather than imported from that
-module, which is an anchor.
+The files are the frozen copies under `templates/fixtures/exemplars/` — a snapshot of the
+shipped Templates taken when the suite was decoupled from `templates/*.yaml`, so the
+shipped files evolve freely without breaking the graph coverage here (the shipped files
+themselves are covered by `templates/test_shipped_smoke.py`). Each file's text sits in a
+fake repository holding all four with `calls` pinned exactly as saving them would pin them.
+Read here rather than imported from `test_shipped_templates.py`, which is an anchor.
 """
 
 from __future__ import annotations
@@ -24,17 +26,16 @@ from orchestrator.application.templates.validate import validate
 from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
-#: `tests/unit/application/test_graph_shipped.py` -> repository root.
-REPO_ROOT = Path(__file__).resolve().parents[4]
-TEMPLATES_DIR = REPO_ROOT / "templates"
+#: The frozen exemplar Templates — never the shipped `templates/*.yaml`.
+TEMPLATES_DIR = Path(__file__).resolve().parent / "templates" / "fixtures" / "exemplars"
 
 NAMES = ("repo-init", "story", "epic", "initiative")
 
 TEXTS: dict[str, str] = {name: (TEMPLATES_DIR / f"{name}.yaml").read_text() for name in NAMES}
 
 #: `repo-init@1`'s five steps, in file order.
-REPO_INIT_NODES = ("checkout", "install", "commit", "push", "link")
-REPO_INIT_STEPS = 5
+REPO_INIT_NODES = ("checkout", "install", "context", "context-review", "commit", "push", "link")
+REPO_INIT_STEPS = 7
 
 
 @pytest.fixture
@@ -81,10 +82,10 @@ def node(graph: Graph, node_id: str) -> Node:
     return {found.id: found for found in graph.nodes}[node_id]
 
 
-# --- repo-init@1: five steps, one chain, no group, no call ---------------------------------
+# --- repo-init@1: seven steps, one chain, no group, no call --------------------------------
 
 
-def test_repo_init_is_five_nodes_in_file_order(
+def test_repo_init_is_seven_nodes_in_file_order(
     templates: FakeTemplateVersionRepository,
 ) -> None:
     graph = graph_of("repo-init", templates)
@@ -93,18 +94,29 @@ def test_repo_init_is_five_nodes_in_file_order(
     assert len(graph.nodes) == REPO_INIT_STEPS
 
 
-def test_repo_init_chains_its_five_steps_and_declares_no_group(
+def test_repo_init_chains_its_seven_steps_and_declares_no_group(
     templates: FakeTemplateVersionRepository,
 ) -> None:
     graph = graph_of("repo-init", templates)
 
     assert edge_pairs(graph) == (
         ("checkout", "install"),
-        ("install", "commit"),
+        ("install", "context"),
+        ("context", "context-review"),
+        ("context-review", "commit"),
         ("commit", "push"),
         ("push", "link"),
     )
     assert graph.groups == ()
+
+
+def test_the_repo_init_stop_is_the_one_node_a_person_decides(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    """`application/graph.py::_is_human`: the `checkpoint` kind, and the `human` gate."""
+    graph = graph_of("repo-init", templates)
+
+    assert [found.id for found in graph.nodes if found.human] == ["context-review"]
 
 
 def test_no_repo_init_node_carries_a_call(templates: FakeTemplateVersionRepository) -> None:
@@ -166,9 +178,11 @@ def test_epic_is_the_golden_shape(templates: FakeTemplateVersionRepository) -> N
 
     assert node_ids(graph) == (
         "checkout",
+        "setup",
         "baseline",
         "stories.story",
         "stories.after",
+        "e2e",
         "push",
         "link",
     )
@@ -176,12 +190,39 @@ def test_epic_is_the_golden_shape(templates: FakeTemplateVersionRepository) -> N
         Group(id="stories", label="stories", members=("stories.story", "stories.after")),
     )
     assert edge_pairs(graph) == (
-        ("checkout", "baseline"),
+        ("checkout", "setup"),
+        ("setup", "baseline"),
         ("baseline", "stories.story"),
         ("stories.story", "stories.after"),
-        ("stories.after", "push"),
+        ("stories.after", "e2e"),
+        ("e2e", "push"),
         ("push", "link"),
     )
+
+
+def test_the_epics_slow_gate_runs_once_and_before_the_push(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    """The tiering, as a graph claim rather than as a row list.
+
+    `e2e` is the 24-minute gate: once per epic rather than once per Story, and *before*
+    `push`, because a branch is not handed over carrying a red integration suite. Both
+    halves are read off the chain, so moving the row past `push` fails here.
+    """
+    ids = node_ids(graph_of("epic", templates))
+
+    assert ids.count("e2e") == 1
+    assert ids.index("e2e") < ids.index("push")
+    assert ("e2e", "push") in edge_pairs(graph_of("epic", templates))
+
+
+def test_the_epic_installs_its_toolchain_before_anything_reads_it(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    """A fresh worktree has no virtualenv: `setup` precedes the first row that needs one."""
+    ids = node_ids(graph_of("epic", templates))
+
+    assert ids.index("setup") < ids.index("baseline") < ids.index("stories.story")
 
 
 def test_epic_collapses_its_call_to_story_into_one_node(

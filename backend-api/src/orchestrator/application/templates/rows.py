@@ -65,15 +65,14 @@ from orchestrator.application.templates.plan_model import (
     ON_FAIL_KEY,
     PATH_SEPARATOR,
     REASON_ALREADY_DONE,
-    REASON_NO_COMMAND,
-    REASON_NO_QUALITY_GATE,
     PlanError,
     Redispatched,
     ResolvedTree,
     working_branch,
 )
 from orchestrator.application.templates.reader import PlanReader
-from orchestrator.application.templates.substitute import names_field, paused, resolve
+from orchestrator.application.templates.skip_reason import empty_command_reason
+from orchestrator.application.templates.substitute import paused, resolve
 from orchestrator.domain.statuses import StepStatus
 from orchestrator.domain.values import PlannedRow
 
@@ -90,13 +89,6 @@ COMMAND_KEY = "command"
 #: The key the planner writes onto every timed row's `with_resolved`. The `agent` keys
 #: are `agent_row`'s, because only that kind has them.
 TIMEOUT_KEY = "timeout_min"
-
-#: The entity and the field whose absence makes a shell row
-#: `skipped · no quality_gate_command` rather than `skipped · no command`. Both halves,
-#: because `{{project.quality_gate_command}}` names no Repository and asks for nothing:
-#: the pair is one of `expressions.ENTITY_FIELDS`' own.
-QUALITY_GATE_ENTITY = "repository"
-QUALITY_GATE_FIELD = "quality_gate_command"
 
 #: What one loop item is called in a label: the Story by its own id, the epic by its place.
 STORY_LABEL = "story"
@@ -277,7 +269,7 @@ def row_status(
     if frame.skipped:
         return SKIPPED, REASON_ALREADY_DONE
     if step.uses == SHELL_KIND and not str(resolved.get(COMMAND_KEY) or "").strip():
-        return SKIPPED, _empty_command_reason(step)
+        return SKIPPED, empty_command_reason(dict(step.params).get(COMMAND_KEY))
     return PLANNED, None
 
 
@@ -381,13 +373,6 @@ def _routing(step: Step, frame: Frame) -> str | Redispatched | None:
         version=frame.template.version,
         line=step.line,
     )
-
-
-def _empty_command_reason(step: Step) -> str:
-    """Why the command is empty, in the Operator's terms rather than in the plan's."""
-    declared = dict(step.params).get(COMMAND_KEY)
-    asked = names_field(declared, QUALITY_GATE_ENTITY, QUALITY_GATE_FIELD)
-    return REASON_NO_QUALITY_GATE if asked else REASON_NO_COMMAND
 
 
 def _joined(prefix: str, segment: str) -> str:

@@ -1,12 +1,13 @@
-"""The four shipped Templates (CAP-2, SPEC epic-03-templates 3.2): validate, compose, gate.
+"""The four exemplar Templates (CAP-2, SPEC epic-03-templates 3.2): validate, compose, gate.
 
 `repo-init`, `story`, `epic` and `initiative` are DSL v1 in the flesh: the brief's binding
 rules superseding `template-dsl-draft.md` §3 (`uses: <kind>` instead of `run: git.worktree`,
-`gate` on every executable step). This module is their only reader in the unit suite. Each
-file's text comes straight off disk, relative to the repository root -- the same text
-`GET /templates/{name}/{v}/validate` will read once 3.3 lands storage -- and is run through
-`validate()` against a fake repository holding the other three, pinned the way saving
-`epic@1` and `initiative@1` would pin their callees (AD-15).
+`gate` on every executable step). The files are the frozen copies under
+`fixtures/exemplars/` — a snapshot of the shipped Templates taken when the suite was
+decoupled from `templates/*.yaml`, so the shipped files evolve freely without breaking the
+DSL coverage here (the shipped files themselves are covered by `test_shipped_smoke.py`).
+Each file's text is run through `validate()` against a fake repository holding the other
+three, pinned the way saving `epic@1` and `initiative@1` would pin their callees (AD-15).
 """
 
 from __future__ import annotations
@@ -20,9 +21,8 @@ from orchestrator.application.templates.validate import validate
 from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
-#: `tests/unit/application/templates/test_shipped_templates.py` -> repository root.
-REPO_ROOT = Path(__file__).resolve().parents[5]
-TEMPLATES_DIR = REPO_ROOT / "templates"
+#: The frozen exemplar Templates — never the shipped `templates/*.yaml`.
+TEMPLATES_DIR = Path(__file__).resolve().parent / "fixtures" / "exemplars"
 
 NAMES = ("repo-init", "story", "epic", "initiative")
 

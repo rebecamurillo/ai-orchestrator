@@ -25,7 +25,9 @@ SLUG = re.compile(r"^[a-z][a-z0-9-]*$")
 TEMPLATE_KEYS = frozenset({"name", "version", "description", "inputs", STEPS_KEY})
 INPUT_KEYS = frozenset({"type", "required", "default", "values"})
 STEP_KEYS = frozenset({"id", "uses", "run", "with", "gate", "timeout_min", "on_fail"})
-AGENT_KEYS = frozenset({"expect", "retry", "escalate_when", "pause_when"})
+WRITES_KEY = "writes"
+
+AGENT_KEYS = frozenset({"expect", "retry", "escalate_when", "pause_when", WRITES_KEY})
 FOR_EACH_KEYS = frozenset(
     {
         "id",

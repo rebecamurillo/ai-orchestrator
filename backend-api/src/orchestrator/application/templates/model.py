@@ -119,6 +119,7 @@ class AgentExtras(BaseModel):
     retry_resume_session: bool = True
     escalate_when: str | None = None
     pause_when: str | None = None
+    writes: tuple[str, ...] = ()
 
 
 class TemplateCall(BaseModel):

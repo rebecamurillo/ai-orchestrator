@@ -25,7 +25,7 @@ already makes, unchanged.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -51,6 +51,8 @@ EPICS_FILENAME = "epics.yaml"
 
 #: The constitution, protected wherever it is and whether or not it exists yet.
 AGENTS_FILENAME = "AGENTS.md"
+
+WRITES_KEY = "writes"
 
 #: What `git status --porcelain` separates its status letters from the path with: `XY path`.
 STATUS_PREFIX = 3
@@ -89,6 +91,13 @@ def build(
     if initiative_folder:
         anchors.add(f"{initiative_folder}/{EPICS_FILENAME}")
     return frozenset(anchors)
+
+
+def declared(with_resolved: Mapping[str, Any]) -> tuple[str, ...]:
+    paths = with_resolved.get(WRITES_KEY)
+    if not isinstance(paths, Sequence) or isinstance(paths, str):
+        return ()
+    return tuple(path for path in paths if isinstance(path, str))
 
 
 def uncommitted(status: str) -> tuple[Change, ...]:

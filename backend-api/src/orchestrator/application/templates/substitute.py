@@ -92,6 +92,28 @@ def names_field(value: Any, entity: str, field: str) -> bool:
     )
 
 
+def field_named(value: Any, entity: str) -> str | None:
+    """Which field of `entity` a declared value asks for, or `None` if it asks for none.
+
+    `names_field` above answers "does this name *that* field"; a Repository states three
+    commands and a skipped row must say which one is missing, so the planner needs the
+    field itself. Same grammar, same both-halves rule — `{{project.unit_test_command}}`
+    names a Project, so it answers `None` and the row reads `no command` — and the field
+    is checked against what the entity actually exposes, so a reason can only ever name a
+    field an Operator can go and fill in.
+    """
+    if not isinstance(value, str):
+        return None
+    for inner in EXPRESSION.findall(value):
+        reference = VARIABLE.match(inner)
+        if reference is None or reference.group(1) != entity:
+            continue
+        field = reference.group(2)
+        if field in ENTITY_FIELDS.get(entity, frozenset()):
+            return str(field)
+    return None
+
+
 def paused(condition: str | None, scope: Mapping[str, Any]) -> bool:
     """Whether a `pause_*_when` condition holds for what is bound now.
 

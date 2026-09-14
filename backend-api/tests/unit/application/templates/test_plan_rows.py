@@ -32,7 +32,8 @@ from orchestrator.application.templates.plan_model import (
     PlanError,
     ResolvedTree,
 )
-from orchestrator.application.templates.rows import QUALITY_GATE_FIELD, working_branch
+from orchestrator.application.templates.rows import working_branch
+from orchestrator.application.templates.skip_reason import QUALITY_GATE_FIELD
 from orchestrator.application.templates.validate import validate
 from orchestrator.domain.entities.template import TemplateVersion
 from tests.unit.application.templates import plan_fixtures as fixtures

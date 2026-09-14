@@ -51,6 +51,7 @@ from orchestrator.application.templates.table import (
     RUN_KEY,
     RUN_SUGAR_KIND,
     WITH_KEY,
+    WRITES_KEY,
     is_count,
     problem,
 )
@@ -218,6 +219,7 @@ def _agent(node: LinedMap) -> AgentExtras:
         retry_resume_session=retry.get("resume_session", RESUME_DEFAULT),
         escalate_when=_text(node.get("escalate_when")),
         pause_when=_text(node.get("pause_when")),
+        writes=tuple(as_seq(node.get(WRITES_KEY)) or ()),
     )
 
 

@@ -1,4 +1,4 @@
-"""The four shipped Templates, planned: the story's acceptance criteria, row by row.
+"""The four exemplar Templates, planned: the story's acceptance criteria, row by row.
 
 This is the module that says what a Run *is*. `repo-init@1`, `epic@1` and `initiative@1`
 are expanded against a scripted `Git`, and what is asserted is the whole row list — paths,
@@ -6,8 +6,10 @@ labels, gates, statuses and the commit each list file was read at — because AD
 is that *What will run* is exactly what runs, and a promise about a list is only kept by
 asserting the list.
 
-Nothing here is a second reading of the Template files: `plan_fixtures` runs the same text
-`make lint` ships through the same `validate()` the API calls (AD-15).
+The Templates are `plan_fixtures`' frozen exemplars, run through the same `validate()` the
+API calls (AD-15) — a snapshot of the shipped files taken when the suite was decoupled
+from `templates/*.yaml`, so the shipped files evolve freely without breaking the planner
+coverage here. The shipped files themselves are covered by `test_shipped_smoke.py`.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from orchestrator.application.templates.plan_model import (
     REASON_NO_QUALITY_GATE,
     Plan,
     PlanError,
+    reason_no_field,
 )
 from orchestrator.domain.values import PlannedRow, Redispatch
 from tests.unit.application.templates import plan_fixtures as fixtures
@@ -78,13 +81,43 @@ def test_repo_init_plans_from_the_base_when_its_branch_is_not_on_the_remote(
     assert repo_init.plan_ref == fixtures.BASE_SHA
 
 
-def test_repo_init_is_six_rows_in_file_order(repo_init: Plan) -> None:
-    assert paths(repo_init) == ["plan", "checkout", "install", "commit", "push", "link"]
-    assert [row.seq for row in repo_init.rows] == [1, 2, 3, 4, 5, 6]
+def test_repo_init_is_eight_rows_in_file_order(repo_init: Plan) -> None:
+    assert paths(repo_init) == [
+        "plan",
+        "checkout",
+        "install",
+        "context",
+        "context-review",
+        "commit",
+        "push",
+        "link",
+    ]
+    assert [row.seq for row in repo_init.rows] == [1, 2, 3, 4, 5, 6, 7, 8]
 
 
-def test_repo_init_gates_are_five_deterministic_and_then_the_live_one(repo_init: Plan) -> None:
-    assert [row.gate for row in repo_init.rows] == ["deterministic"] * 5 + ["liveness"]
+def test_repo_init_gates_name_the_dispatch_the_stop_and_the_link(repo_init: Plan) -> None:
+    """The `context` dispatch is live, the stop after it is the Operator's, and the rest are
+    the git kinds' own — `pr.link` last, which talks to a host that may not answer."""
+    assert [row.gate for row in repo_init.rows] == [
+        *["deterministic"] * 3,
+        "liveness",
+        "human",
+        *["deterministic"] * 2,
+        "liveness",
+    ]
+
+
+def test_repo_init_declares_the_agents_file_the_context_step_writes(repo_init: Plan) -> None:
+    """AD-17: the Template said so up front, so the tail subtracts it instead of parking."""
+    assert row(repo_init, "context").with_resolved["writes"] == ["AGENTS.md"]
+
+
+def test_repo_init_stops_for_the_operator_after_the_context_step(repo_init: Plan) -> None:
+    stop = row(repo_init, "context-review")
+
+    assert stop.kind == "checkpoint"
+    assert stop.gate == "human"
+    assert stop.status == "planned"
 
 
 def test_repo_init_checkout_substitutes_the_base_branch_and_the_literal_branch(
@@ -117,6 +150,7 @@ def test_repo_init_reads_no_list_file_at_all(repo_init: Plan) -> None:
 EPIC_ROWS = [
     "plan",
     "checkout",
+    "setup",
     "baseline",
     "stories[0].sync",
     "stories[0].build",
@@ -131,6 +165,7 @@ EPIC_ROWS = [
     "stories[2].build",
     "stories[2].verify",
     "stories[2].commit-guard",
+    "e2e",
     "push",
     "link",
 ]
@@ -265,7 +300,15 @@ def test_two_files_for_one_story_stop_the_plan_even_on_a_re_review() -> None:
 # --- AC4: a repository with no quality gate -------------------------------------------------------
 
 
-def test_every_shell_row_is_skipped_when_the_repository_states_no_quality_gate() -> None:
+def test_only_the_slow_gate_is_skipped_when_the_repository_states_no_quality_gate() -> None:
+    """The tiering, stated as what a half-configured Repository still gets.
+
+    Every shell row of `epic@1` used to read `{{repository.quality_gate_command}}`, so a
+    Repository that stated none lost all of them. The rows are tiered now — `setup` asks
+    for `install_command`, `baseline` and each Story's `verify` for `unit_test_command`,
+    and only `e2e` for the quality gate — so the same Repository loses exactly one row and
+    keeps every gate it did declare.
+    """
     result = plan(
         "epic",
         fixtures.epic_inputs(repository=fixtures.NO_QUALITY_GATE),
@@ -274,13 +317,41 @@ def test_every_shell_row_is_skipped_when_the_repository_states_no_quality_gate()
 
     shell_rows = [entry for entry in result.rows if entry.kind == "shell"]
     assert [entry.path for entry in shell_rows] == [
+        "setup",
         "baseline",
         "stories[0].verify",
         "stories[1].verify",
         "stories[2].verify",
+        "e2e",
     ]
-    for entry in shell_rows[:3]:
-        assert (entry.status, entry.reason) == ("skipped", REASON_NO_QUALITY_GATE), entry.path
+    assert (row(result, "e2e").status, row(result, "e2e").reason) == (
+        "skipped",
+        REASON_NO_QUALITY_GATE,
+    )
+    # the rows whose command the Repository does state are planned, not collateral damage
+    for path in ("setup", "baseline", "stories[0].verify", "stories[1].verify"):
+        assert (row(result, path).status, row(result, path).reason) == ("planned", None), path
+
+
+def test_a_repository_that_states_no_command_at_all_names_the_field_of_every_row() -> None:
+    """`skipped · no command` would be three different boxes to guess between (FR-8).
+
+    Each row names the command *it* asked for, so an Operator reading the plan learns
+    which of the three to fill in rather than that one of them is missing.
+    """
+    bare = fixtures.REPOSITORY.model_copy(
+        update={
+            "install_command": None,
+            "unit_test_command": None,
+            "quality_gate_command": None,
+        }
+    )
+    result = plan("epic", fixtures.epic_inputs(repository=bare), fixtures.epic_git())
+
+    assert row(result, "setup").reason == reason_no_field("install_command")
+    assert row(result, "baseline").reason == reason_no_field("unit_test_command")
+    assert row(result, "stories[0].verify").reason == reason_no_field("unit_test_command")
+    assert row(result, "e2e").reason == reason_no_field("quality_gate_command")
 
 
 def test_the_already_done_reason_wins_over_the_missing_quality_gate() -> None:
@@ -304,13 +375,13 @@ def initiative() -> Plan:
 
 def epic_frame(index: int, *, after: bool) -> list[str]:
     prefix = f"epics[{index}]"
-    rows = [f"{prefix}.checkout", f"{prefix}.baseline"]
+    rows = [f"{prefix}.checkout", f"{prefix}.setup", f"{prefix}.baseline"]
     for story in range(4):
         rows += [
             f"{prefix}.stories[{story}].{step}"
             for step in ("sync", "build", "verify", "commit-guard")
         ]
-    rows += [f"{prefix}.push", f"{prefix}.link"]
+    rows += [f"{prefix}.e2e", f"{prefix}.push", f"{prefix}.link"]
     if after:
         rows.append(f"{prefix}.after")
     return rows

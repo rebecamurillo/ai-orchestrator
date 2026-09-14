@@ -106,10 +106,41 @@ class Redispatched:
 
 #: FR-10: the Story's file already states `status: done`, and this is not a re-review.
 REASON_ALREADY_DONE = "already done"
-#: The row's command was `{{repository.quality_gate_command}}` and the Repository has none.
-REASON_NO_QUALITY_GATE = "no quality_gate_command"
-#: The row's command resolved to nothing and named no quality gate on the way.
+#: The row's command resolved to nothing and named no Repository command on the way.
 REASON_NO_COMMAND = "no command"
+
+
+#: What every `reason_no_field` answer begins with, and the bare fallback does too — which
+#: is why `names_a_field` excludes it explicitly rather than by prefix alone.
+NO_FIELD_PREFIX = "no "
+
+
+def reason_no_field(field: str) -> str:
+    """`skipped · no <field>` — the row asked a Repository for a command it does not state.
+
+    One function rather than one constant per field, because a Repository states three
+    commands (`install_command`, `unit_test_command`, `quality_gate_command`) and every
+    one of them can be the reason a shell row has nothing to run. Naming the field is the
+    whole value of the reason: `skipped · no command` tells an Operator that something is
+    unset, `skipped · no unit_test_command` tells them which box to fill in.
+    """
+    return f"no {field}"
+
+
+def names_a_field(reason: str) -> bool:
+    """Whether a reason is one of `reason_no_field`'s, rather than the bare fallback.
+
+    The question `_verify_line` asks: was this row skipped because the Repository declares
+    no command for it — which is an honest "there was nothing to prove" — or for some
+    other reason, which is a readiness failure.
+    """
+    return reason.startswith(NO_FIELD_PREFIX) and reason != REASON_NO_COMMAND
+
+
+#: The row's command was `{{repository.quality_gate_command}}` and the Repository has none.
+#: Kept as a name because it is the one field the readiness fixture's own docstring reasons
+#: about; derived, so the wording can never drift from `reason_no_field`'s.
+REASON_NO_QUALITY_GATE = reason_no_field("quality_gate_command")
 
 # --- how a row is named -----------------------------------------------------------------------
 
