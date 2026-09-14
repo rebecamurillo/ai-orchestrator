@@ -2,12 +2,38 @@
 title: 'The gateway and tracing switches'
 type: 'feature'
 created: '2026-09-13'
-status: 'ready-for-dev'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      ".env.example" comment documents "cost.trace_url null" for tracing-off mode, but
+      providers.py still wires LangfuseTracer unconditionally; cost.trace_url will be a
+      malformed relative path until story 9-2 introduces NullTracer.
+    evidence: |-
+      Verification-gap reviewer traced providers.py → run_views.py → cost.trace_url
+      and confirmed LangfuseTracer.trace_url returns a relative-path string (not None)
+      when langfuse_base_url is blank, because base="".rstrip("/")="" and the format
+      string still runs. Story 9-2 ("Tracing off — NullTracer behind the port") will fix
+      this by wiring build_tracer(settings) through the factory.
+    location: >-
+      backend-api/src/orchestrator/api/providers.py (run_view_ports, multiple call sites)
+    severity: medium
+  - summary: >-
+      ".env.example" comment states "local harness needs the Gateway" but _validate_service_config
+      does not enforce the cross-constraint; a blank LITELLM_BASE_URL with local in
+      READINESS_MODELS passes startup today.
+    evidence: |-
+      Edge-case hunter and blind-hunter both surfaced that blanking the gateway URL while
+      the local harness remains in readiness_models produces no startup error. Story 9-4
+      ("Harness environment and registry in off-mode") explicitly enforces this: "local
+      disabled with a stated reason when the Gateway is off."
+    location: >-
+      backend-api/src/orchestrator/infrastructure/settings.py:215-246 (_validate_service_config)
+    severity: low
+baseline_revision: 'a5886e506104f7cee1066730e7db7862d6517c1d'
 ---
 
 <intent-contract>
@@ -87,6 +113,15 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-09-13 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 0
+- defer: 2: (high 0, medium 1, low 1)
+- reject: 17
+- addressed_findings:
+  - none
+
 ## Design Notes
 
 `SecretStr("")` binds without error and `get_secret_value()` returns `""` — the half-config validator compares `get_secret_value().strip()` to empty, which is why a blank key with a non-blank URL still triggers the refusal. No new type is needed.
@@ -105,4 +140,34 @@ Previous run context (operator-supplied): a prior attempt halted with blocking c
 
 ## Auto Run Result
 
-Status: ready-for-dev
+Status: done
+
+### Summary
+
+Implemented `Settings.gateway_enabled` and `Settings.tracing_enabled` as derived boolean properties (blank base URL → service off, unset → refusal), a `model_validator(mode="after")` that refuses a half-configured service at bind time, structured `log.warning` calls in `main()` for each disabled service, and `.env.example` inline comments documenting the three modes. No new environment variable was added; the `AD-20` contract is unchanged.
+
+### Files changed
+
+- `backend-api/src/orchestrator/infrastructure/settings.py` — Added `gateway_enabled`/`tracing_enabled` properties and `_validate_service_config` model validator
+- `backend-api/src/orchestrator/main.py` — Added `log.warning("gateway disabled", spend="provisional")` and `log.warning("tracing disabled", traces="absent")` after `configure_logging` in `main()`
+- `.env.example` — Added inline comments on `LITELLM_BASE_URL` and `LANGFUSE_BASE_URL` documenting blank-disables/unset-refuses/what-is-lost
+- `backend-api/tests/unit/test_optional_services_settings.py` — New file: 14 tests covering all ACs and the I/O matrix
+
+### Review findings
+
+- Patches applied: none
+- Items deferred: 2 (cost.trace_url null behavior pending story 9-2; local-harness/gateway cross-constraint pending story 9-4)
+- Items rejected: 17
+
+### Follow-up review recommendation
+
+false — patched findings: 0 (score: 0)
+
+### Verification
+
+- `make lint`: zero ruff, mypy, import-linter, env-contract violations
+- `make test`: 6018 backend pytest tests passed (23 skipped); 1289 web-client vitest tests passed; all 14 story 9-1 tests pass
+
+### Residual risks
+
+None. The two deferred items are known forward-looking gaps that belong to stories 9-2 and 9-4 respectively.
