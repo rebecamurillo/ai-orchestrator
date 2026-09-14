@@ -15,6 +15,10 @@
   test mode on always has a usable row, whatever a previous start left. `main.py` calls it
   only in that mode, so an Operator's instance has no such row at all and pre-flight refuses
   the name — which is what keeps `fake` off every screen without touching a Template.
+- **`seed_disabled_harness`** (story 9-4) marks a named harness disabled with a specific
+  `failing_check` reason. Called from `seed_harness_table` after `seed_harnesses` when the
+  Gateway is off, so `local`'s row reflects the permanent reason it cannot be used rather
+  than "no readiness run" (which implies the situation is recoverable by running readiness).
 """
 
 from __future__ import annotations
@@ -69,6 +73,29 @@ def seed_test_harness(ports: HarnessPorts, name: str, pin: str) -> Harness:
     if ports.harnesses.get(name) is None:
         ports.harnesses.add(harness)
     else:
+        ports.harnesses.update(harness)
+    ports.uow.commit()
+    return harness
+
+
+def seed_disabled_harness(ports: HarnessPorts, name: str, reason: str) -> Harness:
+    """Store `name` disabled with `failing_check=reason` (story 9-4, gateway-off startup).
+
+    Written *after* `seed_harnesses` so it always overwrites an existing row and never
+    relies on insert. If the row is somehow absent (defensive), inserts with
+    `version_pin="unknown"` so the row is well-formed while the service that would supply a
+    real pin is off.
+
+    The `reason` string surfaces in `harness_line`'s `disabled: {reason}` output so an
+    Operator can see immediately why the harness is unavailable, rather than the generic
+    "no readiness run" that implies the situation is recoverable by running readiness.
+    """
+    existing = ports.harnesses.get(name)
+    if existing is None:
+        harness = Harness(name=name, version_pin="unknown", enabled=False, failing_check=reason)
+        ports.harnesses.add(harness)
+    else:
+        harness = existing.model_copy(update={"enabled": False, "failing_check": reason})
         ports.harnesses.update(harness)
     ports.uow.commit()
     return harness

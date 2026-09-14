@@ -13,6 +13,14 @@ turns that contract into its own names. The table below is the one place the two
 joined, so Epic 7's `codex` and `local` adapters add a line here and change nothing else —
 and a harness with no entry gets the contract and no aliases, which is exactly what a
 harness that declares none should receive.
+
+**Gateway-off mode** (story 9-4): when `gateway_enabled` is false, `alias_table` short-
+circuits to `{claude: claude_native_aliases(...), codex: codex_aliases(...)}` — no
+`local`, and the `ALIASES`/`SUBSCRIPTION_ALIASES` selection is skipped entirely.
+`build_harnesses` removes `local` from the registry for the same reason: it depends on the
+Gateway for its model server and cannot function without it. `claude_native_aliases` is the
+third builder alongside `claude_aliases` and `claude_subscription_aliases`; it applies
+regardless of the subscription flag when the gateway is off.
 """
 
 from __future__ import annotations
@@ -31,6 +39,7 @@ from orchestrator.domain.ports.process import ProcessRunner
 from orchestrator.infrastructure.harness.claude import (
     ClaudeHarness,
     claude_aliases,
+    claude_native_aliases,
     claude_subscription_aliases,
 )
 from orchestrator.infrastructure.harness.codex import CodexHarness, codex_aliases
@@ -97,8 +106,24 @@ def alias_table(settings: Settings) -> dict[str, AliasBuilder]:
     still green. Merging per harness is what makes the code do what the table's own docstring
     already promised.
     """
+    if not settings.gateway_enabled:
+        # Gateway off: route claude directly (no LiteLLM), codex through contract names.
+        # local is absent — it requires the Gateway and has no gateway-off path.
+        return {
+            ClaudeHarness.name: claude_native_aliases(settings.tracing_enabled),
+            CodexHarness.name: codex_aliases(settings.agent_home),
+        }
     table = {**ALIASES, **SUBSCRIPTION_ALIASES} if settings.claude_subscription_auth else ALIASES
-    return {**table, CodexHarness.name: codex_aliases(settings.agent_home)}
+    result: dict[str, AliasBuilder] = {
+        **table,
+        CodexHarness.name: codex_aliases(settings.agent_home),
+    }
+    if not settings.tracing_enabled:
+        # Tracing off: local's aliases are the two Langfuse plugin names; without a Langfuse
+        # endpoint they carry no meaning and the plugin would emit to nowhere. Drop the builder
+        # so the harness receives only the contract (blanked values still travel).
+        result.pop(LocalHarness.name, None)
+    return result
 
 
 def build_harnesses(settings: Settings, runner: ProcessRunner) -> dict[str, Harness]:
@@ -125,6 +150,10 @@ def build_harnesses(settings: Settings, runner: ProcessRunner) -> dict[str, Harn
         CodexHarness.name: CodexHarness(runner, settings),
         LocalHarness.name: LocalHarness(runner, settings),
     }
+    if not settings.gateway_enabled:
+        # local requires the Gateway (its model server is behind LiteLLM); without it the
+        # harness cannot function and must not appear as a registry option.
+        built.pop(LocalHarness.name, None)
     if settings.orch_test_mode:
         built[FakeHarness.name] = FakeHarness(runner, settings)
     return built
