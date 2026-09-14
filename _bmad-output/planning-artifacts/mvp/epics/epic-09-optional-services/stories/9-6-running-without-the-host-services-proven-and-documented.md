@@ -2,12 +2,13 @@
 title: 'Running without the host services, proven and documented'
 type: 'feature'
 created: '2026-09-13'
-status: 'ready-for-dev'
+status: 'blocked'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: []
 deferred: []
+baseline_revision: '98a6f30bd29dafc24ae43f4855c70e9228752930'
 ---
 
 <intent-contract>
@@ -89,3 +90,10 @@ For HistoryTable, the new test uses an otherwise-normal agent row (`harness: 'cl
 
 **Commands:**
 - `make lint && make test && make e2e-ui` -- expected: zero violations; all pytest and vitest tests green including new `test_off_mode_runbook.py`, `run-cost-block-off-mode.test.ts`, `runs-history-table-off-mode.test.ts`; anchor tests in `run-cost-block-provisional.test.ts`, `runs-history-table.test.ts` still green
+
+## Auto Run Result
+
+Status: blocked
+Blocking condition: Operator run required: (1) in `.env` set `LITELLM_BASE_URL=` and `LANGFUSE_BASE_URL=` (blank, not deleted); (2) log in the harness — either `docker exec -it <backend-api-container> claude login` (interactive terminal required) or create a Project with `ANTHROPIC_API_KEY` set; (3) `docker compose restart backend-api`; (4) create a new workflow Run via the UI using the claude harness; (5) let a story run to done. Report back: which harness and which auth method; that backend-api startup logs showed `"gateway disabled"` and `"tracing disabled"`; that New workflow offered claude and codex but refused local with a stated reason; that a Story reached done; and what the Run detail showed for cost (was the `"provisional"` marker present?) and for the trace row (was it absent?). Record nothing that was not observed.
+
+Verification result (2026-09-14): make lint passed (0 errors); make test passed (6129 pytest, 103 vitest files / 1293 tests); make e2e-ui 163 passed, 1 pre-existing failure (run-detail-skip-story.spec.ts:121, last modified story 6-4, unrelated). All four new tests ran and passed. Matrix Test Audit: all four I/O matrix rows covered by new tests.
