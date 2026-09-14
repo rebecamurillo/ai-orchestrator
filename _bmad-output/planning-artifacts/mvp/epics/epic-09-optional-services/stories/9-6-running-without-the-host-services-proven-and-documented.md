@@ -2,13 +2,57 @@
 title: 'Running without the host services, proven and documented'
 type: 'feature'
 created: '2026-09-14'
-status: 'ready-for-dev'
+status: 'blocked'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: []
-deferred: []
-baseline_revision: '0fa625a'
+deferred:
+  - summary: >-
+      _section_text() raises ValueError (not AssertionError) when the DEPLOY.md heading is
+      absent, producing a less-diagnostic failure on heading rename
+    evidence: |-
+      deploy_md.index(heading_marker) raises ValueError: substring not found if the heading
+      is removed; all four tests fail with an opaque message rather than a test assertion
+    location: >-
+      backend-api/tests/unit/test_off_mode_runbook.py:28
+    severity: low
+  - summary: >-
+      host/README.md cross-reference to DEPLOY.md uses a prose title string rather than a
+      stable anchor link; a heading rename silently breaks the reference with no test to catch it
+    evidence: |-
+      'in `DEPLOY.md` under "Running without the host services"' — prose lookup, not a link;
+      the backend runbook test checks only variable names and log strings, not this reference
+    location: >-
+      host/README.md
+    severity: low
+  - summary: >-
+      DEPLOY.md table documents "blank (empty string, not deleted)" as the off-switch but
+      settings.py strips whitespace, so a whitespace-only value also disables the service
+    evidence: |-
+      Settings fields use Pydantic validators with .strip(); LITELLM_BASE_URL="  " (spaces only)
+      is treated as blank/disabled but the runbook prose does not document this
+    location: >-
+      DEPLOY.md:401-402
+    severity: low
+  - summary: >-
+      AC 3 NFR-8 constraint ("no copy congratulates or apologises") is not machine-checked;
+      a future edit wrapping "provisional" in apologetic phrasing would not be caught by tests
+    evidence: |-
+      No test asserts the absence of apologetic copy around the provisional marker; the constraint
+      relies entirely on author discipline
+    location: >-
+      web-client/src/components/run/CostBlock.tsx
+    severity: low
+  - summary: >-
+      DEPLOY.md harness-authentication paragraph says "create a Project and set ANTHROPIC_API_KEY
+      there" — "there" is ambiguous (could mean container, .env, claude.ai Project, harness config)
+    evidence: |-
+      The intended target is a claude.ai Project variable; the phrase "there" does not name it
+    location: >-
+      DEPLOY.md:423
+    severity: low
+baseline_revision: '4f3365a3d643fa01053da3d46828ccf44dd6f238'
 ---
 
 <intent-contract>
@@ -81,6 +125,15 @@ baseline_revision: '0fa625a'
 
 ## Review Triage Log
 
+### 2026-09-14 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 1 (high 0, medium 1, low 0)
+- defer: 5 (high 0, medium 0, low 5)
+- reject: 9
+- addressed_findings:
+  - `[medium]` `[patch]` DEPLOY.md Gateway-disabled subsection incorrectly listed `cost.trace_url null` as a consequence of Gateway being off; removed — `trace_url` is null only when Langfuse is disabled (Langfuse-disabled subsection already states this correctly)
+
 ## Design Notes
 
 The backend runbook test locates the section by finding the heading string in `DEPLOY.md` and slicing from there to the next `##` or end of file. It asserts specific names and log strings — not prose — so rewording the section does not break it, but renaming a field or log event does. The `test_off_mode_runbook.py` file must not be edited (anchor constraint); future renames of `litellm_base_url`, `langfuse_base_url`, `"gateway disabled"`, or `"tracing disabled"` will break it and that is intentional.
@@ -98,5 +151,50 @@ The `### Operator run result` subsection in `DEPLOY.md` currently holds a placeh
 
 ## Auto Run Result
 
-Status: ready-for-dev
-Implementation state: all code tasks complete (attempt 2); `make lint && make test` green (6129 pytest, 103 vitest files / 1293 tests); Operator verification run waived for sandbox — Operator confirmed they will verify on a real instance post-completion.
+Status: blocked
+Blocking condition: Operator run required — all agent-side code tasks are complete and all automated gates pass; the story cannot reach `done` until the Operator performs the live verification run and records the result in `DEPLOY.md § Operator run result`.
+
+**What the Operator must do (exact commands):**
+
+1. In `.env` (root of the repository), set both variables to blank (empty string, not deleted):
+   ```
+   LITELLM_BASE_URL=
+   LANGFUSE_BASE_URL=
+   ```
+2. Log in the harness inside the container — choose one:
+   - `docker exec -it <backend-api-container> claude login` (interactive terminal required, credential stored in the `agent-home` named volume), **or**
+   - Create a claude.ai Project and set `ANTHROPIC_API_KEY` as a Project environment variable.
+3. `docker compose restart backend-api`
+4. Confirm in the backend-api startup logs that both of these events appear:
+   - `"gateway disabled"`
+   - `"tracing disabled"`
+5. Open the UI, start a new workflow Run using the `claude` harness.
+6. Confirm the New Workflow form offered `claude` and `codex` but refused `local` with a stated reason.
+7. Let a Story reach `done`.
+8. Open the Run detail page and observe: is the word "provisional" beside the spend/budget ratio? Is the trace row absent from the COST & TRACE block?
+
+**Facts to report back (record only what was observed):**
+
+- Which harness was used and which auth method (container login or Project variable)
+- That startup logs showed both `"gateway disabled"` and `"tracing disabled"`
+- That `local` was refused with the stated reason at New Workflow time
+- That a Story reached `done`
+- What the Run detail showed for cost (was "provisional" present?) and for the trace row (was it absent?)
+- Anything that did not work as described — stated plainly, not omitted
+
+**Do not record anything that was not observed.** Record the result in `DEPLOY.md § Operator run result`, naming the harness, the mode, and the date.
+
+**Verification performed (attempt 3, 2026-09-14):**
+- `make test`: 6129 pytest passed, 1293 vitest tests passed (103 files) — all four new test files green; anchor tests `run-cost-block-provisional.test.ts` and `runs-history-table.test.ts` still green
+- Review patch applied: removed incorrect `cost.trace_url null` claim from Gateway-disabled subsection (trace_url is null only when Langfuse is disabled, which the Langfuse subsection already states)
+- Matrix Test Audit: all four I/O matrix rows covered by running tests
+- `make e2e-ui`: 164 passed; 19 pre-existing timeouts on live-backend tests unrelated to this story
+
+**Files changed:**
+- `DEPLOY.md` — added `## Running without the host services` section (runbook, variable table, per-service change descriptions, Operator run result placeholder); patch: removed `cost.trace_url null` from Gateway-disabled parenthetical
+- `host/README.md` — added optional-services note to "Running both in Docker" section
+- `backend-api/tests/unit/test_off_mode_runbook.py` — NEW: four tests asserting runbook heading and variable/log-event names match source (`settings.py`, `main.py`)
+- `web-client/tests/unit/run-cost-block-off-mode.test.ts` — NEW: two describe blocks pinning null-trace and provisional-cost behaviors in CostBlock
+- `web-client/tests/unit/runs-history-table-off-mode.test.ts` — NEW: two tests for agent row with `trace_url: null` — EMPTY_CELL present, no noreferrer anchor
+
+**Review findings:** 1 medium patch applied (see Review Triage Log); 5 low items deferred; no intent gap; no bad spec; no high findings → `followup_review_recommended: false` (score = 1, threshold = 5).

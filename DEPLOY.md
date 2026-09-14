@@ -412,7 +412,7 @@ Both can be blanked together to run the full stack with no host services at all.
 
 - **Cost is provisional.** The backend cannot read spend from LiteLLM; every attempt's cost
   figure comes from the harness's own accounting and is marked `provisional` in the Run detail
-  (`cost.trace_url` null, `cost.provisional` true). The "provisional" marker is visible beside
+  (`cost.provisional` true). The "provisional" marker is visible beside
   the spent/budget ratio in the UI.
 - **`local` model is unavailable.** The Gateway is what routes `local-coder` and
   `local-general`; with it absent, those names are refused at harness readiness time with
