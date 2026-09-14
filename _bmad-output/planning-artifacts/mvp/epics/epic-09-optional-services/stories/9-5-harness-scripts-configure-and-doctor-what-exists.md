@@ -2,12 +2,29 @@
 title: 'Harness scripts configure and doctor what exists'
 type: 'feature'
 created: '2026-09-13'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      Test file lives in tests/unit/ but spawns bash processes and has integration-test characteristics.
+    evidence: |-
+      File uses pytestmark skipif(shutil.which("bash") is None) and real subprocess invocations.
+      This matches the pre-existing convention in test_harness_scripts.py.
+    location: >-
+      backend-api/tests/unit/test_harness_scripts_off_mode.py
+    severity: low
+  - summary: >-
+      JSON/TOML output in harness configure scripts is not safe against operator-controlled env vars
+      containing double-quotes or backslashes (LITELLM_BASE_URL, LANGFUSE_ENVIRONMENT).
+    evidence: |-
+      Scripts interpolate these values directly into JSON/TOML double-quoted strings without escaping.
+      This is a pre-existing issue in the original scripts, not introduced by story 9-5.
+    location: >-
+      scripts/harness/claude.sh, scripts/harness/codex.sh, scripts/harness/opencode.sh
+    severity: medium
 baseline_revision: 'b2799748e6e590a6c36d599295f8af63d09028d6'
 ---
 
@@ -85,6 +102,16 @@ baseline_revision: 'b2799748e6e590a6c36d599295f8af63d09028d6'
 
 ## Review Triage Log
 
+### 2026-09-13 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 2: (high 0, medium 1, low 1)
+- defer: 2: (high 0, medium 1, low 1)
+- reject: 11
+- addressed_findings:
+  - `[medium]` `[patch]` "gateway disabled"/"tracing disabled" log not tested in configure: added stderr assertions to AC 2, AC 3, and AC 4 `_exits_zero` tests
+  - `[low]` `[patch]` test_ac3_tracing_off_codex_has_model_provider missing `model_providers` assertion: added `assert "model_providers" in cfg`
+
 ## Design Notes
 
 `${VAR+declared}` expands to the string `declared` when VAR is set (even to empty), and to empty string when VAR is unset. So `[ -z "${LITELLM_BASE_URL+declared}" ]` is true only when the variable is unset. Combined with OR: `if [ -z "${LITELLM_BASE_URL+declared}" ] || [ -n "${LITELLM_BASE_URL}" ]` — enters the `:?` block for unset (fires and refuses) or non-blank (passes the check); skips it when declared-blank (off-switch). `${VAR:-}` used in `litellm_enabled` is safe when VAR is unset (expands to empty); `[ -n "" ]` is false, so the function returns non-zero (disabled) for unset and blank alike.
@@ -98,3 +125,28 @@ For the permissions anchor, the redirect form must contain `> "${` before the `c
 **Commands:**
 - `make lint` -- expected: zero ruff, mypy, import-linter, env-contract violations
 - `make test` -- expected: all pytest and vitest tests green, including new `test_harness_scripts_off_mode.py`; anchor `test_harness_scripts.py` and `test_harness_config_permissions.py` still green
+
+## Auto Run Result
+
+**Summary:** Added `litellm_enabled`/`langfuse_enabled` helpers to `_common.sh`; updated `require_harness_env` to skip declared-blank services while still refusing unset ones; gated all configure sections and `doctor_gateway` on the service predicates; created 33 off-mode tests covering all 6 ACs.
+
+**Files changed:**
+- `scripts/harness/_common.sh` — added `litellm_enabled`/`langfuse_enabled` predicates, updated `require_harness_env` with conditional blocks, added early return to `doctor_gateway`
+- `scripts/harness/claude.sh` — replaced heredoc with array-based conditional env assembly
+- `scripts/harness/codex.sh` — replaced single heredoc with brace-group conditional sections piped to cat
+- `scripts/harness/opencode.sh` — replaced single heredoc with entries-array approach; provider block via heredoc to preserve literal double-quotes
+- `backend-api/tests/unit/test_harness_scripts_off_mode.py` — new file: 33 tests covering ACs 1–6 across all three harnesses
+
+**Review findings breakdown:**
+- Patches applied: 2 (medium: log assertions in configure; low: model_providers assertion)
+- Items deferred: 2 (low: test file category convention; medium: pre-existing JSON/TOML injection risk in env var interpolation)
+- Items rejected: 11
+
+**Follow-up review recommendation score:** 1 medium patch × 3 = 3, 1 low patch × 1 = 1 → score 4/5, threshold not reached → `false`
+
+**Verification performed:**
+- `make lint`: passed — zero ruff, mypy, import-linter, env-contract, tsc, eslint, prettier violations
+- `make test`: 6125 passed, 23 skipped, 0 failed — new `test_harness_scripts_off_mode.py` and all anchor tests green
+
+**Residual risks:**
+- JSON/TOML injection if operator configures `LITELLM_BASE_URL` or `LANGFUSE_ENVIRONMENT` with double-quotes or backslashes (pre-existing; deferred)
