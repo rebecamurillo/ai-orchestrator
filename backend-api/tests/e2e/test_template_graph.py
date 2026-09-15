@@ -38,15 +38,20 @@ REPO_INIT_NODES = [
 
 
 def test_epic_1_answers_the_golden_shape(authenticated: httpx.Client) -> None:
+    """Operator revision 2026-09-15: the quality-gate reorder (b0f3898 — unit on story,
+    e2e on epic) gave `epic@1` a `setup` step and an `e2e` step; this golden shape follows
+    the shipped file it mirrors."""
     response = authenticated.get(f"{TEMPLATES}/epic/1/graph")
 
     assert response.status_code == HTTP_OK
     body = response.json()
     assert [node["id"] for node in body["nodes"]] == [
         "checkout",
+        "setup",
         "baseline",
         "stories.story",
         "stories.after",
+        "e2e",
         "push",
         "link",
     ]
@@ -59,10 +64,12 @@ def test_epic_1_answers_the_golden_shape(authenticated: httpx.Client) -> None:
         }
     ]
     assert body["edges"] == [
-        {"from": "checkout", "to": "baseline"},
+        {"from": "checkout", "to": "setup"},
+        {"from": "setup", "to": "baseline"},
         {"from": "baseline", "to": "stories.story"},
         {"from": "stories.story", "to": "stories.after"},
-        {"from": "stories.after", "to": "push"},
+        {"from": "stories.after", "to": "e2e"},
+        {"from": "e2e", "to": "push"},
         {"from": "push", "to": "link"},
     ]
 

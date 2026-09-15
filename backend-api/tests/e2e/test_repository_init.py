@@ -76,9 +76,19 @@ def run_of(project: dict[str, Any], run_id: str) -> dict[str, Any]:
 
 
 def wait_until_terminal(api: httpx.Client, run_id: str) -> str:
+    """Drive the Run to a terminal status, playing the Operator at its declared stop.
+
+    Operator revision 2026-09-15: `repo-init@1` gained a `context` step and a
+    `context-review` checkpoint (f79a2a1), so the Run now parks `needs_you` there by
+    design; this driver sends `continue` the way the Operator would. A park that does not
+    admit `continue` fails loudly on the 409, never spins.
+    """
     deadline = time.monotonic() + RUN_TIMEOUT_SECONDS
     status = status_of(api, run_id)
-    while status in ("queued", "running") and time.monotonic() < deadline:
+    while status in ("queued", "running", "needs_you") and time.monotonic() < deadline:
+        if status == "needs_you":
+            continued = api.post(f"/api/v1/runs/{run_id}/signals", json={"kind": "continue"})
+            assert continued.status_code == HTTP_OK, continued.text
         time.sleep(POLL_INTERVAL_SECONDS)
         status = status_of(api, run_id)
     return status

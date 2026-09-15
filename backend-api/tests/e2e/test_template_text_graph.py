@@ -63,16 +63,21 @@ def test_the_posted_graph_of_story_1_marks_its_agent_step(authenticated: httpx.C
 
 def test_posting_epic_1s_text_answers_the_golden_shape(authenticated: httpx.Client) -> None:
     """`epic@1` is the one shipped file with steps before and after a loop, a collapsed call
-    and an item checkpoint — the shape 3.6's diagram is drawn from."""
+    and an item checkpoint — the shape 3.6's diagram is drawn from.
+
+    Operator revision 2026-09-15: the quality-gate reorder (b0f3898 — unit on story, e2e on
+    epic) gave the file a `setup` step and an `e2e` step; the golden shape follows it."""
     text = stored_yaml(authenticated, "epic", 1)
 
     body = authenticated.post(f"{TEMPLATES}/epic/graph", json={"yaml": text}).json()
 
     assert [node["id"] for node in body["nodes"]] == [
         "checkout",
+        "setup",
         "baseline",
         "stories.story",
         "stories.after",
+        "e2e",
         "push",
         "link",
     ]
@@ -85,10 +90,12 @@ def test_posting_epic_1s_text_answers_the_golden_shape(authenticated: httpx.Clie
         }
     ]
     assert body["edges"] == [
-        {"from": "checkout", "to": "baseline"},
+        {"from": "checkout", "to": "setup"},
+        {"from": "setup", "to": "baseline"},
         {"from": "baseline", "to": "stories.story"},
         {"from": "stories.story", "to": "stories.after"},
-        {"from": "stories.after", "to": "push"},
+        {"from": "stories.after", "to": "e2e"},
+        {"from": "e2e", "to": "push"},
         {"from": "push", "to": "link"},
     ]
 
@@ -98,25 +105,32 @@ def test_epic_1s_nodes_carry_the_kind_label_and_gate_the_file_declares(
 ) -> None:
     """The ids alone are not the picture. `web-client/tests/unit/diagram-fixtures.ts` copies
     this graph to draw it without a stack; pinning kind, label and gate here is what makes the
-    copy unable to drift from the real answer without one of the two suites failing."""
+    copy unable to drift from the real answer without one of the two suites failing.
+
+    Operator revision 2026-09-15: rows follow the quality-gate reorder (b0f3898), which gave
+    `epic@1` a `setup` and an `e2e` step."""
     text = stored_yaml(authenticated, "epic", 1)
 
     body = authenticated.post(f"{TEMPLATES}/epic/graph", json={"yaml": text}).json()
 
     assert [(node["kind"], node["label"], node["gate"]) for node in body["nodes"]] == [
         ("git.worktree", "checkout", "deterministic"),
+        ("shell", "setup", "deterministic"),
         ("shell", "baseline", "deterministic"),
         ("template", "story@1", None),
         ("checkpoint", "after", "human"),
+        ("shell", "e2e", "deterministic"),
         ("git.push", "push", "deterministic"),
         ("pr.link", "link", "liveness"),
     ]
-    assert [node["agent"] for node in body["nodes"]] == [False] * 6
+    assert [node["agent"] for node in body["nodes"]] == [False] * 8
     assert [node["human"] for node in body["nodes"]] == [
         False,
         False,
         False,
+        False,
         True,
+        False,
         False,
         False,
     ]
