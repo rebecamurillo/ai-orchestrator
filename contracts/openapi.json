@@ -2660,6 +2660,24 @@
         "title": "QueueOut",
         "type": "object"
       },
+      "RepoInitIn": {
+        "description": "`POST /repositories/{id}/init`'s optional body: the harness the Template's `agent`\nrows dispatch. Omitted (or an omitted body), `create_run`'s own default stands (AD-10).",
+        "properties": {
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          }
+        },
+        "title": "RepoInitIn",
+        "type": "object"
+      },
       "RepositoryCreate": {
         "description": "`POST /projects/{project_id}/repositories`.",
         "properties": {
@@ -5448,7 +5466,7 @@
         ]
       },
       "post": {
-        "description": "Start a `repo-init@1` Run on `repository.default_branch`, with no harness.",
+        "description": "Start a `repo-init@1` Run on `repository.default_branch`; the optional body names\nthe harness its `agent` rows dispatch, else `create_run`'s own default stands.",
         "operationId": "init_api_v1_repositories__repository_id__init_post",
         "parameters": [
           {
@@ -5462,6 +5480,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RepoInitIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "content": {

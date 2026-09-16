@@ -48,6 +48,9 @@ THREE = 3
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
+#: `test_durability.py`'s own bound, for the same `docker compose exec` route.
+DOCKER_TIMEOUT_SECONDS = 60.0
+
 #: One script, run either here or inside the container: `$1` is the directory, `$2` the
 #: repository name, `$3` the manifest to commit (empty for a repository that carries none).
 MAKE_BARE_REPOSITORY = """
@@ -124,11 +127,21 @@ class Fixtures:
 
     def _run(self, command: list[str], where: str) -> bool:
         try:
+            # bounded (Operator revision, 2026-09-16): `docker compose exec` against an
+            # unhealthy container blocks with no ceiling of its own
             completed = subprocess.run(  # fixed argv, no shell
-                command, cwd=REPO_ROOT, capture_output=True, text=True, check=False
+                command,
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=DOCKER_TIMEOUT_SECONDS,
             )
         except OSError as error:
             self.refusals.append(f"{where}: {error}")
+            return False
+        except subprocess.TimeoutExpired:
+            self.refusals.append(f"{where}: no answer within {DOCKER_TIMEOUT_SECONDS:.0f}s")
             return False
         if completed.returncode != 0:
             self.refusals.append(f"{where}: {(completed.stderr or completed.stdout).strip()}")

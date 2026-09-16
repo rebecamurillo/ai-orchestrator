@@ -24,6 +24,13 @@ starts and serves without it. It exists for two things — exercising the whole 
 on one machine before there is a hosted Gateway, and as the reference for what a new instance
 has to stand up. Treat it as a worked example of the table above, not as a dependency.
 
+**The host services are themselves individually optional.** Setting `LITELLM_BASE_URL=` (blank,
+not deleted) in the root `.env` disables the Gateway; setting `LANGFUSE_BASE_URL=` disables
+tracing. Either or both can be blanked: the product stack starts and serves in all cases.
+With the Gateway off, cost figures are provisional and `local` is unavailable; with tracing
+off, trace links are absent. The full runbook — what each switch changes and what to supply
+instead — is in `DEPLOY.md` under "Running without the host services".
+
 `docker-compose.yml` in this directory runs LiteLLM and Langfuse together. It is a **separate
 compose project** (`ai-orchestrator-host`) from the repository root's: different lifecycle, its
 own data, and it stays up across a `make down`. The orchestrator reaches it through

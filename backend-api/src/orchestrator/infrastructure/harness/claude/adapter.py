@@ -63,6 +63,7 @@ from orchestrator.infrastructure.harness.claude.result import (
     result_object,
     usage_from,
 )
+from orchestrator.infrastructure.harness.env import AliasBuilder
 from orchestrator.infrastructure.settings import Settings
 
 #: What this module still owns, plus what it re-exports from `result.py`: the parsing moved
@@ -76,6 +77,7 @@ __all__ = [
     "SUBSCRIPTION_KEY_HEADER",
     "ClaudeHarness",
     "claude_aliases",
+    "claude_native_aliases",
     "claude_subscription_aliases",
     "json_objects",
     "read_text",
@@ -177,6 +179,33 @@ def claude_subscription_aliases(contract: Mapping[str, str]) -> dict[str, str]:
         )
     )
     return aliases
+
+
+def claude_native_aliases(tracing_enabled: bool) -> AliasBuilder:
+    """Gateway-off AliasBuilder factory: no ANTHROPIC_AUTH_TOKEN; Langfuse headers when tracing on.
+
+    No LiteLLM proxy — `ANTHROPIC_AUTH_TOKEN` is never set. `claude` reaches Anthropic
+    directly; a Project `ANTHROPIC_API_KEY` travels through `env_for`'s Project-variable
+    layer (AD-5). `HEADER_SOURCES[:2]` = `langfuse_session_id` + `langfuse_tags` only (no
+    LiteLLM headers). Content-logging pair: same `ORCH_LOG_CONTENT == "1"` rule.
+    **Gateway-off vs subscription mode.** `CLAUDE_SUBSCRIPTION_AUTH=true` with gateway on
+    routes through LiteLLM. With gateway off there is no proxy to read any header;
+    `alias_table`'s gateway-off branch short-circuits before the subscription check to
+    prevent conflation of the two modes.
+    """
+
+    def builder(contract: Mapping[str, str]) -> dict[str, str]:
+        aliases: dict[str, str] = {}
+        if tracing_enabled:
+            headers = "\n".join(
+                f"{header}: {contract[name]}" for header, name in HEADER_SOURCES[:2]
+            )
+            aliases["ANTHROPIC_CUSTOM_HEADERS"] = headers
+        if contract.get("ORCH_LOG_CONTENT") == "1":
+            aliases.update(dict.fromkeys(CONTENT_LOGGING_NAMES, "1"))
+        return aliases
+
+    return builder
 
 
 class ClaudeHarness:

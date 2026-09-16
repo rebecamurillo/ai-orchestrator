@@ -24,21 +24,44 @@ configure() {
   mkdir -p "${AGENT_HOME}/.claude"
   # Static settings only. Per-attempt values (TRACEPARENT, langfuse_session_id, tags, model, budget) are
   # injected by infrastructure/harness/claude/adapter.py env_for(attempt). Nothing here is per Run.
+  # Build env entries conditionally so the file is valid JSON for every service combination.
+  local env_entries=()
+  if litellm_enabled; then
+    env_entries+=("\"ANTHROPIC_BASE_URL\": \"${LITELLM_BASE_URL%/}\"")
+  else
+    log "gateway disabled"
+  fi
+  if langfuse_enabled; then
+    env_entries+=(
+      "\"CLAUDE_CODE_ENABLE_TELEMETRY\": \"1\""
+      "\"CLAUDE_CODE_ENHANCED_TELEMETRY_BETA\": \"1\""
+      "\"CLAUDE_CODE_PROPAGATE_TRACEPARENT\": \"1\""
+      "\"OTEL_TRACES_EXPORTER\": \"otlp\""
+      "\"OTEL_METRICS_EXPORTER\": \"none\""
+      "\"OTEL_LOGS_EXPORTER\": \"none\""
+      "\"OTEL_EXPORTER_OTLP_PROTOCOL\": \"http/protobuf\""
+      "\"OTEL_EXPORTER_OTLP_ENDPOINT\": \"$(langfuse_otlp_endpoint)\""
+      "\"OTEL_EXPORTER_OTLP_HEADERS\": \"Authorization=Basic $(langfuse_basic_auth),x-langfuse-ingestion-version=4\""
+      "\"OTEL_RESOURCE_ATTRIBUTES\": \"service.name=claude-code,deployment.environment=${LANGFUSE_ENVIRONMENT:-mvp}\""
+    )
+  else
+    log "tracing disabled"
+  fi
+  env_entries+=("\"DISABLE_AUTOUPDATER\": \"1\"")
+  # Join entries with ",\n    " — first entry has no leading separator; no trailing comma.
+  local env_json="" i
+  for i in "${!env_entries[@]}"; do
+    if [ "$i" -eq 0 ]; then
+      env_json="${env_entries[$i]}"
+    else
+      env_json="${env_json},
+    ${env_entries[$i]}"
+    fi
+  done
   cat > "${AGENT_HOME}/.claude/settings.json" <<JSON
 {
   "env": {
-    "ANTHROPIC_BASE_URL": "${LITELLM_BASE_URL%/}",
-    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
-    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
-    "CLAUDE_CODE_PROPAGATE_TRACEPARENT": "1",
-    "OTEL_TRACES_EXPORTER": "otlp",
-    "OTEL_METRICS_EXPORTER": "none",
-    "OTEL_LOGS_EXPORTER": "none",
-    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "$(langfuse_otlp_endpoint)",
-    "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Basic $(langfuse_basic_auth),x-langfuse-ingestion-version=4",
-    "OTEL_RESOURCE_ATTRIBUTES": "service.name=claude-code,deployment.environment=${LANGFUSE_ENVIRONMENT:-mvp}",
-    "DISABLE_AUTOUPDATER": "1"
+    ${env_json}
   }
 }
 JSON

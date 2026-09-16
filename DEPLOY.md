@@ -392,3 +392,59 @@ Named here rather than left to be discovered:
 - **No post-deploy smoke test.** §3.5 is a manual checklist. `make e2e-api` is not it — its
   guard refuses any database but the gate's own, by design, and it writes fixtures it never
   removes.
+
+---
+
+## Running without the host services
+
+Both host services — the LiteLLM Gateway and Langfuse — are optional. Each is controlled by
+a single environment variable in `.env`. Setting either variable to blank (empty string, not
+deleted) disables the corresponding service without refusing start-up.
+
+| Variable | Blank → | Unset → |
+| --- | --- | --- |
+| `LITELLM_BASE_URL` | Gateway disabled, spend is provisional | start-up refuses with a configuration error |
+| `LANGFUSE_BASE_URL` | Tracing disabled, no trace links | start-up refuses with a configuration error |
+
+Both can be blanked together to run the full stack with no host services at all.
+
+### What changes with Gateway disabled (`LITELLM_BASE_URL=`)
+
+- **Cost is provisional.** The backend cannot read spend from LiteLLM; every attempt's cost
+  figure comes from the harness's own accounting and is marked `provisional` in the Run detail
+  (`cost.provisional` true). The "provisional" marker is visible beside
+  the spent/budget ratio in the UI.
+- **`local` model is unavailable.** The Gateway is what routes `local-coder` and
+  `local-general`; with it absent, those names are refused at harness readiness time with
+  the reason stated.
+- **Harness authentication.** Without the Gateway the harness authenticates directly against
+  the upstream provider. For `claude`: log in once inside the container —
+  `docker exec -it <backend-api-container> claude login` (interactive terminal required), or
+  create a Project and set `ANTHROPIC_API_KEY` there. The credential is stored under
+  `AGENT_HOME`, which is a named volume and survives `make down`. No credential is printed
+  or stored in any log or file in this repository.
+- **Stack logs** `"gateway disabled"` at start-up (with `spend="provisional"`).
+
+### What changes with tracing disabled (`LANGFUSE_BASE_URL=`)
+
+- **No traces, no trace links.** The backend's tracer is a no-op; no spans are sent. Every
+  Run's `cost.trace_url` is null, and the trace row in the COST & TRACE block is absent
+  entirely (no row, no placeholder). The `trace` cell in the history table reads "—".
+- **Stack logs** `"tracing disabled"` at start-up (with `traces="absent"`).
+
+### Running both disabled together
+
+Set both to blank in `.env`:
+
+```
+LITELLM_BASE_URL=
+LANGFUSE_BASE_URL=
+```
+
+Restart the backend: `docker compose restart backend-api`. Both log events — `"gateway disabled"`
+and `"tracing disabled"` — appear in the start-up output. The stack serves normally; cost
+figures are provisional and trace links are absent throughout.
+
+### Operator run result
+
+Verification deferred to post-epic-completion per Operator instruction (2026-09-14). The Operator confirmed they will run the off-mode verification — both `LITELLM_BASE_URL` and `LANGFUSE_BASE_URL` blanked — once the epic is fully built. Nothing has been observed yet; this section will be updated when the Operator reports their findings.

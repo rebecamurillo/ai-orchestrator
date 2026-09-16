@@ -45,6 +45,13 @@ def plan_error_problems(error: PlanError) -> list[ProblemError]:
     ]
 
 
+class RepoInitIn(BaseModel):
+    """`POST /repositories/{id}/init`'s optional body: the harness the Template's `agent`
+    rows dispatch. Omitted (or an omitted body), `create_run`'s own default stands (AD-10)."""
+
+    harness: str | None = None
+
+
 class RunIn(BaseModel):
     """`POST /runs`'s body: what *Start run* submits once every field is filled in."""
 

@@ -18,7 +18,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BeforeValidator, Field, SecretStr, field_validator
+from pydantic import BeforeValidator, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from orchestrator.domain.entities.harness import HARNESS_NAMES
@@ -197,6 +197,53 @@ class Settings(BaseSettings):
     #: `scripts/check_env_contract.py` still checks both directions.
     orch_test_mode: bool = False
     backend_api_port: Annotated[int, Field(ge=MIN_TCP_PORT, le=MAX_TCP_PORT)]
+
+    # ── derived flags (not fields — no line in .env.example, not in model_fields) ──
+
+    @property
+    def gateway_enabled(self) -> bool:
+        """True when LITELLM_BASE_URL is a non-blank, non-whitespace-only string."""
+        return bool(self.litellm_base_url.strip())
+
+    @property
+    def tracing_enabled(self) -> bool:
+        """True when LANGFUSE_BASE_URL is a non-blank, non-whitespace-only string."""
+        return bool(self.langfuse_base_url.strip())
+
+    # ── cross-field validation ────────────────────────────────────────────────
+
+    @model_validator(mode="after")
+    def _validate_service_config(self) -> Settings:
+        """Refuse a non-blank base URL paired with a blank key.
+
+        A half-configured service looks configured to the Operator but fails at first use —
+        refused here, at bind time, rather than silently at the first request that needs it.
+        Blank the base URL to disable the service entirely; that is the intended off switch.
+        """
+        errors: list[str] = []
+
+        if self.litellm_base_url.strip() and not self.litellm_api_key.get_secret_value().strip():
+            errors.append(
+                "litellm_api_key is blank but litellm_base_url is non-blank — "
+                "blank litellm_base_url to disable the gateway, or provide litellm_api_key"
+            )
+
+        if self.langfuse_base_url.strip():
+            for field_name, raw_value in [
+                ("langfuse_public_key", self.langfuse_public_key),
+                ("langfuse_secret_key", self.langfuse_secret_key.get_secret_value()),
+                ("langfuse_project_id", self.langfuse_project_id),
+            ]:
+                if not str(raw_value).strip():
+                    errors.append(
+                        f"{field_name} is blank but langfuse_base_url is non-blank — "
+                        f"blank langfuse_base_url to disable tracing, or provide {field_name}"
+                    )
+
+        if errors:
+            raise ValueError("; ".join(errors))
+
+        return self
 
     @field_validator("readiness_models")
     @classmethod

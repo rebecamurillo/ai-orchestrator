@@ -108,7 +108,8 @@ class Tracer(Protocol):
         """
         ...
 
-    def trace_url(self, trace_id: str) -> str:
+    def trace_url(self, trace_id: str) -> str | None:
         """The Langfuse UI link for one trace id — a pure string format, never a network
-        call (unlike the SDK's own `get_trace_url()`, whose project-id lookup this avoids)."""
+        call (unlike the SDK's own `get_trace_url()`, whose project-id lookup this avoids).
+        Returns `None` when tracing is disabled (the `NullTracer` path)."""
         ...

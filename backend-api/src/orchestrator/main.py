@@ -337,6 +337,10 @@ def main() -> None:
         raise SystemExit(f"configuration error (AD-20): .env is incomplete\n{error}") from error
 
     configure_logging(settings.log_level)
+    if not settings.gateway_enabled:
+        log.warning("gateway disabled", spend="provisional")
+    if not settings.tracing_enabled:
+        log.warning("tracing disabled", traces="absent")
     # none of these opens a connection, so this stays inside the "no I/O before start-up" rule
     session_factory = create_session_factory(create_engine_from(settings))
     # the one place the git adapter is named. It holds GITHUB_TOKEN for the subprocess

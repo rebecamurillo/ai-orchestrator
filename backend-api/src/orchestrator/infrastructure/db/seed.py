@@ -22,6 +22,7 @@ from orchestrator.application.use_cases.harness_readiness_seed import (
 )
 from orchestrator.application.use_cases.harnesses import (
     HarnessPorts,
+    seed_disabled_harness,
     seed_harnesses,
     seed_test_harness,
 )
@@ -81,6 +82,15 @@ def seed_harness_table(settings: Settings) -> list[Harness]:
             hports = HarnessPorts(uow=uow, harnesses=SQLAlchemyHarnessRepository(uow.session))
             sync_pins(hports, pins)
             seeded = seed_harnesses(hports, pins)
+            if not settings.gateway_enabled:
+                # Gateway off: mark local disabled so pre-flight surfaces the reason
+                # immediately, rather than "no readiness run" which implies it is fixable
+                # by running readiness. Use replacement (not append) to avoid returning
+                # local twice — seed_harnesses already added it to seeded.
+                disabled = seed_disabled_harness(
+                    hports, "local", "gateway disabled (LITELLM_BASE_URL blank)"
+                )
+                seeded = [disabled if h.name == "local" else h for h in seeded]
             if settings.orch_test_mode:
                 seeded.append(seed_test_harness(hports, FAKE_HARNESS_NAME, FAKE_HARNESS_PIN))
             pports = ProjectPorts(

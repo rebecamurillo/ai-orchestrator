@@ -17,11 +17,22 @@ install() {
 configure() {
   mkdir -p "${CODEX_HOME}"
   # Provider + auth cannot be overridden by a project .codex/config.toml, so they live here.
-  # wire_api "responses" is the only supported value; LiteLLM serves /v1/responses.
-  cat > "${CODEX_HOME}/config.toml" <<TOML
-model_provider = "litellm"
+  # Sections are conditional: omitted entirely when the service is disabled so the file is
+  # valid TOML in all four service combinations. Piped through cat to write the file so the
+  # redirect pattern satisfies test_harness_config_permissions.py's grep for `cat > "${`.
+  {
+    if litellm_enabled; then
+      printf 'model_provider = "litellm"\n'
+    else
+      log "gateway disabled"
+    fi
+    # wire_api "responses" is the only supported value; LiteLLM serves /v1/responses.
+    cat <<'STATIC'
 approval_policy = "never"
 sandbox_mode = "danger-full-access"      # the container is the sandbox (AD-10); bwrap/seccomp may not work under cap_drop ALL
+STATIC
+    if litellm_enabled; then
+      cat <<LITELLM
 
 [model_providers.litellm]
 name = "LiteLLM"
@@ -36,6 +47,10 @@ wire_api = "responses"
 stream_idle_timeout_ms = 7200000
 # Per-attempt headers by environment variable NAME (AD-10): values come from env_for(attempt), never from this file.
 env_http_headers = { langfuse_session_id = "ORCH_RUN_ID", langfuse_tags = "ORCH_LANGFUSE_TAGS", x-litellm-end-user-id = "ORCH_RUN_ID", x-litellm-session-id = "ORCH_ATTEMPT_ID", x-litellm-tags = "ORCH_TAGS" }
+LITELLM
+    fi
+    if langfuse_enabled; then
+      cat <<OTEL
 
 [otel]
 environment = "${LANGFUSE_ENVIRONMENT:-mvp}"
@@ -45,7 +60,11 @@ metrics_exporter = "none"
 
 [otel.span_attributes]
 "service.name" = "codex-cli"
-TOML
+OTEL
+    else
+      log "tracing disabled"
+    fi
+  } | cat > "${CODEX_HOME}/config.toml"
   # No key material today; held to the same mode so the three cannot drift apart.
   chmod 600 "${CODEX_HOME}/config.toml"
   log "wrote ${CODEX_HOME}/config.toml"

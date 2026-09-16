@@ -212,7 +212,11 @@ def _orphan_control(ctx: StepContext) -> None:
 
 
 def _wip_commit(ctx: StepContext) -> None:
-    """Commit what an interrupted attempt left; a clean tree gets no commit (AD-9)."""
+    """Commit what a previous dispatch left, so this row starts tracked (AD-9): the answer
+    archive stages the story file's old path, which only a tracked file stages as a
+    deletion. First-dispatch dirt is earlier rows' writes, owed to their commit step."""
+    if ctx.previous_attempt is None:
+        return
     worktree = require_cwd(ctx)
     git = ctx.ports.git
     if not git.status(worktree).strip():

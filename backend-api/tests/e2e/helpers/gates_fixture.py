@@ -35,6 +35,9 @@ FIXTURE_DIRECTORY = "e2e-fixtures"
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
+#: `test_durability.py`'s own bound, for the same `docker compose exec` route.
+DOCKER_TIMEOUT_SECONDS = 60.0
+
 #: The fixture's source, per topology: the checkout on this host, `/app/fixtures` in the
 #: image (`backend-api/Dockerfile` copies the whole directory).
 SOURCE_HERE = str(REPO_ROOT / "fixtures" / "gates-repo")
@@ -145,11 +148,21 @@ class GatesFixture:
         )
         for command, where in routes:
             try:
+                # bounded (Operator revision, 2026-09-16): `docker compose exec` against an
+                # unhealthy container blocks with no ceiling of its own
                 done = subprocess.run(  # fixed argv, no shell
-                    command, cwd=REPO_ROOT, capture_output=True, text=True, check=False
+                    command,
+                    cwd=REPO_ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=DOCKER_TIMEOUT_SECONDS,
                 )
             except OSError as error:
                 refusals.append(f"{where}: {error}")
+                continue
+            except subprocess.TimeoutExpired:
+                refusals.append(f"{where}: no answer within {DOCKER_TIMEOUT_SECONDS:.0f}s")
                 continue
             if done.returncode == 0:
                 return done.stdout

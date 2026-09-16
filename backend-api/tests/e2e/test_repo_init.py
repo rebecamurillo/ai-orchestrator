@@ -233,8 +233,12 @@ def initialised(
 
 
 def park_of(client: httpx.Client, run_id: str) -> dict[str, Any]:
-    """What the Run says it is waiting for, as the Operator's screen reads it."""
-    response = client.get(f"{RUNS}/{run_id}")
+    """What the Run says it is waiting for, as the Operator's screen reads it.
+
+    Operator revision 2026-09-16: reads `GET /runs/{id}/detail` — `alert` and `steps`
+    are `RunDetailOut`'s fields; the summary route this read before has neither, so
+    every assertion on the captured stop raised `KeyError` instead of asserting."""
+    response = client.get(f"{RUNS}/{run_id}/detail")
     assert response.status_code == HTTP_OK, response.text
     return dict(response.json())
 
@@ -273,18 +277,25 @@ def run_of(sessions: Any, run_id: str) -> Any:
 
 
 def test_the_run_stops_for_the_operator_at_the_context_review(
-    initialised: dict[str, Any], sessions: Any
+    initialised: dict[str, Any],
 ) -> None:
     """The declared stop, before anything is committed: the Operator reads the block the
     `context` step wrote and answers it. A Run that never stopped would have committed an
-    `AGENTS.md` nobody looked at."""
+    `AGENTS.md` nobody looked at.
+
+    Operator revision 2026-09-15: asserted on the parked snapshot the fixture captured,
+    not on the final row — `signal_run` clears `park_*` when the Operator continues
+    (AD-8), so after the fixture's own `continue` the database row cannot carry the stop
+    this test is about; as written before this date it could never pass."""
     assert initialised["parked"] == NEEDS_YOU, initialised
 
-    run = run_of(sessions, initialised["id"])
+    stop = initialised["stop"]
 
-    assert run is not None
-    assert run.park_kind == STOP_KIND
-    assert run.park_path == STOP_ROW
+    assert stop is not None
+    assert stop["alert"] is not None, stop
+    assert stop["alert"]["park_kind"] == STOP_KIND
+    review = next(step for step in stop["steps"] if step["path"] == STOP_ROW)
+    assert review["status"] == "checkpoint"
 
 
 def test_the_context_step_wrote_its_agents_file_without_parking_on_it(

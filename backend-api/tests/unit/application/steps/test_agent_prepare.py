@@ -170,13 +170,35 @@ def test_a_lock_that_never_clears_ends_at_the_deadline_and_the_row_proceeds() ->
 # ── the WIP commit ───────────────────────────────────────────────────────────
 
 
-def test_a_dirty_worktree_is_staged_whole_and_committed_as_wip() -> None:
+def test_a_dirty_tree_on_a_first_dispatch_is_not_committed_as_wip() -> None:
+    """Operator revision, 2026-09-16: the WIP sweep is of what a *previous dispatch* left,
+    so a row's first dispatch never sweeps. Its dirt is earlier rows' own writes
+    (repo-init's `bmad.install` leaves the method for the Template's `commit` step), and
+    staging it whole as `(interrupted)` stole that step's commit. Replaces the assertion
+    that any dirty tree was staged whole and committed as WIP; the re-dispatch cases below
+    and under orphan control keep theirs."""
     world = a_world(git=FakeGit(status=["?? notes.md", ""], head_sha=[HEAD_SHA]))
 
     run(world)
 
+    assert (WORKTREE_PATH, None) not in world.git.called("stage")
+    assert all("(interrupted)" not in message for _, message in world.git.called("commit"))
+
+
+def test_a_finished_previous_attempts_dirt_is_still_swept_as_wip() -> None:
+    """A re-dispatch sweeps whatever the last dispatch left, finished or not (Operator
+    revision, 2026-09-16): the answer archive stages the story file's old path, which
+    only stages as a deletion when the file is tracked — the sweep is what tracks it."""
+    row = an_agent_row()
+    previous = an_attempt(
+        row, 1, pgid=4242, ended_at=EPOCH, end_sha=HEAD_SHA, status="done", output_ref="log"
+    )
+    world = a_world(previous=previous, git=FakeGit(status=["?? notes.md", ""], head_sha=[HEAD_SHA]))
+
+    run(world)
+
     assert world.git.called("stage")[0] == (WORKTREE_PATH, None)
-    assert world.git.called("commit")[0][1] == "wip: story 4-1 attempt 1 (interrupted)"
+    assert world.git.called("commit")[0][1] == "wip: story 4-1 attempt 2 (interrupted)"
 
 
 def test_a_clean_worktree_leaves_no_wip_commit() -> None:
@@ -216,7 +238,9 @@ def test_a_context_path_the_worktree_does_not_hold_is_left_out_and_never_raises(
 
 
 def test_the_prepare_commit_stages_exactly_the_document_it_wrote() -> None:
-    world = context_world(git=FakeGit(status=["", " M x", ""], head_sha=[HEAD_SHA]))
+    # First dispatch: the WIP check reads no status (Operator revision, 2026-09-16), so
+    # the first scripted answer is the one the prepare commit's own staging check reads.
+    world = context_world(git=FakeGit(status=[" M x", ""], head_sha=[HEAD_SHA]))
 
     run(world)
 

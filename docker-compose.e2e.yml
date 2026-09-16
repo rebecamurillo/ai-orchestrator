@@ -27,11 +27,13 @@ services:
   postgres:
     ports: !override
       - "127.0.0.1:${E2E_POSTGRES_PORT:-55432}:5432"
+    restart: "no"
 
   backend-api:
     env_file: !override
       - path: .env.e2e
         required: true
+    restart: "no"
     # Test mode (SPEC CAP-1), and it belongs here rather than in `.env.e2e`: that file is
     # generated once from `.env.example` by `scripts/generate-env.sh` and never rewritten,
     # so a checkout whose `.env.e2e` predates this story would silently run the gate without

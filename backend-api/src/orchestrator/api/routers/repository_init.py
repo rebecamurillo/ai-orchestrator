@@ -34,7 +34,7 @@ from orchestrator.api.errors import (
 )
 from orchestrator.api.providers import create_run_ports, project_ports
 from orchestrator.api.schemas.projects import RepositoryOut
-from orchestrator.api.schemas.runs import CreateRunOut
+from orchestrator.api.schemas.runs import CreateRunOut, RepoInitIn
 from orchestrator.application.use_cases import projects as project_use_cases
 from orchestrator.application.use_cases.create_run import CreateRunPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
@@ -79,9 +79,11 @@ ReadPorts = Annotated[ProjectPorts, Depends(project_ports)]
     summary="Initialise this Repository for the method",
     responses=POST_REFUSALS,
 )
-def init(repository_id: UUID, ports: CreatePorts) -> CreateRunOut:
-    """Start a `repo-init@1` Run on `repository.default_branch`, with no harness."""
-    return CreateRunOut.of(init_repository(ports, repository_id))
+def init(repository_id: UUID, ports: CreatePorts, body: RepoInitIn | None = None) -> CreateRunOut:
+    """Start a `repo-init@1` Run on `repository.default_branch`; the optional body names
+    the harness its `agent` rows dispatch, else `create_run`'s own default stands."""
+    harness = body.harness if body is not None else None
+    return CreateRunOut.of(init_repository(ports, repository_id, harness))
 
 
 @router.get(

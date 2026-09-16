@@ -105,6 +105,10 @@ def parked(api: httpx.Client, gates: GatesFixture, test_mode: None) -> Iterator[
             "url": gates.make(),
             "default_branch": "main",
             "quality_gate_command": QUALITY_GATE,
+            # operator revision 2026-09-15: since the quality-gate reorder (b0f3898) the
+            # story's verify row runs `unit_test_command`; declaring it keeps verify
+            # exercised — without it the row plans `skipped · no command`.
+            "unit_test_command": QUALITY_GATE,
         },
     )
     assert created.status_code == HTTP_CREATED, created.text

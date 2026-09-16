@@ -14,11 +14,22 @@ set -euo pipefail
 # verbs that read those values require them, so the guard is a function the dispatcher in
 # <harness>.sh calls for `configure` and `doctor` and not for `install`.
 require_harness_env() {
-  : "${LITELLM_BASE_URL:?set it in .env, copied from .env.example}"
-  : "${LANGFUSE_BASE_URL:?set it in .env, copied from .env.example}"
-  : "${LANGFUSE_PUBLIC_KEY:?set it in .env, copied from .env.example}"
-  : "${LANGFUSE_SECRET_KEY:?set it in .env, copied from .env.example}"
+  # Blank (declared as "") means the service is disabled — skip the check.
+  # Unset means the operator forgot — fire :? and refuse.
+  if [ -z "${LITELLM_BASE_URL+declared}" ] || [ -n "${LITELLM_BASE_URL}" ]; then
+    : "${LITELLM_BASE_URL:?set it in .env, copied from .env.example}"
+  fi
+  if [ -z "${LANGFUSE_BASE_URL+declared}" ] || [ -n "${LANGFUSE_BASE_URL}" ]; then
+    : "${LANGFUSE_BASE_URL:?set it in .env, copied from .env.example}"
+    : "${LANGFUSE_PUBLIC_KEY:?set it in .env, copied from .env.example}"
+    : "${LANGFUSE_SECRET_KEY:?set it in .env, copied from .env.example}"
+  fi
 }
+
+# Service-state predicates — the sole conditionals for gateway/tracing decisions.
+# ${VAR:-} is safe under set -u: unset expands to empty → [ -n "" ] = false = disabled.
+litellm_enabled() { [ -n "${LITELLM_BASE_URL:-}" ]; }
+langfuse_enabled() { [ -n "${LANGFUSE_BASE_URL:-}" ]; }
 
 # AD-10: this list is NORMATIVE. It is exactly what env_for(attempt) exports to every harness, plus the harness's own
 # HARNESS_ENV_ALIASES (declared in <harness>.sh, derived from these) and the Project's env vars. Config files reference
@@ -57,6 +68,7 @@ doctor_skill_present() {  # $1 = skills dir
 }
 
 doctor_gateway() {
+  if ! litellm_enabled; then log "gateway disabled"; return 0; fi
   curl -fsS -H "Authorization: Bearer ${LITELLM_API_KEY:?}" "${LITELLM_BASE_URL%/}/v1/models" >/dev/null \
     && log "gateway reachable at ${LITELLM_BASE_URL}" || { log "gateway unreachable"; return 1; }
 }
