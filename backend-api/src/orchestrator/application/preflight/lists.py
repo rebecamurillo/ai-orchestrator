@@ -27,6 +27,8 @@ EPICS_FILENAME = "epics.yaml"
 STORIES_FILENAME = "stories.yaml"
 SPEC_FILENAME = "SPEC.md"
 STATUS_KEY = "status"
+#: The Run input `initiative@1` binds its epic list under (same key as `walk_frame.py`).
+INITIATIVE_FOLDER_KEY = "initiative_folder"
 FRONTMATTER_FENCE = "---"
 STORY_SUFFIX = ".md"
 PATH_SEPARATOR = "/"
@@ -103,12 +105,20 @@ def stories_yaml_lines(ctx: Context) -> tuple[list[Line], dict[str, tuple[str, .
 
 
 def spec_folders(ctx: Context) -> tuple[str, ...]:
-    """Every spec folder the plan touches: each epic's, or the request's own single one."""
+    """Every spec folder the plan touches: each epic's, or the request's own single one.
+
+    An epic's `spec_folder` is relative to the Initiative folder (PRD §3), the same
+    composition `initiative@1` declares — so each entry is prefixed with the request's
+    `initiative_folder` when one is typed; without it the bare entries stand.
+    """
     if ctx.is_initiative:
-        return (
-            tuple(_joined(epics_entries(ctx), "spec_folder").split(", "))
-            if epics_entries(ctx)
-            else ()
+        entries = epics_entries(ctx)
+        if not entries:
+            return ()
+        prefix = ctx.req.inputs.get(INITIATIVE_FOLDER_KEY)
+        head = f"{prefix}{PATH_SEPARATOR}" if isinstance(prefix, str) and prefix else ""
+        return tuple(
+            f"{head}{folder}" for folder in _joined(entries, "spec_folder").split(", ") if folder
         )
     folder = ctx.req.inputs.get("spec_folder")
     return (folder,) if isinstance(folder, str) and folder else ()
