@@ -1,322 +1,352 @@
 # ai-orchestrator
 
-An orchestrator that runs BMAD dev-loop workflows against other repositories: a Run is planned up front, executed durably, dispatches stories to a coding-agent harness (Claude Code, Codex, OpenCode), verifies with the target repository's own commands, and stops for the operator only at declared checkpoints or when an agent is blocked.
+An orchestrator that runs BMAD dev-loop workflows against other repositories: a Run is
+planned up front, executed durably, dispatches stories to a coding-agent harness (Claude
+Code, Codex, OpenCode), verifies with the target repository's own commands, and stops for
+the operator only at declared checkpoints or when an agent is blocked.
 
-The product is specified, not yet built. Everything that decides what gets built lives under `_bmad-output/planning-artifacts/mvp/`:
+**Who reads what:**
 
-| Document | Path |
-| --- | --- |
-| PRD (build contract, FR-1..FR-33) | `mvp/prd.md` + `mvp/addendum.md` |
-| Architecture spine (binding, AD-1..AD-20) | `mvp/architecture/ARCHITECTURE-SPINE.md` |
-| Epics and stories (8 epics, 66 stories) | `mvp/epics/epics.md`, `mvp/epics/epics.yaml`, one folder per epic |
-| UX experience and visual system | `ux-designs/ux-v1-dev-loop-2026-08-26/`, `ux-designs/ux-ai-orchestrator-2026-08-25/DESIGN.md` |
+| Document | Audience | Holds |
+| --- | --- | --- |
+| `README.md` (this file) | humans | boot a machine, start the stack, run an orchestration, keep the gates green |
+| `AGENTS.md` | AI agents | the hard rules, the architecture, the gates, and how to guide an operator through setup |
+| `DEPLOY.md` | the operator of the production machine | GHCR images, upgrades, rollback, the drain rule, running without the host services |
+| `host/README.md` | whoever sets up LiteLLM / Langfuse / the model server | the optional host stack, its keys, its pitfalls |
+| `_bmad-output/planning-artifacts/mvp/` | product decisions | PRD, architecture spine (`AD-n`), epics and stories |
 
-## Running it
+## The system at a glance
 
-This section is the development stack. Deploying to the machine that does real work —
-images from GHCR, upgrades, rollback and the drain rule — is `DEPLOY.md`.
+Three containers in one compose stack, plus optional services on the host:
 
-### Setting up a fresh checkout
-
-One command turns a clone into a machine the gates run on, and it is the same command on the
-second day as on the first — every step is a no-op when it is already done:
-
-```bash
-make install                # backend .venv from uv.lock, web-client from pnpm-lock.yaml, .env files
-make install-e2e            # the same, plus the Playwright chromium build make e2e-ui needs
-make doctor                 # report only: what is missing and the command that fixes it
+```
+ browser ── 127.0.0.1:4321 ──► web-client (Astro SSR + React islands)
+                                   │  Bearer ORCHESTRATOR_TOKEN, server side only
+                                   ▼
+                               backend-api (FastAPI + DBOS durable engine)
+                                   │            │              │
+                                   ▼            ▼              ▼
+                               postgres:18   harness CLIs   git / target repos
+                               (schemas:     (claude, codex,  (worktrees under
+                                public+dbos)  opencode, in     the `work` volume)
+                                              the image)
+                                   │
+              optional, on the host, reached via host.docker.internal:
+                LiteLLM gateway :4000 ── model providers / local oMLX
+                Langfuse tracing :3000
 ```
 
-`make install` deliberately installs no *machine* prerequisite — uv, Node, Docker are yours —
-but it names the exact command for each one it finds missing, and it reports every problem
-before exiting rather than stopping at the first. It also does what it can when something is
-missing: a machine with the wrong Node still gets its backend virtualenv synced. The exit code
-follows the report, so a half-installed machine never reads as a ready one.
+- **web-client** talks only to backend-api, server side, with the bearer token. The browser
+  never holds a credential.
+- **backend-api** owns everything else: the database, the durable workflow engine (DBOS),
+  git worktrees, and the harness CLIs that are pre-installed in its image at pinned versions.
+- **LiteLLM** (model gateway: metered spend, local models) and **Langfuse** (tracing) are
+  optional. Each is one variable in `.env`; blank disables it and the stack runs without it.
 
-Run `make doctor` before blaming a red gate on the code: `uv: command not found` and
+## Boot a new machine (per-client setup)
+
+Every client machine follows the same steps. Nothing here needs to be done twice — every
+step is a no-op when it is already done.
+
+### 1. Prerequisites
+
+Install these yourself; `make install` checks for them and names the exact fix for each one
+it finds missing, but deliberately installs none of them:
+
+- **Docker** (Docker Desktop on macOS) — runs the stack
+- **uv** — `brew install uv` (backend tooling and gates)
+- **Node 24** with corepack — `nvm install 24` (web-client tooling; pnpm comes from corepack)
+- **git**, with access to this repository and to the target repositories
+
+### 2. Install and check
+
+```bash
+git clone <this repository> ai-orchestrator && cd ai-orchestrator
+make install     # backend .venv from uv.lock, web-client from pnpm-lock.yaml, .env files
+make doctor      # report only: what is missing and the command that fixes it
+```
+
+Run `make doctor` before blaming anything on the code: `uv: command not found` and
 `Cannot find module 'astro'` are setup failures wearing a test failure's clothes.
 
-Configuration is the environment (AD-20): `.env.example` is the contract, `make lint` fails when a
-setting exists in one place and not the other. Copy it once, fill it in, and never commit the result.
+### 3. Choose your environment mode
+
+Decide up front which services this machine runs. Both switches live in `.env`; **blank
+disables** the service, deleting the line refuses start-up.
+
+| Mode | `LITELLM_BASE_URL` | `LANGFUSE_BASE_URL` | You get |
+| --- | --- | --- | --- |
+| **Bare** (simplest, fine for a demo) | *(blank)* | *(blank)* | Runs work; cost figures are provisional; no trace links; `local` models unavailable; the harness authenticates directly with the provider |
+| **Gateway only** | `http://host.docker.internal:4000` | *(blank)* | Metered cost from LiteLLM, local models, budget enforcement on real numbers; no traces |
+| **Full** | `http://host.docker.internal:4000` | `http://host.docker.internal:3000` | Everything above plus a Langfuse trace link on every Run |
+
+The full runbook for what each switch changes is `DEPLOY.md` → "Running without the host
+services".
+
+### 4. Write the environment
 
 ```bash
-make env                    # write .env (and .env.e2e), then fill in the tokens and keys
-make up                     # build the images and start web-client, backend-api, postgres
+make env         # writes .env (a copy of .env.example) and .env.e2e; never overwrites
 ```
 
-`make env` is `cp .env.example .env` plus the one line that is not an application setting:
-`COMPOSE_PROJECT_NAME=aio-dev`, which names this stack's containers and volumes. There are two
-local environments and they share nothing — `aio-dev` is the one you develop in, `aio-e2e` is
-the one `make e2e` builds and destroys around the gate. Without the name compose falls back to
-the checkout's directory name, so a second clone would silently be a third project with empty
-volumes.
+`.env.example` is the contract: every setting of both components lives there, commented.
+Open `.env` and set these — the rest can keep their defaults:
 
-One of those values is not a placeholder you can leave alone. `ORCHESTRATOR_SECRET_KEY` must be
-a real Fernet key — `change-me-fernet-key` is not one, and `cryptography` refuses it with
-`Fernet key must be 32 url-safe base64-encoded bytes`. The backend builds a Fernet per request,
-so with the committed value the stack starts, `/healthz` answers, and every write to
-`/api/v1/projects` answers 500 with the reason only in `docker compose logs backend-api`. Mint
-one before you use the Projects API (`.env.e2e` gets one of its own, generated):
+| Variable | Set it to |
+| --- | --- |
+| `ORCHESTRATOR_TOKEN` | a long random string — the one login for the web UI and the API |
+| `ORCHESTRATOR_SESSION_SECRET` | 32 random bytes — signs the browser session cookie |
+| `ORCHESTRATOR_SECRET_KEY` | a **real Fernet key** — mint it with the command below. The committed placeholder is not one, and with it every write to `/api/v1/projects` answers 500 |
+| `POSTGRES_PASSWORD` | a random string |
+| `GITHUB_TOKEN` | a token that can clone the client's target repositories (read by git only; a harness never receives it) |
+| `LITELLM_BASE_URL`, `LANGFUSE_BASE_URL` | per your mode from step 3 — blank to disable |
 
 ```bash
 python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
 ```
 
-`make up` is `docker compose up -d --build`. The first run builds both images, which takes
-minutes: the backend image installs Node 24, the three harness CLIs at their pinned versions,
-and the BMAD skill stubs. When it returns, `docker compose ps` shows three services and every
-one of them reaches `healthy` — the backend after `alembic upgrade head`, the web-client after
-`/login` answers.
+In **gateway / full** mode you also need `LITELLM_API_KEY` (the harness key),
+`LITELLM_SPEND_KEY` (backend only), and in full mode the `LANGFUSE_*` keys — step 5 mints
+and writes all of them for you.
+
+### 5. (Gateway / full mode only) start the host services
 
 ```bash
-curl -fs http://127.0.0.1:8000/healthz     # {"status":"ok", …}
-open http://127.0.0.1:4321/login           # the token from .env logs in
+make host-up          # generate host/.env, start LiteLLM + Langfuse, wait for health
+make host-env-sync    # mint the harness key and write the six values into the root .env
 ```
 
-Both ports are published on `127.0.0.1` only, like the database: one operator at one machine.
-Reaching the stack from another host is a host-level decision (a tunnel), not a compose one.
-The addresses are written as `127.0.0.1` rather than `localhost` for the same reason
-`astro.config.mjs` pins it: `localhost` also resolves to `::1`, which nothing here listens on.
+Two things `host-up` cannot do for you, both in `host/.env`:
 
-The model gateway (LiteLLM), the tracing server (Langfuse) and the model server run on the host
-rather than in compose, and `backend-api` reaches them through `host.docker.internal`. Setting
-them up — the two Gateway keys, the `langfuse_otel` callback, the egress allowlist and the
-nightly `pg_dump` — is `host/README.md`, with `host/litellm.config.yaml` as the starting config.
+- **A real provider key** (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or a running oMLX). The
+  proxy starts and answers `/health` without one, but every completion fails 401 — enough
+  to bring the stack up, not enough to run a harness.
+- Or use a **Claude subscription instead of an API key**: set
+  `CLAUDE_SUBSCRIPTION_AUTH=true` in `.env` and follow `host/README.md` →
+  "authenticate on a Claude subscription".
+
+Details, key separation, and verification commands: `host/README.md`.
+
+### 6. Start the app — pick a mode
+
+There are two ways to launch, publishing the same ports — so run one at a time (each
+refuses a port the other holds; `make down` switches back from mode A).
+
+**Mode A — containers (recommended for demos and client machines):**
 
 ```bash
-make logs                                # follow every service
-make down                                # stop the stack; pgdata, work and agent-home survive
-docker compose down -v                   # the deliberate act that also deletes them
+make up          # docker compose up -d --build: web-client, backend-api, postgres
 ```
 
-Inside the backend container everything an agent needs is already there, as the non-root user
-`agent`:
+Everything runs in compose, and the harness CLIs (claude, codex, opencode) ship inside the
+backend image at pinned versions. The first run builds both images (minutes). The backend
+runs its migrations before it binds — it never serves a half-migrated schema.
+
+**Mode B — local processes (faster iteration while developing):**
 
 ```bash
-docker compose exec backend-api sh -c 'id -un; claude --version; codex --version; opencode --version'
+make local          # postgres in compose; backend-api + web-client from source, one Ctrl-C stops both
+make local-backend  # or each half in its own terminal…
+make local-web      # …with its logs to itself
+```
+
+Postgres still runs in compose (it is the one piece with no local-install story); the
+backend and web-client run from source on this machine. `scripts/local.sh` reads the same
+`.env` and rewrites only the values that name the compose network — `@postgres:` becomes
+`@127.0.0.1:`, `host.docker.internal` becomes `127.0.0.1`, and the container paths become
+`.local/work`, your `$HOME` and `templates/` (override with `LOCAL_WORK_DIR` /
+`LOCAL_AGENT_HOME`). Two consequences: Runs dispatch to the harness CLIs on **your PATH**
+(install and log them in yourself — mode A ships them), and `AGENT_HOME=$HOME` means your
+own `claude` login is what a Run uses.
+
+### 7. Verify
+
+```bash
+docker compose ps                                    # three services, all `healthy`
+curl -fs http://127.0.0.1:8000/healthz               # {"status":"ok", …}
+open http://127.0.0.1:4321/login                     # ORCHESTRATOR_TOKEN logs in
 docker compose exec backend-api scripts/harness/claude.sh doctor   # version · skills · gateway
 ```
 
-### Running backend-api from a shell instead
+In bare mode, authenticate the `claude` harness once. Mode A (stored in the `agent-home`
+volume, survives `make down`): `docker compose exec -it backend-api claude login`, or set
+`ANTHROPIC_API_KEY` as a Project env var in the UI (step "Create a Project" below). Mode B
+uses your own `claude` login — if `claude` works in your terminal, the harness works.
 
-`DATABASE_URL` in the contract names the compose service (`@postgres:5432`), because that is
-what the containers use. It does not resolve from a shell on this machine, so a host run
-overrides it — without that line the process dies in the migration step:
-
-```bash
-set -a; . ./.env; set +a                       # the contract both components read
-docker compose up -d postgres                  # postgres:18, published on 127.0.0.1:5432
-
-export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
-uv run --locked --directory backend-api python -m orchestrator.main
-```
-
-The process logs one `migrations applied` line carrying the Alembic revision and then binds —
-it never serves a half-migrated schema. Check the schema with:
+Both ports are published on `127.0.0.1` only — one operator at one machine. Use the IP, not
+`localhost` (which also resolves to `::1`, where nothing listens). Reaching the stack from
+another host is a host-level decision (a tunnel), not a compose one.
 
 ```bash
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'select * from alembic_version'
+make logs        # follow every service
+make down        # stop the stack; pgdata, work and agent-home volumes survive
 ```
 
-The gates that decide whether work is done. Every one of them runs; a target whose tooling a
-later story still brings would exit non-zero with `not available until story <id>` rather than
-pass silently, and none is in that state:
+## Start your first orchestration
+
+The whole flow happens in the web UI at `http://127.0.0.1:4321`. Everything the UI does is
+also the API under `/api/v1` with `Authorization: Bearer $ORCHESTRATOR_TOKEN`.
+
+1. **Log in** at `/login` with `ORCHESTRATOR_TOKEN`.
+2. **Create a Project** (`/projects/new`): a name, free context text for the agents, and
+   env vars (encrypted at rest, returned masked). The Project is the container — the repo
+   comes next.
+3. **Register a Repository** under the Project (`/projects/{id}/edit`): the target repo's
+   URL, default branch, and its own commands — `install_command`, `unit_test_command`,
+   `quality_gate_command`. Those commands are what the orchestrator verifies each story
+   with; get them right.
+4. **Run the clone check** (button on the same page): proves the URL and token resolve and
+   reports the target's BMAD state.
+5. **Initialise the repository** if the target has never run the BMAD method: the
+   "Initialise repository" action runs the `repo-init` template — installs the method,
+   generates the repo's `AGENTS.md`, and opens it all as a pull request.
+6. **Start a Run** at `/workflows/new`: pick a template, the project, the repository, a
+   base branch, a **budget in USD** (required — a Run cannot start without one), the
+   harness and optionally a model, and the template's declared inputs. The page shows the
+   pre-flight result and the planned step graph before you commit.
+
+   | Template | Runs |
+   | --- | --- |
+   | `story` | one story to a verified commit |
+   | `epic` | all stories of one epic on one branch, verified, pushed |
+   | `initiative` | every epic of one initiative, in order |
+   | `repo-init` | bootstrap the BMAD method into a repo, as a PR |
+
+   The harness page section shows each harness's live probe; the deeper readiness
+   diagnostic (`POST /harnesses/{name}/readiness`) runs a trivial story end to end and
+   proves the plumbing before you spend a real budget on it.
+7. **Watch it**: the Board (`/`) is the kanban of Runs; `/runs` shows the queue and step
+   history; `/workflows/{id}` is the step-level detail, `?view=diagram` for the graph.
+8. **Answer when it stops.** A Run parks as `needs_you` at a declared checkpoint, when an
+   agent is blocked, when verify fails, when the budget or a timeout is hit, or when a
+   protected path (SPEC, stories, AGENTS.md, existing tests) was touched. The Run detail
+   names the reason and offers exactly the signals that apply: `answer`, `continue`,
+   `retry`, `skip_story`, `skip_epic`, `budget_raise`, `cancel`, and the terminal signals.
+   Nothing proceeds past a park without you.
+
+Run statuses are `queued → running → needs_you / done / failed / cancelled`. A `done` story
+with a green verify also writes one append-only trajectory row — exportable per Project as
+JSONL from the Project page.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| Every `POST /api/v1/projects` answers 500 | `ORCHESTRATOR_SECRET_KEY` is still the placeholder — mint a real Fernet key (step 4), restart |
+| A gate is red on a fresh machine | Run `make doctor` first: missing uv/Node/pnpm reads as a test failure |
+| `/login` or `/healthz` unreachable on `localhost` | Use `127.0.0.1` — nothing listens on `::1` |
+| Harness readiness fails 401 on every model | The Gateway has no real upstream provider key in `host/.env` — see `host/README.md` |
+| Claude Code fails with `Invalid model name … claude-opus-5` | Its own default model is not in the Gateway's `model_list`: bind a model on the Run, or add the name in `host/litellm.config.yaml` |
+| `make e2e-ui` refuses: `127.0.0.1:4321 is already used` | It binds the same port `make up` publishes — `make down` first, or change `WEB_CLIENT_PORT` |
+| Cost shows "provisional" | Gateway is disabled (`LITELLM_BASE_URL=` blank) — expected in bare mode |
+| No trace link on Runs | Tracing is disabled (`LANGFUSE_BASE_URL=` blank) — expected outside full mode |
+| Second clone / renamed checkout sees empty data | Compose project name changed — `make env` pins `COMPOSE_PROJECT_NAME=aio-dev` in `.env` |
+
+## Architecture
+
+**Infrastructure** is the diagram above: postgres 18 holds one database with two schemas —
+`public` (the application's, migrated by Alembic) and `dbos` (owned by the durable engine).
+**DBOS** is the job runner: every Run is a durable workflow whose steps survive a backend
+restart — `make durability` kills the backend mid-Run and proves the Run still completes.
+The queue is partitioned per Repository, capped globally by `MAX_ACTIVE_RUNS`. Harness CLIs
+run inside the backend container as the non-root user `agent`, in git worktrees under the
+`work` volume, with an env built from an explicit contract — never the backend's own env.
+
+**Code** (backend-api, AD-2) is layered, and `import-linter` enforces the direction in
+`make lint`:
+
+```
+domain  ◄─  application  ◄─  { api, infrastructure }  ◄─  main.py
+```
+
+- `domain/` — entities, status machines, and the ports (protocols) every adapter implements
+- `application/` — use cases, step executors, template validation and planning; pure, no I/O
+- `api/` — FastAPI routers and Pydantic schemas; thin: parse → one use case → map
+- `infrastructure/` — the adapters: SQLAlchemy, DBOS, git, harness drivers, LiteLLM, Langfuse
+- `main.py` — the composition root
+
+The web-client is Astro SSR with React islands; the browser talks only to a same-origin
+proxy, and every API payload type is generated from `contracts/openapi.json` (`pnpm
+gen:api`), never written by hand. Per-component detail: `backend-api/AGENTS.md`,
+`web-client/AGENTS.md`. The binding architecture decisions (`AD-1..AD-20`) live in
+`_bmad-output/planning-artifacts/mvp/architecture/ARCHITECTURE-SPINE.md`.
+
+## Quality: TDD and the gates
+
+The project is built test-first (AD-18): a story's tests exist and fail before its
+implementation exists, and existing test files are anchors — never edited, only added to.
+Unit tests run with no Postgres and no network, against shared in-memory fakes (one per
+port); e2e tests run against a real, disposable compose stack.
 
 ```bash
-make lint        # ruff · mypy · import-linter · env-contract · eslint · prettier · tsc · astro check
-make test        # backend unit tests (pytest) + web-client unit tests (vitest)
-make e2e-api     # httpx scenarios + schemathesis against the stack   (story 1.2)
-make openapi     # export contracts/openapi.json, regenerate types    (story 1.3)
-make e2e-ui      # playwright against the built web-client            (story 1.3)
-make durability  # kill the backend mid-Run, restart it, count what is left (story 4.17)
-make up / down   # docker compose: web-client, backend-api, postgres  (story 1.6)
+make lint        # ruff · mypy · import-linter · env-contract · test pairs · contract drift · eslint · prettier · tsc · astro check
+make test        # backend unit (pytest) + web-client unit (vitest), with coverage
+make e2e         # build the disposable aio-e2e stack, run e2e-api in it, destroy it
+make e2e-ui      # playwright against the built web-client (stubbed backend)
+make durability  # kill the backend mid-Run, restart, prove the Run completes
 ```
 
-`make e2e` is the whole gate, and the target to type:
-
-```bash
-make e2e        # build the aio-e2e stack, run the suite in it, destroy it — dev stack untouched
-```
-
-The suite writes and cleans up nothing. `tests/e2e/test_projects.py` says so in its own
-docstring — there is no `DELETE` in the API yet, so it makes its names unique per run instead —
-`test_schemathesis.py` drives every published operation with generated input while
-authenticated, and `test_clone_check.py` leaves bare fixture repositories and base clones under
-`WORK_DIR`. That is right for a suite that has to pass twice against the same stack, and ruinous
-against the stack you develop in: a few runs and the Projects list is mostly generated noise.
-
-So the gate gets a stack of its own. `make e2e` brings up compose project `aio-e2e` from
-`docker-compose.yml` plus `docker-compose.e2e.yml`, with its own database (`orchestrator_e2e`),
-its own `pgdata`, `work` and `agent-home` volumes, its own ports (`55432`, `8020`, `4341`) so it
-runs beside `make up` rather than instead of it, and `down -v` in a trap so a failed run cleans
-up as thoroughly as a green one. `.env.e2e` is generated on first use and holds no real
-credential: the git and gateway values are the committed placeholders, exactly as CI runs them.
-
-`make e2e-api` is the gate itself — what CI invokes, and what `make e2e` invokes once the stack
-is up. Run directly it attaches to whatever `DATABASE_URL` names, so
-`scripts/check_e2e_target.sh` refuses any database whose name does not end in `_e2e`, before
-pytest opens a connection. To point it at a stack you keep anyway, say so:
-
-```bash
-set -a; . ./.env; set +a
-export DATABASE_URL="${DATABASE_URL/@postgres:/@127.0.0.1:}" BACKEND_API_URL=http://127.0.0.1:8000
-E2E_ALLOW_SHARED_STACK=1 make e2e-api                   # and keep what it leaves behind
-```
-
-### The web-client half
-
-`make lint`, `make test`, `make openapi` and `make e2e-ui` all run web-client tooling, so they
-need Node 24 and pnpm 11.25.0 (pnpm comes from corepack; the first call downloads it). Two
-one-time steps per machine:
-
-```bash
-pnpm --dir web-client install --frozen-lockfile
-pnpm --dir web-client exec playwright install chromium     # ~95 MB, for make e2e-ui only
-```
-
-`make openapi` needs neither `.env` nor the database: it builds the application with dummy
-settings, writes `contracts/openapi.json`, and regenerates `web-client/src/api/schema.d.ts`
-from it. Both files are committed, and `make lint` fails when either is out of date — the
-TypeScript types for an API payload are generated, never written by hand (AD-3).
-
-`make e2e-ui` builds web-client and runs Playwright against the built server on
-`127.0.0.1:4321`, with a stub backend-api on `127.0.0.1:8788`. It needs no database and no
-running backend; `E2E_BACKEND=real` points the same specs at a real one instead.
-
-That is the same address `make up` publishes the web-client on, so the two cannot run at
-once: with the stack up, Playwright refuses with `127.0.0.1:4321 is already used`. Run
-`make down` first, or give the container a different `WEB_CLIENT_PORT` in `.env`.
+`make e2e` runs beside `make up` — it has its own compose project (`aio-e2e`), its own
+database, volumes and ports, and a `down -v` trap, so the suite's leftovers never land in
+the stack you develop against. `make e2e-api` alone attaches to whatever stack is
+configured and refuses any database whose name does not end in `_e2e`.
 
 ## Contributing
 
-The five gates decide whether work is done, and they run in one order — `lint`, then `test`,
-then `e2e-api`, then `e2e-ui`, then `images`. A failing gate stops the ones after it, locally
-and in CI:
+The five gates decide whether work is done, and they run in one order — a failing gate
+stops the ones after it, locally and in CI:
 
 ```bash
-make lint        # ruff · mypy · import-linter · env contract · test pairs · contract drift · eslint · prettier · tsc · astro check
-make test        # backend unit tests + web-client unit tests, both with coverage
+make lint        # static gates, both components
+make test        # unit tests, both components
 make coverage    # changed lines >= 90 %, against the branch this work forks from
-make e2e         # the e2e-api gate in a stack of its own, created and destroyed around it
-make e2e-api     # httpx scenarios + schemathesis against a running stack
-make e2e-ui      # playwright against the built web-client and a stubbed backend
-make durability  # the restart-and-orphan proof: kill the backend mid-Run and count what is left
-make openapi     # re-export the contract; CI then fails on any diff (AD-3)
+make e2e         # the e2e-api gate (httpx scenarios + schemathesis) in its own stack
+make e2e-api     # the gate itself, against a running stack
+make e2e-ui      # playwright against the built web-client
+make durability  # the restart-and-orphan proof
+make openapi     # re-export contracts/openapi.json; CI fails on any diff (AD-3)
 make images      # build both container images without starting anything
 ```
 
-`.github/workflows/ci.yml` runs those same targets as five jobs chained by `needs:`, one run
-per ref. The lint job also re-exports the contract and refuses any diff, so a hand-edited
-`contracts/openapi.json` fails there rather than reaching the browser as a type that lies. It calls no command the Makefile does not hold, and it carries no credential: the
-e2e job copies `.env.example` to `.env` and runs on the committed placeholders, with two
-exceptions it writes itself — `ORCHESTRATOR_SECRET_KEY`, because the committed placeholder is
-not a valid Fernet key and every write would answer 500 without it, and `POSTGRES_DB`, which it
-names `orchestrator_e2e` so the same guard that protects a developer's stack also passes there.
-The key is generated on the runner, read from no repository secret, and dies with the job.
-
-`make e2e-api` is the one gate that needs more than the Makefile gives it: it constructs
-`Settings` in the test process, so the *whole* contract must be exported, and `DATABASE_URL`
-must name an address this machine can reach rather than the compose hostname `postgres`. `make
-e2e` does all of that around it, against a stack built for the purpose:
-
-```bash
-make e2e
-```
+`.github/workflows/ci.yml` runs the same targets as five jobs chained by `needs:` — it
+calls no command the Makefile does not hold and carries no credential (it runs on the
+committed `.env.example` placeholders, generating only a Fernet key on the runner).
 
 Two rules are enforced rather than asked for:
 
-- **Coverage.** `orchestrator.domain` and `orchestrator.application` are at 100 % branch
-  coverage — `make test` re-reports over those two packages with `--fail-under=100` after the
-  suite runs — and `web-client/src/lib/**` and `src/stores/**` at 90 % lines. Changed lines
-  must be 90 % covered (`make coverage`). Raise a number by writing a test; a threshold that
-  is lowered, a file that is excluded, or a `pragma: no cover` added to reach it is the
+- **Coverage.** `orchestrator.domain` and `orchestrator.application` hold 100 % branch
+  coverage (`make test` fails under it); `web-client/src/lib/**` and `src/stores/**` hold
+  90 % lines; changed lines must be 90 % covered (`make coverage`). Raise a number by
+  writing a test — a lowered threshold, an excluded file, or a `pragma: no cover` is the
   failure the gate exists to catch.
-- **Test pairs.** Every module under `backend-api/src/` is imported by a module under
-  `tests/unit/`, and every module under `web-client/src/` is named by one, or `make lint`
-  fails with the path of the module that is not. `__init__.py`, `main.py`, generated and
-  ambient declarations, and `.astro` page routes are exempt — everything else has a test
-  module of its own.
-
-`make durability` is the proof that "a Run survives a restart" is measured rather than
-promised (FR-12, SM-4). It builds the same disposable stack `make e2e` builds and then, inside
-it, starts a Run, `docker compose kill`s `backend-api` in the middle of a step, brings the
-container back and reads what the database and the container's process table say: the row that
-was running gets a second Attempt and the one that had already finished does not, the Run reaches
-`done`, and exactly one process group for that Run exists afterwards. A second scenario kills the
-backend while a Run waits on a `checkpoint` row and then continues it. Both print the Run's
-attempt table.
-
-It is a target of its own rather than part of `make e2e-api` because it needs a backend it may
-kill and restart, which means a container. `make e2e-api` attaches to whatever stack is
-configured — in CI that is a backend-api process started from source on the runner — so the
-`durability` marker is deselected there and CI runs `make durability` as its own step of the
-`e2e-api` job instead, against a compose stack of its own:
-
-```bash
-make durability   # builds and destroys its own stack; the two scenarios take ~75 seconds
-```
-
-`make images` is last because it is the slowest and the only one that needs a Docker
-daemon. It is also the only gate that proves a Dockerfile still builds: every gate before it
-runs from source, so without it `backend-api/Dockerfile` or `web-client/Dockerfile` could
-break and no pipeline would notice until someone ran `make up`.
+- **Test pairs.** Every module under `backend-api/src/` and `web-client/src/` is named by a
+  test module, or `make lint` fails with the path of the one that is not.
 
 Before opening a change: `make lint && make test && make coverage`, then `make e2e` and
-`make e2e-ui`. `make e2e` runs beside `make up` — it publishes its own ports. `make e2e-ui`
-still does not: it binds `127.0.0.1:4321`, which is where `make up` publishes the web-client,
-so run `make down` first or give the dev container a different `WEB_CLIENT_PORT`.
+`make e2e-ui` (the latter needs `make down` first — it binds the dev stack's port).
 
-## Setting up the BMAD method on a new machine
+## The BMAD method on a new machine
 
-The repository commits the method itself (`_bmad/`: config, scripts, manifests, modules) so every clone carries the same version, **6.11.0**. Two things are per machine and git-ignored: the skill stubs Claude Code loads (`.claude/skills/bmad-*`, `.agents/skills/bmad-*`) and your personal install answers (`_bmad/config.user.toml`). Reinstall them once per machine with the steps below.
-
-### 1. Prerequisites
-
-- **git** with access to this repository.
-- **Node.js 22 or newer** (the installer runs through `npx`). With nvm: `nvm install 22 && nvm use 22`.
-- **uv** (the BMAD scripts run with `uv run`): `brew install uv` on macOS, or see https://docs.astral.sh/uv/.
-- **Claude Code** CLI, logged in: https://docs.anthropic.com/en/docs/claude-code — `npm install -g @anthropic-ai/claude-code`, then `claude` and `/login` once.
-
-### 2. Clone and install the skill stubs
+The repository commits the method itself (`_bmad/`, version **6.11.0**); the skill stubs
+and your personal install answers are per machine and git-ignored. Once per machine:
 
 ```bash
-git clone <this repository> ai-orchestrator
-cd ai-orchestrator
 npx --yes bmad-method@6.11.0 install --directory . --modules bmm --tools claude-code,codex --yes --user-name OptimAI-team
-```
-
-The installer writes the skill stubs into `.claude/skills/` (read by Claude Code) and `.agents/skills/` (read by Codex and OpenCode), and regenerates `_bmad/config.user.toml` with your answers. Pin the version exactly: a different `bmad-method` version rewrites the installer-managed files under `_bmad/` and shows up as a diff.
-
-### 3. Check
-
-```bash
-git status                                   # must be clean: the committed _bmad/ files match 6.11.0
+git status                                   # must be clean
 ls .claude/skills | grep -c '^bmad-'         # 49 skills
-uv run _bmad/scripts/resolve_config.py --project-root .   # prints the merged config as JSON
 ```
 
-Then open Claude Code in the repository and type `/bmad-help`. It reads the planning artifacts and tells you where the project stands and which skill comes next.
+Pin the version exactly — a different one rewrites installer-managed files and shows up as
+a diff. Team overrides: `_bmad/custom/config.toml` (committed); personal:
+`_bmad/custom/config.user.toml` (ignored). Then open Claude Code here and type
+`/bmad-help`.
 
-### Notes
+## More
 
-- Team-wide overrides go in `_bmad/custom/config.toml` (committed). Personal ones go in `_bmad/custom/config.user.toml` (ignored). Never edit `_bmad/config.toml` or `_bmad/config.user.toml` by hand: the installer regenerates them.
-- To change an install answer (name, language), re-run the same `install` command with the new flags; prior answers are the defaults.
-- Copies of the skills under `~/.claude/skills/` are optional. This repository relies on the project-level ones in `.claude/skills/`.
-
-## Project brain template
-
-Published as [OptimAI-labs/project-brain-template](https://github.com/OptimAI-labs/project-brain-template):
-a GitHub **template repository** for a multi-repo product's planning hub — planning truth
-(PRD, architecture spine, contracts), business knowledge, per-initiative spec folders in the
-exact shape `templates/initiative.yaml` consumes, member code repos as lazy submodules, and
-two committed agents (a non-technical Product Partner and a Project Architect).
-`templates/project-brain/` holds the source copy; when it changes, push the same changes to
-the template repo, which is canonical for "Use this template". A generated repo
-onboards two ways: `scripts/init.sh` (guided questions: name, org, member repos → submodules
-+ `repos.yaml`; non-interactive with args) or any harness agent, which `CLAUDE.md`/`AGENTS.md`
-route to `skills/onboard.md` while the repo is uninitialised. Design and risk analysis:
-`_bmad-output/planning-artifacts/project-brain/DESIGN.md`.
-
-## Where the work stands
-
-Epics and stories are complete (`mvp/epics/`). Next: `bmad-sprint-planning` to generate the tracking file, then build Epic 1 (repository foundation and quality gates) with `bmad-build`; Epics 2 to 8 are written for unattended `bmad-build-auto` dispatch, one brief per story.
+- **Production deploys** (GHCR images, upgrades, rollback, drain): `DEPLOY.md`
+- **Host stack in depth** (LiteLLM keys, Langfuse, oMLX, egress, backups): `host/README.md`
+- **Project brain template** (the planning-hub template repo for client products):
+  [OptimAI-labs/project-brain-template](https://github.com/OptimAI-labs/project-brain-template),
+  source under `templates/project-brain/`
+- **Planning truth**: `_bmad-output/planning-artifacts/mvp/` — PRD, architecture spine,
+  epics and stories

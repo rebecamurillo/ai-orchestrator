@@ -15,7 +15,7 @@ PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
 # --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
 NODE_RUN := $(PNPM) --dir $(WEB) run
 
-.PHONY: install install-e2e doctor lint test coverage e2e e2e-api e2e-ui durability images openapi env up down logs host-up host-down host-logs host-doctor host-env-sync
+.PHONY: install install-e2e doctor lint test coverage e2e e2e-api e2e-ui durability images openapi env up down logs host-up host-down host-logs host-doctor host-env-sync local local-backend local-web
 
 ## install — a fresh checkout to a machine the gates run on (scripts/install.sh)
 ## Syncs backend-api's virtualenv from uv.lock, installs web-client from pnpm-lock.yaml at
@@ -154,6 +154,25 @@ up:
 ## `docker compose down -v` would delete all three; that is a deliberate act, not a target
 down:
 	docker compose down
+
+## ── local mode: run the app on this machine instead of in containers ────────
+## Mode A is `make up` (everything in compose, harness CLIs in the image). Mode B is
+## `make local`: postgres stays in compose, backend-api and web-client run from source as
+## host processes — faster iteration, and Runs dispatch to the harness CLIs on YOUR PATH.
+## The published ports are the same as `make up`'s, so the two modes cannot run at once;
+## scripts/local.sh refuses a bound port and says to `make down` first.
+
+## local — backend-api in the background, web-client in the foreground, one Ctrl-C stops both
+local:
+	./scripts/local.sh up
+
+## local-backend — postgres in compose, then backend-api from source in the foreground
+local-backend:
+	./scripts/local.sh backend
+
+## local-web — web-client (astro dev) from source in the foreground
+local-web:
+	./scripts/local.sh web
 
 ## ── the host stack: LiteLLM and Langfuse (host/docker-compose.yml) ──────────
 ## Separate from the product stack on purpose: different lifecycle, its own data, and it
