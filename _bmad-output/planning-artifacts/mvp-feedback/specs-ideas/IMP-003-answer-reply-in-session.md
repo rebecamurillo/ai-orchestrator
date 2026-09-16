@@ -1,7 +1,8 @@
 ---
 id: IMP-003
 title: Answer a blocked Story in the same harness session, or restart — the operator chooses
-status: candidate
+status: accepted
+accepted: 2026-09-15 — sprint-change-proposal-2026-09-14 approved by the operator
 raised: 2026-09-13
 raised-by: operator, answering a blocked story mid-run and watching the agent re-enter plan mode
 area: backend-api

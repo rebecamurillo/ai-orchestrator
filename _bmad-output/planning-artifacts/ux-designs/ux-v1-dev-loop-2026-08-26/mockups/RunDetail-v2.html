@@ -1,0 +1,244 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Run detail — reworked (F3, blocked state)</title>
+<style>
+  :root{
+    --bg:#0B0D0E; --surface:#111416; --raised:#171B1D; --rail:#0E1113; --inset:#08090A; --input:#0A0C0D;
+    --line:#21272A; --line-strong:#2C3438;
+    --text:#DDE3E5; --text-2:#8B979B; --text-3:#5C686C;
+    --amber:#E4B33C; --green:#4FB477; --red:#E05252; --blue:#6C8CD5; --accent:#7FD4C1;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-weight:400}
+  body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;display:flex;min-height:100vh}
+  /* rail */
+  .rail{width:172px;flex:none;background:var(--rail);border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column;gap:2px}
+  .rail .brand{font-size:11px;letter-spacing:.18em;color:var(--text-2);margin-bottom:22px}
+  .rail a{display:block;padding:7px 8px;color:var(--text-2);text-decoration:none;font-size:12.5px}
+  .rail a.active{background:var(--surface);color:var(--text)}
+  .rail .needs{color:var(--amber);font-size:11px}
+  .rail .sect{font-size:10px;letter-spacing:.22em;color:var(--text-3);margin:18px 0 4px;padding:0 8px}
+  .rail .foot{margin-top:auto;font-size:10.5px;color:var(--text-3);line-height:1.7;padding:0 8px}
+  /* main */
+  main{flex:1;padding:22px 30px 40px;max-width:1440px}
+  .crumb{font-size:11px;color:var(--text-3);margin-bottom:10px}
+  .crumb b{color:var(--text-2)}
+  .headrow{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+  .chip{display:inline-block;border:1px solid var(--amber);color:var(--amber);font-size:11px;letter-spacing:.10em;padding:3px 8px}
+  .title{font-size:19px;letter-spacing:-.01em}
+  .age{font-size:11.5px;color:var(--amber)}
+  .headright{margin-left:auto;font-size:11.5px;color:var(--text-2)}
+  .meta{font-size:11.5px;color:var(--text-3);line-height:1.6;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:16px}
+  .meta em{font-style:normal;color:var(--text-2)}
+  /* stop zone */
+  .stop{border-left:2px solid var(--amber);background:var(--surface);padding:14px 18px;margin-bottom:22px}
+  .stop .banner{display:flex;gap:12px;align-items:baseline;margin-bottom:12px}
+  .stop .tok{color:var(--amber);font-size:11px;letter-spacing:.10em}
+  .stop .reason{font-size:13px}
+  .stop .banright{margin-left:auto;font-size:11px;color:var(--text-2)}
+  .stop .eyebrow{font-size:10.5px;letter-spacing:.16em;color:var(--text-3);margin:12px 0 6px}
+  .stop .result{background:var(--inset);border:1px solid var(--line);padding:10px 12px;font-size:12.5px;color:var(--text-2);line-height:1.55;margin-bottom:12px}
+  .stop .q{font-size:14px;line-height:1.7;margin-bottom:10px}
+  textarea{width:100%;background:var(--input);border:1px solid var(--line-strong);color:var(--text);font-family:var(--mono);font-size:13px;line-height:1.6;padding:10px;height:74px;resize:vertical}
+  .hint{font-size:10.5px;color:var(--text-3);line-height:1.6;margin-top:6px}
+  .actions{display:flex;gap:10px;margin-top:12px;align-items:center}
+  button{font-family:var(--mono);font-size:11px;letter-spacing:.12em;padding:8px 14px;background:none;border:1px solid var(--line-strong);color:var(--text-2);cursor:pointer}
+  button.primary{border-color:var(--accent);color:var(--accent)}
+  /* body grid */
+  .grid{display:flex;gap:26px;margin-bottom:26px}
+  .diagwrap{flex:1;min-width:0}
+  .sect-head{font-size:10px;letter-spacing:.22em;color:var(--text-2);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:14px}
+  /* diagram */
+  .diag{overflow-x:auto;padding-bottom:8px}
+  .lane{display:flex;align-items:flex-start;gap:0}
+  .conn{width:22px;height:1px;background:var(--line-strong);flex:none;margin-top:26px}
+  .n{flex:none;background:var(--surface);border:1px solid var(--line);padding:8px 10px;min-width:116px}
+  .n .eb{font-size:10.5px;letter-spacing:.16em;color:var(--text-3);margin-bottom:3px}
+  .n .lb{font-size:12.5px;line-height:1.35}
+  .n .tr{display:flex;justify-content:space-between;gap:10px;margin-top:5px;font-size:11px}
+  .group{border:1px solid var(--amber);padding:10px;background:var(--surface)}
+  .group .ghead{display:flex;gap:10px;font-size:11px;margin-bottom:10px}
+  .group .ghead .eb{letter-spacing:.16em;color:var(--text-3)}
+  .inner{display:flex;align-items:flex-start}
+  .inner .conn{margin-top:22px;width:16px}
+  .dim{color:var(--text-3)} .dim .lb{color:var(--text-3)}
+  .now{font-size:10.5px;letter-spacing:.16em;color:var(--amber)}
+  .diagfoot{font-size:11px;color:var(--text-3);margin-top:12px}
+  /* right column */
+  aside{width:300px;flex:none}
+  .kv{font-size:11.5px;line-height:1.9;color:var(--text-2)}
+  .kv b{color:var(--text);font-weight:400;float:right}
+  .strip{display:flex;gap:4px;align-items:center;margin:4px 0 14px;flex-wrap:wrap}
+  .cell{width:20px;height:20px;border:1px solid var(--line-strong);font-size:9px;display:flex;align-items:center;justify-content:center;color:var(--text-3)}
+  .cell.done{background:var(--raised);color:var(--text-2)}
+  .cell.cur{border-color:var(--amber);color:var(--amber)}
+  .striplab{font-size:11px;color:var(--text-3);width:100%}
+  .tree{font-size:12px;line-height:1.9;color:var(--text-2)}
+  .tree .chg{color:var(--accent);font-size:10px;letter-spacing:.10em;margin-left:8px}
+  .tree .indent{padding-left:16px}
+  asides .sect-head{margin-top:20px}
+  /* tabs */
+  .tabs{border-top:1px solid var(--line)}
+  .tabbar{display:flex;gap:2px;margin:0 0 0}
+  .tab{font-size:10px;letter-spacing:.22em;padding:10px 16px;color:var(--text-3);border:1px solid transparent;border-bottom:none;cursor:pointer}
+  .tab.active{color:var(--text);background:var(--surface);border-color:var(--line)}
+  .tabbody{background:var(--surface);border:1px solid var(--line);padding:14px 18px;font-size:12px;line-height:2;color:var(--text-2)}
+  .tabbody .t{color:var(--text-3)}
+  .tabbody .p{color:var(--text)}
+  .amb{color:var(--amber)}
+  .grn{color:var(--green)} .blu{color:var(--blue)} .rd{color:var(--red)}
+</style>
+</head>
+<body>
+  <nav class="rail">
+    <div class="brand">AI ORCHESTRATOR</div>
+    <a href="#" class="active">workflows 7 <span class="needs">· 2 need you</span></a>
+    <a href="#">runs</a>
+    <div class="sect">CONFIGURE</div>
+    <a href="#">projects</a>
+    <a href="#">templates</a>
+    <div class="foot">2 running · 1 queued<br>2 need you<br>updated 09:41:22 · refresh</div>
+  </nav>
+  <main>
+    <div class="crumb">workflows / <b>feat-notifications</b> &nbsp;·&nbsp; /workflows/0192f3a1</div>
+    <div class="headrow">
+      <span class="chip">BLK</span>
+      <span class="title">feat/notifications</span>
+      <span class="age">blocked 2d 04h</span>
+      <span class="headright">1/2 epics · 5/8 stories · 1 link &nbsp;·&nbsp; $23.40 / $60.00</span>
+    </div>
+    <div class="meta">optimai · <em>ai-orchestrator</em> · base <em>main</em> · initiative <em>_bmad-output/planning-artifacts/mvp</em> · <em>initiative@3</em> · harness <em>claude</em> · model <em>claude-sonnet-5</em> · started <em>2026-09-13T05:37Z</em> · worktree <em>/work/wt/0192f3a1</em></div>
+
+    <!-- STOP ZONE -->
+    <section class="stop">
+      <div class="banner">
+        <span class="tok">BLK</span>
+        <span class="reason">blocked · epic 1 · story 4-1 · build</span>
+        <span class="banright">5/8 stories · $23.40</span>
+      </div>
+      <div class="eyebrow">AUTO RUN RESULT · CLAUDE · ATTEMPT 1</div>
+      <div class="result">The story asks for a saved-view share link but SPEC.md does not define who may open one — the operator only, or any token holder. Blocking: authorization model for shared saved views is undefined.</div>
+      <div class="q">Who may open a saved-view share link?</div>
+      <textarea>Any holder of the operator token — there is one operator; links carry no extra grant.</textarea>
+      <div class="hint">answer archived to stories/.answers/4-1-attempt-1.md; story 4-1 re-planned with the answer as context — edit SPEC.md on the branch when the gap is in the spec</div>
+      <div class="actions">
+        <button class="primary">RESUME WITH ANSWER</button>
+        <button>SKIP STORY</button>
+        <button>SKIP EPIC</button>
+        <button>CANCEL RUN</button>
+      </div>
+    </section>
+
+    <!-- DIAGRAM + SUMMARY -->
+    <div class="grid">
+      <div class="diagwrap">
+        <div class="sect-head">RUN</div>
+        <div class="diag">
+          <div class="lane">
+            <div class="n" style="border-color:var(--green)">
+              <div class="eb">PLAN</div><div class="lb">plan.check</div>
+              <div class="tr"><span class="grn">DON</span><span class="dim">00h 02m</span></div>
+            </div>
+            <div class="conn"></div>
+            <!-- epic 1 group, expanded -->
+            <div class="group">
+              <div class="ghead"><span class="eb">EPIC 1 · feat/notifications</span><span class="amb">BLK</span><span class="dim">27/34 steps</span></div>
+              <div class="inner">
+                <div class="n" style="border-color:var(--green)">
+                  <div class="eb">STORY 3-1</div><div class="lb">digest model</div>
+                  <div class="tr"><span class="grn">DON</span><span class="dim">5/5</span></div>
+                </div>
+                <div class="conn"></div>
+                <div class="n" style="border-color:var(--green)">
+                  <div class="eb">STORY 3-2</div><div class="lb">digest render</div>
+                  <div class="tr"><span class="grn">DON</span><span class="dim">5/5</span></div>
+                </div>
+                <div class="conn"></div>
+                <!-- story 4-1 expanded to leaves -->
+                <div class="group" style="border-color:var(--amber)">
+                  <div class="ghead"><span class="eb">STORY 4-1 · saved views</span><span class="amb">BLK</span><span class="dim">1/5</span></div>
+                  <div class="inner">
+                    <div class="n" style="border-color:var(--green);min-width:88px">
+                      <div class="eb">SYNC</div><div class="tr"><span class="grn">DON</span></div>
+                    </div>
+                    <div class="conn"></div>
+                    <div class="n" style="border-color:var(--amber);min-width:88px">
+                      <div class="eb now">NOW</div><div class="lb">build</div><div class="tr"><span class="amb">BLK</span></div>
+                    </div>
+                    <div class="conn"></div>
+                    <div class="n dim" style="min-width:88px">
+                      <div class="eb">VERIFY</div><div class="tr"><span>QUE</span></div>
+                    </div>
+                    <div class="conn"></div>
+                    <div class="n dim" style="min-width:88px">
+                      <div class="eb">COMMIT</div><div class="tr"><span>QUE</span></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="conn"></div>
+                <div class="n dim">
+                  <div class="eb">STORY 4-2</div><div class="lb">export csv</div>
+                  <div class="tr"><span>QUE</span><span>0/5</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="conn"></div>
+            <!-- epic 2 collapsed -->
+            <div class="n dim" style="min-width:140px">
+              <div class="eb">EPIC 2</div><div class="lb">feat/saved-views-ui</div>
+              <div class="tr"><span>QUE</span><span>0/18 steps</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="diagfoot">step 29 of 53 · epic 1 · story 4-1 · build · blocked 2d 04h · 5/8 stories &nbsp;·&nbsp; click a box: epics and stories expand · steps open their detail</div>
+      </div>
+
+      <aside>
+        <div class="sect-head">STORIES</div>
+        <div class="strip">
+          <span class="striplab">epic 1 · 5/6</span>
+          <span class="cell done">3-1</span><span class="cell done">3-2</span><span class="cell done">3-3</span><span class="cell done">3-4</span><span class="cell done">3-5</span><span class="cell cur">4-1</span>
+          <span class="striplab" style="margin-top:4px">epic 2 · 0/2</span>
+          <span class="cell">5-1</span><span class="cell">5-2</span>
+        </div>
+        <div class="sect-head">COST &amp; TRACE</div>
+        <div class="kv">
+          spent <b>$23.40 / $60.00</b><br>
+          tokens <b>4.1M in · 310k out</b><br>
+          wall-clock <b>31h 12m</b><br>
+          your active time <b>00h 14m</b><br>
+          trace <b style="color:var(--accent)">langfuse ↗</b><br>
+          epic 1 compare <b style="color:var(--accent)">link ↗</b><br>
+          branch <b style="color:var(--accent)">feat/notifications ↗</b>
+        </div>
+        <div class="sect-head" style="margin-top:20px">ARTIFACTS</div>
+        <div class="tree">
+          _bmad-output/. . ./epic-04/<br>
+          <span class="indent">SPEC.md<span class="chg">CHANGED</span></span><br>
+          <span class="indent">stories.yaml</span><br>
+          <span class="indent">stories/4-1-saved-views.md<span class="chg">CHANGED</span></span><br>
+          <span class="indent">stories/.answers/</span>
+        </div>
+      </aside>
+    </div>
+
+    <!-- TABS -->
+    <div class="tabs">
+      <div class="tabbar">
+        <span class="tab active">GATE RECORD</span>
+        <span class="tab">STEPS</span>
+        <span class="tab">SESSION</span>
+      </div>
+      <div class="tabbody">
+        <span class="t">09-13 07:22</span> · epics[0].stories[3].build · blocked · claude · authorization model for shared saved views is undefined<br>
+        <span class="t">09-13 06:41</span> · epics[0].stories[3].build · start · engine<br>
+        <span class="t">09-13 06:40</span> · epics[0].stories[3].sync · done · engine<br>
+        <span class="t">09-13 04:12</span> · epics[0].stories[2].verify · done · engine · exit 0<br>
+        <span class="t">09-12 22:03</span> · epics[0].stories[2].build · done · claude · $2.84
+      </div>
+    </div>
+  </main>
+</body>
+</html>

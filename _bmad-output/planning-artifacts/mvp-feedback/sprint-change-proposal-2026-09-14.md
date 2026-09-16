@@ -1,7 +1,8 @@
 ---
 title: Sprint Change Proposal — MVP feedback cycle
 date: 2026-09-14
-status: drafted, pending operator approval
+status: approved
+approved: 2026-09-15 — operator. Wave-0 gates cleared the same day — UX (artboards operator-approved) and the bmad-prd pass (§5 deltas applied to ../mvp/prd.md; AD deltas recorded in its §8 for the architect pass).
 trigger: 19 operator feedback items from testing the full app workflow, plus 3 improvements-backlog notes
 mode: batch (operator not present during drafting; every decision below is a recommendation, not a commitment)
 inputs:

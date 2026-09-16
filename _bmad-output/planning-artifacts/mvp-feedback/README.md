@@ -1,6 +1,6 @@
 ---
 title: MVP feedback — correct-course working folder
-status: proposal-pending-approval
+status: approved 2026-09-15 — wave-0 gates cleared (UX artboards; PRD deltas applied)
 created: 2026-09-14
 purpose: operator feedback from testing the MVP dev loop, grouped into features/fixes and carried into a Sprint Change Proposal
 inputs:
@@ -35,7 +35,12 @@ proposal, at which point they move to `accepted`.
 ## Next steps after approval (in order)
 
 1. `bmad-ux` — sketch and refine the two screens the proposal gates on UX: the reworked Run
-   view (F3) and the new Step-run detail with live logs (F2). Output lands in this folder.
+   view (F3) and the new Step-run detail with live logs (F2). **Ran 2026-09-15** — the
+   operator chose to update the existing UX workspace in place rather than this folder:
+   decisions (`.memlog.md`), the updated `EXPERIENCE-v1.md` (§2.2, §2.3, deltas 20–27), the
+   two artboards (`mockups/`), and the two-lens validation report all live in
+   `../ux-designs/ux-v1-dev-loop-2026-08-26/`. **Artboards operator-approved 2026-09-15 —
+   the UX gate is cleared.**
 2. `bmad-prd` (update mode) — apply the PRD deltas listed in the proposal §5 (FR-8, FR-10,
    FR-13, FR-17, FR-23, FR-29, FR-33, NFR-6, §5 non-goals).
 3. `bmad-create-epics-and-stories` — cut the approved features into the next version's epics.

@@ -1,7 +1,8 @@
 ---
 id: IMP-001
 title: Start a Run for one Story
-status: candidate
+status: accepted
+accepted: 2026-09-15 — sprint-change-proposal-2026-09-14 approved by the operator
 raised: 2026-09-08
 raised-by: operator, from the New Workflow screen during Epic 5
 area: template-dsl
