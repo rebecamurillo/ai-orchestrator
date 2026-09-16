@@ -75,20 +75,35 @@ def run_of(project: dict[str, Any], run_id: str) -> dict[str, Any]:
     return run
 
 
+#: The park kinds `continue` answers (`application/rules/signals_table.py`'s own row).
+CONTINUABLE = frozenset({"checkpoint", "protected_path", "plan_stale"})
+
+
 def wait_until_terminal(api: httpx.Client, run_id: str) -> str:
     """Drive the Run to a terminal status, playing the Operator at its declared stop.
 
     Operator revision 2026-09-15: `repo-init@1` gained a `context` step and a
     `context-review` checkpoint (f79a2a1), so the Run now parks `needs_you` there by
-    design; this driver sends `continue` the way the Operator would. A park that does not
-    admit `continue` fails loudly on the 409, never spins.
+    design; this driver sends `continue` the way the Operator would.
+
+    Operator revision 2026-09-16: a park is read before it is answered — `continue` on a
+    kind that does not admit it is a 409 by design (`signals_table`), and asserting 200
+    on every `needs_you` aborted the module with the Run stranded on its queue slot.
+    An un-continuable park fails naming the kind and reason; `cancel_run` cleans up.
     """
     deadline = time.monotonic() + RUN_TIMEOUT_SECONDS
     status = status_of(api, run_id)
     while status in ("queued", "running", "needs_you") and time.monotonic() < deadline:
         if status == "needs_you":
-            continued = api.post(f"/api/v1/runs/{run_id}/signals", json={"kind": "continue"})
-            assert continued.status_code == HTTP_OK, continued.text
+            alert = alert_of(api, run_id)
+            # `None` while `needs_you` is the moment between a signal's own commit and
+            # the walker moving the row — transitional, not a park to answer or fail on
+            if alert is not None:
+                kind = alert.get("park_kind")
+                if kind not in CONTINUABLE:
+                    pytest.fail(f"run {run_id} parked {kind}: {alert.get('reason')}")
+                continued = api.post(f"/api/v1/runs/{run_id}/signals", json={"kind": "continue"})
+                assert continued.status_code == HTTP_OK, continued.text
         time.sleep(POLL_INTERVAL_SECONDS)
         status = status_of(api, run_id)
     return status
@@ -100,26 +115,51 @@ def status_of(api: httpx.Client, run_id: str) -> str:
     return str(response.json()["status"])
 
 
+def alert_of(api: httpx.Client, run_id: str) -> dict[str, Any] | None:
+    """The parked Run's declared stop, from the detail read the Operator's screen makes."""
+    response = api.get(f"/api/v1/runs/{run_id}/detail")
+    assert response.status_code == HTTP_OK, response.text
+    alert: dict[str, Any] | None = response.json()["alert"]
+    return alert
+
+
+def start_init(api: httpx.Client, repository_id: str) -> str:
+    """POST the init, dispatching the seeded `fake` harness (Operator decision,
+    2026-09-16): the e2e stack runs no real harness, and the endpoint's optional
+    `harness` body exists for exactly this stack's situation."""
+    created = api.post(init_path(repository_id), json={"harness": "fake"})
+    assert created.status_code == HTTP_CREATED, created.text
+    return str(created.json()["run"]["id"])
+
+
+def cancel_run(api: httpx.Client, run_id: str) -> None:
+    """Best-effort release of the Run's queue slot (AD-12); a terminal Run refuses with
+    409 and that is fine — the slot is already free."""
+    api.post(f"/api/v1/runs/{run_id}/signals", json={"kind": "cancel"})
+
+
 @pytest.fixture(scope="module")
-def initialised(api: httpx.Client, fixtures: Fixtures) -> dict[str, Any]:
-    """A Repository with no method, initialised end to end through this story's own route."""
+def initialised(api: httpx.Client, fixtures: Fixtures) -> Iterator[dict[str, Any]]:
+    """A Repository with no method, initialised end to end through this story's own route.
+    The `finally` cancel (Operator revision, 2026-09-16) releases the queue slot a failed
+    drive would otherwise hold for the rest of the stack's life (AD-12)."""
     project_id = create_project(api)
     origin = fixtures.make()
     repository_id = create_repository(api, project_id, origin)
     clone_check(api, repository_id)
     checked_before = repository_of(project_of(api, project_id), repository_id)["clone_check"]["at"]
 
-    created = api.post(init_path(repository_id))
-    assert created.status_code == HTTP_CREATED, created.text
-    run_id = str(created.json()["run"]["id"])
-
-    return {
-        "project_id": project_id,
-        "repository_id": repository_id,
-        "run_id": run_id,
-        "status": wait_until_terminal(api, run_id),
-        "checked_before": checked_before,
-    }
+    run_id = start_init(api, repository_id)
+    try:
+        yield {
+            "project_id": project_id,
+            "repository_id": repository_id,
+            "run_id": run_id,
+            "status": wait_until_terminal(api, run_id),
+            "checked_before": checked_before,
+        }
+    finally:
+        cancel_run(api, run_id)
 
 
 def test_the_run_reaches_done(initialised: dict[str, Any]) -> None:
@@ -168,18 +208,18 @@ def test_a_second_init_while_the_first_is_still_going_is_refused(
     repository_id = create_repository(api, project_id, origin)
     clone_check(api, repository_id)
 
-    first = api.post(init_path(repository_id))
-    assert first.status_code == HTTP_CREATED, first.text
-    run_id = first.json()["run"]["id"]
+    run_id = start_init(api, repository_id)
+    try:
+        second = api.post(init_path(repository_id))
 
-    second = api.post(init_path(repository_id))
+        assert second.status_code == HTTP_CONFLICT, second.text
+        assert run_id in second.json()["detail"]
 
-    assert second.status_code == HTTP_CONFLICT, second.text
-    assert run_id in second.json()["detail"]
-
-    # let the Run finish so it releases the Repository's queue partition (AD-12) before the
-    # module's other tests and its own teardown run
-    wait_until_terminal(api, run_id)
+        # let the Run finish so it releases the Repository's queue partition (AD-12) before
+        # the module's other tests and its own teardown run
+        wait_until_terminal(api, run_id)
+    finally:
+        cancel_run(api, run_id)
 
 
 def test_a_failed_clone_check_refuses_initialisation(api: httpx.Client) -> None:

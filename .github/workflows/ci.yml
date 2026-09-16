@@ -205,6 +205,9 @@ jobs:
       - name: Backend log
         if: failure()
         run: cat backend-api.log
+      - name: Stop the source-run backend
+        if: always()
+        run: pkill -f "orchestrator.main" || true
       - name: Stop the stack
         if: always()
         run: docker compose down -v

@@ -354,8 +354,10 @@ def test_both_ends_of_the_rename_are_staged_into_the_prepare_commit() -> None:
     agent's — which AD-17 and FR-31 forbid."""
     world = ambiguous(
         resume=an_operator(),
+        # A first dispatch has no predecessor, so the WIP check reads no status (Operator
+        # revision, 2026-09-16): the first answer is the prepare commit's own check.
         git=FakeGit(
-            status=["", " R specs/notifications/stories/4-1-notify.md", ""], head_sha=[HEAD_SHA]
+            status=[" R specs/notifications/stories/4-1-notify.md", ""], head_sha=[HEAD_SHA]
         ),
     )
 
@@ -409,7 +411,8 @@ def test_the_section_names_the_command_the_code_and_the_log_tail() -> None:
 
 def test_the_prepare_commit_carries_the_story_file_it_rewrote() -> None:
     world = a_tail_world(
-        previous=a_previous("done"), git=FakeGit(status=["", " M x", ""], head_sha=[HEAD_SHA])
+        previous=a_previous("done"),
+        git=FakeGit(status=["", " M x", ""], head_sha=[HEAD_SHA]),
     )
 
     run(failing_verify(world))

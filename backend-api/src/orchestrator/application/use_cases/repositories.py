@@ -31,16 +31,20 @@ from orchestrator.domain.errors import Conflict, NotFound
 TEMPLATE_NAME = "repo-init"
 TEMPLATE_VERSION = 1
 
-#: `repo-init` has no `agent` step, so it accrues no gateway spend; `0` is a real budget, not
-#: a placeholder one, and is unread by anything in this epic (`create_run`'s own docstring).
+#: `repo-init`'s `context` row is its one `agent` step; the `fake` harness spends nothing
+#: and a real one is capped at this figure, so `0` is a real budget, not a placeholder one.
 NO_BUDGET = Decimal("0")
 
 CLONE_CHECK_FAILED = "clone check failed: run the clone check again before initialising"
 ALREADY_RUNNING = "initialisation already running: {run_id}"
 
 
-def init_repository(ports: CreateRunPorts, repository_id: UUID) -> CreateRunResult:
-    """Start a `repo-init@1` Run on this Repository, refusing what only this action refuses."""
+def init_repository(
+    ports: CreateRunPorts, repository_id: UUID, harness: str | None = None
+) -> CreateRunResult:
+    """Start a `repo-init@1` Run on this Repository, refusing what only this action refuses.
+    `harness` is the Operator's override for the Template's `agent` rows; `None` leaves the
+    choice to `create_run`'s own default (AD-10)."""
     repository = ports.preflight.repositories.get(repository_id)
     if repository is None:
         raise NotFound(f"no repository {repository_id}")
@@ -57,6 +61,7 @@ def init_repository(ports: CreateRunPorts, repository_id: UUID) -> CreateRunResu
         repository_id=repository.id,
         base_branch=repository.default_branch,
         budget_usd=NO_BUDGET,
+        harness=harness,
     )
     return create_run(ports, request)
 

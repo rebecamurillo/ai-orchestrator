@@ -233,8 +233,12 @@ def initialised(
 
 
 def park_of(client: httpx.Client, run_id: str) -> dict[str, Any]:
-    """What the Run says it is waiting for, as the Operator's screen reads it."""
-    response = client.get(f"{RUNS}/{run_id}")
+    """What the Run says it is waiting for, as the Operator's screen reads it.
+
+    Operator revision 2026-09-16: reads `GET /runs/{id}/detail` — `alert` and `steps`
+    are `RunDetailOut`'s fields; the summary route this read before has neither, so
+    every assertion on the captured stop raised `KeyError` instead of asserting."""
+    response = client.get(f"{RUNS}/{run_id}/detail")
     assert response.status_code == HTTP_OK, response.text
     return dict(response.json())
 

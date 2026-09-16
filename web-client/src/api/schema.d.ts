@@ -264,7 +264,8 @@ export interface paths {
         put?: never;
         /**
          * Initialise this Repository for the method
-         * @description Start a `repo-init@1` Run on `repository.default_branch`, with no harness.
+         * @description Start a `repo-init@1` Run on `repository.default_branch`; the optional body names
+         *     the harness its `agent` rows dispatch, else `create_run`'s own default stands.
          */
         post: operations["init_api_v1_repositories__repository_id__init_post"];
         delete?: never;
@@ -1534,6 +1535,15 @@ export interface components {
             max_active_runs: number;
             /** Next Cursor */
             next_cursor?: string | null;
+        };
+        /**
+         * RepoInitIn
+         * @description `POST /repositories/{id}/init`'s optional body: the harness the Template's `agent`
+         *     rows dispatch. Omitted (or an omitted body), `create_run`'s own default stands (AD-10).
+         */
+        RepoInitIn: {
+            /** Harness */
+            harness?: string | null;
         };
         /**
          * RepositoryCreate
@@ -2996,7 +3006,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RepoInitIn"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             201: {

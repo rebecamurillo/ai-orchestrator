@@ -85,12 +85,13 @@ e2e:
 	set -e; \
 	set -a; . ./$(E2E_ENV); set +a; \
 	trap '$(E2E_COMPOSE) down -v' EXIT; \
+	trap 'exit 130' INT TERM; \
 	$(E2E_COMPOSE) down -v; \
-	$(E2E_COMPOSE) up -d --build --wait backend-api; \
+	$(E2E_COMPOSE) up -d --build --wait --wait-timeout 300 backend-api; \
 	COMPOSE_PROJECT_NAME=aio-e2e; \
 	COMPOSE_FILE=docker-compose.yml:docker-compose.e2e.yml; \
-	COMPOSE_ENV_FILE=$(E2E_ENV); \
-	export COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_ENV_FILE; \
+	COMPOSE_ENV_FILES=$(E2E_ENV); \
+	export COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_ENV_FILES; \
 	export BACKEND_API_URL="http://127.0.0.1:$$BACKEND_API_PORT"; \
 	export DATABASE_URL="postgresql+psycopg://$$POSTGRES_USER:$$POSTGRES_PASSWORD@127.0.0.1:$$E2E_POSTGRES_PORT/$$POSTGRES_DB"; \
 	$(SUBMAKE) e2e-api
@@ -107,7 +108,7 @@ e2e:
 E2E_MARKER ?= not durability
 e2e-api:
 	./scripts/check_e2e_target.sh
-	$(PYTHON_RUN) pytest tests/e2e -q -m "$(E2E_MARKER)"
+	$(PYTHON_RUN) pytest tests/e2e -q --maxfail=3 -m "$(E2E_MARKER)"
 
 ## durability — the restart-and-orphan proof (SPEC CAP-17, FR-12, SM-4)
 ## The same disposable stack `make e2e` builds — its own project, its own volumes, its own
