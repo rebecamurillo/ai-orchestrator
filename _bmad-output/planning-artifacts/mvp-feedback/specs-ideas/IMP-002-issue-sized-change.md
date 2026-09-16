@@ -1,7 +1,8 @@
 ---
 id: IMP-002
 title: Run an issue-sized change through the BMAD plan gate
-status: candidate
+status: accepted
+accepted: 2026-09-15 — sprint-change-proposal-2026-09-14 approved by the operator
 raised: 2026-09-08
 raised-by: operator — "GitHub issue → plan → human validates and adapts → develop"
 area: template-dsl

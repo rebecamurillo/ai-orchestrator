@@ -1,0 +1,62 @@
+# Epic 5 — a story's entry here plus SPEC.md in this folder are its complete requirements.
+- id: "5-1"
+  title: The queue partitions by (Repository, branch)
+  description: >-
+    engine.enqueue uses partition_key = "{repository_id}:{declared branch}" — the branch the plan's
+    git.worktree row was declared from, never an allocated fresh name; an initiative plan uses its
+    base branch; the engine port's partition_key widens to str deliberately (AD-12, FR-13).
+    Acceptance: engine.enqueue is idempotent on run_id — a second enqueue is a recorded no-op; the
+    same branch stays refused — pre-flight's held-branch check covers branches declared by
+    git.worktree rows of non-terminal Runs, and git.worktree parks "misconfigured: branch held by
+    {run}" as the backstop (AD-14, PRD §4.6); queue reasons become "branch held by {run}" and
+    "global concurrency, held by {runs}" — revising test-pinned strings ONLY as the operator revision
+    of 2026-09-15 (anchor exception 4), the revised test naming the decision and date;
+    MAX_ACTIVE_RUNS stays the instance setting; a needs_you Run still holds partition and slot.
+  invoke_dev_with: >-
+    This story's complete requirements are its stories.yaml entry plus SPEC.md in
+    _bmad-output/planning-artifacts/mvp-feedback/epics/epic-05-concurrency/. Do not read other epic
+    folders.
+- id: "5-2"
+  title: Shared-repository informed consent
+  description: >-
+    Pre-flight on a repository with an active Run elsewhere warns with the facts — which Run, which
+    branch, which Spec folder — and Start run requires explicit confirmation ("this can lead to
+    merge conflicts"); never refused, never silently queued (FR-8, FR-13). Acceptance: two Runs on
+    different branches then execute concurrently; the facts land in words, one signal colour max per
+    row (NFR-6).
+  invoke_dev_with: >-
+    This story's complete requirements are its stories.yaml entry plus SPEC.md in
+    _bmad-output/planning-artifacts/mvp-feedback/epics/epic-05-concurrency/. Do not read other epic
+    folders.
+- id: "5-3"
+  title: Save a Run without starting it
+  description: >-
+    Save beside Start run persists the same planned rows without enqueueing: the saved Run is status
+    queued with engine_ref null — the null is the saved state, no new token (application reads only
+    its presence; content stays adapter-only, AD-6); it renders in the Queued column with reason
+    "saved — not started" (FR-8, FR-13, AD-12). Acceptance: the start Signal (valid only when
+    engine_ref null and status queued) enqueues it — gate-record event started_by_operator,
+    after_run_id cleared in the same unit of work, the Probe re-read exactly as create_run does
+    (AD-13, AD-10); list_queue appends saved Runs to the engine's queue view; reason texts, never
+    status tokens (FR-25).
+  invoke_dev_with: >-
+    This story's complete requirements are its stories.yaml entry plus SPEC.md in
+    _bmad-output/planning-artifacts/mvp-feedback/epics/epic-05-concurrency/. Do not read other epic
+    folders.
+- id: "5-4"
+  title: after {run_id} — dependencies between Runs
+  description: >-
+    A saved Run may declare after: {run_id} (stored run.after_run_id); its queue row reads "waiting
+    for run {x}" (FR-13, FR-25). Acceptance: the writer applying the predecessor's terminal
+    transition resolves dependents (engine_ref null only) in the same unit of work — done: idempotent
+    engine.enqueue; failed | cancelled: dependent needs_you, park_kind dependency, park_path null,
+    reason "run {x} ended {status}" — still the two writers, no poller (AD-8, AD-12, §4.6);
+    container start sweeps crash residue — every Run whose after_run_id names a done Run and whose
+    engine_ref is null is enqueued (AD-12); on a dependency park Continue enqueues (start anyway)
+    and Cancel cancels — signal_run calls engine.enqueue, not engine.signal, for these; a dependency
+    park never expires; cancel's effects are recorded no-ops where referents don't exist (AD-13).
+  done_checkpoint: true
+  invoke_dev_with: >-
+    This story's complete requirements are its stories.yaml entry plus SPEC.md in
+    _bmad-output/planning-artifacts/mvp-feedback/epics/epic-05-concurrency/. Do not read other epic
+    folders.

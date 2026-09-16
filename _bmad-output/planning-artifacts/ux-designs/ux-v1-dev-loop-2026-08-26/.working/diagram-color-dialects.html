@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Diagram colour dialects — A vs B</title>
+<style>
+  :root{
+    --bg:#0B0D0E; --surface:#111416; --surface-raised:#171B1D; --inset:#08090A;
+    --line:#21272A; --line-strong:#2C3438;
+    --text:#DDE3E5; --text-2:#8B979B; --text-3:#5C686C;
+    --amber:#E4B33C; --green:#4FB477; --red:#E05252; --blue:#6C8CD5; --accent:#7FD4C1;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--mono);font-weight:400;padding:32px 40px;font-size:13px}
+  h1{font-size:13px;letter-spacing:.18em;color:var(--text-2);margin-bottom:6px;font-weight:400}
+  p.note{font-size:11.5px;color:var(--text-3);line-height:1.5;margin-bottom:28px;max-width:72ch}
+  section{margin-bottom:40px}
+  .sect-head{font-size:10px;letter-spacing:.22em;color:var(--text-2);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:4px}
+  .sect-sub{font-size:11px;color:var(--text-3);margin-bottom:18px;line-height:1.6}
+  .strip{display:flex;align-items:center;gap:0;overflow-x:auto;padding:10px 0 22px}
+  .conn{width:26px;height:1px;background:var(--line-strong);flex:none}
+  .node{flex:none;width:148px;background:var(--surface);border:1px solid var(--line);padding:9px 10px}
+  .node .eyebrow{font-size:10.5px;letter-spacing:.16em;color:var(--text-3);margin-bottom:4px}
+  .node .label{font-size:12.5px;line-height:1.35;margin-bottom:3px}
+  .node .meta{font-size:11px;color:var(--text-3);line-height:1.5}
+  .node .tokrow{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px}
+  .tok{font-size:11px;letter-spacing:.10em}
+  .steps{font-size:11px;color:var(--text-3)}
+  /* group (iteration) box */
+  .node.group{border-style:solid}
+  /* dim scheduled */
+  .dim .label{color:var(--text-3)} .dim .meta{color:var(--text-3)}
+  .legend{display:flex;gap:26px;font-size:11px;color:var(--text-2);margin-top:2px;flex-wrap:wrap}
+  .legend b{font-weight:400;color:var(--text)}
+  .sw{display:inline-block;width:9px;height:9px;border:1px solid;vertical-align:baseline;margin-right:6px;position:relative;top:1px}
+</style>
+</head>
+<body>
+<h1>DIAGRAM COLOUR DIALECTS</h1>
+<p class="note">The same run fragment twice: epic 1 collapsed to one box per story iteration (item 12), each node carrying a word token beside its border colour — colour never alone, per the NFR-6 amendment. Six states shown: done, done, running, waiting-for-human, error, scheduled.</p>
+
+<section>
+  <div class="sect-head">DIALECT A — ITEM 12 VERBATIM (CI CONVENTION)</div>
+  <div class="sect-sub">done <b style="color:var(--green)">green</b> · running <b style="color:var(--blue)">blue</b> (revives the existing <code>signal-criterion</code> token) · error <b style="color:var(--red)">red</b> · waiting-human <b style="color:var(--amber)">amber</b> · scheduled grey. Green flips meaning vs the board (board: green = running). Blue re-enters the system for this surface.</div>
+  <div class="strip">
+    <div class="node" style="border-color:var(--green)">
+      <div class="eyebrow">STORY 3-1</div><div class="label">auth scaffolding</div>
+      <div class="tokrow"><span class="tok" style="color:var(--green)">DON</span><span class="steps">5/5 steps</span></div>
+    </div>
+    <div class="conn"></div>
+    <div class="node" style="border-color:var(--green)">
+      <div class="eyebrow">STORY 3-2</div><div class="label">token refresh</div>
+      <div class="tokrow"><span class="tok" style="color:var(--green)">DON</span><span class="steps">5/5 steps</span></div>
+    </div>
+    <div class="conn"></div>
+    <div class="node" style="border-color:var(--blue)">
+      <div class="eyebrow">STORY 3-3 · NOW</div><div class="label">session expiry</div>
+      <div class="tokrow"><span class="tok" style="color:var(--blue)">RUN</span><span class="steps">2/5 steps</span></div>
+    </div>
+    <div class="conn"></div>
+    <div class="node" style="border-color:var(--amber)">
+      <div class="eyebrow">STORY 4-1</div><div class="label">saved views</div>
+      <div class="tokrow"><span class="tok" style="color:var(--amber)">BLK</span><span class="steps">3/5 steps</span></div>
+    </div>
+    <div class="conn"></div>
+    <div class="node" style="border-color:var(--red)">
+      <div class="eyebrow">STORY 4-2</div><div class="label">export csv</div>
+      <div class="tokrow"><span class="tok" style="color:var(--red)">ERR</span><span class="steps">4/5 steps</span></div>
+    </div>
+    <div class="conn"></div>
+    <div class="node dim" style="border-color:var(--line)">
+      <div class="eyebrow">STORY 4-3</div><div class="label">audit trail</div>
+      <div class="tokrow"><span class="tok" style="color:var(--text-3)">QUE</span><span class="steps">0/5 steps</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="border-color:var(--green)"></span>done</span>
+    <span><span class="sw" style="border-color:var(--blue)"></span>running</span>
+    <span><span class="sw" style="border-color:var(--amber)"></span>needs you</span>
+    <span><span class="sw" style="border-color:var(--red)"></span>error</span>
+    <span><span class="sw" style="border-color:var(--line)"></span>scheduled</span>
+  </div>
+</section>
+
+<section>
+  <div class="sect-head">DIALECT B — V1 ATTENTION MODEL, EXTENDED TO BORDERS</div>
+  <div class="sect-sub">running <b style="color:var(--green)">green</b> · needs-you <b style="color:var(--amber)">amber</b> · error <b style="color:var(--red)">red</b> · done grey (strong hairline, full-weight text) · scheduled grey (faint hairline, tertiary text). Same hue meanings as the board and every chip in the app; no blue; "where is it now" pops, "what is finished" recedes.</div>
+  <div class="strip">
+    <div class="node" style="border-color:var(--line-strong)">
+      <div class="eyebrow">STORY 3-1</div><div class="label">auth scaffolding</div>
+      <div class="tokrow"><span class="tok" style="color:var(--text-2)">DON</span><span class="steps">5/5 steps</span></div>
+    </div>
+    <div class="conn"></div>
+    <div class="node" style="border-color:var(--line-strong)">
+      <div class="eyebrow">STORY 3-2</div><div class="label">token refresh</div>
+      <div class="tokrow"><span class="tok" style="color:var(--text-2)">DON</span><span class="steps">5/5 steps</span></div>
+    </div>
+    <div class="conn"></div>
+    <div class="node" style="border-color:var(--green)">
+      <div class="eyebrow">STORY 3-3 · NOW</div><div class="label">session expiry</div>
+      <div class="tokrow"><span class="tok" style="color:var(--green)">RUN</span><span class="steps">2/5 steps</span></div>
+    </div>
+    <div class="conn"></div>
+    <div class="node" style="border-color:var(--amber)">
+      <div class="eyebrow">STORY 4-1</div><div class="label">saved views</div>
+      <div class="tokrow"><span class="tok" style="color:var(--amber)">BLK</span><span class="steps">3/5 steps</span></div>
+    </div>
+    <div class="conn"></div>
+    <div class="node" style="border-color:var(--red)">
+      <div class="eyebrow">STORY 4-2</div><div class="label">export csv</div>
+      <div class="tokrow"><span class="tok" style="color:var(--red)">ERR</span><span class="steps">4/5 steps</span></div>
+    </div>
+    <div class="conn"></div>
+    <div class="node dim" style="border-color:var(--line)">
+      <div class="eyebrow">STORY 4-3</div><div class="label">audit trail</div>
+      <div class="tokrow"><span class="tok" style="color:var(--text-3)">QUE</span><span class="steps">0/5 steps</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="border-color:var(--green)"></span>running</span>
+    <span><span class="sw" style="border-color:var(--amber)"></span>needs you</span>
+    <span><span class="sw" style="border-color:var(--red)"></span>error</span>
+    <span><span class="sw" style="border-color:var(--line-strong)"></span>done</span>
+    <span><span class="sw" style="border-color:var(--line)"></span>scheduled</span>
+  </div>
+</section>
+
+<p class="note">Both dialects keep the word token as the authoritative state; the border only reinforces. The difference is what a wall of finished work looks like: in A a healthy long run is mostly green boxes with one blue; in B it is quiet grey with one green — colour appears only where something moves or needs you.</p>
+</body>
+</html>
