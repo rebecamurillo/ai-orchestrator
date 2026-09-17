@@ -2,13 +2,23 @@
 title: story-run@1 and the only selector
 type: feature
 created: '2026-09-17'
-status: in-progress
+status: done
 baseline_revision: ea32720c365555cce53a39d0091e2df094220084
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: [oversized]
-deferred: []
+deferred:
+  - summary: >-
+      usesHarness and withTemplate harness tests in newwf-state.test.ts do not assert story-run
+    evidence: |-
+      usesHarness('story-run') correctly returns true (negative match on 'repo-init') but is
+      unasserted. withTemplate harness-clearing tests cover initiative/epic/repo-init only.
+      Fixing requires touching newwf-state.test.ts, an existing test file, without current
+      operator authorization.
+    location: >-
+      web-client/tests/unit/newwf-state.test.ts:306-326
+    severity: low
 ---
 
 <intent-contract>
@@ -117,3 +127,50 @@ The key reads outer scope (the template's declared inputs), not item scope (the 
 **Commands:**
 - `make lint` -- expected: ruff format+lint, mypy, import-linter, env-contract, test-pairs all green; tsc and eslint green after state.ts change; no new Python source modules
 - `make test` -- expected: 3 new backend test files green, `newwf-state.test.ts` green after revision; domain + application 100% branch coverage; total ~6363+ backend tests passing
+
+## Review Triage Log
+
+### 2026-09-17 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 2: (high 0, medium 1, low 1)
+- defer: 2: (high 0, medium 0, low 2)
+- reject: 9
+- addressed_findings:
+  - `[medium]` `[patch]` Outer-scope invariant untested: `only: "{{story}}"` on a loop `as: story` was not asserted to raise `UNBOUND_VARIABLE`. Added `test_for_each_with_only_rejects_as_name` to `test_validate_only_key.py` with fixture `TEMPLATE_ONLY_AS_NAME` using the `as:` name in `only:`.
+  - `[low]` `[patch]` I/O matrix row 4 (literal `only:`) had no test. Added `HEADER_LITERAL_ONLY` template and `test_only_selector_with_literal_value_filters_correctly` to `test_only_selector.py`; `only: "2"` (no expression) plans story "2" correctly.
+
+## Auto Run Result
+
+### Summary
+Added `only: str | None` plan-time filter to `ForEach`, wired validation (unknown-key acceptance and outer-scope expression check), and added `expand_loop` filtering with `PlanError(ONLY_NOT_IN_LIST)` on no match. Created `templates/story-run.yaml` (IMP-001 option B): a root template that checks out a branch, runs the quality gate, dispatches exactly one story via `only: "{{story_id}}"`, pushes, and creates a PR link. Extended the web-client `TEMPLATE_ORDER` and `TEMPLATE_INPUT_FIELDS` with `story-run` as the fourth root template under AGENTS.md exception 4 (IMP-001 accepted 2026-09-15).
+
+### Files changed
+- `backend-api/src/orchestrator/application/templates/model.py` — added `only: str | None = None` to `ForEach`
+- `backend-api/src/orchestrator/application/templates/table.py` — added `"only"` to `FOR_EACH_KEYS`
+- `backend-api/src/orchestrator/application/templates/validate.py` — mapped `only` YAML key in `_entry()`
+- `backend-api/src/orchestrator/application/templates/expressions.py` — added outer-scope scan for `only:` in `_check_for_each()`
+- `backend-api/src/orchestrator/application/templates/plan_model.py` — added `ONLY_NOT_IN_LIST` constant
+- `backend-api/src/orchestrator/application/templates/rows.py` — added `only:` filter block in `expand_loop()`
+- `templates/story-run.yaml` — new shipped root template per IMP-001 option B
+- `web-client/src/lib/newwf/state.ts` — added `story-run` to `TEMPLATE_ORDER` and `TEMPLATE_INPUT_FIELDS`
+- `web-client/tests/unit/newwf-state.test.ts` — revised under AGENTS.md exception 4 to assert four-template state
+- `backend-api/tests/unit/application/templates/test_only_selector.py` — new; 4 tests covering filter, no-match, regression, literal
+- `backend-api/tests/unit/application/templates/test_validate_only_key.py` — new; 3 tests covering pass, unbound, as-name rejection
+- `backend-api/tests/unit/application/templates/test_story_run_template.py` — new; validates and plans story-run@1
+- `backend-api/tests/unit/fakes/templates.py` — fixed `list()` sort to match path-sort order (smoke test alignment)
+
+### Review findings breakdown
+- patches applied: 2 (medium: outer-scope invariant test; low: literal only: test)
+- items deferred: 2 (low: `usesHarness('story-run')` and `withTemplate` harness not asserted for `story-run` in existing test file — requires operator authorization to modify)
+- items rejected: 9 (noise: duplicate-ID case protected by `check_entries`; non-string `only:` handled by `_text()`; non-string `resolve()` result wrapped by `str()`; check_entries-before-filter is documented design; no-retry is not spec'd; implicit on_fail is framework default; plan-row structure covered by validation test; description wording; intent-alignment false positives from outside this story's diff)
+
+### Follow-up review recommendation
+Patched counts: medium 1, low 1. Score: 3×1 + 1×1 = 4 < 5. followup_review_recommended: false.
+
+### Verification
+- `make lint`: all checks green (ruff, mypy, import-linter, env-contract, test-pairs, tsc, eslint, prettier)
+- `make test`: 6369 backend tests passed, 1348 web-client tests passed; domain + application 100% branch coverage
+
+### Residual risks
+- `usesHarness('story-run')` is not explicitly asserted; the function returns `template !== 'repo-init'` so it returns `true` for `story-run` (correct) but without a pinning test. Deferred.
