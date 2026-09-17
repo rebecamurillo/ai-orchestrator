@@ -124,7 +124,9 @@ def finish(
         hit = protected(ctx, finished)
         if hit is not None:
             return hit.model_copy(update={"output_ref": str(result.log_path)})
-        reason = STALLED.format(path=result.stall_cwd, n=stall_min)
+        stall_path = result.stall_cwd if result.stall_cwd is not None else "(unknown)"
+        stall_n = stall_min if stall_min is not None else 30
+        reason = STALLED.format(path=stall_path, n=stall_n)
         return StepResult(
             status="error",
             gate=ctx.row.gate,

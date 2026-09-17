@@ -145,6 +145,61 @@ def test_waiting_on_an_unknown_handle_answers_cleanly_rather_than_raising() -> N
     assert outcome.timed_out is False
 
 
+#: Stall detection fires after one poll cycle (~10 s); allow ≤ 15 s total.
+STALL_DEADLINE_SECONDS = 15.0
+
+
+def test_a_process_that_sits_idle_is_killed_as_stalled(tmp_path: Path) -> None:
+    """FR-10: `wait` returns stalled=True when nothing in cwd changes for stall_min minutes.
+
+    stall_min=0.005 min ≈ 0.3 s — the threshold is already exceeded after the first 10 s
+    poll, so the stall fires well within STALL_DEADLINE_SECONDS.
+    """
+    runner = RealProcessRunner()
+    log_path = tmp_path / "logs" / "007-1.log"
+
+    start = time.monotonic()
+    handle = runner.start(
+        ["sleep", "60"],
+        cwd=tmp_path,
+        env={},
+        timeout_min=None,
+        log_path=log_path,
+        stall_min=0.005,
+    )
+    outcome = runner.wait(handle)
+    elapsed = time.monotonic() - start
+
+    assert outcome.stalled is True
+    assert outcome.timed_out is False
+    assert elapsed <= STALL_DEADLINE_SECONDS
+    assert not _group_alive(handle.pgid)
+
+
+def test_a_process_that_writes_files_exits_cleanly_with_no_stall(tmp_path: Path) -> None:
+    """FR-10: a process with stall_min set that exits naturally is not reported as stalled."""
+    runner = RealProcessRunner()
+    log_path = tmp_path / "logs" / "008-1.log"
+    marker = tmp_path / "marker.txt"
+
+    handle = runner.start(
+        [
+            "bash",
+            "-c",
+            f"echo run1 >> {marker}; sleep 0.1; echo run2 >> {marker}; exit 0",
+        ],
+        cwd=tmp_path,
+        env={},
+        timeout_min=None,
+        log_path=log_path,
+        stall_min=1.0,  # 1 min — well above run time; natural exit before any poll fires
+    )
+    outcome = runner.wait(handle)
+
+    assert outcome.stalled is False
+    assert outcome.exit_code == 0
+
+
 def _group_alive(pgid: int) -> bool:
     """Mirrors `runner._group_alive`: a zombie not yet reaped answers `0` with `EPERM` on
     Darwin, `ESRCH` once reaped — either one means there is nothing left to signal."""

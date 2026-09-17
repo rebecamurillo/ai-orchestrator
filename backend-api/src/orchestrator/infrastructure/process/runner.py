@@ -174,7 +174,7 @@ class RealProcessRunner:
                 elif now - last_activity >= child.stall_min_s:
                     self.kill_group(handle.pgid)
                     popen.wait()
-                    return Outcome(exit_code=None, timed_out=False, stalled=True)
+                    return Outcome(exit_code=popen.returncode, timed_out=False, stalled=True)
         finally:
             _forget(handle.pgid)
 
@@ -286,7 +286,7 @@ def _max_mtime(cwd: Path | None) -> float:
     if cwd is None:
         return 0.0
     best = 0.0
-    for dirpath, _dirs, filenames in os.walk(str(cwd)):
+    for dirpath, _dirs, filenames in os.walk(cwd):
         for fname in filenames:
             try:
                 t = os.path.getmtime(os.path.join(dirpath, fname))

@@ -162,7 +162,7 @@ def test_a_row_carrying_no_resolved_timeout_gets_the_kinds_own_default() -> None
     assert world.harness.called("start")[0]["stall_min"] == STALL_MIN
 
 
-def test_a_row_carrying_an_explicit_null_timeout_gets_the_default_too() -> None:
+def test_a_row_with_explicit_null_timeout_carries_no_deadline_and_stall_default() -> None:
     """Operator revision 2026-09-15: an explicit null timeout_min passes through as None
     (no wall-clock kill); the kind's stall_default_min of 30 still applies."""
     world = dispatched(with_resolved=resolved(timeout_min=None))
