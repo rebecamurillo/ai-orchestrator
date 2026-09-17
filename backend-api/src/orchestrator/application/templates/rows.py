@@ -63,6 +63,7 @@ from orchestrator.application.templates.plan_model import (
     INSERTED_GATE,
     LABEL_SEPARATOR,
     ON_FAIL_KEY,
+    ONLY_NOT_IN_LIST,
     PATH_SEPARATOR,
     REASON_ALREADY_DONE,
     PlanError,
@@ -183,13 +184,27 @@ def expand(entries: Sequence[Step | ForEach], frame: Frame, ctx: Context) -> lis
 def expand_loop(loop: ForEach, frame: Frame, ctx: Context) -> list[PlannedRow]:
     """One frame per entry of the list file the loop names, in the file's own order."""
     path = str(resolve(loop.source, frame.scope))
-    items, ref_used = read_list(ctx.reader, frame, path, line=loop.line)
+    raw_items, ref_used = read_list(ctx.reader, frame, path, line=loop.line)
     kind = list_kind(path)
-    check_entries(items, kind, frame, line=loop.line)
+    check_entries(raw_items, kind, frame, line=loop.line)
+    filtered: Sequence[Mapping[str, Any]]
+    if loop.only is not None:
+        target_id = str(resolve(loop.only, frame.scope))
+        filtered = [e for e in raw_items if e.get(ID_KEY) == target_id]
+        if not filtered:
+            raise PlanError(
+                reason=ONLY_NOT_IN_LIST,
+                template=frame.template.name,
+                version=frame.template.version,
+                line=loop.line,
+                item=target_id,
+            )
+    else:
+        filtered = raw_items
     # the list decided which commit this frame reads at; the story files follow it
     outer = replace(frame, ref=ref_used)
     rows: list[PlannedRow] = []
-    for index, entry in enumerate(items):
+    for index, entry in enumerate(filtered):
         item = _Item(loop=loop, index=index, entry=entry, kind=kind, path=path)
         rows += _item_rows(item, _item_frame(item, outer, ctx), ctx)
     return rows

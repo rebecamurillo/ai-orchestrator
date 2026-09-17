@@ -3,10 +3,11 @@
  * without rendering (`web-client/AGENTS.md`).
  *
  * `TEMPLATE_ORDER` and `TEMPLATE_INPUT_FIELDS` are the brief's own fixed enumeration, not
- * derived from `GET /templates`: this epic ships exactly three root Templates
- * (`templates/initiative.yaml`, `templates/epic.yaml`, `templates/repo-init.yaml`), `story`
- * is never started directly, and the list the Operator switches between never depends on
- * what the list endpoint happens to answer. The `templates` prop is read only to look up
+ * derived from `GET /templates`: this epic ships four root Templates
+ * (`templates/initiative.yaml`, `templates/epic.yaml`, `templates/repo-init.yaml`,
+ * `templates/story-run.yaml`), `story` is never started directly (IMP-001 accepted
+ * 2026-09-15, FR-33), and the list the Operator switches between never depends on what the
+ * list endpoint happens to answer. The `templates` prop is read only to look up
  * `latest_version` for whichever name is selected.
  */
 import type { components } from '../../api/schema';
@@ -19,7 +20,7 @@ type RepositoryOut = components['schemas']['RepositoryOut'];
 type HarnessOut = components['schemas']['HarnessOut'];
 export type ProbeResultOut = components['schemas']['ProbeResultOut'];
 
-export const TEMPLATE_ORDER = ['initiative', 'epic', 'repo-init'] as const;
+export const TEMPLATE_ORDER = ['initiative', 'epic', 'repo-init', 'story-run'] as const;
 export type TemplateName = (typeof TEMPLATE_ORDER)[number];
 
 export const DEFAULT_TEMPLATE: TemplateName = 'initiative';
@@ -55,6 +56,11 @@ export const TEMPLATE_INPUT_FIELDS: Record<TemplateName, TemplateInputField[]> =
     },
   ],
   'repo-init': [],
+  'story-run': [
+    { key: 'branch', label: 'WORKING BRANCH' },
+    { key: 'spec_folder', label: 'SPEC FOLDER' },
+    { key: 'story_id', label: 'STORY ID' },
+  ],
 };
 
 export function isTemplateName(value: string): value is TemplateName {

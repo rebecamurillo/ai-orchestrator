@@ -130,6 +130,10 @@ def _check_for_each(node: LinedMap, types: dict[str, str]) -> list[ValidationErr
         if "{{" not in source:
             errors.append(problem(at, EXPRESSION_SYNTAX))
         errors += _scan_text(source, types, at)
+    # `only:` reads outer scope (the template's declared inputs), not the loop's item scope —
+    # this is what makes `only: "{{story_id}}"` work where `story_id` is an input, not a field.
+    if isinstance(only_val := node.get("only"), str):
+        errors += _scan_text(only_val, types, key_line(node, "only", node.line))
     declared = node.get(AS_KEY)
     item = _scope(types, declared if isinstance(declared, str) else None)
     for key in CONDITION_KEYS:

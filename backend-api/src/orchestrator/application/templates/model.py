@@ -182,6 +182,7 @@ class ForEach(BaseModel):
     steps: tuple[Step, ...] = ()
     pause_before_item_when: str | None = None
     pause_after_item_when: str | None = None
+    only: str | None = None
 
 
 class ParsedTemplate(BaseModel):
