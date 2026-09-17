@@ -176,7 +176,7 @@ def _check_ids(walked: list[tuple[LinedMap, LinedMap | None]]) -> list[Validatio
             errors.append(problem(node.line, MISSING_KEY))
             continue
         line = key_line(node, "id", node.line)
-        if isinstance(node["id"], str) and node["id"].isdigit():
+        if isinstance(node["id"], str) and node["id"].isdigit() and node["id"].isascii():
             errors.append(problem(line, ALL_DIGIT_STEP_ID))
             continue
         if not is_slug(node["id"]):
