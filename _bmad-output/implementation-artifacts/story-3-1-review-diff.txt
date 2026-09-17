@@ -1,0 +1,266 @@
+diff --git a/backend-api/src/orchestrator/application/steps/__init__.py b/backend-api/src/orchestrator/application/steps/__init__.py
+index 27c79f8..85bb416 100644
+--- a/backend-api/src/orchestrator/application/steps/__init__.py
++++ b/backend-api/src/orchestrator/application/steps/__init__.py
+@@ -56,6 +56,9 @@ class KindMeta:
+     with_keys: frozenset[str]
+     #: True when the planner inserts the kind and a Template may not name it.
+     planner_only: bool = False
++    #: Minutes of filesystem silence before the stall detector kills the process.
++    #: `None` for kinds that do not use the stall detector (shell, git.*, etc.).
++    stall_default_min: int | None = None
+
+
+ #: Every step kind there is (spine "Shipped kinds"). The only enumeration of kinds.
+@@ -66,8 +69,9 @@ KIND_META: dict[str, KindMeta] = {
+     "shell": KindMeta("deterministic", 30, frozenset({"command"})),
+     "agent": KindMeta(
+         "liveness",
+-        90,
++        None,
+         frozenset({"harness", "model", "skill", "args", "prompt_extra"}),
++        stall_default_min=30,
+     ),
+     "git.commit": KindMeta("deterministic", 5, frozenset({"message"})),
+     "git.push": KindMeta("deterministic", 5, frozenset({"branch"})),
+diff --git a/backend-api/src/orchestrator/application/steps/agent.py b/backend-api/src/orchestrator/application/steps/agent.py
+index 27be960..5fe11ed 100644
+--- a/backend-api/src/orchestrator/application/steps/agent.py
++++ b/backend-api/src/orchestrator/application/steps/agent.py
+@@ -18,18 +18,13 @@ middle write is the one thing a *resumed* session skips — `Harness.resume` is
+ which is the very case this guards — while `end_sha` is written only by the tail.
+
+ **One resume reaches this module and dispatches nothing.** A `continue` carrying accepted
+-files answers a `protected_path` park (AD-17): the work is already in the worktree, so
+-`agent_tail.re_check` re-runs the check and the routing over the previous attempt and
+-`execute` returns that — before the orphan control, before the WIP commit, before anything
+-here would put a commit of its own in front of the range about to be read.
++files runs only the check and routing over the previous attempt — `agent_tail.re_check`
++handles it before any new commits are placed in front of the range it reads.
+
+ **Three re-dispatches reach this module and are not the same dispatch** (AD-9, AD-13): the
+-Template's own `retry`, which resumes the session or prepends its prompt to a fresh one; a
+-person's *Retry* from a stop, which archives every extra Story file an ambiguity left before
+-anything reads the glob again (AD-13); a `verify` redispatch, which hands
+-the agent its file back at `in-progress` with a `## Verify Failure` section (FR-10).
+-`context.retrying`, `context.operator_retry` and `context.redispatched` tell them apart, off
+-`StepContext` alone.
++Template's own `retry`; a person's *Retry* from a stop; and a `verify` redispatch that
++hands the agent its file back at `in-progress` with a `## Verify Failure` section (FR-10).
++`context.retrying`, `context.operator_retry` and `context.redispatched` tell them apart.
+ """
+
+ from __future__ import annotations
+@@ -69,7 +64,7 @@ from orchestrator.application.templates.agent_row import (
+     SPEC_FOLDER_KEY,
+     STORY_ID_KEY,
+ )
+-from orchestrator.application.templates.rows import TIMEOUT_KEY
++from orchestrator.application.templates.rows import STALL_KEY, TIMEOUT_KEY
+ from orchestrator.domain.entities.attempt import Attempt
+ from orchestrator.domain.entities.gate_record import GateRecord
+ from orchestrator.domain.ids import new_id
+@@ -116,8 +111,10 @@ LOCK_POLL_SECONDS, LOCK_TIMEOUT_SECONDS = 1.0, 30.0
+ #: reports a refusal as `()`, so AD-17's set would come back empty and nothing would fail.
+ WHOLE_TREE = "."
+
+-#: `KIND_META["agent"].timeout_default_min` — what a row carrying no resolved timeout gets.
+-DEFAULT_TIMEOUT_MIN = 90
++#: No wall-clock deadline by default (operator revision 2026-09-15: 90-min kill → stall).
++DEFAULT_TIMEOUT_MIN = None
++#: Minutes of filesystem silence before the stall detector kills the process (FR-10).
++DEFAULT_STALL_MIN = 30
+
+
+ @dataclass(frozen=True)
+@@ -348,7 +345,8 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
+     resumed session skips the middle write: `Harness.resume` is one call, so no handle sits
+     between two halves for a dead backend to lose."""
+     run, environment = require_run(ctx), require_env(ctx)
+-    timeout_min = ctx.with_resolved.get(TIMEOUT_KEY) or DEFAULT_TIMEOUT_MIN
++    timeout_min = ctx.with_resolved.get(TIMEOUT_KEY)
++    stall_min = ctx.with_resolved.get(STALL_KEY, DEFAULT_STALL_MIN)
+     env = require_harness_env(ctx)(
+         dispatch.attempt,
+         run=run,
+@@ -366,8 +364,9 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
+             env=env,
+             timeout_min=timeout_min,
+             log_path=log_path(ctx),
++            stall_min=stall_min,
+         )
+-        return agent_tail.finish(ctx, dispatch.attempt, resumed, timeout_min)
++        return agent_tail.finish(ctx, dispatch.attempt, resumed, timeout_min, stall_min)
+     handle = dispatch.harness.start(
+         cwd=require_cwd(ctx),
+         prompt=dispatch.prompt,
+@@ -377,6 +376,7 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
+         budget_usd_remaining=run.budget_usd - run.spend_usd,
+         timeout_min=timeout_min,
+         log_path=log_path(ctx),
++        stall_min=stall_min,
+     )
+     # the session travels with the group: a dead backend must leave a resumable attempt
+     running = dispatch.attempt.model_copy(
+@@ -388,7 +388,7 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
+         # the only frame holding the handle: an escape without a kill is AD-14's orphan
+         require_process(ctx).kill_group(handle.pgid)
+         raise
+-    return agent_tail.finish(ctx, running, dispatch.harness.wait(handle), timeout_min)
++    return agent_tail.finish(ctx, running, dispatch.harness.wait(handle), timeout_min, stall_min)
+
+
+ def _text(ctx: StepContext, key: str) -> str:
+diff --git a/backend-api/src/orchestrator/application/steps/agent_tail.py b/backend-api/src/orchestrator/application/steps/agent_tail.py
+index d6498fa..547009d 100644
+--- a/backend-api/src/orchestrator/application/steps/agent_tail.py
++++ b/backend-api/src/orchestrator/application/steps/agent_tail.py
+@@ -65,6 +65,10 @@ AMBIGUOUS = 2
+ #: harness never got to write a file, so there is nothing for FR-16 to read.
+ TIMED_OUT = "timeout {path} after {n} min"
+
++#: FR-10: the stall detector found no filesystem activity under `cwd` for `n` minutes.
++#: Verbatim format: `{path}` is the monitored worktree, `{n}` is `stall_min` (FR-10, NFR-8).
++STALLED = "stalled {path}: no activity for {n} min"
++
+ #: What an anchor an attempt touched stops the Run with (AD-17), and how the files are named.
+ #: A sentence of its own rather than `git_commit.py`'s: that one is about a commit that was
+ #: refused, this one is about a dispatch that has already happened.
+@@ -113,7 +117,11 @@ CAP_EXIT_VALUE = "error_max_budget_usd"
+
+
+ def finish(
+-    ctx: StepContext, attempt: Attempt, result: HarnessResult, timeout_min: float
++    ctx: StepContext,
++    attempt: Attempt,
++    result: HarnessResult,
++    timeout_min: float | None,
++    stall_min: float | None = None,
+ ) -> StepResult:
+     """Record what the harness did, then say what the row reached; `mark_finished` runs
+     first, so a killed attempt is as fully recorded as one that exited cleanly (AD-8).
+@@ -137,6 +145,18 @@ def finish(
+         }
+     )
+     committed(ctx, lambda attempts: attempts.mark_finished(finished))
++    if result.stalled:
++        hit = protected(ctx, finished)
++        if hit is not None:
++            return hit.model_copy(update={"output_ref": str(result.log_path)})
++        reason = STALLED.format(path=result.stall_cwd, n=stall_min)
++        return StepResult(
++            status="error",
++            gate=ctx.row.gate,
++            output_ref=str(result.log_path),
++            reason=reason,
++            park=Park(kind="timeout", reason=reason, path=ctx.row.path),
++        )
++    if result.timed_out:
++        hit = protected(ctx, finished)
++        if hit is not None:
+diff --git a/backend-api/src/orchestrator/application/templates/keys.py b/backend-api/src/orchestrator/application/templates/keys.py
+@@ -246,6 +246,7 @@ def _check_step(
+     if kind == AGENT_KIND:
+         errors += check_agent_extras(node)
+     errors += _check_timeout(node)
++    errors += _check_stall_min(node)
+     return errors + _check_on_fail(node, earlier_agents)
+
+
+@@ -327,6 +328,12 @@ def _check_timeout(node: LinedMap) -> list[ValidationError]:
+     return [problem(key_line(node, "timeout_min", node.line), INVALID_TIMEOUT)]
+
+
++def _check_stall_min(node: LinedMap) -> list[ValidationError]:
++    if "stall_min" not in node or is_count(node["stall_min"]):
++        return []
++    return [problem(key_line(node, "stall_min", node.line), INVALID_TIMEOUT)]
++
++
+ def _check_on_fail(node: LinedMap, earlier_agents: set[str]) -> list[ValidationError]:
+diff --git a/backend-api/src/orchestrator/application/templates/model.py b/backend-api/src/orchestrator/application/templates/model.py
+@@ -149,6 +149,7 @@ class Step(BaseModel):
+     gate: Gate | None = None
+     timeout_min: int | None = None
++    stall_min: int | None = None
+     on_fail: OnFailAction | None = None
+diff --git a/backend-api/src/orchestrator/application/templates/rows.py b/backend-api/src/orchestrator/application/templates/rows.py
+@@ -90,6 +90,9 @@ COMMAND_KEY = "command"
+ TIMEOUT_KEY = "timeout_min"
++STALL_KEY = "stall_min"
+
+@@ -345,6 +348,9 @@ def _resolved(step: Step, frame: Frame) -> dict[str, Any]:
+     timeout = step.timeout_min if step.timeout_min is not None else step.meta.timeout_default_min
+     if timeout is not None:
+         resolved[TIMEOUT_KEY] = timeout
++    stall = step.stall_min if step.stall_min is not None else step.meta.stall_default_min
++    if stall is not None:
++        resolved[STALL_KEY] = stall
+diff --git a/backend-api/src/orchestrator/application/templates/table.py b/backend-api/src/orchestrator/application/templates/table.py
+@@ -24,7 +24,7 @@ STEP_KEYS = frozenset({"id", "uses", "run", "with", "gate", "timeout_min", "on_fail"})
++STEP_KEYS = frozenset({"id", "uses", "run", "with", "gate", "timeout_min", "stall_min", "on_fail"})
+
+@@ -47,9 +47,9 @@ CALL_TIMING_KEYS = ("timeout_min", "on_fail")
++CALL_TIMING_KEYS = ("timeout_min", "stall_min", "on_fail")
+
+diff --git a/backend-api/src/orchestrator/application/templates/validate.py b/backend-api/src/orchestrator/application/templates/validate.py
+@@ -180,6 +180,7 @@ def _step(node: LinedMap) -> Step:
+         timeout_min=node.get("timeout_min"),
++        stall_min=node.get("stall_min"),
+diff --git a/backend-api/src/orchestrator/domain/ports/harness.py b/backend-api/src/orchestrator/domain/ports/harness.py
+@@ -118,6 +118,10 @@ class HarnessResult:
+     raw_result: dict[str, Any] | None = None
++    stalled: bool = False
++    stall_cwd: Path | None = None
+
+ @@ -218,8 +222,9 @@ class Harness(Protocol):
+-        timeout_min: float,
++        timeout_min: float | None,
++        stall_min: float | None = None,
+
+diff --git a/backend-api/src/orchestrator/domain/ports/process.py b/backend-api/src/orchestrator/domain/ports/process.py
+@@ -42,34 +42,41 @@ class Outcome:
+     timed_out: bool
++    stalled: bool = False
+
+diff --git a/backend-api/src/orchestrator/infrastructure/harness/claude/adapter.py b/backend-api/src/orchestrator/infrastructure/harness/claude/adapter.py
+[claude adapter: all four methods (run/start/resume/_start) gain stall_min; _start now sets cwd on HarnessHandle; wait() maps outcome.stalled to HarnessResult.stalled/stall_cwd]
+
+diff --git a/backend-api/src/orchestrator/infrastructure/harness/codex/adapter.py b/backend-api/src/orchestrator/infrastructure/harness/codex/adapter.py
+[codex adapter: same pattern as claude]
+
+diff --git a/backend-api/src/orchestrator/infrastructure/harness/fake/adapter.py b/backend-api/src/orchestrator/infrastructure/harness/fake/adapter.py
+[fake adapter: same pattern as claude]
+
+diff --git a/backend-api/src/orchestrator/infrastructure/harness/opencode/adapter.py b/backend-api/src/orchestrator/infrastructure/harness/opencode/adapter.py
+[opencode adapter: same pattern as claude]
+
+diff --git a/backend-api/src/orchestrator/infrastructure/process/runner.py b/backend-api/src/orchestrator/infrastructure/process/runner.py
+[_Child extended with cwd/log_path/stall_min_s; start() populates them; wait() gains stall detection polling loop (_POLL_SECONDS=10); _max_mtime() and _log_size() helpers added]
+
+diff --git a/backend-api/tests/unit/application/steps/agent_fixtures.py b/backend-api/tests/unit/application/steps/agent_fixtures.py
+[resolved() fixture: timeout_min removed (operator revision 2026-09-15), stall_min=30 added]
+
+diff --git a/backend-api/tests/unit/application/steps/test_agent_dispatch.py b/backend-api/tests/unit/application/steps/test_agent_dispatch.py
+[existing timeout test uses explicit timeout_min=60 (operator revision 2026-09-15); new test_a_stall_is_recorded_in_full_and_then_parks_the_run; stall_min assertions throughout]
+
+diff --git a/backend-api/tests/unit/application/steps/test_agent_stall_protected_path.py b/backend-api/tests/unit/application/steps/test_agent_stall_protected_path.py
+[new: tests FR-31 on stall path — a modified anchor overrides the stall park]
+
+diff --git a/backend-api/tests/unit/application/templates/test_plan_rows.py b/backend-api/tests/unit/application/templates/test_plan_rows.py
+[revised: agent timeout_default_min is now None, stall_default_min=30, timeout_min absent from resolved]
+
+diff --git a/backend-api/tests/unit/application/templates/test_stall_min.py b/backend-api/tests/unit/application/templates/test_stall_min.py
+[new: validator accepts/rejects stall_min; CALL_TIMING rule; KindMeta defaults; _resolved() propagation]
+
+diff --git a/backend-api/tests/unit/application/templates/test_step_kind_registry.py b/backend-api/tests/unit/application/templates/test_step_kind_registry.py
+[revised: agent entry now includes stall_default_min=30, operator revision 2026-09-15]
+
+diff --git a/backend-api/tests/unit/fakes/harness.py b/backend-api/tests/unit/fakes/harness.py
+[FakeHarness: all methods gain stall_min parameter, record it in calls]
+
+diff --git a/backend-api/tests/unit/fakes/process.py b/backend-api/tests/unit/fakes/process.py
+[FakeProcessRunner.start: gains stall_min param, records it; DEFAULT_OUTCOME.stalled=False]
+
+diff --git a/backend-api/tests/unit/test_tracer_env_integration.py b/backend-api/tests/unit/test_tracer_env_integration.py
+[timeout_min=90.0 → None, comment names operator revision 2026-09-15]
