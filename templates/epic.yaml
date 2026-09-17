@@ -55,8 +55,24 @@ steps:
             story: "{{story}}"
             harness: "{{harness}}"
             model: "{{model}}"
+  - id: gen-e2e
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: bmad-qa-generate-e2e-tests
+      args: { folder: "{{spec_folder}}" }
+    timeout_min: 30
+    gate: liveness
+
+  - id: commit-e2e
+    uses: git.commit
+    with: { message: "e2e: generated tests (orchestrator)" }
+    gate: deterministic
+
   - id: e2e
     run: "{{repository.quality_gate_command}}"
+    on_fail: { redispatch: gen-e2e, max: 2 }
     timeout_min: 45
     gate: deterministic
 
