@@ -373,7 +373,7 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
         env=env,
         model=(_text(ctx, MODEL_KEY) or None),
         session_id=dispatch.session_id,
-        budget_usd_remaining=run.budget_usd - run.spend_usd,
+        budget_usd_remaining=run.budget_usd - run.spend_usd if run.budget_usd is not None else None,
         timeout_min=timeout_min,
         log_path=log_path(ctx),
         stall_min=stall_min,

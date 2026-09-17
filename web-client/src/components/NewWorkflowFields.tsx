@@ -186,13 +186,12 @@ export default function NewWorkflowFields({
 
       <label
         className="newwf-field"
-        title="Maximum LLM spend in USD for this Run. The Run enters needs_you when this limit is reached."
+        title="Maximum LLM spend in USD for this Run. The Run enters needs_you when this limit is reached. Blank runs without a cap; spend is still tracked."
       >
-        <span className="newwf-field-label">BUDGET (USD) *</span>
+        <span className="newwf-field-label">BUDGET (USD) (optional)</span>
         <input
           type="text"
           inputMode="decimal"
-          required
           data-testid="newwf-budget"
           value={state.budgetUsd}
           onChange={(event) => onChange({ ...state, budgetUsd: event.target.value })}

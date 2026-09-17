@@ -802,8 +802,15 @@
             "type": "integer"
           },
           "budget_usd": {
-            "title": "Budget Usd",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Usd"
           },
           "provisional": {
             "title": "Provisional",
@@ -3318,8 +3325,15 @@
             "type": "string"
           },
           "budget_usd": {
-            "title": "Budget Usd",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Usd"
           },
           "compare_urls": {
             "items": {
@@ -3729,14 +3743,21 @@
           "budget_usd": {
             "anyOf": [
               {
-                "type": "number"
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                    "type": "string"
+                  }
+                ],
+                "gt": 0
               },
               {
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-                "type": "string"
+                "type": "null"
               }
             ],
-            "gt": 0,
             "title": "Budget Usd"
           },
           "harness": {
@@ -3812,8 +3833,7 @@
           "template_version",
           "project_id",
           "repository_id",
-          "base_branch",
-          "budget_usd"
+          "base_branch"
         ],
         "title": "RunIn",
         "type": "object"
@@ -3941,8 +3961,15 @@
             "type": "string"
           },
           "budget_usd": {
-            "title": "Budget Usd",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Usd"
           },
           "created_at": {
             "title": "Created At",

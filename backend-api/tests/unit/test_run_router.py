@@ -247,14 +247,17 @@ async def test_post_a_second_run_against_a_held_repository_waits(env: dict[str, 
     assert response.json()["starts_now"] is False
 
 
-async def test_post_without_budget_is_a_422(api: Api) -> None:
+async def test_post_without_budget_creates_a_null_budget_run(api: Api) -> None:
+    # Operator decision 2026-09-17: budget is optional (story 3-2).
+    # Was 422; now 201 with null budget_usd.
     payload = repo_init_payload()
     del payload["budget_usd"]
 
     async with api.client() as client:
         response = await client.post(RUNS, json=payload)
 
-    assert response.status_code == HTTP_UNPROCESSABLE
+    assert response.status_code == HTTP_CREATED, response.text
+    assert response.json()["run"]["budget_usd"] is None
 
 
 async def test_post_with_a_zero_budget_is_a_422(api: Api) -> None:

@@ -16,7 +16,13 @@ from orchestrator.domain.values import Park
 
 
 def check(run: Run) -> Park | None:
-    """`Park(kind="budget", ...)` once spend exceeds budget; `None` at or under it."""
+    """`Park(kind="budget", ...)` once spend exceeds budget; `None` at or under it.
+
+    When `run.budget_usd` is `None` the run is uncapped: spend tracking continues but no
+    park ever fires (story 3-2, AC2).
+    """
+    if run.budget_usd is None:
+        return None
     if run.spend_usd <= run.budget_usd:
         return None
     return forced(run)
@@ -33,5 +39,10 @@ def forced(run: Run) -> Park:
     park reason is a sentence an operator reads, not the wire `MoneyStr` (which keeps all
     six of the column's own decimal places, `api/schemas/common.py::_money_string`).
     """
-    reason = f"budget ${run.spend_usd:.2f} / ${run.budget_usd:.2f}"
+    if run.budget_usd is None:
+        # Defensive: `--max-budget-usd` was absent so Claude cannot self-cap; the harness
+        # exited for another reason. Report spend only (story 3-2, "Block If" invariant).
+        reason = f"budget ${run.spend_usd:.2f} / (no cap)"
+    else:
+        reason = f"budget ${run.spend_usd:.2f} / ${run.budget_usd:.2f}"
     return Park(kind="budget", reason=reason)

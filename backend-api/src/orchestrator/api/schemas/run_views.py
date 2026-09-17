@@ -275,7 +275,7 @@ class StoryCellOut(BaseModel):
 
 class CostOut(BaseModel):
     spent_usd: MoneyStr
-    budget_usd: MoneyStr
+    budget_usd: MoneyStr | None
     tokens_in: int
     tokens_out: int
     wall_clock_seconds: float

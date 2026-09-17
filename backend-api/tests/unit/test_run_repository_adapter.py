@@ -325,6 +325,7 @@ def test_the_gate_record_timestamp_carries_its_zone() -> None:
 #: The columns a later story fills, which therefore start `NULL`.
 NULLABLE = {
     "run": {
+        "budget_usd",  # Operator decision 2026-09-17: run.budget_usd nullable (story 3-2)
         "plan_ref",
         "manual_estimate_h",
         "park_kind",

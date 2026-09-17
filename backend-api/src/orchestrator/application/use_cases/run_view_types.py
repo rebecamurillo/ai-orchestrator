@@ -224,7 +224,7 @@ class StoryCell:
 @dataclass(frozen=True)
 class Cost:
     spent_usd: Decimal
-    budget_usd: Decimal
+    budget_usd: Decimal | None
     tokens_in: int
     tokens_out: int
     wall_clock_seconds: float

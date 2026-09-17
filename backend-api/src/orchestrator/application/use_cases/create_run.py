@@ -95,7 +95,7 @@ class CreateRunRequest:
     project_id: UUID
     repository_id: UUID
     base_branch: str
-    budget_usd: Decimal
+    budget_usd: Decimal | None
     inputs: dict[str, Any] | None = None
     harness: str | None = None
     model: str | None = None

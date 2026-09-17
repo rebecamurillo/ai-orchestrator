@@ -37,8 +37,12 @@ export function prefilledBudget(cost: CostOut): string {
   return Math.ceil(base + BUDGET_HEADROOM).toFixed(2);
 }
 
-/** `$4.18 / $15.00` promoted into the stop body — the same ratio `CostBlock` shows. */
+/** `$4.18 / $15.00` promoted into the stop body — the same ratio `CostBlock` shows.
+ * Returns `"tracked, no cap"` when `budget_usd` is null (story 3-2, NFR-8).
+ * The budget-park box never renders for null-budget runs, but the guard is here for
+ * TypeScript compliance and the defensive path. */
 export function budgetRatio(cost: CostOut): string {
+  if (cost.budget_usd == null) return 'tracked, no cap';
   return `$${cost.spent_usd} / $${cost.budget_usd}`;
 }
 

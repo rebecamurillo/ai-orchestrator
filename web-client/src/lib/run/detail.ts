@@ -152,8 +152,10 @@ export function summaryLine(detail: RunDetailOut): string {
   return line;
 }
 
-/** `$4.18 / $15.00` — a ratio, never a percentage or a bar (`KvTable.astro`'s own rule). */
+/** `$4.18 / $15.00` — a ratio, never a percentage or a bar (`KvTable.astro`'s own rule).
+ * Returns `"tracked, no cap"` verbatim when `budget_usd` is null (story 3-2, FR-17, NFR-8). */
 export function moneyRatio(cost: CostOut): string {
+  if (cost.budget_usd == null) return 'tracked, no cap';
   return `$${cost.spent_usd} / $${cost.budget_usd}`;
 }
 

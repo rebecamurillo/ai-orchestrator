@@ -958,7 +958,7 @@ export interface components {
             /** Active Seconds */
             active_seconds: number;
             /** Budget Usd */
-            budget_usd: string;
+            budget_usd: string | null;
             /** Provisional */
             provisional: boolean;
             /** Spent Usd */
@@ -1844,7 +1844,7 @@ export interface components {
             /** Branch */
             branch: string;
             /** Budget Usd */
-            budget_usd: string;
+            budget_usd: string | null;
             /** Compare Urls */
             compare_urls: string[];
             /** Created At */
@@ -2032,7 +2032,7 @@ export interface components {
             /** Base Branch */
             base_branch: string;
             /** Budget Usd */
-            budget_usd: number | string;
+            budget_usd?: (number | string) | null;
             /** Harness */
             harness?: string | null;
             /** Inputs */
@@ -2101,7 +2101,7 @@ export interface components {
             /** Branch */
             branch: string;
             /** Budget Usd */
-            budget_usd: string;
+            budget_usd: string | null;
             /** Created At */
             created_at: string;
             /**
