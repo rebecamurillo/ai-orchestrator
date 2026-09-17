@@ -294,6 +294,11 @@ def _latest_of(attempts: Sequence[Attempt]) -> Attempt | None:
 def _step_row(ports: RunViewPorts, row: StepRun, attempts: Sequence[Attempt]) -> StepRowView:
     latest = _latest_of(attempts)
     cost_usd = sum((attempt.cost_usd or Decimal("0") for attempt in attempts), Decimal("0"))
+    retry_prompt = (
+        row.with_resolved.get("retry", {}).get("prompt")
+        if isinstance(row.with_resolved.get("retry"), dict)
+        else None
+    )
     return StepRowView(
         seq=row.seq,
         path=row.path,
@@ -306,6 +311,7 @@ def _step_row(ports: RunViewPorts, row: StepRun, attempts: Sequence[Attempt]) ->
         attempts=len(attempts),
         latest=_latest_attempt(ports, latest) if latest is not None else None,
         cost_usd=cost_usd,
+        retry_prompt=retry_prompt if isinstance(retry_prompt, str) else None,
     )
 
 

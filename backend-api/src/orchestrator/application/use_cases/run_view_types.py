@@ -215,6 +215,9 @@ class StepRowView:
     latest: LatestAttempt | None
     #: This row's own attempts, summed (5.3). Defaulted: predates this story.
     cost_usd: Decimal = Decimal("0")
+    #: The resolved retry prompt from `with_resolved["retry"]["prompt"]` (story 3-5).
+    #: `None` when the step has no retry block or the prompt key is absent.
+    retry_prompt: str | None = None
 
 
 @dataclass(frozen=True)

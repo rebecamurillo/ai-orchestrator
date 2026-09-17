@@ -16,10 +16,12 @@ from orchestrator.application.templates.model import (
     INVALID_STATUS_TOKEN,
     INVALID_VALUE,
     MISSING_KEY,
+    RETRY_PROMPT_REQUIRED,
     STATUS_TOKENS,
     ValidationError,
 )
 from orchestrator.application.templates.table import (
+    RETRY_KEYS,
     SUB_MAPS,
     WRITES_KEY,
     problem,
@@ -97,6 +99,15 @@ def _check_retry_shapes(node: LinedMap) -> list[ValidationError]:
     for key, kind in RETRY_SHAPES:
         if key in retry and not _is_exactly(retry[key], kind):
             errors.append(problem(key_line(retry, key, retry.line), INVALID_VALUE))
+    # A retry block must carry an explicit, non-empty prompt (story 3-5).
+    # A wrong-type prompt is already reported as INVALID_VALUE by the shape loop above.
+    # Skip the prompt-required check when the block already has shape errors or unknown keys
+    # so that each violation is reported as exactly one error per input.
+    has_unknown_keys = any(k not in RETRY_KEYS for k in retry)
+    if not errors and not has_unknown_keys:
+        prompt_val = retry.get("prompt")
+        if prompt_val is None or (isinstance(prompt_val, str) and not prompt_val):
+            errors.append(problem(retry.line, RETRY_PROMPT_REQUIRED))
     return errors
 
 

@@ -4221,6 +4221,17 @@
             ],
             "title": "Reason"
           },
+          "retry_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Prompt"
+          },
           "seq": {
             "title": "Seq",
             "type": "integer"

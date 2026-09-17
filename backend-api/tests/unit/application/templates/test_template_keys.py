@@ -30,6 +30,7 @@ from orchestrator.application.templates.model import (
     NESTED_FOR_EACH,
     NON_LITERAL_VERSION,
     PARALLEL_RESERVED,
+    RETRY_PROMPT_REQUIRED,
     SECOND_FOR_EACH,
     UNKNOWN_KEY,
     UNKNOWN_KIND,
@@ -344,6 +345,14 @@ def test_a_retry_count_that_is_not_an_integer_is_an_invalid_value(written: str) 
 
 def test_a_retry_prompt_that_is_not_text_is_an_invalid_value() -> None:
     assert check(HEAD + AGENT + "    retry:\n      prompt: [a]\n")[0] == [INVALID_VALUE]
+
+
+def test_a_retry_block_with_no_prompt_requires_a_prompt() -> None:
+    assert check(HEAD + AGENT + "    retry:\n      max: 2\n")[0] == [RETRY_PROMPT_REQUIRED]
+
+
+def test_a_retry_block_with_an_empty_prompt_is_invalid() -> None:
+    assert check(HEAD + AGENT + "    retry:\n      prompt: ''\n")[0] == [RETRY_PROMPT_REQUIRED]
 
 
 def test_a_resume_session_that_is_not_a_flag_is_an_invalid_value() -> None:

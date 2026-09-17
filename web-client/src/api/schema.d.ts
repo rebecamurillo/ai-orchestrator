@@ -2208,6 +2208,8 @@ export interface components {
             path: string;
             /** Reason */
             reason: string | null;
+            /** Retry Prompt */
+            retry_prompt?: string | null;
             /** Seq */
             seq: number;
             /** Status */
