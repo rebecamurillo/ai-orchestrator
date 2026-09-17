@@ -76,6 +76,21 @@ steps:
     timeout_min: 45
     gate: deterministic
 
+  - id: retro
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: bmad-retrospective
+      args: { folder: "{{spec_folder}}" }
+    timeout_min: 30
+    gate: liveness
+
+  - id: commit-retro
+    uses: git.commit
+    with: { message: "retro: epic retrospective (orchestrator)" }
+    gate: deterministic
+
   - id: push
     uses: git.push
     with: { branch: "{{branch}}" }
