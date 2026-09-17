@@ -201,7 +201,7 @@ export function runBody(state: FormState, templates: TemplateSummary[]): RunIn |
     project_id: state.projectId,
     repository_id: state.repositoryId,
     base_branch: state.baseBranch,
-    budget_usd: state.budgetUsd || null,
+    budget_usd: state.budgetUsd !== '' ? state.budgetUsd : null,
     inputs: state.inputs,
     harness: state.harness || null,
     model: state.model || null,

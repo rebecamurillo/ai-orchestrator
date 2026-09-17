@@ -59,6 +59,11 @@ describe('budgetRatio', () => {
   it('is the same spent-over-budget ratio the cost block shows', () => {
     expect(budgetRatio(cost('41.20'))).toBe('$41.20 / $40.00');
   });
+
+  it('returns "tracked, no cap" when budget_usd is null', () => {
+    const nullBudgetCost = { ...cost('41.20'), budget_usd: null } as unknown as CostOut;
+    expect(budgetRatio(nullBudgetCost)).toBe('tracked, no cap');
+  });
 });
 
 describe('budgetRaiseBody', () => {

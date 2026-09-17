@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0013_budget_usd_nullable"
@@ -24,11 +25,12 @@ depends_on: str | Sequence[str] | None = None
 
 RUN = "run"
 COLUMN = "budget_usd"
+MONEY = sa.Numeric(12, 6)
 
 
 def upgrade() -> None:
-    op.alter_column(RUN, COLUMN, nullable=True)
+    op.alter_column(RUN, COLUMN, existing_type=MONEY, nullable=True)
 
 
 def downgrade() -> None:
-    op.alter_column(RUN, COLUMN, nullable=False)
+    op.alter_column(RUN, COLUMN, existing_type=MONEY, nullable=False)
