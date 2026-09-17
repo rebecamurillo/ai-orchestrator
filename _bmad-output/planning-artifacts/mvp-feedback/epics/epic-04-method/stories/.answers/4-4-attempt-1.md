@@ -107,3 +107,9 @@ Four tests fail after adding the `spec-gate` step to `templates/epic.yaml`. All 
 Hard rule 6: "No test may pin shipped template content (step ids, ordering, counts, graph shapes, YAML text of templates/*.yaml): shipped templates are exemplars that evolve freely, and a test that would fail on a template edit is testing the wrong thing." These tests violate that rule. As a dispatched agent I cannot revise them — that requires the Operator's ruling.
 
 Implementation is complete; `make lint` passes; 6353 of 6357 tests pass. The four tests above must be revised (removing template-content pins, testing the same behaviour on fixture copies the tests own) before `make test` will pass.
+
+## Human Answer
+
+2026-09-17T19:45:38.933967Z · operator
+
+authorization to review and update existing tests and adapt to new behavior.
