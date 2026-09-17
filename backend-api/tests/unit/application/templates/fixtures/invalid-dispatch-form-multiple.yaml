@@ -1,0 +1,10 @@
+name: bare-agent
+version: 1
+steps:
+  - id: build
+    uses: agent
+    with:
+      harness: claude
+      skill: bmad-build-auto
+      prompt: "Do X."
+    gate: liveness

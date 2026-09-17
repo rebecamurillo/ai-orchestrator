@@ -1,0 +1,11 @@
+name: all-three-dispatch-forms
+version: 1
+steps:
+  - id: build
+    uses: agent
+    with:
+      harness: claude
+      skill: bmad-build-auto
+      prompt: Do X.
+      prompt_file: plan.md
+    gate: liveness
