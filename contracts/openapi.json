@@ -1053,6 +1053,17 @@
             "title": "Id",
             "type": "string"
           },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
           "path": {
             "anyOf": [
               {
@@ -3248,6 +3259,10 @@
           },
           "header": {
             "$ref": "#/components/schemas/HeaderOut"
+          },
+          "reply_available": {
+            "title": "Reply Available",
+            "type": "boolean"
           },
           "run": {
             "$ref": "#/components/schemas/RunDetailSummaryOut"

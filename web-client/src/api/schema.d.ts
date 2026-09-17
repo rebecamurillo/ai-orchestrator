@@ -1043,6 +1043,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Mode */
+            mode?: string | null;
             /** Path */
             path: string | null;
             /** Text */
@@ -1825,6 +1827,8 @@ export interface components {
             /** Gate Record */
             gate_record: components["schemas"]["GateRecordOut"][];
             header: components["schemas"]["HeaderOut"];
+            /** Reply Available */
+            reply_available?: boolean;
             run: components["schemas"]["RunDetailSummaryOut"];
             /** Steps */
             steps: components["schemas"]["StepRowOut"][];

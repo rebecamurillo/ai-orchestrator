@@ -59,6 +59,7 @@ import BudgetRaiseBox from './BudgetRaiseBox';
 import ConfirmAction from './ConfirmAction';
 import QuestionBlock from './QuestionBlock';
 import RejectBox from './RejectBox';
+import RetryBox from './RetryBox';
 import StoryFileBlock from './StoryFileBlock';
 
 type ProblemDetail = components['schemas']['ProblemDetail'];
@@ -76,7 +77,12 @@ interface Props {
    * same `answer` signal (`AnswerBox`/`RejectBox`'s own precedent), so one callback serves
    * both boxes. Optional because neither box appears outside the one stop that admits it,
    * and a caller that renders no such stop has nothing to hand it. */
-  onAnswer?: (text: string) => void;
+  onAnswer?: (text: string, mode: string) => void;
+  /** The mode-aware Retry (story 3-4): only rendered when `replyAvailable` is true.
+   * Optional like the other payload callbacks — a caller without a `RetryBox` omits it. */
+  onRetry?: (mode: string) => void;
+  /** When true, `RetryBox` is shown instead of the plain Retry button (story 3-4). */
+  replyAvailable?: boolean;
   /** The raised budget (6.6, FR-17) — a figure, so like the Answer it is reported with its
    * payload rather than by kind alone. Optional for the same reason: no other stop has one. */
   onRaiseBudget?: (budgetUsd: string) => void;
@@ -102,10 +108,12 @@ export default function StopBody({
   posting,
   error,
   onAnswer = () => {},
+  onRetry = () => {},
   onRaiseBudget = () => {},
   onAccept = () => {},
   runId = '',
   plannedFile = null,
+  replyAvailable = false,
 }: Props) {
   const kind = stopKind(detail, token);
   if (kind === null) return null;
@@ -139,7 +147,14 @@ export default function StopBody({
   // for that kind steps aside here, exactly as `skip_story`'s does for its confirm. Every
   // other stop's `continue` button is untouched (`plan_stale`, `checkpoint`).
   const accepting = offersAccept(detail, kind);
-  const buttons = accepting ? signals.filter((s) => s !== 'continue') : signals;
+  // When `replyAvailable` is true and `retry` is admitted, `RetryBox` takes the place of
+  // the plain Retry button — `retry` is filtered out of `buttons` so the two do not both
+  // render (story 3-4). The `RetryBox` renders its own button inside the actions block.
+  const hasRetryBox = replyAvailable && signals.includes('retry');
+  const buttonsAfterAccept = accepting ? signals.filter((s) => s !== 'continue') : signals;
+  const buttons = hasRetryBox
+    ? buttonsAfterAccept.filter((s) => s !== 'retry')
+    : buttonsAfterAccept;
   const canCancel = detail.admitted_signals.includes('cancel');
   const tail = logTail(detail);
   const path = currentStepPath(detail);
@@ -160,6 +175,7 @@ export default function StopBody({
           onAnswer={onAnswer}
           posting={posting !== null}
           error={posting === null && error ? error : null}
+          replyAvailable={replyAvailable}
         />
       ) : null}
       {kind === 'misconfigured' ? <p className="wf-stop-reason">{bannerText(detail)}</p> : null}
@@ -203,7 +219,7 @@ export default function StopBody({
           {offersReject(detail, kind) ? (
             <RejectBox
               target={answerTarget(detail)}
-              onReject={onAnswer}
+              onReject={(text) => onAnswer(text, 'restart')}
               posting={posting !== null}
               error={posting === null && error ? error : null}
             />
@@ -240,6 +256,14 @@ export default function StopBody({
         </p>
       ) : (
         <div className="wf-stop-actions">
+          {hasRetryBox ? (
+            <RetryBox
+              target={answerTarget(detail)}
+              onRetry={onRetry}
+              posting={posting !== null}
+              error={posting === null && error ? error : null}
+            />
+          ) : null}
           {buttons.map((s) =>
             s === 'skip_story' ? (
               <ConfirmAction

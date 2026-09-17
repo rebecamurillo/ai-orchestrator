@@ -248,9 +248,13 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
     same reasoning as `create_run_ports`'s own `build_tracer` call.
 
     `terminal` (6.7): built with `build_terminal_env` and `build_harnesses` — neither starts
-    a process (AD-14), and `build_terminal_env` reads no credential (AD-5)."""
+    a process (AD-14), and `build_terminal_env` reads no credential (AD-5).
+
+    `harness_is_resumable` (story 3-4): shares the same `build_harnesses` call already
+    made for `terminal`, extracted to a local variable so neither call is duplicated."""
     session_factory = from_state(request, SESSION_FACTORY)
     settings = from_state(request, SETTINGS)
+    harnesses = build_harnesses(settings, RealProcessRunner())
     with SQLAlchemyUnitOfWork(session_factory) as uow:
         yield RunViewPorts(
             runs=SQLAlchemyRunRepository(uow.session),
@@ -264,7 +268,10 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
             tracer=build_tracer(settings),
             terminal=TerminalPorts(
                 env=build_terminal_env(settings),
-                harnesses=build_harnesses(settings, RealProcessRunner()),
+                harnesses=harnesses,
+            ),
+            harness_is_resumable=lambda name: (
+                name in harnesses and harnesses[name].capabilities.resume
             ),
             git=git_adapter(request),
         )

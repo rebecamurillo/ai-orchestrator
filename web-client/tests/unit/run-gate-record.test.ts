@@ -139,4 +139,48 @@ describe('GateRecord', () => {
 
     expect(html).not.toContain('data-signal');
   });
+
+  it('shows mode when the gate record carries one (story 3-4)', () => {
+    const html = renderToStaticMarkup(
+      createElement(GateRecord, {
+        detail: detail([
+          {
+            id: 'g1',
+            at: '2026-09-07T09:10:00Z',
+            path: 'plan',
+            event: 'answer',
+            actor: 'operator',
+            text: 'post it to the channel',
+            attempt_n: 1,
+            mode: 'session',
+          },
+        ]),
+        token: 'BLK',
+      }),
+    );
+
+    expect(html).toMatch(/data-testid="wf-gate-mode"[^>]*>session</);
+  });
+
+  it('shows no mode span when the gate record carries no mode (story 3-4)', () => {
+    const html = renderToStaticMarkup(
+      createElement(GateRecord, {
+        detail: detail([
+          {
+            id: 'g1',
+            at: '2026-09-07T09:00:00Z',
+            path: 'plan',
+            event: 'start',
+            actor: 'machine',
+            text: 'plan started',
+            attempt_n: null,
+          },
+        ]),
+        token: 'RUN',
+      }),
+    );
+
+    // No mode present: no extra span for it
+    expect(html).not.toMatch(/data-testid="wf-gate-mode"/);
+  });
 });

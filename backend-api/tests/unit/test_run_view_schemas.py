@@ -237,3 +237,113 @@ def test_summary_is_projected_when_present() -> None:
     assert out.summary is not None
     assert out.summary.skipped == ["4-2"]
     assert out.summary.links == ["https://example.invalid"]
+
+
+def test_gate_record_of_extracts_mode_from_payload() -> None:
+    record = GateRecord(
+        id=new_id(),
+        run_id=RUN_ID,
+        at=NOW,
+        path="build",
+        event="answer",
+        actor="operator",
+        text="let's go",
+        attempt_n=1,
+        payload={"mode": "session"},
+    )
+
+    out = GateRecordOut.of(record)
+
+    assert out.mode == "session"
+
+
+def test_gate_record_of_mode_is_none_when_payload_has_no_mode() -> None:
+    record = GateRecord(
+        id=new_id(),
+        run_id=RUN_ID,
+        at=NOW,
+        path="build",
+        event="start",
+        actor="machine",
+        text="started",
+        attempt_n=None,
+    )
+
+    out = GateRecordOut.of(record)
+
+    assert out.mode is None
+
+
+def test_run_detail_out_includes_reply_available_true_in_serialized_output() -> None:
+    run = a_run()
+    detail = RunDetailView(
+        run=run,
+        header=Header(
+            project="Acme",
+            repository="acme-app",
+            base_branch="main",
+            folder="",
+            template="repo-init",
+            version=1,
+            harness=None,
+            started_at=None,
+            worktree_path=None,
+        ),
+        alert=None,
+        steps=[],
+        stories=[],
+        cost=Cost(
+            spent_usd=Decimal("0"),
+            budget_usd=Decimal("10"),
+            tokens_in=0,
+            tokens_out=0,
+            wall_clock_seconds=0.0,
+            active_seconds=0,
+            provisional=False,
+        ),
+        gate_record=[],
+        admitted_signals=(),
+        summary=None,
+        reply_available=True,
+    )
+
+    dumped = RunDetailOut.of(detail).model_dump()
+
+    assert dumped["reply_available"] is True
+
+
+def test_run_detail_out_omits_reply_available_when_false() -> None:
+    run = a_run()
+    detail = RunDetailView(
+        run=run,
+        header=Header(
+            project="Acme",
+            repository="acme-app",
+            base_branch="main",
+            folder="",
+            template="repo-init",
+            version=1,
+            harness=None,
+            started_at=None,
+            worktree_path=None,
+        ),
+        alert=None,
+        steps=[],
+        stories=[],
+        cost=Cost(
+            spent_usd=Decimal("0"),
+            budget_usd=Decimal("10"),
+            tokens_in=0,
+            tokens_out=0,
+            wall_clock_seconds=0.0,
+            active_seconds=0,
+            provisional=False,
+        ),
+        gate_record=[],
+        admitted_signals=(),
+        summary=None,
+    )
+
+    dumped = RunDetailOut.of(detail).model_dump()
+
+    assert "reply_available" not in dumped

@@ -24,6 +24,10 @@ export const ANSWER_HINT =
   'story {id} re-planned with the answer as context. ' +
   'If the gap is in SPEC.md, edit SPEC.md on the branch instead.';
 
+/** The hint for session-mode Answer (story 3-4): the session continues, Story file stays. */
+export const SESSION_ANSWER_HINT =
+  'The session continues with your answer; the Story file stays in place.';
+
 /** The same sentence for a response that names no Story — the mechanism, no invented path. */
 export const ANSWER_HINT_WITHOUT_STORY =
   'Blocked story file archived to stories/.answers/ with your answer; ' +
@@ -66,9 +70,10 @@ export function answerHint(target: AnswerTarget): string {
   return ANSWER_HINT.replaceAll('{id}', target.storyId).replace('{n}', String(target.attempt));
 }
 
-/** `POST /runs/{id}/signals`'s body for an Answer: the Operator's text, under `text`. */
-export function answerBody(text: string): SignalIn {
-  return { kind: 'answer', payload: { text } };
+/** `POST /runs/{id}/signals`'s body for an Answer: the Operator's text and delivery mode.
+ * `mode` defaults to `'restart'` (story 3-4); pass `'session'` for session delivery. */
+export function answerBody(text: string, mode = 'restart'): SignalIn {
+  return { kind: 'answer', payload: { text, mode } };
 }
 
 /** Whether this stop offers the Answer box: a `blocked` body whose Run admits `answer`. */
