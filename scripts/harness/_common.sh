@@ -62,6 +62,60 @@ bmad_install_global_skills() {
   log "BMAD ${BMAD_VERSION} skill stubs → $dest ($(ls "$dest" | wc -l | tr -d ' ') skills)"
 }
 
+# Operator skills: copy every subdirectory from $1 (ia-agents-skills source) into $2 (dest
+# skills dir), detect name collisions against already-installed stubs, and write a sorted
+# skills-manifest.json one level above $2. Called after bmad_install_global_skills so
+# stubs are already present when collision detection runs. AD-16.
+install_operator_skills() {
+  local src="$1" dest="$2"
+  local manifest
+  manifest="$(dirname "$dest")/skills-manifest.json"
+
+  # Collect ALL collision names before deciding to exit (operator sees every problem at once).
+  local collisions=()
+  if [ -d "$src" ]; then
+    local d
+    while IFS= read -r d; do
+      local name
+      name="$(basename "$d")"
+      [ -d "$dest/$name" ] && collisions+=("$name")
+    done < <(find "$src" -mindepth 1 -maxdepth 1 -type d | sort)
+  fi
+  if [ "${#collisions[@]}" -gt 0 ]; then
+    log "operator skill name collision(s) with installed stubs: ${collisions[*]}"
+    exit 1
+  fi
+
+  # Copy operator skill subdirectories to dest.
+  if [ -d "$src" ]; then
+    mkdir -p "$dest"
+    while IFS= read -r d; do
+      cp -R "$d" "$dest/"
+    done < <(find "$src" -mindepth 1 -maxdepth 1 -type d | sort)
+  fi
+
+  # Write sorted skills-manifest.json enumerating every skill dir now present in dest.
+  local skill_names=()
+  if [ -d "$dest" ]; then
+    while IFS= read -r d; do
+      skill_names+=("$(basename "$d")")
+    done < <(find "$dest" -mindepth 1 -maxdepth 1 -type d | sort)
+  fi
+  local json='{"skills":['
+  local i=0
+  local name escaped
+  for name in "${skill_names[@]+"${skill_names[@]}"}"; do
+    escaped="${name//\\/\\\\}"   # \ → \\
+    escaped="${escaped//\"/\\\"}"  # " → \"
+    [ "$i" -gt 0 ] && json="${json},"
+    json="${json}\"${escaped}\""
+    i=$((i+1))
+  done
+  json="${json}]}"
+  printf '%s\n' "$json" > "$manifest"
+  log "skills manifest → $manifest (${#skill_names[@]} skills)"
+}
+
 doctor_skill_present() {  # $1 = skills dir
   [ -f "$1/bmad-build-auto/SKILL.md" ] || { log "bmad-build-auto not found in $1"; return 1; }
   log "bmad-build-auto discoverable in $1"

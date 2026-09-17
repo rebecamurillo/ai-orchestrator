@@ -134,6 +134,10 @@ COPY --chown=agent:agent templates /app/templates
 # edits it in place. Repository-root, like `templates` above.
 COPY --chown=agent:agent fixtures /app/fixtures
 
+# Operator skills (story 4-1, AD-16): installed into every harness by install_operator_skills
+# in _common.sh. Repository-root, like `templates` and `fixtures` above.
+COPY --chown=agent:agent ia-agents-skills /app/ia-agents-skills
+
 WORKDIR /app
 
 # Each harness installs its CLI at its pinned version and copies the BMAD skill stubs into

@@ -18,6 +18,7 @@ HARNESS_ENV_ALIASES=(ANTHROPIC_AUTH_TOKEN=LITELLM_API_KEY ANTHROPIC_CUSTOM_HEADE
 install() {
   npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
   bmad_install_global_skills claude-code "${AGENT_HOME}/.claude/skills"     # Claude reads ~/.claude/skills, not ~/.agents/skills
+  install_operator_skills /app/ia-agents-skills "${AGENT_HOME}/.claude/skills"
 }
 
 configure() {
