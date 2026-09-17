@@ -69,3 +69,7 @@ steps:
     uses: pr.link
     with: { branch: "{{branch}}" }
     gate: liveness
+
+  - id: done-checkpoint
+    uses: checkpoint
+    gate: human
