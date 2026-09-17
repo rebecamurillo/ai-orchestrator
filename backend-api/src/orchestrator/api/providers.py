@@ -78,6 +78,7 @@ from orchestrator.infrastructure.harness.models import model_table
 from orchestrator.infrastructure.harness.registry import build_harnesses, build_terminal_env
 from orchestrator.infrastructure.process.logs import RealLogReader
 from orchestrator.infrastructure.process.runner import RealProcessRunner
+from orchestrator.infrastructure.skill_catalog import FsSkillCatalog
 from orchestrator.infrastructure.tracing import build_tracer
 
 #: Re-exports: the frozen router tests and `routers/run_files.py` import these names from
@@ -160,6 +161,7 @@ def _preflight_ports(request: Request, uow: SQLAlchemyUnitOfWork, needed_by: str
         harnesses=SQLAlchemyHarnessRepository(uow.session),
         repositories=SQLAlchemyRepositoryRepository(uow.session),
         projects=SQLAlchemyProjectRepository(uow.session),
+        skill_catalog=FsSkillCatalog(settings.agent_home / ".claude" / "skills-manifest.json"),
         bmad_version=settings.bmad_version,
         max_active_runs=settings.max_active_runs,
         work_dir=settings.work_dir,
