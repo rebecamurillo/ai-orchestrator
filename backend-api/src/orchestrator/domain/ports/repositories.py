@@ -150,6 +150,14 @@ class AttemptRepository(Protocol):
         """The highest-`n` attempt at this row, or `None` if it has never run."""
         ...
 
+    def latest_for_run(self, run_id: UUID) -> Attempt | None:
+        """The most recently started Attempt for this Run across all rows, or `None`.
+
+        Used by `signal_run` to check reply_available: whether the run's harness supports
+        resume and whether the last attempt recorded a session_id (AD-10, story 3-3).
+        """
+        ...
+
     def list_for_row(self, step_run_id: UUID) -> list[Attempt]:
         """Every attempt at this row, ordered by `n`."""
         ...

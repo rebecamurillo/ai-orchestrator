@@ -150,6 +150,13 @@ class FakeAttemptRepository:
         stored = [a for a in self.attempts.values() if a.step_run_id == step_run_id]
         return max(stored, key=lambda attempt: attempt.n, default=None)
 
+    def latest_for_run(self, run_id: UUID) -> Attempt | None:
+        self.calls.append(("latest_for_run", run_id))
+        stored = [a for a in self.attempts.values() if a.run_id == run_id]
+        if not stored:
+            return None
+        return max(stored, key=lambda attempt: attempt.n)
+
     def list_for_row(self, step_run_id: UUID) -> list[Attempt]:
         self.calls.append(("list_for_row", step_run_id))
         return sorted(

@@ -811,6 +811,22 @@ def test_writing_an_attempt_the_table_does_not_hold_is_refused(method: str) -> N
         getattr(attempts_repository(session), method)(an_attempt())
 
 
+def test_latest_for_run_orders_by_started_at_descending() -> None:
+    attempt = an_attempt(n=2)
+    session = RecordingSession(scalars_queue=[[AttemptRow(**attempts_module.row_values(attempt))]])
+
+    assert attempts_repository(session).latest_for_run(attempt.run_id) == attempt
+    rendered = str(session.statements[0])
+    assert "attempt.run_id" in rendered
+    assert "ORDER BY attempt.started_at DESC" in rendered
+
+
+def test_latest_for_run_is_none_when_no_attempts_exist() -> None:
+    session = RecordingSession(scalars_queue=[[]])
+
+    assert attempts_repository(session).latest_for_run(new_id()) is None
+
+
 # ── SQLAlchemyGateRecordRepository ───────────────────────────────────────────
 
 

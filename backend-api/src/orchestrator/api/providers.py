@@ -331,13 +331,26 @@ def open_run_ports(
 def signal_effect_ports(request: Request) -> Iterator[SignalEffectPorts]:
     """The ports `handle_signal` (4.9) runs on: `signal_run`'s own writers, plus `cancel`'s
     cleanup — a `Git`, a `ProcessRunner`, `WORK_DIR`, and one Run's environment, read the
-    same way `infrastructure/dbos/walker.py` reads it for an executor (4.8)."""
+    same way `infrastructure/dbos/walker.py` reads it for an executor (4.8).
+
+    `harness_is_resumable` and `latest_attempt_for_run` are injected into `SignalPorts` so
+    that `_check_mode` can validate `mode="session"` without the application layer importing
+    infrastructure adapters (AD-2, story 3-3).
+    """
     session_factory = from_state(request, SESSION_FACTORY)
     engine: WorkflowEngine = from_state(request, ENGINE)
     settings = from_state(request, SETTINGS)
+    harnesses = build_harnesses(settings, RealProcessRunner())
     with open_writer_ports(session_factory) as writers:
         yield SignalEffectPorts(
-            signal=SignalPorts(writers=writers, engine=engine),
+            signal=SignalPorts(
+                writers=writers,
+                engine=engine,
+                harness_is_resumable=lambda name: (
+                    name in harnesses and harnesses[name].capabilities.resume
+                ),
+                latest_attempt_for_run=writers.attempts.latest_for_run,
+            ),
             git=required_git(request, "signals"),
             process=RealProcessRunner(),
             work_dir=settings.work_dir,

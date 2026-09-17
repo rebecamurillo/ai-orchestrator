@@ -141,7 +141,9 @@ class AgentExecutor:
             return found
         _orphan_control(ctx)
         _wip_commit(ctx)
-        _prepare_writes(ctx)
+        mode = ctx.resume_signal.payload.get("mode") if ctx.resume_signal else None
+        if mode != "session":
+            _prepare_writes(ctx)
         return _dispatch(ctx, found, _start(ctx))
 
 
@@ -190,9 +192,7 @@ def _harness(ctx: StepContext) -> Harness | StepResult:
 
 
 def _orphan_control(ctx: StepContext) -> None:
-    """Kill whatever the last attempt left running, wait for git to clear its own crash lock,
-    then close the attempt (AD-14, FR-12). The wait is bounded and never raises: the row goes
-    on either way, and the commit that follows reports the lock if it is still there."""
+    """Kill orphan process, wait on git lock, close interrupted attempt (AD-14, FR-12)."""
     previous = ctx.previous_attempt
     if previous is None or previous.pgid is None or previous.end_sha is not None:
         return
@@ -209,9 +209,7 @@ def _orphan_control(ctx: StepContext) -> None:
 
 
 def _wip_commit(ctx: StepContext) -> None:
-    """Commit what a previous dispatch left, so this row starts tracked (AD-9): the answer
-    archive stages the story file's old path, which only a tracked file stages as a
-    deletion. First-dispatch dirt is earlier rows' writes, owed to their commit step."""
+    """Commit leftover dirt so this row starts tracked (AD-9)."""
     if ctx.previous_attempt is None:
         return
     worktree = require_cwd(ctx)
@@ -223,15 +221,7 @@ def _wip_commit(ctx: StepContext) -> None:
 
 
 def _prepare_writes(ctx: StepContext) -> None:
-    """The orchestrator's writes into the worktree, and the one commit holding exactly them.
-
-    The archives run first: everything after them reads the glob they leave. Their renames
-    are staged alongside the files written, because they are this row's writes too — an
-    unstaged move would still be in the tree at `start_sha` and 5.6 would read it as the
-    agent's (AD-17, FR-31), and it would dirty the whole-tree commit guard while leaving the
-    index empty. Files are staged by name and the tree asked afterwards, so unchanged bytes
-    leave no empty commit.
-    """
+    """Orchestrator writes + prepare commit (skipped for session-mode delivery)."""
     moved = (*agent_answer.archive_with_answer(ctx), *agent_tail.archive_ambiguous(ctx))
     written = (_context_document(ctx), _verify_failure(ctx))
     targets = [*moved, *(target for target in written if target is not None)]
@@ -300,11 +290,7 @@ def _start(ctx: StepContext) -> Attempt:
 
 
 def _frozen_test_files(ctx: StepContext, start_sha: str | None) -> tuple[str, ...] | None:
-    """AD-17's anchors, as the *committed tree* at `start_sha` holds them (AD-17, 5.6).
-    Through `Git.list_files` and not off the worktree: 5.6 compares this set against
-    `diff_names(start_sha, end_sha)`, and globbing the filesystem would carry directory
-    entries and untracked files no commit range can name. Skipped only for an attempt whose
-    predecessor actually *reached* `start_sha`."""
+    """AD-17 anchors from committed tree at start_sha; skips if predecessor reached it."""
     previous = ctx.previous_attempt
     if start_sha is None or (previous is not None and previous.start_sha is not None):
         return None
@@ -324,7 +310,7 @@ def _dispatch(ctx: StepContext, harness: Harness, attempt: Attempt) -> StepResul
 
 
 def _planned(ctx: StepContext, harness: Harness, attempt: Attempt) -> _Dispatch:
-    """Which of the three dispatches this is, and what it carries (FR-16, AD-10).
+    """Which of the three dispatches this is, and what it carries (FR-16, AD-10, AD-13).
     `compose_prompt` never sees a retry prompt: a resumed session already holds the context
     that sentence would repeat, while a session that cannot be resumed — the contract said
     not to, the harness cannot, or the last attempt recorded none — is a new one, which
@@ -332,7 +318,12 @@ def _planned(ctx: StepContext, harness: Harness, attempt: Attempt) -> _Dispatch:
     previous = ctx.previous_attempt
     retry = agent_tail.retry_of(ctx) if retrying(ctx) else None
     session, resumable = str(new_id()), previous.session_id if previous is not None else None
-    if retry is not None and retry.resume_session and harness.capabilities.resume and resumable:
+    operator_mode = ctx.resume_signal.payload.get("mode") if ctx.resume_signal else None
+    can_res = harness.capabilities.resume and resumable is not None
+    tpl_ok = retry is not None and retry.resume_session
+    if operator_mode == "session" and can_res:
+        return _Dispatch(harness, attempt, _session_message(ctx), session, resumable)
+    if operator_mode != "restart" and tpl_ok and can_res and retry is not None:
         return _Dispatch(harness, attempt, retry.prompt, session, resumable)
     prompt = compose_prompt(ctx.with_resolved, agent_answer.resolved_signal(ctx), previous)
     if retry is not None:
@@ -395,6 +386,13 @@ def _text(ctx: StepContext, key: str) -> str:
     """One of this row's resolved keys as a string — `STORY_ID_KEY` is the Story it works
     on, flattened onto the row by the planner (AD-7)."""
     return resolved_text(ctx.with_resolved, key)
+
+
+def _session_message(ctx: StepContext) -> str:
+    if ctx.resume_signal is not None and ctx.resume_signal.event == ANSWER_EVENT:
+        return str(ctx.resume_signal.payload.get("text", ""))
+    retry = agent_tail.retry_of(ctx)
+    return retry.prompt if retry is not None else ""
 
 
 register(KIND, AgentExecutor())

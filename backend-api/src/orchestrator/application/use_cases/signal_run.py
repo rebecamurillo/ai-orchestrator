@@ -37,7 +37,8 @@ everything the caller needs and 4.9 acts on it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
@@ -52,8 +53,10 @@ from orchestrator.application.use_cases.writers import (
     require_run,
     set_run,
 )
+from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
+from orchestrator.domain.errors import Invalid
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.statuses import run_transition
 from orchestrator.domain.values import Signal
@@ -64,13 +67,38 @@ RUNNING = "running"
 #: The kind whose engine call is `cancel` rather than `signal` (AD-13).
 CANCEL = "cancel"
 
+#: The two signal kinds that carry an optional `mode` key (story 3-3).
+_MODE_KINDS: frozenset[str] = frozenset({"answer", "retry"})
+#: The payload key and the two accepted values.
+_MODE_KEY = "mode"
+_MODE_SESSION = "session"
+_MODE_RESTART = "restart"
+_KNOWN_MODES: frozenset[str] = frozenset({_MODE_RESTART, _MODE_SESSION})
+
+
+def _always_false(_: str) -> bool:
+    return False
+
+
+def _no_attempt(_: UUID) -> Attempt | None:
+    return None
+
 
 @dataclass(frozen=True)
 class SignalPorts:
-    """What `signal_run` writes and talks through: the shared writer ports, and the engine."""
+    """What `signal_run` writes and talks through: the shared writer ports, and the engine.
+
+    `harness_is_resumable` and `latest_attempt_for_run` are the two callables that let
+    `_check_mode` validate `mode="session"` without importing infrastructure (AD-2).  They
+    default to `False`/`None` so callers that never send `mode="session"` need not wire them
+    — the mode check short-circuits on `mode="restart"` (the implicit default) and never
+    calls them.
+    """
 
     writers: WriterPorts
     engine: WorkflowEngine
+    harness_is_resumable: Callable[[str], bool] = field(default=_always_false)
+    latest_attempt_for_run: Callable[[UUID], Attempt | None] = field(default=_no_attempt)
 
 
 @dataclass(frozen=True)
@@ -85,13 +113,14 @@ class SignalOutcome:
 
 
 def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcome:
-    """Apply one Operator signal to a Run, or refuse it with the reason (409)."""
+    """Apply one Operator signal to a Run, or refuse it with the reason (409/422)."""
     writers = ports.writers
     with writers.uow:
         run = require_run(writers, run_id)
         rows = writers.steps.list_for_run(run_id)
         park_row = _park_row(rows, run.park_path)
         rule = validate(run, park_row, signal)
+        _check_mode(ports, run, signal)
         record(
             writers,
             run,
@@ -109,6 +138,28 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
     resumed = effect.resume and rule.run_event is not None and run.status == RUNNING
     _tell_the_engine(ports, run_id, signal, resumed=resumed)
     return SignalOutcome(run=run, resumed=resumed, cancel_plan=effect.cancel_plan)
+
+
+def _check_mode(ports: SignalPorts, run: Run, signal: Signal) -> None:
+    """Refuse an unknown or unavailable `mode` before any gate record is written (story 3-3).
+
+    Runs only for `answer` and `retry` — the two kinds that carry `mode`. An absent `mode`
+    defaults to `"restart"` and is never refused; a present `"restart"` is always accepted.
+    `"session"` is accepted only when the run's harness supports resume *and* the latest
+    attempt recorded a session_id — the two facts that together define reply_available (AD-10).
+    """
+    if signal.kind not in _MODE_KINDS:
+        return
+    mode = signal.payload.get(_MODE_KEY, _MODE_RESTART)
+    if mode not in _KNOWN_MODES:
+        raise Invalid(f"unknown mode: {mode}")
+    if mode != _MODE_SESSION:
+        return
+    attempt = ports.latest_attempt_for_run(run.id)
+    if attempt is None or attempt.session_id is None:
+        raise Invalid("mode 'session' not available: no session recorded")
+    if not ports.harness_is_resumable(attempt.harness or ""):
+        raise Invalid("mode 'session' not available: harness does not support resume")
 
 
 def _park_row(rows: list[StepRun], park_path: str | None) -> StepRun | None:
