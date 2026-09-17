@@ -70,14 +70,17 @@ function project(overrides: Partial<ProjectRead> = {}): ProjectRead {
 }
 
 describe('TEMPLATE_ORDER and TEMPLATE_INPUT_FIELDS', () => {
-  it('lists the four root Templates, initiative first, story never', () => {
+  // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
+  it('lists the five root Templates, initiative first, story never', () => {
     // Updated 2026-09-17 (story 4-8): IMP-001 accepted 2026-09-15 — story-run is the fourth root Template
-    expect(TEMPLATE_ORDER).toEqual(['initiative', 'epic', 'repo-init', 'story-run']);
+    // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
+    expect(TEMPLATE_ORDER).toEqual(['initiative', 'epic', 'repo-init', 'story-run', 'task']);
     expect(DEFAULT_TEMPLATE).toBe('initiative');
     expect(TEMPLATE_ORDER).not.toContain('story');
   });
 
-  it('gives initiative one input, epic two, repo-init none, story-run three', () => {
+  // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
+  it('gives initiative one input, epic two, repo-init none, story-run three, task five', () => {
     expect(TEMPLATE_INPUT_FIELDS.initiative.map((field) => field.key)).toEqual([
       'initiative_folder',
     ]);
@@ -89,17 +92,28 @@ describe('TEMPLATE_ORDER and TEMPLATE_INPUT_FIELDS', () => {
       'spec_folder',
       'story_id',
     ]);
+    // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
+    expect(TEMPLATE_INPUT_FIELDS['task'].map((f) => f.key)).toEqual([
+      'branch',
+      'task_id',
+      'title',
+      'intent',
+      'artifacts_dir',
+    ]);
   });
 });
 
 describe('isTemplateName', () => {
   // Updated 2026-09-17 (story 4-8): IMP-001 accepted 2026-09-15 — story-run is the fourth root Template
-  it('accepts the four fixed names and refuses anything else', () => {
+  // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
+  it('accepts the five fixed names and refuses anything else', () => {
     expect(isTemplateName('initiative')).toBe(true);
     expect(isTemplateName('epic')).toBe(true);
     expect(isTemplateName('repo-init')).toBe(true);
     // Updated 2026-09-17 (story 4-8): IMP-001 accepted 2026-09-15 — story-run is the fourth root Template
     expect(isTemplateName('story-run')).toBe(true);
+    // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
+    expect(isTemplateName('task')).toBe(true);
     expect(isTemplateName('story')).toBe(false);
     expect(isTemplateName('')).toBe(false);
   });

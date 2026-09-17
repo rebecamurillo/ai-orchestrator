@@ -79,6 +79,8 @@ DEFAULT_KEY = "default"
 
 #: The keys written bare as `<name>.<field>` rather than interpolated.
 CONDITION_KEYS = ("pause_when", "pause_before_item_when", "pause_after_item_when")
+#: The literal that makes a `pause_when` unconditional — no field required (task@1).
+ALWAYS_LITERAL: str = "always"
 
 
 def check_expressions(root: LinedMap) -> list[ValidationError]:
@@ -206,8 +208,14 @@ def _check_reference(
 
 
 def _check_condition(value: Any, scope: dict[str, str], line: int) -> list[ValidationError]:
-    """A single item field, written bare: `story.spec_checkpoint`, never in braces."""
+    """A single item field, written bare: `story.spec_checkpoint`, never in braces.
+
+    The literal `"always"` is also accepted — it makes a condition unconditional, with no
+    field to check. Everything else that does not match `BARE_FIELD` is `expression syntax`.
+    """
     if not isinstance(value, str):
+        return []
+    if value == ALWAYS_LITERAL:
         return []
     match = BARE_FIELD.match(value)
     if match is None:

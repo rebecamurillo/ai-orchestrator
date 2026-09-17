@@ -3,12 +3,13 @@
  * without rendering (`web-client/AGENTS.md`).
  *
  * `TEMPLATE_ORDER` and `TEMPLATE_INPUT_FIELDS` are the brief's own fixed enumeration, not
- * derived from `GET /templates`: this epic ships four root Templates
+ * derived from `GET /templates`: this epic ships five root Templates
  * (`templates/initiative.yaml`, `templates/epic.yaml`, `templates/repo-init.yaml`,
- * `templates/story-run.yaml`), `story` is never started directly (IMP-001 accepted
- * 2026-09-15, FR-33), and the list the Operator switches between never depends on what the
- * list endpoint happens to answer. The `templates` prop is read only to look up
- * `latest_version` for whichever name is selected.
+ * `templates/story-run.yaml`, `templates/task.yaml`), `story` is never started directly
+ * (IMP-001 accepted 2026-09-15, FR-33), and the list the Operator switches between never
+ * depends on what the list endpoint happens to answer. The `templates` prop is read only to
+ * look up `latest_version` for whichever name is selected.
+ * Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template.
  */
 import type { components } from '../../api/schema';
 
@@ -20,7 +21,8 @@ type RepositoryOut = components['schemas']['RepositoryOut'];
 type HarnessOut = components['schemas']['HarnessOut'];
 export type ProbeResultOut = components['schemas']['ProbeResultOut'];
 
-export const TEMPLATE_ORDER = ['initiative', 'epic', 'repo-init', 'story-run'] as const;
+// Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
+export const TEMPLATE_ORDER = ['initiative', 'epic', 'repo-init', 'story-run', 'task'] as const;
 export type TemplateName = (typeof TEMPLATE_ORDER)[number];
 
 export const DEFAULT_TEMPLATE: TemplateName = 'initiative';
@@ -60,6 +62,14 @@ export const TEMPLATE_INPUT_FIELDS: Record<TemplateName, TemplateInputField[]> =
     { key: 'branch', label: 'WORKING BRANCH' },
     { key: 'spec_folder', label: 'SPEC FOLDER' },
     { key: 'story_id', label: 'STORY ID' },
+  ],
+  // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
+  task: [
+    { key: 'branch', label: 'WORKING BRANCH' },
+    { key: 'task_id', label: 'TASK ID' },
+    { key: 'title', label: 'TITLE' },
+    { key: 'intent', label: 'INTENT' },
+    { key: 'artifacts_dir', label: 'ARTIFACTS DIR' },
   ],
 };
 

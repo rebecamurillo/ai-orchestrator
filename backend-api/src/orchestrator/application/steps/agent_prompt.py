@@ -39,9 +39,15 @@ RETRY_PROMPT = "{retry} {dispatch}"
 PROMPT_KEY = "prompt"
 #: The `with` key that names a file whose content is used as the prompt base.
 PROMPT_FILE_KEY = "prompt_file"
+#: The `with` key that carries a pasted intent for the intent dispatch form (task@1).
+INTENT_KEY = "intent"
 
 #: The `with` key for the skill dispatch form (kept here alongside its siblings).
 SKILL_KEY = "skill"
+#: Prefix for intent dispatch. The `{skill}` placeholder is formatted (a validated slug);
+#: the intent text is then concatenated raw, bypassing `.format()` to avoid treating
+#: `{...}` patterns in the operator's intent as format specifiers.
+DISPATCH_INTENT = "Run the skill {skill} with the following intent:\n\n"
 
 
 def compose_prompt(
@@ -56,15 +62,21 @@ def compose_prompt(
     Base selection (exactly one of these fires):
     - `prompt` key present → use its value directly.
     - `prompt_file_content` provided → use the pre-read file content.
-    - neither → the DISPATCH sentence (skill/folder/id form).
+    - `intent` key present → DISPATCH_INTENT prefix + intent text (concatenated raw to
+      avoid `.format()` treating `{...}` patterns in the intent as placeholders).
+    - none of the above → the folder+id DISPATCH sentence (skill/folder/id form).
 
-    `prompt_extra`, HALT, and ANSWER clauses are appended the same way for all three forms.
+    `prompt_extra`, HALT, and ANSWER clauses are appended the same way for all forms.
     `agent_answer.halts_after_planning` is the one place that decides the halt.
     """
     if PROMPT_KEY in with_resolved:
         base = str(with_resolved[PROMPT_KEY])
     elif prompt_file_content is not None:
         base = prompt_file_content
+    elif INTENT_KEY in with_resolved:
+        base = DISPATCH_INTENT.format(skill=resolved_text(with_resolved, SKILL_KEY)) + str(
+            with_resolved[INTENT_KEY]
+        )
     else:
         base = DISPATCH.format(
             skill=resolved_text(with_resolved, SKILL_KEY),

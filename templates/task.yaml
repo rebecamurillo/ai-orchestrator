@@ -1,0 +1,64 @@
+name: task
+version: 1
+description: one issue-sized change through the plan gate (IMP-002 B1)
+inputs:
+  project:      { type: project,    required: true }
+  repository:   { type: repository, required: true }
+  base_branch:  { type: string,     required: true }
+  branch:       { type: string,     required: true }
+  task_id:      { type: string,     required: true }
+  title:        { type: string,     required: true }
+  intent:       { type: string,     required: true }   # pasted by the Operator; never ingested from API (IMP-002 B2 deferred)
+  artifacts_dir: { type: path,      required: true }   # spec-{{task_id}}-*.md lands here
+  harness:      { type: enum, values: [claude, codex, local], default: claude }
+  model:        { type: string,     required: false }
+steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "{{branch}}" }
+    gate: deterministic
+
+  - id: baseline
+    run: "{{repository.quality_gate_command}}"
+    on_fail: fail
+    timeout_min: 45
+    gate: deterministic
+
+  - id: plan-and-build
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: bmad-build-auto
+      intent: "{{intent}}"
+    expect:
+      files: ["{{artifacts_dir}}/spec-{{task_id}}-*.md"]
+      status_in: [done, blocked, ready-for-dev]
+    retry:
+      max: 2
+      resume_session: true
+    escalate_when: "output.status == blocked"
+    pause_when: always
+    timeout_min: 90
+    gate: liveness
+
+  - id: verify
+    run: "{{repository.unit_test_command}}"
+    on_fail: { redispatch: plan-and-build, max: 1 }
+    timeout_min: 30
+    gate: deterministic
+
+  - id: commit-guard
+    uses: git.commit
+    with: { message: "{{task_id}}: {{title}} (orchestrator)" }
+    gate: deterministic
+
+  - id: push
+    uses: git.push
+    with: { branch: "{{branch}}" }
+    gate: deterministic
+
+  - id: link
+    uses: pr.link
+    with: { branch: "{{branch}}" }
+    gate: liveness

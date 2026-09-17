@@ -281,6 +281,9 @@ def _run_sugar(node: LinedMap) -> tuple[str | None, list[ValidationError]]:
 
 #: The three dispatch forms an `agent` `with` block may carry — only one at a time.
 _DISPATCH_KEYS: frozenset[str] = frozenset({"skill", "prompt", "prompt_file"})
+#: The intent key for the intent dispatch form (task@1, IMP-002 accepted 2026-09-15).
+#: NOT added to _DISPATCH_KEYS to avoid triggering INVALID_DISPATCH_FORM for skill+intent.
+_INTENT_KEYS: frozenset[str] = frozenset({"intent"})
 
 
 def _check_dispatch_form(params: LinedMap, with_line: int) -> list[ValidationError]:
@@ -300,7 +303,7 @@ def _check_with(node: LinedMap, kind: str) -> list[ValidationError]:
     if params is None:
         return [problem(line, MISSING_KEY)]
     base = KIND_META[kind].with_keys
-    allowed = base | _DISPATCH_KEYS if kind == AGENT_KIND else base
+    allowed = base | _DISPATCH_KEYS | _INTENT_KEYS if kind == AGENT_KIND else base
     errors = unknown_keys(params, allowed)
     if kind == AGENT_KIND:
         errors += _check_dispatch_form(params, line)
