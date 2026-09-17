@@ -352,10 +352,15 @@ def test_an_agent_row_carries_its_expect_and_retry_resolved() -> None:
     assert resolved["retry"] == {"max": 2, "prompt": "again for t1", "resume_session": True}
 
 
-def test_an_agent_row_carries_the_kinds_own_timeout_when_the_step_declares_none() -> None:
+def test_an_agent_row_carries_no_timeout_when_the_step_declares_none() -> None:
+    """Operator revision 2026-09-15: the agent kind's `timeout_default_min` is now `None`
+    (no wall-clock deadline by default); stall detection replaced the hard kill."""
     resolved = row(planned(PAUSED, git=things_git()), "things[0].work").with_resolved
 
-    assert resolved["timeout_min"] == KIND_META["agent"].timeout_default_min
+    assert "timeout_min" not in resolved
+    assert KIND_META["agent"].timeout_default_min is None
+    assert KIND_META["agent"].stall_default_min == 30  # noqa: PLR2004
+    assert resolved["stall_min"] == 30  # noqa: PLR2004
 
 
 # --- the skipped rules ----------------------------------------------------------------------------

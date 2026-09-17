@@ -139,7 +139,12 @@ def a_run(**over: Any) -> Run:
 
 
 def resolved(**over: Any) -> dict[str, Any]:
-    """The `with_resolved` an `agent` row carries, as the planner leaves it (AD-7)."""
+    """The `with_resolved` an `agent` row carries, as the planner leaves it (AD-7).
+
+    Operator revision 2026-09-15: `timeout_min` is no longer present by default (agent steps
+    carry no wall-clock deadline unless the template sets one explicitly); `stall_min` is
+    present with the kind's own default of 30.
+    """
     row: dict[str, Any] = {
         "harness": HARNESS_NAME,
         "model": MODEL,
@@ -149,7 +154,7 @@ def resolved(**over: Any) -> dict[str, Any]:
         "story_id": STORY_ID,
         "spec_folder": SPEC_FOLDER,
         "spec_checkpoint": False,
-        "timeout_min": 90,
+        "stall_min": 30,
     }
     row.update(over)
     return row

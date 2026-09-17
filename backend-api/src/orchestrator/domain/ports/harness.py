@@ -140,6 +140,10 @@ class HarnessResult:
     #: The harness's JSON result object, verbatim. 5.7 reads the budget-cap field out of it;
     #: this port names no field of it at all.
     raw_result: dict[str, Any] | None = None
+    #: True when the stall detector found no filesystem activity under `stall_cwd`.
+    stalled: bool = False
+    #: The worktree path the stall detector monitored; set only when `stalled=True`.
+    stall_cwd: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -240,8 +244,9 @@ class Harness(Protocol):
         model: str | None,
         session_id: str,
         budget_usd_remaining: Decimal,
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         """Dispatch `prompt` in `cwd`, with exactly `env` and nothing of this process's own.
 
@@ -263,8 +268,9 @@ class Harness(Protocol):
         model: str | None,
         session_id: str,
         budget_usd_remaining: Decimal,
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessHandle:
         """Start the dispatch and hand back its handle, without waiting for it.
 
@@ -289,8 +295,9 @@ class Harness(Protocol):
         session_id: str,
         message: str,
         env: Mapping[str, str],
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         """Continue `session_id` with `message`. Only `retry` on the same row uses this, and
         no row ever resumes another row's session (AD-10)."""

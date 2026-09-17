@@ -113,8 +113,9 @@ class FakeHarness:
         model: str | None,
         session_id: str,
         budget_usd_remaining: Decimal,
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         """First dispatch, start to finish: exactly `wait(start(...))` (AD-14)."""
         return self.wait(
@@ -127,6 +128,7 @@ class FakeHarness:
                 budget_usd_remaining=budget_usd_remaining,
                 timeout_min=timeout_min,
                 log_path=log_path,
+                stall_min=stall_min,
             )
         )
 
@@ -139,8 +141,9 @@ class FakeHarness:
         model: str | None,
         session_id: str,
         budget_usd_remaining: Decimal,
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessHandle:
         """Apply the scenario's writes, then start its process and hand back the group."""
         return self._dispatch(
@@ -159,8 +162,9 @@ class FakeHarness:
         session_id: str,
         message: str,
         env: Mapping[str, str],
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         """The next scenario for the same story, under the session already opened."""
         return self.wait(
@@ -194,6 +198,8 @@ class FakeHarness:
             timed_out=outcome.timed_out,
             pgid=handle.pgid,
             raw_result=raw_result,
+            stalled=outcome.stalled,
+            stall_cwd=handle.cwd if outcome.stalled else None,
         )
 
     def probe(self) -> ProbeResult:

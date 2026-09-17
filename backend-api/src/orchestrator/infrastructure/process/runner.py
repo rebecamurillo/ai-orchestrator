@@ -44,6 +44,8 @@ from orchestrator.domain.ports.process import Handle, Outcome
 GRACE_SECONDS = 10.0
 #: How often `kill_group` checks whether the group has gone, while it waits out the grace.
 POLL_SECONDS = 0.1
+#: How long each iteration of the stall-detection loop waits on the process (FR-10).
+_POLL_SECONDS = 10.0
 #: How long a `SIGKILL`ed child is given to become reapable, so a `kill_group` that no
 #: `wait` ever follows — `cancel`'s, AD-13 — leaves no zombie holding the group open.
 #: Short on purpose: `SIGKILL` cannot be caught, so this is the kernel's own latency, and
@@ -61,10 +63,16 @@ _DEFAULT_LANG = "C.UTF-8"
 
 @dataclass(frozen=True)
 class _Child:
-    """One process this process forked, and the deadline `wait` holds it to."""
+    """One process this process forked, the deadline `wait` holds it to, and stall config."""
 
     popen: subprocess.Popen[bytes]
-    timeout_seconds: float
+    timeout_seconds: float | None
+    #: The working directory monitored for filesystem activity; `None` disables stall checks.
+    cwd: Path | None
+    #: The log file whose size is checked as an additional activity signal.
+    log_path: Path
+    #: Seconds of inactivity before the stall detector fires; `None` disables stall checks.
+    stall_min_s: float | None
 
 
 #: Every child *this operating-system process* forked, by the process group it leads.
@@ -84,14 +92,15 @@ _CHILDREN_LOCK = threading.Lock()
 class RealProcessRunner:
     """One process group per `start`, reaped by whichever call ends it."""
 
-    def start(
+    def start(  # noqa: PLR0913 — the port's own signature
         self,
         cmd: Sequence[str] | str,
         *,
         cwd: Path | None,
         env: Mapping[str, str],
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> Handle:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         with log_path.open("ab") as log_file:
@@ -105,22 +114,67 @@ class RealProcessRunner:
                 shell=isinstance(cmd, str),
             )
         pgid = os.getpgid(popen.pid)
-        _remember(pgid, _Child(popen=popen, timeout_seconds=timeout_min * 60))
+        _remember(
+            pgid,
+            _Child(
+                popen=popen,
+                timeout_seconds=timeout_min * 60 if timeout_min is not None else None,
+                cwd=cwd,
+                log_path=log_path,
+                stall_min_s=stall_min * 60 if stall_min is not None else None,
+            ),
+        )
         return Handle(pid=popen.pid, pgid=pgid)
 
-    def wait(self, handle: Handle) -> Outcome:
+    def wait(self, handle: Handle) -> Outcome:  # noqa: PLR0911 — stall path adds returns
         child = _child_of(handle.pgid)
         if child is None:
-            return Outcome(exit_code=None, timed_out=False)
+            return Outcome(exit_code=None, timed_out=False, stalled=False)
         popen = child.popen
         try:
-            popen.wait(timeout=child.timeout_seconds)
-            return Outcome(exit_code=popen.returncode, timed_out=False)
-        except subprocess.TimeoutExpired:
-            # the registry is still holding this child, so the escalation below can reap it
-            self.kill_group(handle.pgid)
-            popen.wait()
-            return Outcome(exit_code=popen.returncode, timed_out=True)
+            if child.stall_min_s is None:
+                # No stall detection — simple wait with optional wall-clock deadline.
+                if child.timeout_seconds is None:
+                    popen.wait()
+                    return Outcome(exit_code=popen.returncode, timed_out=False, stalled=False)
+                try:
+                    popen.wait(timeout=child.timeout_seconds)
+                    return Outcome(exit_code=popen.returncode, timed_out=False, stalled=False)
+                except subprocess.TimeoutExpired:
+                    self.kill_group(handle.pgid)
+                    popen.wait()
+                    return Outcome(exit_code=popen.returncode, timed_out=True, stalled=False)
+            # Stall detection: poll every ~10 s, watching mtime and log growth.
+            deadline = (
+                time.monotonic() + child.timeout_seconds
+                if child.timeout_seconds is not None
+                else None
+            )
+            last_activity = time.monotonic()
+            last_mtime = _max_mtime(child.cwd)
+            last_log_size = _log_size(child.log_path)
+            while True:
+                try:
+                    popen.wait(timeout=_POLL_SECONDS)
+                    # Natural exit.
+                    return Outcome(exit_code=popen.returncode, timed_out=False, stalled=False)
+                except subprocess.TimeoutExpired:
+                    pass
+                now = time.monotonic()
+                if deadline is not None and now >= deadline:
+                    self.kill_group(handle.pgid)
+                    popen.wait()
+                    return Outcome(exit_code=popen.returncode, timed_out=True, stalled=False)
+                current_mtime = _max_mtime(child.cwd)
+                current_log_size = _log_size(child.log_path)
+                if current_mtime != last_mtime or current_log_size != last_log_size:
+                    last_activity = now
+                    last_mtime = current_mtime
+                    last_log_size = current_log_size
+                elif now - last_activity >= child.stall_min_s:
+                    self.kill_group(handle.pgid)
+                    popen.wait()
+                    return Outcome(exit_code=None, timed_out=False, stalled=True)
         finally:
             _forget(handle.pgid)
 
@@ -220,3 +274,31 @@ def _group_alive(pgid: int) -> bool:
     """
     _reap(pgid)
     return _signal_group(pgid, 0)
+
+
+def _max_mtime(cwd: Path | None) -> float:
+    """The highest mtime of any file under `cwd` (including `.git`), or `0.0` if empty/None.
+
+    Used by the stall-detection loop to detect that something in the worktree has changed.
+    A git commit updates `.git/index` and `.git/COMMIT_EDITMSG`, so any commit counts as
+    activity.  Symlinks are not followed to avoid loops; `OSError` on any entry is skipped.
+    """
+    if cwd is None:
+        return 0.0
+    best = 0.0
+    for dirpath, _dirs, filenames in os.walk(str(cwd)):
+        for fname in filenames:
+            try:
+                t = os.path.getmtime(os.path.join(dirpath, fname))
+                best = max(best, t)
+            except OSError:
+                pass
+    return best
+
+
+def _log_size(log_path: Path) -> int:
+    """The current byte size of `log_path`, or `0` when the file does not exist yet."""
+    try:
+        return log_path.stat().st_size
+    except OSError:
+        return 0

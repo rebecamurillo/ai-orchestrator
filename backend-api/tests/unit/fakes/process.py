@@ -19,8 +19,8 @@ from typing import Any
 
 from orchestrator.domain.ports.process import Handle, Outcome
 
-#: What an unscripted `start` answers with: a clean exit, no timeout.
-DEFAULT_OUTCOME = Outcome(exit_code=0, timed_out=False)
+#: What an unscripted `start` answers with: a clean exit, no timeout, no stall.
+DEFAULT_OUTCOME = Outcome(exit_code=0, timed_out=False, stalled=False)
 
 
 class FakeProcessRunner:
@@ -38,14 +38,15 @@ class FakeProcessRunner:
         self._pending: dict[int, Outcome] = {}
         self._next_pgid = 1
 
-    def start(
+    def start(  # noqa: PLR0913 — the port's own signature
         self,
         cmd: Sequence[str] | str,
         *,
         cwd: Path | None,
         env: Mapping[str, str],
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> Handle:
         self.calls.append(
             {
@@ -54,6 +55,7 @@ class FakeProcessRunner:
                 "cwd": cwd,
                 "env": dict(env),
                 "timeout_min": timeout_min,
+                "stall_min": stall_min,
                 "log_path": log_path,
             }
         )

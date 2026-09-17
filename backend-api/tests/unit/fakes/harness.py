@@ -76,8 +76,9 @@ class FakeHarness:
         model: str | None,
         session_id: str,
         budget_usd_remaining: Decimal,
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         self.calls.append(
             {
@@ -89,6 +90,7 @@ class FakeHarness:
                 "session_id": session_id,
                 "budget_usd_remaining": budget_usd_remaining,
                 "timeout_min": timeout_min,
+                "stall_min": stall_min,
                 "log_path": log_path,
             }
         )
@@ -103,8 +105,9 @@ class FakeHarness:
         model: str | None,
         session_id: str,
         budget_usd_remaining: Decimal,
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessHandle:
         self.calls.append(
             {
@@ -116,6 +119,7 @@ class FakeHarness:
                 "session_id": session_id,
                 "budget_usd_remaining": budget_usd_remaining,
                 "timeout_min": timeout_min,
+                "stall_min": stall_min,
                 "log_path": log_path,
             }
         )
@@ -138,8 +142,9 @@ class FakeHarness:
         session_id: str,
         message: str,
         env: Mapping[str, str],
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         self.calls.append(
             {
@@ -149,6 +154,7 @@ class FakeHarness:
                 "message": message,
                 "env": dict(env),
                 "timeout_min": timeout_min,
+                "stall_min": stall_min,
                 "log_path": log_path,
             }
         )

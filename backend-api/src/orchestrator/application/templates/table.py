@@ -24,7 +24,7 @@ SLUG = re.compile(r"^[a-z][a-z0-9-]*$")
 
 TEMPLATE_KEYS = frozenset({"name", "version", "description", "inputs", STEPS_KEY})
 INPUT_KEYS = frozenset({"type", "required", "default", "values"})
-STEP_KEYS = frozenset({"id", "uses", "run", "with", "gate", "timeout_min", "on_fail"})
+STEP_KEYS = frozenset({"id", "uses", "run", "with", "gate", "timeout_min", "stall_min", "on_fail"})
 WRITES_KEY = "writes"
 
 AGENT_KEYS = frozenset({"expect", "retry", "escalate_when", "pause_when", WRITES_KEY})
@@ -47,9 +47,9 @@ REDISPATCH_KEYS = frozenset({"redispatch", "max"})
 #: `project`, `repository` and `item` are bound at run time and fit no default at all.
 TEXT_TYPES = frozenset({"string", "path"})
 
-#: The two step keys a `uses: template` step may not carry: a call is not timed and does
+#: The step keys a `uses: template` step may not carry: a call is not timed and does
 #: not fail on its own — the callee's steps do.
-CALL_TIMING_KEYS = ("timeout_min", "on_fail")
+CALL_TIMING_KEYS = ("timeout_min", "stall_min", "on_fail")
 
 #: Deep type checking inside `expect` and `retry` is out of scope; membership is not.
 SUB_MAPS = (("expect", EXPECT_KEYS), ("retry", RETRY_KEYS))

@@ -18,18 +18,13 @@ middle write is the one thing a *resumed* session skips — `Harness.resume` is 
 which is the very case this guards — while `end_sha` is written only by the tail.
 
 **One resume reaches this module and dispatches nothing.** A `continue` carrying accepted
-files answers a `protected_path` park (AD-17): the work is already in the worktree, so
-`agent_tail.re_check` re-runs the check and the routing over the previous attempt and
-`execute` returns that — before the orphan control, before the WIP commit, before anything
-here would put a commit of its own in front of the range about to be read.
+files runs only the check and routing over the previous attempt — `agent_tail.re_check`
+handles it before any new commits are placed in front of the range it reads.
 
 **Three re-dispatches reach this module and are not the same dispatch** (AD-9, AD-13): the
-Template's own `retry`, which resumes the session or prepends its prompt to a fresh one; a
-person's *Retry* from a stop, which archives every extra Story file an ambiguity left before
-anything reads the glob again (AD-13); a `verify` redispatch, which hands
-the agent its file back at `in-progress` with a `## Verify Failure` section (FR-10).
-`context.retrying`, `context.operator_retry` and `context.redispatched` tell them apart, off
-`StepContext` alone.
+Template's own `retry`; a person's *Retry* from a stop; and a `verify` redispatch that
+hands the agent its file back at `in-progress` with a `## Verify Failure` section (FR-10).
+`context.retrying`, `context.operator_retry` and `context.redispatched` tell them apart.
 """
 
 from __future__ import annotations
@@ -69,7 +64,7 @@ from orchestrator.application.templates.agent_row import (
     SPEC_FOLDER_KEY,
     STORY_ID_KEY,
 )
-from orchestrator.application.templates.rows import TIMEOUT_KEY
+from orchestrator.application.templates.rows import STALL_KEY, TIMEOUT_KEY
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.ids import new_id
@@ -116,8 +111,10 @@ LOCK_POLL_SECONDS, LOCK_TIMEOUT_SECONDS = 1.0, 30.0
 #: reports a refusal as `()`, so AD-17's set would come back empty and nothing would fail.
 WHOLE_TREE = "."
 
-#: `KIND_META["agent"].timeout_default_min` — what a row carrying no resolved timeout gets.
-DEFAULT_TIMEOUT_MIN = 90
+#: No wall-clock deadline by default (operator revision 2026-09-15: 90-min kill → stall).
+DEFAULT_TIMEOUT_MIN = None
+#: Minutes of filesystem silence before the stall detector kills the process (FR-10).
+DEFAULT_STALL_MIN = 30
 
 
 @dataclass(frozen=True)
@@ -348,7 +345,8 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
     resumed session skips the middle write: `Harness.resume` is one call, so no handle sits
     between two halves for a dead backend to lose."""
     run, environment = require_run(ctx), require_env(ctx)
-    timeout_min = ctx.with_resolved.get(TIMEOUT_KEY) or DEFAULT_TIMEOUT_MIN
+    timeout_min = ctx.with_resolved.get(TIMEOUT_KEY)
+    stall_min = ctx.with_resolved.get(STALL_KEY, DEFAULT_STALL_MIN)
     env = require_harness_env(ctx)(
         dispatch.attempt,
         run=run,
@@ -366,8 +364,9 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
             env=env,
             timeout_min=timeout_min,
             log_path=log_path(ctx),
+            stall_min=stall_min,
         )
-        return agent_tail.finish(ctx, dispatch.attempt, resumed, timeout_min)
+        return agent_tail.finish(ctx, dispatch.attempt, resumed, timeout_min, stall_min)
     handle = dispatch.harness.start(
         cwd=require_cwd(ctx),
         prompt=dispatch.prompt,
@@ -377,6 +376,7 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
         budget_usd_remaining=run.budget_usd - run.spend_usd,
         timeout_min=timeout_min,
         log_path=log_path(ctx),
+        stall_min=stall_min,
     )
     # the session travels with the group: a dead backend must leave a resumable attempt
     running = dispatch.attempt.model_copy(
@@ -388,7 +388,7 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
         # the only frame holding the handle: an escape without a kill is AD-14's orphan
         require_process(ctx).kill_group(handle.pgid)
         raise
-    return agent_tail.finish(ctx, running, dispatch.harness.wait(handle), timeout_min)
+    return agent_tail.finish(ctx, running, dispatch.harness.wait(handle), timeout_min, stall_min)
 
 
 def _text(ctx: StepContext, key: str) -> str:

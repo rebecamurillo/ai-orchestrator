@@ -246,6 +246,7 @@ def _check_step(
     if kind == AGENT_KIND:
         errors += check_agent_extras(node)
     errors += _check_timeout(node)
+    errors += _check_stall_min(node)
     return errors + _check_on_fail(node, earlier_agents)
 
 
@@ -325,6 +326,12 @@ def _check_timeout(node: LinedMap) -> list[ValidationError]:
     if "timeout_min" not in node or is_count(node["timeout_min"]):
         return []
     return [problem(key_line(node, "timeout_min", node.line), INVALID_TIMEOUT)]
+
+
+def _check_stall_min(node: LinedMap) -> list[ValidationError]:
+    if "stall_min" not in node or is_count(node["stall_min"]):
+        return []
+    return [problem(key_line(node, "stall_min", node.line), INVALID_TIMEOUT)]
 
 
 def _check_on_fail(node: LinedMap, earlier_agents: set[str]) -> list[ValidationError]:

@@ -156,8 +156,9 @@ class LocalHarness:
         model: str | None,
         session_id: str,
         budget_usd_remaining: Decimal,
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         """First dispatch, start to finish: exactly `wait(start(...))` (AD-14)."""
         return self.wait(
@@ -170,6 +171,7 @@ class LocalHarness:
                 budget_usd_remaining=budget_usd_remaining,
                 timeout_min=timeout_min,
                 log_path=log_path,
+                stall_min=stall_min,
             )
         )
 
@@ -182,8 +184,9 @@ class LocalHarness:
         model: str | None,
         session_id: str,
         budget_usd_remaining: Decimal,
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessHandle:
         """Start the dispatch and hand its group back before anything waits on it (AD-14).
 
@@ -196,7 +199,12 @@ class LocalHarness:
         argv = self._argv(cwd, model=model, message=prompt)
         self._record_prompt(log_path, prompt)
         handle = self.runner.start(
-            argv, cwd=cwd, env=env, timeout_min=timeout_min, log_path=log_path
+            argv,
+            cwd=cwd,
+            env=env,
+            timeout_min=timeout_min,
+            log_path=log_path,
+            stall_min=stall_min,
         )
         return HarnessHandle(
             session_id="", log_path=log_path, pid=handle.pid, pgid=handle.pgid, cwd=cwd
@@ -209,8 +217,9 @@ class LocalHarness:
         session_id: str,
         message: str,
         env: Mapping[str, str],
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         """Refuse: this harness declares `capabilities.resume = False` (see `RESUME_UNSUPPORTED`).
 
@@ -261,6 +270,8 @@ class LocalHarness:
             timed_out=outcome.timed_out,
             pgid=handle.pgid,
             raw_result=raw_result,
+            stalled=outcome.stalled,
+            stall_cwd=handle.cwd if outcome.stalled else None,
         )
 
     def _stored_session(self, handle: HarnessHandle) -> str | None:

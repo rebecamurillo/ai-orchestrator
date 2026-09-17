@@ -149,6 +149,7 @@ class Step(BaseModel):
     #: never filled in from `meta.gate_default`.
     gate: Gate | None = None
     timeout_min: int | None = None
+    stall_min: int | None = None
     on_fail: OnFailAction | None = None
     redispatch: str | None = None
     redispatch_max: int | None = None

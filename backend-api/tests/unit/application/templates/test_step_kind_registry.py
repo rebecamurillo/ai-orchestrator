@@ -26,9 +26,10 @@ SPINE = {
     "shell": ("deterministic", 30, frozenset({"command"}), False),
     "agent": (
         "liveness",
-        90,
+        None,  # operator revision 2026-09-15: no wall-clock default (stall detection instead)
         frozenset({"harness", "model", "skill", "args", "prompt_extra"}),
         False,
+        30,  # stall_default_min
     ),
     "git.commit": ("deterministic", 5, frozenset({"message"}), False),
     "git.push": ("deterministic", 5, frozenset({"branch"}), False),
@@ -48,9 +49,14 @@ def test_the_registry_holds_exactly_the_eleven_shipped_kinds() -> None:
 
 @pytest.mark.parametrize("kind", sorted(SPINE))
 def test_a_kind_carries_the_spine_values(kind: str) -> None:
-    gate, timeout, with_keys, planner_only = SPINE[kind]
+    """Operator revision 2026-09-15: agent's timeout_default_min is None; stall_default_min=30."""
+    spine = SPINE[kind]
+    gate, timeout, with_keys, planner_only = spine[:4]
+    stall = spine[4] if len(spine) > 4 else None  # type: ignore[misc]  # noqa: PLR2004
 
-    assert KIND_META[kind] == KindMeta(gate, timeout, with_keys, planner_only)  # type: ignore[arg-type]
+    assert KIND_META[kind] == KindMeta(  # type: ignore[arg-type]
+        gate, timeout, with_keys, planner_only, stall_default_min=stall
+    )
 
 
 def test_plan_check_is_the_only_kind_a_template_may_not_name() -> None:

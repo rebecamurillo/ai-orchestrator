@@ -152,8 +152,9 @@ class CodexHarness:
         model: str | None,
         session_id: str,
         budget_usd_remaining: Decimal,
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         """First dispatch, start to finish: exactly `wait(start(...))` (AD-14)."""
         return self.wait(
@@ -166,6 +167,7 @@ class CodexHarness:
                 budget_usd_remaining=budget_usd_remaining,
                 timeout_min=timeout_min,
                 log_path=log_path,
+                stall_min=stall_min,
             )
         )
 
@@ -178,8 +180,9 @@ class CodexHarness:
         model: str | None,
         session_id: str,
         budget_usd_remaining: Decimal,
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessHandle:
         """Start the dispatch and hand its group back before anything waits on it (AD-14).
 
@@ -196,7 +199,14 @@ class CodexHarness:
             message=prompt,
         )
         self._record_prompt(log_path, prompt)
-        return self._start(argv, cwd=cwd, env=env, timeout_min=timeout_min, log_path=log_path)
+        return self._start(
+            argv,
+            cwd=cwd,
+            env=env,
+            timeout_min=timeout_min,
+            log_path=log_path,
+            stall_min=stall_min,
+        )
 
     def resume(  # noqa: PLR0913 — the port's own signature (AD-10)
         self,
@@ -205,8 +215,9 @@ class CodexHarness:
         session_id: str,
         message: str,
         env: Mapping[str, str],
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         """Continue the thread this row already opened — `retry`'s path only (AD-10).
 
@@ -225,6 +236,7 @@ class CodexHarness:
                 timeout_min=timeout_min,
                 log_path=log_path,
                 session_id=session_id,
+                stall_min=stall_min,
             )
         )
 
@@ -272,6 +284,8 @@ class CodexHarness:
             timed_out=outcome.timed_out,
             pgid=handle.pgid,
             raw_result=raw_result,
+            stalled=outcome.stalled,
+            stall_cwd=handle.cwd if outcome.stalled else None,
         )
 
     def _argv(
@@ -299,9 +313,10 @@ class CodexHarness:
         *,
         cwd: Path,
         env: Mapping[str, str],
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
         session_id: str = "",
+        stall_min: float | None = None,
     ) -> HarnessHandle:
         """The runner's handle, as the port's own: what `wait` needs and nothing more.
 
@@ -310,10 +325,19 @@ class CodexHarness:
         given, which is the only case where a handle can carry one.
         """
         handle = self.runner.start(
-            argv, cwd=cwd, env=env, timeout_min=timeout_min, log_path=log_path
+            argv,
+            cwd=cwd,
+            env=env,
+            timeout_min=timeout_min,
+            log_path=log_path,
+            stall_min=stall_min,
         )
         return HarnessHandle(
-            session_id=session_id, log_path=log_path, pid=handle.pid, pgid=handle.pgid
+            session_id=session_id,
+            log_path=log_path,
+            pid=handle.pid,
+            pgid=handle.pgid,
+            cwd=cwd,
         )
 
     def probe(self) -> ProbeResult:

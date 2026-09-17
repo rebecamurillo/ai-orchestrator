@@ -43,6 +43,8 @@ LOG_PATH = Path("/work/logs")
 END_SHA = "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d"
 #: `KIND_META["agent"]`'s own timeout, which `templates/story.yaml` also writes on the row.
 TIMEOUT_MIN = 90
+#: Operator revision 2026-09-15: activity-based stall default for agent steps.
+STALL_MIN = 30
 #: A group no real process would be in, so the assertion cannot pass by coincidence.
 OTHER_PGID = 9191
 #: Ids in this system are UUIDv7 (Consistency Conventions — Ids & keys).
@@ -124,6 +126,8 @@ def test_a_row_outside_a_story_frame_names_no_story_to_the_environment() -> None
 
 
 def test_the_dispatch_carries_a_fresh_session_the_remainder_and_the_rows_deadline() -> None:
+    """Operator revision 2026-09-15: the agent kind's default changed from a 90-min
+    wall-clock deadline to stall detection (stall_min=30, timeout_min=None)."""
     world = dispatched()
 
     run(world)
@@ -131,7 +135,8 @@ def test_the_dispatch_carries_a_fresh_session_the_remainder_and_the_rows_deadlin
     call = world.harness.called("start")[0]
     assert call["cwd"] == Path(WORKTREE)
     assert call["model"] == "claude-opus-5"
-    assert call["timeout_min"] == TIMEOUT_MIN
+    assert call["timeout_min"] is None  # no wall-clock deadline by default
+    assert call["stall_min"] == STALL_MIN  # activity-based stall detection
     assert call["budget_usd_remaining"] == BUDGET - SPEND
     assert call["log_path"] == Path("/work/logs") / str(world.run.id) / "003-1.log"
 
@@ -147,22 +152,25 @@ def test_the_session_id_is_a_fresh_uuid_v7_and_not_the_attempts_own() -> None:
 
 
 def test_a_row_carrying_no_resolved_timeout_gets_the_kinds_own_default() -> None:
-    without = resolved()
-    del without["timeout_min"]
-    world = dispatched(with_resolved=without)
+    """Operator revision 2026-09-15: the kind's own default is now stall_min=30 with no
+    wall-clock timeout; a row without timeout_min in resolved passes None to the harness."""
+    world = dispatched()  # resolved() has stall_min=30, no timeout_min
 
     run(world)
 
-    assert world.harness.called("start")[0]["timeout_min"] == TIMEOUT_MIN
+    assert world.harness.called("start")[0]["timeout_min"] is None
+    assert world.harness.called("start")[0]["stall_min"] == STALL_MIN
 
 
 def test_a_row_carrying_an_explicit_null_timeout_gets_the_default_too() -> None:
-    """`None` would reach `Harness.start` and the timeout sentence as the word `None`."""
+    """Operator revision 2026-09-15: an explicit null timeout_min passes through as None
+    (no wall-clock kill); the kind's stall_default_min of 30 still applies."""
     world = dispatched(with_resolved=resolved(timeout_min=None))
 
     run(world)
 
-    assert world.harness.called("start")[0]["timeout_min"] == TIMEOUT_MIN
+    assert world.harness.called("start")[0]["timeout_min"] is None
+    assert world.harness.called("start")[0]["stall_min"] == STALL_MIN
 
 
 def test_the_prompt_the_harness_receives_is_the_composed_one() -> None:
@@ -277,8 +285,15 @@ def test_a_harness_that_reported_no_usage_leaves_the_token_columns_untouched() -
 
 
 def test_a_timeout_is_recorded_in_full_and_then_parks_the_run() -> None:
+    """Operator revision 2026-09-15: agent steps no longer carry a 90-min default wall-clock
+    deadline; `timeout_min` must be set explicitly in the template.  This test now uses an
+    explicit `timeout_min=60` to cover the wall-clock-kill path; the 90-min hardcoded
+    assertion is removed under that revision."""
     harness = FakeHarness()
-    world = dispatched(harness=harness)
+    world = dispatched(
+        harness=harness,
+        with_resolved=resolved(timeout_min=60),
+    )
     harness.results.append(a_result(world, exit_code=None, timed_out=True))
 
     result = run(world)
@@ -289,7 +304,27 @@ def test_a_timeout_is_recorded_in_full_and_then_parks_the_run() -> None:
     assert result.status == "error"
     assert result.park is not None
     assert result.park.kind == "timeout"
-    assert result.park.reason == "timeout epics[0].stories[3].build after 90 min"
+    assert result.park.reason == "timeout epics[0].stories[3].build after 60 min"
+    assert result.park.path == ROW_PATH
+
+
+def test_a_stall_is_recorded_in_full_and_then_parks_the_run() -> None:
+    """FR-10: when the stall detector fires, the park kind is `timeout` and the reason is
+    the verbatim stalled-format sentence (operator revision 2026-09-15)."""
+    harness = FakeHarness()
+    stall_cwd = Path(WORKTREE)
+    world = dispatched(harness=harness)
+    harness.results.append(a_result(world, exit_code=None, stalled=True, stall_cwd=stall_cwd))
+
+    result = run(world)
+
+    finished = world.attempts.attempts[world.attempt.id]
+    assert finished.ended_at is not None
+    assert finished.end_sha == END_SHA
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "timeout"
+    assert result.park.reason == f"stalled {stall_cwd}: no activity for {STALL_MIN} min"
     assert result.park.path == ROW_PATH
 
 
