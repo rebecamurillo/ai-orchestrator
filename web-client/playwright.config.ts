@@ -3,6 +3,7 @@ import { defineConfig } from '@playwright/test';
 import {
   BACKEND_API_URL,
   ORCHESTRATOR_TOKEN,
+  PREVIEW_PORT,
   PREVIEW_URL,
   PROBE_SESSION_SECRET,
   STUB_BACKEND_PORT,
@@ -40,6 +41,9 @@ const preview = {
   url: PREVIEW_URL,
   reuseExistingServer: false,
   env: {
+    // PORT is what the standalone entry binds; it follows E2E_PREVIEW_PORT so the suite
+    // can run beside a live stack holding 4321 (operator rule, 2026-09-18).
+    PORT: String(PREVIEW_PORT),
     BACKEND_API_URL,
     ORCHESTRATOR_TOKEN,
     ORCHESTRATOR_SESSION_SECRET: PROBE_SESSION_SECRET,
