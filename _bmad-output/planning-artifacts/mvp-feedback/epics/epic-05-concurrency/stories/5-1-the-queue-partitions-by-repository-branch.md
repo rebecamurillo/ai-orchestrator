@@ -2,7 +2,7 @@
 title: 'The queue partitions by (Repository, branch)'
 type: 'feature'
 created: '2026-09-18'
-status: 'in-progress'
+status: 'in-review'
 baseline_revision: '29cf53606cb0e704488dae344d2de6648a4d254b'
 review_loop_iteration: 0
 followup_review_recommended: false
