@@ -360,14 +360,22 @@ def _group_prefixes(rows: Sequence[StepRun]) -> list[str]:
 
 def _group(prefix: str, rows: Sequence[StepRun], *, cancelled: bool) -> Group:
     """One frame, its members in `seq` order, and its status by the one rule — `None` for a
-    `cancelled` Run, which never finished or stopped at any of them (SPEC CAP-12)."""
+    `cancelled` Run, which never finished or stopped at any of them (SPEC CAP-12).
+
+    k/n semantics (story 1-5): k = count of `done` members; n = count of members with
+    status != 'skipped'. Both are computed from member statuses even for cancelled runs.
+    """
     members = rows_in_frame(rows, prefix)
     status = None if cancelled else group_status([member.status for member in members])
+    k = sum(1 for m in members if m.status == "done")
+    n = sum(1 for m in members if m.status != "skipped")
     return Group(
         id=prefix,
         label=prefix,
         members=tuple(member.path for member in members),
         status=status,
+        k=k,
+        n=n,
     )
 
 

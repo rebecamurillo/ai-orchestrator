@@ -1968,6 +1968,8 @@ export interface components {
         RunGroupOut: {
             /** Id */
             id: string;
+            /** K */
+            k?: number;
             /**
              * Kind
              * @constant
@@ -1977,6 +1979,8 @@ export interface components {
             label: string;
             /** Members */
             members: string[];
+            /** N */
+            n?: number;
             /** Status */
             status: string | null;
         };

@@ -22,7 +22,7 @@ type RunGroupOut = components['schemas']['RunGroupOut'];
 type EdgeOut = components['schemas']['EdgeOut'];
 
 /** Story group ids match `epic-\d+/story-[\w-]+` (two segments, second starts with `story`). */
-const STORY_GROUP_PATTERN = /^epic-\d+\/story-[\w-]+$/;
+export const STORY_GROUP_PATTERN = /^epic-\d+\/story-[\w-]+$/;
 /** Epic group ids match `epic-\d+` (one segment). */
 const EPIC_GROUP_PATTERN = /^epic-\d+$/;
 
@@ -41,7 +41,10 @@ const EPIC_GROUP_PATTERN = /^epic-\d+$/;
  * The synthesised story nodes carry a non-standard `substeps?: string[]` property that
  * `DiagramNode` reads for the sub-step words inside each story box. Nothing else reads it.
  */
-export function buildRunTree(graph: RunGraphOut): {
+export function buildRunTree(
+  graph: RunGraphOut,
+  expandedGroups: Set<string> = new Set(),
+): {
   nodes: RunNodeOut[];
   edges: EdgeOut[];
   groups: RunGroupOut[];
@@ -49,16 +52,20 @@ export function buildRunTree(graph: RunGraphOut): {
   const storyGroups = graph.groups.filter((g) => STORY_GROUP_PATTERN.test(g.id));
   const epicGroups = graph.groups.filter((g) => EPIC_GROUP_PATTERN.test(g.id));
 
-  // Build a set of all node ids that belong to any story group
-  const storyMemberIds = new Set<string>();
-  for (const group of storyGroups) {
+  // Partition story groups: collapsed → synthesise aggregate; expanded → members pass through
+  const collapsedStoryGroups = storyGroups.filter((g) => !expandedGroups.has(g.id));
+
+  // Build a set of all node ids that belong to a COLLAPSED story group
+  // (expanded group members pass through as-is, so we do NOT include them here)
+  const collapsedMemberIds = new Set<string>();
+  for (const group of collapsedStoryGroups) {
     for (const memberId of group.members) {
-      storyMemberIds.add(memberId);
+      collapsedMemberIds.add(memberId);
     }
   }
 
-  // Synthesise one story-level aggregate node per story group
-  const storyNodes: (RunNodeOut & { substeps?: string[] })[] = storyGroups.map((group) => {
+  // Synthesise one story-level aggregate node per COLLAPSED story group
+  const storyNodes: (RunNodeOut & { substeps?: string[] })[] = collapsedStoryGroups.map((group) => {
     const members = group.members
       .map((id) => graph.nodes.find((n) => n.id === id))
       .filter((n): n is RunNodeOut => n !== undefined);
@@ -93,22 +100,23 @@ export function buildRunTree(graph: RunGraphOut): {
     };
   });
 
-  // Keep nodes that are NOT members of any story group
-  const keptNodes = graph.nodes.filter((n) => !storyMemberIds.has(n.id));
+  // Keep nodes that are NOT members of any collapsed story group.
+  // Members of expanded groups pass through as-is (they are not in collapsedMemberIds).
+  const keptNodes = graph.nodes.filter((n) => !collapsedMemberIds.has(n.id));
 
-  // All synthesised nodes: kept (epic/root level) + story aggregates
+  // All synthesised nodes: kept (epic/root/expanded-member level) + collapsed aggregates
   const allNodes: RunNodeOut[] = [...keptNodes, ...(storyNodes as RunNodeOut[])];
   const nodeIds = new Set(allNodes.map((n) => n.id));
 
-  // Map from story member id → story group id for edge substitution
+  // Map from collapsed story member id → story group id for edge substitution
   const memberToGroup = new Map<string, string>();
-  for (const group of storyGroups) {
+  for (const group of collapsedStoryGroups) {
     for (const memberId of group.members) {
       memberToGroup.set(memberId, group.id);
     }
   }
 
-  // Rebuild edges: substitute story member endpoints with the group id, then deduplicate
+  // Rebuild edges: substitute collapsed story member endpoints with the group id, then deduplicate
   const seen = new Set<string>();
   const rebuiltEdges: EdgeOut[] = [];
 

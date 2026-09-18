@@ -7,14 +7,13 @@
  * a graph-fetch error shows `fetch-failed` inside `wf-diagram-main` only; the stop zone,
  * summary column, and tab region continue to render off the already-loaded `detail` prop.
  *
- * Node clicks navigate to `?view=detail#step-{seq}`: the `?view=detail` prefix ensures the
- * same page + step fragment is served whether the user arrived via redirect or directly.
- *
- * `window.location.assign('#step-{seq}')` (hash-only) was the original design-note intent, but
- * the frozen e2e test `run-diagram.spec.ts` (c) checks for `?view=detail#step-\d+` in the URL
- * post-click, so the `?view=detail` prefix is kept to satisfy the frozen assertion.
+ * Story 1-5: story-aggregate nodes expand/collapse on click; leaf step nodes navigate to
+ * `/workflows/{runId}/steps/{dot-index-path}`. The `$poll` store drives graph re-fetches;
+ * `expandedGroups` state is preserved across poll ticks. The group containing the current
+ * step starts expanded on the first fetch.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useStore } from '@nanostores/react';
 
 import { api } from '../../api/client';
 import type { components } from '../../api/schema';
@@ -22,14 +21,17 @@ import FailedFetch from '../FailedFetch';
 import { ageText } from '../../lib/board/format';
 import { layoutGraph } from '../../lib/diagram/layout';
 import { DiagramEdge, DiagramGroup, DiagramNode } from '../../lib/diagram/svg';
-import { buildRunTree, findCurrentStep } from '../../lib/diagram/tree';
+import { buildRunTree, findCurrentStep, STORY_GROUP_PATTERN } from '../../lib/diagram/tree';
+import { encode } from '../../lib/step-path';
 import {
   runToken,
   stateAgeSeconds,
   type RunDetailOut,
   type StepRowOut,
 } from '../../lib/run/detail';
+import { $poll } from '../../stores/poll';
 import '../../styles/diagram.css';
+import '../../styles/diagram-status.css';
 
 type RunGraphOut = components['schemas']['RunGraphOut'];
 type RunNodeOut = components['schemas']['RunNodeOut'];
@@ -72,7 +74,11 @@ function pathLabel(id: string): string {
 export default function DiagramSection({ runId, detail }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [graph, setGraph] = useState<RunGraphOut | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const requestSeqRef = useRef(0);
+  const initializedRef = useRef(false);
+  const pollTick = useStore($poll);
+  const mountedTickRef = useRef(pollTick);
 
   async function fetchGraph(): Promise<void> {
     const seq = ++requestSeqRef.current;
@@ -87,6 +93,19 @@ export default function DiagramSection({ runId, detail }: Props) {
       }
       setGraph(result.data);
       setPhase({ kind: 'ready' });
+      // On the first successful fetch, pre-expand groups that contain the current step.
+      if (!initializedRef.current) {
+        initializedRef.current = true;
+        const currentStep = findCurrentStep(result.data);
+        if (currentStep) {
+          const ancestorIds = result.data.groups
+            .filter((g) => STORY_GROUP_PATTERN.test(g.id) && g.members.includes(currentStep.id))
+            .map((g) => g.id);
+          if (ancestorIds.length > 0) {
+            setExpandedGroups(new Set(ancestorIds));
+          }
+        }
+      }
     } catch {
       if (seq !== requestSeqRef.current) return;
       setPhase({ kind: 'error', status: null });
@@ -98,7 +117,16 @@ export default function DiagramSection({ runId, detail }: Props) {
     // Fetch once on mount; retry only via the FailedFetch button.
   }, [runId]);
 
-  const tree = useMemo(() => (graph ? buildRunTree(graph) : null), [graph]);
+  // Re-fetch on poll tick without resetting expandedGroups.
+  useEffect(() => {
+    if (pollTick === mountedTickRef.current) return;
+    void fetchGraph();
+  }, [pollTick]);
+
+  const tree = useMemo(
+    () => (graph ? buildRunTree(graph, expandedGroups) : null),
+    [graph, expandedGroups],
+  );
 
   const layout = useMemo(() => {
     if (!tree) return null;
@@ -162,27 +190,49 @@ export default function DiagramSection({ runId, detail }: Props) {
         >
           {layout.groups.map((placed) => {
             const runGroup = placed.group as RunGroupOut;
-            return <DiagramGroup key={placed.group.id} placed={placed} status={runGroup.status} />;
+            return (
+              <DiagramGroup
+                key={placed.group.id}
+                placed={placed}
+                status={runGroup.status}
+                k={runGroup.k ?? 0}
+                n={runGroup.n ?? 0}
+              />
+            );
           })}
           {layout.edges.map((placed) => (
             <DiagramEdge key={placed.id} placed={placed} />
           ))}
           {layout.nodes.map((placed) => {
             const runNode = placed.node as RunNodeOut & { substeps?: string[] };
-            const stepSeq = nodeSeq(placed.node.id, detail.steps);
+            const id = placed.node.id;
+            const stepSeq = nodeSeq(id, detail.steps);
+            // Story aggregate nodes (kind='story') expand/collapse; leaf step nodes navigate.
+            const onClick =
+              placed.node.kind === 'story'
+                ? () =>
+                    setExpandedGroups((prev) => {
+                      const s = new Set(prev);
+                      if (s.has(id)) {
+                        s.delete(id);
+                      } else {
+                        s.add(id);
+                      }
+                      return s;
+                    })
+                : stepSeq !== null
+                  ? () =>
+                      window.location.assign(`/workflows/${runId}/steps/${encode(placed.node.id)}`)
+                  : undefined;
             return (
               <DiagramNode
-                key={placed.node.id}
+                key={id}
                 placed={placed}
                 status={runNode.status}
                 token={runNode.token}
                 current={runNode.current}
                 substeps={runNode.substeps}
-                onClick={
-                  stepSeq !== null
-                    ? () => window.location.assign(`?view=detail#step-${stepSeq}`)
-                    : undefined
-                }
+                onClick={onClick}
               />
             );
           })}

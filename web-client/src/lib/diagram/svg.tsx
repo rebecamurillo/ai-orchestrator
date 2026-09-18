@@ -47,6 +47,22 @@ const CHIP_OFFSET_Y = 5;
 /** Sub-step words baseline inside the node box (near the bottom). */
 const SUBSTEPS_BASELINE = 44;
 
+/** k/n count text baseline near the bottom of a group box (group boxes are taller). */
+const GROUP_KN_BASELINE = 14;
+
+/** Three-letter display token for each status (AD-15 dialect, story 1-5). */
+const STATUS_TOKEN: Record<string, string> = {
+  running: 'RUN',
+  done: 'DON',
+  blocked: 'BLK',
+  checkpoint: 'CHK',
+  error: 'ERR',
+  skipped: 'SKP',
+  queued: 'QUE',
+  cancelled: 'CAN',
+  planned: 'QUE',
+};
+
 /** The longest label a box can hold before it is cut; the boxes are a fixed width. */
 const LABEL_LIMIT = 17;
 
@@ -180,24 +196,56 @@ export function DiagramNode({
   );
 }
 
-export function DiagramGroup({ placed, status }: { placed: PlacedGroup; status?: string | null }) {
+export function DiagramGroup({
+  placed,
+  status,
+  k,
+  n,
+}: {
+  placed: PlacedGroup;
+  status?: string | null;
+  k?: number | null;
+  n?: number | null;
+}) {
   const { group, x, y, width, height } = placed;
+  // Three-letter token: look up STATUS_TOKEN first; fall back to status as-is for raw tokens
+  // passed by test fixtures (e.g. 'DON'), so existing assertions remain satisfied.
+  const displayToken = status != null ? (STATUS_TOKEN[status] ?? status) : null;
 
   return (
-    <g className="diagram-group" data-testid={`diagram-group-${group.id}`}>
+    <g
+      className="diagram-group"
+      data-testid={`diagram-group-${group.id}`}
+      data-status={status ?? undefined}
+    >
       <rect className="diagram-group-box" x={x} y={y} width={width} height={height} />
+      {/* Group label ABOVE the box — unchanged */}
       <text className="diagram-group-label" x={x} y={y - GROUP_LABEL_OFFSET}>
         {fit(group.label)}
       </text>
-      {/* Group status token: only when the run assigns one (null = absent, e.g. cancelled) */}
-      {status !== null && status !== undefined ? (
-        <text
-          className="diagram-group-token"
-          x={x + width}
-          y={y - GROUP_LABEL_OFFSET}
-          textAnchor="end"
-        >
-          {status}
+      {/* Status chip + 3-letter token at top-right inside the box */}
+      {displayToken != null ? (
+        <>
+          <circle
+            className="diagram-group-chip"
+            cx={x + width - TOKEN_INSET - CHIP_RADIUS}
+            cy={y + CHIP_OFFSET_Y}
+            r={CHIP_RADIUS}
+          />
+          <text
+            className="diagram-group-token"
+            x={x + width - TOKEN_INSET}
+            y={y + CHIP_OFFSET_Y + CHIP_RADIUS + 3}
+            textAnchor="end"
+          >
+            {displayToken}
+          </text>
+        </>
+      ) : null}
+      {/* k/n step count at the bottom inside the box: "k/n steps". Omitted when n === 0. */}
+      {(n ?? 0) > 0 ? (
+        <text className="diagram-group-kn" x={x + TEXT_INSET} y={y + height - GROUP_KN_BASELINE}>
+          {k}/{n} steps
         </text>
       ) : null}
     </g>

@@ -428,21 +428,30 @@ test.describe('/workflows/[id]?view=diagram — Run diagram', () => {
     await expect(amberElements).toHaveCount(1);
   });
 
-  test('(c) clicking a node navigates to ?view=detail#step-{seq}', async ({ page }) => {
+  // Revised: story 1-5 (2026-09-16) — no click-scrolls behaviour; group boxes expand; leaf nodes navigate to step-run detail
+  test('(c) clicking a story aggregate expands it; clicking a step leaf navigates to step-run detail', async ({
+    page,
+  }) => {
     await mockDetail(page, twoEpicDetail());
     await mockGraph(page, twoEpicGraph());
     await page.goto(DIAGRAM_URL);
     await expect(page.getByTestId('wf-diagram')).toBeVisible();
 
-    // Mock detail for the subsequent navigation
-    await mockDetail(page, twoEpicDetail());
-
-    // Click the story-4-1 node
+    // story-4-1 starts collapsed (it is not the current story in this fixture's init state
+    // for the RunDiagram island — RunDiagram does not pre-expand on mount)
     const story41 = page.getByTestId('diagram-node-epic-2/story-4-1');
+    await expect(story41).toBeVisible();
+
+    // Click the story aggregate — it should expand and reveal its member step nodes
     await story41.click();
 
-    // URL should now contain ?view=detail and a step fragment
-    await expect(page).toHaveURL(/\?view=detail#step-\d+/);
+    // A member step node (e.g. story-4-1/build) becomes visible after expansion
+    const buildNode = page.getByTestId('diagram-node-epic-2/story-4-1/build');
+    await expect(buildNode).toBeVisible();
+
+    // Click the step node — browser navigates to step-run detail URL (contains /steps/)
+    await buildNode.click();
+    await expect(page).toHaveURL(/\/workflows\/[^/]+\/steps\//);
   });
 
   test('(d) cancelled run: no group tokens rendered, root shows CAN token', async ({ page }) => {

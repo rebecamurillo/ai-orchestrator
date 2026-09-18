@@ -30,10 +30,13 @@
   --color-text-tertiary: #5c686c;
 
   /* Signal — three hues, one rule: a row or card carries exactly one of them, on the 7px
-     chip and its three-letter token. Green is running, amber is "needs you", red failed. */
+     chip and its three-letter token. Green is running, amber is "needs you", red failed.
+     `--color-signal-criterion` is the diagram-only fourth signal: the blue that marks the
+     step actively running in the embedded run diagram (story 1-5, SPEC.md). */
   --color-signal-run: #4fb477;
   --color-signal-needs-you: #e4b33c;
   --color-signal-failed: #e05252;
+  --color-signal-criterion: #6c8cd5;
 
   /* Accent — interaction and identifier literals only. Pale teal sits outside the three
      signal hues, so it can never be misread as a status. */

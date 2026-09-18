@@ -106,6 +106,10 @@ class Group(BaseModel):
     #: Template's graph, and `None` for every group of a `cancelled` Run (nothing ran to
     #: completion or to a stop, so no member status is a fact worth colouring).
     status: str | None = None
+    #: k = members with status == "done"; n = members with status != "skipped" (story 1-5).
+    #: Both default to 0 so template-graph `Graph()` construction is unchanged.
+    k: int = 0
+    n: int = 0
 
 
 class Graph(BaseModel):

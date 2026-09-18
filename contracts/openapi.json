@@ -3634,6 +3634,10 @@
             "title": "Id",
             "type": "string"
           },
+          "k": {
+            "title": "K",
+            "type": "integer"
+          },
           "kind": {
             "const": "for_each",
             "title": "Kind",
@@ -3649,6 +3653,10 @@
             },
             "title": "Members",
             "type": "array"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
           },
           "status": {
             "anyOf": [

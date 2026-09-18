@@ -10,8 +10,8 @@
  * Status has two writers (AD-8): this island never writes or derives Run/Step status —
  * everything shown here comes verbatim off the API responses.
  *
- * Node clicks navigate to `?view=detail#step-{seq}` via `window.location.assign`, which
- * re-mounts `RunDetail` with the correct fragment anchor.
+ * Story 1-5: story-aggregate nodes expand/collapse on click (expandedGroups state, starts
+ * empty); leaf step nodes navigate to `/workflows/{runId}/steps/{dot-index-path}`.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
@@ -25,11 +25,13 @@ import { layoutGraph } from '../lib/diagram/layout';
 import { DiagramEdge, DiagramGroup, DiagramNode } from '../lib/diagram/svg';
 import { ageText } from '../lib/board/format';
 import { buildRunTree, findCurrentStep } from '../lib/diagram/tree';
+import { encode } from '../lib/step-path';
 import { runToken, stateAgeSeconds, type RunDetailOut, type StepRowOut } from '../lib/run/detail';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
 import { startTracking, stopTracking } from '../stores/activity';
 import '../styles/run-detail.css';
 import '../styles/diagram.css';
+import '../styles/diagram-status.css';
 
 type RunGraphOut = components['schemas']['RunGraphOut'];
 type RunNodeOut = components['schemas']['RunNodeOut'];
@@ -86,6 +88,7 @@ export default function RunDiagram({ runId }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [detail, setDetail] = useState<RunDetailOut | null>(null);
   const [graph, setGraph] = useState<RunGraphOut | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
@@ -148,8 +151,8 @@ export default function RunDiagram({ runId }: Props) {
 
   const tree = useMemo(() => {
     if (!graph) return null;
-    return buildRunTree(graph);
-  }, [graph]);
+    return buildRunTree(graph, expandedGroups);
+  }, [graph, expandedGroups]);
 
   const layout = useMemo(() => {
     if (!tree) return null;
@@ -218,27 +221,49 @@ export default function RunDiagram({ runId }: Props) {
           {/* groups first, so the dashed rectangle sits behind the boxes it encloses */}
           {layout.groups.map((placed) => {
             const runGroup = placed.group as RunGroupOut;
-            return <DiagramGroup key={placed.group.id} placed={placed} status={runGroup.status} />;
+            return (
+              <DiagramGroup
+                key={placed.group.id}
+                placed={placed}
+                status={runGroup.status}
+                k={runGroup.k ?? 0}
+                n={runGroup.n ?? 0}
+              />
+            );
           })}
           {layout.edges.map((placed) => (
             <DiagramEdge key={placed.id} placed={placed} />
           ))}
           {layout.nodes.map((placed) => {
             const runNode = placed.node as RunNodeOut & { substeps?: string[] };
-            const stepSeq = nodeSeq(placed.node.id, detail.steps);
+            const id = placed.node.id;
+            const stepSeq = nodeSeq(id, detail.steps);
+            // Story aggregate nodes expand/collapse; leaf step nodes navigate to step-run detail.
+            const onClick =
+              placed.node.kind === 'story'
+                ? () =>
+                    setExpandedGroups((prev) => {
+                      const s = new Set(prev);
+                      if (s.has(id)) {
+                        s.delete(id);
+                      } else {
+                        s.add(id);
+                      }
+                      return s;
+                    })
+                : stepSeq !== null
+                  ? () =>
+                      window.location.assign(`/workflows/${runId}/steps/${encode(placed.node.id)}`)
+                  : undefined;
             return (
               <DiagramNode
-                key={placed.node.id}
+                key={id}
                 placed={placed}
                 status={runNode.status}
                 token={runNode.token}
                 current={runNode.current}
                 substeps={runNode.substeps}
-                onClick={
-                  stepSeq !== null
-                    ? () => window.location.assign(`?view=detail#step-${stepSeq}`)
-                    : undefined
-                }
+                onClick={onClick}
               />
             );
           })}
