@@ -1,8 +1,8 @@
 /**
  * The Run detail's own ARTIFACTS column (6.3, SPEC CAP-2, FR-19, FR-23, UX-DR9): fetches
- * the tree on mount and after every successful save, fetches one file's content on
- * selection, and PUTs on Save — then re-fetches the tree so the row's own `mtime` updates
- * (AC5's own words).
+ * the tree on mount and after every successful save, opens an `ArtifactModal` overlay when
+ * a file row is clicked, and re-fetches the tree when the modal signals a successful save
+ * so the row's own `mtime` updates (AC5's own words).
  *
  * Three props (`runId`, `run`, `folder`), the same three facts `RunDetail.tsx`'s own
  * `plannedFile` effect already reads off `detail` — this panel owns its own tree/selection/
@@ -12,23 +12,11 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { api } from '../../api/client';
-import type { components } from '../../api/schema';
 import type { RunDetailOut } from '../../lib/run/detail';
-import {
-  canEditFile,
-  isListFile,
-  isFile,
-  isTree,
-  readOnlyLine as readOnlyLineText,
-  treeRequestPath,
-  type RunFileOut,
-  type RunFilesTreeChangedOut,
-} from '../../lib/run/artifacts';
+import { isTree, treeRequestPath, type RunFilesTreeChangedOut } from '../../lib/run/artifacts';
 import ArtifactsTree from './ArtifactsTree';
-import FileEditor from './FileEditor';
-import FileViewer from './FileViewer';
+import ArtifactModal from './ArtifactModal';
 
-type ProblemDetail = components['schemas']['ProblemDetail'];
 type RunSummary = RunDetailOut['run'];
 
 interface Props {
@@ -40,17 +28,11 @@ interface Props {
 export default function ArtifactsPanel({ runId, run, folder }: Props) {
   const [tree, setTree] = useState<RunFilesTreeChangedOut | null>(null);
   const [treeError, setTreeError] = useState(false);
-  const [selected, setSelected] = useState<RunFileOut | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<ProblemDetail | null>(null);
-  // `RunDetail.tsx`'s own `requestSeqRef` precedent: `fetchTree`/`fetchFile` are called from
-  // both an effect and the tree's own click handler, so a sequence number (not a single
-  // effect-scoped `cancelled` boolean) is what keeps a slow, stale response from landing
-  // after a newer one — a save's own tree/file re-fetch racing a fresh selection, or a
-  // `runId` change outrunning the fetch it replaced.
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  // `RunDetail.tsx`'s own `requestSeqRef` precedent: `fetchTree` is called from both an
+  // effect and the modal's own `onSaved` callback, so a sequence number keeps a slow,
+  // stale response from landing after a newer one.
   const treeSeqRef = useRef(0);
-  const fileSeqRef = useRef(0);
 
   async function fetchTree(): Promise<void> {
     const seq = ++treeSeqRef.current;
@@ -67,49 +49,11 @@ export default function ArtifactsPanel({ runId, run, folder }: Props) {
     setTree(data);
   }
 
-  async function fetchFile(path: string): Promise<void> {
-    const seq = ++fileSeqRef.current;
-    const { data, error } = await api.GET('/runs/{run_id}/files', {
-      params: { path: { run_id: runId }, query: { path } },
-    });
-    if (seq !== fileSeqRef.current) return;
-    if (error || !data || !isFile(data)) return;
-    setSelected(data);
-    setEditing(false);
-    setSaveError(null);
-  }
-
   useEffect(() => {
+    setSelectedPath(null);
     void fetchTree();
     // fires once on mount and again whenever the Run itself changes underneath this panel
   }, [runId]);
-
-  async function save(content: string): Promise<void> {
-    if (!selected) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const { data, error } = await api.PUT('/runs/{run_id}/files', {
-        params: { path: { run_id: runId } },
-        body: { path: selected.path, content },
-      });
-      if (error || !data) {
-        setSaveError(
-          error ?? {
-            status: 0,
-            title: 'the request failed',
-            type: 'about:blank',
-            detail: `PUT ${treeRequestPath(runId)} → empty response`,
-          },
-        );
-        return;
-      }
-      setEditing(false);
-      await Promise.all([fetchFile(selected.path), fetchTree()]);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <section className="wf-artifacts" data-testid="wf-artifacts">
@@ -123,31 +67,19 @@ export default function ArtifactsPanel({ runId, run, folder }: Props) {
         <ArtifactsTree
           entries={tree.entries}
           root={tree.root}
-          selectedPath={selected?.path ?? null}
-          onSelect={(path) => void fetchFile(path)}
+          selectedPath={selectedPath}
+          onSelect={(path) => setSelectedPath(path)}
         />
       ) : null}
-      {selected ? (
-        editing ? (
-          <FileEditor
-            path={selected.path}
-            initialContent={selected.content}
-            branch={run.branch}
-            saving={saving}
-            error={saveError}
-            onSave={(content) => void save(content)}
-            onCancel={() => setEditing(false)}
-          />
-        ) : (
-          <FileViewer
-            path={selected.path}
-            content={selected.content}
-            readOnlyLine={isListFile(folder, selected.path) ? readOnlyLineText(run.plan_ref) : null}
-            canEdit={canEditFile(run, selected.path, folder)}
-            editing={editing}
-            onEditToggle={() => setEditing(true)}
-          />
-        )
+      {selectedPath ? (
+        <ArtifactModal
+          runId={runId}
+          path={selectedPath}
+          run={run}
+          folder={folder}
+          onClose={() => setSelectedPath(null)}
+          onSaved={() => void fetchTree()}
+        />
       ) : null}
     </section>
   );
