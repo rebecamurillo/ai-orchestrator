@@ -189,3 +189,9 @@ Additional high-severity finding noted for next attempt (not actioned — moot u
 defer `after_run_id=None` to the second UoW (atomically with `engine_ref`).
 
 Patch saved: `_bmad-output/implementation-artifacts/5-4-intent-gap-patch.md`
+
+## Human Answer
+
+2026-09-18T17:55:46.837148Z · operator
+
+authorization to modify existing tests, and align with new behavior
