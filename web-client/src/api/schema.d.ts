@@ -3987,6 +3987,7 @@ export interface operations {
                 project_id?: string | null;
                 /** @description One of BLK DON ERR QUE RUN. Omitted means every status. */
                 status?: string | null;
+                /** @description A harness name. Omitted means every harness. */
                 harness?: string | null;
                 cursor?: string | null;
                 limit?: number;
@@ -4016,7 +4017,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description `status` is not one of the tokens this endpoint offers, `cursor` is not one it issued, or `limit` is outside its bounds. */
+            /** @description `status` is not one of the tokens this endpoint offers, `cursor` is not one it issued, `harness` is not the shape of a harness name, or `limit` is outside its bounds. */
             422: {
                 headers: {
                     [name: string]: unknown;

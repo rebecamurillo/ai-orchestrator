@@ -4533,6 +4533,7 @@
             "name": "name",
             "required": true,
             "schema": {
+              "pattern": "^[a-z][a-z0-9-]{0,31}$",
               "title": "Name",
               "type": "string"
             }
@@ -4614,6 +4615,7 @@
             "name": "name",
             "required": true,
             "schema": {
+              "pattern": "^[a-z][a-z0-9-]{0,31}$",
               "title": "Name",
               "type": "string"
             }
@@ -7295,18 +7297,21 @@
             }
           },
           {
+            "description": "A harness name. Omitted means every harness.",
             "in": "query",
             "name": "harness",
             "required": false,
             "schema": {
               "anyOf": [
                 {
+                  "pattern": "^[a-z][a-z0-9-]{0,31}$",
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "A harness name. Omitted means every harness.",
               "title": "Harness"
             }
           },
@@ -7378,7 +7383,7 @@
                 }
               }
             },
-            "description": "`status` is not one of the tokens this endpoint offers, `cursor` is not one it issued, or `limit` is outside its bounds."
+            "description": "`status` is not one of the tokens this endpoint offers, `cursor` is not one it issued, `harness` is not the shape of a harness name, or `limit` is outside its bounds."
           }
         },
         "security": [

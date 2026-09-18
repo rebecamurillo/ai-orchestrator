@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Path
 
 from orchestrator.api.errors import (
     HTTP_UNPROCESSABLE_CONTENT,
@@ -32,12 +32,21 @@ from orchestrator.api.schemas.runs import CreateRunOut
 from orchestrator.application.templates.plan_model import PlanError
 from orchestrator.application.use_cases.harness_readiness import HarnessReadinessPorts, start
 from orchestrator.application.use_cases.harnesses import HarnessPorts
+from orchestrator.domain.entities.harness import HARNESS_NAME_PATTERN
 from orchestrator.domain.errors import NotFound
 
 router = APIRouter(tags=["harnesses"])
 
 StartPorts = Annotated[HarnessReadinessPorts, Depends(readiness_ports)]
 ReadPorts = Annotated[HarnessPorts, Depends(harness_ports)]
+
+#: The shape both operations take the name in, and the shape `BAD_NAME_RESPONSE` below has
+#: always said they publish. Declared rather than checked in the handlers because `GET`
+#: compares the name to `harness.name` in Postgres, which cannot hold a NUL byte: without it
+#: such a name reached psycopg as a `DataError` and answered 500 (schemathesis, 2026-09-18).
+#: Not `HARNESS_NAMES` — `start` checks membership itself and answers 404, and `GET` serves
+#: the `fake` harness `ORCH_TEST_MODE` seeds, whose name that tuple does not list.
+Name = Annotated[str, Path(pattern=HARNESS_NAME_PATTERN)]
 
 
 def _refusal(description: str) -> dict[str, object]:
@@ -74,7 +83,7 @@ READ_REFUSALS = {404: NO_SUCH_HARNESS_RESPONSE, HTTP_UNPROCESSABLE_CONTENT: BAD_
     summary="Dispatch a readiness Run for one harness",
     responses=START_REFUSALS,
 )
-def start_readiness(name: str, ports: StartPorts) -> CreateRunOut:
+def start_readiness(name: Name, ports: StartPorts) -> CreateRunOut:
     """Dispatch an `epic@1` Run of the fixture Repository, `skip_harness_check` bypassing
     the disabled-harness pre-flight line (AD-10) so a harness never yet enabled can still
     run the Run that would enable it."""
@@ -95,7 +104,7 @@ def start_readiness(name: str, ports: StartPorts) -> CreateRunOut:
     summary="Read one harness's current readiness",
     responses=READ_REFUSALS,
 )
-def get_readiness(name: str, ports: ReadPorts) -> HarnessOut:
+def get_readiness(name: Name, ports: ReadPorts) -> HarnessOut:
     """The same row `GET /harnesses` lists, addressed by name."""
     harness = ports.harnesses.get(name)
     if harness is None:
