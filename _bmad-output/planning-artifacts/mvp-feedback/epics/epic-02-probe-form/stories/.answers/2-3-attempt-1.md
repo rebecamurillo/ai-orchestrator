@@ -234,3 +234,9 @@ For test 1: the radio is initially enabled; a `page.route('**/api/harnesses/*/pr
 For test 2: remove the `toBeDisabled()` assertion and the "re-running readiness is what enables one" comment; add assertion that the radio is initially enabled; name the decision and date per exception-4 requirement.
 
 **What does NOT need exception-4:** `harness-list.test.ts` and `newwf-state.test.ts` are preserved unchanged by the `probeResults !== undefined` fallback design in `HarnessList` (see Design Notes).
+
+## Human Answer
+
+2026-09-17T05:26:43.351907Z · operator
+
+exception-4 authorized OK
