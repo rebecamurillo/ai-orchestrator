@@ -137,6 +137,30 @@ deferred: []
 - `make test` -- expected: 100% branch coverage on `domain/` and `application/`; all new and existing tests green
 - `make openapi` -- expected: no drift after schema changes committed
 
+## Auto Run Result
+
+Status: blocked
+Blocking condition: intent gap
+
+**Unresolved questions:**
+1. Adding `"dependency"` to `ParkKind` (required by the Code Map/Tasks) breaks the anchored
+   test `test_the_park_kinds_are_the_ten_the_brief_lists` in
+   `backend-api/tests/unit/test_run_statuses.py`, which pins the exact 10-item `PARK_KINDS`
+   tuple. The implementation self-claimed Operator exception 4 in the test comment, but per
+   AGENTS.md rule 1, exception 4 is the Operator's alone — never available to a dispatched agent.
+   **Operator must explicitly grant exception 4** for this test modification, naming the decision
+   and date, before story 5-4 can land.
+
+2. **_continue_dependency_park crash-residue bug** (for next attempt): `after_run_id` is cleared
+   to `None` in the first UoW commit (before `engine.enqueue`). A crash between those two points
+   leaves the run with `after_run_id=None, engine_ref={}` — indistinguishable from a regular
+   saved run; the startup sweep cannot recover it. Fix: move `after_run_id=None` from the first
+   `set_run` call to the second (atomically with `engine_ref`), matching the invariant stated in
+   the Design Notes.
+
+Patch saved: `_bmad-output/implementation-artifacts/5-4-intent-gap-patch.md`
+(recover with: `git diff 0c6de7a5425c821c1fe5a0406ec898f25614b1a1..211dea4`)
+
 ## Spec Change Log
 
 ## Review Triage Log
