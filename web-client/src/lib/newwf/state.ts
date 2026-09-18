@@ -59,17 +59,55 @@ export const TEMPLATE_INPUT_FIELDS: Record<TemplateName, TemplateInputField[]> =
   ],
   'repo-init': [],
   'story-run': [
-    { key: 'branch', label: 'WORKING BRANCH' },
-    { key: 'spec_folder', label: 'SPEC FOLDER' },
-    { key: 'story_id', label: 'STORY ID' },
+    {
+      key: 'branch',
+      label: 'WORKING BRANCH',
+      tooltip:
+        'Branch the harness creates and pushes story commits to. Passed to the template as branch.',
+    },
+    {
+      key: 'spec_folder',
+      label: 'SPEC FOLDER',
+      tooltip:
+        "Path holding the epic's stories.yaml and story spec files. Passed to the template as spec_folder.",
+    },
+    {
+      key: 'story_id',
+      label: 'STORY ID',
+      tooltip:
+        'Id of the one story from stories.yaml this Run works. Passed to the template as story_id.',
+    },
   ],
   // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
   task: [
-    { key: 'branch', label: 'WORKING BRANCH' },
-    { key: 'task_id', label: 'TASK ID' },
-    { key: 'title', label: 'TITLE' },
-    { key: 'intent', label: 'INTENT' },
-    { key: 'artifacts_dir', label: 'ARTIFACTS DIR' },
+    {
+      key: 'branch',
+      label: 'WORKING BRANCH',
+      tooltip:
+        'Branch the harness creates and pushes the change to. Passed to the template as branch.',
+    },
+    {
+      key: 'task_id',
+      label: 'TASK ID',
+      tooltip: 'Id that names the task and its spec file. Passed to the template as task_id.',
+    },
+    {
+      key: 'title',
+      label: 'TITLE',
+      tooltip: 'One-line name of the change. Passed to the template as title.',
+    },
+    {
+      key: 'intent',
+      label: 'INTENT',
+      tooltip:
+        'What the change should accomplish, in the Operator’s words. Passed to the template as intent.',
+    },
+    {
+      key: 'artifacts_dir',
+      label: 'ARTIFACTS DIR',
+      tooltip:
+        'Path in the repository where the task’s spec and review land. Passed to the template as artifacts_dir.',
+    },
   ],
 };
 

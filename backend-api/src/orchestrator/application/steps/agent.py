@@ -369,7 +369,7 @@ def _text(ctx: StepContext, key: str) -> str:
 
 
 def _session_message(ctx: StepContext) -> str:
-    if ctx.resume_signal is not None and ctx.resume_signal.event == ANSWER_EVENT:
+    if ctx.resume_signal is not None and ctx.resume_signal.event == agent_answer.ANSWER_EVENT:
         return str(ctx.resume_signal.payload.get("text", ""))
     retry = agent_tail.retry_of(ctx)
     return retry.prompt if retry is not None else ""
