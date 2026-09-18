@@ -54,6 +54,7 @@ from orchestrator.api.routers import (
     clone_check,
     graph,
     graph_text,
+    harness_probe,
     harness_readiness,
     harnesses,
     history,
@@ -316,6 +317,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
     ):
         _mount(app, router)
     _mount(app, harness_readiness.router)
+    _mount(app, harness_probe.router)
 
     return app
 

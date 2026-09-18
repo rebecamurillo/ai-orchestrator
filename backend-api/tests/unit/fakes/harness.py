@@ -32,6 +32,7 @@ from orchestrator.domain.ports.harness import (
     HarnessCapabilities,
     HarnessHandle,
     HarnessResult,
+    ProbeResult,
 )
 
 #: The claude adapter's own capabilities: the default, so a test about an executor need not
@@ -48,7 +49,7 @@ DEFAULT_PID = 4241
 class FakeHarness:
     """Scripted results in order, a call log, and no process at all."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         name: str = "claude",
@@ -56,6 +57,7 @@ class FakeHarness:
         results: list[HarnessResult] | None = None,
         pgid: int = DEFAULT_PGID,
         on_wait: Callable[[], None] | None = None,
+        probe_results: list[ProbeResult] | None = None,
     ) -> None:
         self.name = name
         self.capabilities = capabilities
@@ -63,6 +65,7 @@ class FakeHarness:
         self.pgid = pgid
         self.on_wait = on_wait
         self.calls: list[dict[str, Any]] = []
+        self._probe_queue: list[ProbeResult] = list(probe_results or [])
 
     def run(  # noqa: PLR0913 — the port's own signature
         self,
@@ -153,6 +156,12 @@ class FakeHarness:
 
     def resume_command(self, cwd: str, session_id: str) -> str:
         return f"cd {cwd} && {self.name} --resume {session_id}"
+
+    def probe(self) -> ProbeResult:
+        """Pop and return the next scripted ProbeResult; raise AssertionError on empty queue."""
+        if not self._probe_queue:
+            raise AssertionError("probe queue empty")
+        return self._probe_queue.pop(0)
 
     def called(self, method: str) -> list[dict[str, Any]]:
         """Every call to one method, in order — `FakeProcessRunner.called`'s own shape."""

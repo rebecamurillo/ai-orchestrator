@@ -45,6 +45,7 @@ from orchestrator.api.providers_run_files import (
 )
 from orchestrator.application.use_cases.activity import ActivityPorts
 from orchestrator.application.use_cases.create_run import CreateRunPorts, RunReadPorts
+from orchestrator.application.use_cases.harness_probe import HarnessProbePorts
 from orchestrator.application.use_cases.harness_readiness import HarnessReadinessPorts
 from orchestrator.application.use_cases.harnesses import HarnessPorts
 from orchestrator.application.use_cases.history import HistoryPorts
@@ -122,6 +123,19 @@ def harness_ports(request: Request) -> Iterator[HarnessPorts]:
     session_factory = from_state(request, SESSION_FACTORY)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
         yield HarnessPorts(uow=uow, harnesses=SQLAlchemyHarnessRepository(uow.session))
+
+
+def harness_probe_ports(request: Request) -> HarnessProbePorts:
+    """The ports `GET /harnesses/{name}/probe` runs on (story 2-1).
+
+    Builds the harness registry fresh per request — no DB session, no transaction.
+    `ProcessRunner` is constructed but unused by `probe()`: each adapter shells its script
+    via `subprocess.run` directly, so the runner is only here because `build_harnesses`
+    requires it.
+    """
+    settings = from_state(request, SETTINGS)
+    harnesses = build_harnesses(settings, RealProcessRunner())
+    return HarnessProbePorts(harnesses=harnesses)
 
 
 def harness_models(request: Request) -> dict[str, tuple[str, ...]]:

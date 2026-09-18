@@ -48,11 +48,7 @@ from collections.abc import Mapping
 from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 
-from orchestrator.domain.ports.harness import (
-    HarnessCapabilities,
-    HarnessHandle,
-    HarnessResult,
-)
+from orchestrator.domain.ports.harness import HarnessCapabilities, HarnessHandle, HarnessResult
 from orchestrator.domain.ports.process import Handle, ProcessRunner
 from orchestrator.infrastructure.harness.claude.result import (
     ENCODING,
@@ -64,12 +60,9 @@ from orchestrator.infrastructure.harness.claude.result import (
     usage_from,
 )
 from orchestrator.infrastructure.harness.env import AliasBuilder
+from orchestrator.infrastructure.harness.probe import ProbeResult, run_probe_script
 from orchestrator.infrastructure.settings import Settings
 
-#: What this module still owns, plus what it re-exports from `result.py`: the parsing moved
-#: out when `start`/`wait` moved in (5.4), and every name it was reachable under here stays
-#: reachable here, because a reader who knows the adapter should not have to learn a second
-#: module path to find what it reads back.
 __all__ = [
     "ENCODING",
     "RESULT_TYPE",
@@ -379,6 +372,9 @@ class ClaudeHarness:
         return HarnessHandle(
             session_id=session_id, log_path=log_path, pid=handle.pid, pgid=handle.pgid
         )
+
+    def probe(self) -> ProbeResult:
+        return run_probe_script(self.settings.harness_scripts_dir / "claude.sh")
 
     def _record_prompt(self, log_path: Path, message: str) -> None:
         """The prompt, beside the log, so an attempt's record holds what was asked."""

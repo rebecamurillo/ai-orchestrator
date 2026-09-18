@@ -2123,6 +2123,45 @@
         "title": "PreflightOut",
         "type": "object"
       },
+      "ProbeResultOut": {
+        "description": "The HTTP shape of a harness probe result (story 2-1).\n\nHTTP 200 in both the `ok=True` and `ok=False` cases \u2014 failures are reported in the body,\nnot through HTTP error codes.  `failing_reason` is `null` when `ok` is `True`.",
+        "properties": {
+          "failing_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failing Reason"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "failing_reason",
+          "version",
+          "models"
+        ],
+        "title": "ProbeResultOut",
+        "type": "object"
+      },
       "ProblemDetail": {
         "description": "The problem document itself. Members that do not apply are omitted, never `null`.",
         "properties": {
@@ -4172,6 +4211,89 @@
           }
         ],
         "summary": "List every harness",
+        "tags": [
+          "harnesses"
+        ]
+      }
+    },
+    "/api/v1/harnesses/{name}/probe": {
+      "get": {
+        "description": "Shell the harness's probe verb and return the result.\n\n`ok=True` means all checks passed; `ok=False` means the probe ran and found a specific\nproblem, named in `failing_reason`.  Both are HTTP 200.  Unknown harness names are 404.",
+        "operationId": "run_probe_api_v1_harnesses__name__probe_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No harness has that name."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`name` does not match the shape below."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Run a readiness probe for one harness",
         "tags": [
           "harnesses"
         ]

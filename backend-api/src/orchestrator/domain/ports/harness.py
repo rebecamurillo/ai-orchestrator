@@ -63,6 +63,28 @@ from orchestrator.domain.entities.run import Run
 
 
 @dataclass(frozen=True)
+class ProbeResult:
+    """What one harness probe produced (story 2-1).
+
+    The shell verb always emits exactly one JSON line to stdout regardless of outcome; this
+    dataclass is its parsed representation.  `ok=False` with a non-None `failing_reason` is
+    the ordinary "probe ran and found a problem" case — the adapter returns this rather than
+    raising, so the route can serve HTTP 200 with the detail.
+
+    Callers must not interpret an empty `models` list as a probe failure: when the gateway is
+    disabled `probe()` skips the network call and returns `ok=True, models=[]`.
+    """
+
+    ok: bool
+    #: Exactly one of the three specific strings when `ok` is False; `None` when `ok` is True.
+    failing_reason: str | None
+    #: The CLI version string the probe captured from `<cli> --version`.
+    version: str
+    #: The model IDs the gateway `/v1/models` returned; empty when the gateway is disabled.
+    models: list[str]
+
+
+@dataclass(frozen=True)
 class HarnessUsage:
     """What one attempt cost, as the harness itself reported it (AD-11).
 
@@ -282,5 +304,18 @@ class Harness(Protocol):
         block for such a harness, so this is belt and braces rather than a second rule: a
         plausible-looking line for a session that cannot be continued would be worse than
         no line, and an adapter should be able to say so in the return value.
+        """
+        ...
+
+    def probe(self) -> ProbeResult:
+        """Shell `scripts/harness/<name>.sh probe`, parse its stdout JSON, and return the result.
+
+        The adapter uses `subprocess.run` directly (not `ProcessRunner`) because probe is a
+        short synchronous one-shot invocation, not a coding-agent dispatch. Unparseable stdout
+        is an adapter error and raises rather than returning a failing `ProbeResult`.
+
+        Returns a result whether the probe found problems or not; only raises on adapter faults
+        (the shell script is missing, stdout is not JSON, etc.).  The route maps `ok=False` to
+        HTTP 200 with the `failing_reason` in the body — never to a 4xx/5xx.
         """
         ...

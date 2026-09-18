@@ -72,3 +72,48 @@ doctor_gateway() {
   curl -fsS -H "Authorization: Bearer ${LITELLM_API_KEY:?}" "${LITELLM_BASE_URL%/}/v1/models" >/dev/null \
     && log "gateway reachable at ${LITELLM_BASE_URL}" || { log "gateway unreachable"; return 1; }
 }
+
+# Emit one JSON line to stdout: {"ok":<bool>,"failing_reason":<null|string>,"version":"<ver>","models":<array>}.
+# $1 = ok (true|false), $2 = reason (literal "null" for null, else the reason string),
+# $3 = version string, $4 = models JSON array (e.g. "[]" or '["m1","m2"]').
+probe_output() {
+  local ok="$1" reason="$2" version="$3" models_json="$4"
+  if [ "$reason" = "null" ]; then
+    printf '{"ok":%s,"failing_reason":null,"version":"%s","models":%s}\n' \
+      "$ok" "$version" "$models_json"
+  else
+    printf '{"ok":%s,"failing_reason":"%s","version":"%s","models":%s}\n' \
+      "$ok" "$reason" "$version" "$models_json"
+  fi
+}
+
+# Check gateway reachability for probe(). Sets PROBE_MODELS_OK (true/false),
+# PROBE_MODELS_REASON (failing reason or empty), and PROBE_MODELS_JSON (array or "[]").
+# When gateway is disabled, sets ok=true with an empty models list (Design Notes, 2-1).
+probe_gateway_models() {
+  if ! litellm_enabled; then
+    PROBE_MODELS_OK=true; PROBE_MODELS_REASON=""; PROBE_MODELS_JSON="[]"; return 0
+  fi
+  local tmpfile http_code
+  tmpfile=$(mktemp)
+  if ! http_code=$(curl -s -w '%{http_code}' -o "$tmpfile" \
+      -H "Authorization: Bearer ${LITELLM_API_KEY:?}" \
+      "${LITELLM_BASE_URL%/}/v1/models" 2>/dev/null); then
+    rm -f "$tmpfile"
+    PROBE_MODELS_OK=false; PROBE_MODELS_REASON="gateway unreachable"; PROBE_MODELS_JSON="[]"
+    return 0
+  fi
+  if [ "$http_code" = "401" ]; then
+    rm -f "$tmpfile"
+    PROBE_MODELS_OK=false; PROBE_MODELS_REASON="not logged in"; PROBE_MODELS_JSON="[]"
+    return 0
+  fi
+  if [ "${http_code:-000}" -lt 200 ] 2>/dev/null || [ "${http_code:-000}" -ge 300 ] 2>/dev/null; then
+    rm -f "$tmpfile"
+    PROBE_MODELS_OK=false; PROBE_MODELS_REASON="gateway unreachable"; PROBE_MODELS_JSON="[]"
+    return 0
+  fi
+  PROBE_MODELS_JSON=$(python3 -c "import json;d=json.load(open('${tmpfile}'));print(json.dumps([m['id'] for m in d.get('data',[])]))" 2>/dev/null) || PROBE_MODELS_JSON="[]"
+  rm -f "$tmpfile"
+  PROBE_MODELS_OK=true; PROBE_MODELS_REASON=""
+}
