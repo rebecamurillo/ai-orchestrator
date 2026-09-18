@@ -47,7 +47,7 @@ from orchestrator.application.rules.signals import row_at
 from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.errors import Conflict, NotFound
+from orchestrator.domain.errors import Conflict, Invalid, NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.engine import WorkflowEngine
@@ -133,6 +133,20 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     if preflighted.plan_error is not None:
         raise preflighted.plan_error
     _refuse_failing_lines(preflighted.result.lines, skip_harness_check=ports.skip_harness_check)
+
+    # Live probe: validate the model against the harness's actual model list (story 2-2).
+    # `harness_registry` is a dict on `PreflightPorts`; reuse it rather than re-running
+    # pre-flight a second time.  No probe when harness is absent, adapter not in registry,
+    # probe.models is empty (gateway-disabled mode), or model is None.
+    if (
+        req.harness
+        and (_probe_adapter := ports.preflight.harness_registry.get(req.harness)) is not None
+    ):
+        probe_result = _probe_adapter.probe()
+        if not probe_result.ok:
+            raise Conflict(probe_result.failing_reason or "probe failed")
+        if req.model and probe_result.models and req.model not in probe_result.models:
+            raise Invalid(f"model {req.model!r} not in probed list: {list(probe_result.models)}")
 
     resolved = preflighted.resolved
     if resolved.project is None:

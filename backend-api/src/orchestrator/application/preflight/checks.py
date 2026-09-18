@@ -6,7 +6,7 @@ module's `Context` is also built for.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from orchestrator.application.preflight.model import (
@@ -40,6 +40,7 @@ from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.git import Git, GitError
+from orchestrator.domain.ports.harness import Harness as HarnessAdapter
 from orchestrator.domain.ports.harnesses import HarnessRepository
 from orchestrator.domain.ports.repositories import RunRepository
 from orchestrator.domain.values import PlannedRow
@@ -82,6 +83,9 @@ class Context:
     tree: ResolvedTree | None
     plan: Plan | None
     plan_error: PlanError | None
+    #: Live harness adapters keyed by name — used by `harness_probe_line` (story 2-2).
+    #: Defaults to empty so every existing `Context(...)` construction keeps compiling.
+    harness_registry: dict[str, HarnessAdapter] = field(default_factory=dict)
 
     @property
     def is_initiative(self) -> bool:
@@ -263,6 +267,33 @@ def _failing_check(harness: Harness | None) -> str:
     if harness is not None and harness.failing_check:
         return harness.failing_check
     return NO_READINESS_RUN
+
+
+def harness_probe_line(ctx: Context) -> Line:
+    """Line 8 (story 2-2): live probe replacing the `enabled`-flag check.
+
+    Same skip guards as `harness_line()` — name None → skip, repository None → skip,
+    no agent step → skip — then looks up the adapter in `ctx.harness_registry` and calls
+    `probe()`.  Missing from the registry is a hard fail (the harness is not available on
+    this instance), not a skip.
+
+    `harness_line()` is left unchanged (its tests are read-only anchors); `_lines()` in
+    `preflight.py` is what switches to this function.
+    """
+    name = ctx.req.harness
+    if name is None:
+        return Line(CHECK_HARNESS, "skip", "no harness")
+    if ctx.repository is None:
+        return Line(CHECK_HARNESS, "skip", "no repository")
+    if ctx.tree is None or not _has_agent_step(ctx.tree):
+        return Line(CHECK_HARNESS, "skip", "no agent step")
+    adapter = ctx.harness_registry.get(name)
+    if adapter is None:
+        return Line(CHECK_HARNESS, "fail", "harness not available")
+    result = adapter.probe()
+    if not result.ok:
+        return Line(CHECK_HARNESS, "fail", result.failing_reason or "probe failed")
+    return Line(CHECK_HARNESS, "ok", f"probe ok · {result.version}")
 
 
 def checkpoints_line(ctx: Context) -> Line:

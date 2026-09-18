@@ -163,6 +163,7 @@ def _preflight_ports(request: Request, uow: SQLAlchemyUnitOfWork, needed_by: str
         bmad_version=settings.bmad_version,
         max_active_runs=settings.max_active_runs,
         work_dir=settings.work_dir,
+        harness_registry=build_harnesses(settings, RealProcessRunner()),
     )
 
 
@@ -199,8 +200,12 @@ def create_run_ports(request: Request) -> Iterator[CreateRunPorts]:
 def readiness_ports(request: Request) -> Iterator[HarnessReadinessPorts]:
     """The ports `POST /harnesses/{name}/readiness` runs `start` on (SPEC CAP-8).
 
-    `create_run_ports`'s own wiring, over `skip_harness_check=True` (AD-10): a harness that
-    has never passed readiness can still run the readiness Run that would enable it.
+    `create_run_ports`'s own wiring.  The `skip_harness_check=True` exemption (AD-10) that
+    bypassed the old `enabled`-flag check is removed here (story 2-2, 2026-09-16): a
+    correctly-installed harness returns `ok=True` from the live probe regardless of whether
+    it has ever passed a readiness Run, so the exemption is both wrong (it would now bypass
+    the probe, not the `enabled` check) and unnecessary.  `skip_harness_check` stays on
+    `CreateRunPorts` reserved for epic 5.
     """
     session_factory = from_state(request, SESSION_FACTORY)
     engine: WorkflowEngine = from_state(request, ENGINE)
@@ -213,7 +218,6 @@ def readiness_ports(request: Request) -> Iterator[HarnessReadinessPorts]:
                 steps=SQLAlchemyStepRunRepository(uow.session),
                 uow=uow,
                 clock=SystemClock(),
-                skip_harness_check=True,
                 tracer=build_tracer(settings),
             ),
             budget_usd=settings.readiness_budget_usd,
