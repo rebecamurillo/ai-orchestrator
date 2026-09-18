@@ -41,6 +41,14 @@ class AttemptDetailOut(BaseModel):
     result: str | None
     #: `with_resolved['run']` for shell steps, else `None`.
     command: str | None
+    #: The paste-able resume command built by `terminal.resume_command()`, or `None` when the
+    #: step is not an agent step, the harness is not resumable, no session was assigned, or
+    #: `RunViewPorts.terminal` is absent.  Default `None` keeps all existing constructions
+    #: written before this story compiling unchanged (AD-18).
+    resume_command: str | None = None
+    #: When the harness stops being able to resume this session, or `None` when the harness
+    #: states no lifetime, no session, or `RunViewPorts.terminal` is absent.
+    session_lifetime_ends_at: datetime | None = None
 
 
 class StepDetailOut(BaseModel):

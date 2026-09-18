@@ -36,6 +36,8 @@ from orchestrator.application.use_cases.step_detail import (
     _retry_prompt,
     step_detail,
 )
+from orchestrator.application.use_cases.terminal import Terminal
+from orchestrator.application.use_cases.terminal import resume_command as _terminal_resume
 from orchestrator.domain.errors import NotFound
 
 router = APIRouter(tags=["runs"])
@@ -91,40 +93,51 @@ def get_step_detail(
     spec_folder = step.with_resolved.get("spec_folder")
     story_id = step.with_resolved.get("story_id")
 
-    attempt_details = [
-        AttemptDetailOut(
-            id=attempt.id,
-            n=attempt.n,
-            status=attempt.status,
-            token=STEP_TOKENS.get(attempt.status, attempt.status[:3].upper()),
-            started_at=attempt.started_at,
-            ended_at=attempt.ended_at,
-            seconds=(
-                (attempt.ended_at - attempt.started_at).total_seconds()
-                if attempt.ended_at and attempt.started_at
-                else None
-            ),
-            harness=attempt.harness,
-            model=attempt.model,
-            session_id=attempt.session_id,
-            exit_code=attempt.exit_code,
-            cost_usd=attempt.cost_usd,
-            cost_provisional=attempt.cost_provisional,
-            tokens_in=attempt.tokens_in,
-            tokens_out=attempt.tokens_out,
-            dispatch_prompt=dispatch_prompt,
-            retry_prompt=retry_prompt_val,
-            result=_extract_result(
-                ports.git,
-                worktree,
-                attempt.end_sha,
-                str(spec_folder) if spec_folder else None,
-                str(story_id) if story_id else None,
-            ),
-            command=str(command) if command is not None else None,
+    project = ports.projects.get(run.project_id)
+    project_slug = project.slug if project else ""
+
+    attempt_details = []
+    for attempt in attempts:
+        t: Terminal | None = (
+            _terminal_resume(ports.terminal, run, step, attempt, project_slug=project_slug)
+            if ports.terminal
+            else None
         )
-        for attempt in attempts
-    ]
+        attempt_details.append(
+            AttemptDetailOut(
+                id=attempt.id,
+                n=attempt.n,
+                status=attempt.status,
+                token=STEP_TOKENS.get(attempt.status, attempt.status[:3].upper()),
+                started_at=attempt.started_at,
+                ended_at=attempt.ended_at,
+                seconds=(
+                    (attempt.ended_at - attempt.started_at).total_seconds()
+                    if attempt.ended_at and attempt.started_at
+                    else None
+                ),
+                harness=attempt.harness,
+                model=attempt.model,
+                session_id=attempt.session_id,
+                exit_code=attempt.exit_code,
+                cost_usd=attempt.cost_usd,
+                cost_provisional=attempt.cost_provisional,
+                tokens_in=attempt.tokens_in,
+                tokens_out=attempt.tokens_out,
+                dispatch_prompt=dispatch_prompt,
+                retry_prompt=retry_prompt_val,
+                result=_extract_result(
+                    ports.git,
+                    worktree,
+                    attempt.end_sha,
+                    str(spec_folder) if spec_folder else None,
+                    str(story_id) if story_id else None,
+                ),
+                command=str(command) if command is not None else None,
+                resume_command=t.command if t else None,
+                session_lifetime_ends_at=t.session_lifetime_ends_at if t else None,
+            )
+        )
 
     return StepDetailOut(
         seq=step.seq,

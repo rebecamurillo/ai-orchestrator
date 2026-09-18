@@ -220,6 +220,17 @@
             ],
             "title": "Result"
           },
+          "resume_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Command"
+          },
           "retry_prompt": {
             "anyOf": [
               {
@@ -252,6 +263,18 @@
               }
             ],
             "title": "Session Id"
+          },
+          "session_lifetime_ends_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Lifetime Ends At"
           },
           "started_at": {
             "anyOf": [

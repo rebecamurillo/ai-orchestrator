@@ -19,7 +19,9 @@ import { useStore } from '@nanostores/react';
 import { api } from '../api/client';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
 import LogViewer from '../components/run/LogViewer';
+import HelperDrawer, { type DrawerContent } from '../components/run/HelperDrawer';
 import { decode } from '../lib/step-path';
+import '../styles/step-detail.css';
 
 interface AttemptDetail {
   id: string;
@@ -41,6 +43,8 @@ interface AttemptDetail {
   retry_prompt: string | null;
   result: string | null;
   command: string | null;
+  resume_command?: string | null;
+  session_lifetime_ends_at?: string | null;
 }
 
 interface StepDetail {
@@ -71,9 +75,19 @@ export default function StepDetail({ runId, dotPath }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [detail, setDetail] = useState<StepDetail | null>(null);
   const [selectedN, setSelectedN] = useState<number | null>(null);
+  const [drawerState, setDrawerState] = useState<{ n: number; content: DrawerContent } | null>(
+    null,
+  );
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
+
+  function toggleDrawer(n: number, content: DrawerContent): void {
+    setDrawerState((prev) => {
+      if (prev !== null && prev.n === n && prev.content === content) return null;
+      return { n, content };
+    });
+  }
 
   async function fetchDetail(): Promise<void> {
     const seq = ++requestSeqRef.current;
@@ -135,6 +149,8 @@ export default function StepDetail({ runId, dotPath }: Props) {
 
   const selectedAttempt = detail.attempts.find((a) => a.n === selectedN) ?? detail.attempts[0];
   const isStopped = STOPPED_STATUSES.has(detail.status);
+  const drawerAttempt =
+    drawerState !== null ? (detail.attempts.find((a) => a.n === drawerState.n) ?? null) : null;
 
   return (
     <div data-testid="step-detail">
@@ -200,6 +216,26 @@ export default function StepDetail({ runId, dotPath }: Props) {
                   {attempt.harness && ` · ${attempt.harness}`}
                   {attempt.seconds != null && ` · ${Math.round(attempt.seconds)}s`}
                 </button>
+                {attempt.command === null && (
+                  <>
+                    <button
+                      type="button"
+                      data-testid={`step-prompt-${attempt.n}`}
+                      onClick={() => toggleDrawer(attempt.n, 'prompt-result')}
+                    >
+                      prompt · result
+                    </button>
+                    {attempt.resume_command != null && (
+                      <button
+                        type="button"
+                        data-testid={`step-reach-${attempt.n}`}
+                        onClick={() => toggleDrawer(attempt.n, 'reach-agent')}
+                      >
+                        reach agent
+                      </button>
+                    )}
+                  </>
+                )}
               </li>
             ))}
           </ul>
@@ -280,6 +316,21 @@ export default function StepDetail({ runId, dotPath }: Props) {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Helper drawer ── */}
+      {drawerState !== null && drawerAttempt !== null && (
+        <HelperDrawer
+          attempt={{
+            dispatch_prompt: drawerAttempt.dispatch_prompt,
+            retry_prompt: drawerAttempt.retry_prompt,
+            result: drawerAttempt.result,
+            resume_command: drawerAttempt.resume_command ?? null,
+            session_lifetime_ends_at: drawerAttempt.session_lifetime_ends_at ?? null,
+          }}
+          initialContent={drawerState.content}
+          onClose={() => setDrawerState(null)}
+        />
       )}
     </div>
   );

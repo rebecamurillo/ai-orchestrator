@@ -746,12 +746,16 @@ export interface components {
             n: number;
             /** Result */
             result: string | null;
+            /** Resume Command */
+            resume_command?: string | null;
             /** Retry Prompt */
             retry_prompt: string | null;
             /** Seconds */
             seconds: number | null;
             /** Session Id */
             session_id: string | null;
+            /** Session Lifetime Ends At */
+            session_lifetime_ends_at?: string | null;
             /** Started At */
             started_at: string | null;
             /** Status */
