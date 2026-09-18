@@ -177,3 +177,21 @@ async def test_k_and_n_present_on_run_group_out_http_round_trip(api: Api) -> Non
     expected_n = 4  # 5 total - 1 skipped (link is planned, not skipped)
     assert story_group["k"] == expected_k
     assert story_group["n"] == expected_n
+
+
+def test_cancelled_run_group_kn_computed_from_member_statuses() -> None:
+    """Cancelled run: k/n are computed from member statuses even when group status is None."""
+    run = a_run(status="cancelled")
+    rows = [
+        a_row(run, "epics[0].stories[0].sync", seq=1, status="done"),
+        a_row(run, "epics[0].stories[0].build", seq=2, status="running"),
+        a_row(run, "epics[0].stories[0].verify", seq=3, status="planned"),
+    ]
+    graph = build_run_graph(rows, run)
+    group = next(g for g in graph.groups if g.id == "epics[0].stories[0]")
+    # group.status is None for a cancelled run; k/n still reflect member statuses
+    expected_k = 1  # only sync is done
+    expected_n = 3  # none are skipped (running and planned both count toward n)
+    assert group.status is None
+    assert group.k == expected_k
+    assert group.n == expected_n

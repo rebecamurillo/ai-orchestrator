@@ -2,13 +2,26 @@
 title: "Diagram dialect — colours, iteration boxes, click navigation"
 type: 'feature'
 created: '2026-09-16'
-status: 'in-review'
+status: 'done'
 review_loop_iteration: 0
 baseline_revision: '26204f106beed3499db0717623d1eb038d2f4954'
-followup_review_recommended: false
+followup_review_recommended: true
 context: []
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      DiagramSection click behavior (leaf-step navigation and story-aggregate expand/collapse)
+      has no dedicated test — the revised e2e test (c) exercises RunDiagram at ?view=diagram,
+      not DiagramSection at the run-detail page.
+    evidence: |-
+      run-diagram-section.test.ts only checks typeof DiagramSection === 'function'.
+      Verification gap reviewer confirmed: no test exercises DiagramSection's click handler
+      for leaf-step navigation or story-aggregate expand. Core code logic is correct and
+      tested via RunDiagram (identical implementation). Adding proper DiagramSection e2e
+      coverage requires full run-detail page mock infrastructure.
+    location: >-
+      web-client/src/components/run/DiagramSection.tsx:183-214
+    severity: medium
 ---
 
 <intent-contract>
@@ -121,7 +134,7 @@ deferred: []
 **Acceptance Criteria:**
 - Given `GET /runs/{id}/graph` after story 1-5, when a group has 3 done members and 2 non-skipped non-done members, then `RunGroupOut.k === 3` and `RunGroupOut.n === 5`
 - Given all group members are skipped, when the graph is fetched, then `k === 0` and `n === 0`; the frontend renders no count text inside that group box
-- Given a `running` node, when the diagram renders, then its box border uses `--color-signal-criterion` (#6C8CD5) and the word "running" appears beside the colour
+- Given a `running` node, when the diagram renders, then its box border uses `--color-signal-criterion` (#6C8CD5) and the token "RUN" appears beside the colour
 - Given a `done` node, when rendered, then green border and "DON" word; `skipped` node has faint-grey border, never green
 - Given the diagram loads with a running step inside story group G, when the diagram mounts, then group G starts expanded and individual step nodes are visible
 - Given a collapsed story aggregate node is clicked, when the click fires, then its member step nodes appear in the diagram without any URL change
@@ -153,3 +166,52 @@ deferred: []
 ## Spec Change Log
 
 ## Review Triage Log
+
+### 2026-09-16 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 5: (high 0, medium 1, low 4)
+- defer: 1: (high 0, medium 1, low 0)
+- reject: 12
+- addressed_findings:
+  - `[medium]` `[patch]` `diagram-group-kn` text element had no CSS rule — rendered with SVG defaults; added `.diagram-group-kn { fill: var(--color-text-tertiary); font-size: var(--type-meta); }` to `diagram-status.css`
+  - `[low]` `[patch]` `skipped`/`cancelled` chip rules had no `opacity: 0.4` while their box rules did — chips rendered at full saturation; added `opacity: 0.4` to chip rules for those statuses in `diagram-status.css`
+  - `[low]` `[patch]` Stale NOTE in `diagram-status.css` comment claimed `tokens.test.ts` revision was pending — it was already done in the same diff; removed the stale note
+  - `[low]` `[patch]` No unit test for cancelled-run k/n despite Design Notes stating it works; added `test_cancelled_run_group_kn_computed_from_member_statuses` to `test_run_graph_kn.py`
+  - `[low]` `[patch]` AC text said "the word 'running' appears beside the colour" but the diagram token is `'RUN'` (3-letter UI token per AGENTS.md); corrected to "the token 'RUN' appears"
+
+## Auto Run Result
+
+**Summary:** Implemented the AD-15 diagram dialect: backend k/n computation on group payloads, CSS status→colour mapping via `data-status` attributes in a new `diagram-status.css`, `DiagramGroup` chip+token+k/n rendering, expand/collapse state in `DiagramSection` and `RunDiagram` with poll-tick preservation and current-step pre-expansion, leaf-node navigation to step-run detail URL, and exception-4 revision of `run-diagram.spec.ts` test (c).
+
+**Files changed:**
+- `backend-api/src/orchestrator/application/graph_schema.py` — added `k: int = 0`, `n: int = 0` to `Group`
+- `backend-api/src/orchestrator/application/graph.py` — computed k/n in `_group()`
+- `backend-api/src/orchestrator/api/schemas/graph.py` — added `k`/`n` to `RunGroupOut`, mapped in `.of()`
+- `backend-api/tests/unit/application/test_run_graph_kn.py` — new test file (TDD): k/n scenarios + HTTP round-trip + cancelled-run coverage (patch)
+- `contracts/openapi.json` — regenerated; `k`/`n` in `RunGroupOut`
+- `web-client/src/api/schema.d.ts` — regenerated
+- `web-client/src/styles/tokens.css` — added `--color-signal-criterion: #6c8cd5`
+- `web-client/src/styles/diagram-status.css` — new file: status→colour rules, chip fill, skipped/cancelled opacity, `.diagram-group-kn` typography (patch)
+- `web-client/src/lib/diagram/svg.tsx` — `DiagramGroup` with `data-status`, chip+token, k/n count; `STATUS_TOKEN` map
+- `web-client/src/lib/diagram/tree.ts` — exported `STORY_GROUP_PATTERN`; added `expandedGroups` param; member pass-through for expanded groups
+- `web-client/src/components/run/DiagramSection.tsx` — expand/collapse state, poll hook, step-run navigation, k/n props passthrough
+- `web-client/src/islands/RunDiagram.tsx` — expand/collapse state, step-run navigation, k/n props passthrough
+- `web-client/tests/e2e/run-diagram.spec.ts` — exception-4 revision of test (c)
+- `web-client/tests/unit/run-diagram-tree-expand.test.ts` — new test file (TDD): buildRunTree expansion
+- `web-client/tests/unit/diagram-group-kn.test.ts` — new test file (TDD): DiagramGroup k/n rendering
+- `web-client/tests/unit/tokens.test.ts` — exception-4 revision: added `--color-signal-criterion` to COLORS record, updated count assertion
+- `_bmad-output/planning-artifacts/mvp-feedback/epics/epic-01-observability/stories/1-5-diagram-dialect-colours-iteration-boxes-click-navigation.md` — this spec
+
+**Review findings:** 5 patches applied (1 medium, 4 low); 1 deferred (medium — DiagramSection click behavior verification gap); 12 rejected.
+
+**Follow-up review score:** 3×1 medium + 1×4 low = 7 ≥ 5 → `followup_review_recommended: true`.
+
+**Verification:**
+- `make lint` — exit 0 ✓
+- `make test` — 6372 passed, 23 skipped, 0 failed ✓
+- `make openapi` + `pnpm gen:api` — not re-run (no schema changes in patches; openapi.json and schema.d.ts already in diff)
+- `make e2e-ui` — not run (no compose stack available)
+
+**Residual risks:**
+- DiagramSection click behavior (leaf-step navigation and story-aggregate expand) has no dedicated automated test; code is correct but a future regression there would go undetected. See deferred list.
