@@ -255,8 +255,10 @@ def test_continue_on_the_done_checkpoint_resumes_the_run_to_done(
     detail = poll_until(
         api,
         run_id,
-        lambda detail: detail["run"]["status"] == "needs_you"
-        and step_status(detail, "done-checkpoint") == "checkpoint",
+        lambda detail: (
+            detail["run"]["status"] == "needs_you"
+            and step_status(detail, "done-checkpoint") == "checkpoint"
+        ),
         "the Run parking on the epic tail's own done-checkpoint",
     )
     response = api.post(f"{RUNS}/{run_id}/signals", json={"kind": "continue"})

@@ -566,9 +566,23 @@ def test_c_the_operator_repairs_the_gate_file_inline_and_it_lands_as_one_commit(
 
 @pytest.fixture(scope="module")
 def skipped(api: httpx.Client, repaired: dict[str, Any]) -> dict[str, Any]:
-    """*Skip story* at the `verify_failed` stop, walked on until the Run is terminal."""
+    """*Skip story* at the `verify_failed` stop, walked on until the Run is terminal.
+
+    story 4-5 (2026-09-17) ended the epic tail with a final human `done-checkpoint` row, so
+    the walk now parks there once past `link`; a Continue is what finishes the Run."""
     response = api.post(f"{RUNS}/{repaired['id']}/signals", json={"kind": "skip_story"})
     assert response.status_code == HTTP_OK, response.text
+    poll_until(
+        api,
+        repaired["id"],
+        lambda detail: (
+            detail["run"]["status"] in ("done", "failed", "cancelled")
+            or step_status(detail, "done-checkpoint") == "checkpoint"
+        ),
+        "the Run reaching the epic tail's done-checkpoint after the skip",
+    )
+    final = api.post(f"{RUNS}/{repaired['id']}/signals", json={"kind": "continue"})
+    assert final.status_code == HTTP_OK, final.text
     detail = poll_until(
         api,
         repaired["id"],
