@@ -136,7 +136,7 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
         run = _apply(writers, run, rule, effect)
         writers.uow.commit()
     resumed = effect.resume and rule.run_event is not None and run.status == RUNNING
-    _tell_the_engine(ports, run_id, signal, resumed=resumed)
+    _tell_the_engine(ports, run_id, signal, resumed=resumed, finished=effect.finished)
     return SignalOutcome(run=run, resumed=resumed, cancel_plan=effect.cancel_plan)
 
 
@@ -179,9 +179,17 @@ def _apply(writers: WriterPorts, run: Run, rule: Rule, effect: Effect) -> Run:
     return moved
 
 
-def _tell_the_engine(ports: SignalPorts, run_id: UUID, signal: Signal, *, resumed: bool) -> None:
-    """Wake the Run's `recv`, or stop its workflow — after the writes are durable."""
-    if signal.kind == CANCEL:
+def _tell_the_engine(
+    ports: SignalPorts, run_id: UUID, signal: Signal, *, resumed: bool, finished: bool
+) -> None:
+    """Wake the Run's `recv`, or stop its workflow — after the writes are durable.
+
+    `finished` is a signal that ended the Run itself (a Continue on the plan's final
+    checkpoint row — story 4-5's `done-checkpoint` is the shipped case): nothing remains to
+    walk, but the workflow parked in `recv` would otherwise sleep out `HUMAN_WAIT_SECONDS`
+    holding its queue slot (AD-12), so it is stopped the same way a cancel stops one.
+    """
+    if signal.kind == CANCEL or finished:
         ports.engine.cancel(run_id)
     elif resumed:
         ports.engine.signal(run_id, signal)

@@ -162,6 +162,10 @@ def test_continue_on_a_checkpoint_that_is_the_last_row_ends_the_run() -> None:
     assert outcome.run.status == "done"
     assert world.events() == ["continue", "done"]
     assert not outcome.resumed
+    # the walk workflow is parked in `recv` and nothing remains to walk: it is stopped, or
+    # it would sleep out HUMAN_WAIT_SECONDS holding its queue slot (AD-12; story 4-5's
+    # `done-checkpoint` made a final checkpoint row the shipped case, fix 2026-09-18)
+    assert engine_calls(world) == ["cancel"]
 
 
 # ── retry ────────────────────────────────────────────────────────────────────
@@ -250,7 +254,10 @@ def test_skip_story_with_nothing_left_to_run_ends_the_run() -> None:
     outcome = send(world, "skip_story")
 
     assert outcome.run.status == "done"
-    assert engine_calls(world) == []
+    # revised 2026-09-18 with the `finished` fix (story 4-5's done-checkpoint surfaced it):
+    # a signal that ends the Run stops its parked workflow instead of leaving it in `recv`
+    # holding a queue slot for HUMAN_WAIT_SECONDS (AD-12); `[]` pinned the leak.
+    assert engine_calls(world) == ["cancel"]
 
 
 # ── skip_epic ────────────────────────────────────────────────────────────────
