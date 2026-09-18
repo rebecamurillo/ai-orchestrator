@@ -166,7 +166,9 @@ def test_a_parked_run_and_the_one_queued_behind_it_read_the_fixed_reasons(
 
         waiting_row = queue_row(api, second_id)
         assert waiting_row is not None, "the waiting run is not in the queue"
-        assert waiting_row["reason"].startswith("repository lock held by ")
+        # story 5-1 (2026-09-17): the queue partitions per branch, not per repository, and
+        # the reason follows — `branch held by {run} · {branch}` replaced the repository lock.
+        assert waiting_row["reason"].startswith("branch held by ")
         assert isinstance(waiting_row["position"], int)
     finally:
         cancel(api, first_id)
