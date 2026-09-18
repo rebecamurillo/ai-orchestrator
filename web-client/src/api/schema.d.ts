@@ -363,6 +363,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/attempts/{attempt_id}/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one attempt's log, paged by byte offset
+         * @description Page through an attempt's log by byte cursor, or download the full file.
+         *
+         *     Returns `LogPageOut` JSON when `download` is absent or false.  Returns a
+         *     `text/plain` attachment when `?download=true`.  Both variants answer 200 with a
+         *     human-readable message when the file has been garbage-collected.
+         */
+        get: operations["log_page_api_v1_runs__run_id__attempts__attempt_id__log_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/detail": {
         parameters: {
             query?: never;
@@ -1143,6 +1167,22 @@ export interface components {
             status: "ok" | "warn" | "fail" | "skip";
             /** Text */
             text: string;
+        };
+        /**
+         * LogPageOut
+         * @description One page of an attempt's log, addressed by byte cursor.
+         *
+         *     `next_cursor` is the byte offset immediately after the last `\n` in `lines`.
+         *     Pass it as `?cursor=` on the next poll to receive only newly appended content.
+         *     `eof=True` means no bytes follow `next_cursor` at the time this page was read.
+         */
+        LogPageOut: {
+            /** Eof */
+            eof: boolean;
+            /** Lines */
+            lines: string[];
+            /** Next Cursor */
+            next_cursor: number;
         };
         /**
          * MaskedEnvVarOut
@@ -3341,6 +3381,63 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID, or `focused_seconds` is outside [1, 3600]. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    log_page_api_v1_runs__run_id__attempts__attempt_id__log_get: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+                download?: boolean;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+                attempt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogPageOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No attempt with that id in this Run. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path segment does not parse as a UUID. */
             422: {
                 headers: {
                     [name: string]: unknown;

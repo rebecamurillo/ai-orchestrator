@@ -26,3 +26,21 @@ class LogReader(Protocol):
         """The last `n` lines of the file at `path`, oldest first; `[]` if `path` is
         `None` or names a file that does not exist."""
         ...
+
+    def read_from(self, path: str, cursor: int, limit: int) -> tuple[list[str], int, bool] | None:
+        """Up to `limit` complete lines starting at byte `cursor`, oldest first.
+
+        Returns `(lines, next_cursor, eof)` where `next_cursor` is the byte offset
+        immediately after the last `\\n` in the returned set, and `eof` is `True`
+        when no more bytes follow. An incomplete trailing line (no `\\n`) is never
+        returned — this keeps paging deterministic for pollers.
+
+        Returns `None` when `path` is non-null but the file cannot be opened
+        (`OSError`), signalling that the log was garbage-collected.
+        """
+        ...
+
+    def read_raw(self, path: str) -> bytes | None:
+        """The full raw content of the file at `path`, or `None` if it cannot be
+        opened (`OSError`) — same GC'd signal as `read_from`."""
+        ...

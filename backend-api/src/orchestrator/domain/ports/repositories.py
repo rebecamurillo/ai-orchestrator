@@ -142,6 +142,10 @@ class AttemptRepository(Protocol):
         """Store an attempt that does not exist yet."""
         ...
 
+    def get(self, attempt_id: UUID) -> Attempt | None:
+        """The Attempt with this id, or `None` — direct lookup for the log endpoint."""
+        ...
+
     def get_latest(self, step_run_id: UUID) -> Attempt | None:
         """The highest-`n` attempt at this row, or `None` if it has never run."""
         ...

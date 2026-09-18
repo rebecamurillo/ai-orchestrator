@@ -129,6 +129,10 @@ class SQLAlchemyAttemptRepository:
         # emitted now, against the `run` and `step_run` rows their adapters already flushed
         self._session.flush()
 
+    def get(self, attempt_id: UUID) -> Attempt | None:
+        row = self._session.get(AttemptRow, attempt_id)
+        return None if row is None else to_entity(row)
+
     def get_latest(self, step_run_id: UUID) -> Attempt | None:
         row = self._session.scalars(
             select(AttemptRow)
