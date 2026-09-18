@@ -2,12 +2,22 @@
 title: 'Probe gates create_run and pre-flight; model enforced server-side'
 type: 'feature'
 created: '2026-09-17'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      harness_line() in checks.py is dead code — present but no longer called
+      by _lines() after this story switched to harness_probe_line().
+    evidence: |-
+      _lines() at preflight.py:154 now calls harness_probe_line(ctx); harness_line()
+      (checks.py:246) is the only reader of harness.enabled in application code and
+      has no callers. It will silently accumulate drift with harness_probe_line.
+    location: >-
+      backend-api/src/orchestrator/application/preflight/checks.py:246
+    severity: low
 baseline_revision: '8a436bc938b772c09b29bcbbe55d6ceac64d5ad8'
 ---
 
@@ -98,6 +108,20 @@ Exception-4 test revisions (Operator authorization 2026-09-16 — these are the 
 - Given `readiness_ports` in `providers.py`, when called, then `skip_harness_check` is not set to `True` and the readiness Run goes through the same probe path as any create
 - Given implementation complete, when `make lint` runs, then ruff, mypy, and import-linter pass with no AD-2 violations
 
+## Spec Change Log
+
+## Review Triage Log
+
+### 2026-09-17 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 2: (high 0, medium 0, low 2)
+- defer: 1: (high 0, medium 0, low 1)
+- reject: 12
+- addressed_findings:
+  - `[low]` `[patch]` Module docstring in test_repository_init_harness.py retained stale "must be enabled here" language — updated docstring to reflect probe-registry wiring as the operative change, citing Operator decision 2026-09-16
+  - `[low]` `[patch]` Decision/date comment appeared only in World.__init__, not in the named test function body — added comment to test_a_named_harness_reaches_the_runs_inputs body per AGENTS.md exception-4 requirement
+
 ## Design Notes
 
 **Probe call count per `create_run`:** When `req.harness` is set and the adapter is in `harness_registry`, `probe()` is called twice total: once inside `harness_probe_line` (pre-flight), once in the inline block (`create_run`). The `FakeHarness._probe_queue` must have exactly two `ProbeResult` entries for any test that calls `create_run` with a named harness in the registry. `test_no_harness_still_dispatches_the_default` (harness=None) calls `probe()` zero times.
@@ -109,3 +133,38 @@ Exception-4 test revisions (Operator authorization 2026-09-16 — these are the 
 **Commands:**
 - `make lint` — expected: ruff, mypy, import-linter, prettier, tsc, eslint, env-contract, check_test_pairs, gen:api --check all pass
 - `make test` — expected: all unit tests green including both revised anchor tests and the already-passing probe-gate/harness-probe-line test files
+
+## Auto Run Result
+
+Status: done
+
+### Summary
+
+Completed the two exception-4 anchor test revisions authorized by the Operator (decision 2026-09-16) to unblock story 2-2. All implementation code (harness_probe_line, PreflightPorts.harness_registry, create_run inline probe, model-list validation, readiness exemption removal) was already committed in prior WIP. This run landed only the two test revisions and follow-up patches from review.
+
+### Files changed
+
+- `backend-api/tests/unit/application/test_preflight_use_case.py` — exception-4 revision: removed enabled-flag setup, changed assertion from `"disabled: no readiness run"` to `"harness not available"` (probe semantics), added decision comment
+- `backend-api/tests/unit/application/test_repository_init_harness.py` — exception-4 revision: added FakeHarness/ProbeResult imports, wired harness_registry with two ok ProbeResult entries into World, updated module docstring (review patch), added decision comment to named test function body (review patch)
+- `_bmad-output/planning-artifacts/mvp-feedback/epics/epic-02-probe-form/stories/2-2-probe-gates-create-run-and-pre-flight-model-enforced-server-side.md` — spec file (this document)
+
+### Review findings breakdown
+
+- Patches applied: 2 (low 2)
+- Items deferred: 1 (low 1) — harness_line() dead code in checks.py
+- Items rejected: 12
+
+### Follow-up review recommendation
+
+false — 0 high patches, 0 medium patches, 2 low patches. Score: 3×0 + 1×2 = 2 < 5.
+
+### Verification performed
+
+- `make lint`: passed — ruff, mypy, import-linter, prettier, tsc, eslint, env-contract, check_test_pairs, gen:api --check all clean
+- `make test`: 6344 backend unit tests passed, 23 skipped; 1348 frontend unit tests passed (0 failures)
+- `make e2e-api`: not run (requires running compose stack)
+- `make e2e-ui`: not run (requires running compose stack)
+
+### Residual risks
+
+1 deferred low-severity item: `harness_line()` in `checks.py` is dead code — present but no longer called by `_lines()`. Will accumulate drift with `harness_probe_line()` until removed.

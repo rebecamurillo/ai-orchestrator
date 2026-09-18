@@ -1,11 +1,12 @@
 """`init_repository`'s `harness` override (Operator decision, 2026-09-16): the shipped
 `repo-init` Template gained an `agent` row, and a stack that can only dispatch a seeded
 test harness (ORCH_TEST_MODE) needs the init action to accept the name. The override is
-handed to `create_run` unchanged — including its pre-flight, which is why the named one
-must be enabled here; omitted, `create_run`'s own default stands (AD-10).
+handed to `create_run` unchanged — including its pre-flight.
 
 Reuses `test_repository_init.py`'s fixtures; its own `Harness` wiring pins an empty
-harness table, so this file wires the one difference — a seeded, enabled harness."""
+harness table, so this file wires the one difference — a `harness_registry` entry for
+the named harness with scripted probe results (Operator decision 2026-09-16: pre-flight
+now uses live probe via harness_registry, not the DB enabled flag)."""
 
 from __future__ import annotations
 
@@ -78,6 +79,8 @@ class World:
 
 
 def test_a_named_harness_reaches_the_runs_inputs() -> None:
+    # Operator decision 2026-09-16: probe-based semantics replace the enabled flag;
+    # World wires harness_registry so create_run succeeds and inputs["harness"] is stored.
     world = World()
 
     result = world.init("fake")
