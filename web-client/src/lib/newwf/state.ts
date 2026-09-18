@@ -17,6 +17,7 @@ type RunIn = components['schemas']['RunIn'];
 type TemplateSummary = components['schemas']['TemplateSummaryOut'];
 type RepositoryOut = components['schemas']['RepositoryOut'];
 type HarnessOut = components['schemas']['HarnessOut'];
+export type ProbeResultOut = components['schemas']['ProbeResultOut'];
 
 export const TEMPLATE_ORDER = ['initiative', 'epic', 'repo-init'] as const;
 export type TemplateName = (typeof TEMPLATE_ORDER)[number];
@@ -226,6 +227,18 @@ export function harnessLineText(harness: HarnessOut): string {
   const status = harness.enabled
     ? 'enabled'
     : `disabled: ${harness.failing_check ?? 'no readiness run'}`;
+  const readiness = harness.last_readiness_at ? readinessTime(harness.last_readiness_at) : '—';
+  return `${harness.name} · ${status} · last readiness ${readiness} · `;
+}
+
+/**
+ * The part of the harness line before its `re-run readiness` link, using a live probe result
+ * instead of the SSR `enabled` flag.  Format mirrors `harnessLineText` but replaces the
+ * `enabled | disabled: …` segment with either `"ok"` or the `failing_reason` string, and
+ * always uses `harness.last_readiness_at` for the timestamp.
+ */
+export function harnessProbeLineText(harness: HarnessOut, result: ProbeResultOut): string {
+  const status = result.ok ? 'ok' : (result.failing_reason ?? 'probe failed');
   const readiness = harness.last_readiness_at ? readinessTime(harness.last_readiness_at) : '—';
   return `${harness.name} · ${status} · last readiness ${readiness} · `;
 }

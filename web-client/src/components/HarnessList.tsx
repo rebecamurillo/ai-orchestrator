@@ -24,7 +24,9 @@ import {
   READINESS_LINK_LABEL,
   READINESS_NOT_AVAILABLE,
   harnessLineText,
+  harnessProbeLineText,
   readinessHref,
+  type ProbeResultOut,
 } from '../lib/newwf/state';
 
 type HarnessOut = components['schemas']['HarnessOut'];
@@ -33,9 +35,13 @@ interface Props {
   harnesses: HarnessOut[];
   selected: string;
   onSelect: (name: string) => void;
+  /** When `undefined` (unit tests / initial SSR), falls back to `!harness.enabled` for the
+   * disabled decision.  When passed as an object (island), only explicit `ok === false`
+   * disables — a harness with no entry is not disabled. */
+  probeResults?: Record<string, ProbeResultOut>;
 }
 
-export default function HarnessList({ harnesses, selected, onSelect }: Props) {
+export default function HarnessList({ harnesses, selected, onSelect, probeResults }: Props) {
   return (
     <fieldset className="newwf-field newwf-harnesses-field">
       <legend className="newwf-field-label">HARNESS</legend>
@@ -51,11 +57,17 @@ export default function HarnessList({ harnesses, selected, onSelect }: Props) {
                 type="radio"
                 name="newwf-harness"
                 value={harness.name}
-                disabled={!harness.enabled}
+                disabled={
+                  probeResults !== undefined
+                    ? probeResults[harness.name]?.ok === false
+                    : !harness.enabled
+                }
                 checked={selected === harness.name}
                 onChange={() => onSelect(harness.name)}
               />
-              {harnessLineText(harness)}
+              {probeResults !== undefined && probeResults[harness.name]
+                ? harnessProbeLineText(harness, probeResults[harness.name])
+                : harnessLineText(harness)}
             </label>
             <a
               className="newwf-harness-readiness"

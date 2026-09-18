@@ -96,15 +96,35 @@ test.describe('/workflows/new', () => {
     await expect(page.getByTestId('newwf-harness-claude')).toHaveCount(0);
   });
 
-  test('a disabled harness reads its own line and is not selectable', async ({ page }) => {
+  test('a harness with a failing probe reads its failing_reason line and is not selectable (Operator decision 2026-09-17: probe-based gating)', async ({
+    page,
+  }) => {
+    // Operator decision 2026-09-17: harnesses are no longer gated by HarnessOut.enabled on
+    // initial render; gating is probe-based.  A harness is initially selectable and becomes
+    // disabled only after a probe returns ok=false.
     await mockPreflight(page, preflightBody());
+    await page.route('**/api/harnesses/claude/probe', (route: Route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: false,
+          failing_reason: 'not logged in',
+          models: [],
+          version: '',
+        }),
+      }),
+    );
     await page.goto(LINK);
 
     const claude = page.getByTestId('newwf-harness-claude');
-    await expect(claude).toContainText(
-      'claude · disabled: no readiness run · last readiness — · re-run readiness',
-    );
-    await expect(claude.locator('input[type="radio"]')).toBeDisabled();
+    // Radio is initially enabled — no probe result yet
+    await expect(claude.locator('input[type="radio"]')).toBeEnabled();
+    // Click to trigger probe
+    await claude.locator('input[type="radio"]').click();
+    // After probe returns failing, radio becomes disabled and row shows failing_reason
+    await expect(claude.locator('input[type="radio"]')).toBeDisabled({ timeout: DEBOUNCED });
+    await expect(claude).toContainText('not logged in');
   });
 
   test('a fail line shows its fix, disables Start run, and colours only the x', async ({
@@ -381,6 +401,8 @@ test.describe('/workflows/new', () => {
   test('the re-run readiness link points at the endpoint and says it is not served yet', async ({
     page,
   }) => {
+    // Operator decision 2026-09-17: harnesses are initially enabled (probe-based gating);
+    // the re-run readiness link is offered regardless of probe state.
     await mockPreflight(page, preflightBody());
     await page.goto(LINK);
 
@@ -389,8 +411,8 @@ test.describe('/workflows/new', () => {
       '/api/harnesses/claude/readiness',
     );
     await expect(page.getByTestId('newwf-readiness-claude-note')).toHaveText('not available yet');
-    // the link is offered on a disabled harness too — re-running readiness is what enables one
-    await expect(page.getByTestId('newwf-harness-claude').locator('input')).toBeDisabled();
+    // Initially enabled — no probe result yet on page load
+    await expect(page.getByTestId('newwf-harness-claude').locator('input')).toBeEnabled();
   });
 
   test('a pre-flight that cannot be read says so instead of rendering an empty column', async ({
