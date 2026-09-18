@@ -169,3 +169,20 @@ def test_a_counter_that_cannot_be_read_starts_over_rather_than_raising(tmp_path:
     counter.write_text("not a number")
 
     assert scenarios.next_attempt(work_dir, worktree, STORY_ID) == 1
+
+
+def test_a_no_story_dispatch_files_its_counter_beside_the_story_counters(tmp_path: Path) -> None:
+    """An empty story id must not resolve to the digest directory itself: writing the
+    counter there replaces the directory every per-story counter lives in, and each later
+    story dispatch then reads attempt 1 forever (found via `epic@1`'s spec-gate row)."""
+    work_dir, worktree = tmp_path / "work", tmp_path / "wt"
+    worktree.mkdir()
+
+    assert scenarios.next_attempt(work_dir, worktree, "") == 1
+    assert scenarios.next_attempt(work_dir, worktree, STORY_ID) == 1
+    assert scenarios.next_attempt(work_dir, worktree, STORY_ID) == SECOND_ATTEMPT
+    assert scenarios.next_attempt(work_dir, worktree, "") == SECOND_ATTEMPT
+
+    no_story = scenarios.counter_path(work_dir, worktree, "")
+    assert no_story.is_file()
+    assert no_story.parent == scenarios.counter_path(work_dir, worktree, STORY_ID).parent
