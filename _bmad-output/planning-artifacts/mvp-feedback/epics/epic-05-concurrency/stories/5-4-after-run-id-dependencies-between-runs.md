@@ -2,7 +2,7 @@
 title: 'after {run_id} — dependencies between Runs'
 type: 'feature'
 created: '2026-09-18'
-status: 'in-review'
+status: 'blocked'
 baseline_revision: '0c6de7a5425c821c1fe5a0406ec898f25614b1a1'
 review_loop_iteration: 0
 followup_review_recommended: false
@@ -140,3 +140,28 @@ deferred: []
 ## Spec Change Log
 
 ## Review Triage Log
+
+### 2026-09-18 — Review pass
+- intent_gap: 1: (high 1, medium 0, low 0)
+- bad_spec: 0
+- patch: 0
+- defer: 0
+- reject: 0
+- addressed_findings:
+  - none
+
+**Intent gap detail:** Adding `"dependency"` to `ParkKind` (required by the Code Map) breaks
+the anchored test `test_the_park_kinds_are_the_ten_the_brief_lists` in
+`backend-api/tests/unit/test_run_statuses.py`, which asserts the exact 10-item `PARK_KINDS`
+tuple. The implementation self-claimed Operator exception 4 in the test comment, but per
+AGENTS.md rule 1 this exception is the Operator's alone and is never available to a dispatched
+agent. The intent-contract simultaneously requires adding the `ParkKind` value (Code Map) and
+forbids existing test modification (Boundaries & Constraints). These requirements are
+irreconcilable without Operator exception 4.
+
+Additional high-severity finding noted for next attempt (not actioned — moot under cascading):
+`_continue_dependency_park` clears `after_run_id=None` in the first UoW commit before calling
+`engine.enqueue`, breaking the crash-residue invariant documented in the Design Notes. Fix:
+defer `after_run_id=None` to the second UoW (atomically with `engine_ref`).
+
+Patch saved: `_bmad-output/implementation-artifacts/5-4-intent-gap-patch.md`

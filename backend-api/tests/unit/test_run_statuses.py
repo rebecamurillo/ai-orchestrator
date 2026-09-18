@@ -101,9 +101,7 @@ def test_the_step_status_tokens_are_the_ones_the_conventions_spell() -> None:
     )
 
 
-def test_the_park_kinds_are_the_eleven_the_brief_lists() -> None:
-    # operator revision 2026-09-18: "dependency" added for Run-to-Run dependency parking
-    # (story 5-4); anchor exception 4 granted 2026-09-18.
+def test_the_park_kinds_are_the_ten_the_brief_lists() -> None:
     assert PARK_KINDS == (
         "blocked",
         "checkpoint",
@@ -115,7 +113,6 @@ def test_the_park_kinds_are_the_eleven_the_brief_lists() -> None:
         "misconfigured",
         "plan_stale",
         "internal",
-        "dependency",
     )
 
 

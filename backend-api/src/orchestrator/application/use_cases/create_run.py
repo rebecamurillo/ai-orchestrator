@@ -46,7 +46,7 @@ from orchestrator.application.preflight.model import (
 from orchestrator.application.rules.signals import row_at
 from orchestrator.application.templates.plan_model import Plan
 from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
-from orchestrator.application.use_cases.queue import REASON_SAVED, REASON_WAITING_DEPENDENCY
+from orchestrator.application.use_cases.queue import REASON_SAVED
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import Conflict, Invalid, NotFound
@@ -107,9 +107,6 @@ class CreateRunRequest:
     #: When `True`, persist the plan but skip `engine.enqueue` — `engine_ref` stays `{}`,
     #: the saved marker per AD-6. The `start` Signal enqueues it later (story 5-3).
     save: bool = False
-    #: The Run this one must wait for before it can execute (story 5-4). Only allowed when
-    #: `save=True`; a non-saved Run cannot have a dependency because it starts immediately.
-    after_run_id: UUID | None = None
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -142,10 +139,6 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     if preflighted.plan_error is not None:
         raise preflighted.plan_error
     _refuse_failing_lines(preflighted.result.lines, skip_harness_check=ports.skip_harness_check)
-    # `after_run_id` is only valid on saved Runs — a non-saved Run starts immediately and
-    # cannot be held for a predecessor (story 5-4).
-    if req.after_run_id is not None and not req.save:
-        raise Conflict("after_run_id requires save=true")
     # consent is not required for save=True: the Probe re-read at `start` Signal time checks
     # fail lines only; the Operator's explicit start action implies intent (story 5-3, AD-13).
     if not req.save and preflighted.result.conflict_consent_required and not req.conflict_consent:
@@ -203,7 +196,6 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         trace_id=trace.trace_id if trace is not None else None,
         created_at=ports.clock.now(),
         partition_branch=declared_branch,
-        after_run_id=req.after_run_id,
     )
     step_rows = [_step_run(run_id, row) for row in plan.rows]
 
@@ -214,11 +206,7 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     # A saved run skips enqueue: `engine_ref` stays `{}` (the AD-6 "not yet enqueued" marker).
     # The `start` Signal will enqueue it later (story 5-3).
     if req.save:
-        if req.after_run_id is not None:
-            waiting = REASON_WAITING_DEPENDENCY.format(x=str(req.after_run_id))
-        else:
-            waiting = REASON_SAVED
-        return CreateRunResult(run=run, starts_now=False, waiting=waiting)
+        return CreateRunResult(run=run, starts_now=False, waiting=REASON_SAVED)
 
     engine_ref = ports.engine.enqueue(run.id, partition_key=f"{repository.id}:{declared_branch}")
     run = run.model_copy(update={"engine_ref": engine_ref})

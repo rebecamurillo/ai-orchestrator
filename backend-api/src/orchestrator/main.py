@@ -103,7 +103,6 @@ from orchestrator.infrastructure.dbos import (
     schedule_engine_jobs,
     schedule_jobs,
     serving,
-    sweep_dependency_residue,
 )
 from orchestrator.infrastructure.git import SubprocessGit
 
@@ -200,9 +199,6 @@ def run_migrations(settings: Settings) -> str:
     # last, and inside this function: see `infrastructure/dbos/startup.py`. A process that
     # is not serving — every unit test — has no engine registered and launches nothing.
     launch_engine()
-    # after the launch: re-enqueue any saved Run whose predecessor landed `done` before the
-    # last container crashed (story 5-4). Guarded the same way: no-op outside serving.
-    sweep_dependency_residue(settings)
     # after the launch: `engine.schedule` writes to the database the launch just opened
     # (SPEC CAP-11), the same reason `register_queue` runs after `start` inside it.
     schedule_jobs(settings)

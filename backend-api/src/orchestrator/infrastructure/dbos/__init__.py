@@ -20,7 +20,6 @@ from orchestrator.infrastructure.dbos.startup import (
     schedule_engine_jobs,
     schedule_jobs,
     serving,
-    sweep_dependency_residue,
 )
 from orchestrator.infrastructure.dbos.walker import WalkerDeps, build_walk
 
@@ -36,5 +35,4 @@ __all__ = [
     "schedule_engine_jobs",
     "schedule_jobs",
     "serving",
-    "sweep_dependency_residue",
 ]

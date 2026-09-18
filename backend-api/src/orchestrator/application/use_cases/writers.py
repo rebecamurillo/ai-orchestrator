@@ -24,7 +24,6 @@ from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
-from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
@@ -73,9 +72,7 @@ class WriterPorts:
 
     `git` and `trajectories` (5.9) are the two `record_trajectory` needs beyond these four —
     both default `None` and degrade like `tracer`/`spend_writes`, so every `WriterPorts(...)`
-    construction that predates this story keeps working unchanged. `engine` (5.4) is used by
-    `apply_step_result` to enqueue saved dependents when their predecessor finishes `done`;
-    `None` skips the enqueue, preserving every existing call site.
+    construction that predates this story keeps working unchanged.
     """
 
     runs: RunRepository
@@ -86,7 +83,6 @@ class WriterPorts:
     clock: Clock
     git: Git | None = None
     trajectories: TrajectoryRepository | None = None
-    engine: WorkflowEngine | None = None
 
 
 def require_run(ports: WriterPorts, run_id: UUID) -> Run:
