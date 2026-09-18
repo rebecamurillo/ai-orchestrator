@@ -2,13 +2,23 @@
 title: "Run detail layout rework"
 type: 'feature'
 created: '2026-09-16'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 baseline_revision: '0247b2f62e190978897c390f971dc31a3bb5166b'
 followup_review_recommended: false
 context: []
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      Stale file-level doc comment in run-diagram.spec.ts still describes ?view=diagram as mounting RunDiagram
+    evidence: |-
+      Lines 1-10 of run-diagram.spec.ts read "?view=diagram mounts RunDiagram, which polls
+      both GET /runs/{id}/detail and GET /runs/{id}/graph". This description was accurate before
+      story 1-4 but is now false: ?view=diagram redirects 301 and RunDetail mounts instead.
+      The comment misleads readers of the file.
+    location: >-
+      web-client/tests/e2e/run-diagram.spec.ts:1-10
+    severity: low
 ---
 
 <intent-contract>
@@ -105,3 +115,36 @@ deferred: []
 **Commands:**
 - `make lint` -- expected: exit 0
 - `make test` -- expected: exit 0, all 6367+ backend and 1383+ frontend tests green
+
+## Spec Change Log
+
+## Review Triage Log
+
+### 2026-09-16 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 1: (high 1, medium 0, low 0)
+- defer: 1: (high 0, medium 0, low 1)
+- reject: 12
+- addressed_findings:
+  - `[high]` `[patch]` `run-detail-toggle.spec.ts:87,91` pin the old `view="detail"` behavior (live `<a>` link, no `[aria-disabled]`). Story 1-4 changed RunDetail to pass `view={undefined}` to Header, which renders `<span aria-disabled="true">DIAGRAM</span>` instead of a functional anchor. Both assertions fail under `make e2e-ui`. Revised under exception-4 (Operator ruling 2026-09-16) to assert DIAGRAM is a disabled stub and DETAIL has `aria-current="true"`.
+
+## Auto Run Result
+
+**Status:** done
+
+**Summary:** Applied Operator exception-4 ruling (2026-09-16) to revise three stale e2e assertions across two test files that pinned the old standalone-diagram behavior retired by story 1-4 / FR-29. All backend and frontend restructuring (model field, DiagramSection embed, `?view=diagram` redirect, tab layout) was already committed in attempt 1 (`ecbcbae`).
+
+**Files changed:**
+- `web-client/tests/e2e/run-diagram.spec.ts` — two tests revised: (1) `graphCalled` test updated from `toBe(false)` to `toBe(true)` with `fetch-failed` hydration gate; (2) toggle test updated from DIAGRAM `aria-current` to DETAIL `aria-current` + DIAGRAM `aria-disabled`
+- `web-client/tests/e2e/run-detail-toggle.spec.ts` — test revised: replaced `<a href*="view=diagram">` visible + `[aria-disabled]` count=0 assertions with `[aria-disabled="true"]` text=DIAGRAM + count=1 + `[aria-current="true"]` text=DETAIL assertions; file-level comment updated
+
+**Review findings:** 1 patch applied (high), 1 deferred (low), 12 rejected.
+
+**Follow-up review recommended:** `false` — patched counts: high 1, medium 0, low 0; score = 3×1 = 3 < 5.
+
+**Verification:**
+- `make lint`: exit 0
+- `make test`: 6367 backend + 1383 frontend passed, 0 failures
+
+**Residual risks:** Stale file-level doc comment in `run-diagram.spec.ts` (lines 1-10) still describes `?view=diagram` as mounting `RunDiagram` — deferred, low severity.

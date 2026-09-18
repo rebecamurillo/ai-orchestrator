@@ -1,10 +1,7 @@
 /**
- * Run detail toggle (8.1): when RunDetail mounts (no ?view= param), Header receives
- * `view="detail"`, which replaces the `aria-disabled` stub toggle with functional
- * `<a href>` links — including a link to `?view=diagram`.
- *
- * This verifies that RunDetail passes `view="detail"` to Header and that the diagram
- * toggle is a live anchor, not a disabled placeholder.
+ * Run detail toggle: when RunDetail mounts (no ?view= param), Header receives
+ * `view={undefined}` and renders DIAGRAM as a disabled stub and DETAIL as aria-current.
+ * ?view=diagram is retired (FR-29, story 1-4, 2026-09-16); no functional link to it exists.
  */
 
 import { expect, test, type Route } from '@playwright/test';
@@ -68,7 +65,8 @@ function minimalDetail(): Record<string, unknown> {
 }
 
 test.describe('/workflows/[id] (no ?view=) — RunDetail toggle', () => {
-  test('diagram toggle is a functional <a> link to ?view=diagram, not aria-disabled', async ({
+  // Revised: story 1-4 (2026-09-16) — RunDetail passes view={undefined}; DIAGRAM is a disabled stub (FR-29)
+  test('diagram toggle renders DIAGRAM as aria-disabled stub and DETAIL as aria-current', async ({
     page,
   }) => {
     // operator revision 2026-09-18: story 8-3 put `?opened=true` on the first detail fetch; the
@@ -86,11 +84,15 @@ test.describe('/workflows/[id] (no ?view=) — RunDetail toggle', () => {
 
     await expect(page.getByTestId('wf-header')).toBeVisible();
 
-    // The toggle must contain an <a> link that points at ?view=diagram
-    const diagramLink = page.locator('[data-testid="wf-toggle-diagram"] a[href*="view=diagram"]');
-    await expect(diagramLink).toBeVisible();
-
-    // No aria-disabled element inside the toggle (the old stub is gone)
-    await expect(page.locator('[data-testid="wf-toggle-diagram"] [aria-disabled]')).toHaveCount(0);
+    // DIAGRAM is a disabled stub — ?view=diagram is retired (FR-29, story 1-4, 2026-09-16)
+    await expect(
+      page.locator('[data-testid="wf-toggle-diagram"] [aria-disabled="true"]'),
+    ).toHaveText('DIAGRAM');
+    // Exactly one aria-disabled element in the toggle
+    await expect(page.locator('[data-testid="wf-toggle-diagram"] [aria-disabled]')).toHaveCount(1);
+    // DETAIL carries aria-current
+    await expect(
+      page.locator('[data-testid="wf-toggle-diagram"] [aria-current="true"]'),
+    ).toHaveText('DETAIL');
   });
 });
