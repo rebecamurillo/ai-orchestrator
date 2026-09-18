@@ -66,9 +66,19 @@ test.describe('New Workflow readiness badge and handler', () => {
     await mockPreflight(page);
     await openForm(page);
 
+    // The `page.route` above cannot reach this page's harness list: `pages/workflows/new.astro`
+    // reads `GET /api/v1/harnesses` server-side and hands the island a prop (AD-1 — the browser
+    // talks only to the proxy), so the rows come from `stub-backend.mjs`'s own fixed three and a
+    // browser-side interception never sees the request. What a browser *can* settle is that the
+    // hydrated island renders its own badge in this span rather than the `not available yet`
+    // stub the SSR path shows; the badge's text for every field combination is
+    // `tests/unit/harness-list-readiness.test.ts`'s, which asserts this exact timestamp.
     const note = page.getByTestId('newwf-readiness-claude-note');
-    await expect(note).toHaveText('2026-09-17 10:00:00');
     await expect(note).not.toHaveText('not available yet');
+    await expect(page.getByTestId('newwf-readiness-claude')).toHaveAttribute(
+      'href',
+      '/api/harnesses/claude/readiness',
+    );
   });
 
   test('clicking run readiness calls POST and navigates to /runs on 201', async ({ page }) => {

@@ -336,9 +336,11 @@ test.describe('New Workflow probe-based harness gating', () => {
     await expect(
       page.locator('[data-testid="newwf-model"] option:not([value=""])').first(),
     ).toContainText('codex-model');
-    await expect(page.locator('[data-testid="newwf-model"] option')).not.toContainText(
-      'claude-opus-4',
-    );
+    // Asserted on the select rather than on `option`: with a plain string, Playwright's
+    // `toContainText` requires the locator to resolve to one element, and `option` resolves to
+    // the placeholder and the model both — the assertion below raised a strict-mode violation
+    // rather than ever checking anything. The select is the one element that holds every option.
+    await expect(page.getByTestId('newwf-model')).not.toContainText('claude-opus-4');
   });
 
   test('submit without harness selected skips probe and calls POST /runs with harness null', async ({
