@@ -44,11 +44,7 @@ from collections.abc import Mapping
 from decimal import Decimal
 from pathlib import Path
 
-from orchestrator.domain.ports.harness import (
-    HarnessCapabilities,
-    HarnessHandle,
-    HarnessResult,
-)
+from orchestrator.domain.ports.harness import HarnessCapabilities, HarnessHandle, HarnessResult
 from orchestrator.domain.ports.process import Handle, ProcessRunner
 from orchestrator.infrastructure.harness.codex.events import (
     events as stream_events,
@@ -60,6 +56,7 @@ from orchestrator.infrastructure.harness.codex.events import (
 )
 from orchestrator.infrastructure.harness.env import AliasBuilder
 from orchestrator.infrastructure.harness.jsonl import ENCODING, read_text
+from orchestrator.infrastructure.harness.probe import ProbeResult, run_probe_script
 from orchestrator.infrastructure.settings import Settings
 
 #: The executable `scripts/harness/codex.sh install` puts on `PATH` at `CODEX_VERSION`.
@@ -318,6 +315,9 @@ class CodexHarness:
         return HarnessHandle(
             session_id=session_id, log_path=log_path, pid=handle.pid, pgid=handle.pgid
         )
+
+    def probe(self) -> ProbeResult:
+        return run_probe_script(self.settings.harness_scripts_dir / "codex.sh")
 
     def _record_prompt(self, log_path: Path, message: str) -> None:
         """The prompt, beside the log, so an attempt's record holds what was asked."""

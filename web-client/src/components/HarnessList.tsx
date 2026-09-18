@@ -24,7 +24,10 @@ import {
   READINESS_LINK_LABEL,
   READINESS_NOT_AVAILABLE,
   harnessLineText,
+  harnessProbeLineText,
+  readinessBadgeText,
   readinessHref,
+  type ProbeResultOut,
 } from '../lib/newwf/state';
 
 type HarnessOut = components['schemas']['HarnessOut'];
@@ -33,12 +36,29 @@ interface Props {
   harnesses: HarnessOut[];
   selected: string;
   onSelect: (name: string) => void;
+  /** When `undefined` (unit tests / initial SSR), falls back to `!harness.enabled` for the
+   * disabled decision.  When passed as an object (island), only explicit `ok === false`
+   * disables — a harness with no entry is not disabled. */
+  probeResults?: Record<string, ProbeResultOut>;
+  /** When `undefined` (unit tests / static SSR), the note span shows `READINESS_NOT_AVAILABLE`.
+   * When passed (island), the note shows `readinessBadgeText(harness)` and the link fires the
+   * handler instead of navigating (story 2-4). */
+  onRunReadiness?: (name: string) => void;
 }
 
-export default function HarnessList({ harnesses, selected, onSelect }: Props) {
+export default function HarnessList({
+  harnesses,
+  selected,
+  onSelect,
+  probeResults,
+  onRunReadiness,
+}: Props) {
   return (
-    <fieldset className="newwf-field newwf-harnesses-field">
-      <legend className="newwf-field-label">HARNESS</legend>
+    <fieldset
+      className="newwf-field newwf-harnesses-field"
+      title="Coding-agent that executes the story steps. Probed live on selection and again at submit."
+    >
+      <legend className="newwf-field-label">HARNESS (optional)</legend>
       <div className="newwf-harnesses">
         {harnesses.map((harness) => (
           <p
@@ -51,16 +71,30 @@ export default function HarnessList({ harnesses, selected, onSelect }: Props) {
                 type="radio"
                 name="newwf-harness"
                 value={harness.name}
-                disabled={!harness.enabled}
+                disabled={
+                  probeResults !== undefined
+                    ? probeResults[harness.name]?.ok === false
+                    : !harness.enabled
+                }
                 checked={selected === harness.name}
                 onChange={() => onSelect(harness.name)}
               />
-              {harnessLineText(harness)}
+              {probeResults !== undefined && probeResults[harness.name]
+                ? harnessProbeLineText(harness, probeResults[harness.name])
+                : harnessLineText(harness)}
             </label>
             <a
               className="newwf-harness-readiness"
               data-testid={`newwf-readiness-${harness.name}`}
               href={readinessHref(harness.name)}
+              onClick={
+                onRunReadiness !== undefined
+                  ? (e) => {
+                      e.preventDefault();
+                      onRunReadiness(harness.name);
+                    }
+                  : undefined
+              }
             >
               {READINESS_LINK_LABEL}
             </a>
@@ -68,7 +102,7 @@ export default function HarnessList({ harnesses, selected, onSelect }: Props) {
               className="newwf-harness-note"
               data-testid={`newwf-readiness-${harness.name}-note`}
             >
-              {READINESS_NOT_AVAILABLE}
+              {onRunReadiness !== undefined ? readinessBadgeText(harness) : READINESS_NOT_AVAILABLE}
             </span>
           </p>
         ))}

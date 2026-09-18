@@ -28,6 +28,19 @@ from orchestrator.api.schemas.common import UtcTimestamp
 from orchestrator.domain.entities.harness import EvaluationLine, Harness
 
 
+class ProbeResultOut(BaseModel):
+    """The HTTP shape of a harness probe result (story 2-1).
+
+    HTTP 200 in both the `ok=True` and `ok=False` cases — failures are reported in the body,
+    not through HTTP error codes.  `failing_reason` is `null` when `ok` is `True`.
+    """
+
+    ok: bool
+    failing_reason: str | None
+    version: str
+    models: list[str]
+
+
 class EvaluationLineOut(BaseModel):
     """One line `evaluate` produced: `{check, ok, text}`, the brief's own literal shape."""
 

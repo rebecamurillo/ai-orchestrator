@@ -51,11 +51,7 @@ from collections.abc import Mapping
 from decimal import Decimal
 from pathlib import Path
 
-from orchestrator.domain.ports.harness import (
-    HarnessCapabilities,
-    HarnessHandle,
-    HarnessResult,
-)
+from orchestrator.domain.ports.harness import HarnessCapabilities, HarnessHandle, HarnessResult
 from orchestrator.domain.ports.process import Handle, ProcessRunner
 from orchestrator.infrastructure.harness.jsonl import ENCODING, read_text
 from orchestrator.infrastructure.harness.opencode.events import (
@@ -70,6 +66,7 @@ from orchestrator.infrastructure.harness.opencode.sessions import (
     session_for_directory,
     store_path,
 )
+from orchestrator.infrastructure.harness.probe import ProbeResult, run_probe_script
 from orchestrator.infrastructure.settings import Settings
 
 #: The executable `scripts/harness/opencode.sh install` puts on `PATH` at `OPENCODE_VERSION`.
@@ -290,6 +287,9 @@ class LocalHarness:
             f"{PROVIDER}/{model or self.settings.local_models[0]}",
             message,
         ]
+
+    def probe(self) -> ProbeResult:
+        return run_probe_script(self.settings.harness_scripts_dir / "opencode.sh")
 
     def _record_prompt(self, log_path: Path, message: str) -> None:
         """The prompt, beside the log, so an attempt's record holds what was asked."""

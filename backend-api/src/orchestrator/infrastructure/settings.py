@@ -175,6 +175,11 @@ class Settings(BaseSettings):
     claude_subscription_auth: bool
     work_dir: Path
     agent_home: Path
+    #: The directory that holds `claude.sh`, `codex.sh`, `opencode.sh` inside the container.
+    #: The probe adapters call `<harness_scripts_dir>/<name>.sh probe` via subprocess. In a
+    #: non-image dev run this is `../scripts/harness` (relative to `backend-api/`). Never
+    #: validated absolute like `work_dir`/`agent_home` because the dev value is relative.
+    harness_scripts_dir: Path
 
     # ── Templates (AD-15) ────────────────────────────────────────────────────
     #: `../templates` in development, `/app/templates` in the image; never validated

@@ -31,6 +31,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/harnesses/{name}/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run a readiness probe for one harness
+         * @description Shell the harness's probe verb and return the result.
+         *
+         *     `ok=True` means all checks passed; `ok=False` means the probe ran and found a specific
+         *     problem, named in `failing_reason`.  Both are HTTP 200.  Unknown harness names are 404.
+         */
+        get: operations["run_probe_api_v1_harnesses__name__probe_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/harnesses/{name}/readiness": {
         parameters: {
             query?: never;
@@ -1456,6 +1479,23 @@ export interface components {
             start_allowed: boolean;
         };
         /**
+         * ProbeResultOut
+         * @description The HTTP shape of a harness probe result (story 2-1).
+         *
+         *     HTTP 200 in both the `ok=True` and `ok=False` cases — failures are reported in the body,
+         *     not through HTTP error codes.  `failing_reason` is `null` when `ok` is `True`.
+         */
+        ProbeResultOut: {
+            /** Failing Reason */
+            failing_reason: string | null;
+            /** Models */
+            models: string[];
+            /** Ok */
+            ok: boolean;
+            /** Version */
+            version: string;
+        };
+        /**
          * ProblemDetail
          * @description The problem document itself. Members that do not apply are omitted, never `null`.
          */
@@ -2321,6 +2361,58 @@ export interface operations {
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    run_probe_api_v1_harnesses__name__probe_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeResultOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No harness has that name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `name` does not match the shape below. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -54,6 +54,7 @@ from orchestrator.domain.ports.harness import (
     HarnessCapabilities,
     HarnessHandle,
     HarnessResult,
+    ProbeResult,
 )
 from orchestrator.domain.ports.process import Handle, ProcessRunner
 from orchestrator.infrastructure.harness.claude.result import (
@@ -193,6 +194,12 @@ class FakeHarness:
             timed_out=outcome.timed_out,
             pgid=handle.pgid,
             raw_result=raw_result,
+        )
+
+    def probe(self) -> ProbeResult:
+        """Return a fixed ok ProbeResult — the fake harness is always ready (dev-mode only)."""
+        return ProbeResult(
+            ok=True, failing_reason=None, version="0.0.0-fake", models=["fake-model"]
         )
 
     def resume_command(self, cwd: str, session_id: str) -> str:

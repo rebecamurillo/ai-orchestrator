@@ -87,8 +87,26 @@ doctor() {
   doctor_gateway
 }
 
+probe() {
+  local version_str
+  if ! command -v claude >/dev/null 2>&1; then
+    probe_output false "cli not installed" "" "[]"; exit 1
+  fi
+  version_str=$(claude --version 2>&1 | awk '{print $NF}')
+  if [ "$version_str" != "${CLAUDE_CODE_VERSION}" ]; then
+    probe_output false "cli not at pinned version ${CLAUDE_CODE_VERSION}" "${version_str}" "[]"
+    exit 1
+  fi
+  probe_gateway_models
+  if [ "${PROBE_MODELS_OK}" = "true" ]; then
+    probe_output true "null" "${version_str}" "${PROBE_MODELS_JSON}"; exit 0
+  fi
+  probe_output false "${PROBE_MODELS_REASON}" "${version_str}" "[]"; exit 1
+}
+
 case "${1:-}" in
-  install)          install ;;
-  configure|doctor) require_harness_env; "$1" ;;
-  *)                echo "usage: $0 install|configure|doctor" >&2; exit 2 ;;
+  install)                install ;;
+  configure|doctor)       require_harness_env; "$1" ;;
+  probe)                  require_harness_env; probe ;;
+  *)                      echo "usage: $0 install|configure|doctor|probe" >&2; exit 2 ;;
 esac

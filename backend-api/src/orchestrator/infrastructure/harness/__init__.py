@@ -17,6 +17,7 @@ from orchestrator.infrastructure.harness.claude import (
 )
 from orchestrator.infrastructure.harness.codex import CodexHarness, codex_aliases
 from orchestrator.infrastructure.harness.env import HARNESS_ENV_CONTRACT, env_for
+from orchestrator.infrastructure.harness.probe import run_probe_script
 from orchestrator.infrastructure.harness.registry import (
     ALIASES,
     SUBSCRIPTION_ALIASES,
@@ -38,4 +39,5 @@ __all__ = [
     "claude_subscription_aliases",
     "codex_aliases",
     "env_for",
+    "run_probe_script",
 ]

@@ -29,14 +29,13 @@ import PreflightLines from '../components/PreflightLines';
 import { formStateToQuery } from '../lib/newwf/query';
 import {
   cloneCheckNote,
-  modelsFor,
   preflightBody,
   repositoriesFor,
   repositoryById,
   runBody,
   usesHarness,
-  withHarness,
   type FormState,
+  type ProbeResultOut,
 } from '../lib/newwf/state';
 import '../styles/new-workflow.css';
 
@@ -69,7 +68,10 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
   const [pending, setPending] = useState(true);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | undefined>(undefined);
+  const [probeResults, setProbeResults] = useState<Record<string, ProbeResultOut>>({});
+  const [probeInFlight, setProbeInFlight] = useState(false);
   const requestSeqRef = useRef(0);
+  const probeSeqRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -109,6 +111,34 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
     }, DEBOUNCE_MS);
   }
 
+  async function runReadiness(name: string): Promise<void> {
+    await api.POST('/harnesses/{name}/readiness', { params: { path: { name } } });
+    window.location.href = '/runs';
+  }
+
+  async function runProbe(name: string): Promise<void> {
+    const seq = ++probeSeqRef.current;
+    setProbeInFlight(true);
+    try {
+      const { data } = await api.GET('/harnesses/{name}/probe', { params: { path: { name } } });
+      if (seq !== probeSeqRef.current) return;
+      if (data) {
+        setProbeResults((prev) => ({ ...prev, [name]: data }));
+        if (!data.ok) {
+          setState((prev) => (prev.harness === name ? { ...prev, harness: '', model: '' } : prev));
+        } else {
+          setState((prev) =>
+            prev.harness === name && data.models.length > 0 && !data.models.includes(prev.model)
+              ? { ...prev, model: '' }
+              : prev,
+          );
+        }
+      }
+    } finally {
+      if (seq === probeSeqRef.current) setProbeInFlight(false);
+    }
+  }
+
   function update(next: FormState): void {
     setState(next);
     setStartError(undefined);
@@ -137,6 +167,29 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
     setStarting(true);
     setStartError(undefined);
     try {
+      if (state.harness) {
+        const { data: probe } = await api.GET('/harnesses/{name}/probe', {
+          params: { path: { name: state.harness } },
+        });
+        if (probe && !probe.ok) {
+          setProbeResults((prev) => ({ ...prev, [state.harness]: probe }));
+          setPreflight({
+            lines: [
+              {
+                check: 'HARNESS',
+                status: 'fail',
+                text: probe.failing_reason ?? 'probe failed',
+                fix: null,
+              },
+            ],
+            start_allowed: false,
+            queue_note: '',
+            rows: null,
+            plan_error: null,
+          });
+          return;
+        }
+      }
       const { data, error } = await api.POST('/runs', { body });
       if (error) {
         setStartError(error.detail ?? error.title ?? GENERIC_FAILURE_DETAIL);
@@ -156,7 +209,7 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
 
   const repositories = repositoriesFor(projects, state.projectId);
   const note = cloneCheckNote(repositoryById(repositories, state.repositoryId));
-  const startDisabled = starting || pending || !preflight.start_allowed;
+  const startDisabled = starting || pending || probeInFlight || !preflight.start_allowed;
 
   return (
     <div className="newwf">
@@ -170,7 +223,7 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
             state={state}
             projects={projects}
             repositories={repositories}
-            models={modelsFor(harnesses, state.harness)}
+            models={probeResults[state.harness]?.models ?? []}
             note={note}
             onChange={update}
           />
@@ -178,7 +231,12 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
             <HarnessList
               harnesses={harnesses}
               selected={state.harness}
-              onSelect={(name) => update(withHarness(state, name, harnesses))}
+              probeResults={probeResults}
+              onSelect={(name) => {
+                update({ ...stateRef.current, harness: name, model: '' });
+                void runProbe(name);
+              }}
+              onRunReadiness={runReadiness}
             />
           ) : null}
         </form>

@@ -17,6 +17,7 @@ type RunIn = components['schemas']['RunIn'];
 type TemplateSummary = components['schemas']['TemplateSummaryOut'];
 type RepositoryOut = components['schemas']['RepositoryOut'];
 type HarnessOut = components['schemas']['HarnessOut'];
+export type ProbeResultOut = components['schemas']['ProbeResultOut'];
 
 export const TEMPLATE_ORDER = ['initiative', 'epic', 'repo-init'] as const;
 export type TemplateName = (typeof TEMPLATE_ORDER)[number];
@@ -26,14 +27,32 @@ export const DEFAULT_TEMPLATE: TemplateName = 'initiative';
 export interface TemplateInputField {
   key: string;
   label: string;
+  tooltip: string;
 }
 
 /** Template-dependent inputs, in the brief's own words and order. */
 export const TEMPLATE_INPUT_FIELDS: Record<TemplateName, TemplateInputField[]> = {
-  initiative: [{ key: 'initiative_folder', label: 'INITIATIVE FOLDER' }],
+  initiative: [
+    {
+      key: 'initiative_folder',
+      label: 'INITIATIVE FOLDER',
+      tooltip:
+        'Path in the repository where planning output lands. Passed to the template as initiative_folder.',
+    },
+  ],
   epic: [
-    { key: 'branch', label: 'WORKING BRANCH' },
-    { key: 'spec_folder', label: 'SPEC FOLDER' },
+    {
+      key: 'branch',
+      label: 'WORKING BRANCH',
+      tooltip:
+        'Branch the harness creates and pushes story commits to. Passed to the template as branch.',
+    },
+    {
+      key: 'spec_folder',
+      label: 'SPEC FOLDER',
+      tooltip:
+        "Path holding the epic's stories.yaml and story spec files. Passed to the template as spec_folder.",
+    },
   ],
   'repo-init': [],
 };
@@ -230,6 +249,18 @@ export function harnessLineText(harness: HarnessOut): string {
   return `${harness.name} · ${status} · last readiness ${readiness} · `;
 }
 
+/**
+ * The part of the harness line before its `re-run readiness` link, using a live probe result
+ * instead of the SSR `enabled` flag.  Format mirrors `harnessLineText` but replaces the
+ * `enabled | disabled: …` segment with either `"ok"` or the `failing_reason` string, and
+ * always uses `harness.last_readiness_at` for the timestamp.
+ */
+export function harnessProbeLineText(harness: HarnessOut, result: ProbeResultOut): string {
+  const status = result.ok ? 'ok' : (result.failing_reason ?? 'probe failed');
+  const readiness = harness.last_readiness_at ? readinessTime(harness.last_readiness_at) : '—';
+  return `${harness.name} · ${status} · last readiness ${readiness} · `;
+}
+
 /** The whole line as one string, link text included — what a reader sees, and what the
  * acceptance criterion quotes verbatim. */
 export function harnessLine(harness: HarnessOut): string {
@@ -246,6 +277,24 @@ export function readinessHref(name: string): string {
 /** Stated beside the link while `contracts/openapi.json` carries no readiness route — see
  * `src/components/HarnessList.tsx` for why this is a fact about the build, not a guess. */
 export const READINESS_NOT_AVAILABLE = 'not available yet';
+
+/** Text for the note span beside the "re-run readiness" link (story 2-4).
+ *
+ * Joins the non-empty parts of `readinessTime(last_readiness_at)` and `failing_check` with
+ * ` · `.  Returns `""` when both are null — the island passes `onRunReadiness` and shows this
+ * badge; the unit-test / SSR path does not pass the prop and shows `READINESS_NOT_AVAILABLE`
+ * instead.
+ */
+export function readinessBadgeText(harness: HarnessOut): string {
+  const parts: string[] = [];
+  if (harness.last_readiness_at) {
+    parts.push(readinessTime(harness.last_readiness_at));
+  }
+  if (harness.failing_check) {
+    parts.push(harness.failing_check);
+  }
+  return parts.join(' · ');
+}
 
 function readinessTime(iso: string): string {
   return iso.slice(0, 19).replace('T', ' ');

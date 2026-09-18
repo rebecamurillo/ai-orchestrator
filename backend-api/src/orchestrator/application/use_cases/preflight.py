@@ -10,7 +10,7 @@ so the New-workflow screen can call this on every keystroke.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from orchestrator.application.dto import ProjectSnapshot, RepositorySnapshot, RunInputs
@@ -25,6 +25,7 @@ from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.entities.template import TemplateRef
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.harness import Harness as HarnessAdapter
 from orchestrator.domain.ports.harnesses import HarnessRepository
 from orchestrator.domain.ports.repositories import (
     ProjectRepository,
@@ -54,6 +55,10 @@ class PreflightPorts:
     #: The instance's clone root (AD-14, Settings.work_dir); the per-Repository base clone
     #: is `{work_dir}/{project.slug}/{repository.slug}/base`, computed once both resolve.
     work_dir: Path
+    #: Live harness adapters keyed by name (story 2-2): passed into `Context` so
+    #: `harness_probe_line` can call each adapter's `probe()`.  Defaults to empty so every
+    #: existing frozen `PreflightPorts(...)` construction keeps compiling unchanged.
+    harness_registry: dict[str, HarnessAdapter] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -101,6 +106,7 @@ def preflight_and_plan(ports: PreflightPorts, req: PreflightRequest) -> Prefligh
         tree=resolved.tree,
         plan=plan,
         plan_error=plan_error,
+        harness_registry=ports.harness_registry,
     )
     lines = _lines(ctx)
     # The brief's formula ("no fail line and no plan_error") assumes a plan was built; a
@@ -145,7 +151,7 @@ def _lines(ctx: Context) -> list[Line]:
     lines += stories_lines
     lines.append(checks.checkpoints_line(ctx))
     lines += lists.spec_md_lines(ctx)
-    lines.append(checks.harness_line(ctx))
+    lines.append(checks.harness_probe_line(ctx))
     lines.append(checks.method_version_line(ctx))
     lines.append(lists.existing_story_files_line(ctx, ids_by_path))
     lines.append(checks.clone_check_line(ctx))

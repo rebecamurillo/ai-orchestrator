@@ -59,8 +59,11 @@ export default function NewWorkflowFields({
 }: Props) {
   return (
     <>
-      <label className="newwf-field">
-        <span className="newwf-field-label">TEMPLATE</span>
+      <label
+        className="newwf-field"
+        title="Selects which BMAD workflow the Run executes. Controls the step sequence and which inputs the form shows."
+      >
+        <span className="newwf-field-label">TEMPLATE *</span>
         <select
           data-testid="newwf-template"
           value={state.template}
@@ -77,8 +80,11 @@ export default function NewWorkflowFields({
         </select>
       </label>
 
-      <label className="newwf-field">
-        <span className="newwf-field-label">PROJECT</span>
+      <label
+        className="newwf-field"
+        title="Billing and authorisation scope for the Run. Limits the repository list."
+      >
+        <span className="newwf-field-label">PROJECT *</span>
         <select
           data-testid="newwf-project"
           value={state.projectId}
@@ -95,8 +101,11 @@ export default function NewWorkflowFields({
         </select>
       </label>
 
-      <label className="newwf-field">
-        <span className="newwf-field-label">REPOSITORY</span>
+      <label
+        className="newwf-field"
+        title="Target repository. The harness checks it out for every Run."
+      >
+        <span className="newwf-field-label">REPOSITORY *</span>
         <select
           data-testid="newwf-repository"
           value={state.repositoryId}
@@ -121,8 +130,11 @@ export default function NewWorkflowFields({
         {note ? <span className="newwf-field-note">{note}</span> : null}
       </label>
 
-      <label className="newwf-field">
-        <span className="newwf-field-label">BASE BRANCH</span>
+      <label
+        className="newwf-field"
+        title="The branch the harness starts from when creating per-story working branches."
+      >
+        <span className="newwf-field-label">BASE BRANCH *</span>
         <input
           type="text"
           data-testid="newwf-base"
@@ -132,8 +144,8 @@ export default function NewWorkflowFields({
       </label>
 
       {TEMPLATE_INPUT_FIELDS[state.template].map((field) => (
-        <label className="newwf-field" key={field.key}>
-          <span className="newwf-field-label">{field.label}</span>
+        <label className="newwf-field" key={field.key} title={field.tooltip}>
+          <span className="newwf-field-label">{field.label} *</span>
           <input
             type="text"
             data-testid={`newwf-input-${field.key}`}
@@ -143,8 +155,11 @@ export default function NewWorkflowFields({
         </label>
       ))}
 
-      <label className="newwf-field">
-        <span className="newwf-field-label">MODEL</span>
+      <label
+        className="newwf-field"
+        title="LLM model the harness calls. Blank uses the harness default; the list shows only what the live probe returned."
+      >
+        <span className="newwf-field-label">MODEL (optional)</span>
         {models.length > 0 ? (
           <select
             data-testid="newwf-model"
@@ -169,8 +184,11 @@ export default function NewWorkflowFields({
         )}
       </label>
 
-      <label className="newwf-field">
-        <span className="newwf-field-label">BUDGET (USD)</span>
+      <label
+        className="newwf-field"
+        title="Maximum LLM spend in USD for this Run. The Run enters needs_you when this limit is reached."
+      >
+        <span className="newwf-field-label">BUDGET (USD) *</span>
         <input
           type="text"
           inputMode="decimal"
@@ -181,7 +199,10 @@ export default function NewWorkflowFields({
         />
       </label>
 
-      <label className="newwf-field newwf-switch">
+      <label
+        className="newwf-field newwf-switch"
+        title="Adds a review pass after each story the harness marks done. Increases run time."
+      >
         <input
           type="checkbox"
           data-testid="newwf-rereview"
@@ -191,8 +212,11 @@ export default function NewWorkflowFields({
         <span>re-review done stories</span>
       </label>
 
-      <label className="newwf-field">
-        <span className="newwf-field-label">MANUAL ESTIMATE (H)</span>
+      <label
+        className="newwf-field"
+        title="Hours estimate recorded in the run report. Has no effect on execution."
+      >
+        <span className="newwf-field-label">MANUAL ESTIMATE (H) (optional)</span>
         <input
           type="text"
           inputMode="decimal"

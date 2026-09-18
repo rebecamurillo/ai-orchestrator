@@ -19,7 +19,6 @@ from orchestrator.application.preflight.model import (
 from orchestrator.application.templates.plan_model import CALLEE_NOT_RESOLVED, PlanError
 from orchestrator.application.use_cases import preflight as preflight_uc
 from orchestrator.application.use_cases.preflight import PreflightPorts, run_preflight
-from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import CloneCheck, Repository
 from orchestrator.domain.entities.run import Run
@@ -149,16 +148,13 @@ def test_ac2_stories_yaml_ids_not_prefix_free() -> None:
 
 
 def test_ac3_harness_disabled() -> None:
-    harnesses = FakeHarnessRepository(
-        [Harness(name="claude", enabled=False, version_pin="2.1.258")]
-    )
+    # Operator decision 2026-09-16: harness check now uses live probe via harness_registry,
+    # not the DB enabled flag. Registry absent (default {}) → "harness not available".
     req = epic_request(harness="claude")
 
-    result = run_preflight(ports(git=fixtures.epic_git(), harnesses=harnesses), req)
+    result = run_preflight(ports(git=fixtures.epic_git()), req)
 
-    assert line(result, CHECK_HARNESS) == Line(
-        CHECK_HARNESS, "fail", "disabled: no readiness run", "re-run readiness on this screen"
-    )
+    assert line(result, CHECK_HARNESS) == Line(CHECK_HARNESS, "fail", "harness not available")
 
 
 def test_ac4_held_branch() -> None:
