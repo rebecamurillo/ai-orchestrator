@@ -34,3 +34,8 @@ Nothing here is edited by hand between runs: `backend-api/tests/e2e/helpers/gate
 copies this directory into a scratch tree, writes a `_bmad/_config/manifest.yaml` stating the
 instance's own `BMAD_VERSION`, and pushes the result to a bare origin the backend clones
 from. This directory is never edited in place.
+
+`.fake-harness/default.yaml` (the root one, beside the per-story directories) serves every
+dispatch whose prompt names no story id — `epic@1`'s own `spec-gate`, `gen-e2e` and `retro`
+rows (stories 4-4..4-7). It writes `specs/gates/spec-gate-result.md` with a terminal status,
+which is the one `expect:` those rows declare between them.

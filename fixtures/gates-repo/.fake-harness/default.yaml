@@ -1,0 +1,18 @@
+# The epic tail's non-story dispatches (spec-gate, gen-e2e, retro — stories 4-4..4-7).
+# Their prompts carry no story id, so `scenario.py` resolves them all to this root default
+# (`.fake-harness/{story_id}/` with an empty id). It writes the one file the spec-gate's
+# `expect:` names, with a terminal status, so the tail walks through deterministically;
+# gen-e2e and retro declare no expect and route done on exit 0 regardless.
+files:
+  - path: specs/gates/spec-gate-result.md
+    content: |
+      ---
+      status: done
+      ---
+
+      # Spec gate — result
+
+      Reviewed: the stories are implementable as specified.
+commit: true
+exit_code: 0
+usage: { tokens_in: 50, tokens_out: 80, cost_usd: "0.01" }
