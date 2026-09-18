@@ -161,14 +161,7 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
             park_dependents(writers, run)
         writers.uow.commit()
     resumed = effect.resume and rule.run_event is not None and run.status == RUNNING
-    _tell_the_engine(
-        ports,
-        run_id,
-        signal,
-        original_park_kind=original_park_kind,
-        resumed=resumed,
-        finished=effect.finished,
-    )
+    _tell_the_engine(ports, run_id, signal, resumed=resumed, finished=effect.finished)
     # Two-phase enqueue for done dependents after signal (e.g. skip-to-done, story 5-4).
     if run.status == "done":
         enqueue_dependents(writers, writers.engine, run)
@@ -215,29 +208,19 @@ def _apply(writers: WriterPorts, run: Run, rule: Rule, effect: Effect) -> Run:
 
 
 def _tell_the_engine(
-    ports: SignalPorts,
-    run_id: UUID,
-    signal: Signal,
-    *,
-    original_park_kind: str | None,
-    resumed: bool,
-    finished: bool,
+    ports: SignalPorts, run_id: UUID, signal: Signal, *, resumed: bool, finished: bool
 ) -> None:
     """Wake the Run's `recv`, or stop its workflow — after the writes are durable.
-
-    `engine.cancel` is guarded on `original_park_kind`: a dependency-parked Run
-    (`park_kind="dependency"`) was never enqueued, so there is no workflow to cancel.  Any
-    other park kind (including `None`, for a queued Run) means the engine holds a workflow.
 
     `finished` is a signal that ended the Run itself (a Continue on the plan's final
     checkpoint row — story 4-5's `done-checkpoint` is the shipped case, and a skip with
     nothing left to run is another): nothing remains to walk, but the workflow parked in
     `recv` would otherwise sleep out `HUMAN_WAIT_SECONDS` holding its queue slot (AD-12),
-    so it is stopped the same way a cancel stops one.
+    so it is stopped the same way a cancel stops one. A run that was never enqueued (a
+    dependency park) has no workflow; `engine.cancel` swallows that case by contract.
     """
     if signal.kind == CANCEL or finished:
-        if original_park_kind != DEPENDENCY_PARK:
-            ports.engine.cancel(run_id)
+        ports.engine.cancel(run_id)
     elif resumed:
         ports.engine.signal(run_id, signal)
 
