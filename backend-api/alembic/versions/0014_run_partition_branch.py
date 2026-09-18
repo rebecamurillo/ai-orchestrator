@@ -17,8 +17,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0013_run_partition_branch"
-down_revision: str | None = "0012_run_spend_provisional"
+revision: str = "0014_run_partition_branch"
+down_revision: str | None = "0013_budget_usd_nullable"
 branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | None = None
 

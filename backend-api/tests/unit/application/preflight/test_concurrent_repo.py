@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from orchestrator.application.preflight import checks
+from orchestrator.application.preflight import checks, lists
 from orchestrator.application.preflight.checks import Context
 from orchestrator.application.preflight.model import (
     CHECK_CONCURRENT_REPO,
@@ -85,7 +85,7 @@ def make_ctx(
 
 def test_returns_empty_when_repository_is_none() -> None:
     ctx = make_ctx(repository=None)
-    assert checks.concurrent_repo_lines(ctx) == []
+    assert lists.concurrent_repo_lines(ctx) == []
 
 
 # --- partition_branch=None holders are skipped -------------------------------------------
@@ -95,7 +95,7 @@ def test_skips_holders_with_partition_branch_none() -> None:
     holder = run_on(REPO_ID, branch=None)
     ctx = make_ctx(repository=repo(), runs=[holder])
 
-    assert checks.concurrent_repo_lines(ctx) == []
+    assert lists.concurrent_repo_lines(ctx) == []
 
 
 # --- same-branch holders are skipped (already a fail via branch_lines) -------------------
@@ -105,7 +105,7 @@ def test_skips_holders_whose_partition_branch_equals_new_runs_declared_branch() 
     holder = run_on(REPO_ID, branch="feat/s2")
     ctx = make_ctx(repository=repo(), runs=[holder], base_branch="feat/s2")
 
-    assert checks.concurrent_repo_lines(ctx) == []
+    assert lists.concurrent_repo_lines(ctx) == []
 
 
 # --- concurrent different-branch emits a warn --------------------------------------------
@@ -115,7 +115,7 @@ def test_emits_one_warn_line_for_concurrent_run_on_different_branch() -> None:
     holder = run_on(REPO_ID, branch="feat/s1")
     ctx = make_ctx(repository=repo(), runs=[holder], base_branch="feat/s2")
 
-    lines = checks.concurrent_repo_lines(ctx)
+    lines = lists.concurrent_repo_lines(ctx)
 
     assert len(lines) == 1
     assert lines[0].check == CHECK_CONCURRENT_REPO
@@ -132,7 +132,7 @@ def test_concurrent_run_text_includes_spec_folder() -> None:
     holder = run_on(REPO_ID, branch="feat/s1", inputs={"spec_folder": "docs/epic-1"})
     ctx = make_ctx(repository=repo(), runs=[holder], base_branch="feat/s2")
 
-    lines = checks.concurrent_repo_lines(ctx)
+    lines = lists.concurrent_repo_lines(ctx)
 
     assert len(lines) == 1
     assert "docs/epic-1" in lines[0].text
@@ -142,7 +142,7 @@ def test_concurrent_run_text_includes_initiative_folder() -> None:
     holder = run_on(REPO_ID, branch="feat/s1", inputs={"initiative_folder": "docs/init"})
     ctx = make_ctx(repository=repo(), runs=[holder], base_branch="feat/s2")
 
-    lines = checks.concurrent_repo_lines(ctx)
+    lines = lists.concurrent_repo_lines(ctx)
 
     assert len(lines) == 1
     assert "docs/init" in lines[0].text
@@ -152,7 +152,7 @@ def test_concurrent_run_text_has_no_folder_suffix_when_neither_input_is_set() ->
     holder = run_on(REPO_ID, branch="feat/s1", inputs={})
     ctx = make_ctx(repository=repo(), runs=[holder], base_branch="feat/s2")
 
-    lines = checks.concurrent_repo_lines(ctx)
+    lines = lists.concurrent_repo_lines(ctx)
 
     assert len(lines) == 1
     # text is only run_label: "{template} · {branch}"
@@ -168,7 +168,7 @@ def test_multiple_concurrent_runs_emit_multiple_warn_lines() -> None:
     holder_b = run_on(REPO_ID, branch="feat/s3")
     ctx = make_ctx(repository=repo(), runs=[holder_a, holder_b], base_branch="feat/s2")
 
-    lines = checks.concurrent_repo_lines(ctx)
+    lines = lists.concurrent_repo_lines(ctx)
 
     assert all(line.check == CHECK_CONCURRENT_REPO for line in lines)
     assert all(line.status == "warn" for line in lines)
@@ -184,4 +184,4 @@ def test_terminal_runs_are_not_emitted() -> None:
     done_run = run_on(REPO_ID, branch="feat/s1", status="done")
     ctx = make_ctx(repository=repo(), runs=[done_run], base_branch="feat/s2")
 
-    assert checks.concurrent_repo_lines(ctx) == []
+    assert lists.concurrent_repo_lines(ctx) == []

@@ -26,12 +26,14 @@ from orchestrator.domain.entities.repository import CloneCheck, Repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.errors import Conflict
 from orchestrator.domain.ids import new_id
+from orchestrator.domain.ports.harness import ProbeResult
 from orchestrator.domain.values import Signal
 from tests.unit.application.templates import plan_fixtures as fixtures
 from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
 from tests.unit.fakes.engine import FakeWorkflowEngine
 from tests.unit.fakes.git import FakeGit
+from tests.unit.fakes.harness import FakeHarness as FakeHarnessAdapter
 from tests.unit.fakes.harnesses import FakeHarnessRepository
 from tests.unit.fakes.projects import FakeProjectRepository, FakeRepositoryRepository
 from tests.unit.fakes.runs import (
@@ -150,7 +152,11 @@ class StartHarness:
         )
         # A healthy `claude` harness so the preflight harness-line check passes for
         # saved runs whose inputs carry `harness="claude"` (story 5-3 AC re-read probe).
+        # Since story 2-2 the line is a live probe through `harness_registry`, so the
+        # registry carries a shared fake scripted to answer `ok` on every re-read.
         claude = Harness(name="claude", version_pin="1.0.0", enabled=True)
+        probe_ok = ProbeResult(ok=True, failing_reason=None, version="1.0.0", models=[])
+        adapter = FakeHarnessAdapter(name="claude", probe_results=[probe_ok] * 8)
         preflight = PreflightPorts(
             git=git,
             templates=self.templates,
@@ -161,6 +167,7 @@ class StartHarness:
             bmad_version=fixtures.BMAD_VERSION,
             max_active_runs=2,
             work_dir=Path("/work"),
+            harness_registry={"claude": adapter},
         )
         self.ports = SignalPorts(
             writers=writer_ports,

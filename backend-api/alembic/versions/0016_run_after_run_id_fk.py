@@ -17,8 +17,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0015_run_after_run_id_fk"
-down_revision: str | None = "0014_run_after_run_id"
+revision: str = "0016_run_after_run_id_fk"
+down_revision: str | None = "0015_run_after_run_id"
 branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | None = None
 

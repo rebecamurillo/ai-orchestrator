@@ -156,7 +156,7 @@ def _lines(ctx: Context) -> list[Line]:
     """Every line, in FR-8's order."""
     lines: list[Line] = [checks.origin_reachable(ctx), checks.base_branch_line(ctx)]
     lines += checks.branch_lines(ctx)
-    lines += checks.concurrent_repo_lines(ctx)
+    lines += lists.concurrent_repo_lines(ctx)
     epics_line = lists.epics_yaml_line(ctx)
     if epics_line is not None:
         lines.append(epics_line)

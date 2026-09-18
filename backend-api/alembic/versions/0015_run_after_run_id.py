@@ -15,8 +15,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0014_run_after_run_id"
-down_revision: str | None = "0013_run_partition_branch"
+revision: str = "0015_run_after_run_id"
+down_revision: str | None = "0014_run_partition_branch"
 branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | None = None
 
