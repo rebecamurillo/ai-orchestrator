@@ -402,10 +402,17 @@ test.describe('/workflows/[id]?view=diagram — Run diagram', () => {
     await expect(epic1Group).toBeVisible();
     await expect(epic1Group).toContainText('DON');
 
-    // story-4-1 aggregate node is present and has data-current
-    const story41 = page.getByTestId('diagram-node-epic-2/story-4-1');
-    await expect(story41).toBeVisible();
-    await expect(story41).toHaveAttribute('data-current', 'true');
+    // operator revision 2026-09-18: story 1-4 embedded the diagram in the Run detail as
+    // `DiagramSection`, which pre-expands the group holding the current step on its first
+    // fetch. story-4-1 *is* that story here, so it renders as its own member steps rather than
+    // as an aggregate — the current story is now shown opened, which is what the pre-expansion
+    // is for. What this asserted — that the current story is the one marked — is asserted of the
+    // member step below, and a story that is not current still renders as an aggregate.
+    await expect(page.getByTestId('diagram-node-epic-2/story-4-1')).toHaveCount(0);
+    const build = page.getByTestId('diagram-node-epic-2/story-4-1/build');
+    await expect(build).toBeVisible();
+    await expect(build).toHaveAttribute('data-current', 'true');
+    await expect(page.getByTestId('diagram-node-epic-2/story-4-2')).toBeVisible();
 
     // Footer is present and contains story count, step-seq prefix, and separator
     const footer = page.getByTestId('wf-diagram-footer');
@@ -428,21 +435,32 @@ test.describe('/workflows/[id]?view=diagram — Run diagram', () => {
     await expect(amberElements).toHaveCount(1);
   });
 
-  test('(c) clicking a node navigates to ?view=detail#step-{seq}', async ({ page }) => {
+  // Revised: story 1-5 (2026-09-16) — no click-scrolls behaviour; group boxes expand; leaf nodes navigate to step-run detail
+  test('(c) clicking a story aggregate expands it; clicking a step leaf navigates to step-run detail', async ({
+    page,
+  }) => {
     await mockDetail(page, twoEpicDetail());
     await mockGraph(page, twoEpicGraph());
     await page.goto(DIAGRAM_URL);
     await expect(page.getByTestId('wf-diagram')).toBeVisible();
 
-    // Mock detail for the subsequent navigation
-    await mockDetail(page, twoEpicDetail());
+    // operator revision 2026-09-18: story 1-4 embedded the diagram as `DiagramSection`, which
+    // pre-expands the group holding the current step. story-4-1 is that story in this fixture,
+    // so what is expanded by a *click* is one that is not — story-4-2. The two clicks this test
+    // exists for are unchanged; only the story they are made on moved.
+    const story42 = page.getByTestId('diagram-node-epic-2/story-4-2');
+    await expect(story42).toBeVisible();
 
-    // Click the story-4-1 node
-    const story41 = page.getByTestId('diagram-node-epic-2/story-4-1');
-    await story41.click();
+    // Click the story aggregate — it should expand and reveal its member step nodes
+    await story42.click();
 
-    // URL should now contain ?view=detail and a step fragment
-    await expect(page).toHaveURL(/\?view=detail#step-\d+/);
+    // A member step node (e.g. story-4-2/build) becomes visible after expansion
+    const buildNode = page.getByTestId('diagram-node-epic-2/story-4-2/build');
+    await expect(buildNode).toBeVisible();
+
+    // Click the step node — browser navigates to step-run detail URL (contains /steps/)
+    await buildNode.click();
+    await expect(page).toHaveURL(/\/workflows\/[^/]+\/steps\//);
   });
 
   test('(d) cancelled run: no group tokens rendered, root shows CAN token', async ({ page }) => {
@@ -486,7 +504,8 @@ test.describe('/workflows/[id]?view=diagram — Run diagram', () => {
     await expect(page.getByTestId('wf-step-1')).toHaveCount(0);
   });
 
-  test('?view=detail (or no view) never calls GET /graph', async ({ page }) => {
+  // Revised: FR-29 + story 1-4 (2026-09-16) — ?view=diagram retired; diagram embedded in RunDetail; graph is always fetched
+  test('?view=detail (or no view) calls GET /graph for the embedded diagram', async ({ page }) => {
     let graphCalled = false;
     await page.route(`**/api/runs/${RUN_ID}/graph`, (route: Route) => {
       graphCalled = true;
@@ -496,16 +515,21 @@ test.describe('/workflows/[id]?view=diagram — Run diagram', () => {
     await page.goto(BASE_URL);
 
     await expect(page.getByTestId('wf-header')).toBeVisible();
-    expect(graphCalled).toBe(false);
+    await expect(page.getByTestId('fetch-failed')).toBeVisible(); // graph aborted → DiagramSection error state
+    expect(graphCalled).toBe(true);
   });
 
-  test('toggle shows DIAGRAM as aria-current when ?view=diagram', async ({ page }) => {
+  // Revised: FR-29 + story 1-4 (2026-09-16) — ?view=diagram retired via 301; RunDetail renders with view=undefined
+  test('?view=diagram redirects; toggle shows DETAIL as aria-current and DIAGRAM as disabled', async ({
+    page,
+  }) => {
     await mockDetail(page, twoEpicDetail());
     await mockGraph(page, twoEpicGraph());
     await page.goto(DIAGRAM_URL);
     await expect(page.getByTestId('wf-diagram')).toBeVisible();
 
     const toggle = page.getByTestId('wf-toggle-diagram');
-    await expect(toggle.locator('[aria-current="true"]')).toHaveText('DIAGRAM');
+    await expect(toggle.locator('[aria-current="true"]')).toHaveText('DETAIL');
+    await expect(toggle.locator('[aria-disabled="true"]')).toHaveText('DIAGRAM');
   });
 });

@@ -246,6 +246,7 @@ def _header(run: Run, project: Project | None, repository: Repository | None) ->
         template=run.template_name,
         version=run.template_version,
         harness=run.inputs.get("harness"),
+        model=run.inputs.get("model"),
         started_at=run.started_at,
         worktree_path=run.worktree_path,
     )

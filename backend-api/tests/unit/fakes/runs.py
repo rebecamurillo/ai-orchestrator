@@ -141,6 +141,10 @@ class FakeAttemptRepository:
             raise ValueError(f"row {attempt.step_run_id} already has attempt {attempt.n}")
         self.attempts[attempt.id] = attempt
 
+    def get(self, attempt_id: UUID) -> Attempt | None:
+        self.calls.append(("get", attempt_id))
+        return self.attempts.get(attempt_id)
+
     def get_latest(self, step_run_id: UUID) -> Attempt | None:
         self.calls.append(("get_latest", step_run_id))
         stored = [a for a in self.attempts.values() if a.step_run_id == step_run_id]

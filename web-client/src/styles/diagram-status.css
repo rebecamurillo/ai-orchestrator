@@ -1,0 +1,93 @@
+/*
+ * Run-graph status colours for `.diagram-node` and `.diagram-group` (story 1-5, AD-15).
+ *
+ * Imported by DiagramSection and RunDiagram — the two components that render live run
+ * graphs. Template diagrams (`diagram.css` alone) carry no status and do not import this.
+ * Keeping the status rules here (not in `diagram.css`) preserves `diagram-island.test.ts`'s
+ * assertion that the template diagram has no signal colours.
+ *
+ * Rules placed AFTER the `.diagram-node[data-agent='true']` rule in `diagram.css` so
+ * equal-specificity source-order wins (0,3,0). Colour comes only from `data-status`
+ * selectors — never inline style (NFR-6). `skipped`/`cancelled` are faint-grey, never
+ * green (NFR-2). `running` uses `--color-signal-criterion` from `tokens.css`.
+ */
+
+/* done — green */
+.diagram-node[data-status='done'] .diagram-node-box,
+.diagram-group[data-status='done'] .diagram-group-box {
+  stroke: var(--color-signal-run);
+}
+.diagram-node[data-status='done'] .diagram-node-chip,
+.diagram-group[data-status='done'] .diagram-group-chip {
+  fill: var(--color-signal-run);
+}
+
+/* running — blue (diagram-only criterion signal) */
+.diagram-node[data-status='running'] .diagram-node-box,
+.diagram-group[data-status='running'] .diagram-group-box {
+  stroke: var(--color-signal-criterion);
+}
+.diagram-node[data-status='running'] .diagram-node-chip,
+.diagram-group[data-status='running'] .diagram-group-chip {
+  fill: var(--color-signal-criterion);
+}
+
+/* error — red */
+.diagram-node[data-status='error'] .diagram-node-box,
+.diagram-group[data-status='error'] .diagram-group-box {
+  stroke: var(--color-signal-failed);
+}
+.diagram-node[data-status='error'] .diagram-node-chip,
+.diagram-group[data-status='error'] .diagram-group-chip {
+  fill: var(--color-signal-failed);
+}
+
+/* blocked / checkpoint — amber */
+.diagram-node[data-status='blocked'] .diagram-node-box,
+.diagram-node[data-status='checkpoint'] .diagram-node-box,
+.diagram-group[data-status='blocked'] .diagram-group-box,
+.diagram-group[data-status='checkpoint'] .diagram-group-box {
+  stroke: var(--color-signal-needs-you);
+}
+.diagram-node[data-status='blocked'] .diagram-node-chip,
+.diagram-node[data-status='checkpoint'] .diagram-node-chip,
+.diagram-group[data-status='blocked'] .diagram-group-chip,
+.diagram-group[data-status='checkpoint'] .diagram-group-chip {
+  fill: var(--color-signal-needs-you);
+}
+
+/* planned / queued — default grey (same as baseline stroke) */
+.diagram-node[data-status='planned'] .diagram-node-box,
+.diagram-node[data-status='queued'] .diagram-node-box,
+.diagram-group[data-status='planned'] .diagram-group-box,
+.diagram-group[data-status='queued'] .diagram-group-box {
+  stroke: var(--color-line);
+}
+.diagram-node[data-status='planned'] .diagram-node-chip,
+.diagram-node[data-status='queued'] .diagram-node-chip,
+.diagram-group[data-status='planned'] .diagram-group-chip,
+.diagram-group[data-status='queued'] .diagram-group-chip {
+  fill: var(--color-line);
+}
+
+/* skipped / cancelled — faint grey, never green (NFR-2) */
+.diagram-node[data-status='skipped'] .diagram-node-box,
+.diagram-node[data-status='cancelled'] .diagram-node-box,
+.diagram-group[data-status='skipped'] .diagram-group-box,
+.diagram-group[data-status='cancelled'] .diagram-group-box {
+  stroke: var(--color-line);
+  opacity: 0.4;
+}
+.diagram-node[data-status='skipped'] .diagram-node-chip,
+.diagram-node[data-status='cancelled'] .diagram-node-chip,
+.diagram-group[data-status='skipped'] .diagram-group-chip,
+.diagram-group[data-status='cancelled'] .diagram-group-chip {
+  fill: var(--color-line);
+  opacity: 0.4;
+}
+
+/* k/n step-count text inside a group box (story 1-5) */
+.diagram-group-kn {
+  fill: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}

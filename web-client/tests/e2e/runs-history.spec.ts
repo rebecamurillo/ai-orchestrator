@@ -194,9 +194,14 @@ test.describe('/runs (HISTORY section)', () => {
     );
     await openHistory(page);
 
+    // operator revision 2026-09-18: story 1-2 gave the *path* cell its own destination — the
+    // step-run detail page (`lib/runs/history.ts::stepDetailHref`) — so the link that carries
+    // this arrival is the workflow cell, which still holds `rowHref`'s `#step-{seq}`. The
+    // behaviour below is unchanged; only the link that reaches it moved. The path cell's new
+    // destination is asserted by `runs-history-step-link.spec.ts`.
     await page
       .getByTestId('runs-history-row-00000000-0000-0000-0000-000000000001')
-      .getByRole('link', { name: 'epics[0].stories[3].build' })
+      .getByRole('link', { name: 'story v3 · feat/epic-7' })
       .click();
 
     await expect(page).toHaveURL(new RegExp(`/workflows/${RUN_ID}#step-7$`));

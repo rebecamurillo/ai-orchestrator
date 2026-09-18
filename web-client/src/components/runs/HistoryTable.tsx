@@ -25,6 +25,7 @@ import {
   promoted,
   rowHref,
   startedText,
+  stepDetailHref,
   TRACE_LINK_TEXT,
   workflowText,
   type HistoryRowOut,
@@ -60,7 +61,7 @@ export default function HistoryTable({ rows }: Props) {
                 <a href={rowHref(row)}>{workflowText(row)}</a>
               </td>
               <td>
-                <a href={rowHref(row)}>{row.path}</a>
+                <a href={stepDetailHref(row)}>{row.path}</a>
               </td>
               <td>{row.kind}</td>
               <td>{harnessText(row)}</td>

@@ -35,7 +35,9 @@ import FailedFetch from '../components/FailedFetch';
 import ArtifactsPanel from '../components/run/ArtifactsPanel';
 import Banner from '../components/run/Banner';
 import CancelModal from '../components/run/CancelModal';
+import CommandBlock from '../components/run/CommandBlock';
 import CostBlock from '../components/run/CostBlock';
+import DiagramSection from '../components/run/DiagramSection';
 import GateRecord from '../components/run/GateRecord';
 import Header from '../components/run/Header';
 import StepsTable from '../components/run/StepsTable';
@@ -49,7 +51,7 @@ import { anchoredSeq, PROMOTED_MS, stepAnchorId } from '../lib/run/anchor';
 import { isSpecCheckpoint, plannedFilePath } from '../lib/run/checkpoint';
 import { detailRequestPath, runToken, stopKind, type RunDetailOut } from '../lib/run/detail';
 import { signalBody, signalsRequestPath, type SignalIn, type SignalKind } from '../lib/run/signals';
-import { TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
+import { terminalBlock, TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
 import { startTracking, stopTracking } from '../stores/activity';
 import '../styles/run-detail.css';
@@ -71,9 +73,12 @@ export default function RunDetail({ runId }: Props) {
   const [signalError, setSignalError] = useState<ProblemDetail | null>(null);
   const [plannedFile, setPlannedFile] = useState<RunFileOut | null>(null);
   const [anchored, setAnchored] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'gate' | 'steps' | 'session'>('gate');
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
+  /** One-shot guard: sets the active tab once on the first detail load. */
+  const tabDefaultSetRef = useRef(false);
   // 8-3: on the first navigation fetch, append `?opened=true` so `open_run` records the
   // visit server-side before `build_detail` runs — the response's `last_opened_at` then
   // reflects the just-updated timestamp, and the files fetch sees the freshly committed
@@ -152,6 +157,13 @@ export default function RunDetail({ runId }: Props) {
   // The `#step-{seq}` arrival (7.5). `arrived` guards the one-shot: the effect depends on
   // `detail` because the row it scrolls to only exists once the first one has rendered, and
   // without the guard every poll would re-scroll the page.
+  //
+  // It opens STEPS as well as promoting the row, because since story 1-4 the table is one tab
+  // of three and `activeTab` starts on GATE: the row this arrival exists to show is not
+  // mounted, so the `getElementById` below found nothing and a HISTORY row's `#step-{seq}`
+  // link landed on the gate record with no sign of the step it named (FR-25's own link rule).
+  // The scroll is a second effect for the same reason — the row exists only after the tab
+  // this one opens has rendered.
   const arrivedRef = useRef(false);
   useEffect(() => {
     if (!detail || arrivedRef.current) return;
@@ -159,9 +171,28 @@ export default function RunDetail({ runId }: Props) {
     const seq = anchoredSeq(window.location.hash);
     if (seq === null) return;
     setAnchored(seq);
-    document.getElementById(stepAnchorId(seq))?.scrollIntoView({ block: 'center' });
+    setActiveTab('steps');
     const clear = window.setTimeout(() => setAnchored(null), PROMOTED_MS);
     return () => window.clearTimeout(clear);
+  }, [detail]);
+
+  useEffect(() => {
+    if (anchored === null || activeTab !== 'steps') return;
+    document.getElementById(stepAnchorId(anchored))?.scrollIntoView({ block: 'center' });
+  }, [anchored, activeTab]);
+
+  // SESSION tab default (story 1-4): set once on the first detail load when terminal is present.
+  // The `tabDefaultSetRef` guard prevents subsequent polls from resetting the operator's choice.
+  // A `#step-{seq}` arrival wins over it: the Operator followed a link to one row, and this
+  // effect runs after the one above, so without the guard it would take the tab straight back.
+  useEffect(() => {
+    if (!detail) return;
+    if (tabDefaultSetRef.current) return;
+    tabDefaultSetRef.current = true;
+    if (anchoredSeq(window.location.hash) !== null) return;
+    if (terminalBlock(detail) !== null) {
+      setActiveTab('session');
+    }
   }, [detail]);
 
   async function sendSignal(kind: SignalKind, body?: SignalIn): Promise<void> {
@@ -203,38 +234,80 @@ export default function RunDetail({ runId }: Props) {
   if (!detail) return null;
 
   const token = runToken(detail.run, detail.alert);
+  const terminal = terminalBlock(detail);
 
   return (
     <div data-testid="wf-detail">
-      <Header detail={detail} token={token} now={Date.now()} view="detail" />
+      <Header detail={detail} token={token} now={Date.now()} view={undefined} />
       <Banner detail={detail} token={token} />
-      <div className="wf-body">
-        <div className="wf-left">
-          <StopBody
-            detail={detail}
-            token={token}
-            onSignal={(kind) => void sendSignal(kind)}
-            onCancelClick={() => setCancelOpen(true)}
-            posting={posting}
-            error={signalError}
-            onAnswer={(text) => void sendSignal('answer', answerBody(text))}
-            onRaiseBudget={(amount) => void sendSignal('budget_raise', budgetRaiseBody(amount))}
-            onAccept={(paths) => void sendSignal('continue', acceptBody(paths))}
-            runId={runId}
-            onTerminalStart={() => void sendSignal(TERMINAL_START)}
-            onTerminalRelease={() => void sendSignal(TERMINAL_RELEASE)}
-            plannedFile={plannedFile}
-          />
-          <div>
-            <h2 className="wf-section-head">STEPS</h2>
-            <StepsTable detail={detail} anchoredSeq={anchored} />
-          </div>
+      <div className="wf-top-zone">
+        <StopBody
+          detail={detail}
+          token={token}
+          onSignal={(kind) => void sendSignal(kind)}
+          onCancelClick={() => setCancelOpen(true)}
+          posting={posting}
+          error={signalError}
+          onAnswer={(text) => void sendSignal('answer', answerBody(text))}
+          onRaiseBudget={(amount) => void sendSignal('budget_raise', budgetRaiseBody(amount))}
+          onAccept={(paths) => void sendSignal('continue', acceptBody(paths))}
+          runId={runId}
+          plannedFile={plannedFile}
+        />
+      </div>
+      <div className="wf-diagram-row">
+        <div className="wf-diagram-main">
+          <DiagramSection runId={runId} detail={detail} />
         </div>
-        <div className="wf-right">
+        <div className="wf-summary-col">
           <StoriesStrip stories={detail.stories} />
           <CostBlock detail={detail} />
-          <GateRecord detail={detail} token={token} />
           <ArtifactsPanel runId={runId} run={detail.run} folder={detail.header.meta.folder} />
+        </div>
+      </div>
+      <div className="wf-tabs">
+        <div className="wf-tab-btns">
+          <button
+            type="button"
+            className="wf-tab-btn"
+            aria-pressed={activeTab === 'gate'}
+            onClick={() => setActiveTab('gate')}
+          >
+            GATE
+          </button>
+          <button
+            type="button"
+            className="wf-tab-btn"
+            aria-pressed={activeTab === 'steps'}
+            onClick={() => setActiveTab('steps')}
+          >
+            STEPS
+          </button>
+          {terminal !== null ? (
+            <button
+              type="button"
+              className="wf-tab-btn"
+              aria-pressed={activeTab === 'session'}
+              onClick={() => setActiveTab('session')}
+            >
+              SESSION
+            </button>
+          ) : null}
+        </div>
+        <div className="wf-tab-panel">
+          {activeTab === 'gate' ? <GateRecord detail={detail} token={token} /> : null}
+          {activeTab === 'steps' ? (
+            <StepsTable detail={detail} anchoredSeq={anchored} runId={runId} />
+          ) : null}
+          {activeTab === 'session' && terminal !== null ? (
+            <CommandBlock
+              terminal={terminal}
+              onCopy={() => void sendSignal(TERMINAL_START)}
+              onRelease={() => void sendSignal(TERMINAL_RELEASE)}
+              canRelease={(detail.admitted_signals as readonly string[]).includes(TERMINAL_RELEASE)}
+              disabled={posting !== null}
+            />
+          ) : null}
         </div>
       </div>
       {cancelOpen ? (

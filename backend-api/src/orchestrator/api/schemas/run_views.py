@@ -169,6 +169,8 @@ class HeaderMetaOut(BaseModel):
     template: str
     version: int
     harness: str | None
+    #: The model the dispatch used — EXPERIENCE-v1.md delta 26 (2026-09-15).
+    model: str | None = None
     started_at: UtcTimestamp | None
     worktree_path: str | None
 
@@ -187,6 +189,7 @@ class HeaderOut(BaseModel):
                 template=header.template,
                 version=header.version,
                 harness=header.harness,
+                model=header.model,
                 started_at=header.started_at,
                 worktree_path=header.worktree_path,
             )

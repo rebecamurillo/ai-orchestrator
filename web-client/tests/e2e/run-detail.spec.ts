@@ -122,6 +122,10 @@ test.describe('/workflows/[id] (Run detail)', () => {
     await page.goto(URL);
 
     await expect(page.getByTestId('wf-header')).toBeVisible();
+    // operator revision 2026-09-18: story 1-4 put the Steps table in a tabbed region whose
+    // default panel is GATE, so the table is reached rather than arrived on. The rows and the
+    // promotion below are unchanged. `run-detail-tabs.spec.ts` asserts the region itself.
+    await page.getByRole('button', { name: 'STEPS' }).click();
     for (let i = 1; i <= 12; i += 1) {
       await expect(page.getByTestId(`wf-step-${i}`)).toContainText(`row-${i}`);
     }
@@ -416,6 +420,9 @@ test.describe('/workflows/[id] (Run detail)', () => {
     );
     await page.goto(URL);
 
+    // operator revision 2026-09-18: story 1-4 put the Steps table behind the STEPS tab; the
+    // row's own reading below is unchanged. See `run-detail-tabs.spec.ts`.
+    await page.getByRole('button', { name: 'STEPS' }).click();
     await expect(page.getByTestId('wf-step-1')).toContainText(
       'SKP · skipped — no quality_gate_command',
     );

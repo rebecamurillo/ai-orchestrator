@@ -1,0 +1,24 @@
+---
+/**
+ * Step-run detail page (story 1-2, AD-15): the full history for one step of a Run.
+ *
+ * The `[id]` segment is the Run id (same as `workflows/[id].astro`).
+ * The `[...path]` catch-all receives the step path in dot-index encoding, e.g.
+ * `epics.0.stories.3.build` — `StepDetail` decodes it to bracket form before calling
+ * the API.
+ *
+ * No server-side read: the island fetches and polls client-side, the same pattern as
+ * `workflows/[id].astro`'s `RunDetail` island.
+ */
+import Shell from '../../../../layouts/Shell.astro';
+import StepDetail from '../../../../islands/StepDetail';
+
+export const prerender = false;
+
+const { id, path } = Astro.params;
+if (!id || path === undefined) return Astro.redirect('/workflows');
+---
+
+<Shell active="workflows" title="STEP DETAIL">
+  <StepDetail client:load runId={id} dotPath={path} />
+</Shell>

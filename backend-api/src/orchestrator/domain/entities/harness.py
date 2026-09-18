@@ -25,6 +25,22 @@ from pydantic import BaseModel, ConfigDict
 #: `tests/unit/application/test_harness_readiness_start_unknown_name.py` compares the two.
 HARNESS_NAMES: tuple[str, ...] = ("claude", "codex", "local")
 
+#: The shape of a harness name, as the API declares it on every parameter that carries one.
+#:
+#: Wider than `HARNESS_NAMES` on purpose: the `fake` harness `ORCH_TEST_MODE` seeds
+#: (`infrastructure/harness/fake/adapter.py`) is a row with a real name outside that tuple, so
+#: reading and filtering by name stay open to any well-formed one. What this refuses is a
+#: value no name can be — every name in this system is a lowercase slug, and a name is
+#: compared against a Postgres text column (`attempt.harness`, `harness.name`), which cannot
+#: hold a NUL byte. Without the shape such a value reached psycopg as a `DataError` and left a
+#: 500 where the caller had asked for something that could match nothing (schemathesis, on
+#: `GET /steps?harness=` and `GET /harnesses/{name}/readiness`, 2026-09-18).
+#:
+#: Anchored at both ends because FastAPI matches a declared pattern unanchored.
+#: `tests/unit/test_harness_name_pattern.py` pins the shape; the two router `*_shape.py`
+#: modules pin the parameters that declare it.
+HARNESS_NAME_PATTERN = r"^[a-z][a-z0-9-]{0,31}$"
+
 
 class EvaluationLine(BaseModel):
     """One line `evaluate` (SPEC CAP-8) produced: one named check, and whether it passed."""

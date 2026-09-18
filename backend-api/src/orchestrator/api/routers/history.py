@@ -33,6 +33,7 @@ from orchestrator.application.use_cases.history import (
     HistoryPorts,
     list_history,
 )
+from orchestrator.domain.entities.harness import HARNESS_NAME_PATTERN
 
 router = APIRouter(tags=["history"])
 
@@ -48,7 +49,8 @@ REFUSALS = {
         "model": ProblemDetail,
         "description": (
             "`status` is not one of the tokens this endpoint offers, `cursor` is not one it "
-            "issued, or `limit` is outside its bounds."
+            "issued, `harness` is not the shape of a harness name, or `limit` is outside its "
+            "bounds."
         ),
         "content": {PROBLEM_MEDIA_TYPE: {"schema": PROBLEM_SCHEMA_REF}},
     }
@@ -56,11 +58,19 @@ REFUSALS = {
 
 STATUS_DESCRIPTION = f"One of {' '.join(sorted(STATUS_FILTERS))}. Omitted means every status."
 
+#: The filter is a name, not a free string: it is compared to `attempt.harness` in Postgres,
+#: which cannot hold a NUL byte, so an unshaped value raised `psycopg.DataError` and answered
+#: 500 for a filter that could match nothing. Not `HARNESS_NAMES` — the `fake` harness
+#: `ORCH_TEST_MODE` seeds is outside that tuple and its rows are filterable like any other.
+HARNESS_DESCRIPTION = "A harness name. Omitted means every harness."
+
 
 def history_filters(
     project_id: Annotated[UUID | None, Query()] = None,
     status: Annotated[str | None, Query(description=STATUS_DESCRIPTION)] = None,
-    harness: Annotated[str | None, Query()] = None,
+    harness: Annotated[
+        str | None, Query(pattern=HARNESS_NAME_PATTERN, description=HARNESS_DESCRIPTION)
+    ] = None,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> HistoryFilters:

@@ -1,0 +1,252 @@
+/**
+ * Styling for `StepDetail.tsx` and `HelperDrawer.tsx` (stories 1-2, 1-3). A plain
+ * stylesheet, not scoped `<style>` blocks — React has no equivalent of Astro's own scoping,
+ * so every rule is hand-scoped under `.wf-step-detail-` (island classes) or `.step-drawer-`
+ * (helper drawer classes). Tokens only, no inline styles (`web-client/AGENTS.md`).
+ */
+
+/* ── Step-detail island (story 1-2) ─────────────────────────────────────── */
+
+.wf-step-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-8);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.wf-step-detail-crumb {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.wf-step-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.wf-step-detail-path {
+  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+  font-family: var(--font-mono);
+}
+
+.wf-step-token {
+  font-size: var(--type-status-token);
+  letter-spacing: var(--type-status-token-tracking);
+  color: var(--color-text-secondary);
+}
+
+.wf-step-detail-kind,
+.wf-step-detail-gate {
+  font-size: var(--type-meta);
+  color: var(--color-text-tertiary);
+}
+
+.wf-step-detail-stopped {
+  padding: var(--space-8);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+  line-height: var(--type-body-line);
+}
+
+.wf-step-detail-context {
+  padding: var(--space-8);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.wf-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-8);
+  font-size: var(--type-body);
+  line-height: var(--type-body-line);
+  color: var(--color-text-secondary);
+}
+
+.wf-kv dt {
+  color: var(--color-text-tertiary);
+}
+
+.wf-step-detail-attempts {
+  padding: var(--space-8);
+}
+
+.wf-step-detail-attempt-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-8) 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.wf-step-detail-session {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.wf-step-detail-session-label {
+  font-size: var(--type-meta);
+  color: var(--color-text-tertiary);
+  text-transform: var(--type-surface-title-transform);
+  letter-spacing: var(--type-surface-title-tracking);
+}
+
+.wf-step-detail-session-id {
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+  color: var(--color-text-secondary);
+}
+
+.wf-step-detail-copy {
+  font-size: var(--type-control);
+  color: var(--color-text-tertiary);
+  text-transform: var(--type-control-transform);
+  letter-spacing: var(--type-control-tracking);
+}
+
+.wf-step-detail-prompt,
+.wf-step-detail-retry-prompt,
+.wf-step-detail-result {
+  margin-bottom: var(--space-6);
+}
+
+.wf-step-detail-prompt-text,
+.wf-step-detail-retry-prompt-text,
+.wf-step-detail-result-text {
+  font-family: var(--font-mono);
+  font-size: var(--type-command);
+  line-height: var(--type-command-line);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.wf-step-detail-command {
+  font-family: var(--font-mono);
+  font-size: var(--type-command);
+  line-height: var(--type-command-line);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-6);
+}
+
+.wf-step-detail-exit {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.wf-step-detail-running {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-body);
+}
+
+.wf-step-detail-log {
+  margin-top: var(--space-8);
+}
+
+/* ── Helper drawer (story 1-3) ───────────────────────────────────────────── */
+
+.step-drawer-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 480px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-line-strong);
+  overflow: hidden;
+}
+
+.step-drawer-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-8);
+  border-bottom: 1px solid var(--color-line);
+  flex-shrink: 0;
+}
+
+.step-drawer-tab {
+  font-size: var(--type-control);
+  text-transform: var(--type-control-transform);
+  letter-spacing: var(--type-control-tracking);
+  color: var(--color-text-tertiary);
+  padding: var(--space-2) var(--space-4);
+}
+
+.step-drawer-tab[data-active='true'] {
+  color: var(--color-accent);
+}
+
+.step-drawer-close {
+  margin-left: auto;
+  font-size: var(--type-control);
+  text-transform: var(--type-control-transform);
+  letter-spacing: var(--type-control-tracking);
+  color: var(--color-text-tertiary);
+  padding: var(--space-2) var(--space-4);
+}
+
+.step-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-8);
+}
+
+.step-drawer-section {
+  margin-bottom: var(--space-10);
+}
+
+.step-drawer-section-label {
+  font-size: var(--type-section-head);
+  text-transform: var(--type-section-head-transform);
+  letter-spacing: var(--type-section-head-tracking);
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-4);
+}
+
+.step-drawer-pre {
+  font-family: var(--font-mono);
+  font-size: var(--type-command);
+  line-height: var(--type-command-line);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  background: var(--color-surface-inset);
+  padding: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.step-drawer-copy {
+  font-size: var(--type-control);
+  text-transform: var(--type-control-transform);
+  letter-spacing: var(--type-control-tracking);
+  color: var(--color-text-tertiary);
+}
+
+.step-drawer-lifetime {
+  font-size: var(--type-meta);
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-4);
+}
+
+.step-drawer-session-line {
+  font-size: var(--type-body);
+  line-height: var(--type-body-line);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-4);
+}
+
+.step-drawer-note {
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+  color: var(--color-text-tertiary);
+}

@@ -114,6 +114,235 @@
         "title": "AlertOut",
         "type": "object"
       },
+      "AttemptDetailOut": {
+        "description": "One attempt's full detail, as returned by the step-run detail endpoint.\n\n`dispatch_prompt` and `command` derive from the step's `with_resolved`: they are the\nsame for every attempt of the step and carried here so the frontend needs only this\nobject.  `result` is extracted per-attempt from the spec file at `end_sha`.",
+        "properties": {
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "cost_provisional": {
+            "title": "Cost Provisional",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "dispatch_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dispatch Prompt"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "resume_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Command"
+          },
+          "retry_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Prompt"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "session_lifetime_ends_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Lifetime Ends At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "tokens_in": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens In"
+          },
+          "tokens_out": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens Out"
+          }
+        },
+        "required": [
+          "id",
+          "n",
+          "status",
+          "token",
+          "started_at",
+          "ended_at",
+          "seconds",
+          "harness",
+          "model",
+          "session_id",
+          "exit_code",
+          "cost_usd",
+          "cost_provisional",
+          "tokens_in",
+          "tokens_out",
+          "dispatch_prompt",
+          "retry_prompt",
+          "result",
+          "command"
+        ],
+        "title": "AttemptDetailOut",
+        "type": "object"
+      },
       "AttributionOut": {
         "description": "The blocked Question's eyebrow (5.10, SPEC CAP-10): `Agent \u00b7 {harness} \u00b7 {model} \u00b7\n{ended_at}`.",
         "properties": {
@@ -1022,6 +1251,17 @@
             ],
             "title": "Harness"
           },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
           "project": {
             "title": "Project",
             "type": "string"
@@ -1514,6 +1754,34 @@
           "text"
         ],
         "title": "LineOut",
+        "type": "object"
+      },
+      "LogPageOut": {
+        "description": "One page of an attempt's log, addressed by byte cursor.\n\n`next_cursor` is the byte offset immediately after the last `\\n` in `lines`.\nPass it as `?cursor=` on the next poll to receive only newly appended content.\n`eof=True` means no bytes follow `next_cursor` at the time this page was read.",
+        "properties": {
+          "eof": {
+            "title": "Eof",
+            "type": "boolean"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "next_cursor": {
+            "minimum": 0.0,
+            "title": "Next Cursor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lines",
+          "next_cursor",
+          "eof"
+        ],
+        "title": "LogPageOut",
         "type": "object"
       },
       "MaskedEnvVarOut": {
@@ -3366,6 +3634,10 @@
             "title": "Id",
             "type": "string"
           },
+          "k": {
+            "title": "K",
+            "type": "integer"
+          },
           "kind": {
             "const": "for_each",
             "title": "Kind",
@@ -3381,6 +3653,10 @@
             },
             "title": "Members",
             "type": "array"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
           },
           "status": {
             "anyOf": [
@@ -3745,6 +4021,76 @@
           "kind"
         ],
         "title": "SignalIn",
+        "type": "object"
+      },
+      "StepDetailOut": {
+        "description": "One step's full detail, as returned by the step-run detail endpoint.\n\n`attempts` is newest first (highest `n` first), consistent with every other endpoint\nthat sorts attempts for display.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptDetailOut"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "gate": {
+            "title": "Gate",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "with_resolved": {
+            "additionalProperties": true,
+            "title": "With Resolved",
+            "type": "object"
+          }
+        },
+        "required": [
+          "seq",
+          "path",
+          "label",
+          "kind",
+          "gate",
+          "status",
+          "token",
+          "reason",
+          "with_resolved",
+          "attempts"
+        ],
+        "title": "StepDetailOut",
         "type": "object"
       },
       "StepRowOut": {
@@ -4187,6 +4533,7 @@
             "name": "name",
             "required": true,
             "schema": {
+              "pattern": "^[a-z][a-z0-9-]{0,31}$",
               "title": "Name",
               "type": "string"
             }
@@ -4268,6 +4615,7 @@
             "name": "name",
             "required": true,
             "schema": {
+              "pattern": "^[a-z][a-z0-9-]{0,31}$",
               "title": "Name",
               "type": "string"
             }
@@ -6061,6 +6409,133 @@
         ]
       }
     },
+    "/api/v1/runs/{run_id}/attempts/{attempt_id}/log": {
+      "get": {
+        "description": "Page through an attempt's log by byte cursor, or download the full file.\n\nReturns `LogPageOut` JSON when `download` is absent or false.  Returns a\n`text/plain` attachment when `?download=true`.  Both variants answer 200 with a\nhuman-readable message when the file has been garbage-collected.",
+        "operationId": "log_page_api_v1_runs__run_id__attempts__attempt_id__log_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attempt_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Attempt Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Cursor",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "download",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Download",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogPageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No attempt with that id in this Run."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A path segment does not parse as a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one attempt's log, paged by byte offset",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
     "/api/v1/runs/{run_id}/detail": {
       "get": {
         "description": "Everything the Run detail screen shows, from one read (SPEC CAP-12 \"one per screen\").\n\nWhen `?opened=true`, records the visit via `open_run` before building the detail so the\nresponse's `run.last_opened_at` reflects the just-updated timestamp (8-3).",
@@ -6688,6 +7163,99 @@
         ]
       }
     },
+    "/api/v1/runs/{run_id}/steps/{step_path}": {
+      "get": {
+        "description": "Return one step's metadata and every attempt, newest first.\n\nWrites nothing; derives no status (AD-8).",
+        "operationId": "get_step_detail_api_v1_runs__run_id__steps__step_path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step_path",
+            "required": true,
+            "schema": {
+              "title": "Step Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No run or step with those identifiers."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`run_id` does not parse as a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one step's full history and context",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
     "/api/v1/steps": {
       "get": {
         "description": "One page of executed attempts. Writes nothing; derives no status (AD-8).",
@@ -6729,18 +7297,21 @@
             }
           },
           {
+            "description": "A harness name. Omitted means every harness.",
             "in": "query",
             "name": "harness",
             "required": false,
             "schema": {
               "anyOf": [
                 {
+                  "pattern": "^[a-z][a-z0-9-]{0,31}$",
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "A harness name. Omitted means every harness.",
               "title": "Harness"
             }
           },
@@ -6812,7 +7383,7 @@
                 }
               }
             },
-            "description": "`status` is not one of the tokens this endpoint offers, `cursor` is not one it issued, or `limit` is outside its bounds."
+            "description": "`status` is not one of the tokens this endpoint offers, `cursor` is not one it issued, `harness` is not the shape of a harness name, or `limit` is outside its bounds."
           }
         },
         "security": [

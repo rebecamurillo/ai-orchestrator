@@ -153,6 +153,72 @@
   text-transform: var(--type-section-head-transform);
 }
 
+/* ── story 1-4 layout zones ──────────────────────────────────────────────────────────────── */
+
+.wf-top-zone {
+  padding: var(--space-8);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.wf-diagram-row {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--space-10);
+  padding: var(--space-8);
+  align-items: start;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.wf-diagram-main {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.wf-diagram-skeleton {
+  height: 200px;
+  background: var(--color-surface-raised);
+}
+
+.wf-summary-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  min-width: 0;
+}
+
+.wf-tabs {
+  padding: var(--space-8);
+}
+
+.wf-tab-btns {
+  display: flex;
+  gap: var(--space-5);
+  border-bottom: 1px solid var(--color-line);
+  margin-bottom: var(--space-8);
+}
+
+.wf-tab-btn {
+  padding: var(--space-4) 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.wf-tab-btn[aria-pressed='true'] {
+  color: var(--color-text);
+  border-bottom-color: var(--color-text);
+}
+
+.wf-tab-panel {
+  /* Panel content is conditionally rendered; no layout needed here. */
+}
+
 .wf-stop {
   display: flex;
   flex-direction: column;
@@ -863,4 +929,128 @@ table.wf-steps tr[data-anchored='true'] td {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--type-meta);
+}
+
+/* ── the Artifact modal (1-6, FR-19, UX-DR9) ────────────────────────────── */
+/* Mirrors CancelModal's structure: outer div (fixed inset, flex centre), backdrop div
+   (fixed inset, opacity 0.8), panel div (relative, raised surface, border). Wider than
+   CancelModal (800px vs 420px) to accommodate file content. z-index 100 sits above every
+   in-flow element and above the cancel modal (both are fixed; the artifact modal opens
+   from the ARTIFACTS column which appears before the cancel button in reading order). */
+
+.wf-artifact-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.wf-artifact-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg);
+  opacity: 0.8;
+}
+
+.wf-artifact-modal-panel {
+  position: relative;
+  max-width: 800px;
+  width: calc(100% - 2 * var(--space-10));
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line-strong);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-10);
+}
+
+.wf-artifact-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wf-artifact-modal-path {
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+  color: var(--color-text);
+}
+
+.wf-artifact-modal-close {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  padding: 0;
+}
+
+.wf-artifact-modal-tabs {
+  display: flex;
+  gap: var(--space-6);
+  align-items: center;
+  border-bottom: 1px solid var(--color-line);
+  padding-bottom: var(--space-3);
+}
+
+.wf-artifact-modal-tabs button {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-meta);
+  cursor: pointer;
+  padding: 0;
+}
+
+.wf-artifact-modal-tabs button[aria-pressed='true'] {
+  color: var(--color-text);
+}
+
+.wf-artifact-modal-download {
+  margin-left: auto;
+}
+
+/* Download is inside the tabs row but is not a tab toggle — give it distinct color. */
+.wf-artifact-modal-tabs .wf-artifact-modal-download {
+  color: var(--color-text);
+  font-size: var(--type-body);
+}
+
+.wf-artifact-modal-body {
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+  color: var(--color-text);
+  line-height: var(--type-body-line);
+}
+
+/* Markdown / prose rendered view inherits the page's default font, not mono. */
+div.wf-artifact-modal-body {
+  font-family: inherit;
+}
+
+.wf-artifact-modal-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  margin: 0;
+}
+
+.wf-artifact-modal-readonly {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  margin: 0;
+}
+
+.wf-artifact-modal-error {
+  white-space: pre-wrap;
+  color: var(--color-signal-failed);
+  font-family: var(--font-mono);
+  font-size: var(--type-meta);
+  margin-top: var(--space-3);
 }

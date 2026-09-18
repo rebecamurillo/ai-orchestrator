@@ -194,13 +194,18 @@ test.describe('/workflows/[id] — 5.10 additions', () => {
     );
     await expect(page.getByTestId('wf-trace')).toContainText('open in Langfuse');
 
-    // the step row's own cost cell reads provisional too
-    await expect(page.getByTestId('wf-step-1')).toContainText('$3.20 provisional');
-
+    // The screenshot is taken before the tab is changed: what it is a screenshot *of* is the
+    // blocked question, which is the default GATE panel.
     await page.screenshot({
       path: `${SCREENS}/01-run-detail-blocked-question.png`,
       fullPage: true,
     });
+
+    // the step row's own cost cell reads provisional too
+    // operator revision 2026-09-18: story 1-4 put the Steps table behind the STEPS tab; the
+    // cell's own reading is unchanged. See `run-detail-tabs.spec.ts`.
+    await page.getByRole('button', { name: 'STEPS' }).click();
+    await expect(page.getByTestId('wf-step-1')).toContainText('$3.20 provisional');
   });
 
   test('a misconfigured park shows the condition, the file list, the log tail, and no Answer box', async ({

@@ -18,6 +18,7 @@ from orchestrator.application.use_cases.terminal import Terminal, TerminalPorts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.clock import Clock
+from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.logs import LogReader
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
@@ -51,6 +52,10 @@ class RunViewPorts:
     #: same precedent: a read that was not wired for the resume command simply publishes no
     #: `terminal` block, and every `RunViewPorts(...)` written before this story compiles.
     terminal: TerminalPorts | None = None
+    #: `None` degrades to `result=null` for every attempt on the step-run detail endpoint
+    #: (story 1-2, AD-15). Every `RunViewPorts(...)` written before this story compiles
+    #: unchanged — the new field is optional with default `None`, last in the list.
+    git: Git | None = None
 
 
 @dataclass(frozen=True)
@@ -126,6 +131,9 @@ class Header:
     harness: str | None
     started_at: datetime | None
     worktree_path: str | None
+    #: The model the dispatch used — EXPERIENCE-v1.md delta 26 (2026-09-15).
+    #: Optional field with default None so existing Header() call sites need not change.
+    model: str | None = None
 
 
 @dataclass(frozen=True)

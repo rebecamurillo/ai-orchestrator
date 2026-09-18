@@ -1,33 +1,25 @@
 ---
 /**
- * Run detail (4.15, SPEC CAP-15, FR-23) and Run diagram (8.1): the header, the alert banner,
- * the Steps table, the gate record, the cost block, the links, the Cancel confirm, and the
- * Retry/Continue stop bodies; OR the four-column diagram view of the planned execution graph.
+ * Run detail (4.15, SPEC CAP-15, FR-23, story 1-4): header, alert banner, stop zone, embedded
+ * diagram, summary column, and tabbed gate/steps/session region. RunDetail always mounts here.
  *
- * The active island is chosen by `?view=`: `diagram` mounts `RunDiagram`, anything else
- * (including the default with no param) mounts `RunDetail`. The Astro SSR page re-renders
- * on each navigation so the correct island is hydrated — no JS router needed.
+ * `?view=diagram` redirects 301 to `/workflows/{id}` — the diagram is now embedded inside
+ * RunDetail's layout via DiagramSection. RunDiagram is no longer mounted from this page.
  *
- * No server-side read of its own — each island does its own polled fetch client:load, the
- * same split `index.astro` draws for `Board.tsx`. The only thing this page supplies is the
- * id the URL already carries.
+ * No server-side read of its own — RunDetail does its own polled fetch client:load.
  */
 import Shell from '../../layouts/Shell.astro';
 import RunDetail from '../../islands/RunDetail';
-import RunDiagram from '../../islands/RunDiagram';
 
 export const prerender = false;
 
 const { id } = Astro.params;
-const view = Astro.url.searchParams.get('view') ?? 'detail';
+
+if (Astro.url.searchParams.get('view') === 'diagram') {
+  return Astro.redirect(`/workflows/${id}`, 301);
+}
 ---
 
 <Shell active="workflows" title="RUN DETAIL">
-  {
-    view === 'diagram' ? (
-      <RunDiagram client:load runId={id as string} />
-    ) : (
-      <RunDetail client:load runId={id as string} />
-    )
-  }
+  <RunDetail client:load runId={id as string} />
 </Shell>

@@ -185,6 +185,12 @@ class RunGroupOut(BaseModel):
     members: list[str]
     #: By the one rule (`application/graph.py::group_status`); `None` for a cancelled Run.
     status: str | None
+    #: k = members with status == "done"; n = members with status != "skipped" (story 1-5).
+    #: default_factory (not a literal) keeps the JSON schema free of a "default" key, which
+    #: makes openapi-typescript v7 emit `k?: number` (optional) rather than `k: number`
+    #: (required). This lets existing test fixtures omit k/n without TypeScript errors.
+    k: int = Field(default_factory=lambda: 0)
+    n: int = Field(default_factory=lambda: 0)
 
     @classmethod
     def of(cls, group: Group) -> RunGroupOut:
@@ -194,6 +200,8 @@ class RunGroupOut(BaseModel):
             kind=group.kind,
             members=list(group.members),
             status=group.status,
+            k=group.k,
+            n=group.n,
         )
 
 
