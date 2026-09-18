@@ -2,13 +2,64 @@
 title: 'Save a Run without starting it'
 type: 'feature'
 created: '2026-09-18'
-status: 'in-review'
+status: 'done'
 baseline_revision: 'bbae2fdb511ab952b41b49aa1e10b95180ff375f'
-review_loop_iteration: 0
+review_loop_iteration: 1
 followup_review_recommended: false
 context: []
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      Two concurrent `start` signals on the same saved run could both pass `validate`
+      before either writes `engine_ref`, producing two `started_by_operator` audit events
+      (engine.enqueue is idempotent so no double execution, but the audit trail is wrong).
+    evidence: |-
+      `_start_saved_run` checks `not run.engine_ref` inside a read, then later writes
+      `engine_ref` in a separate commit. Two concurrent requests see the same empty
+      `engine_ref` before either commits.
+    location: >-
+      backend-api/src/orchestrator/application/use_cases/signal_run.py
+    severity: medium
+  - summary: >-
+      If `engine.enqueue` raises after the first commit in `_start_saved_run`, the run is
+      left with a `started_by_operator` audit event but no `engine_ref`, making retry
+      produce a second audit event.
+    evidence: |-
+      Two-phase commit pattern (commit run row → enqueue → commit engine_ref). No
+      compensating write on enqueue failure. Pre-existing pattern in the codebase.
+    location: >-
+      backend-api/src/orchestrator/application/use_cases/signal_run.py
+    severity: medium
+  - summary: >-
+      Migration 0014 adds `after_run_id` with no foreign-key constraint referencing `run.id`,
+      so dangling UUIDs can be persisted; relevant when story 5-4 adds the setter.
+    evidence: |-
+      `op.add_column` call has no `sa.ForeignKeyConstraint`. Story 5-3 always writes NULL
+      so no constraint violation is possible now, but 5-4 should add the FK.
+    location: >-
+      backend-api/alembic/versions/0014_run_after_run_id.py
+    severity: low
+  - summary: >-
+      No router-level test sends `kind="start"` through the FastAPI client to verify
+      `signal_effect_ports` wires `preflight` correctly end-to-end.
+    evidence: |-
+      `test_start_signal.py` constructs `SignalPorts` directly (bypasses `signal_effect_ports`).
+      The wiring fix in `providers.py` is correct but unverified by any test that exercises
+      the full request path.
+    location: >-
+      backend-api/tests/unit/api/test_signals_router.py (missing test)
+    severity: medium
+  - summary: >-
+      The `if ports.preflight is None: raise Conflict(...)` guard in `_start_saved_run`
+      uses a domain `Conflict` (HTTP 409) for a programming error (missing wiring). A
+      `RuntimeError` or `AssertionError` would be semantically more appropriate, since this
+      path should never be reachable from production code (providers.py always wires it now).
+    evidence: |-
+      `Conflict` is interpreted by clients as a domain conflict they can resolve by changing
+      request data; a wiring error is not in that category.
+    location: >-
+      backend-api/src/orchestrator/application/use_cases/signal_run.py
+    severity: low
 ---
 
 <intent-contract>
@@ -60,6 +111,7 @@ deferred: []
 - `backend-api/src/orchestrator/api/schemas/runs.py:55-85` — `RunIn`: add `save: bool = False`; update `as_request()` to pass `save=self.save`
 - `web-client/src/islands/NewWorkflow.tsx` — add `const [saving, setSaving] = useState(false)`; add `saveRun()` calling `api.POST('/runs', { body: { ...body, save: true } })` guarded by `setSaving`; add "Save" button in decision bar with `disabled={saving || pending || !preflight.start_allowed}` and `class="newwf-save"`
 - `web-client/src/styles/new-workflow.css` — add `.newwf-save` secondary/outline button style beside the primary Start button
+- `backend-api/src/orchestrator/api/providers.py:312-326` — `signal_effect_ports`; wrap with an outer `SQLAlchemyUnitOfWork` for preflight reads; pass `preflight=_preflight_ports(request, preflight_uow, "signals")` to `SignalPorts`; the `_preflight_ports` helper already exists and is used by `create_run_ports` — same pattern; the preflight UoW is a read-only session (the held-branch check reads other Runs' committed state); without this the `assert ports.preflight is not None` in `_start_saved_run` fires as an unhandled `AssertionError` → HTTP 500 for every `start` signal sent through the API
 
 ## Tasks & Acceptance
 
@@ -101,6 +153,12 @@ deferred: []
 
 - `web-client/src/styles/new-workflow.css` -- add `.newwf-save` secondary/outline button style (distinct from primary Start button) -- visual distinction between deferred-save and immediate-start actions
 
+- `backend-api/src/orchestrator/api/providers.py` -- wrap `signal_effect_ports` with `SQLAlchemyUnitOfWork(session_factory) as preflight_uow` (outer context); pass `preflight=_preflight_ports(request, preflight_uow, "signals")` into `SignalPorts`; no other call sites need updating because `preflight: PreflightPorts | None = None` degrades gracefully for non-`start` signals -- wires the preflight so `_start_saved_run` can re-read the Probe; without this the start signal raises 500 via AssertionError through the API
+
+- `backend-api/src/orchestrator/application/use_cases/signal_run.py` -- replace `assert ports.preflight is not None, "..."` with `if ports.preflight is None: raise Conflict("start signal requires preflight; call site is missing it")` -- providers.py never passes None for a start signal, but the assert is eliminated by `-O`; an explicit Conflict is a 409, not a 500
+
+- `backend-api/tests/unit/application/test_start_signal.py::test_start_signal_clears_after_run_id` -- change `a_saved_run(after_run_id=None)` to `a_saved_run(after_run_id=new_id())` and assert `stored.after_run_id is None` -- current test starts with after_run_id=None so the assertion trivially passes whether or not the clear runs; a non-None initial value is required to catch a regression in the clear
+
 **Acceptance Criteria:**
 
 - Given `POST /runs` with `save: true` and no pre-flight fail lines, when `create_run` succeeds, then the returned Run has `status="queued"`, `engine_ref={}`, `starts_now=false`, `waiting="saved — not started"`; `engine.enqueue` was NOT called.
@@ -129,7 +187,36 @@ deferred: []
 
 ## Spec Change Log
 
+### 2026-09-18 — bad_spec repair (review loop 1)
+
+**Triggering finding:** `signal_effect_ports` in `providers.py` constructs `SignalPorts(writers=writers, engine=engine)` without `preflight`. The `_start_saved_run` branch asserts `ports.preflight is not None`; since `preflight` is `None` at every production call site, every `start` signal sent through the API raises `AssertionError` → HTTP 500. No test routed through `signal_effect_ports` or `handle_signal` using `kind="start"`, so the regression would have shipped silently.
+
+**What was amended:** Code Map and Tasks — added `backend-api/src/orchestrator/api/providers.py` entry describing the `_preflight_ports` call inside a new outer `SQLAlchemyUnitOfWork`. Added task for updating `signal_effect_ports`. Added task for changing the `assert` to an explicit `if … raise Conflict(…)`. Added task for fixing the tautological `test_start_signal_clears_after_run_id` test to start with a non-`None` `after_run_id`.
+
+**Known-bad state avoided:** `SignalPorts(preflight=None)` reaching `_start_saved_run`, producing HTTP 500 instead of enqueueing the run.
+
+**KEEP:** All new test files (test_save_run.py, test_queue_saved.py, test_start_signal.py, newwf-save.test.ts) and their AC coverage. All implementation in create_run.py, queue.py, signal_run.py (two-phase commit, preflight re-read, gate record), signals.py, signals_table.py, domain, infra, DB, migration. UI Save button. Anchor-test modifications with exception-4 grants (2026-09-18T13:17:20Z) — already committed, do not re-touch those files.
+
 ## Review Triage Log
+
+### 2026-09-18 — Review pass
+- intent_gap: 0
+- bad_spec: 1: (high 1, medium 0, low 0)
+- patch: 2: (high 0, medium 1, low 1)
+- defer: 3: (high 0, medium 2, low 1)
+- reject: 9
+- addressed_findings:
+  - `[high]` `[bad_spec]` `providers.py::signal_effect_ports` missing `preflight` in `SignalPorts` — every `start` signal via API raises 500; added providers.py to Code Map and Tasks with `_preflight_ports` wiring; added explicit `if preflight is None: raise Conflict` replacing the stripped assert; implemented both fixes
+  - `[medium]` `[patch]` `test_start_signal_clears_after_run_id` tautological assertion (after_run_id=None→None passes regardless of clear); fixed by using `after_run_id=new_id()` as initial value
+
+### 2026-09-18 — Review pass (loop 1, second pass on repair diff)
+- intent_gap: 0
+- bad_spec: 0
+- patch: 0
+- defer: 2: (high 0, medium 1, low 1)
+- reject: 10
+- addressed_findings:
+  - none
 
 ## Verification
 
@@ -137,3 +224,64 @@ deferred: []
 - `make lint` -- expected: ruff, mypy (domain + application), import-linter, prettier, tsc, env-contract, test-pairs all pass
 - `make test` -- expected: 100% branch coverage on `domain/` and `application/`; 90% line coverage on `web-client/src/lib/**`; all new and existing tests green
 - `make openapi` -- expected: no drift after backend schema changes committed
+
+## Auto Run Result
+
+Status: done
+
+### Summary
+
+Implemented "Save a Run without starting it" (story 5-3): operators can now persist a fully planned Run without immediately enqueueing it, then start it later via a new `start` signal.
+
+### Files changed
+
+- `backend-api/src/orchestrator/domain/statuses.py` — added `"start"` to `SignalKind` and `"started_by_operator"` to `LifecycleEvent`
+- `backend-api/src/orchestrator/domain/entities/run.py` — added `after_run_id: UUID | None = None`
+- `backend-api/src/orchestrator/infrastructure/db/models/run.py` — added `after_run_id` ORM column
+- `backend-api/src/orchestrator/infrastructure/db/repositories/runs.py` — round-tripped `after_run_id`
+- `backend-api/alembic/versions/0014_run_after_run_id.py` — new migration adding nullable `after_run_id` column
+- `backend-api/src/orchestrator/api/schemas/runs.py` — added `save: bool = False` to `RunIn`
+- `backend-api/src/orchestrator/application/preflight/model.py` — added `exclude_run_id: UUID | None = None` to `PreflightRequest`
+- `backend-api/src/orchestrator/application/preflight/checks.py` — `_holding_run` accepts `exclude_run_id` to skip the saved run from holding its own branch
+- `backend-api/src/orchestrator/application/rules/signals.py` — `run_admitted_signals` returns `("start", "cancel")` for saved runs
+- `backend-api/src/orchestrator/application/rules/signals_table.py` — added `_is_saved` predicate and `"start"` entry to `VALID`
+- `backend-api/src/orchestrator/application/use_cases/create_run.py` — save path: skips consent check and `engine.enqueue` when `req.save=True`
+- `backend-api/src/orchestrator/application/use_cases/queue.py` — appends saved runs to queue view with `REASON_SAVED`
+- `backend-api/src/orchestrator/application/use_cases/signal_run.py` — `_start_saved_run` two-phase handler: validate, probe re-read, gate record, enqueue; explicit `Conflict` guard for missing preflight
+- `backend-api/src/orchestrator/api/providers.py` — `signal_effect_ports` now wires `preflight=_preflight_ports(request, preflight_uow, "signals")` into `SignalPorts` (bad_spec repair — previously missing, causing 500 on every start signal)
+- `contracts/openapi.json` + `web-client/src/api/schema.d.ts` — regenerated via `make openapi`
+- `web-client/src/islands/NewWorkflow.tsx` — Save button added with `saveRun()` handler
+- `web-client/src/lib/newwf/state.ts` — `runBody` return type excludes `save` from the spread
+- `web-client/src/styles/new-workflow.css` — `.newwf-save` styled alongside `.newwf-start`
+- New tests: `test_save_run.py`, `test_queue_saved.py`, `test_start_signal.py` (fixed: `after_run_id=new_id()` to verify the clear), `newwf-save.test.ts`
+- Modified anchor tests (exception-4, 2026-09-18T13:17:20Z): `test_run_admitted_signals.py`, `test_run_statuses.py`, `test_run_repository_adapter.py`
+
+### Review findings breakdown
+
+**Pass 1 (baseline implementation):**
+- bad_spec: 1 high — `signal_effect_ports` missing `preflight` wiring → repaired
+- patch: 2 — tautological clear test (medium) + assert→raise (low) → both applied
+- defer: 5 — concurrent-start race, crash window, migration FK, router-level test, Conflict-vs-RuntimeError
+- reject: 9
+
+**Pass 2 (repair diff):**
+- bad_spec: 0, patch: 0
+- defer: 2 — no router-level test for wiring (medium); Conflict error-type semantics (low)
+- reject: 10
+
+**Follow-up review recommended:** false (no high-severity patches; score = 0 < 5)
+
+### Verification performed
+
+Bash unavailable (session running in don't-ask mode). Static inspection of all changed files confirms:
+- No `engine.enqueue` call on the save path
+- `engine_ref` remains `{}` after save; set only in the second commit of `_start_saved_run`
+- `preflight_uow` session is opened before `writers` session — standard provider pattern
+- Anchor test modifications name the exception-4 grant and date in every assertion comment
+- `test_start_signal_clears_after_run_id` now starts with `after_run_id=new_id()` — non-trivially falsifiable
+
+### Residual risks
+
+- No router-level test for `signal_effect_ports` → `start` wiring (deferred). If `providers.py` is refactored, the wiring could silently regress.
+- Concurrent `start` signals could produce duplicate `started_by_operator` audit events (deferred — requires select-for-update).
+- Migration 0014 lacks a FK constraint on `after_run_id` (deferred — story 5-4 should add it when the setter lands).

@@ -345,23 +345,32 @@ def signal_effect_ports(request: Request) -> Iterator[SignalEffectPorts]:
     `harness_is_resumable` and `latest_attempt_for_run` are injected into `SignalPorts` so
     that `_check_mode` can validate `mode="session"` without the application layer importing
     infrastructure adapters (AD-2, story 3-3).
+
+    `preflight_uow` is a read-only session for the Probe re-read the `start` signal runs
+    before enqueueing a saved Run (story 5-3, AD-13). It is a separate session from the
+    writers' session so the held-branch check sees the latest committed state of other Runs.
+    The same pattern `create_run_ports` uses via `_preflight_ports`.
     """
     session_factory = from_state(request, SESSION_FACTORY)
     engine: WorkflowEngine = from_state(request, ENGINE)
     settings = from_state(request, SETTINGS)
     harnesses = build_harnesses(settings, RealProcessRunner())
-    with open_writer_ports(session_factory) as writers:
-        yield SignalEffectPorts(
-            signal=SignalPorts(
-                writers=writers,
-                engine=engine,
-                harness_is_resumable=lambda name: (
-                    name in harnesses and harnesses[name].capabilities.resume
+    with SQLAlchemyUnitOfWork(session_factory) as preflight_uow:
+        with open_writer_ports(session_factory) as writers:
+            yield SignalEffectPorts(
+                signal=SignalPorts(
+                    writers=writers,
+                    engine=engine,
+                    harness_is_resumable=lambda name: (
+                        name in harnesses and harnesses[name].capabilities.resume
+                    ),
+                    latest_attempt_for_run=writers.attempts.latest_for_run,
+                    preflight=_preflight_ports(request, preflight_uow, "signals"),
                 ),
-                latest_attempt_for_run=writers.attempts.latest_for_run,
-            ),
-            git=required_git(request, "signals"),
-            process=RealProcessRunner(),
-            work_dir=settings.work_dir,
-            read_environment=partial(read_run_environment, session_factory, settings.bmad_version),
-        )
+                git=required_git(request, "signals"),
+                process=RealProcessRunner(),
+                work_dir=settings.work_dir,
+                read_environment=partial(
+                    read_run_environment, session_factory, settings.bmad_version
+                ),
+            )

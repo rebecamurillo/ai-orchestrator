@@ -243,10 +243,11 @@ def _start_saved_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> Signal
         run = require_run(writers, run_id)
         # Validate against the table: run_statuses={"queued"}, extra=_is_saved.
         # `validate` raises Conflict if the run is not queued or engine_ref is non-empty.
-        # It runs BEFORE the preflight assert so that a "start" sent to a non-queued Run
-        # earns the table's own 409 rather than an AssertionError.
+        # It runs BEFORE the preflight check so that a "start" sent to a non-queued Run
+        # earns the table's own 409 rather than the missing-preflight error below.
         validate(run, None, signal)
-        assert ports.preflight is not None, "_start_saved_run requires preflight in SignalPorts"
+        if ports.preflight is None:
+            raise Conflict("start signal requires preflight; call site is missing it")
         # Re-read the Probe — the Operator could have left the tab open while something else
         # changed the Repository (e.g. another Run started on the same branch).
         preflighted = preflight_and_plan(ports.preflight, _preflight_req_from_run(run))

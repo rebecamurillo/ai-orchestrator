@@ -208,8 +208,11 @@ def test_start_signal_writes_engine_ref() -> None:
 
 
 def test_start_signal_clears_after_run_id() -> None:
+    # Use a non-None after_run_id so the assertion catches a regression in the clear.
+    # (story 5-3 always writes None here; story 5-4 will set non-None values before start.)
+    some_id = new_id()
     harness = StartHarness(git=fixtures.repo_init_git())
-    saved = a_saved_run(after_run_id=None)
+    saved = a_saved_run(after_run_id=some_id)
 
     harness.start(saved)
 
