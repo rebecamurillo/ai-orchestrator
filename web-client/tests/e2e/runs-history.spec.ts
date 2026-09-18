@@ -182,7 +182,10 @@ test.describe('/runs (HISTORY section)', () => {
     page,
   }) => {
     await mockHistory(page, [{ items: [historyRow({ seq: 7 })], next_cursor: null }]);
-    await page.route(`**/api/runs/${RUN_ID}/detail`, (route: Route) =>
+    // operator revision 2026-09-18: story 8-3 put `?opened=true` on the first detail fetch; the
+    // trailing `**` admits the query string a bare glob never matches. `run-detail-last-opened.
+    // spec.ts` AC1/AC3 assert the new behaviour.
+    await page.route(`**/api/runs/${RUN_ID}/detail**`, (route: Route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -209,7 +212,10 @@ test.describe('/runs (HISTORY section)', () => {
   test('opening the detail directly at #step-7 scrolls to row 7 and promotes it', async ({
     page,
   }) => {
-    await page.route(`**/api/runs/${RUN_ID}/detail`, (route: Route) =>
+    // operator revision 2026-09-18: story 8-3 put `?opened=true` on the first detail fetch; the
+    // trailing `**` admits the query string a bare glob never matches. `run-detail-last-opened.
+    // spec.ts` AC1/AC3 assert the new behaviour.
+    await page.route(`**/api/runs/${RUN_ID}/detail**`, (route: Route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',

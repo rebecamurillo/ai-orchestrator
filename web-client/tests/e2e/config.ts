@@ -6,9 +6,11 @@
  * credential-leak spec greps the build output, the served HTML and every response header
  * for exactly this string, and a generic value would make those assertions meaningless.
  */
-export const PREVIEW_PORT = 4321;
+// Env-overridable (operator rule, 2026-09-18: a port conflict with a running stack is
+// resolved by binding another port, never by stopping the stack). Defaults unchanged.
+export const PREVIEW_PORT = Number(process.env.E2E_PREVIEW_PORT ?? 4321);
 export const PREVIEW_URL = `http://127.0.0.1:${PREVIEW_PORT}`;
-export const STUB_BACKEND_PORT = 8788;
+export const STUB_BACKEND_PORT = Number(process.env.E2E_STUB_BACKEND_PORT ?? 8788);
 
 export const PROBE_TOKEN = 'e2e-probe-token-must-not-reach-the-browser';
 export const PROBE_SESSION_SECRET = 'e2e-probe-session-secret';

@@ -98,7 +98,10 @@ function stepRow(overrides: Record<string, unknown> = {}): Record<string, unknow
 }
 
 async function mockDetail(page: Page, body: Record<string, unknown>): Promise<void> {
-  await page.route(`**/api/runs/${RUN_ID}/detail`, (route: Route) =>
+  // operator revision 2026-09-18: story 8-3 put `?opened=true` on the first detail fetch; the
+  // trailing `**` admits the query string a bare glob never matches. `run-detail-last-opened.
+  // spec.ts` AC1/AC3 assert the new behaviour.
+  await page.route(`**/api/runs/${RUN_ID}/detail**`, (route: Route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) }),
   );
 }
@@ -422,7 +425,10 @@ test.describe('/workflows/[id] (Run detail)', () => {
     page,
   }) => {
     let fail = true;
-    await page.route(`**/api/runs/${RUN_ID}/detail`, (route: Route) => {
+    // operator revision 2026-09-18: story 8-3 put `?opened=true` on the first detail fetch; the
+    // trailing `**` admits the query string a bare glob never matches. `run-detail-last-opened.
+    // spec.ts` AC1/AC3 assert the new behaviour.
+    await page.route(`**/api/runs/${RUN_ID}/detail**`, (route: Route) => {
       if (fail) {
         return route.fulfill({
           status: 500,
