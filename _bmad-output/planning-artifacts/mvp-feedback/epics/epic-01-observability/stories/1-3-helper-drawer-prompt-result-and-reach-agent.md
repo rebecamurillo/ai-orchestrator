@@ -2,14 +2,48 @@
 title: "Helper drawer — prompt-result and reach-agent"
 type: 'feature'
 created: '2026-09-16'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: false
 baseline_revision: 'b2a3f581ba98718e3b567dd0f86dc7d1b62d392b'
 context: []
 warnings: []
 deferred:
-  - "I/O matrix rows 4–7 (close, same-button toggle, tab switch, shell-step button exclusion) require click events or async hooks; deferred to tests/e2e/step-detail.spec.ts per story 1-2 pattern"
+  - summary: >-
+      I/O matrix rows 4–7 (close, same-button toggle, tab switch, shell-step button exclusion)
+      require click events or async hooks; deferred to tests/e2e/step-detail.spec.ts per story 1-2 pattern
+    evidence: |-
+      HelperDrawer and StepDetail use useState/onClick which renderToStaticMarkup cannot drive.
+      step-detail-island.test.ts only asserts typeof StepDetail === 'function'.
+      tests/e2e/step-detail.spec.ts does not yet exist.
+    location: >-
+      web-client/src/islands/StepDetail.tsx, web-client/src/components/run/HelperDrawer.tsx
+    severity: medium
+  - summary: >-
+      project_slug silently becomes "" when ports.projects.get(run.project_id) returns None;
+      no log or warning surfaced to operator
+    evidence: |-
+      step_detail.py router: project_slug = project.slug if project else "".
+      Pre-existing pattern; not introduced by this story but first used here for resume_command.
+    location: >-
+      backend-api/src/orchestrator/api/routers/step_detail.py
+    severity: low
+  - summary: >-
+      sessionLifetimeLine() renders a raw ISO 8601 string; user sees unformatted datetime
+    evidence: |-
+      terminal.ts sessionLifetimeLine returns 'session lifetime ends ${endsAt}' verbatim.
+      Pre-existing function; this story reuses it per spec constraint.
+    location: >-
+      web-client/src/lib/run/terminal.ts
+    severity: low
+  - summary: >-
+      No Escape key handler on HelperDrawer; keyboard-only users must use the close button
+    evidence: |-
+      HelperDrawer has no onKeyDown handler. No intent constraint mentions keyboard dismissal.
+      Enhancement beyond story scope.
+    location: >-
+      web-client/src/components/run/HelperDrawer.tsx
+    severity: low
 ---
 
 <intent-contract>
@@ -121,3 +155,52 @@ deferred:
 - `make test` -- expected: all tests green including `test_step_detail_resume.py` and `helper-drawer.test.ts`
 - `make openapi` -- expected: exit 0, `resume_command` and `session_lifetime_ends_at` visible in `AttemptDetailOut` in `contracts/openapi.json`
 - `cd web-client && pnpm gen:api` -- expected: exit 0, no schema drift
+
+## Review Triage Log
+
+### 2026-09-16 — Review pass
+
+- intent_gap: 0
+- bad_spec: 0
+- patch: 3: (high 0, medium 0, low 3)
+- defer: 5: (high 0, medium 0, low 5)
+- reject: 4
+- addressed_findings:
+  - `[low]` `[patch]` HelperDrawer missing `key` prop — `useState(initialContent)` ignores prop updates when switching content on the same attempt from the attempt-row buttons; fixed by adding `key={\`${drawerState.n}-${drawerState.content}\`}` to `<HelperDrawer>` in `StepDetail.tsx`.
+  - `[low]` `[patch]` `copy()` function synchronous TypeError if `navigator.clipboard` is undefined (HTTP context); fixed by guarding with `if (navigator.clipboard)` in `HelperDrawer.tsx`.
+  - `[low]` `[patch]` Copy buttons had no contextual accessible label; fixed by adding `aria-label` to each copy button in `HelperDrawer.tsx` (dispatch prompt, retry prompt, result, resume command). Two additional patch findings (test description and test docstring) were not applied per AGENTS.md rule 1 (test files are read-only).
+
+## Auto Run Result
+
+**Summary:** Added a right-side helper drawer to the Step-run detail page. Backend `AttemptDetailOut` extended with `resume_command` and `session_lifetime_ends_at`, computed per-attempt by `terminal.resume_command()`. Frontend `HelperDrawer.tsx` component renders two tabs (prompt · result; reach agent) with copy controls. `StepDetail.tsx` wired with drawer state, per-attempt buttons, and `<HelperDrawer>` mount.
+
+**Files changed:**
+- `backend-api/src/orchestrator/api/schemas/step_detail.py` — added `resume_command: str | None = None` and `session_lifetime_ends_at: datetime | None = None` to `AttemptDetailOut`
+- `backend-api/src/orchestrator/api/routers/step_detail.py` — per-attempt `_terminal_resume()` call; converted list comprehension to loop
+- `backend-api/tests/unit/test_step_detail_resume.py` (new) — 5 ASGI tests covering all null/non-null paths for the two new fields
+- `contracts/openapi.json` — regenerated with new fields in `AttemptDetailOut`
+- `web-client/src/api/schema.d.ts` — regenerated from openapi.json
+- `web-client/src/components/run/HelperDrawer.tsx` (new) — helper drawer component; exports `DrawerContent` type and `HelperDrawerAttempt` interface
+- `web-client/src/styles/step-detail.css` (new) — CSS for `wf-step-detail-*` and `step-drawer-*` classes
+- `web-client/src/islands/StepDetail.tsx` — drawer state, toggle function, per-attempt buttons, `<HelperDrawer>` render
+- `web-client/tests/unit/helper-drawer.test.ts` (new) — AD-18 pair: asserts HelperDrawer is a function
+- `web-client/tests/unit/helper-drawer-render.test.ts` (new) — 10 static render tests covering I/O matrix rows 1-3
+- `_bmad-output/.../stories/1-3-*.md` (new) — this spec file
+
+**Review findings breakdown:**
+- Patches applied: 3 (all low) — key prop, clipboard guard, aria-labels
+- Items deferred: 5 — e2e rows 4-7 (already documented), project_slug silent failure, sessionLifetimeLine ISO formatting, Escape key handler
+- Items rejected: 4 — shell-step test coverage adequate; FakeProjectRepository empty adequate; terminal.py docstring unverified; import alias style acceptable
+
+**Follow-up review recommendation:** `false` — patched counts: high 0, medium 0, low 3; score 3×0 + 1×3 = 3 < 5. (The deferred e2e spec gap is tracked in the `deferred` list.)
+
+**Verification performed:**
+- `make lint` — exit 0; ruff, mypy, import-linter, eslint, prettier, tsc, check-test-pairs all pass
+- `make test` — 6363 backend + 1381 frontend passed (0 failed)
+- `make openapi` — exit 0; resume_command and session_lifetime_ends_at present in AttemptDetailOut
+- `pnpm gen:api --check` — exit 0; schema.d.ts matches openapi.json (run as part of make lint)
+
+**Residual risks:**
+- `tests/e2e/step-detail.spec.ts` referenced in deferral does not yet exist; drawer interaction behaviors (close, toggle, tab switch, shell-step row exclusion) have no test coverage at any tier until that spec lands.
+- Copy buttons that silently fail (clipboard API rejected post-guard) show no user feedback; no toast or error indicator.
+- `sessionLifetimeLine()` renders a raw ISO 8601 datetime string; user sees unformatted output.

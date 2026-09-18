@@ -35,7 +35,7 @@ export default function HelperDrawer({ attempt, initialContent, onClose }: Props
   const [activeTab, setActiveTab] = useState<DrawerContent>(initialContent);
 
   function copy(text: string): void {
-    void navigator.clipboard.writeText(text);
+    if (navigator.clipboard) void navigator.clipboard.writeText(text);
   }
 
   const lifetimeLine = sessionLifetimeLine(attempt.session_lifetime_ends_at);
@@ -76,6 +76,7 @@ export default function HelperDrawer({ attempt, initialContent, onClose }: Props
                 <button
                   type="button"
                   className="step-drawer-copy"
+                  aria-label="copy dispatch prompt"
                   onClick={() => copy(attempt.dispatch_prompt!)}
                 >
                   copy
@@ -89,6 +90,7 @@ export default function HelperDrawer({ attempt, initialContent, onClose }: Props
                 <button
                   type="button"
                   className="step-drawer-copy"
+                  aria-label="copy retry prompt"
                   onClick={() => copy(attempt.retry_prompt!)}
                 >
                   copy
@@ -102,6 +104,7 @@ export default function HelperDrawer({ attempt, initialContent, onClose }: Props
                 <button
                   type="button"
                   className="step-drawer-copy"
+                  aria-label="copy result"
                   onClick={() => copy(attempt.result!)}
                 >
                   copy
@@ -117,6 +120,7 @@ export default function HelperDrawer({ attempt, initialContent, onClose }: Props
               <button
                 type="button"
                 className="step-drawer-copy"
+                aria-label="copy resume command"
                 onClick={() => copy(attempt.resume_command!)}
               >
                 copy

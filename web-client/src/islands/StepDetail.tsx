@@ -321,6 +321,7 @@ export default function StepDetail({ runId, dotPath }: Props) {
       {/* ── Helper drawer ── */}
       {drawerState !== null && drawerAttempt !== null && (
         <HelperDrawer
+          key={`${drawerState.n}-${drawerState.content}`}
           attempt={{
             dispatch_prompt: drawerAttempt.dispatch_prompt,
             retry_prompt: drawerAttempt.retry_prompt,
