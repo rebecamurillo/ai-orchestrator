@@ -46,6 +46,7 @@ from orchestrator.application.preflight.model import (
 from orchestrator.application.rules.signals import row_at
 from orchestrator.application.templates.plan_model import Plan
 from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
+from orchestrator.application.use_cases.queue import REASON_SAVED
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import Conflict, Invalid, NotFound
@@ -103,6 +104,9 @@ class CreateRunRequest:
     manual_estimate_h: Decimal | None = None
     re_review_done: bool = False
     conflict_consent: bool = False
+    #: When `True`, persist the plan but skip `engine.enqueue` — `engine_ref` stays `{}`,
+    #: the saved marker per AD-6. The `start` Signal enqueues it later (story 5-3).
+    save: bool = False
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -135,7 +139,9 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     if preflighted.plan_error is not None:
         raise preflighted.plan_error
     _refuse_failing_lines(preflighted.result.lines, skip_harness_check=ports.skip_harness_check)
-    if preflighted.result.conflict_consent_required and not req.conflict_consent:
+    # consent is not required for save=True: the Probe re-read at `start` Signal time checks
+    # fail lines only; the Operator's explicit start action implies intent (story 5-3, AD-13).
+    if not req.save and preflighted.result.conflict_consent_required and not req.conflict_consent:
         raise Conflict("this can lead to merge conflicts: conflict consent required")
 
     # Live probe: validate the model against the harness's actual model list (story 2-2).
@@ -196,6 +202,11 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     ports.preflight.runs.add(run)
     ports.steps.add_many(step_rows)
     ports.uow.commit()
+
+    # A saved run skips enqueue: `engine_ref` stays `{}` (the AD-6 "not yet enqueued" marker).
+    # The `start` Signal will enqueue it later (story 5-3).
+    if req.save:
+        return CreateRunResult(run=run, starts_now=False, waiting=REASON_SAVED)
 
     engine_ref = ports.engine.enqueue(run.id, partition_key=f"{repository.id}:{declared_branch}")
     run = run.model_copy(update={"engine_ref": engine_ref})

@@ -42,7 +42,9 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
+from orchestrator.application.preflight.model import PreflightRequest
 from orchestrator.application.rules.signals import Rule, record_text, validate
+from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
 from orchestrator.application.use_cases.signal_effects import EFFECTS, CancelPlan, Effect
 from orchestrator.application.use_cases.writers import (
     Entry,
@@ -56,7 +58,7 @@ from orchestrator.application.use_cases.writers import (
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.errors import Invalid
+from orchestrator.domain.errors import Conflict, Invalid
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.statuses import run_transition
 from orchestrator.domain.values import Signal
@@ -84,6 +86,10 @@ def _no_attempt(_: UUID) -> Attempt | None:
     return None
 
 
+#: The signal that enqueues a saved Run on Operator request (story 5-3).
+START = "start"
+
+
 @dataclass(frozen=True)
 class SignalPorts:
     """What `signal_run` writes and talks through: the shared writer ports, and the engine.
@@ -99,6 +105,9 @@ class SignalPorts:
     engine: WorkflowEngine
     harness_is_resumable: Callable[[str], bool] = field(default=_always_false)
     latest_attempt_for_run: Callable[[UUID], Attempt | None] = field(default=_no_attempt)
+    #: Required when the `start` Signal may be sent (story 5-3). `None` degrades gracefully
+    #: for every existing call site that predates this field and never sends `start`.
+    preflight: PreflightPorts | None = None
 
 
 @dataclass(frozen=True)
@@ -114,6 +123,8 @@ class SignalOutcome:
 
 def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcome:
     """Apply one Operator signal to a Run, or refuse it with the reason (409/422)."""
+    if signal.kind == START:
+        return _start_saved_run(ports, run_id, signal)
     writers = ports.writers
     with writers.uow:
         run = require_run(writers, run_id)
@@ -193,3 +204,70 @@ def _tell_the_engine(
         ports.engine.cancel(run_id)
     elif resumed:
         ports.engine.signal(run_id, signal)
+
+
+def _preflight_req_from_run(run: Run) -> PreflightRequest:
+    """Reconstruct `PreflightRequest` from a stored Run for the Probe re-read at start time.
+
+    `run.inputs` always holds `base_branch`, `harness`, and `model` (set by `_inputs_dict`
+    in `create_run`); extra keys are harmless for fail-line checks.
+    """
+    return PreflightRequest(
+        template_name=run.template_name,
+        template_version=run.template_version,
+        project_id=run.project_id,
+        repository_id=run.repository_id,
+        base_branch=str(run.inputs.get("base_branch", "")),
+        inputs=dict(run.inputs),
+        harness=run.inputs.get("harness"),
+        model=run.inputs.get("model"),
+        budget_usd=run.budget_usd,
+        re_review_done=run.re_review_done,
+        # Exclude the saved Run itself so the branch-held check does not find it holding
+        # its own branch — the Run is queued but not yet executing (story 5-3).
+        exclude_run_id=run.id,
+    )
+
+
+def _start_saved_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcome:
+    """Enqueue a saved Run on Operator request (story 5-3, AD-6).
+
+    Dedicated branch because:
+    - The gate record event is `"started_by_operator"` (a `LifecycleEvent`), not `"start"`
+      (the `SignalKind`) — a generic flow would record the wrong token.
+    - The engine call is `enqueue`, not `signal` — `_tell_the_engine` has no place for it.
+    - The Probe is re-read before enqueueing; consent is never checked (AD-13).
+    """
+    writers = ports.writers
+    with writers.uow:
+        run = require_run(writers, run_id)
+        # Validate against the table: run_statuses={"queued"}, extra=_is_saved.
+        # `validate` raises Conflict if the run is not queued or engine_ref is non-empty.
+        # It runs BEFORE the preflight assert so that a "start" sent to a non-queued Run
+        # earns the table's own 409 rather than an AssertionError.
+        validate(run, None, signal)
+        assert ports.preflight is not None, "_start_saved_run requires preflight in SignalPorts"
+        # Re-read the Probe — the Operator could have left the tab open while something else
+        # changed the Repository (e.g. another Run started on the same branch).
+        preflighted = preflight_and_plan(ports.preflight, _preflight_req_from_run(run))
+        failing = [line for line in preflighted.result.lines if line.status == "fail"]
+        if failing:
+            raise Conflict("; ".join(line.text for line in failing))
+        # Record the gate event; the event is the lifecycle token, not the signal kind.
+        record(
+            writers,
+            run,
+            Entry(event="started_by_operator", actor="operator", path=None, text="", payload={}),
+        )
+        # Clear after_run_id (story 5-4 sets it; story 5-3 adds the field and the clear).
+        run = set_run(writers, run, after_run_id=None)
+        writers.uow.commit()
+    # Enqueue outside the first commit so the Run row is durable before the engine sees it.
+    partition_key = (
+        f"{run.repository_id}:{run.partition_branch or run.inputs.get('base_branch', '')}"
+    )
+    engine_ref = ports.engine.enqueue(run.id, partition_key=partition_key)
+    with writers.uow:
+        run = set_run(writers, run, engine_ref=engine_ref)
+        writers.uow.commit()
+    return SignalOutcome(run=run, resumed=False)

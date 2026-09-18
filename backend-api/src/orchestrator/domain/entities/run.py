@@ -92,6 +92,11 @@ class Run(BaseModel):
     #: at `create_run` time from `plan.branches`; never written again. `None` on old runs that
     #: pre-date this field — those runs are treated as non-competing for branch-partition checks.
     partition_branch: str | None = None
+    #: The Run this one must wait for before the `start` Signal may enqueue it (story 5-4).
+    #: Added in story 5-3 so the `start` handler can clear it; story 5-4 adds the setter.
+    #: `None` always in story 5-3's scope — clearing `None → None` is a no-op that seeds the
+    #: 5-4 unit-of-work invariant correctly.
+    after_run_id: UUID | None = None
     #: The Langfuse trace this Run's attempt spans hang under (AD-11).
     trace_id: str | None = None
     terminal_session: bool = False

@@ -249,7 +249,7 @@ export function preflightBody(state: FormState, templates: TemplateSummary[]): P
 export function runBody(
   state: FormState,
   templates: TemplateSummary[],
-): Omit<RunIn, 'conflict_consent'> | null {
+): Omit<RunIn, 'conflict_consent' | 'save'> | null {
   const version = latestVersion(templates, state.template);
   if (!state.projectId || !state.repositoryId || !state.baseBranch) {
     return null;

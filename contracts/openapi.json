@@ -785,7 +785,8 @@
                   "cancel",
                   "terminal_start",
                   "terminal_release",
-                  "terminal_resume"
+                  "terminal_resume",
+                  "start"
                 ],
                 "type": "string"
               },
@@ -794,7 +795,8 @@
                   "start",
                   "done",
                   "failed",
-                  "cancelled"
+                  "cancelled",
+                  "started_by_operator"
                 ],
                 "type": "string"
               },
@@ -2910,7 +2912,8 @@
                 "cancel",
                 "terminal_start",
                 "terminal_release",
-                "terminal_resume"
+                "terminal_resume",
+                "start"
               ],
               "type": "string"
             },
@@ -3004,7 +3007,8 @@
                 "cancel",
                 "terminal_start",
                 "terminal_release",
-                "terminal_resume"
+                "terminal_resume",
+                "start"
               ],
               "type": "string"
             },
@@ -3491,6 +3495,11 @@
             "title": "Repository Id",
             "type": "string"
           },
+          "save": {
+            "default": false,
+            "title": "Save",
+            "type": "boolean"
+          },
           "template_name": {
             "title": "Template Name",
             "type": "string"
@@ -3624,7 +3633,8 @@
                 "cancel",
                 "terminal_start",
                 "terminal_release",
-                "terminal_resume"
+                "terminal_resume",
+                "start"
               ],
               "type": "string"
             },
@@ -3740,7 +3750,8 @@
               "cancel",
               "terminal_start",
               "terminal_release",
-              "terminal_resume"
+              "terminal_resume",
+              "start"
             ],
             "title": "Kind",
             "type": "string"

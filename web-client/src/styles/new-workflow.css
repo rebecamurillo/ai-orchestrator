@@ -207,6 +207,7 @@ table.newwf-plan td {
 }
 
 .newwf-start,
+.newwf-save,
 .newwf-cancel {
   padding: var(--space-3) var(--space-6);
   border: 1px solid var(--color-line-strong);
@@ -224,7 +225,8 @@ table.newwf-plan td {
   color: var(--color-accent);
 }
 
-.newwf-start:disabled {
+.newwf-start:disabled,
+.newwf-save:disabled {
   border-color: var(--color-line-strong);
   color: var(--color-text-tertiary);
 }

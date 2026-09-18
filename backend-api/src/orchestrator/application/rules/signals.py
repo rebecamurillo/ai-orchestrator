@@ -147,6 +147,8 @@ def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKin
         return ()
     if run.terminal_session:
         return TERMINAL_SESSION_SIGNALS
+    if run.status == "queued" and not run.engine_ref:
+        return ("start", "cancel")
     if run.status != "needs_you":
         return ("cancel",)
     if run.park_kind is None:

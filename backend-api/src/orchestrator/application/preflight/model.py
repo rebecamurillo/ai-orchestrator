@@ -69,6 +69,9 @@ class PreflightRequest:
     model: str | None = None
     budget_usd: Decimal | None = None
     re_review_done: bool = False
+    #: When set, the branch-held check skips this Run as a potential holder.  Used by
+    #: `_start_saved_run` so the Run being started does not appear to hold its own branch.
+    exclude_run_id: UUID | None = None
 
 
 @dataclass(frozen=True)

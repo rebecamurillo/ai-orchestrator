@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from uuid import UUID
 
 from orchestrator.application.preflight.model import (
     CHECK_BASE_BRANCH,
@@ -170,14 +171,13 @@ def branch_lines(ctx: Context) -> list[Line]:
 
 def _branch_line(ctx: Context, plan: Plan, branch: str) -> Line:
     """One branch the plan creates: who is holding it, and where it starts from.
-
     The plan creates a branch nobody has used (`templates/branches.py`), so `held by run`
     is asked of the name the Template *declared* — `Plan.branches` maps the two — and never
     of the fresh one, which by construction no Run can be holding. AD-14's refusal is about
     two Runs working the same branch, and that is still what it reports.
     """
     declared = _declared(plan, branch)
-    holder = _holding_run(ctx.runs, ctx.repository, declared)
+    holder = _holding_run(ctx.runs, ctx.repository, declared, exclude_run_id=ctx.req.exclude_run_id)
     if holder is not None:
         return Line(
             CHECK_BRANCH,
@@ -195,25 +195,22 @@ def _branch_line(ctx: Context, plan: Plan, branch: str) -> Line:
 
 
 def _declared(plan: Plan, branch: str) -> str:
-    """The name the Template wrote for a branch the plan creates, or the branch itself.
-
-    A branch no allocation names is its own declaration — a plan built before there was
-    anything to allocate, or a row that names a branch this Run does not create.
-    """
+    """The declared name for `branch` in the plan's allocations, or `branch` itself."""
     return {created: named for named, created in plan.branches.items()}.get(branch, branch)
 
 
-def _holding_run(runs: RunRepository, repository: Repository | None, branch: str) -> Run | None:
-    """The non-terminal Run holding `branch` on this Repository, if any (AD-14).
-
-    Compares `run.partition_branch` (set at create-time, story 5-1). Old runs with
-    `partition_branch = None` are treated as non-competing and skipped.
-    """
+def _holding_run(
+    runs: RunRepository,
+    repository: Repository | None,
+    branch: str,
+    exclude_run_id: UUID | None = None,
+) -> Run | None:
+    """Non-terminal Run holding `branch` on this Repository (AD-14, story 5-1)."""
     if repository is None:
         return None
-    for run in runs.list_by_repository_non_terminal(repository.id):
-        if run.partition_branch is not None and run.partition_branch == branch:
-            return run
+    for r in runs.list_by_repository_non_terminal(repository.id):
+        if r.id != exclude_run_id and r.partition_branch == branch:
+            return r
     return None
 
 

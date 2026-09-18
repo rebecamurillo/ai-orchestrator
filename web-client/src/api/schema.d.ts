@@ -913,7 +913,7 @@ export interface components {
             /** Attempt N */
             attempt_n: number | null;
             /** Event */
-            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume") | ("start" | "done" | "failed" | "cancelled") | ("redispatch" | "retry_auto") | "spec_edit";
+            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start") | ("start" | "done" | "failed" | "cancelled" | "started_by_operator") | ("redispatch" | "retry_auto") | "spec_edit";
             /**
              * Id
              * Format: uuid
@@ -1662,7 +1662,7 @@ export interface components {
          */
         RunDetailOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start")[];
             alert: components["schemas"]["AlertOut"] | null;
             cost: components["schemas"]["CostOut"];
             /** Gate Record */
@@ -1683,7 +1683,7 @@ export interface components {
             /** Accepted Paths */
             accepted_paths: string[];
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start")[];
             /** Branch */
             branch: string;
             /** Budget Usd */
@@ -1902,6 +1902,11 @@ export interface components {
              * Format: uuid
              */
             repository_id: string;
+            /**
+             * Save
+             * @default false
+             */
+            save: boolean;
             /** Template Name */
             template_name: string;
             /** Template Version */
@@ -1941,7 +1946,7 @@ export interface components {
          */
         RunSummaryOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start")[];
             /** Branch */
             branch: string;
             /** Budget Usd */
@@ -1994,7 +1999,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume";
+            kind: "answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start";
             /** Payload */
             payload?: {
                 [key: string]: unknown;

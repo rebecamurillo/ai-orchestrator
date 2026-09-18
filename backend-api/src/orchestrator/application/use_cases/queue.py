@@ -28,6 +28,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from uuid import UUID
 
 from orchestrator.application.preflight.checks import run_label
 from orchestrator.domain.entities.run import Run
@@ -42,6 +43,8 @@ REASON_WAITING_ANSWER = "waiting for your answer"
 # operator revision 2026-09-15: partition by (repository, branch)
 REASON_BRANCH_HELD = "branch held by {run}"
 REASON_GLOBAL_CONCURRENCY = "global concurrency, held by {runs}"
+#: A saved Run: persisted but not yet enqueued (story 5-3, AD-6).
+REASON_SAVED = "saved — not started"
 
 #: The engine's own two states for a held workflow (`domain/ports/engine.py::QueueState`).
 PENDING = "pending"
@@ -80,18 +83,43 @@ class QueuePorts:
 
 def list_queue(ports: QueuePorts) -> QueueView:
     """Every Run the engine is holding, joined with its rows for the reason it waits."""
-    entries = (_row(ports, entry) for entry in ports.engine.list_queue())
-    rows = [row for row in entries if row is not None]
+    engine_entries = list(ports.engine.list_queue())
+    # IDs already in the engine queue — they must not also appear as saved rows.
+    engine_run_ids: frozenset[UUID] = frozenset(entry.run_id for entry in engine_entries)
+    rows = [row for row in (_row(ports, entry) for entry in engine_entries) if row is not None]
+    rows += [_saved_row(ports, r) for r in _saved_runs(ports.runs, engine_run_ids)]
     return QueueView(items=sorted(rows, key=_order_key), max_active_runs=ports.max_active_runs)
 
 
 def _order_key(row: QueueRow) -> tuple[int, int]:
-    """Active first, then queued by position; a parked Run last (module docstring)."""
+    """Active first, then queued by position; a parked Run last; saved runs after that."""
     if row.reason == REASON_RUNNING:
         return (0, 0)
     if row.position is not None:
         return (1, row.position)
+    if row.reason == REASON_SAVED:
+        return (3, 0)
     return (2, 0)
+
+
+def _saved_runs(runs: RunRepository, engine_run_ids: frozenset[UUID]) -> list[Run]:
+    """All queued Runs not yet sent to the engine (engine_ref == {} and not in engine queue)."""
+    return [
+        r for r in runs.list_by_status("queued") if not r.engine_ref and r.id not in engine_run_ids
+    ]
+
+
+def _saved_row(ports: QueuePorts, run: Run) -> QueueRow:
+    """One saved Run as a `QueueRow`, with position=None and reason=REASON_SAVED."""
+    steps = ports.steps.list_for_run(run.id)
+    return QueueRow(
+        position=None,
+        run=run,
+        next_step_label=_next_step_label(run, steps),
+        reason=REASON_SAVED,
+        waiting_since=run.created_at,
+        waiting_seconds=(ports.clock.now() - run.created_at).total_seconds(),
+    )
 
 
 def _row(ports: QueuePorts, entry: QueueEntry) -> QueueRow | None:
