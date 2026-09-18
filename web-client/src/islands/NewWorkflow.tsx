@@ -28,6 +28,7 @@ import PlanTable from '../components/PlanTable';
 import PreflightLines from '../components/PreflightLines';
 import { formStateToQuery } from '../lib/newwf/query';
 import {
+  CONSENT_CHECK_TEXT,
   cloneCheckNote,
   preflightBody,
   repositoriesFor,
@@ -58,7 +59,14 @@ const INCOMPLETE_FORM_DETAIL =
   'every field but model and manual estimate is required before a run can start';
 
 function emptyPreflight(): PreflightOut {
-  return { lines: [], start_allowed: false, queue_note: '', rows: null, plan_error: null };
+  return {
+    lines: [],
+    start_allowed: false,
+    queue_note: '',
+    rows: null,
+    plan_error: null,
+    conflict_consent_required: false,
+  };
 }
 
 export default function NewWorkflow({ templates, projects, harnesses, initial }: Props) {
@@ -70,6 +78,7 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
   const [startError, setStartError] = useState<string | undefined>(undefined);
   const [probeResults, setProbeResults] = useState<Record<string, ProbeResultOut>>({});
   const [probeInFlight, setProbeInFlight] = useState(false);
+  const [conflictConsent, setConflictConsent] = useState(false);
   const requestSeqRef = useRef(0);
   const probeSeqRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -142,6 +151,7 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
   function update(next: FormState): void {
     setState(next);
     setStartError(undefined);
+    setConflictConsent(false);
     // the last outcome describes a form that no longer exists; nothing may start on it
     setPending(true);
     const query = formStateToQuery(next).toString();
@@ -186,11 +196,14 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
             queue_note: '',
             rows: null,
             plan_error: null,
+            conflict_consent_required: false,
           });
           return;
         }
       }
-      const { data, error } = await api.POST('/runs', { body });
+      const { data, error } = await api.POST('/runs', {
+        body: { ...body, conflict_consent: conflictConsent },
+      });
       if (error) {
         setStartError(error.detail ?? error.title ?? GENERIC_FAILURE_DETAIL);
         return;
@@ -209,7 +222,12 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
 
   const repositories = repositoriesFor(projects, state.projectId);
   const note = cloneCheckNote(repositoryById(repositories, state.repositoryId));
-  const startDisabled = starting || pending || probeInFlight || !preflight.start_allowed;
+  const startDisabled =
+    starting ||
+    pending ||
+    probeInFlight ||
+    !preflight.start_allowed ||
+    (preflight.conflict_consent_required && !conflictConsent);
 
   return (
     <div className="newwf">
@@ -264,6 +282,19 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
           <p className="newwf-bar-error" data-testid="newwf-start-error">
             {startError}
           </p>
+        ) : null}
+        {preflight.conflict_consent_required ? (
+          <div className="newwf-consent" data-testid="newwf-consent">
+            <label>
+              <input
+                type="checkbox"
+                checked={conflictConsent}
+                onChange={(e) => setConflictConsent(e.target.checked)}
+                data-testid="newwf-consent-checkbox"
+              />
+              {CONSENT_CHECK_TEXT}
+            </label>
+          </div>
         ) : null}
         <div className="newwf-bar-controls">
           <button

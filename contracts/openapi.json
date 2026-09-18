@@ -2359,6 +2359,10 @@
       "PreflightOut": {
         "description": "`POST /runs/preflight`'s response.",
         "properties": {
+          "conflict_consent_required": {
+            "title": "Conflict Consent Required",
+            "type": "boolean"
+          },
           "lines": {
             "items": {
               "$ref": "#/components/schemas/LineOut"
@@ -2404,7 +2408,8 @@
           "start_allowed",
           "queue_note",
           "rows",
-          "plan_error"
+          "plan_error",
+          "conflict_consent_required"
         ],
         "title": "PreflightOut",
         "type": "object"
@@ -3774,6 +3779,11 @@
               }
             ],
             "title": "Budget Usd"
+          },
+          "conflict_consent": {
+            "default": false,
+            "title": "Conflict Consent",
+            "type": "boolean"
           },
           "harness": {
             "anyOf": [

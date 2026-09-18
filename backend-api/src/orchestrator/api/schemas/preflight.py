@@ -127,6 +127,7 @@ class PreflightOut(BaseModel):
     queue_note: str
     rows: list[PlannedRowOut] | None
     plan_error: PlanErrorOut | None
+    conflict_consent_required: bool
 
     @classmethod
     def of(cls, result: PreflightResult) -> PreflightOut:
@@ -140,4 +141,5 @@ class PreflightOut(BaseModel):
             plan_error=PlanErrorOut.of(result.plan_error)
             if result.plan_error is not None
             else None,
+            conflict_consent_required=result.conflict_consent_required,
         )

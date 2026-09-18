@@ -102,6 +102,7 @@ class CreateRunRequest:
     model: str | None = None
     manual_estimate_h: Decimal | None = None
     re_review_done: bool = False
+    conflict_consent: bool = False
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -134,6 +135,8 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     if preflighted.plan_error is not None:
         raise preflighted.plan_error
     _refuse_failing_lines(preflighted.result.lines, skip_harness_check=ports.skip_harness_check)
+    if preflighted.result.conflict_consent_required and not req.conflict_consent:
+        raise Conflict("this can lead to merge conflicts: conflict consent required")
 
     # Live probe: validate the model against the harness's actual model list (story 2-2).
     # `harness_registry` is a dict on `PreflightPorts`; reuse it rather than re-running

@@ -66,6 +66,7 @@ class RunIn(BaseModel):
     model: str | None = None
     manual_estimate_h: Decimal | None = None
     re_review_done: bool = False
+    conflict_consent: bool = False
 
     def as_request(self) -> CreateRunRequest:
         return CreateRunRequest(
@@ -80,6 +81,7 @@ class RunIn(BaseModel):
             model=self.model,
             manual_estimate_h=self.manual_estimate_h,
             re_review_done=self.re_review_done,
+            conflict_consent=self.conflict_consent,
         )
 
 

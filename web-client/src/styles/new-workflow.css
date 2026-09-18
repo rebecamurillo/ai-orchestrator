@@ -234,3 +234,18 @@ table.newwf-plan td {
   font-size: var(--type-meta);
   line-height: var(--type-meta-line);
 }
+
+.newwf-consent {
+  border-left: 2px solid var(--color-signal-needs-you);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.newwf-consent label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
