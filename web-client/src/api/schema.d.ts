@@ -31,6 +31,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/harnesses/{name}/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run a readiness probe for one harness
+         * @description Shell the harness's probe verb and return the result.
+         *
+         *     `ok=True` means all checks passed; `ok=False` means the probe ran and found a specific
+         *     problem, named in `failing_reason`.  Both are HTTP 200.  Unknown harness names are 404.
+         */
+        get: operations["run_probe_api_v1_harnesses__name__probe_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/harnesses/{name}/readiness": {
         parameters: {
             query?: never;
@@ -363,6 +386,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/attempts/{attempt_id}/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one attempt's log, paged by byte offset
+         * @description Page through an attempt's log by byte cursor, or download the full file.
+         *
+         *     Returns `LogPageOut` JSON when `download` is absent or false.  Returns a
+         *     `text/plain` attachment when `?download=true`.  Both variants answer 200 with a
+         *     human-readable message when the file has been garbage-collected.
+         */
+        get: operations["log_page_api_v1_runs__run_id__attempts__attempt_id__log_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/detail": {
         parameters: {
             query?: never;
@@ -455,6 +502,28 @@ export interface paths {
          * @description Validate against AD-13, refuse a kind this epic does not apply yet, then apply it.
          */
         post: operations["post_signal_api_v1_runs__run_id__signals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/steps/{step_path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one step's full history and context
+         * @description Return one step's metadata and every attempt, newest first.
+         *
+         *     Writes nothing; derives no status (AD-8).
+         */
+        get: operations["get_step_detail_api_v1_runs__run_id__steps__step_path__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -654,7 +723,7 @@ export interface components {
             attribution?: components["schemas"]["AttributionOut"] | null;
             checkpoint_story?: components["schemas"]["CheckpointStoryOut"] | null;
             /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | null;
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency") | null;
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -665,6 +734,61 @@ export interface components {
             row_kind?: string | null;
             /** Token */
             token: string;
+        };
+        /**
+         * AttemptDetailOut
+         * @description One attempt's full detail, as returned by the step-run detail endpoint.
+         *
+         *     `dispatch_prompt` and `command` derive from the step's `with_resolved`: they are the
+         *     same for every attempt of the step and carried here so the frontend needs only this
+         *     object.  `result` is extracted per-attempt from the spec file at `end_sha`.
+         */
+        AttemptDetailOut: {
+            /** Command */
+            command: string | null;
+            /** Cost Provisional */
+            cost_provisional: boolean;
+            /** Cost Usd */
+            cost_usd: string | null;
+            /** Dispatch Prompt */
+            dispatch_prompt: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /** Exit Code */
+            exit_code: number | null;
+            /** Harness */
+            harness: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Model */
+            model: string | null;
+            /** N */
+            n: number;
+            /** Result */
+            result: string | null;
+            /** Resume Command */
+            resume_command?: string | null;
+            /** Retry Prompt */
+            retry_prompt: string | null;
+            /** Seconds */
+            seconds: number | null;
+            /** Session Id */
+            session_id: string | null;
+            /** Session Lifetime Ends At */
+            session_lifetime_ends_at?: string | null;
+            /** Started At */
+            started_at: string | null;
+            /** Status */
+            status: string;
+            /** Token */
+            token: string;
+            /** Tokens In */
+            tokens_in: number | null;
+            /** Tokens Out */
+            tokens_out: number | null;
         };
         /**
          * AttributionOut
@@ -731,7 +855,7 @@ export interface components {
             /** Needs You Since */
             needs_you_since: string | null;
             /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | null;
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency") | null;
             progress: components["schemas"]["ProgressOut"] | null;
             /** Project Name */
             project_name: string;
@@ -834,7 +958,7 @@ export interface components {
             /** Active Seconds */
             active_seconds: number;
             /** Budget Usd */
-            budget_usd: string;
+            budget_usd: string | null;
             /** Provisional */
             provisional: boolean;
             /** Spent Usd */
@@ -913,12 +1037,14 @@ export interface components {
             /** Attempt N */
             attempt_n: number | null;
             /** Event */
-            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start") | ("start" | "done" | "failed" | "cancelled" | "started_by_operator") | ("redispatch" | "retry_auto") | "spec_edit";
+            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency") | ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start") | ("start" | "done" | "failed" | "cancelled" | "started_by_operator") | ("redispatch" | "retry_auto") | "spec_edit";
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Mode */
+            mode?: string | null;
             /** Path */
             path: string | null;
             /** Text */
@@ -992,6 +1118,8 @@ export interface components {
             folder: string;
             /** Harness */
             harness: string | null;
+            /** Model */
+            model?: string | null;
             /** Project */
             project: string;
             /** Repository */
@@ -1143,6 +1271,22 @@ export interface components {
             status: "ok" | "warn" | "fail" | "skip";
             /** Text */
             text: string;
+        };
+        /**
+         * LogPageOut
+         * @description One page of an attempt's log, addressed by byte cursor.
+         *
+         *     `next_cursor` is the byte offset immediately after the last `\n` in `lines`.
+         *     Pass it as `?cursor=` on the next poll to receive only newly appended content.
+         *     `eof=True` means no bytes follow `next_cursor` at the time this page was read.
+         */
+        LogPageOut: {
+            /** Eof */
+            eof: boolean;
+            /** Lines */
+            lines: string[];
+            /** Next Cursor */
+            next_cursor: number;
         };
         /**
          * MaskedEnvVarOut
@@ -1337,6 +1481,23 @@ export interface components {
             rows: components["schemas"]["PlannedRowOut"][] | null;
             /** Start Allowed */
             start_allowed: boolean;
+        };
+        /**
+         * ProbeResultOut
+         * @description The HTTP shape of a harness probe result (story 2-1).
+         *
+         *     HTTP 200 in both the `ok=True` and `ok=False` cases — failures are reported in the body,
+         *     not through HTTP error codes.  `failing_reason` is `null` when `ok` is `True`.
+         */
+        ProbeResultOut: {
+            /** Failing Reason */
+            failing_reason: string | null;
+            /** Models */
+            models: string[];
+            /** Ok */
+            ok: boolean;
+            /** Version */
+            version: string;
         };
         /**
          * ProblemDetail
@@ -1668,6 +1829,8 @@ export interface components {
             /** Gate Record */
             gate_record: components["schemas"]["GateRecordOut"][];
             header: components["schemas"]["HeaderOut"];
+            /** Reply Available */
+            reply_available?: boolean;
             run: components["schemas"]["RunDetailSummaryOut"];
             /** Steps */
             steps: components["schemas"]["StepRowOut"][];
@@ -1687,7 +1850,7 @@ export interface components {
             /** Branch */
             branch: string;
             /** Budget Usd */
-            budget_usd: string;
+            budget_usd: string | null;
             /** Compare Urls */
             compare_urls: string[];
             /** Created At */
@@ -1851,6 +2014,8 @@ export interface components {
         RunGroupOut: {
             /** Id */
             id: string;
+            /** K */
+            k?: number;
             /**
              * Kind
              * @constant
@@ -1860,6 +2025,8 @@ export interface components {
             label: string;
             /** Members */
             members: string[];
+            /** N */
+            n?: number;
             /** Status */
             status: string | null;
         };
@@ -1868,10 +2035,12 @@ export interface components {
          * @description `POST /runs`'s body: what *Start run* submits once every field is filled in.
          */
         RunIn: {
+            /** After Run Id */
+            after_run_id?: string | null;
             /** Base Branch */
             base_branch: string;
             /** Budget Usd */
-            budget_usd: number | string;
+            budget_usd?: (number | string) | null;
             /**
              * Conflict Consent
              * @default false
@@ -1950,7 +2119,7 @@ export interface components {
             /** Branch */
             branch: string;
             /** Budget Usd */
-            budget_usd: string;
+            budget_usd: string | null;
             /** Created At */
             created_at: string;
             /**
@@ -2005,6 +2174,37 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * StepDetailOut
+         * @description One step's full detail, as returned by the step-run detail endpoint.
+         *
+         *     `attempts` is newest first (highest `n` first), consistent with every other endpoint
+         *     that sorts attempts for display.
+         */
+        StepDetailOut: {
+            /** Attempts */
+            attempts: components["schemas"]["AttemptDetailOut"][];
+            /** Gate */
+            gate: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Path */
+            path: string;
+            /** Reason */
+            reason: string | null;
+            /** Seq */
+            seq: number;
+            /** Status */
+            status: string;
+            /** Token */
+            token: string;
+            /** With Resolved */
+            with_resolved: {
+                [key: string]: unknown;
+            };
+        };
         /** StepRowOut */
         StepRowOut: {
             /** Attempts */
@@ -2022,6 +2222,8 @@ export interface components {
             path: string;
             /** Reason */
             reason: string | null;
+            /** Retry Prompt */
+            retry_prompt?: string | null;
             /** Seq */
             seq: number;
             /** Status */
@@ -2179,6 +2381,58 @@ export interface operations {
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    run_probe_api_v1_harnesses__name__probe_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeResultOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No harness has that name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `name` does not match the shape below. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3364,6 +3618,63 @@ export interface operations {
             };
         };
     };
+    log_page_api_v1_runs__run_id__attempts__attempt_id__log_get: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+                download?: boolean;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+                attempt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogPageOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No attempt with that id in this Run. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path segment does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     detail_api_v1_runs__run_id__detail_get: {
         parameters: {
             query?: {
@@ -3729,12 +4040,66 @@ export interface operations {
             };
         };
     };
+    get_step_detail_api_v1_runs__run_id__steps__step_path__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                step_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepDetailOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No run or step with those identifiers. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     read_history_api_v1_steps_get: {
         parameters: {
             query?: {
                 project_id?: string | null;
                 /** @description One of BLK DON ERR QUE RUN. Omitted means every status. */
                 status?: string | null;
+                /** @description A harness name. Omitted means every harness. */
                 harness?: string | null;
                 cursor?: string | null;
                 limit?: number;
@@ -3764,7 +4129,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description `status` is not one of the tokens this endpoint offers, `cursor` is not one it issued, or `limit` is outside its bounds. */
+            /** @description `status` is not one of the tokens this endpoint offers, `cursor` is not one it issued, `harness` is not the shape of a harness name, or `limit` is outside its bounds. */
             422: {
                 headers: {
                     [name: string]: unknown;
