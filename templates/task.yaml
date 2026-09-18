@@ -36,6 +36,7 @@ steps:
       status_in: [done, blocked, ready-for-dev]
     retry:
       max: 2
+      prompt: "No spec file with a terminal status was found at {{artifacts_dir}}/spec-{{task_id}}-*.md. Finish the task and write that file, or set status: blocked with the reason."
       resume_session: true
     escalate_when: "output.status == blocked"
     pause_when: always

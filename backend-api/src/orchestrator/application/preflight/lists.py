@@ -16,10 +16,12 @@ from orchestrator.application.preflight.checks import Context, list_error_target
 from orchestrator.application.preflight.model import (
     CHECK_EPICS_YAML,
     CHECK_EXISTING_STORY_FILES,
+    CHECK_INSTALLED_SKILL,
     CHECK_SPEC_MD,
     CHECK_STORIES_YAML,
     Line,
 )
+from orchestrator.application.steps import AGENT_KIND
 from orchestrator.application.templates.lines import load_sequence, load_with_lines
 from orchestrator.application.templates.lists import stories_directory
 
@@ -187,3 +189,41 @@ def _story_status(text: str) -> str | None:
             value = loaded.root.get(STATUS_KEY) if loaded.root is not None else None
             return str(value) if value is not None else None
     return None
+
+
+def installed_skill_lines(ctx: Context) -> list[Line]:
+    """One line per missing skill, `ok` when all are present, `skip` when catalog is absent.
+
+    Returns an empty list when the plan is `None` or has no `skill:` agent steps — nothing
+    to check.  Returns a single `skip` line when the catalog is unavailable (either
+    `ctx.skill_catalog` is `None` or `installed_skills()` returns `None`).  Returns one
+    `fail` line per missing skill name when some are absent; returns a single `ok` line when
+    every named skill is installed.  Lives here rather than in `checks.py` on line count
+    alone (the 400-line module limit), like every plural-line check before it.
+    """
+    if ctx.plan is None:
+        return []
+    skill_names: list[str] = []
+    for plan_row in ctx.plan.rows:
+        if plan_row.kind != AGENT_KIND:
+            continue
+        skill = plan_row.with_resolved.get("skill")
+        if isinstance(skill, str) and skill and skill not in skill_names:
+            skill_names.append(skill)
+    if not skill_names:
+        return []
+    installed = ctx.skill_catalog.installed_skills() if ctx.skill_catalog is not None else None
+    if installed is None:
+        return [Line(CHECK_INSTALLED_SKILL, "skip", "catalog unavailable")]
+    missing = [name for name in skill_names if name not in installed]
+    if missing:
+        return [
+            Line(
+                CHECK_INSTALLED_SKILL,
+                "fail",
+                f"not installed: {name}",
+                fix="rebuild the agent image",
+            )
+            for name in missing
+        ]
+    return [Line(CHECK_INSTALLED_SKILL, "ok", "ok")]

@@ -16,7 +16,6 @@ from orchestrator.application.preflight.model import (
     CHECK_CLONE_CHECK,
     CHECK_EPICS_YAML,
     CHECK_HARNESS,
-    CHECK_INSTALLED_SKILL,
     CHECK_METHOD_VERSION,
     CHECK_ORIGIN,
     CHECK_STORIES_YAML,
@@ -299,43 +298,6 @@ def harness_probe_line(ctx: Context) -> Line:
     if not result.ok:
         return Line(CHECK_HARNESS, "fail", result.failing_reason or "probe failed")
     return Line(CHECK_HARNESS, "ok", f"probe ok · {result.version}")
-
-
-def installed_skill_lines(ctx: Context) -> list[Line]:
-    """One line per missing skill, `ok` when all are present, `skip` when catalog is absent.
-
-    Returns an empty list when the plan is `None` or has no `skill:` agent steps — nothing
-    to check.  Returns a single `skip` line when the catalog is unavailable (either
-    `ctx.skill_catalog` is `None` or `installed_skills()` returns `None`).  Returns one
-    `fail` line per missing skill name when some are absent; returns a single `ok` line when
-    every named skill is installed.
-    """
-    if ctx.plan is None:
-        return []
-    skill_names: list[str] = []
-    for plan_row in ctx.plan.rows:
-        if plan_row.kind != AGENT_KIND:
-            continue
-        skill = plan_row.with_resolved.get("skill")
-        if isinstance(skill, str) and skill and skill not in skill_names:
-            skill_names.append(skill)
-    if not skill_names:
-        return []
-    installed = ctx.skill_catalog.installed_skills() if ctx.skill_catalog is not None else None
-    if installed is None:
-        return [Line(CHECK_INSTALLED_SKILL, "skip", "catalog unavailable")]
-    missing = [name for name in skill_names if name not in installed]
-    if missing:
-        return [
-            Line(
-                CHECK_INSTALLED_SKILL,
-                "fail",
-                f"not installed: {name}",
-                fix="rebuild the agent image",
-            )
-            for name in missing
-        ]
-    return [Line(CHECK_INSTALLED_SKILL, "ok", "ok")]
 
 
 def checkpoints_line(ctx: Context) -> Line:

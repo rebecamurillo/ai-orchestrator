@@ -44,6 +44,7 @@ from orchestrator.application.templates.lists import (
     ID_KEY,
     STORIES_KIND,
     check_entries,
+    filter_only,
     list_kind,
     read_list,
     stories_directory,
@@ -63,7 +64,6 @@ from orchestrator.application.templates.plan_model import (
     INSERTED_GATE,
     LABEL_SEPARATOR,
     ON_FAIL_KEY,
-    ONLY_NOT_IN_LIST,
     PATH_SEPARATOR,
     REASON_ALREADY_DONE,
     PlanError,
@@ -187,20 +187,8 @@ def expand_loop(loop: ForEach, frame: Frame, ctx: Context) -> list[PlannedRow]:
     raw_items, ref_used = read_list(ctx.reader, frame, path, line=loop.line)
     kind = list_kind(path)
     check_entries(raw_items, kind, frame, line=loop.line)
-    filtered: Sequence[Mapping[str, Any]]
-    if loop.only is not None:
-        target_id = str(resolve(loop.only, frame.scope))
-        filtered = [e for e in raw_items if e.get(ID_KEY) == target_id]
-        if not filtered:
-            raise PlanError(
-                reason=ONLY_NOT_IN_LIST,
-                template=frame.template.name,
-                version=frame.template.version,
-                line=loop.line,
-                item=target_id,
-            )
-    else:
-        filtered = raw_items
+    only = str(resolve(loop.only, frame.scope)) if loop.only is not None else None
+    filtered = filter_only(raw_items, only, frame, line=loop.line)
     # the list decided which commit this frame reads at; the story files follow it
     outer = replace(frame, ref=ref_used)
     rows: list[PlannedRow] = []

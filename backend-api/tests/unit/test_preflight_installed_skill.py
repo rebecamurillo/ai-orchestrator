@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from orchestrator.application.preflight import checks
+from orchestrator.application.preflight import lists
 from orchestrator.application.preflight.checks import Context
 from orchestrator.application.preflight.model import CHECK_INSTALLED_SKILL, PreflightRequest
 from orchestrator.application.templates.plan_model import Plan
@@ -88,7 +88,7 @@ def _ctx(**overrides: object) -> Context:
 def test_installed_skill_lines_returns_empty_when_plan_is_none() -> None:
     ctx = _ctx(skill_catalog=FakeSkillCatalog(frozenset({"bmad-build-auto"})))
 
-    assert checks.installed_skill_lines(ctx) == []
+    assert lists.installed_skill_lines(ctx) == []
 
 
 # ---------------------------------------------------------------------------
@@ -100,14 +100,14 @@ def test_installed_skill_lines_returns_empty_when_no_skill_steps() -> None:
     plan = _plan(_row(kind="git.worktree"))
     ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset({"bmad-build-auto"})))
 
-    assert checks.installed_skill_lines(ctx) == []
+    assert lists.installed_skill_lines(ctx) == []
 
 
 def test_installed_skill_lines_returns_empty_for_agent_step_without_skill_key() -> None:
     plan = _plan(_row(kind="agent"))  # no `skill` key in with_resolved
     ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset({"bmad-build-auto"})))
 
-    assert checks.installed_skill_lines(ctx) == []
+    assert lists.installed_skill_lines(ctx) == []
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ def test_installed_skill_lines_skips_when_installed_skills_returns_none() -> Non
     plan = _plan(_row(kind="agent", skill="bmad-build-auto"))
     ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(None))
 
-    result = checks.installed_skill_lines(ctx)
+    result = lists.installed_skill_lines(ctx)
 
     assert len(result) == 1
     assert result[0].check == CHECK_INSTALLED_SKILL
@@ -132,7 +132,7 @@ def test_installed_skill_lines_skips_when_skill_catalog_is_none() -> None:
     plan = _plan(_row(kind="agent", skill="bmad-build-auto"))
     ctx = _ctx(plan=plan, skill_catalog=None)
 
-    result = checks.installed_skill_lines(ctx)
+    result = lists.installed_skill_lines(ctx)
 
     assert len(result) == 1
     assert result[0].status == "skip"
@@ -147,7 +147,7 @@ def test_installed_skill_lines_ok_when_skill_is_installed() -> None:
     plan = _plan(_row(kind="agent", skill="bmad-build-auto"))
     ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset({"bmad-build-auto"})))
 
-    result = checks.installed_skill_lines(ctx)
+    result = lists.installed_skill_lines(ctx)
 
     assert len(result) == 1
     assert result[0].check == CHECK_INSTALLED_SKILL
@@ -163,7 +163,7 @@ def test_installed_skill_lines_fails_when_skill_is_absent() -> None:
     plan = _plan(_row(kind="agent", skill="bmad-missing"))
     ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset({"bmad-build-auto"})))
 
-    result = checks.installed_skill_lines(ctx)
+    result = lists.installed_skill_lines(ctx)
 
     assert len(result) == 1
     assert result[0].check == CHECK_INSTALLED_SKILL
@@ -184,7 +184,7 @@ def test_installed_skill_lines_emits_one_fail_per_missing_skill() -> None:
     )
     ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset()))
 
-    result = checks.installed_skill_lines(ctx)
+    result = lists.installed_skill_lines(ctx)
 
     expected_count = len(plan.rows)
     assert len(result) == expected_count
@@ -202,7 +202,7 @@ def test_installed_skill_lines_deduplicates_repeated_skill_names() -> None:
     )
     ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset()))
 
-    result = checks.installed_skill_lines(ctx)
+    result = lists.installed_skill_lines(ctx)
 
     assert len(result) == 1
     assert "bmad-build-auto" in result[0].text

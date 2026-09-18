@@ -157,7 +157,7 @@ def _lines(ctx: Context) -> list[Line]:
     lines.append(checks.checkpoints_line(ctx))
     lines += lists.spec_md_lines(ctx)
     lines.append(checks.harness_probe_line(ctx))
-    lines += checks.installed_skill_lines(ctx)
+    lines += lists.installed_skill_lines(ctx)
     lines.append(checks.method_version_line(ctx))
     lines.append(lists.existing_story_files_line(ctx, ids_by_path))
     lines.append(checks.clone_check_line(ctx))

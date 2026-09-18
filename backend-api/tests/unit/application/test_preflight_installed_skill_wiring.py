@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from orchestrator.application.preflight import checks
+from orchestrator.application.preflight import lists
 from orchestrator.application.preflight.checks import Context
 from orchestrator.application.preflight.model import CHECK_INSTALLED_SKILL, PreflightRequest
 from orchestrator.application.templates.plan_model import Plan
@@ -54,7 +54,7 @@ def test_missing_skill_produces_fail_line_and_would_block_start() -> None:
         skill_catalog=FakeSkillCatalog(frozenset()),  # empty catalog → skill absent
     )
 
-    lines = checks.installed_skill_lines(ctx)
+    lines = lists.installed_skill_lines(ctx)
 
     # The check itself returns a fail line naming the missing skill.
     assert len(lines) == 1
