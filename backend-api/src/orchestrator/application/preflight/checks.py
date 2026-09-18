@@ -203,18 +203,24 @@ def _declared(plan: Plan, branch: str) -> str:
 
 
 def _holding_run(runs: RunRepository, repository: Repository | None, branch: str) -> Run | None:
-    """The non-terminal Run holding `branch` in a worktree on this Repository, if any (AD-14)."""
+    """The non-terminal Run holding `branch` on this Repository, if any (AD-14).
+
+    Compares `run.partition_branch` (set at create-time, story 5-1). Old runs with
+    `partition_branch = None` are treated as non-competing and skipped.
+    """
     if repository is None:
         return None
     for run in runs.list_by_repository_non_terminal(repository.id):
-        if any(worktree.branch == branch for worktree in run.worktrees):
+        if run.partition_branch is not None and run.partition_branch == branch:
             return run
     return None
 
 
 def run_label(run: Run) -> str:
     """`"{template} · {branch}"` — the label pre-flight names a holding Run with."""
-    if run.worktrees:
+    if run.partition_branch is not None:
+        branch = run.partition_branch
+    elif run.worktrees:
         branch = run.worktrees[0].branch
     else:
         branch = str(run.inputs.get("branch") or run.inputs.get("base_branch") or "")

@@ -37,7 +37,7 @@ class LocalWorkflowEngine:
         self._queue: dict[UUID, QueueEntry] = {}
         self._next_ref = 0
 
-    def enqueue(self, run_id: UUID, partition_key: UUID) -> dict[str, Any]:
+    def enqueue(self, run_id: UUID, partition_key: str) -> dict[str, Any]:
         with self._lock:
             self._next_ref += 1
             ref = self._next_ref

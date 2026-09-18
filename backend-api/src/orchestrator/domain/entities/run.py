@@ -88,6 +88,10 @@ class Run(BaseModel):
     #: default reaches the same idempotency without joining that set — see this story's
     #: Design Notes.
     worktrees_removed: bool = False
+    #: The declared branch this Run partitions its queue slot by (AD-12, story 5-1). Set once
+    #: at `create_run` time from `plan.branches`; never written again. `None` on old runs that
+    #: pre-date this field — those runs are treated as non-competing for branch-partition checks.
+    partition_branch: str | None = None
     #: The Langfuse trace this Run's attempt spans hang under (AD-11).
     trace_id: str | None = None
     terminal_session: bool = False

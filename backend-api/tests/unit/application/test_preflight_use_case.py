@@ -162,6 +162,8 @@ def test_ac4_held_branch() -> None:
         refs={fixtures.BASE_BRANCH: fixtures.BASE_SHA, "feat/x": fixtures.WORK_SHA},
         files={(fixtures.WORK_SHA, f"{fixtures.SPEC_FOLDER}/stories.yaml"): fixtures.EPIC_STORIES},
     )
+    # operator revision 2026-09-15: partition by (repository, branch) — holder needs
+    # partition_branch set so _holding_run detects it via the new check.
     holder = Run(
         id=new_id(),
         project_id=fixtures.PROJECT.id,
@@ -171,6 +173,7 @@ def test_ac4_held_branch() -> None:
         status="running",
         inputs={},
         budget_usd=Decimal("0"),
+        partition_branch="feat/x",
         worktrees=(Worktree(branch="feat/x", path="/work/x", created_branch=True, pushed=False),),
         created_at=NOW,
     )

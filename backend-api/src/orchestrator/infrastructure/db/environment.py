@@ -34,6 +34,7 @@ from uuid import UUID
 
 from orchestrator.application.steps.context import ProjectContext, RunEnvironment
 from orchestrator.domain.entities.project import Project
+from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.crypto import Crypto
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyProjectRepository,
@@ -65,6 +66,7 @@ def read_run_environment(
         if project is None or repository is None:
             return None
         spec_folder = run.inputs.get(SPEC_FOLDER_INPUT)
+        held_by_label = _held_by_label(run, SQLAlchemyRunRepository(session))
         return RunEnvironment(
             run_id=run.id,
             project_slug=project.slug,
@@ -80,9 +82,24 @@ def read_run_environment(
             run=run,
             project=_project_context(project, crypto),
             test_globs=repository.test_globs,
+            held_by_label=held_by_label,
         )
     finally:
         session.close()
+
+
+def _held_by_label(run: Run, runs: SQLAlchemyRunRepository) -> str | None:
+    """The label of another non-terminal Run on the same (repository, partition_branch), or `None`.
+
+    Used as the executor backstop for the race between pre-flight passing and worktree
+    creation (AD-14, story 5-1). `None` when `partition_branch` is not set or no holder exists.
+    """
+    if run.partition_branch is None:
+        return None
+    for other in runs.list_by_repository_non_terminal(run.repository_id):
+        if other.id != run.id and other.partition_branch == run.partition_branch:
+            return f"{other.template_name} · {other.partition_branch}"
+    return None
 
 
 def _project_context(project: Project, crypto: Callable[[], Crypto] | None) -> ProjectContext:

@@ -44,6 +44,7 @@ from orchestrator.application.preflight.model import (
     PreflightRequest,
 )
 from orchestrator.application.rules.signals import row_at
+from orchestrator.application.templates.plan_model import Plan
 from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -168,6 +169,7 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         if ports.tracer is not None
         else None
     )
+    declared_branch = _partition_branch(plan, req.base_branch)
     run = Run(
         id=run_id,
         project_id=project.id,
@@ -184,6 +186,7 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         re_review_done=req.re_review_done,
         trace_id=trace.trace_id if trace is not None else None,
         created_at=ports.clock.now(),
+        partition_branch=declared_branch,
     )
     step_rows = [_step_run(run_id, row) for row in plan.rows]
 
@@ -191,7 +194,7 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     ports.steps.add_many(step_rows)
     ports.uow.commit()
 
-    engine_ref = ports.engine.enqueue(run.id, partition_key=repository.id)
+    engine_ref = ports.engine.enqueue(run.id, partition_key=f"{repository.id}:{declared_branch}")
     run = run.model_copy(update={"engine_ref": engine_ref})
     ports.preflight.runs.update(run)
     ports.uow.commit()
@@ -274,6 +277,17 @@ def _inputs_dict(req: CreateRunRequest) -> dict[str, Any]:
         "model": req.model,
         **(req.inputs or {}),
     }
+
+
+def _partition_branch(plan: Plan, base_branch: str) -> str:
+    """The declared branch this Run partitions its queue slot by (AD-12).
+
+    For a story/epic plan, `plan.branches` has exactly one key (the declared branch name).
+    For an initiative plan (empty `plan.branches`), the base_branch is the partition key.
+    The FIRST key is used in case a template ever declares more than one branch — the Run
+    is partitioned by its first declared branch, same as the pre-flight branch-line check.
+    """
+    return next(iter(plan.branches), base_branch)
 
 
 def _step_run(run_id: UUID, row: PlannedRow) -> StepRun:

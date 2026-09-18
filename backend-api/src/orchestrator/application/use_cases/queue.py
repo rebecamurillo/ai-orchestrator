@@ -39,8 +39,10 @@ from orchestrator.domain.ports.repositories import RunRepository, StepRunReposit
 #: The fixed reasons (SPEC CAP-11, AD-12). A queue row states one of these, verbatim.
 REASON_RUNNING = "running"
 REASON_WAITING_ANSWER = "waiting for your answer"
-REASON_REPOSITORY_LOCK = "repository lock held by {label}"
-REASON_GLOBAL_CONCURRENCY = "global concurrency, held by {labels}"
+# operator revision 2026-09-15: partition by (repository, branch) — renamed from
+# REASON_REPOSITORY_LOCK = "repository lock held by {label}"
+REASON_BRANCH_HELD = "branch held by {run}"
+REASON_GLOBAL_CONCURRENCY = "global concurrency, held by {runs}"
 
 #: The engine's own two states for a held workflow (`domain/ports/engine.py::QueueState`).
 PENDING = "pending"
@@ -118,15 +120,27 @@ def _reason(ports: QueuePorts, run: Run, entry: QueueEntry) -> tuple[str, int | 
         return REASON_RUNNING, None
     holder = _holding_run(ports.runs, run)
     if holder is not None:
-        return REASON_REPOSITORY_LOCK.format(label=run_label(holder)), entry.position
-    labels = ", ".join(run_label(candidate) for candidate in _active_runs(ports.runs))
-    return REASON_GLOBAL_CONCURRENCY.format(labels=labels), entry.position
+        return REASON_BRANCH_HELD.format(run=run_label(holder)), entry.position
+    runs_labels = ", ".join(run_label(candidate) for candidate in _active_runs(ports.runs))
+    return REASON_GLOBAL_CONCURRENCY.format(runs=runs_labels), entry.position
 
 
 def _holding_run(runs: RunRepository, run: Run) -> Run | None:
-    """The other non-terminal Run already on this Repository, if any (AD-12's partition)."""
+    """The other non-terminal Run on this Repository with the same partition branch, if any.
+
+    Skips Runs where either side has `partition_branch = None` — old runs without the field
+    (story 5-1) are treated as non-competing (operator revision 2026-09-15).
+    """
+    if run.partition_branch is None:
+        return None
     return next(
-        (r for r in runs.list_by_repository_non_terminal(run.repository_id) if r.id != run.id),
+        (
+            r
+            for r in runs.list_by_repository_non_terminal(run.repository_id)
+            if r.id != run.id
+            and r.partition_branch is not None
+            and r.partition_branch == run.partition_branch
+        ),
         None,
     )
 

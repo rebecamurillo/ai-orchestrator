@@ -89,8 +89,16 @@ class DbosWorkflowEngine:
         self._engine.register_queue(QUEUE_NAME, concurrency=self._config.max_active_runs)
         log.info(ENGINE_LAUNCHED, version=self._config.application_version)
 
-    def enqueue(self, run_id: UUID, partition_key: UUID) -> dict[str, Any]:
-        """Put a Run behind its Repository's partition (AD-12); return its `engine_ref`."""
+    def enqueue(self, run_id: UUID, partition_key: str) -> dict[str, Any]:
+        """Put a Run behind its (Repository, declared-branch) partition (AD-12).
+
+        Returns the `engine_ref` for the enqueued workflow.
+        """
+        # Idempotency: a repeated call after a lost response finds the existing workflow
+        # rather than enqueueing a second walk (AD-12, adapter.py line 8 comment).
+        if self._engine.steps(str(run_id)):
+            log.info("enqueue_no_op", run_id=str(run_id))
+            return {WORKFLOW_ID: str(run_id)}
         self._engine.enqueue(
             QUEUE_NAME, self._walker(), str(run_id), partition_key=str(partition_key)
         )

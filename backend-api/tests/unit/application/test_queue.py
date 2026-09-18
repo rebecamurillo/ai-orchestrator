@@ -10,8 +10,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from orchestrator.application.use_cases.queue import (
+    REASON_BRANCH_HELD,
     REASON_GLOBAL_CONCURRENCY,
-    REASON_REPOSITORY_LOCK,
     REASON_RUNNING,
     REASON_WAITING_ANSWER,
     QueuePorts,
@@ -81,8 +81,10 @@ def entry(run_id: object, state: str, position: int | None, enqueued_at: datetim
 
 
 def test_running_queued_and_parked_runs_read_the_fixed_reasons() -> None:
-    running = a_run(repository_id=REPOSITORY_A, status="running")
-    queued = a_run(repository_id=REPOSITORY_A, status="queued")
+    # operator revision 2026-09-15: partition by (repository, branch); both runs need
+    # partition_branch set to the same value for REASON_BRANCH_HELD to be reported.
+    running = a_run(repository_id=REPOSITORY_A, status="running", partition_branch="feat/x")
+    queued = a_run(repository_id=REPOSITORY_A, status="queued", partition_branch="feat/x")
     parked = a_run(
         repository_id=REPOSITORY_B,
         status="needs_you",
@@ -101,7 +103,8 @@ def test_running_queued_and_parked_runs_read_the_fixed_reasons() -> None:
     assert by_id[running.id].reason == REASON_RUNNING
     assert by_id[running.id].position is None
     assert by_id[queued.id].position == 1
-    assert by_id[queued.id].reason == REASON_REPOSITORY_LOCK.format(label="epic · feat/x")
+    # operator revision 2026-09-15: partition by (repository, branch)
+    assert by_id[queued.id].reason == REASON_BRANCH_HELD.format(run="epic · feat/x")
     assert by_id[parked.id].reason == REASON_WAITING_ANSWER
     assert by_id[parked.id].position is None
 
@@ -133,7 +136,8 @@ def test_an_enqueued_run_with_a_free_repository_reads_global_concurrency() -> No
     row = next(r for r in view.items if r.run.id == waiting.id)
     # `FakeRunRepository.list_by_status` reads newest first: `active_two` (created later)
     # before `active_one`.
-    assert row.reason == REASON_GLOBAL_CONCURRENCY.format(labels="epic · feat/b, epic · feat/a")
+    # operator revision 2026-09-15: partition by (repository, branch)
+    assert row.reason == REASON_GLOBAL_CONCURRENCY.format(runs="epic · feat/b, epic · feat/a")
     assert row.position == 1
 
 

@@ -56,8 +56,11 @@ class EngineRecord:
 class WorkflowEngine(Protocol):
     """The durable engine, behind one interface (AD-6). `application/` never imports DBOS."""
 
-    def enqueue(self, run_id: UUID, partition_key: UUID) -> dict[str, Any]:
-        """Put a Run behind its Repository's partition (AD-12); return its `engine_ref`."""
+    def enqueue(self, run_id: UUID, partition_key: str) -> dict[str, Any]:
+        """Put a Run behind its (Repository, declared-branch) partition (AD-12).
+
+        Returns the `engine_ref` for the enqueued workflow.
+        """
         ...
 
     def signal(self, run_id: UUID, signal: Signal) -> None:

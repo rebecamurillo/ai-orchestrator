@@ -295,8 +295,11 @@ def test_branch_lines_ok_will_create_from_base() -> None:
 
 
 def test_branch_lines_fails_when_held_by_a_non_terminal_run() -> None:
+    # operator revision 2026-09-15: partition by (repository, branch) — holder needs
+    # partition_branch set so _holding_run detects it via the new check.
     holder = run(
         template_name="epic",
+        partition_branch="feat/x",
         worktrees=(Worktree(branch="feat/x", path="/work/x", created_branch=True, pushed=False),),
     )
     plan = Plan(plan_ref="sha", rows=(row(with_resolved={"branch": "feat/x"}),))

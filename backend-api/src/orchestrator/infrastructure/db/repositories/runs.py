@@ -91,6 +91,7 @@ def to_entity(row: RunRow) -> Run:
         started_at=row.started_at,
         ended_at=row.ended_at,
         worktrees_removed=row.worktrees_removed,
+        partition_branch=row.partition_branch,
     )
 
 
@@ -140,6 +141,7 @@ def row_values(run: Run) -> dict[str, Any]:
         "started_at": run.started_at,
         "ended_at": run.ended_at,
         "worktrees_removed": run.worktrees_removed,
+        "partition_branch": run.partition_branch,
     }
 
 

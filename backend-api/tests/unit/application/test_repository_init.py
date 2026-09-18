@@ -139,7 +139,10 @@ def test_a_missing_method_and_a_passing_clone_check_starts_repo_init() -> None:
     assert stored.budget_usd == NO_BUDGET
     assert stored.inputs["base_branch"] == fixtures.REPOSITORY.default_branch
     assert stored.inputs["harness"] is not None  # `create_run`'s own default, never asked for
-    assert harness.engine.calls == [("enqueue", (result.run.id, fixtures.REPOSITORY.id))]
+    # operator revision 2026-09-15: partition by (repository, branch)
+    assert harness.engine.calls == [
+        ("enqueue", (result.run.id, f"{fixtures.REPOSITORY.id}:{fixtures.INIT_BRANCH}"))
+    ]
 
 
 def test_an_unknown_repository_is_not_found() -> None:
