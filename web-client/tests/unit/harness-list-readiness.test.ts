@@ -38,7 +38,9 @@ function render(harnesses: HarnessOut[]): string {
 }
 
 function noteText(markup: string, name: string): string {
-  return markup.match(new RegExp(`data-testid="newwf-readiness-${name}-note">(.*?)<\\/span>`))?.[1] ?? '';
+  return (
+    markup.match(new RegExp(`data-testid="newwf-readiness-${name}-note">(.*?)<\\/span>`))?.[1] ?? ''
+  );
 }
 
 describe('HarnessList with onRunReadiness prop', () => {
