@@ -157,11 +157,12 @@ def build_engine(
     settings: Settings, session_factory: SessionFactory, git: Git
 ) -> DbosWorkflowEngine:
     """The durable `WorkflowEngine`, wired to the walker's ports. Opens no connection."""
-    return DbosWorkflowEngine(
-        engine_config(settings),
-        RealEngine(),
-        walker_deps(settings, session_factory, git),
-    )
+    deps = walker_deps(settings, session_factory, git)
+    engine = DbosWorkflowEngine(engine_config(settings), RealEngine(), deps)
+    # Wire the engine back into deps so apply_step_result can enqueue done-dependents
+    # (story 5-4, AD-8): the cell is populated after construction to break the circular dep.
+    deps.engine_cell.append(engine)
+    return engine
 
 
 @contextmanager
@@ -208,6 +209,54 @@ def schedule_jobs(settings: Settings) -> None:
             continue
         for name, cron, job in scheduled_jobs(settings, session_factory, git):
             engine.schedule(name, cron, job)
+
+
+def sweep_dependency_residue(settings: Settings) -> None:
+    """Enqueue saved Runs whose predecessors landed 'done' before a container crash.
+
+    Guarded via `_SERVING`: a process that is not serving (every unit test) has nothing in
+    `_SERVING`, so this is a no-op there.  Called in `run_migrations` after `launch_engine`
+    so the engine is running before we enqueue.
+
+    Crash invariant (story 5-4 Design Notes): a Run with `after_run_id IS NOT NULL` and
+    `engine_ref = {}` whose named predecessor has `status = done` was enqueued-but-not-written
+    before the process crashed.  We re-enqueue it here so the Run is not orphaned.
+    """
+    for engine, session_factory, _git in _SERVING:
+        if session_factory is None:
+            continue
+        _do_sweep_dependency_residue(engine, session_factory)
+
+
+def _do_sweep_dependency_residue(
+    engine: DbosWorkflowEngine, session_factory: SessionFactory
+) -> None:
+    """Find crash-residue dependents and enqueue them, writing engine_ref atomically."""
+    # Phase 1: read — find saved Runs whose predecessor is already done.
+    with open_writer_ports(session_factory) as ports:
+        queued = ports.runs.list_by_status("queued")
+        candidates = []
+        for run in queued:
+            if run.after_run_id is None or run.engine_ref:
+                continue
+            predecessor = ports.runs.get(run.after_run_id)
+            if predecessor is not None and predecessor.status == "done":
+                candidates.append(run)
+
+    # Phase 2: enqueue each candidate and write engine_ref + clear after_run_id.
+    for run in candidates:
+        partition_key = (
+            f"{run.repository_id}:{run.partition_branch or run.inputs.get('base_branch', '')}"
+        )
+        engine_ref = engine.enqueue(run.id, partition_key=partition_key)
+        with open_writer_ports(session_factory) as ports:
+            with ports.uow:
+                live = ports.runs.get(run.id)
+                if live is not None and not live.engine_ref:
+                    ports.runs.update(
+                        live.model_copy(update={"engine_ref": engine_ref, "after_run_id": None})
+                    )
+                    ports.uow.commit()
 
 
 def schedule_engine_jobs(settings: Settings) -> None:

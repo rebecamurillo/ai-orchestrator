@@ -45,6 +45,8 @@ REASON_BRANCH_HELD = "branch held by {run}"
 REASON_GLOBAL_CONCURRENCY = "global concurrency, held by {runs}"
 #: A saved Run: persisted but not yet enqueued (story 5-3, AD-6).
 REASON_SAVED = "saved — not started"
+#: A saved Run waiting for a named predecessor to finish (story 5-4, AD-6).
+REASON_WAITING_DEPENDENCY = "waiting for run {x}"
 
 #: The engine's own two states for a held workflow (`domain/ports/engine.py::QueueState`).
 PENDING = "pending"
@@ -97,7 +99,7 @@ def _order_key(row: QueueRow) -> tuple[int, int]:
         return (0, 0)
     if row.position is not None:
         return (1, row.position)
-    if row.reason == REASON_SAVED:
+    if row.reason == REASON_SAVED or row.reason.startswith("waiting for run "):
         return (3, 0)
     return (2, 0)
 
@@ -110,13 +112,21 @@ def _saved_runs(runs: RunRepository, engine_run_ids: frozenset[UUID]) -> list[Ru
 
 
 def _saved_row(ports: QueuePorts, run: Run) -> QueueRow:
-    """One saved Run as a `QueueRow`, with position=None and reason=REASON_SAVED."""
+    """One saved Run as a `QueueRow`, with position=None.
+
+    Reason is `REASON_WAITING_DEPENDENCY` when the Run has an `after_run_id` (story 5-4),
+    else `REASON_SAVED`.
+    """
     steps = ports.steps.list_for_run(run.id)
+    if run.after_run_id is not None:
+        reason = REASON_WAITING_DEPENDENCY.format(x=str(run.after_run_id))
+    else:
+        reason = REASON_SAVED
     return QueueRow(
         position=None,
         run=run,
         next_step_label=_next_step_label(run, steps),
-        reason=REASON_SAVED,
+        reason=reason,
         waiting_since=run.created_at,
         waiting_seconds=(ports.clock.now() - run.created_at).total_seconds(),
     )

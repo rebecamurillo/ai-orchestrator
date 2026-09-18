@@ -64,7 +64,8 @@
                   "protected_path",
                   "misconfigured",
                   "plan_stale",
-                  "internal"
+                  "internal",
+                  "dependency"
                 ],
                 "type": "string"
               },
@@ -317,7 +318,8 @@
                   "protected_path",
                   "misconfigured",
                   "plan_stale",
-                  "internal"
+                  "internal",
+                  "dependency"
                 ],
                 "type": "string"
               },
@@ -770,7 +772,8 @@
                   "protected_path",
                   "misconfigured",
                   "plan_stale",
-                  "internal"
+                  "internal",
+                  "dependency"
                 ],
                 "type": "string"
               },
@@ -3416,6 +3419,18 @@
       "RunIn": {
         "description": "`POST /runs`'s body: what *Start run* submits once every field is filled in.",
         "properties": {
+          "after_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Run Id"
+          },
           "base_branch": {
             "title": "Base Branch",
             "type": "string"

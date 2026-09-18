@@ -248,7 +248,7 @@ VALID: dict[SignalKind, Rule] = {
         text_key=ANSWER_KEY,
     ),
     "continue": Rule(
-        park_kinds=frozenset({"checkpoint", "protected_path", "plan_stale"}),
+        park_kinds=frozenset({"checkpoint", "protected_path", "plan_stale", "dependency"}),
         run_event="continue",
         text="continued by the operator",
         text_from=_accepted_text,

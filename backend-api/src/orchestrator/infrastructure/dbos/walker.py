@@ -39,7 +39,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 from uuid import UUID
 
@@ -53,6 +53,7 @@ from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.statuses import GateEvent
 from orchestrator.domain.values import StepResult
 from orchestrator.infrastructure.dbos.config import HUMAN_TOPIC, STEP_ID, WORKFLOW_ID
+from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.infrastructure.dbos.facade import DurableEngine
 
 log = structlog.get_logger(__name__)
@@ -125,6 +126,9 @@ class WalkerDeps:
     #: in every process that wires no such effect — every unit test among them, and any
     #: process built before this hook existed.
     on_terminal: Callable[[UUID], None] | None = None
+    #: Populated by `build_engine` after construction; mutable cell for the engine so
+    #: apply_step_result can enqueue done-dependents (story 5-4, AD-8 exception).
+    engine_cell: list[WorkflowEngine] = field(default_factory=list, hash=False, compare=False)
 
 
 def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]:
@@ -224,6 +228,9 @@ def _apply_result(deps: WalkerDeps) -> Callable[[str, int, dict[str, Any]], str]
     def apply_result(run_id: str, seq: int, result: dict[str, Any]) -> str:
         with deps.open_ports() as ports:
             applied = StepResult.model_validate(result)
+            engine = deps.engine_cell[0] if deps.engine_cell else None
+            if engine is not None:
+                ports = replace(ports, engine=engine)
             status = walk.apply_result(_walk_ports(deps, ports), UUID(run_id), seq, applied)
         _finish(deps, run_id, status)
         return status

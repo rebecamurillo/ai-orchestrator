@@ -1,55 +1,23 @@
-"""`apply_step_result` (SPEC CAP-5): every completion transition, in one unit of work (AD-8).
+"""`apply_step_result` (SPEC CAP-5): every completion transition, one unit of work (AD-8).
 
-The walker calls this with whatever the executor returned, and this module decides what that
-means for the Attempt, the row, the successor and the Run — the executor decides nothing.
-The order is AD-8's and it matters, because each step can change what the next one sees:
+The walker calls this; the executor decides nothing. Order matters — each step changes what
+the next one sees:
 
-0. **Apply the result's `run_updates`.** `git.worktree`, `git.push` and `pr.link` change the
-   Run itself — `worktree_path`, `worktrees[]`, `compare_urls[]` (AD-14) — and AD-8 gives an
-   executor no way to write one. It returns the values and they are written here, first, in
-   the same unit of work: the next row's environment is read after this commits, and
-   `cancel` needs the worktree recorded even when the row that made it then failed.
-1. **Close the Attempt.** `ended_at`, the status the row reached through it, `output_ref`,
-   and `log_path` when the result names one — the spine puts that column on every row's
-   attempt, and a kind that starts a process has no `AttemptRepository` to write it with.
-   `exit_code`, `session_id` and the usage columns are not written here: `StepResult`
-   carries none of them, and AD-8 has the `agent` executor record them through
-   `AttemptRepository.mark_finished` the moment the harness exits, so a restart finds them.
-2. **Write the row**: `result.status` through `step_transition`, `reason` beside it.
-   `StepResult.gate` is deliberately not written back: the row's gate is what the planner
-   recorded before the Run started (AD-7), and a completion is not allowed to re-decide how
-   the step's success is judged.
-3. **Route.** A redispatch goes back (bounded, AD-9); a `park` stops the Run for the
-   Operator; a `retry` re-queues *this* row, counted and recorded (AD-9, FR-16); a
-   finished row queues its successor, or ends the Run when it has none; an
-   `error` row is routed by its own `on_fail` — `fail` ends the Run `failed`, `continue`
-   queues the successor exactly as a finished row does, and `escalate` (the action the DSL
-   gives a row that declared none) writes nothing here, because an executor that escalates
-   returns the `Park` that says why. A Run left with no runnable row is the walker's own
-   `close_run` to report (`use_cases/walk.py`), not a silent stall.
+0. Apply `result.run_updates` (worktree, compare_url — AD-14) on the Run first.
+1. Close the Attempt (`ended_at`, status, `output_ref`, optional `log_path`).
+2. Write the row via `step_transition`; gate is never rewritten (AD-7).
+3. Route: redispatch back (AD-9), park for Operator, retry this row (bounded, FR-16), queue
+   successor when finished, or fail/continue on `error` per `on_fail`. A non-runnable Run
+   is `close_run`'s to report, not a silent stall.
 
-Two rules are worth stating on their own:
+**Cancelled Run absorbs a late result** — nothing is written; one log line explains why.
 
-**A cancelled Run absorbs a late result.** If the Run is not `running` when the result
-arrives, nothing is written at all and one line is logged. The walker's step may well have
-been mid-flight when `signal_run` cancelled the Run; the alternative — writing to a
-terminal Run — is exactly the double write AD-8 exists to prevent.
+**Successor walk reads through `skipped` rows** — an `epic@1` over a done Story ends in
+consecutive `skipped` rows; looking only at `seq + 1` would stall the Run.
 
-**The successor walk reads through `skipped` rows.** AD-8's step diagram says a row is
-queued when its predecessor is "done *or skipped*", and `epic@1` over an already-done Story
-ends in four consecutive `skipped` rows, so a successor rule that looked only at `seq + 1`
-would stall the Run. The walk stops — writing nothing — at the first row that is neither
-`planned` nor `skipped`: such a row is already past `planned`, and the only way to reach it
-is the walker's own re-walk after a redispatch, which owns it.
+`after_route(run, row, result)` is Epic 5's seam for the budget second-record (AD-11).
 
-`after_route(run, row, result)` is Epic 5's seam: the budget rule's second gate record and
-the `park_kind = budget` rewrite hang there. Nothing in Epic 4 passes it.
-
-**5.9's own trigger hangs here too, unconditionally.** The instant a Story frame's own
-commit-guard row itself reaches `done`, `record_trajectory` runs inside the same unit of
-work — the frame's last row, and the only point at which the trajectory's `end_sha` ("HEAD
-after the commit-guard") is a fact. It is idempotent on `(run_id, frame)`, so a durable-step
-replay of this same call records nothing twice (AD-19, AD-6).
+**Commit-guard `done` triggers trajectory capture** (AD-19, AD-6) inside the same UoW.
 """
 
 from __future__ import annotations
@@ -65,6 +33,10 @@ from orchestrator.application.rules.signals import REBASELINE_FAILED
 from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
 from orchestrator.application.use_cases.record_trajectory import record_trajectory
+from orchestrator.application.use_cases.resolve_dependents import (
+    resolve_for_done,
+    resolve_for_failed_or_cancelled,
+)
 from orchestrator.application.use_cases.writers import (
     FINISHED,
     Entry,
@@ -143,6 +115,7 @@ def apply_step_result(
     after_route: AfterRoute | None = None,
 ) -> None:
     """Apply one executor result to the Attempt, the row, the successor and the Run."""
+    done_deps: list[Run] = []
     with ports.uow:
         run = require_run(ports, run_id)
         if run.status != RUNNING:
@@ -161,7 +134,26 @@ def apply_step_result(
         run = _route(ports, run, row, result, attempt)
         if after_route is not None:
             after_route(run, row, result)
+        # Resolve dependency relationships for terminal Run statuses (story 5-4, AD-8).
+        if run.status == "failed":
+            resolve_for_failed_or_cancelled(ports, run)
+        elif run.status == "done":
+            # Capture dependents inside the UoW; enqueue them after commit so the predecessor
+            # is durable before the engine sees the dependent (same invariant as create_run).
+            done_deps = resolve_for_done(ports, run)
         ports.uow.commit()
+    # After the predecessor's terminal status is durable: enqueue each done-dependent.
+    if done_deps and ports.engine is not None:
+        for dep in done_deps:
+            partition_key = (
+                f"{dep.repository_id}:{dep.partition_branch or dep.inputs.get('base_branch', '')}"
+            )
+            engine_ref = ports.engine.enqueue(dep.id, partition_key=partition_key)
+            with ports.uow:
+                live = ports.runs.get(dep.id)
+                if live is not None and not live.engine_ref:
+                    set_run(ports, live, engine_ref=engine_ref, after_run_id=None)
+                    ports.uow.commit()
 
 
 def _apply_run_updates(ports: WriterPorts, run: Run, result: StepResult) -> Run:

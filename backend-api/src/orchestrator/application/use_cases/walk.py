@@ -379,12 +379,20 @@ def close_run(ports: WalkPorts, run_id: UUID) -> RunStatus:
 
 
 def expire(ports: WalkPorts, run_id: UUID) -> RunStatus:
-    """The 30-day `recv` reached its deadline: the Run fails, unless a signal beat it."""
+    """The 30-day `recv` reached its deadline: the Run fails, unless a signal beat it.
+
+    A dependency-parked Run (`park_kind="dependency"`) is never expired: it was never
+    dispatched to the engine, so the recv deadline is a no-op for it.  The Run stays
+    `needs_you` until the Operator continues or cancels it (story 5-4, AD-8).
+    """
     writers = ports.writers
     with writers.uow:
         run = require_run(writers, run_id)
         if run.status != NEEDS_YOU:
             log.info(NOT_PARKED, run_id=str(run_id), status=run.status)
+            return run.status
+        if run.park_kind == "dependency":
+            # A dependency park never expires — absorb the deadline without a transition.
             return run.status
         run = expire_run(writers, run)
         writers.uow.commit()

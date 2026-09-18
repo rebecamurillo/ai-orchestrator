@@ -50,6 +50,7 @@ ParkKind = Literal[
     "misconfigured",
     "plan_stale",
     "internal",
+    "dependency",
 ]
 PARK_KINDS: tuple[ParkKind, ...] = get_args(ParkKind)
 
