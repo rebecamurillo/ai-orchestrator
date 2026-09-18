@@ -15,4 +15,5 @@ files:
       Reviewed: the stories are implementable as specified.
 commit: true
 exit_code: 0
-usage: { tokens_in: 50, tokens_out: 80, cost_usd: "0.01" }
+# no usage: an unmeasured dispatch (AD-11) — the budget suites' figures are calibrated to
+# the story dispatches alone, and the epic tail must not shift them.

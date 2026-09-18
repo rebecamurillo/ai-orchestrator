@@ -57,11 +57,18 @@ def test_there_is_a_scenario_directory_for_every_story() -> None:
 @pytest.mark.parametrize("path", SCENARIOS, ids=lambda p: f"{p.parent.name}/{p.name}")
 def test_every_scenario_parses_into_something_the_harness_would_act_on(path: Path) -> None:
     """`scenario.parse` never raises, so a file that failed to load would silently do
-    nothing at all; a scenario that writes no file is the one shape this fixture never wants."""
+    nothing at all; a scenario that writes no file is the one shape this fixture never wants.
+
+    Revised for stories 4-4..4-7 (2026-09-18): the root `default.yaml` serves the epic
+    tail's no-story dispatches (spec-gate/gen-e2e/retro) and writes plain `files:` rather
+    than a Story file — it must still write *something*, asserted the same way."""
     parsed = scenarios.load(path)
 
     assert parsed != scenarios.Scenario(), path.name
-    assert parsed.story_file is not None, path.name
+    if path.parent.name == ".fake-harness":
+        assert parsed.files, path.name
+    else:
+        assert parsed.story_file is not None, path.name
 
 
 def test_story_ones_two_scenarios_are_the_block_then_the_answer() -> None:
@@ -83,9 +90,11 @@ def test_story_ones_two_scenarios_are_the_block_then_the_answer() -> None:
 
 
 def test_the_story_file_slugs_are_stable_so_a_test_can_name_the_path() -> None:
+    # the root default.yaml (no-story dispatches, stories 4-4..4-7) carries no Story file
     slugs = {
         path.parent.name: (scenarios.load(path).story_file or scenarios.StoryFileSpec("")).slug
         for path in SCENARIOS
+        if path.parent.name != ".fake-harness"
     }
 
     assert slugs == {"1": "notify", "2": "plan", "3": "ship"}
