@@ -221,6 +221,10 @@ test.describe('/ (Board — LIST view)', () => {
       .locator('.board-list-group')
       .filter({ hasText: 'RUNNING' })
       .locator('[data-testid^="board-list-row-"]');
+    // operator revision 2026-09-18: `board-list` is visible before the fetch answers (groups
+    // render only once cards arrive), so the one-shot `evaluateAll` below raced the render on
+    // slow machines. The retrying count waits for the rows; the order assertion is unchanged.
+    await expect(rows).toHaveCount(2);
     const ids = await rows.evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')));
     expect(ids).toEqual(['board-list-row-new', 'board-list-row-old']);
   });
