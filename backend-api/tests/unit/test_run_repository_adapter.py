@@ -339,6 +339,8 @@ NULLABLE = {
         "ended_at",
         # operator revision 2026-09-15: added by story 5-1 (nullable for old runs)
         "partition_branch",
+        # operator revision 2026-09-18: added by story 5-3 (nullable; predecessor run ref)
+        "after_run_id",
     },
     "step_run": {"reason", "frame", "story_id"},
     "attempt": {

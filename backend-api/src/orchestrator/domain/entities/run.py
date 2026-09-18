@@ -92,6 +92,10 @@ class Run(BaseModel):
     #: at `create_run` time from `plan.branches`; never written again. `None` on old runs that
     #: pre-date this field — those runs are treated as non-competing for branch-partition checks.
     partition_branch: str | None = None
+    #: The Run that must complete before this one may start (story 5-3). Set at save time when
+    #: the caller names a predecessor; cleared to `None` by `start_saved_run` in the same
+    #: commit that transitions `queued → running`.
+    after_run_id: UUID | None = None
     #: The Langfuse trace this Run's attempt spans hang under (AD-11).
     trace_id: str | None = None
     terminal_session: bool = False

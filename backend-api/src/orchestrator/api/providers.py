@@ -56,11 +56,14 @@ from orchestrator.application.use_cases.queue import QueuePorts
 from orchestrator.application.use_cases.run_views import RunViewPorts
 from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.application.use_cases.signals import SignalEffectPorts
+from orchestrator.application.use_cases.start_run import StartRunPorts
 from orchestrator.application.use_cases.templates import TemplatePorts
 from orchestrator.application.use_cases.terminal import TerminalPorts
+from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
+    SessionUnitOfWork,
     SQLAlchemyAttemptRepository,
     SQLAlchemyGateRecordRepository,
     SQLAlchemyHarnessRepository,
@@ -364,4 +367,29 @@ def signal_effect_ports(request: Request) -> Iterator[SignalEffectPorts]:
             process=RealProcessRunner(),
             work_dir=settings.work_dir,
             read_environment=partial(read_run_environment, session_factory, settings.bmad_version),
+        )
+
+
+def start_run_ports(request: Request) -> Iterator[StartRunPorts]:
+    """The ports `start_saved_run` (story 5-3) runs on: writer ports, preflight, engine.
+
+    Shares the same session between the writer and the preflight so that a Run persisted
+    in the same request is immediately visible to the concurrency check without a separate
+    flush. `SessionUnitOfWork(uow.session)` gives the writers their own entry guard while the
+    outer `SQLAlchemyUnitOfWork` manages the session lifecycle.
+    """
+    session_factory = from_state(request, SESSION_FACTORY)
+    engine: WorkflowEngine = from_state(request, ENGINE)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield StartRunPorts(
+            writers=WriterPorts(
+                runs=SQLAlchemyRunRepository(uow.session),
+                steps=SQLAlchemyStepRunRepository(uow.session),
+                attempts=SQLAlchemyAttemptRepository(uow.session),
+                records=SQLAlchemyGateRecordRepository(uow.session),
+                uow=SessionUnitOfWork(uow.session),
+                clock=SystemClock(),
+            ),
+            engine=engine,
+            preflight=_preflight_ports(request, uow, "start_run"),
         )

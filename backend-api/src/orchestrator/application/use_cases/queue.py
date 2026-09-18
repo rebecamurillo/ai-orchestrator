@@ -43,6 +43,9 @@ REASON_WAITING_ANSWER = "waiting for your answer"
 REASON_BRANCH_HELD = "branch held by {run}"
 REASON_GLOBAL_CONCURRENCY = "global concurrency, held by {runs}"
 
+#: Saved Runs (story 5-3): queued with an empty `engine_ref`, not yet enqueued.
+REASON_SAVED = "saved — not started"
+
 #: The engine's own two states for a held workflow (`domain/ports/engine.py::QueueState`).
 PENDING = "pending"
 
@@ -80,8 +83,25 @@ class QueuePorts:
 
 def list_queue(ports: QueuePorts) -> QueueView:
     """Every Run the engine is holding, joined with its rows for the reason it waits."""
-    entries = (_row(ports, entry) for entry in ports.engine.list_queue())
+    engine_entries = list(ports.engine.list_queue())
+    entries = (_row(ports, entry) for entry in engine_entries)
     rows = [row for row in entries if row is not None]
+    # story 5-3: saved Runs are queued but absent from the engine's own listing
+    engine_run_ids = {e.run_id for e in engine_entries}
+    for r in ports.runs.list_by_status("queued"):
+        if r.id in engine_run_ids:
+            continue  # already handled above via the engine listing
+        step = ports.steps.first_queued(r.id)
+        rows.append(
+            QueueRow(
+                position=None,
+                run=r,
+                next_step_label=step.gate if step else "",
+                reason=REASON_SAVED,
+                waiting_since=r.created_at,
+                waiting_seconds=(ports.clock.now() - r.created_at).total_seconds(),
+            )
+        )
     return QueueView(items=sorted(rows, key=_order_key), max_active_runs=ports.max_active_runs)
 
 
