@@ -158,3 +158,9 @@ All implementation changes are in the working tree (not committed). `make lint` 
 - `make lint` -- expected: ruff, mypy, import-linter all pass; no AD-2 violation
 - `make test` -- expected: all unit tests green including new probe-gate test files
 - `make openapi` -- expected: no drift reported by `pnpm gen:api --check`
+
+## Human Answer
+
+2026-09-17T04:24:52.746806Z · operator
+
+exception-4 authorized: revise test_ac3_harness_disabled (test_preflight_use_case.py) and test_a_named_harness_reaches_the_runs_inputs (test_repository_init_harness.py) to assert the probe-based semantics as proposed; name this decision and 2026-09-16 in the revised tests.
