@@ -12,6 +12,7 @@ timing out.
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -92,9 +93,23 @@ def test_mode(api: httpx.Client) -> None:
 
 
 @pytest.fixture(scope="module")
-def run_id(api: httpx.Client, settings: Settings, test_mode: None) -> Iterator[str]:
+def bmad_version() -> str:
+    """The pin the fixture's manifest has to state for pre-flight to pass (AD-16)."""
+    value = os.environ.get("BMAD_VERSION")
+    if not value:
+        pytest.fail(
+            "BMAD_VERSION is not set: the gates fixture's `_bmad/` manifest has to state the "
+            "version this instance pins (`make e2e` exports it from .env.e2e)"
+        )
+    return value
+
+
+@pytest.fixture(scope="module")
+def run_id(
+    api: httpx.Client, settings: Settings, bmad_version: str, test_mode: None
+) -> Iterator[str]:
     """A Run on a test-owned template with a retry block; cancelled on teardown."""
-    fixtures = GatesFixture(settings.work_dir, _bmad_version(api))
+    fixtures = GatesFixture(settings.work_dir, bmad_version)
     project_id = create_project(api)
     url = fixtures.make()
     repository_id = create_repository(api, project_id, url)
@@ -126,17 +141,6 @@ def run_id(api: httpx.Client, settings: Settings, test_mode: None) -> Iterator[s
         yield rid
     finally:
         api.post(f"{RUNS}/{rid}/signals", json={"kind": "cancel"})
-
-
-def _bmad_version(api: httpx.Client) -> str:
-    """Read the bmad_version from the stack's settings endpoint, or fall back to a sentinel."""
-    try:
-        resp = api.get("/api/v1/settings")
-        if resp.status_code == HTTP_OK:
-            return str(resp.json().get("bmad_version", "unknown"))
-    except Exception:
-        pass
-    return "unknown"
 
 
 def _poll_for_steps(api: httpx.Client, rid: str) -> list[dict[str, Any]]:

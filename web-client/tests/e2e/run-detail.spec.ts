@@ -470,6 +470,8 @@ test.describe('/workflows/[id] (Run detail)', () => {
     await page.goto(URL);
 
     await expect(page.getByTestId('wf-header')).toBeVisible();
+    // the Steps table lives in the tabbed region and renders once STEPS is chosen
+    await page.getByRole('button', { name: 'STEPS' }).click();
     await expect(page.getByTestId('wf-step-1-retry-prompt')).toBeVisible();
     await expect(page.getByTestId('wf-step-1-retry-prompt')).toContainText('some-prompt');
   });
@@ -484,6 +486,9 @@ test.describe('/workflows/[id] (Run detail)', () => {
     await page.goto(URL);
 
     await expect(page.getByTestId('wf-header')).toBeVisible();
+    // open STEPS so the absence is asserted against a rendered table, not an empty tab
+    await page.getByRole('button', { name: 'STEPS' }).click();
+    await expect(page.getByTestId('wf-step-1')).toBeVisible();
     await expect(page.getByTestId('wf-step-1-retry-prompt')).toHaveCount(0);
   });
 });

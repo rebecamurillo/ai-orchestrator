@@ -172,7 +172,9 @@ test.describe('the Answer box', () => {
 
     await expect.poll(() => posted).not.toBeNull();
     expect(posted!.kind).toBe('answer');
-    expect(posted!.payload).toEqual({ text: ANSWER });
+    // story 3-3 (2026-09-17): the Answer signal now carries a `mode` beside the text —
+    // `restart` is the default when the harness offers no resumable session.
+    expect(posted!.payload).toEqual({ text: ANSWER, mode: 'restart' });
     await expect(page.getByTestId('wf-stop-blocked')).toHaveCount(0);
     await expect(page.getByTestId('wf-answer')).toHaveCount(0);
   });

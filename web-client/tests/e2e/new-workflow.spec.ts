@@ -385,11 +385,14 @@ test.describe('/workflows/new', () => {
   test('Start run with a required field still empty states the reason rather than doing nothing', async ({
     page,
   }) => {
-    // pre-flight says yes (its own fields are all optional) while budget is still empty
+    // pre-flight says yes (its own fields are all optional) while the base branch is still
+    // empty. The empty field was the budget until story 3-2 (2026-09-17) made it optional —
+    // tracked, no cap — so the branch, still required, carries the assertion now.
     await mockPreflight(page, preflightBody());
     await openForm(page);
     await expect(page.getByTestId('newwf-start')).toBeEnabled();
-    await expect(page.getByTestId('newwf-budget')).toHaveValue('');
+    await page.getByTestId('newwf-base').fill('');
+    await expect(page.getByTestId('newwf-base')).toHaveValue('');
 
     await page.getByTestId('newwf-start').click();
 
