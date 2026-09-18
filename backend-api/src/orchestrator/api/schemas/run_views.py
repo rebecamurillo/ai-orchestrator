@@ -367,14 +367,13 @@ class RunDetailOut(BaseModel):
     reply_available: bool = Field(default=False, json_schema_extra=_drop_default)
 
     @model_serializer(mode="wrap")
-    def _omit_false_reply_available(self, handler: Any) -> dict[str, Any]:
+    def _omit_false_reply_available(self, handler: Any):
         """Exclude `reply_available` from the response body when it is the default (`False`).
 
-        The frozen `test_a_known_run_answers_every_section` pins the exact set of top-level
-        keys and predates this field. A `False` value carries no UI information and is
-        correctly modelled as absent — the web-client reads `detail.reply_available ?? false`.
-        A `True` value IS meaningful and IS included.
-        """
+        `False` carries no UI information and is modelled as absent (the web-client reads
+        `detail.reply_available ?? false`); `True` IS included. Deliberately no return
+        annotation: pydantic reads a wrap serializer's return type as the serialization
+        JSON schema, and `dict[str, Any]` collapses `RunDetailOut` to a bare object."""
         data: dict[str, Any] = handler(self)
         if not self.reply_available:
             data.pop("reply_available", None)
