@@ -132,3 +132,9 @@ This file is a read-only anchor introduced by story 2-4 (commit `4c3cc15`). The 
 Story 2-5's implementation is otherwise complete: all 1382 unit tests pass (116 test files), tsc/eslint/prettier pass on all changed files, and all anchor tests pass unchanged.
 
 Operator action required: either authorize a formatting-only fix to `web-client/tests/unit/harness-list-readiness.test.ts` (exception-4, Prettier compliance — no assertion change), or accept the pre-existing lint failure as a defect from story 2-4.
+
+## Human Answer
+
+2026-09-17T07:26:22.494664Z · operator
+
+YES authorize a formatting-only fix to `web-client/tests/unit/harness-list-readiness.test.ts`
