@@ -79,10 +79,10 @@ from orchestrator.application.use_cases.walk_frame import (
 from orchestrator.application.use_cases.writers import (
     FINISHED,
     WriterPorts,
-    _enqueue_dependents,
-    _park_dependents,
+    enqueue_dependents,
     expire_run,
     finish_run,
+    park_dependents,
     park_run,
     queue_row,
     require_row,
@@ -378,7 +378,7 @@ def close_run(ports: WalkPorts, run_id: UUID) -> RunStatus:
             run = park_run(writers, run, Park(kind="internal", reason=reason, path=stalled.path))
         writers.uow.commit()
     if run.status == "done":  # two-phase: commit first, enqueue after (story 5-4)
-        _enqueue_dependents(writers, writers.engine, run)
+        enqueue_dependents(writers, writers.engine, run)
     return run.status
 
 
@@ -395,6 +395,6 @@ def expire(ports: WalkPorts, run_id: UUID) -> RunStatus:
             log.info("dependency park — expiry skipped", run_id=str(run_id))
             return run.status
         run = expire_run(writers, run)
-        _park_dependents(writers, run)  # park dependents in same UoW (story 5-4)
+        park_dependents(writers, run)  # park dependents in same UoW (story 5-4)
         writers.uow.commit()
     return run.status

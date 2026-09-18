@@ -18,6 +18,7 @@ from orchestrator.application.use_cases.walk import WalkPorts, expire
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ids import new_id
+from tests.unit.application.writer_fixtures import build_run
 from tests.unit.fakes.clock import EPOCH, FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
 from tests.unit.fakes.git import FakeGit
@@ -137,3 +138,20 @@ def test_expire_expired_blocked_park_writes_failed_record() -> None:
 
     records = walk_ports.writers.records.list_for_run(run.id)
     assert any(r.event == "failed" for r in records)
+
+
+# ── expire parks dependency-waiting dependents ────────────────────────────────────────────
+
+
+def test_expire_parks_dependency_waiting_run_when_predecessor_expires() -> None:
+    """When a non-dependency park expires to failed, its dependents are parked (story 5-4 P4)."""
+    predecessor = a_parked_run("blocked")
+    dependent = build_run("queued", after_run_id=predecessor.id)
+    walk_ports = make_walk_ports(predecessor, extra_runs=[dependent])
+
+    expire(walk_ports, predecessor.id)
+
+    stored = walk_ports.writers.runs.get(dependent.id)
+    assert stored is not None
+    assert stored.status == "needs_you"
+    assert stored.park_kind == "dependency"

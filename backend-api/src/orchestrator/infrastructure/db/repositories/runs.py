@@ -195,10 +195,11 @@ class SQLAlchemyRunRepository:
         )
 
     def list_by_after_run_id(self, run_id: UUID) -> list[Run]:
-        """Dependency-waiting Runs: after_run_id == run_id and engine_ref == {} (story 5-4)."""
+        """Dependency-waiting Runs: queued, after_run_id == run_id, engine_ref == {} (story 5-4)."""
         return self._read(
             select(RunRow).where(
                 RunRow.after_run_id == run_id,
+                RunRow.status == "queued",
                 RunRow.engine_ref == {},
             )
         )

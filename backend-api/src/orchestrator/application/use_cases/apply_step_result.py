@@ -63,9 +63,9 @@ from orchestrator.application.use_cases.writers import (
     FINISHED,
     Entry,
     WriterPorts,
-    _enqueue_dependents,
-    _park_dependents,
+    enqueue_dependents,
     finish_run,
+    park_dependents,
     park_run,
     queue_row,
     record,
@@ -158,10 +158,10 @@ def apply_step_result(
         if after_route is not None:
             after_route(run, row, result)
         if run.status == "failed":  # park dependents in same UoW (story 5-4)
-            _park_dependents(ports, run)
+            park_dependents(ports, run)
         ports.uow.commit()
     if run.status == "done":  # two-phase: commit first, enqueue after (story 5-4)
-        _enqueue_dependents(ports, ports.engine, run)
+        enqueue_dependents(ports, ports.engine, run)
 
 
 def _apply_run_updates(ports: WriterPorts, run: Run, result: StepResult) -> Run:

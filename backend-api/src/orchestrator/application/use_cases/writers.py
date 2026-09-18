@@ -86,7 +86,7 @@ class WriterPorts:
     trajectories: TrajectoryRepository | None = None
     #: Optional engine for two-phase dependent enqueue (story 5-4). `None` on every call
     #: site that predates this field — every frozen `WriterPorts(...)` construction keeps
-    #: working unchanged. When set, `_enqueue_dependents` uses it after a `done` transition.
+    #: working unchanged. When set, `enqueue_dependents` uses it after a `done` transition.
     engine: WorkflowEngine | None = None
 
 
@@ -247,7 +247,7 @@ def finish_run(ports: WriterPorts, run: Run) -> Run:
 DEPENDENCY_PARK_REASON = "run {run_id} ended {status}"
 
 
-def _park_dependents(ports: WriterPorts, run: Run) -> None:
+def park_dependents(ports: WriterPorts, run: Run) -> None:
     """Park every queued run waiting for `run` in the same UoW as `run`'s terminal write.
 
     Called when `run` reaches `failed` or `cancelled`. Any run whose `after_run_id` points
@@ -273,7 +273,7 @@ def _park_dependents(ports: WriterPorts, run: Run) -> None:
         record(ports, parked, Entry(event="dependency", actor="machine", path=None, text=reason))
 
 
-def _enqueue_dependents(ports: WriterPorts, engine: WorkflowEngine | None, run: Run) -> None:
+def enqueue_dependents(ports: WriterPorts, engine: WorkflowEngine | None, run: Run) -> None:
     """Two-phase enqueue of every run waiting for `run` after `run` reaches `done`.
 
     Called AFTER the predecessor's `done` write is committed. For each dependent whose

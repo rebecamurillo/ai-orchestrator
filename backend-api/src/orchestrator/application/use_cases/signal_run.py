@@ -49,10 +49,10 @@ from orchestrator.application.use_cases.signal_effects import EFFECTS, CancelPla
 from orchestrator.application.use_cases.writers import (
     Entry,
     WriterPorts,
-    _enqueue_dependents,
-    _park_dependents,
     clear_park,
+    enqueue_dependents,
     finish_run,
+    park_dependents,
     record,
     require_run,
     set_run,
@@ -133,8 +133,7 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
     # Dependency-park `continue` needs its own two-phase enqueue flow (story 5-4):
     # park_path is None so EFFECTS["continue"] → _parked(None) would AssertionError.
     if signal.kind == "continue":
-        with ports.writers.uow:
-            _peek = ports.writers.runs.get(run_id)
+        _peek = ports.writers.runs.get(run_id)
         if _peek is not None and _peek.park_kind == DEPENDENCY:
             return _continue_dependency_run(ports, run_id, signal)
     writers = ports.writers
@@ -159,7 +158,7 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
         run = _apply(writers, run, rule, effect)
         # Park dependents in the same UoW when this run reaches `cancelled` (story 5-4).
         if run.status == "cancelled":
-            _park_dependents(writers, run)
+            park_dependents(writers, run)
         writers.uow.commit()
     resumed = effect.resume and rule.run_event is not None and run.status == RUNNING
     _tell_the_engine(
@@ -172,7 +171,7 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
     )
     # Two-phase enqueue for done dependents after signal (e.g. skip-to-done, story 5-4).
     if run.status == "done":
-        _enqueue_dependents(writers, writers.engine, run)
+        enqueue_dependents(writers, writers.engine, run)
     return SignalOutcome(run=run, resumed=resumed, cancel_plan=effect.cancel_plan)
 
 
@@ -286,7 +285,7 @@ def _continue_dependency_run(ports: SignalPorts, run_id: UUID, signal: Signal) -
         # Clear the dependency park and reset to `queued` so the engine starts it fresh.
         # `needs_you → queued` is not in RUN_TRANSITIONS (the machine only allows
         # `needs_you → running` via the "continue" event), so we write directly like
-        # `_park_dependents` does for the inverse direction (story 5-4 design note).
+        # `park_dependents` does for the inverse direction (story 5-4 design note).
         run = set_run(
             writers,
             run,

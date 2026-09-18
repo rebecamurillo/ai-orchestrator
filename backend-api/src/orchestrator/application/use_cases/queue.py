@@ -88,10 +88,12 @@ def list_queue(ports: QueuePorts) -> QueueView:
     engine_entries = list(ports.engine.list_queue())
     # IDs already in the engine queue — they must not also appear as saved rows.
     engine_run_ids: frozenset[UUID] = frozenset(entry.run_id for entry in engine_entries)
+    # One query shared by both saved and dependency-waiting helpers (P5).
+    all_queued = ports.runs.list_by_status("queued")
     rows = [row for row in (_row(ports, entry) for entry in engine_entries) if row is not None]
-    rows += [_saved_row(ports, r) for r in _saved_runs(ports.runs, engine_run_ids)]
+    rows += [_saved_row(ports, r) for r in _saved_runs(all_queued, engine_run_ids)]
     rows += [
-        _dependency_row(ports, r) for r in _dependency_waiting_runs(ports.runs, engine_run_ids)
+        _dependency_row(ports, r) for r in _dependency_waiting_runs(all_queued, engine_run_ids)
     ]
     return QueueView(items=sorted(rows, key=_order_key), max_active_runs=ports.max_active_runs)
 
@@ -109,20 +111,20 @@ def _order_key(row: QueueRow) -> tuple[int, int]:
     return (2, 0)
 
 
-def _saved_runs(runs: RunRepository, engine_run_ids: frozenset[UUID]) -> list[Run]:
+def _saved_runs(all_queued: list[Run], engine_run_ids: frozenset[UUID]) -> list[Run]:
     """Saved Runs: queued, not enqueued, not waiting for a predecessor (story 5-3, AD-6)."""
     return [
         r
-        for r in runs.list_by_status("queued")
+        for r in all_queued
         if not r.engine_ref and r.id not in engine_run_ids and r.after_run_id is None
     ]
 
 
-def _dependency_waiting_runs(runs: RunRepository, engine_run_ids: frozenset[UUID]) -> list[Run]:
+def _dependency_waiting_runs(all_queued: list[Run], engine_run_ids: frozenset[UUID]) -> list[Run]:
     """Dependency-waiting Runs: queued, not enqueued, after_run_id set (story 5-4)."""
     return [
         r
-        for r in runs.list_by_status("queued")
+        for r in all_queued
         if not r.engine_ref and r.id not in engine_run_ids and r.after_run_id is not None
     ]
 
