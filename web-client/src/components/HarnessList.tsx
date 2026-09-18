@@ -25,6 +25,7 @@ import {
   READINESS_NOT_AVAILABLE,
   harnessLineText,
   harnessProbeLineText,
+  readinessBadgeText,
   readinessHref,
   type ProbeResultOut,
 } from '../lib/newwf/state';
@@ -39,9 +40,19 @@ interface Props {
    * disabled decision.  When passed as an object (island), only explicit `ok === false`
    * disables — a harness with no entry is not disabled. */
   probeResults?: Record<string, ProbeResultOut>;
+  /** When `undefined` (unit tests / static SSR), the note span shows `READINESS_NOT_AVAILABLE`.
+   * When passed (island), the note shows `readinessBadgeText(harness)` and the link fires the
+   * handler instead of navigating (story 2-4). */
+  onRunReadiness?: (name: string) => void;
 }
 
-export default function HarnessList({ harnesses, selected, onSelect, probeResults }: Props) {
+export default function HarnessList({
+  harnesses,
+  selected,
+  onSelect,
+  probeResults,
+  onRunReadiness,
+}: Props) {
   return (
     <fieldset className="newwf-field newwf-harnesses-field">
       <legend className="newwf-field-label">HARNESS</legend>
@@ -73,6 +84,14 @@ export default function HarnessList({ harnesses, selected, onSelect, probeResult
               className="newwf-harness-readiness"
               data-testid={`newwf-readiness-${harness.name}`}
               href={readinessHref(harness.name)}
+              onClick={
+                onRunReadiness !== undefined
+                  ? (e) => {
+                      e.preventDefault();
+                      onRunReadiness(harness.name);
+                    }
+                  : undefined
+              }
             >
               {READINESS_LINK_LABEL}
             </a>
@@ -80,7 +99,7 @@ export default function HarnessList({ harnesses, selected, onSelect, probeResult
               className="newwf-harness-note"
               data-testid={`newwf-readiness-${harness.name}-note`}
             >
-              {READINESS_NOT_AVAILABLE}
+              {onRunReadiness !== undefined ? readinessBadgeText(harness) : READINESS_NOT_AVAILABLE}
             </span>
           </p>
         ))}

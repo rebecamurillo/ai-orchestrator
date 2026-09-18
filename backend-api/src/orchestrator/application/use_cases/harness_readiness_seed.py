@@ -57,6 +57,9 @@ def sync_pins(ports: HarnessPorts, pins: dict[str, str]) -> list[Harness]:
                 "enabled": False,
                 "failing_check": VERSION_PIN_CHANGED.format(old=harness.version_pin, new=pin),
                 "version_pin": pin,
+                # Clear the stale timestamp so the badge does not display a run time that
+                # predates the new version pin (story 2-4).
+                "last_readiness_at": None,
             }
         )
         for harness in ports.harnesses.list()

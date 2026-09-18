@@ -260,6 +260,24 @@ export function readinessHref(name: string): string {
  * `src/components/HarnessList.tsx` for why this is a fact about the build, not a guess. */
 export const READINESS_NOT_AVAILABLE = 'not available yet';
 
+/** Text for the note span beside the "re-run readiness" link (story 2-4).
+ *
+ * Joins the non-empty parts of `readinessTime(last_readiness_at)` and `failing_check` with
+ * ` · `.  Returns `""` when both are null — the island passes `onRunReadiness` and shows this
+ * badge; the unit-test / SSR path does not pass the prop and shows `READINESS_NOT_AVAILABLE`
+ * instead.
+ */
+export function readinessBadgeText(harness: HarnessOut): string {
+  const parts: string[] = [];
+  if (harness.last_readiness_at) {
+    parts.push(readinessTime(harness.last_readiness_at));
+  }
+  if (harness.failing_check) {
+    parts.push(harness.failing_check);
+  }
+  return parts.join(' · ');
+}
+
 function readinessTime(iso: string): string {
   return iso.slice(0, 19).replace('T', ' ');
 }

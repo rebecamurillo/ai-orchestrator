@@ -111,6 +111,11 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
     }, DEBOUNCE_MS);
   }
 
+  async function runReadiness(name: string): Promise<void> {
+    await api.POST('/harnesses/{name}/readiness', { params: { path: { name } } });
+    window.location.href = '/runs';
+  }
+
   async function runProbe(name: string): Promise<void> {
     const seq = ++probeSeqRef.current;
     setProbeInFlight(true);
@@ -231,6 +236,7 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
                 update({ ...stateRef.current, harness: name, model: '' });
                 void runProbe(name);
               }}
+              onRunReadiness={runReadiness}
             />
           ) : null}
         </form>

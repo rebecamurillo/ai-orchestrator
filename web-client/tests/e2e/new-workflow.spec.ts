@@ -410,7 +410,11 @@ test.describe('/workflows/new', () => {
       'href',
       '/api/harnesses/claude/readiness',
     );
-    await expect(page.getByTestId('newwf-readiness-claude-note')).toHaveText('not available yet');
+    // Operator decision 2026-09-15/2026-09-17: readiness demoted to informational diagnostic
+    // (SPEC.md epic-02-probe-form); the island passes onRunReadiness so the note shows
+    // readinessBadgeText(harness) — empty string when last_readiness_at and failing_check are
+    // both null (stub backend seeds them null).
+    await expect(page.getByTestId('newwf-readiness-claude-note')).toHaveText('');
     // Initially enabled — no probe result yet on page load
     await expect(page.getByTestId('newwf-harness-claude').locator('input')).toBeEnabled();
   });
