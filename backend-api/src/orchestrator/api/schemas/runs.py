@@ -67,9 +67,6 @@ class RunIn(BaseModel):
     manual_estimate_h: Decimal | None = None
     re_review_done: bool = False
     conflict_consent: bool = False
-    #: When `True`, persist the plan but do NOT enqueue (story 5-3): the Run starts in
-    #: saved state and the Operator starts it later with `POST /runs/{id}/start`.
-    save: bool = False
 
     def as_request(self) -> CreateRunRequest:
         return CreateRunRequest(
@@ -85,7 +82,6 @@ class RunIn(BaseModel):
             manual_estimate_h=self.manual_estimate_h,
             re_review_done=self.re_review_done,
             conflict_consent=self.conflict_consent,
-            save=self.save,
         )
 
 

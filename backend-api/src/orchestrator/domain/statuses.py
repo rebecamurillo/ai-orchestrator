@@ -104,16 +104,10 @@ GATE_EVENTS: tuple[ParkKind | SignalKind | LifecycleEvent, ...] = (
 WriteEvent = Literal["spec_edit"]
 WRITE_EVENTS: tuple[WriteEvent, ...] = get_args(WriteEvent)
 
-#: An Operator action that starts a saved Run without going through `signal_run` (story 5-3).
-#: Like `spec_edit`, it widens the `GateEvent` *type* so the record validates, without being
-#: added to any of the four named tuples (`GATE_EVENTS`, `MACHINE_EVENTS`, `WRITE_EVENTS`,
-#: or `ALL_GATE_EVENTS`): `test_spec_edit_gate_event.py` pins those exact values.
-OperatorInitEvent = Literal["started_by_operator"]
-
 #: What a `gate_record.event` can be: one of AD-8's three, one of AD-9's two bounded
 #: re-executions, which are recorded (AD-9: "each is a recorded `attempt` + `gate_record`")
 #: without the Run's status moving at all, or one of the direct-write class above.
-GateEvent = ParkKind | SignalKind | LifecycleEvent | MachineEvent | WriteEvent | OperatorInitEvent
+GateEvent = ParkKind | SignalKind | LifecycleEvent | MachineEvent | WriteEvent
 #: **Not** widened to include `WRITE_EVENTS`: `tests/unit/test_gate_events.py` pins this
 #: exact concatenation (AD-8's three plus AD-9's two), and `spec_edit` is neither — it is a
 #: third, outer layer that only the `GateEvent` *type* needs to admit so `GateRecord(event=

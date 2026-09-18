@@ -2,7 +2,7 @@
 title: 'Save a Run without starting it'
 type: 'feature'
 created: '2026-09-18'
-status: 'in-review'
+status: 'blocked'
 baseline_revision: '011604dcef53b89026b38f9db1bdd654ed43ca9b'
 review_loop_iteration: 0
 followup_review_recommended: false
@@ -114,3 +114,37 @@ deferred: []
 - `make lint` -- expected: ruff, mypy (domain + application), import-linter, prettier, tsc, env-contract, test-pairs all pass
 - `make test` -- expected: 100% branch coverage on `domain/` and `application/`; all new and existing tests green
 - `make openapi` -- expected: no drift after running
+
+## Review Triage Log
+
+### 2026-09-18 — Review pass
+- intent_gap: 1: (high 1, medium 0, low 0)
+- bad_spec: 0
+- patch: 3: (high 0, medium 1, low 2)
+- defer: 6: (high 1, medium 3, low 2)
+- reject: 6
+- addressed_findings:
+  - none
+
+## Spec Change Log
+
+*(No spec amendments were made in this pass — the blocking condition is inside the intent-contract.)*
+
+## Auto Run Result
+
+Status: blocked
+Blocking condition: intent gap
+
+**Unresolved question:** The intent-contract's I/O matrix specifies `POST /runs/{id}/signals kind="start"` as the API surface for starting a saved Run. Implementing this requires adding `"start"` to `SIGNAL_KINDS` in `domain/statuses.py`. However, `tests/unit/test_run_statuses.py:120` is an anchor test that pins `SIGNAL_KINDS` to exactly its current ten values. Additionally, `test_signals_table.py:58` and `test_signal_rules.py:59` pin `tuple(VALID) == SIGNAL_KINDS`. Adding `"start"` to `SIGNAL_KINDS` without modifying these tests is impossible; modifying these tests requires an Operator anchor exception (hard rule 1, exception 4).
+
+The attempted implementation (commit `0e6048e`, reverted) correctly identified this constraint and used a dedicated endpoint `POST /api/v1/runs/{run_id}/start` instead of the signals endpoint. All behavioral requirements are met (two-commit pattern, gate record `started_by_operator`, `after_run_id` cleared, `list_queue` saves-row, `save: bool = False` on `POST /runs`). The only divergence is the API surface.
+
+**Saved patch:** `_bmad-output/implementation-artifacts/5-3-save-run-patch.md` (describes the full implementation and what was correct vs what needs Operator guidance).
+
+**Three resolution paths — Operator must choose:**
+
+A) **Accept the dedicated-endpoint approach** (as implemented): keep `POST /api/v1/runs/{run_id}/start` as the API surface. Update the I/O matrix in the intent-contract (exception 4, Operator decision revision) so the acceptance criteria match the built surface. The patch commit is functionally complete under this reading.
+
+B) **Use a different signal kind name** (e.g., `"save_start"`): change the I/O matrix in the intent-contract to `kind="save_start"` (exception 4). Update `test_run_statuses.py:120` with a new pinned value (anchor exception 4 required). Re-derive through the signals mechanism.
+
+C) **Grant anchor exception to add `"start"` to `SIGNAL_KINDS`**: Exception 4 authorises the revision of `test_run_statuses.py:120`. The test must be updated in the same commit that asserts the new behaviour. Re-derive through the signals mechanism.

@@ -103,9 +103,6 @@ class CreateRunRequest:
     manual_estimate_h: Decimal | None = None
     re_review_done: bool = False
     conflict_consent: bool = False
-    #: When `True`, persist the plan but do NOT enqueue — the Run waits in saved state
-    #: (`engine_ref == {}`) until the Operator calls `POST /runs/{id}/start` (story 5-3).
-    save: bool = False
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -200,16 +197,13 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     ports.steps.add_many(step_rows)
     ports.uow.commit()
 
-    if not req.save:
-        engine_ref = ports.engine.enqueue(
-            run.id, partition_key=f"{repository.id}:{declared_branch}"
-        )
-        run = run.model_copy(update={"engine_ref": engine_ref})
-        ports.preflight.runs.update(run)
-        ports.uow.commit()
+    engine_ref = ports.engine.enqueue(run.id, partition_key=f"{repository.id}:{declared_branch}")
+    run = run.model_copy(update={"engine_ref": engine_ref})
+    ports.preflight.runs.update(run)
+    ports.uow.commit()
 
-    waiting = preflighted.result.queue_note if not req.save else ""
-    starts_now = (waiting == QUEUE_FREE) and not req.save
+    waiting = preflighted.result.queue_note
+    starts_now = waiting == QUEUE_FREE
     return CreateRunResult(run=run, starts_now=starts_now, waiting=waiting)
 
 

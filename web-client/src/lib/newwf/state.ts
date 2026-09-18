@@ -244,13 +244,12 @@ export function preflightBody(state: FormState, templates: TemplateSummary[]): P
 /** `null` when a field `POST /runs` requires is still unset — the caller's own guard against
  * calling it before `start_allowed` could ever be true.
  *
- * `conflict_consent` and `save` are intentionally excluded: both are non-persistent
- * island-local state that the island spreads on top of this body at call time
- * (`NewWorkflow.tsx::startRun` and `::saveRun`). */
+ * `conflict_consent` is intentionally excluded: it is non-persistent island-local state that
+ * the island spreads on top of this body at call time (`NewWorkflow.tsx::startRun`). */
 export function runBody(
   state: FormState,
   templates: TemplateSummary[],
-): Omit<RunIn, 'conflict_consent' | 'save'> | null {
+): Omit<RunIn, 'conflict_consent'> | null {
   const version = latestVersion(templates, state.template);
   if (!state.projectId || !state.repositoryId || !state.baseBranch) {
     return null;
@@ -274,9 +273,6 @@ export function runBody(
 /** The consent text shown when a concurrent run on the same repository is detected (story
  * 5-2). Shared between the island and the test so neither duplicates the string. */
 export const CONSENT_CHECK_TEXT = 'this can lead to merge conflicts';
-
-/** The label on the Save button in the decision bar (story 5-3). */
-export const SAVE_TEXT = 'Save';
 
 /** `ok / ! / x / —` — the brief's own words, never an icon. */
 export function lineWord(status: LineOut['status']): string {

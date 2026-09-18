@@ -806,10 +806,7 @@
                 "type": "string"
               },
               {
-                "enum": [
-                  "spec_edit",
-                  "started_by_operator"
-                ],
+                "const": "spec_edit",
                 "type": "string"
               }
             ],
@@ -3493,11 +3490,6 @@
             "format": "uuid",
             "title": "Repository Id",
             "type": "string"
-          },
-          "save": {
-            "default": false,
-            "title": "Save",
-            "type": "boolean"
           },
           "template_name": {
             "title": "Template Name",
@@ -6701,105 +6693,6 @@
           }
         ],
         "summary": "Signal a Run: cancel, retry, or continue",
-        "tags": [
-          "runs"
-        ]
-      }
-    },
-    "/api/v1/runs/{run_id}/start": {
-      "post": {
-        "description": "Re-probe pre-flight and start a saved (not-enqueued) Run.\n\n409 if the Run's `engine_ref` is non-empty (already enqueued), if its status is not\n`queued`, or if the re-probed pre-flight returns `start_allowed=False`.",
-        "operationId": "post_start_api_v1_runs__run_id__start_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "run_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Run Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunSummaryOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            },
-            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            },
-            "description": "No Run has that id."
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            },
-            "description": "The Run is not in saved state, or pre-flight refuses to start it."
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            },
-            "description": "`run_id` does not parse as a UUID."
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Start a saved Run (story 5-3)",
         "tags": [
           "runs"
         ]

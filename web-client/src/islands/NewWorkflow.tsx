@@ -29,7 +29,6 @@ import PreflightLines from '../components/PreflightLines';
 import { formStateToQuery } from '../lib/newwf/query';
 import {
   CONSENT_CHECK_TEXT,
-  SAVE_TEXT,
   cloneCheckNote,
   preflightBody,
   repositoriesFor,
@@ -76,7 +75,6 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
   const [preflightFailed, setPreflightFailed] = useState(false);
   const [pending, setPending] = useState(true);
   const [starting, setStarting] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [startError, setStartError] = useState<string | undefined>(undefined);
   const [probeResults, setProbeResults] = useState<Record<string, ProbeResultOut>>({});
   const [probeInFlight, setProbeInFlight] = useState(false);
@@ -204,7 +202,7 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
         }
       }
       const { data, error } = await api.POST('/runs', {
-        body: { ...body, conflict_consent: conflictConsent, save: false },
+        body: { ...body, conflict_consent: conflictConsent },
       });
       if (error) {
         setStartError(error.detail ?? error.title ?? GENERIC_FAILURE_DETAIL);
@@ -226,40 +224,10 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
   const note = cloneCheckNote(repositoryById(repositories, state.repositoryId));
   const startDisabled =
     starting ||
-    saving ||
     pending ||
     probeInFlight ||
     !preflight.start_allowed ||
     (preflight.conflict_consent_required && !conflictConsent);
-  const saveDisabled = saving || starting || pending;
-
-  async function saveRun(): Promise<void> {
-    const body = runBody(state, templates);
-    if (!body) {
-      setStartError(INCOMPLETE_FORM_DETAIL);
-      return;
-    }
-    setSaving(true);
-    setStartError(undefined);
-    try {
-      const { data, error } = await api.POST('/runs', {
-        body: { ...body, conflict_consent: conflictConsent, save: true },
-      });
-      if (error) {
-        setStartError(error.detail ?? error.title ?? GENERIC_FAILURE_DETAIL);
-        return;
-      }
-      if (!data) {
-        setStartError(GENERIC_FAILURE_DETAIL);
-        return;
-      }
-      window.location.assign(`/workflows/${data.run.id}`);
-    } catch {
-      setStartError(GENERIC_FAILURE_DETAIL);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   return (
     <div className="newwf">
@@ -337,15 +305,6 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
             onClick={() => void startRun()}
           >
             Start run
-          </button>
-          <button
-            type="button"
-            className="newwf-save"
-            data-testid="newwf-save"
-            disabled={saveDisabled}
-            onClick={() => void saveRun()}
-          >
-            {SAVE_TEXT}
           </button>
           <a className="newwf-cancel" data-testid="newwf-cancel" href="/">
             Cancel

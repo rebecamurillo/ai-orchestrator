@@ -322,8 +322,11 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
     ):
         _mount(app, router)
     _mount(app, harness_readiness.router)
+<<<<<<< HEAD
     _mount(app, harness_probe.router)
     _mount(app, start_run.router)
+=======
+>>>>>>> 61dba33 (wip: story 5-3 attempt 2 — review blocked (intent gap))
 
     return app
 
