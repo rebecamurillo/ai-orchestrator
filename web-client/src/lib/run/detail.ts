@@ -247,15 +247,17 @@ export function stepStatusText(step: StepRowOut): string {
   return step.token;
 }
 
-/** The header meta line, unabridged (binding rule: "never truncated, wraps if needed"). */
+/** The header meta line, unabridged (binding rule: "never truncated, wraps if needed").
+ * Model slot inserted between harness and started_at — EXPERIENCE-v1.md delta 26 (2026-09-15). */
 export function metaLine(detail: RunDetailOut): string {
   const meta = detail.header.meta;
   const harness = meta.harness ?? '—';
+  const model = meta.model ?? '—';
   const started = meta.started_at ?? '—';
   const worktree = meta.worktree_path ?? '—';
   return (
     `${meta.project} · ${meta.repository} · ${meta.base_branch} · ${meta.folder} · ` +
-    `${meta.template} v${meta.version} · ${harness} · ${started} · ${worktree}`
+    `${meta.template} v${meta.version} · ${harness} · ${model} · ${started} · ${worktree}`
   );
 }
 

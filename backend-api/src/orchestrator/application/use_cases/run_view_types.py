@@ -131,6 +131,9 @@ class Header:
     harness: str | None
     started_at: datetime | None
     worktree_path: str | None
+    #: The model the dispatch used — EXPERIENCE-v1.md delta 26 (2026-09-15).
+    #: Optional field with default None so existing Header() call sites need not change.
+    model: str | None = None
 
 
 @dataclass(frozen=True)

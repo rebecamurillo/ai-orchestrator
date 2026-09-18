@@ -153,6 +153,72 @@
   text-transform: var(--type-section-head-transform);
 }
 
+/* ── story 1-4 layout zones ──────────────────────────────────────────────────────────────── */
+
+.wf-top-zone {
+  padding: var(--space-8);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.wf-diagram-row {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: var(--space-10);
+  padding: var(--space-8);
+  align-items: start;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.wf-diagram-main {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.wf-diagram-skeleton {
+  height: 200px;
+  background: var(--color-surface-raised);
+}
+
+.wf-summary-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  min-width: 0;
+}
+
+.wf-tabs {
+  padding: var(--space-8);
+}
+
+.wf-tab-btns {
+  display: flex;
+  gap: var(--space-5);
+  border-bottom: 1px solid var(--color-line);
+  margin-bottom: var(--space-8);
+}
+
+.wf-tab-btn {
+  padding: var(--space-4) 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.wf-tab-btn[aria-pressed='true'] {
+  color: var(--color-text);
+  border-bottom-color: var(--color-text);
+}
+
+.wf-tab-panel {
+  /* Panel content is conditionally rendered; no layout needed here. */
+}
+
 .wf-stop {
   display: flex;
   flex-direction: column;

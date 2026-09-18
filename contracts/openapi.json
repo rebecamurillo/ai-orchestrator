@@ -1251,6 +1251,17 @@
             ],
             "title": "Harness"
           },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
           "project": {
             "title": "Project",
             "type": "string"

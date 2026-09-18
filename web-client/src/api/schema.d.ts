@@ -1093,6 +1093,8 @@ export interface components {
             folder: string;
             /** Harness */
             harness: string | null;
+            /** Model */
+            model?: string | null;
             /** Project */
             project: string;
             /** Repository */

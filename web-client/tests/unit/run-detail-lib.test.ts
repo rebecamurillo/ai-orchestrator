@@ -373,9 +373,24 @@ describe('crumbText / metaLine / detailRequestPath', () => {
   });
 
   it('joins every meta field in the fixed order', () => {
+    // Exception-4 revision: model slot inserted between harness and started_at.
+    // Authorizing decision: EXPERIENCE-v1.md delta 26 (2026-09-15).
+    // Fixture has no `model` in header.meta → '—' placeholder.
     expect(metaLine(detail())).toBe(
-      'demo · demo-repo · main · docs/initiative · initiative v1 · claude · 2026-09-07T09:00:05Z · /work/demo',
+      'demo · demo-repo · main · docs/initiative · initiative v1 · claude · — · 2026-09-07T09:00:05Z · /work/demo',
     );
+  });
+
+  it('inserts the model value when header.meta.model is set', () => {
+    const d = detail({
+      header: {
+        meta: {
+          ...detail().header.meta,
+          model: 'claude-opus-5',
+        },
+      },
+    });
+    expect(metaLine(d)).toContain('· claude · claude-opus-5 · 2026-09-07T09:00:05Z ·');
   });
 
   it('is the runs/{id}/detail path', () => {
