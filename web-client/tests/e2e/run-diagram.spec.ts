@@ -486,7 +486,8 @@ test.describe('/workflows/[id]?view=diagram — Run diagram', () => {
     await expect(page.getByTestId('wf-step-1')).toHaveCount(0);
   });
 
-  test('?view=detail (or no view) never calls GET /graph', async ({ page }) => {
+  // Revised: FR-29 + story 1-4 (2026-09-16) — ?view=diagram retired; diagram embedded in RunDetail; graph is always fetched
+  test('?view=detail (or no view) calls GET /graph for the embedded diagram', async ({ page }) => {
     let graphCalled = false;
     await page.route(`**/api/runs/${RUN_ID}/graph`, (route: Route) => {
       graphCalled = true;
@@ -496,16 +497,21 @@ test.describe('/workflows/[id]?view=diagram — Run diagram', () => {
     await page.goto(BASE_URL);
 
     await expect(page.getByTestId('wf-header')).toBeVisible();
-    expect(graphCalled).toBe(false);
+    await expect(page.getByTestId('fetch-failed')).toBeVisible(); // graph aborted → DiagramSection error state
+    expect(graphCalled).toBe(true);
   });
 
-  test('toggle shows DIAGRAM as aria-current when ?view=diagram', async ({ page }) => {
+  // Revised: FR-29 + story 1-4 (2026-09-16) — ?view=diagram retired via 301; RunDetail renders with view=undefined
+  test('?view=diagram redirects; toggle shows DETAIL as aria-current and DIAGRAM as disabled', async ({
+    page,
+  }) => {
     await mockDetail(page, twoEpicDetail());
     await mockGraph(page, twoEpicGraph());
     await page.goto(DIAGRAM_URL);
     await expect(page.getByTestId('wf-diagram')).toBeVisible();
 
     const toggle = page.getByTestId('wf-toggle-diagram');
-    await expect(toggle.locator('[aria-current="true"]')).toHaveText('DIAGRAM');
+    await expect(toggle.locator('[aria-current="true"]')).toHaveText('DETAIL');
+    await expect(toggle.locator('[aria-disabled="true"]')).toHaveText('DIAGRAM');
   });
 });
