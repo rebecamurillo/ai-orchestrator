@@ -49,6 +49,8 @@ from orchestrator.application.use_cases.signal_effects import EFFECTS, CancelPla
 from orchestrator.application.use_cases.writers import (
     Entry,
     WriterPorts,
+    _enqueue_dependents,
+    _park_dependents,
     clear_park,
     finish_run,
     record,
@@ -89,6 +91,9 @@ def _no_attempt(_: UUID) -> Attempt | None:
 #: The signal that enqueues a saved Run on Operator request (story 5-3).
 START = "start"
 
+#: The park kind that means the Run is waiting for a predecessor (story 5-4).
+DEPENDENCY = "dependency"
+
 
 @dataclass(frozen=True)
 class SignalPorts:
@@ -125,6 +130,13 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
     """Apply one Operator signal to a Run, or refuse it with the reason (409/422)."""
     if signal.kind == START:
         return _start_saved_run(ports, run_id, signal)
+    # Dependency-park `continue` needs its own two-phase enqueue flow (story 5-4):
+    # park_path is None so EFFECTS["continue"] → _parked(None) would AssertionError.
+    if signal.kind == "continue":
+        with ports.writers.uow:
+            _peek = ports.writers.runs.get(run_id)
+        if _peek is not None and _peek.park_kind == DEPENDENCY:
+            return _continue_dependency_run(ports, run_id, signal)
     writers = ports.writers
     with writers.uow:
         run = require_run(writers, run_id)
@@ -145,6 +157,9 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
         )
         effect = EFFECTS[signal.kind](writers, run, rows, park_row, signal)
         run = _apply(writers, run, rule, effect)
+        # Park dependents in the same UoW when this run reaches `cancelled` (story 5-4).
+        if run.status == "cancelled":
+            _park_dependents(writers, run)
         writers.uow.commit()
     resumed = effect.resume and rule.run_event is not None and run.status == RUNNING
     _tell_the_engine(
@@ -155,6 +170,9 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
         resumed=resumed,
         finished=effect.finished,
     )
+    # Two-phase enqueue for done dependents after signal (e.g. skip-to-done, story 5-4).
+    if run.status == "done":
+        _enqueue_dependents(writers, writers.engine, run)
     return SignalOutcome(run=run, resumed=resumed, cancel_plan=effect.cancel_plan)
 
 
@@ -246,6 +264,48 @@ def _preflight_req_from_run(run: Run) -> PreflightRequest:
         # its own branch — the Run is queued but not yet executing (story 5-3).
         exclude_run_id=run.id,
     )
+
+
+def _continue_dependency_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcome:
+    """Enqueue a dependency-parked Run on Operator `continue` (story 5-4).
+
+    Dedicated branch because `EFFECTS["continue"]` calls `_parked(park_row)` which asserts
+    `park_row is not None`, but dependency parks have `park_path=None`, so `park_row` is
+    `None`. This handler clears the park, resets status to `queued`, and enqueues the run
+    via the engine — the same two-phase commit `_start_saved_run` uses for story 5-3.
+    """
+    writers = ports.writers
+    with writers.uow:
+        run = require_run(writers, run_id)
+        validate(run, None, signal)
+        record(
+            writers,
+            run,
+            Entry(event="continue", actor="operator", path=None, text="", payload=signal.payload),
+        )
+        # Clear the dependency park and reset to `queued` so the engine starts it fresh.
+        # `needs_you → queued` is not in RUN_TRANSITIONS (the machine only allows
+        # `needs_you → running` via the "continue" event), so we write directly like
+        # `_park_dependents` does for the inverse direction (story 5-4 design note).
+        run = set_run(
+            writers,
+            run,
+            status="queued",
+            park_kind=None,
+            park_path=None,
+            park_reason=None,
+            after_run_id=None,
+        )
+        writers.uow.commit()
+    # Enqueue outside the first commit so the Run row is durable before the engine sees it.
+    partition_key = (
+        f"{run.repository_id}:{run.partition_branch or run.inputs.get('base_branch', '')}"
+    )
+    engine_ref = ports.engine.enqueue(run.id, partition_key=partition_key)
+    with writers.uow:
+        run = set_run(writers, run, engine_ref=engine_ref)
+        writers.uow.commit()
+    return SignalOutcome(run=run, resumed=False)
 
 
 def _start_saved_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcome:

@@ -194,6 +194,15 @@ class SQLAlchemyRunRepository:
             )
         )
 
+    def list_by_after_run_id(self, run_id: UUID) -> list[Run]:
+        """Dependency-waiting Runs: after_run_id == run_id and engine_ref == {} (story 5-4)."""
+        return self._read(
+            select(RunRow).where(
+                RunRow.after_run_id == run_id,
+                RunRow.engine_ref == {},
+            )
+        )
+
     def _read(self, statement: Any) -> list[Run]:
         """Every list is newest first; the id breaks a tie within one millisecond."""
         rows = self._session.scalars(

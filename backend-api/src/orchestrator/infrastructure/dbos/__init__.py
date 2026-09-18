@@ -16,6 +16,7 @@ from orchestrator.infrastructure.dbos.config import EngineConfig, engine_config
 from orchestrator.infrastructure.dbos.facade import RealEngine
 from orchestrator.infrastructure.dbos.startup import (
     build_engine,
+    dependency_startup_sweep,
     launch_engine,
     schedule_engine_jobs,
     schedule_jobs,
@@ -30,6 +31,7 @@ __all__ = [
     "WalkerDeps",
     "build_engine",
     "build_walk",
+    "dependency_startup_sweep",
     "engine_config",
     "launch_engine",
     "schedule_engine_jobs",

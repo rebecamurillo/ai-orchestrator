@@ -107,6 +107,10 @@ class CreateRunRequest:
     #: When `True`, persist the plan but skip `engine.enqueue` — `engine_ref` stays `{}`,
     #: the saved marker per AD-6. The `start` Signal enqueues it later (story 5-3).
     save: bool = False
+    #: When set, this Run waits for the named predecessor Run to finish (story 5-4).
+    #: Requires `save=True`: the Run is stored but not enqueued until the predecessor
+    #: reaches a terminal status (`done` → enqueue, `failed|cancelled` → park).
+    after_run_id: UUID | None = None
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -134,6 +138,10 @@ class CreateRunResult:
 
 def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     """Re-run pre-flight, refuse what it refuses, then persist and enqueue the plan."""
+    # A dependency-waiting Run must be saved: `after_run_id` is meaningless on a Run that
+    # the engine picks up immediately — the predecessor might not even exist yet (story 5-4).
+    if req.after_run_id is not None and not req.save:
+        raise Conflict("after_run_id requires save=True")
     preflight_req = req.as_preflight_request()
     preflighted = preflight_and_plan(ports.preflight, preflight_req)
     if preflighted.plan_error is not None:
@@ -196,6 +204,7 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         trace_id=trace.trace_id if trace is not None else None,
         created_at=ports.clock.now(),
         partition_branch=declared_branch,
+        after_run_id=req.after_run_id,
     )
     step_rows = [_step_run(run_id, row) for row in plan.rows]
 

@@ -45,6 +45,8 @@ REASON_BRANCH_HELD = "branch held by {run}"
 REASON_GLOBAL_CONCURRENCY = "global concurrency, held by {runs}"
 #: A saved Run: persisted but not yet enqueued (story 5-3, AD-6).
 REASON_SAVED = "saved — not started"
+#: A dependency-waiting Run: persisted but waiting for a predecessor (story 5-4, AD-6).
+REASON_WAITING_FOR = "waiting for run {run}"
 
 #: The engine's own two states for a held workflow (`domain/ports/engine.py::QueueState`).
 PENDING = "pending"
@@ -88,25 +90,54 @@ def list_queue(ports: QueuePorts) -> QueueView:
     engine_run_ids: frozenset[UUID] = frozenset(entry.run_id for entry in engine_entries)
     rows = [row for row in (_row(ports, entry) for entry in engine_entries) if row is not None]
     rows += [_saved_row(ports, r) for r in _saved_runs(ports.runs, engine_run_ids)]
+    rows += [
+        _dependency_row(ports, r) for r in _dependency_waiting_runs(ports.runs, engine_run_ids)
+    ]
     return QueueView(items=sorted(rows, key=_order_key), max_active_runs=ports.max_active_runs)
 
 
 def _order_key(row: QueueRow) -> tuple[int, int]:
-    """Active first, then queued by position; a parked Run last; saved runs after that."""
+    """Active first, then queued by position; parked last; saved after that; dependency last."""
     if row.reason == REASON_RUNNING:
         return (0, 0)
     if row.position is not None:
         return (1, row.position)
     if row.reason == REASON_SAVED:
         return (3, 0)
+    if row.run.after_run_id is not None:
+        return (4, 0)
     return (2, 0)
 
 
 def _saved_runs(runs: RunRepository, engine_run_ids: frozenset[UUID]) -> list[Run]:
-    """All queued Runs not yet sent to the engine (engine_ref == {} and not in engine queue)."""
+    """Saved Runs: queued, not enqueued, not waiting for a predecessor (story 5-3, AD-6)."""
     return [
-        r for r in runs.list_by_status("queued") if not r.engine_ref and r.id not in engine_run_ids
+        r
+        for r in runs.list_by_status("queued")
+        if not r.engine_ref and r.id not in engine_run_ids and r.after_run_id is None
     ]
+
+
+def _dependency_waiting_runs(runs: RunRepository, engine_run_ids: frozenset[UUID]) -> list[Run]:
+    """Dependency-waiting Runs: queued, not enqueued, after_run_id set (story 5-4)."""
+    return [
+        r
+        for r in runs.list_by_status("queued")
+        if not r.engine_ref and r.id not in engine_run_ids and r.after_run_id is not None
+    ]
+
+
+def _dependency_row(ports: QueuePorts, run: Run) -> QueueRow:
+    """One dependency-waiting Run as a `QueueRow`, reason = REASON_WAITING_FOR."""
+    steps = ports.steps.list_for_run(run.id)
+    return QueueRow(
+        position=None,
+        run=run,
+        next_step_label=_next_step_label(run, steps),
+        reason=REASON_WAITING_FOR.format(run=str(run.after_run_id)),
+        waiting_since=run.created_at,
+        waiting_seconds=(ports.clock.now() - run.created_at).total_seconds(),
+    )
 
 
 def _saved_row(ports: QueuePorts, run: Run) -> QueueRow:

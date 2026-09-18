@@ -79,6 +79,8 @@ from orchestrator.application.use_cases.walk_frame import (
 from orchestrator.application.use_cases.writers import (
     FINISHED,
     WriterPorts,
+    _enqueue_dependents,
+    _park_dependents,
     expire_run,
     finish_run,
     park_run,
@@ -375,6 +377,8 @@ def close_run(ports: WalkPorts, run_id: UUID) -> RunStatus:
             reason = STALLED.format(path=stalled.path, status=stalled.status)
             run = park_run(writers, run, Park(kind="internal", reason=reason, path=stalled.path))
         writers.uow.commit()
+    if run.status == "done":  # two-phase: commit first, enqueue after (story 5-4)
+        _enqueue_dependents(writers, writers.engine, run)
     return run.status
 
 
@@ -386,6 +390,11 @@ def expire(ports: WalkPorts, run_id: UUID) -> RunStatus:
         if run.status != NEEDS_YOU:
             log.info(NOT_PARKED, run_id=str(run_id), status=run.status)
             return run.status
+        # Dependency parks never expire — they resolve when the predecessor terminates (story 5-4).
+        if run.park_kind == "dependency":
+            log.info("dependency park — expiry skipped", run_id=str(run_id))
+            return run.status
         run = expire_run(writers, run)
+        _park_dependents(writers, run)  # park dependents in same UoW (story 5-4)
         writers.uow.commit()
     return run.status
