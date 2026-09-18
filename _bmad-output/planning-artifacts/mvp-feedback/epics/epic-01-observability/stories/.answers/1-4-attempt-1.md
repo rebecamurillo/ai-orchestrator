@@ -220,3 +220,9 @@ After the 301 redirect, `?view=diagram` → `/workflows/{id}` (no view param). `
 ---
 
 **Authorization request:** Both revisions are authorized by story 1-4 itself (FR-29: `?view=diagram` retired and redirects; diagram embedded in RunDetail). Operator exception-4 classification needed to proceed.
+
+## Human Answer
+
+2026-09-16T13:28:44.082618Z · operator
+
+you are allowed to update obsolete tests to match new requirements
