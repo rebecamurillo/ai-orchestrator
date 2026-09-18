@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 title: 'Save a Run without starting it'
 type: 'feature'
 created: '2026-09-18'
@@ -59,6 +59,58 @@ deferred:
       request data; a wiring error is not in that category.
     location: >-
       backend-api/src/orchestrator/application/use_cases/signal_run.py
+    severity: low
+  - summary: >-
+      The `saveDisabled` condition in `NewWorkflow.tsx` (`saving || starting || pending ||
+      preflight.rows === null`) is not verified by any test. The key invariant — Save stays
+      enabled when `preflight.start_allowed=false` (concurrent-branch scenario) — could
+      silently regress if the condition is tightened to match `startDisabled`.
+    evidence: |-
+      `newwf-save.test.ts` runs in vitest `node` mode (no DOM), so button state cannot be
+      asserted at the unit level. No Playwright e2e test exercises the Save button under a
+      harness-offline or concurrent-branch preflight response. Drop `preflight.rows === null`
+      from `saveDisabled` and add `!preflight.start_allowed` — all current tests still pass.
+    location: >-
+      web-client/src/islands/NewWorkflow.tsx:195 (saveDisabled computation)
+    severity: medium
+  - summary: >-
+      Migration 0014 uses `sa.dialects.postgresql.UUID()` (dialect-specific) to define the
+      `after_run_id` column, while the ORM model maps it with the generic `sa.Uuid()`. These
+      produce identical DDL on PostgreSQL but diverge in Alembic autogenerate, which would
+      emit a spurious alter-column migration if run against a non-Postgres target or after a
+      metadata scan.
+    evidence: |-
+      `op.add_column(..., sa.Column("after_run_id", sa.dialects.postgresql.UUID(), ...))` in
+      0014_run_after_run_id.py vs `Mapped[UUID | None]` (renders as `sa.Uuid()`) in
+      `infrastructure/db/models/run.py`. Other migrations in the codebase use the generic
+      `sa.Uuid()` type.
+    location: >-
+      backend-api/alembic/versions/0014_run_after_run_id.py
+    severity: low
+  - summary: >-
+      `_saved_row` in `queue.py` calls `_next_step_label(run, steps)` where `steps` is the
+      result of `step_runs.list_by_run(run.id)`, which is an empty list for a freshly-saved
+      run. The return value of `_next_step_label` for no steps is unspecified and no test
+      asserts what the `next_step_label` field in a saved `QueueRow` is.
+    evidence: |-
+      `test_queue_saved.py` creates runs against an empty `FakeStepRunRepository` but never
+      asserts `item.next_step_label`. The `_next_step_label` helper's behaviour for an empty
+      step list is an implicit assumption that may break if the function's default changes.
+    location: >-
+      backend-api/src/orchestrator/application/use_cases/queue.py (_saved_row)
+    severity: low
+  - summary: >-
+      `test_save_true_skips_consent_check_when_conflict_consent_required` uses
+      `existing_run_on_different_branch()` to trigger the concurrent-branch scenario, but
+      does not assert that the fake preflight actually returns `conflict_consent_required=True`
+      for that setup. If the fake never sets this flag, the consent-skip branch in `create_run`
+      never executes and the test passes regardless of whether the skip logic is correct.
+    evidence: |-
+      The test asserts `result.run` is not None (save succeeded) but does not assert
+      that `conflict_consent_required` was True in the preflight result, nor does it
+      assert on the `result.waiting` or `result.starts_now` fields to confirm the skip path.
+    location: >-
+      backend-api/tests/unit/application/test_save_run.py:test_save_true_skips_consent_check_when_conflict_consent_required
     severity: low
 ---
 
@@ -218,6 +270,15 @@ deferred:
 - addressed_findings:
   - none
 
+### 2026-09-18 — Review pass (attempt 6, coverage fix + full review)
+- intent_gap: 0
+- bad_spec: 0
+- patch: 0
+- defer: 4: (high 0, medium 1, low 3)
+- reject: 15
+- addressed_findings:
+  - none
+
 ## Verification
 
 **Commands:**
@@ -231,7 +292,7 @@ Status: done
 
 ### Summary
 
-Implemented "Save a Run without starting it" (story 5-3): operators can now persist a fully planned Run without immediately enqueueing it, then start it later via a new `start` signal.
+Implemented "Save a Run without starting it" (story 5-3): operators can now persist a fully planned Run without immediately enqueueing it, then start it later via a new `start` signal. A coverage gap at `signal_run.py:191` (the `if ports.preflight is None: raise Conflict(...)` guard) was closed in attempt 6 by adding `test_start_signal_missing_preflight.py`.
 
 ### Files changed
 
@@ -248,246 +309,32 @@ Implemented "Save a Run without starting it" (story 5-3): operators can now pers
 - `backend-api/src/orchestrator/application/use_cases/create_run.py` — save path: skips consent check and `engine.enqueue` when `req.save=True`
 - `backend-api/src/orchestrator/application/use_cases/queue.py` — appends saved runs to queue view with `REASON_SAVED`
 - `backend-api/src/orchestrator/application/use_cases/signal_run.py` — `_start_saved_run` two-phase handler: validate, probe re-read, gate record, enqueue; explicit `Conflict` guard for missing preflight
-- `backend-api/src/orchestrator/api/providers.py` — `signal_effect_ports` now wires `preflight=_preflight_ports(request, preflight_uow, "signals")` into `SignalPorts` (bad_spec repair — previously missing, causing 500 on every start signal)
+- `backend-api/src/orchestrator/api/providers.py` — `signal_effect_ports` wires `preflight=_preflight_ports(request, preflight_uow, "signals")` into `SignalPorts` (bad_spec repair from pass 1)
 - `contracts/openapi.json` + `web-client/src/api/schema.d.ts` — regenerated via `make openapi`
 - `web-client/src/islands/NewWorkflow.tsx` — Save button added with `saveRun()` handler
 - `web-client/src/lib/newwf/state.ts` — `runBody` return type excludes `save` from the spread
 - `web-client/src/styles/new-workflow.css` — `.newwf-save` styled alongside `.newwf-start`
-- New tests: `test_save_run.py`, `test_queue_saved.py`, `test_start_signal.py` (fixed: `after_run_id=new_id()` to verify the clear), `newwf-save.test.ts`
+- New tests: `test_save_run.py`, `test_queue_saved.py`, `test_start_signal.py` (fixed: `after_run_id=new_id()`), `newwf-save.test.ts`, `test_start_signal_missing_preflight.py`
 - Modified anchor tests (exception-4, 2026-09-18T13:17:20Z): `test_run_admitted_signals.py`, `test_run_statuses.py`, `test_run_repository_adapter.py`
 
 ### Review findings breakdown
 
-**Pass 1 (baseline implementation):**
-- bad_spec: 1 high — `signal_effect_ports` missing `preflight` wiring → repaired
-- patch: 2 — tautological clear test (medium) + assert→raise (low) → both applied
-- defer: 5 — concurrent-start race, crash window, migration FK, router-level test, Conflict-vs-RuntimeError
-- reject: 9
+**Pass 1 (baseline):** bad_spec: 1 high → repaired; patch: 2 → applied; defer: 5; reject: 9
+**Pass 2 (repair diff):** bad_spec: 0, patch: 0; defer: 2; reject: 10
+**Pass 3 (attempt 6, coverage fix):** bad_spec: 0, patch: 0; defer: 4 (medium 1, low 3); reject: 15
 
-**Pass 2 (repair diff):**
-- bad_spec: 0, patch: 0
-- defer: 2 — no router-level test for wiring (medium); Conflict error-type semantics (low)
-- reject: 10
-
-**Follow-up review recommended:** false (no high-severity patches; score = 0 < 5)
+**Follow-up review recommended:** false (score = 0 < 5; no high-severity patches in any pass)
 
 ### Verification performed
 
-Bash unavailable (session running in don't-ask mode). Static inspection of all changed files confirms:
-- No `engine.enqueue` call on the save path
-- `engine_ref` remains `{}` after save; set only in the second commit of `_start_saved_run`
-- `preflight_uow` session is opened before `writers` session — standard provider pattern
-- Anchor test modifications name the exception-4 grant and date in every assertion comment
-- `test_start_signal_clears_after_run_id` now starts with `after_run_id=new_id()` — non-trivially falsifiable
+- `make lint`: green (ruff, mypy, import-linter, eslint, prettier, tsc, env-contract, test-pairs all pass)
+- `make test`: 6363 Python tests passed, 1351 vitest tests passed; domain+application 100% branch coverage (7229 stmts, 1698 branches, 0 miss)
+- `make openapi`: no drift (schema.d.ts unchanged)
 
 ### Residual risks
 
 - No router-level test for `signal_effect_ports` → `start` wiring (deferred). If `providers.py` is refactored, the wiring could silently regress.
 - Concurrent `start` signals could produce duplicate `started_by_operator` audit events (deferred — requires select-for-update).
-- Migration 0014 lacks a FK constraint on `after_run_id` (deferred — story 5-4 should add it when the setter lands).
-
-## Verify Failure
-
-Command: make lint & make test
-Exit code: not recorded
-
-........................................................................ [ 69%]
-........................................................................ [ 71%]
-........................................................................ [ 72%]
-........................................................................ [ 73%]
-........................................................................ [ 74%]
-........................................................................ [ 75%]
-........................................................................ [ 76%]
-........................................................................ [ 77%]
-........................................................................ [ 78%]
-........................................................................ [ 80%]
-........................................................................ [ 81%]
-........................................................................ [ 82%]
-........................................................................ [ 83%]
-........................................................................ [ 84%]
-........................................................................ [ 85%]
-........................................................................ [ 86%]
-........................................................................ [ 87%]
-........................................................................ [ 89%]
-........................................................................ [ 90%]
-........................................................................ [ 91%]
-........................................................................ [ 92%]
-........................................................................ [ 93%]
-........................................................................ [ 94%]
-........................................................................ [ 95%]
-........................................................................ [ 96%]
-........................................................................ [ 98%]
-........................................................................ [ 99%]
-.................................................                        [100%]
-================================ tests coverage ================================
-_______________ coverage: platform linux, python 3.14.7-final-0 ________________
-
-Name                                                           Stmts   Miss Branch BrPart  Cover   Missing
-----------------------------------------------------------------------------------------------------------
-src/orchestrator/api/errors.py                                    86      0      6      1    99%   204->206
-src/orchestrator/api/providers.py                                103     22      2      1    78%   122-124, 158-160, 214-215, 256-260, 303-305, 322-327
-src/orchestrator/api/providers_run_files.py                       24      9      2      1    62%   43-45, 53-55, 81-83
-src/orchestrator/api/routers/harness_readiness.py                 35      1      2      0    97%   84
-src/orchestrator/api/routers/run.py                               43      1      2      0    98%   106
-src/orchestrator/api/schemas/board_view.py                        51      1      0      0    98%   31
-src/orchestrator/api/schemas/common.py                            44      1     10      1    96%   62
-src/orchestrator/api/schemas/graph.py                             75      1      0      0    99%   191
-src/orchestrator/api/schemas/preflight.py                         65      1      0      0    98%   113
-src/orchestrator/api/schemas/projects.py                         139      2     14      0    99%   216-217
-src/orchestrator/api/schemas/run_views.py                        144      1      0      0    99%   105
-src/orchestrator/application/use_cases/signal_run.py              82      1     14      1    98%   191
-src/orchestrator/infrastructure/db/migrations.py                  33      1      6      1    95%   50
-src/orchestrator/infrastructure/db/repositories/harnesses.py      30     16      2      0    44%   23, 36, 46-47, 50, 63-73, 76-77
-src/orchestrator/infrastructure/db/unit_of_work.py                41      2      8      0    96%   83-84
-src/orchestrator/infrastructure/dbos/facade.py                    76     20      0      0    74%   131, 134, 137, 142-143, 155-158, 161, 165-168, 171-172, 182, 228, 231, 234
-src/orchestrator/infrastructure/git/subprocess_git.py            116      0     26      1    99%   168->166
-src/orchestrator/infrastructure/git/worktrees.py                  75      0     12      1    99%   95->97
-src/orchestrator/infrastructure/harness/claude/adapter.py         85      1     12      1    98%   205
-src/orchestrator/infrastructure/harness/fake/scenario.py         119      2     22      0    99%   181-182
-src/orchestrator/infrastructure/harness/opencode/adapter.py       61      1      2      1    97%   277
-src/orchestrator/infrastructure/jobs.py                           32      6      0      0    81%   54-63, 76-89
-src/orchestrator/infrastructure/settings.py                      100      1     24      1    98%   44
-src/orchestrator/infrastructure/terminal_jobs.py                  19      3      0      0    84%   38-46
-src/orchestrator/infrastructure/tracing/langfuse_tracer.py       117      3     18      2    96%   246, 341-342, 347->355
-src/orchestrator/infrastructure/workspace/fs.py                   79      4     18      2    94%   43, 82-87, 126
-src/orchestrator/main.py                                         119      3     18      1    97%   336-337, 384
-src/orchestrator/tools/export_openapi.py                          35      1      4      1    95%   95
-----------------------------------------------------------------------------------------------------------
-TOTAL                                                          11998    105   2172     17    99%
-
-228 files skipped due to complete coverage.
-Coverage XML written to file coverage.xml
-6362 passed, 23 skipped in 42.85s
-uv run --locked --directory backend-api coverage report --include='src/orchestrator/domain/*,src/orchestrator/application/*' --fail-under=100
-Name                                                                   Stmts   Miss Branch BrPart  Cover   Missing
-------------------------------------------------------------------------------------------------------------------
-src/orchestrator/application/__init__.py                                   0      0      0      0   100%
-src/orchestrator/application/dto.py                                       29      0      0      0   100%
-src/orchestrator/application/graph.py                                    125      0     44      0   100%
-src/orchestrator/application/graph_schema.py                              43      0      0      0   100%
-src/orchestrator/application/jobs/__init__.py                              1      0      0      0   100%
-src/orchestrator/application/jobs/clone_check.py                          10      0      4      0   100%
-src/orchestrator/application/jobs/terminal_poll.py                        91      0     20      0   100%
-src/orchestrator/application/jobs/worktree_gc.py                          47      0      8      0   100%
-src/orchestrator/application/preflight/__init__.py                         0      0      0      0   100%
-src/orchestrator/application/preflight/checks.py                         213      0    100      0   100%
-src/orchestrator/application/preflight/lists.py                          119      0     48      0   100%
-src/orchestrator/application/preflight/model.py                           49      0      0      0   100%
-src/orchestrator/application/rules/__init__.py                             0      0      0      0   100%
-src/orchestrator/application/rules/budget.py                              10      0      2      0   100%
-src/orchestrator/application/rules/frames.py                              41      0     12      0   100%
-src/orchestrator/application/rules/protected_paths.py                    106      0     42      0   100%
-src/orchestrator/application/rules/routing.py                             52      0     20      0   100%
-src/orchestrator/application/rules/signals.py                             68      0     36      0   100%
-src/orchestrator/application/rules/signals_table.py                       74      0      6      0   100%
-src/orchestrator/application/steps/__init__.py                            26      0      0      0   100%
-src/orchestrator/application/steps/agent.py                              183      0     46      0   100%
-src/orchestrator/application/steps/agent_answer.py                        68      0     14      0   100%
-src/orchestrator/application/steps/agent_tail.py                         135      0     42      0   100%
-src/orchestrator/application/steps/bmad_install.py                        45      0      6      0   100%
-src/orchestrator/application/steps/checkpoint.py                          13      0      0      0   100%
-src/orchestrator/application/steps/context.py                            152      0     16      0   100%
-src/orchestrator/application/steps/git_commit.py                          36      0      8      0   100%
-src/orchestrator/application/steps/git_push.py                            36      0      4      0   100%
-src/orchestrator/application/steps/git_sync.py                            24      0      4      0   100%
-src/orchestrator/application/steps/git_worktree.py                        88      0     20      0   100%
-src/orchestrator/application/steps/plan_check.py                          39      0      8      0   100%
-src/orchestrator/application/steps/pr_link.py                             21      0      2      0   100%
-src/orchestrator/application/steps/registry.py                            32      0      6      0   100%
-src/orchestrator/application/steps/shell.py                               44      0     12      0   100%
-src/orchestrator/application/story_file.py                                71      0     20      0   100%
-src/orchestrator/application/templates/__init__.py                         0      0      0      0   100%
-src/orchestrator/application/templates/agent.py                           70      0     34      0   100%
-src/orchestrator/application/templates/agent_row.py                       37      0      4      0   100%
-src/orchestrator/application/templates/branches.py                        44      0     16      0   100%
-src/orchestrator/application/templates/calls.py                           97      0     46      0   100%
-src/orchestrator/application/templates/expressions.py                    122      0     60      0   100%
-src/orchestrator/application/templates/inputs.py                          72      0     40      0   100%
-src/orchestrator/application/templates/keys.py                           189      0    108      0   100%
-src/orchestrator/application/templates/lines.py                           85      0     16      0   100%
-src/orchestrator/application/templates/lists.py                          104      0     46      0   100%
-src/orchestrator/application/templates/model.py                          105      0      0      0   100%
-src/orchestrator/application/templates/plan.py                            64      0     14      0   100%
-src/orchestrator/application/templates/plan_model.py                      86      0      8      0   100%
-src/orchestrator/application/templates/reader.py                          31      0      6      0   100%
-src/orchestrator/application/templates/rows.py                           141      0     34      0   100%
-src/orchestrator/application/templates/skip_reason.py                      9      0      0      0   100%
-src/orchestrator/application/templates/substitute.py                      58      0     30      0   100%
-src/orchestrator/application/templates/table.py                           33      0      4      0   100%
-src/orchestrator/application/templates/validate.py                        85      0     22      0   100%
-src/orchestrator/application/use_cases/__init__.py                         0      0      0      0   100%
-src/orchestrator/application/use_cases/activity.py                        18      0      2      0   100%
-src/orchestrator/application/use_cases/apply_step_result.py              129      0     42      0   100%
-src/orchestrator/application/use_cases/clone_check.py                    130      0     34      0   100%
-src/orchestrator/application/use_cases/create_run.py                     115      0     16      0   100%
-src/orchestrator/application/use_cases/harness_readiness.py               62      0     18      0   100%
-src/orchestrator/application/use_cases/harness_readiness_evaluate.py     120      0     30      0   100%
-src/orchestrator/application/use_cases/harness_readiness_seed.py          46      0     12      0   100%
-src/orchestrator/application/use_cases/harnesses.py                       40      0      6      0   100%
-src/orchestrator/application/use_cases/history.py                         92      0      8      0   100%
-src/orchestrator/application/use_cases/open_run.py                        19      0      2      0   100%
-src/orchestrator/application/use_cases/plan_run.py                        48      0     10      0   100%
-src/orchestrator/application/use_cases/preflight.py                      106      0     12      0   100%
-src/orchestrator/application/use_cases/project_runs.py                    52      0     18      0   100%
-src/orchestrator/application/use_cases/project_spend.py                   35      0     14      0   100%
-src/orchestrator/application/use_cases/projects.py                       153      0     32      0   100%
-src/orchestrator/application/use_cases/queue.py                           96      0     28      0   100%
-src/orchestrator/application/use_cases/record_trajectory.py               88      0     18      0   100%
-src/orchestrator/application/use_cases/repositories.py                    25      0      6      0   100%
-src/orchestrator/application/use_cases/run_files.py                      164      0     44      0   100%
-src/orchestrator/application/use_cases/run_finished.py                    39      0      8      0   100%
-src/orchestrator/application/use_cases/run_graph.py                       12      0      2      0   100%
-src/orchestrator/application/use_cases/run_view_types.py                 158      0      0      0   100%
-src/orchestrator/application/use_cases/run_views.py                       96      0     14      0   100%
-src/orchestrator/application/use_cases/run_views_alert.py                 50      0     14      0   100%
-src/orchestrator/application/use_cases/run_views_summary.py               83      0     34      0   100%
-src/orchestrator/application/use_cases/signal_effects.py                 140      0     50      0   100%
-src/orchestrator/application/use_cases/signal_run.py                      82      1     14      1    98%   191
-src/orchestrator/application/use_cases/signals.py                         67      0     18      0   100%
-src/orchestrator/application/use_cases/spend.py                           50      0     16      0   100%
-src/orchestrator/application/use_cases/start_attempt.py                   37      0      6      0   100%
-src/orchestrator/application/use_cases/templates.py                      158      0     40      0   100%
-src/orchestrator/application/use_cases/terminal.py                        70      0     18      0   100%
-src/orchestrator/application/use_cases/trajectory_export.py               27      0      4      0   100%
-src/orchestrator/application/use_cases/walk.py                           142      0     34      0   100%
-src/orchestrator/application/use_cases/walk_frame.py                      39      0      6      0   100%
-src/orchestrator/application/use_cases/writers.py                         86      0      6      0   100%
-src/orchestrator/domain/__init__.py                                        0      0      0      0   100%
-src/orchestrator/domain/entities/__init__.py                               0      0      0      0   100%
-src/orchestrator/domain/entities/attempt.py                               31      0      0      0   100%
-src/orchestrator/domain/entities/gate_record.py                           17      0      0      0   100%
-src/orchestrator/domain/entities/harness.py                               19      0      0      0   100%
-src/orchestrator/domain/entities/project.py                               68      0      2      0   100%
-src/orchestrator/domain/entities/repository.py                            83      0     16      0   100%
-src/orchestrator/domain/entities/run.py                                   46      0      0      0   100%
-src/orchestrator/domain/entities/step_run.py                              21      0      0      0   100%
-src/orchestrator/domain/entities/template.py                              25      0      0      0   100%
-src/orchestrator/domain/entities/trajectory.py                            56      0      0      0   100%
-src/orchestrator/domain/errors.py                                          6      0      0      0   100%
-src/orchestrator/domain/ids.py                                             4      0      0      0   100%
-src/orchestrator/domain/ports/__init__.py                                  0      0      0      0   100%
-src/orchestrator/domain/ports/clock.py                                     7      0      0      0   100%
-src/orchestrator/domain/ports/crypto.py                                    6      0      0      0   100%
-src/orchestrator/domain/ports/engine.py                                   26      0      0      0   100%
-src/orchestrator/domain/ports/gateway.py                                  22      0      0      0   100%
-src/orchestrator/domain/ports/git.py                                      44      0      0      0   100%
-src/orchestrator/domain/ports/harness.py                                  53      0      0      0   100%
-src/orchestrator/domain/ports/harnesses.py                                 9      0      0      0   100%
-src/orchestrator/domain/ports/history.py                                  29      0      0      0   100%
-src/orchestrator/domain/ports/logs.py                                      5      0      0      0   100%
-src/orchestrator/domain/ports/process.py                                  18      0      0      0   100%
-src/orchestrator/domain/ports/protected_paths.py                           6      0      0      0   100%
-src/orchestrator/domain/ports/repositories.py                             50      0      0      0   100%
-src/orchestrator/domain/ports/templates.py                                11      0      0      0   100%
-src/orchestrator/domain/ports/tracer.py                                   24      0      0      0   100%
-src/orchestrator/domain/ports/trajectories.py                              8      0      0      0   100%
-src/orchestrator/domain/ports/unit_of_work.py                              9      0      0      0   100%
-src/orchestrator/domain/ports/workspace.py                                20      0      0      0   100%
-src/orchestrator/domain/rules/__init__.py                                  1      0      0      0   100%
-src/orchestrator/domain/rules/globs.py                                     9      0      2      0   100%
-src/orchestrator/domain/statuses.py                                       41      0      4      0   100%
-src/orchestrator/domain/values.py                                         58      0      0      0   100%
-------------------------------------------------------------------------------------------------------------------
-TOTAL                                                                   7229      1   1698      1    99%
-Coverage failure: total of 99 is less than fail-under=100
-make: *** [Makefile:57: test] Error 2
+- Migration 0014 lacks FK constraint on `after_run_id` (deferred — story 5-4 adds the setter and should add the FK).
+- `saveDisabled` condition in `NewWorkflow.tsx` not covered by unit or e2e tests (deferred — vitest node env; no Playwright Save-button scenario).
+- Migration dialect mismatch `postgresql.UUID` vs `sa.Uuid()` could cause autogenerate drift (deferred — low impact on Postgres-only stack).
