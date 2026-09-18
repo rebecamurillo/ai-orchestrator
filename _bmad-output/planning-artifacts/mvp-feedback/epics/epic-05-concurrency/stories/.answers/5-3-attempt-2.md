@@ -148,3 +148,9 @@ A) **Accept the dedicated-endpoint approach** (as implemented): keep `POST /api/
 B) **Use a different signal kind name** (e.g., `"save_start"`): change the I/O matrix in the intent-contract to `kind="save_start"` (exception 4). Update `test_run_statuses.py:120` with a new pinned value (anchor exception 4 required). Re-derive through the signals mechanism.
 
 C) **Grant anchor exception to add `"start"` to `SIGNAL_KINDS`**: Exception 4 authorises the revision of `test_run_statuses.py:120`. The test must be updated in the same commit that asserts the new behaviour. Re-derive through the signals mechanism.
+
+## Human Answer
+
+2026-09-18T13:17:20.945908Z · operator
+
+ACCEPT and update to meet new requirements-  AUTHORIZATION to update
