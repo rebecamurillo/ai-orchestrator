@@ -17,11 +17,13 @@ from orchestrator.application.use_cases.create_run import CreateRunPorts, Create
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.repositories import init_repository
 from orchestrator.domain.entities.harness import Harness
+from orchestrator.domain.ports.harness import ProbeResult
 from tests.unit.application.templates import plan_fixtures as fixtures
 from tests.unit.application.test_repository_init import project, repository
 from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
 from tests.unit.fakes.engine import FakeWorkflowEngine
+from tests.unit.fakes.harness import FakeHarness
 from tests.unit.fakes.harnesses import FakeHarnessRepository
 from tests.unit.fakes.projects import FakeProjectRepository, FakeRepositoryRepository
 from tests.unit.fakes.runs import FakeRunRepository, FakeStepRunRepository
@@ -39,6 +41,10 @@ class World:
             list(fixtures.repository_of_versions().versions.values()), runs=self.runs
         )
         self.uow = FakeUnitOfWork()
+        # Operator decision 2026-09-16: harness check now uses live probe via harness_registry.
+        # Two ProbeResult entries required: one consumed by harness_probe_line (pre-flight),
+        # one consumed by create_run's inline probe block.
+        _ok_probe = ProbeResult(ok=True, failing_reason=None, version="test", models=[])
         preflight = PreflightPorts(
             git=fixtures.repo_init_git(),
             templates=self.templates,
@@ -51,6 +57,12 @@ class World:
             bmad_version=fixtures.BMAD_VERSION,
             max_active_runs=2,
             work_dir=Path("/work"),
+            harness_registry={
+                "fake": FakeHarness(
+                    name="fake",
+                    probe_results=[_ok_probe, _ok_probe],
+                )
+            },
         )
         self.ports = CreateRunPorts(
             preflight=preflight,
