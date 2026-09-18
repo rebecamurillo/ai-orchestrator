@@ -2,13 +2,29 @@
 title: 'Form tooltips and mandatory marks'
 type: 'feature'
 created: '2026-09-17'
-status: 'in-progress'
+status: 'done'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: []
-deferred: []
-baseline_revision: 'dc600a22d3d4e609acfa3f0590288298cf072de9'
+deferred:
+  - summary: >-
+      No HTML required= attribute on mandatory fields; HTML5 native validation is not engaged
+    evidence: |-
+      TEMPLATE, PROJECT, REPOSITORY, BASE BRANCH, BUDGET, and template-input fields carry *
+      in their label text but no required= attribute on the underlying <input>/<select>. The
+      browser will not block submission for empty mandatory fields via native validation. This
+      story's scope was title= and label text only; required= is a separate product decision.
+    severity: low
+  - summary: >-
+      No accessible fallback for title= tooltip; screen readers do not reliably surface it
+    evidence: |-
+      title= is not reliably announced by assistive technology (NVDA, VoiceOver, JAWS).
+      No aria-describedby, aria-label, or visible hint element was added. Touch-device users
+      also cannot trigger title= tooltips. The change is purely visual (hover/pointer only).
+      Adding ARIA fallbacks is an accessibility story beyond this scope.
+    severity: low
+baseline_revision: '4c3cc15e67e43b515f1224d7e1915b3e52284faf'
 ---
 
 <intent-contract>
@@ -75,6 +91,15 @@ Remaining task — all other implementation was completed in commit 7ac5c00:
 
 ## Review Triage Log
 
+### 2026-09-17 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 0
+- defer: 2: (high 0, medium 0, low 2)
+- reject: 17
+- addressed_findings:
+  - none
+
 ## Design Notes
 
 **`title` on `<label>` wrapping an `<input>`:** `title` is a global HTML attribute valid on any element. Browsers render it as a hover tooltip. Screen readers surface it as supplemental text for the associated control. No CSS or JavaScript needed.
@@ -84,6 +109,35 @@ Remaining task — all other implementation was completed in commit 7ac5c00:
 **Re-review checkbox suffix:** The checkbox label `re-review done stories` reads as a factual description; no mandatory/optional suffix adds information. The `title` attribute carries the explanatory text.
 
 **Exception-4 formatting fix:** `harness-list-readiness.test.ts` was introduced by story 2-4 with a 107-character line (line 41's `noteText` regex) that exceeds `printWidth: 100`. Prettier reformats it; no test logic changes. The operator authorized this on 2026-09-17 as a Prettier compliance fix (exception-4 rule).
+
+## Auto Run Result
+
+**Date:** 2026-09-17
+**Status:** done
+**Review loop iterations:** 0 (no patch/bad_spec/intent_gap findings)
+
+**Changes delivered (attempt 1, commit 7ac5c00):**
+- `web-client/src/lib/newwf/state.ts` — `TemplateInputField` interface gains `tooltip: string`; all three `TEMPLATE_INPUT_FIELDS` entries populated with factual consumer-naming tooltip strings
+- `web-client/src/components/NewWorkflowFields.tsx` — all `<label>` elements carry non-empty `title=` attributes; mandatory fields (TEMPLATE, PROJECT, REPOSITORY, BASE BRANCH, BUDGET, template inputs) carry ` *`; optional fields (MODEL, MANUAL ESTIMATE) carry ` (optional)`; re-review checkbox `<label>` gains `title=` with no suffix
+- `web-client/src/components/HarnessList.tsx` — `<fieldset title="...">` and `<legend>HARNESS (optional)</legend>`
+
+**Changes delivered (attempt 2, commit 521e4b2):**
+- `web-client/tests/unit/harness-list-readiness.test.ts` — Prettier formatting fix only (exception-4, Operator decision 2026-09-17); `noteText()` return wrapped in parentheses to satisfy `printWidth: 100`; no assertion or logic change
+
+**New test files:**
+- `web-client/tests/unit/newwf-fields-tooltips.test.ts` — 163 lines asserting tooltip presence, mandatory ` *` marks, optional ` (optional)` marks, and NFR-8 spot-check across all form fields
+
+**Review findings:** 0 patch, 2 deferred (low), 17 rejected. No patches applied.
+
+**Follow-up review score:** 0 patched findings → `followup_review_recommended: false`
+
+**Verification:**
+- `make lint` — green: ruff, mypy, import-linter, prettier, tsc, eslint, check_test_pairs, gen:api --check all pass
+- `make test` — green: 6345 backend tests (23 skipped), 1382 frontend tests (116 files) — all pass
+
+**Residual risks:**
+- Mandatory fields carry ` *` in label text but no `required=` HTML attribute; browser native validation is not engaged (deferred)
+- `title=` tooltips are not accessible to touch users or screen readers without mouse hover (deferred)
 
 ## Verification
 
