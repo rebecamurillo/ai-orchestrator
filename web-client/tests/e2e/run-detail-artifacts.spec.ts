@@ -260,7 +260,14 @@ test.describe('the ARTIFACTS column', () => {
       },
     );
 
+    // operator revision 2026-09-18: story 1-6 made a file row open an `ArtifactModal` over the
+    // panel, whose backdrop covers the tree, so the second selection is made after closing the
+    // first rather than straight over it. The guard is the same one and still this file's
+    // subject — the earlier selection's slow response must not land on the later one — and it
+    // now lives in the modal's own `[runId, path]` effect cleanup rather than in the panel.
     await page.getByTestId(`artifacts-file-${SPEC_FILE}`).click();
+    await expect(page.getByTestId('wf-artifact-modal')).toBeVisible();
+    await page.getByRole('button', { name: 'Close' }).click();
     await page.getByTestId(`artifacts-file-${STORIES_FILE}`).click();
 
     await expect(page.getByTestId('artifacts-readonly')).toHaveText(

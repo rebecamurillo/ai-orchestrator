@@ -402,10 +402,17 @@ test.describe('/workflows/[id]?view=diagram — Run diagram', () => {
     await expect(epic1Group).toBeVisible();
     await expect(epic1Group).toContainText('DON');
 
-    // story-4-1 aggregate node is present and has data-current
-    const story41 = page.getByTestId('diagram-node-epic-2/story-4-1');
-    await expect(story41).toBeVisible();
-    await expect(story41).toHaveAttribute('data-current', 'true');
+    // operator revision 2026-09-18: story 1-4 embedded the diagram in the Run detail as
+    // `DiagramSection`, which pre-expands the group holding the current step on its first
+    // fetch. story-4-1 *is* that story here, so it renders as its own member steps rather than
+    // as an aggregate — the current story is now shown opened, which is what the pre-expansion
+    // is for. What this asserted — that the current story is the one marked — is asserted of the
+    // member step below, and a story that is not current still renders as an aggregate.
+    await expect(page.getByTestId('diagram-node-epic-2/story-4-1')).toHaveCount(0);
+    const build = page.getByTestId('diagram-node-epic-2/story-4-1/build');
+    await expect(build).toBeVisible();
+    await expect(build).toHaveAttribute('data-current', 'true');
+    await expect(page.getByTestId('diagram-node-epic-2/story-4-2')).toBeVisible();
 
     // Footer is present and contains story count, step-seq prefix, and separator
     const footer = page.getByTestId('wf-diagram-footer');
@@ -437,16 +444,18 @@ test.describe('/workflows/[id]?view=diagram — Run diagram', () => {
     await page.goto(DIAGRAM_URL);
     await expect(page.getByTestId('wf-diagram')).toBeVisible();
 
-    // story-4-1 starts collapsed (it is not the current story in this fixture's init state
-    // for the RunDiagram island — RunDiagram does not pre-expand on mount)
-    const story41 = page.getByTestId('diagram-node-epic-2/story-4-1');
-    await expect(story41).toBeVisible();
+    // operator revision 2026-09-18: story 1-4 embedded the diagram as `DiagramSection`, which
+    // pre-expands the group holding the current step. story-4-1 is that story in this fixture,
+    // so what is expanded by a *click* is one that is not — story-4-2. The two clicks this test
+    // exists for are unchanged; only the story they are made on moved.
+    const story42 = page.getByTestId('diagram-node-epic-2/story-4-2');
+    await expect(story42).toBeVisible();
 
     // Click the story aggregate — it should expand and reveal its member step nodes
-    await story41.click();
+    await story42.click();
 
-    // A member step node (e.g. story-4-1/build) becomes visible after expansion
-    const buildNode = page.getByTestId('diagram-node-epic-2/story-4-1/build');
+    // A member step node (e.g. story-4-2/build) becomes visible after expansion
+    const buildNode = page.getByTestId('diagram-node-epic-2/story-4-2/build');
     await expect(buildNode).toBeVisible();
 
     // Click the step node — browser navigates to step-run detail URL (contains /steps/)

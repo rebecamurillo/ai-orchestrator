@@ -93,7 +93,13 @@ test.describe('/workflows/[id]?view=diagram — graph fetch error', () => {
   }) => {
     let graphCallCount = 0;
 
-    await page.route(`**/api/runs/${RUN_ID}/detail`, (route: Route) =>
+    // operator revision 2026-09-18: story 8-3 put `?opened=true` on the first detail fetch; the
+    // trailing `**` admits the query string a bare glob never matches. `run-detail-last-opened.
+    // spec.ts` AC1/AC3 assert the new behaviour. This file was left out of the same revision on
+    // main because the diagram was a page of its own then and fetched `/graph` whichever way the
+    // detail went; since story 1-4 it is a section of the Run detail, so an unmocked detail took
+    // the whole surface down and no graph was ever asked for.
+    await page.route(`**/api/runs/${RUN_ID}/detail**`, (route: Route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',

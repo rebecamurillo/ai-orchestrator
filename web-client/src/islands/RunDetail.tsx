@@ -157,6 +157,13 @@ export default function RunDetail({ runId }: Props) {
   // The `#step-{seq}` arrival (7.5). `arrived` guards the one-shot: the effect depends on
   // `detail` because the row it scrolls to only exists once the first one has rendered, and
   // without the guard every poll would re-scroll the page.
+  //
+  // It opens STEPS as well as promoting the row, because since story 1-4 the table is one tab
+  // of three and `activeTab` starts on GATE: the row this arrival exists to show is not
+  // mounted, so the `getElementById` below found nothing and a HISTORY row's `#step-{seq}`
+  // link landed on the gate record with no sign of the step it named (FR-25's own link rule).
+  // The scroll is a second effect for the same reason — the row exists only after the tab
+  // this one opens has rendered.
   const arrivedRef = useRef(false);
   useEffect(() => {
     if (!detail || arrivedRef.current) return;
@@ -164,17 +171,25 @@ export default function RunDetail({ runId }: Props) {
     const seq = anchoredSeq(window.location.hash);
     if (seq === null) return;
     setAnchored(seq);
-    document.getElementById(stepAnchorId(seq))?.scrollIntoView({ block: 'center' });
+    setActiveTab('steps');
     const clear = window.setTimeout(() => setAnchored(null), PROMOTED_MS);
     return () => window.clearTimeout(clear);
   }, [detail]);
 
+  useEffect(() => {
+    if (anchored === null || activeTab !== 'steps') return;
+    document.getElementById(stepAnchorId(anchored))?.scrollIntoView({ block: 'center' });
+  }, [anchored, activeTab]);
+
   // SESSION tab default (story 1-4): set once on the first detail load when terminal is present.
   // The `tabDefaultSetRef` guard prevents subsequent polls from resetting the operator's choice.
+  // A `#step-{seq}` arrival wins over it: the Operator followed a link to one row, and this
+  // effect runs after the one above, so without the guard it would take the tab straight back.
   useEffect(() => {
     if (!detail) return;
     if (tabDefaultSetRef.current) return;
     tabDefaultSetRef.current = true;
+    if (anchoredSeq(window.location.hash) !== null) return;
     if (terminalBlock(detail) !== null) {
       setActiveTab('session');
     }
