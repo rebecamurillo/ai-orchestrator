@@ -46,6 +46,7 @@ web-client: Astro SSR pages, React islands, nanostores; the browser talks only t
 6. **TDD** (AD-18): a story's tests exist and fail before its implementation exists; a story is done only when every gate that has landed passes. `make lint` and `make test` always apply; `make e2e-api` and `make e2e-ui` apply from the story that lands them (1.2 and 1.3). A target that refuses with `not available until story <id>` is an unlanded gate, not a failure — once landed it is required from then on, and no story may return one to that state. Unit tests use the shared fakes in `tests/unit/fakes/`; do not create new doubles for a port that already has one. **No test, unit or e2e, may pin shipped template content** (step ids, ordering, counts, graph shapes, YAML text of `templates/*.yaml`): shipped templates are exemplars that evolve freely, and a test that would fail on a template edit is testing the wrong thing — cover template behaviour on fixture copies the test owns (Operator ruling, 2026-09-10; the 2026-09-15 e2e revision is what it costs to violate this).
 7. **No silent retry.** A failed command is reported with its output. The only automatic retry in this system is the one a template declares (`retry: {max, prompt}`), and it is bounded.
 8. **Configuration is the environment** (AD-20): a new setting is added to the typed settings module and to `.env.example` in the same change.
+9. **Never stop the operator's running services without authorization** (Operator rule, 2026-09-18): `make down`, `docker stop`/`docker rm`/`docker compose down`, killing a listening process, or anything else that takes a running host, container, or dev stack offline is strictly forbidden without the Operator's explicit go-ahead in the current conversation. A port conflict is resolved by binding a different port; only when that is genuinely impossible, ask first — naming exactly what would go down and why — and wait for the answer. A standing instruction in a doc (such as this file's `make e2e-ui` note) is a procedure, not an authorization.
 
 ## Commands (the gates)
 
@@ -55,7 +56,7 @@ make lint        # ruff · mypy · import-linter · eslint · prettier --check �
 make test        # backend unit (pytest) + web-client unit (vitest)
 make e2e         # build the disposable aio-e2e stack, run e2e-api in it, destroy it
 make e2e-api     # httpx scenarios + schemathesis against the running compose stack
-make e2e-ui      # playwright against the built web-client (binds 4321 — `make down` first)
+make e2e-ui      # playwright against the built web-client (binds 4321; if held, ask the Operator before any `make down` — hard rule 9)
 make durability  # kill the backend mid-Run, restart, prove the Run completes (own stack)
 make openapi     # export contracts/openapi.json, then `pnpm gen:api` in web-client (fails on drift)
 ```
