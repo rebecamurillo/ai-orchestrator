@@ -76,3 +76,30 @@ def test_queued_run_reports_branch_held_when_holder_is_needs_you() -> None:
     # operator revision 2026-09-15: partition by (repository, branch)
     assert by_id[waiting.id].reason == REASON_BRANCH_HELD.format(run="epic · feat/s")
     assert by_id[waiting.id].position == 1
+
+
+# ── row 6b: queued run with partition_branch=None is non-competing ───────────
+
+
+def test_queued_run_without_partition_branch_does_not_report_branch_held() -> None:
+    """A queued run with partition_branch=None is treated as non-competing — it falls
+    through to REASON_GLOBAL_CONCURRENCY, not REASON_BRANCH_HELD (story 5-1, AD-12)."""
+    running = a_run(status="running", partition_branch="feat/s")
+    waiting = a_run(status="queued", partition_branch=None)
+
+    engine = FakeWorkflowEngine()
+    engine.queue[running.id] = entry(running.id, "pending", None)
+    engine.queue[waiting.id] = entry(waiting.id, "enqueued", 1)
+
+    ports = QueuePorts(
+        engine=engine,
+        runs=FakeRunRepository([running, waiting]),
+        steps=FakeStepRunRepository(),
+        clock=FakeClock(NOW),
+        max_active_runs=2,
+    )
+
+    view = list_queue(ports)
+
+    by_id = {row.run.id: row for row in view.items}
+    assert by_id[waiting.id].reason != REASON_BRANCH_HELD.format(run="epic · feat/s")

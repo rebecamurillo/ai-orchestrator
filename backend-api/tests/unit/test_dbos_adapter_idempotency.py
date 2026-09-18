@@ -57,3 +57,5 @@ def test_enqueue_proceeds_when_the_engine_has_no_steps_for_that_run() -> None:
     engine.enqueue(RUN_A, partition_key=PARTITION_KEY)
 
     assert len(fake.enqueued) == 1
+    # The partition key must be forwarded verbatim to the durable engine (AD-12).
+    assert fake.enqueued[0][2] == PARTITION_KEY

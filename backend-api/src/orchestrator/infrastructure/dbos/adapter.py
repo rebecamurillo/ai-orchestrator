@@ -95,7 +95,7 @@ class DbosWorkflowEngine:
         Returns the `engine_ref` for the enqueued workflow.
         """
         # Idempotency: a repeated call after a lost response finds the existing workflow
-        # rather than enqueueing a second walk (AD-12, adapter.py line 8 comment).
+        # rather than enqueueing a second walk (AD-12).
         if self._engine.steps(str(run_id)):
             log.info("enqueue_no_op", run_id=str(run_id))
             return {WORKFLOW_ID: str(run_id)}

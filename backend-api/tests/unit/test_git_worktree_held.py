@@ -74,9 +74,7 @@ def test_execute_proceeds_normally_when_held_by_label_is_none() -> None:
 
     result = GitWorktreeExecutor().execute(ctx)
 
-    # Normal path: result is not the branch-held error.
-    assert result.status != "error" or (
-        result.reason is None or "branch held by" not in result.reason
-    )
+    # The backstop reason must not appear — whatever path was taken.
+    assert "branch held by" not in (result.reason or "")
     # Git was called (base was fetched or cloned).
     assert git.called("fetch_base") != [] or git.called("clone_base") != []

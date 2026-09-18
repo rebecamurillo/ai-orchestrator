@@ -39,8 +39,7 @@ from orchestrator.domain.ports.repositories import RunRepository, StepRunReposit
 #: The fixed reasons (SPEC CAP-11, AD-12). A queue row states one of these, verbatim.
 REASON_RUNNING = "running"
 REASON_WAITING_ANSWER = "waiting for your answer"
-# operator revision 2026-09-15: partition by (repository, branch) — renamed from
-# REASON_REPOSITORY_LOCK = "repository lock held by {label}"
+# operator revision 2026-09-15: partition by (repository, branch)
 REASON_BRANCH_HELD = "branch held by {run}"
 REASON_GLOBAL_CONCURRENCY = "global concurrency, held by {runs}"
 

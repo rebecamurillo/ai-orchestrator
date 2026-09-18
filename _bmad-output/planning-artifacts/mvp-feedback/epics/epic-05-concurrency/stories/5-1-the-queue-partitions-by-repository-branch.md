@@ -2,13 +2,53 @@
 title: 'The queue partitions by (Repository, branch)'
 type: 'feature'
 created: '2026-09-18'
-status: 'in-review'
+status: 'done'
 baseline_revision: '29cf53606cb0e704488dae344d2de6648a4d254b'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context: []
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      `_held_by_label` is called for every step kind, issuing an extra
+      `list_by_repository_non_terminal` query even for non-worktree steps.
+    evidence: |-
+      The function is called unconditionally in `read_run_environment` regardless of
+      which step kind will execute. The query is cheap but unnecessary for steps that
+      cannot trigger the backstop.
+    location: >-
+      backend-api/src/orchestrator/infrastructure/db/environment.py:69
+    severity: low
+  - summary: >-
+      `_held_by_label` accepts `SQLAlchemyRunRepository` (concrete) rather than
+      the `RunRepository` port, coupling infrastructure to its own implementation.
+    evidence: |-
+      The function signature `def _held_by_label(run: Run, runs: SQLAlchemyRunRepository)`
+      bypasses the port abstraction. Changing to `RunRepository` would make the helper
+      testable with `FakeRunRepository` without monkeypatching.
+    location: >-
+      backend-api/src/orchestrator/infrastructure/db/environment.py:91
+    severity: low
+  - summary: >-
+      Multi-branch plans (template declares >1 branch) partition only on the first
+      key; the second declared branch is unguarded.
+    evidence: |-
+      `_partition_branch` uses `next(iter(plan.branches), base_branch)`. If a future
+      template declares two branches, concurrent runs on the second branch bypass the
+      branch-held check. Documented in spec Design Notes as a known limitation.
+    location: >-
+      backend-api/src/orchestrator/application/use_cases/create_run.py:292
+    severity: low
+  - summary: >-
+      `# type: ignore[attr-defined]` on `result.run.partition_branch` and
+      `result.run.id` in `test_create_run_partition.py` — `CreateRunResult.run`
+      type annotation not narrowed to include the new field.
+    evidence: |-
+      Pre-existing annotation issue; the field exists at runtime (type: ignore suppresses
+      mypy). Narrowing `CreateRunResult.run` would remove the suppression.
+    location: >-
+      backend-api/tests/unit/application/test_create_run_partition.py:770,787
+    severity: low
 ---
 
 <intent-contract>
@@ -106,3 +146,67 @@ deferred: []
 **Commands:**
 - `make lint` -- expected: ruff, mypy (domain + application), import-linter, prettier, tsc, env-contract all pass
 - `make test` -- expected: 100 % branch coverage on `domain/` and `application/`; all new and existing tests green
+
+## Review Triage Log
+
+### 2026-09-18 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 9: (high 3, medium 1, low 5)
+- defer: 4: (low 4)
+- reject: 5
+- addressed_findings:
+  - `[high]` `[patch]` Missing test: `run_label` with `partition_branch="feat/s"` and `worktrees[0].branch="feat/s-1"` asserting label uses declared branch — added `test_preflight_run_label_partition.py`
+  - `[high]` `[patch]` Missing test: `queue._holding_run` / `list_queue` with same-repo different-branch runs not blocking — added `test_queue_different_branch.py`
+  - `[high]` `[patch]` Missing test: `read_run_environment` / `_held_by_label` with concurrent run on same (repo, partition_branch) asserting `held_by_label` is set — added `test_run_environment_held_by.py`
+  - `[medium]` `[patch]` `test_execute_proceeds_normally_when_held_by_label_is_none` used weak disjunctive status assertion — strengthened to direct reason check in `test_git_worktree_held.py`
+  - `[low]` `[patch]` Dead-code comment `# REASON_REPOSITORY_LOCK = …` remaining in `queue.py` — removed
+  - `[low]` `[patch]` Alembic migration used `sa.Text()` instead of `sa.String()` per spec — changed to `sa.String()` in `0013_run_partition_branch.py`
+  - `[low]` `[patch]` Comment referenced stale "adapter.py line 8 comment" — removed stale reference in `adapter.py`
+  - `[low]` `[patch]` `test_enqueue_proceeds_when_the_engine_has_no_steps_for_that_run` did not verify partition key forwarded — added assertion to `test_dbos_adapter_idempotency.py`
+  - `[low]` `[patch]` Missing test: `queue._holding_run` where queued run has `partition_branch=None` — added to `test_queue_needs_you_holds_branch.py`
+
+## Auto Run Result
+
+Status: done
+
+### Summary of implemented change
+
+Widened `engine.enqueue`'s `partition_key` from `UUID` to `str` and set it to `"{repository_id}:{declared_branch}"` in `create_run`. Added `partition_branch: str | None` to the `Run` entity and the DB model (Alembic migration 0013), persisting the declared branch at create-time. Fixed three comparison sites that were silently broken: pre-flight `_holding_run` (compared allocated fresh branch names instead of declared names), queue `_holding_run` (compared only by repository, not branch), and `git.worktree` executor backstop (new AD-14 check via `RunEnvironment.held_by_label` populated by `read_run_environment`). Renamed queue-reason constants per operator revision 2026-09-15. Added idempotency guard to `DbosWorkflowEngine.enqueue`.
+
+### Files changed
+
+- `backend-api/src/orchestrator/domain/ports/engine.py` — `enqueue` signature widened to `partition_key: str`
+- `backend-api/src/orchestrator/domain/entities/run.py` — `partition_branch: str | None = None` field added
+- `backend-api/src/orchestrator/infrastructure/db/models/run.py` — `partition_branch` nullable column
+- `backend-api/src/orchestrator/infrastructure/db/repositories/runs.py` — round-trip for `partition_branch`
+- `backend-api/alembic/versions/0013_run_partition_branch.py` — new migration; `sa.String()` nullable column
+- `backend-api/src/orchestrator/application/use_cases/create_run.py` — `_partition_branch` helper; sets `partition_branch` on `Run`; passes string partition key to `engine.enqueue`
+- `backend-api/src/orchestrator/infrastructure/dbos/adapter.py` — `enqueue` signature; idempotency guard via `steps()`
+- `backend-api/src/orchestrator/infrastructure/engine/local.py` — `enqueue` signature
+- `backend-api/src/orchestrator/application/preflight/checks.py` — `_holding_run` compares `partition_branch`; `run_label` prefers `partition_branch`
+- `backend-api/src/orchestrator/application/use_cases/queue.py` — `REASON_BRANCH_HELD`, updated `REASON_GLOBAL_CONCURRENCY`, updated `_holding_run`
+- `backend-api/src/orchestrator/application/steps/context.py` — `held_by_label: str | None = None` on `RunEnvironment`
+- `backend-api/src/orchestrator/infrastructure/db/environment.py` — `_held_by_label` helper; populates `held_by_label`
+- `backend-api/src/orchestrator/application/steps/git_worktree.py` — `HELD_BY` constant; backstop at top of `execute`
+- Several test files: operator-revision updates to `test_queue.py`, `test_queue_schema.py`, `test_create_run_use_case.py`, `test_preflight_use_case.py`, `test_repository_init.py`, `test_checks.py`; new test files for partition, preflight, idempotency, executor backstop, held-by environment, run-label, different-branch queue, needs-you queue
+
+### Review findings breakdown
+
+- Patches applied: 9 (3 high, 1 medium, 5 low)
+- Items deferred: 4 (all low — performance, coupling, edge case, type annotation)
+- Items rejected: 5 (type-safe concerns, unreachable states, probable pre-existing infrastructure)
+
+### Follow-up review recommendation: true
+
+Patched findings by severity — high: 3, medium: 1, low: 5. Score: any high → true.
+
+### Verification performed
+
+- `make lint`: passed (ruff, mypy, import-linter, prettier, tsc, env-contract, test-pairs)
+- `make test`: 6324 passed, 23 skipped — 100% branch coverage on `domain/` and `application/`
+
+### Residual risks
+
+- `_held_by_label` is called on every step kind, issuing an extra DB query for non-worktree steps (deferred — low performance concern).
+- Multi-branch templates (>1 declared branch) partition only by the first branch; a future template with two branches would have the second unguarded (deferred, documented in Design Notes).

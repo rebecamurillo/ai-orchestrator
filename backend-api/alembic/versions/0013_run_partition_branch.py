@@ -24,7 +24,7 @@ depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("run", sa.Column("partition_branch", sa.Text(), nullable=True))
+    op.add_column("run", sa.Column("partition_branch", sa.String(), nullable=True))
 
 
 def downgrade() -> None:
