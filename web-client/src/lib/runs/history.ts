@@ -19,6 +19,7 @@
  * the endpoint sent; this module chooses no token and reclassifies no attempt.
  */
 import type { components } from '../../api/schema';
+import { encode } from '../step-path';
 
 export type HistoryRowOut = components['schemas']['HistoryRowOut'];
 export type HistoryPageOut = components['schemas']['HistoryPageOut'];
@@ -99,6 +100,13 @@ export function workflowText(row: HistoryRowOut): string {
  * the row's `seq`, which is why `HistoryRowOut` carries one. */
 export function rowHref(row: HistoryRowOut): string {
   return `/workflows/${row.run_id}#step-${row.seq}`;
+}
+
+/** Where a history row links when the step-run detail page is available (story 1-2).
+ * The path segment uses dot-index encoding so URL brackets are avoided.
+ * `rowHref` is left unchanged (frozen assertion at `runs-history-lib.test.ts:127`). */
+export function stepDetailHref(row: HistoryRowOut): string {
+  return `/workflows/${row.run_id}/steps/${encode(row.path)}`;
 }
 
 /** The query `GET /steps` is asked with. `ALL` and a missing project are omitted rather than

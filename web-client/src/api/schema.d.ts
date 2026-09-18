@@ -485,6 +485,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/steps/{step_path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one step's full history and context
+         * @description Return one step's metadata and every attempt, newest first.
+         *
+         *     Writes nothing; derives no status (AD-8).
+         */
+        get: operations["get_step_detail_api_v1_runs__run_id__steps__step_path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/steps": {
         parameters: {
             query?: never;
@@ -689,6 +711,57 @@ export interface components {
             row_kind?: string | null;
             /** Token */
             token: string;
+        };
+        /**
+         * AttemptDetailOut
+         * @description One attempt's full detail, as returned by the step-run detail endpoint.
+         *
+         *     `dispatch_prompt` and `command` derive from the step's `with_resolved`: they are the
+         *     same for every attempt of the step and carried here so the frontend needs only this
+         *     object.  `result` is extracted per-attempt from the spec file at `end_sha`.
+         */
+        AttemptDetailOut: {
+            /** Command */
+            command: string | null;
+            /** Cost Provisional */
+            cost_provisional: boolean;
+            /** Cost Usd */
+            cost_usd: string | null;
+            /** Dispatch Prompt */
+            dispatch_prompt: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /** Exit Code */
+            exit_code: number | null;
+            /** Harness */
+            harness: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Model */
+            model: string | null;
+            /** N */
+            n: number;
+            /** Result */
+            result: string | null;
+            /** Retry Prompt */
+            retry_prompt: string | null;
+            /** Seconds */
+            seconds: number | null;
+            /** Session Id */
+            session_id: string | null;
+            /** Started At */
+            started_at: string | null;
+            /** Status */
+            status: string;
+            /** Token */
+            token: string;
+            /** Tokens In */
+            tokens_in: number | null;
+            /** Tokens Out */
+            tokens_out: number | null;
         };
         /**
          * AttributionOut
@@ -2030,6 +2103,37 @@ export interface components {
             kind: "answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume";
             /** Payload */
             payload?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * StepDetailOut
+         * @description One step's full detail, as returned by the step-run detail endpoint.
+         *
+         *     `attempts` is newest first (highest `n` first), consistent with every other endpoint
+         *     that sorts attempts for display.
+         */
+        StepDetailOut: {
+            /** Attempts */
+            attempts: components["schemas"]["AttemptDetailOut"][];
+            /** Gate */
+            gate: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Path */
+            path: string;
+            /** Reason */
+            reason: string | null;
+            /** Seq */
+            seq: number;
+            /** Status */
+            status: string;
+            /** Token */
+            token: string;
+            /** With Resolved */
+            with_resolved: {
                 [key: string]: unknown;
             };
         };
@@ -3803,6 +3907,59 @@ export interface operations {
                 };
             };
             /** @description The posted body does not match the shape below. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_step_detail_api_v1_runs__run_id__steps__step_path__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                step_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepDetailOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No run or step with those identifiers. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `run_id` does not parse as a UUID. */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -17,10 +17,13 @@ import type { RunDetailOut, StepRowOut } from '../../lib/run/detail';
 import { currentStepPath, stepStatusText } from '../../lib/run/detail';
 import { ageText, tokenSignal } from '../../lib/board/format';
 import { stepAnchorId } from '../../lib/run/anchor';
+import { encode } from '../../lib/step-path';
 
 interface Props {
   detail: RunDetailOut;
   anchoredSeq?: number | null;
+  /** The run id, used to build step-detail page links (story 1-2). */
+  runId?: string;
 }
 
 const COLUMNS = ['path', 'kind', 'gate', 'status', 'time', 'harness', 'cost'];
@@ -41,7 +44,7 @@ function attemptsSuffix(step: StepRowOut): string {
   return step.attempts > 1 ? ` · ${step.attempts} attempts` : '';
 }
 
-export default function StepsTable({ detail, anchoredSeq = null }: Props) {
+export default function StepsTable({ detail, anchoredSeq = null, runId }: Props) {
   const current = currentStepPath(detail);
   return (
     <div className="wf-steps-scroll">
@@ -56,28 +59,33 @@ export default function StepsTable({ detail, anchoredSeq = null }: Props) {
           </tr>
         </thead>
         <tbody>
-          {detail.steps.map((step) => (
-            <tr
-              key={step.seq}
-              id={stepAnchorId(step.seq)}
-              data-testid={`wf-step-${step.seq}`}
-              data-current={step.path === current}
-              data-anchored={step.seq === anchoredSeq}
-            >
-              <td>{step.path}</td>
-              <td>{step.kind}</td>
-              <td>{step.gate}</td>
-              <td>
-                <span className="wf-step-token" data-signal={tokenSignal(step.token)}>
-                  {stepStatusText(step)}
-                </span>
-                {attemptsSuffix(step)}
-              </td>
-              <td>{timeText(step)}</td>
-              <td>{step.latest?.harness ?? '—'}</td>
-              <td>{costText(step)}</td>
-            </tr>
-          ))}
+          {detail.steps.map((step) => {
+            const href =
+              runId && step.path ? `/workflows/${runId}/steps/${encode(step.path)}` : undefined;
+            const row = (
+              <tr
+                key={step.seq}
+                id={stepAnchorId(step.seq)}
+                data-testid={`wf-step-${step.seq}`}
+                data-current={step.path === current}
+                data-anchored={step.seq === anchoredSeq}
+              >
+                <td>{href ? <a href={href}>{step.path}</a> : step.path}</td>
+                <td>{step.kind}</td>
+                <td>{step.gate}</td>
+                <td>
+                  <span className="wf-step-token" data-signal={tokenSignal(step.token)}>
+                    {stepStatusText(step)}
+                  </span>
+                  {attemptsSuffix(step)}
+                </td>
+                <td>{timeText(step)}</td>
+                <td>{step.latest?.harness ?? '—'}</td>
+                <td>{costText(step)}</td>
+              </tr>
+            );
+            return row;
+          })}
         </tbody>
       </table>
     </div>

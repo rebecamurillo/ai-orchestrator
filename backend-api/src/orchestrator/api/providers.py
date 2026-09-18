@@ -248,6 +248,7 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
                 env=build_terminal_env(settings),
                 harnesses=build_harnesses(settings, RealProcessRunner()),
             ),
+            git=git_adapter(request),
         )
 
 

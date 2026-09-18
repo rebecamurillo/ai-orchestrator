@@ -227,7 +227,7 @@ export default function RunDetail({ runId }: Props) {
           />
           <div>
             <h2 className="wf-section-head">STEPS</h2>
-            <StepsTable detail={detail} anchoredSeq={anchored} />
+            <StepsTable detail={detail} anchoredSeq={anchored} runId={runId} />
           </div>
         </div>
         <div className="wf-right">

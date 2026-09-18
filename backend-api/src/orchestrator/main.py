@@ -69,6 +69,7 @@ from orchestrator.api.routers import (
     run_files,
     runs,
     signals,
+    step_detail,
     templates,
     trajectories,
 )
@@ -309,6 +310,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         run_detail.router,
         run_activity.router,
         run_attempts.router,
+        step_detail.router,
         signals.router,
         run_files.router,
         harnesses.router,
