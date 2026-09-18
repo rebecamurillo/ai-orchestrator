@@ -27,14 +27,32 @@ export const DEFAULT_TEMPLATE: TemplateName = 'initiative';
 export interface TemplateInputField {
   key: string;
   label: string;
+  tooltip: string;
 }
 
 /** Template-dependent inputs, in the brief's own words and order. */
 export const TEMPLATE_INPUT_FIELDS: Record<TemplateName, TemplateInputField[]> = {
-  initiative: [{ key: 'initiative_folder', label: 'INITIATIVE FOLDER' }],
+  initiative: [
+    {
+      key: 'initiative_folder',
+      label: 'INITIATIVE FOLDER',
+      tooltip:
+        'Path in the repository where planning output lands. Passed to the template as initiative_folder.',
+    },
+  ],
   epic: [
-    { key: 'branch', label: 'WORKING BRANCH' },
-    { key: 'spec_folder', label: 'SPEC FOLDER' },
+    {
+      key: 'branch',
+      label: 'WORKING BRANCH',
+      tooltip:
+        'Branch the harness creates and pushes story commits to. Passed to the template as branch.',
+    },
+    {
+      key: 'spec_folder',
+      label: 'SPEC FOLDER',
+      tooltip:
+        "Path holding the epic's stories.yaml and story spec files. Passed to the template as spec_folder.",
+    },
   ],
   'repo-init': [],
 };

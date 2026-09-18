@@ -54,8 +54,11 @@ export default function HarnessList({
   onRunReadiness,
 }: Props) {
   return (
-    <fieldset className="newwf-field newwf-harnesses-field">
-      <legend className="newwf-field-label">HARNESS</legend>
+    <fieldset
+      className="newwf-field newwf-harnesses-field"
+      title="Coding-agent that executes the story steps. Probed live on selection and again at submit."
+    >
+      <legend className="newwf-field-label">HARNESS (optional)</legend>
       <div className="newwf-harnesses">
         {harnesses.map((harness) => (
           <p
