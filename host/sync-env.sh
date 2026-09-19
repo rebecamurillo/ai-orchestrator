@@ -11,14 +11,17 @@
 # assignments in place, keeps every other line byte for byte, and takes a timestamped backup
 # first. It never adds a variable: a name absent from `.env.example` is not part of the
 # contract (AD-20), so an unknown name here is an error rather than an insertion.
+#
+# An optional argument names a different target — the release bundle's `deploy/.env`,
+# which carries the same contract lines this script rewrites.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 host_env="${root}/host/.env"
-root_env="${root}/.env"
+root_env="${1:-${root}/.env}"
 
 [[ -f "$host_env" ]] || { echo "host/.env is missing — run 'make host-up' first" >&2; exit 1; }
-[[ -f "$root_env" ]] || { echo ".env is missing — cp .env.example .env first" >&2; exit 1; }
+[[ -f "$root_env" ]] || { echo "${root_env} is missing — cp .env.example .env first" >&2; exit 1; }
 
 set -a
 # shellcheck disable=SC1090
