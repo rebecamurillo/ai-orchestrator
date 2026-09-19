@@ -98,6 +98,7 @@ from orchestrator.infrastructure.db.seed import (  # noqa: F401
 )
 from orchestrator.infrastructure.dbos import (
     build_engine,
+    dependency_startup_sweep,
     launch_engine,
     schedule_engine_jobs,
     schedule_jobs,
@@ -204,6 +205,8 @@ def run_migrations(settings: Settings) -> str:
     # the jobs that signal a Run rather than sweep one, and so need the engine itself
     # (SPEC CAP-7, FR-21) — `infrastructure/terminal_jobs.py` says why they register apart
     schedule_engine_jobs(settings)
+    # re-enqueue or park any dependency-waiting Runs left unresolved by a crash (story 5-4)
+    dependency_startup_sweep(settings)
     return head
 
 

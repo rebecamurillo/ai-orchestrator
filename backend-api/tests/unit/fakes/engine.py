@@ -45,7 +45,7 @@ class FakeWorkflowEngine:
         if self._uow is not None:
             self.committed_when_called.append(self._uow.committed)
 
-    def enqueue(self, run_id: UUID, partition_key: UUID) -> dict[str, Any]:
+    def enqueue(self, run_id: UUID, partition_key: str) -> dict[str, Any]:
         self.calls.append(("enqueue", (run_id, partition_key)))
         self._note_commit_state()
         self._next_ref += 1

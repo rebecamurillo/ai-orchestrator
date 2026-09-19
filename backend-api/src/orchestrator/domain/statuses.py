@@ -50,6 +50,7 @@ ParkKind = Literal[
     "misconfigured",
     "plan_stale",
     "internal",
+    "dependency",
 ]
 PARK_KINDS: tuple[ParkKind, ...] = get_args(ParkKind)
 
@@ -65,6 +66,7 @@ SignalKind = Literal[
     "terminal_start",
     "terminal_release",
     "terminal_resume",
+    "start",
 ]
 SIGNAL_KINDS: tuple[SignalKind, ...] = get_args(SignalKind)
 
@@ -77,7 +79,10 @@ Actor = Literal["operator", "machine", "terminal"]
 ACTORS: tuple[Actor, ...] = get_args(Actor)
 
 #: The four events that are neither a park nor a signal: the Run's own beginning and ends.
-LifecycleEvent = Literal["start", "done", "failed", "cancelled"]
+#: `"started_by_operator"` is distinct from `"start"` — it records the Operator's deferred-
+#: start action on a saved Run (story 5-3), while `"start"` is the machine's own running-start
+#: record.
+LifecycleEvent = Literal["start", "done", "failed", "cancelled", "started_by_operator"]
 LIFECYCLE_EVENTS: tuple[LifecycleEvent, ...] = get_args(LifecycleEvent)
 
 #: The bounded re-executions AD-9 records without a Run transition of their own:

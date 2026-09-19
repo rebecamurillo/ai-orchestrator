@@ -23,10 +23,25 @@ def test_a_terminal_run_admits_nothing() -> None:
 
 
 def test_a_queued_or_running_run_admits_only_cancel() -> None:
-    for status in ("queued", "running"):
+    # operator revision 2026-09-18: a *saved* queued run (engine_ref={}) admits ("start",
+    # "cancel"); a normal queued run (engine_ref non-empty) still admits only cancel (story
+    # 5-3); anchor exception 4 granted 2026-09-18T13:17:20Z.
+    # Running runs and normally-queued runs are unchanged.
+    for status in ("running",):
         run = build_run(status=status)
-
         assert run_admitted_signals(run, None) == ("cancel",)
+    # A normally queued run (engine_ref non-empty) also admits only cancel.
+    run = build_run(status="queued", engine_ref={"ref": 1})
+    assert run_admitted_signals(run, None) == ("cancel",)
+
+
+def test_a_saved_run_admits_start_and_cancel() -> None:
+    # operator revision 2026-09-18: saved runs (status=queued, engine_ref={}) admit
+    # ("start", "cancel") so the Operator can enqueue them on demand (story 5-3);
+    # anchor exception 4 granted 2026-09-18T13:17:20Z.
+    run = build_run(status="queued")  # engine_ref={} by default → saved
+
+    assert run_admitted_signals(run, None) == ("start", "cancel")
 
 
 def test_a_parked_run_with_no_park_kind_admits_nothing() -> None:

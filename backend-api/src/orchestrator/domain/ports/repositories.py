@@ -97,6 +97,15 @@ class RunRepository(Protocol):
         """
         ...
 
+    def list_by_after_run_id(self, run_id: UUID) -> list[Run]:
+        """Every queued Run whose `after_run_id` equals `run_id` and `engine_ref` is empty.
+
+        Returns only dependency-waiting runs: those that have not yet been enqueued
+        (`engine_ref == {}`) so the caller does not double-enqueue an already-processing
+        dependent.
+        """
+        ...
+
     # Declared last on purpose: the name `list` shadows the builtin for the rest of this
     # class body, so every `list[Run]` annotation above has to be read before it is bound.
     def list(self, *, project_id: UUID | None = None) -> list[Run]:

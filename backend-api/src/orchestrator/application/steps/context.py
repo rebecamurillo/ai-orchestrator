@@ -26,11 +26,9 @@ facts the row cannot carry — the Repository's clone, its `install_command`, it
 so `attempt_row` reads them once and hands them over as a frozen `RunEnvironment` inside
 `StepPorts`: the executor reads a value, never a repository (AD-8).
 
-**Epic 5's fields are the same move, one layer out**: `harnesses`, `harness_env`,
-`attempt_writes`, `logs` and `spend_writes` are what the `agent` kind and the walker need
-and no other kind has — ports or callables, built once in the composition root, defaulted
-to `None` so every prior `StepPorts(...)` keeps working. Most refuse when unset (`require_*`
-below); `spend_writes` degrades like `tracer` instead, skipping the budget read (5.7).
+**Epic 5's fields** (`harnesses`, `harness_env`, `attempt_writes`, `logs`, `spend_writes`)
+are `agent`-kind and walker-only — defaulted `None` so every prior `StepPorts(...)` keeps
+working. Most refuse when unset (`require_*` below); `spend_writes` degrades (5.7).
 
 **The three questions at the end are how an executor knows which re-dispatch it is**: AD-9
 closes `StepContext`'s field list, so `retrying`/`operator_retry`/`redispatched` read the
@@ -163,6 +161,8 @@ class RunEnvironment:
     verify_failure: VerifyFailure | None = None
     #: AD-17's frozen anchors for this row's Story frame, as the walker resolved them.
     anchors: frozenset[str] = frozenset()
+    #: Label of the run holding the same (repository, branch) slot, or `None` (story 5-1, AD-8).
+    held_by_label: str | None = None
 
     def base_dir(self, work_dir: str) -> Path:
         """`{work_dir}/{project.slug}/{repository.slug}/base` — the one layout (AD-14)."""

@@ -723,7 +723,7 @@ export interface components {
             attribution?: components["schemas"]["AttributionOut"] | null;
             checkpoint_story?: components["schemas"]["CheckpointStoryOut"] | null;
             /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | null;
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency") | null;
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -855,7 +855,7 @@ export interface components {
             /** Needs You Since */
             needs_you_since: string | null;
             /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | null;
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency") | null;
             progress: components["schemas"]["ProgressOut"] | null;
             /** Project Name */
             project_name: string;
@@ -1037,7 +1037,7 @@ export interface components {
             /** Attempt N */
             attempt_n: number | null;
             /** Event */
-            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal") | ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume") | ("start" | "done" | "failed" | "cancelled") | ("redispatch" | "retry_auto") | "spec_edit";
+            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency") | ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start") | ("start" | "done" | "failed" | "cancelled" | "started_by_operator") | ("redispatch" | "retry_auto") | "spec_edit";
             /**
              * Id
              * Format: uuid
@@ -1470,6 +1470,8 @@ export interface components {
          * @description `POST /runs/preflight`'s response.
          */
         PreflightOut: {
+            /** Conflict Consent Required */
+            conflict_consent_required: boolean;
             /** Lines */
             lines: components["schemas"]["LineOut"][];
             plan_error: components["schemas"]["PlanErrorOut"] | null;
@@ -1821,7 +1823,7 @@ export interface components {
          */
         RunDetailOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start")[];
             alert: components["schemas"]["AlertOut"] | null;
             cost: components["schemas"]["CostOut"];
             /** Gate Record */
@@ -1844,7 +1846,7 @@ export interface components {
             /** Accepted Paths */
             accepted_paths: string[];
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start")[];
             /** Branch */
             branch: string;
             /** Budget Usd */
@@ -2033,10 +2035,17 @@ export interface components {
          * @description `POST /runs`'s body: what *Start run* submits once every field is filled in.
          */
         RunIn: {
+            /** After Run Id */
+            after_run_id?: string | null;
             /** Base Branch */
             base_branch: string;
             /** Budget Usd */
             budget_usd?: (number | string) | null;
+            /**
+             * Conflict Consent
+             * @default false
+             */
+            conflict_consent: boolean;
             /** Harness */
             harness?: string | null;
             /** Inputs */
@@ -2062,6 +2071,11 @@ export interface components {
              * Format: uuid
              */
             repository_id: string;
+            /**
+             * Save
+             * @default false
+             */
+            save: boolean;
             /** Template Name */
             template_name: string;
             /** Template Version */
@@ -2101,7 +2115,7 @@ export interface components {
          */
         RunSummaryOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start")[];
             /** Branch */
             branch: string;
             /** Budget Usd */
@@ -2154,7 +2168,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume";
+            kind: "answer" | "continue" | "retry" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start";
             /** Payload */
             payload?: {
                 [key: string]: unknown;

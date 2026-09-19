@@ -101,7 +101,9 @@ def test_the_step_status_tokens_are_the_ones_the_conventions_spell() -> None:
     )
 
 
-def test_the_park_kinds_are_the_ten_the_brief_lists() -> None:
+def test_the_park_kinds_are_the_eleven_the_brief_lists() -> None:
+    # operator revision 2026-09-18: "dependency" added as a new park kind (story 5-4);
+    # anchor exception 4 granted 2026-09-18.
     assert PARK_KINDS == (
         "blocked",
         "checkpoint",
@@ -113,10 +115,13 @@ def test_the_park_kinds_are_the_ten_the_brief_lists() -> None:
         "misconfigured",
         "plan_stale",
         "internal",
+        "dependency",
     )
 
 
-def test_the_signal_kinds_are_the_ten_ad_13_names() -> None:
+def test_the_signal_kinds_are_the_eleven_ad_13_names() -> None:
+    # operator revision 2026-09-18: "start" added for the deferred-start signal (story 5-3);
+    # anchor exception 4 granted 2026-09-18T13:17:20Z.
     assert SIGNAL_KINDS == (
         "answer",
         "continue",
@@ -128,6 +133,7 @@ def test_the_signal_kinds_are_the_ten_ad_13_names() -> None:
         "terminal_start",
         "terminal_release",
         "terminal_resume",
+        "start",
     )
 
 
@@ -141,7 +147,9 @@ def test_the_actors_are_the_three_a_gate_record_can_name() -> None:
 
 
 def test_a_gate_event_is_a_park_kind_a_signal_kind_or_a_lifecycle_event() -> None:
-    assert LIFECYCLE_EVENTS == ("start", "done", "failed", "cancelled")
+    # operator revision 2026-09-18: "started_by_operator" added to LifecycleEvent for
+    # the deferred-start gate record (story 5-3); anchor exception 4 granted 2026-09-18T13:17:20Z.
+    assert LIFECYCLE_EVENTS == ("start", "done", "failed", "cancelled", "started_by_operator")
     assert GATE_EVENTS == (*PARK_KINDS, *SIGNAL_KINDS, *LIFECYCLE_EVENTS)
 
 

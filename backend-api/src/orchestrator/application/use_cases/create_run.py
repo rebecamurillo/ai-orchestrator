@@ -44,7 +44,9 @@ from orchestrator.application.preflight.model import (
     PreflightRequest,
 )
 from orchestrator.application.rules.signals import row_at
+from orchestrator.application.templates.plan_model import Plan
 from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
+from orchestrator.application.use_cases.queue import REASON_SAVED
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import Conflict, Invalid, NotFound
@@ -101,6 +103,14 @@ class CreateRunRequest:
     model: str | None = None
     manual_estimate_h: Decimal | None = None
     re_review_done: bool = False
+    conflict_consent: bool = False
+    #: When `True`, persist the plan but skip `engine.enqueue` — `engine_ref` stays `{}`,
+    #: the saved marker per AD-6. The `start` Signal enqueues it later (story 5-3).
+    save: bool = False
+    #: When set, this Run waits for the named predecessor Run to finish (story 5-4).
+    #: Requires `save=True`: the Run is stored but not enqueued until the predecessor
+    #: reaches a terminal status (`done` → enqueue, `failed|cancelled` → park).
+    after_run_id: UUID | None = None
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -128,11 +138,19 @@ class CreateRunResult:
 
 def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     """Re-run pre-flight, refuse what it refuses, then persist and enqueue the plan."""
+    # A dependency-waiting Run must be saved: `after_run_id` is meaningless on a Run that
+    # the engine picks up immediately — the predecessor might not even exist yet (story 5-4).
+    if req.after_run_id is not None and not req.save:
+        raise Conflict("after_run_id requires save=True")
     preflight_req = req.as_preflight_request()
     preflighted = preflight_and_plan(ports.preflight, preflight_req)
     if preflighted.plan_error is not None:
         raise preflighted.plan_error
     _refuse_failing_lines(preflighted.result.lines, skip_harness_check=ports.skip_harness_check)
+    # consent is not required for save=True: the Probe re-read at `start` Signal time checks
+    # fail lines only; the Operator's explicit start action implies intent (story 5-3, AD-13).
+    if not req.save and preflighted.result.conflict_consent_required and not req.conflict_consent:
+        raise Conflict("this can lead to merge conflicts: conflict consent required")
 
     # Live probe: validate the model against the harness's actual model list (story 2-2).
     # `harness_registry` is a dict on `PreflightPorts`; reuse it rather than re-running
@@ -168,6 +186,7 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         if ports.tracer is not None
         else None
     )
+    declared_branch = _partition_branch(plan, req.base_branch)
     run = Run(
         id=run_id,
         project_id=project.id,
@@ -184,6 +203,8 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         re_review_done=req.re_review_done,
         trace_id=trace.trace_id if trace is not None else None,
         created_at=ports.clock.now(),
+        partition_branch=declared_branch,
+        after_run_id=req.after_run_id,
     )
     step_rows = [_step_run(run_id, row) for row in plan.rows]
 
@@ -191,7 +212,12 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     ports.steps.add_many(step_rows)
     ports.uow.commit()
 
-    engine_ref = ports.engine.enqueue(run.id, partition_key=repository.id)
+    # A saved run skips enqueue: `engine_ref` stays `{}` (the AD-6 "not yet enqueued" marker).
+    # The `start` Signal will enqueue it later (story 5-3).
+    if req.save:
+        return CreateRunResult(run=run, starts_now=False, waiting=REASON_SAVED)
+
+    engine_ref = ports.engine.enqueue(run.id, partition_key=f"{repository.id}:{declared_branch}")
     run = run.model_copy(update={"engine_ref": engine_ref})
     ports.preflight.runs.update(run)
     ports.uow.commit()
@@ -274,6 +300,17 @@ def _inputs_dict(req: CreateRunRequest) -> dict[str, Any]:
         "model": req.model,
         **(req.inputs or {}),
     }
+
+
+def _partition_branch(plan: Plan, base_branch: str) -> str:
+    """The declared branch this Run partitions its queue slot by (AD-12).
+
+    For a story/epic plan, `plan.branches` has exactly one key (the declared branch name).
+    For an initiative plan (empty `plan.branches`), the base_branch is the partition key.
+    The FIRST key is used in case a template ever declares more than one branch — the Run
+    is partitioned by its first declared branch, same as the pre-flight branch-line check.
+    """
+    return next(iter(plan.branches), base_branch)
 
 
 def _step_run(run_id: UUID, row: PlannedRow) -> StepRun:

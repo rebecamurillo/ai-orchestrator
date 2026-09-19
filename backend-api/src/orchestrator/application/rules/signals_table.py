@@ -198,6 +198,11 @@ def _accepted_text(payload: dict[str, Any]) -> str | None:
     return ACCEPTED.format(paths=ACCEPTED_SEPARATOR.join(files))
 
 
+def _is_saved(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
+    """The run has not been enqueued yet — `engine_ref` is the empty dict (AD-6, story 5-3)."""
+    return not run.engine_ref
+
+
 def _no_terminal_session(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
     return not run.terminal_session
 
@@ -232,6 +237,8 @@ def accepted_files(payload: dict[str, Any]) -> tuple[str, ...]:
 
 
 #: AD-13's table. Every `Signal.kind` there is has exactly one row here.
+#: The order matches `SIGNAL_KINDS` in `domain/statuses.py` exactly; both are tested
+#: against each other in `test_signal_rules.py` and `test_signals_table.py`.
 VALID: dict[SignalKind, Rule] = {
     "answer": Rule(
         park_kinds=frozenset({"blocked", "checkpoint"}),
@@ -241,7 +248,7 @@ VALID: dict[SignalKind, Rule] = {
         text_key=ANSWER_KEY,
     ),
     "continue": Rule(
-        park_kinds=frozenset({"checkpoint", "protected_path", "plan_stale"}),
+        park_kinds=frozenset({"checkpoint", "protected_path", "plan_stale", "dependency"}),
         run_event="continue",
         text="continued by the operator",
         text_from=_accepted_text,
@@ -310,6 +317,18 @@ VALID: dict[SignalKind, Rule] = {
         # days later wants to say why the Run started again, not merely that it did
         text=TERMINAL_RESUMED,
         operator_action=False,
+    ),
+    # story 5-3: start a saved Run (engine_ref={}) on Operator request. operator_action=True
+    # because it is the Operator who pushes Start; run_event=None because the status stays
+    # "queued" until `_start_saved_run` calls engine.enqueue and writes engine_ref.
+    "start": Rule(
+        park_kinds=frozenset(),
+        run_statuses=frozenset({"queued"}),
+        run_event=None,
+        extra=_is_saved,
+        extra_refusal="run is already enqueued",
+        operator_action=True,
+        text="",
     ),
 }
 

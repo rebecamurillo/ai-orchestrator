@@ -106,6 +106,8 @@ class RunRow(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     worktrees_removed: Mapped[bool] = mapped_column(Boolean())
+    partition_branch: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    after_run_id: Mapped[UUID | None] = mapped_column(Uuid(), nullable=True)
 
 
 class StepRunRow(Base):

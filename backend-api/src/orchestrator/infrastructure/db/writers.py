@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
+from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.gateway import Gateway
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
@@ -70,13 +71,17 @@ class SessionUnitOfWork:
 
 @contextmanager
 def open_writer_ports(
-    session_factory: SessionFactory, git: Git | None = None
+    session_factory: SessionFactory,
+    git: Git | None = None,
+    engine: WorkflowEngine | None = None,
 ) -> Iterator[WriterPorts]:
     """One session's worth of `WriterPorts`, closed on every path.
 
     `git` is `None` for every caller that predates 5.9 (`attempt_writes`'s own scope has
     never needed it): `record_trajectory` degrades the same way `tracer`/`spend_writes` do.
     `trajectories` needs no adapter of its own beyond the session, so it is always built.
+    `engine` is `None` for every caller that predates story 5-4: `_enqueue_dependents`
+    degrades to a no-op when `None`, keeping every existing frozen `WriterPorts` unchanged.
     """
     session = session_factory()
     try:
@@ -89,6 +94,7 @@ def open_writer_ports(
             clock=SystemClock(),
             git=git,
             trajectories=SQLAlchemyTrajectoryRepository(session),
+            engine=engine,
         )
     finally:
         session.close()

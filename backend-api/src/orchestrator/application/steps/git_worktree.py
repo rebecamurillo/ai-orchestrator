@@ -70,6 +70,8 @@ NO_INSTALL = "no install_command"
 DIRTY = "worktree dirty: {path}"
 INSTALL_FAILED = "install failed: exit {code}"
 INSTALL_TIMED_OUT = "timeout {path} after {n} min"
+#: AD-14 backstop: another Run holds the same (repository, branch) partition (story 5-1).
+HELD_BY = "branch held by {run}"
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,17 @@ class GitWorktreeExecutor:
 
     def execute(self, ctx: StepContext) -> StepResult:
         env = require_env(ctx)
+        # AD-14 backstop: a race between pre-flight passing and this row executing may have
+        # put another Run on the same (repository, branch) partition (story 5-1). Refuse
+        # rather than clobbering the other Run's worktree.
+        if env.held_by_label is not None:
+            reason = HELD_BY.format(run=env.held_by_label)
+            return StepResult(
+                status="error",
+                gate=ctx.row.gate,
+                reason=reason,
+                park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
+            )
         branch = str(ctx.with_resolved[BRANCH_KEY])
         base = str(ctx.with_resolved[BASE_KEY])
         worktree = env.worktree_dir(ctx.ports.work_dir, branch)

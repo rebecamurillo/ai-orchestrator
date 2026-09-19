@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from orchestrator.application.preflight.checks import Context, list_error_target
+from orchestrator.application.preflight.checks import Context, list_error_target, run_label
 from orchestrator.application.preflight.model import (
+    CHECK_CONCURRENT_REPO,
     CHECK_EPICS_YAML,
     CHECK_EXISTING_STORY_FILES,
     CHECK_INSTALLED_SKILL,
@@ -24,6 +25,7 @@ from orchestrator.application.preflight.model import (
 from orchestrator.application.steps import AGENT_KIND
 from orchestrator.application.templates.lines import load_sequence, load_with_lines
 from orchestrator.application.templates.lists import stories_directory
+from orchestrator.domain.entities.run import Run
 
 EPICS_FILENAME = "epics.yaml"
 STORIES_FILENAME = "stories.yaml"
@@ -227,3 +229,46 @@ def installed_skill_lines(ctx: Context) -> list[Line]:
             for name in missing
         ]
     return [Line(CHECK_INSTALLED_SKILL, "ok", "ok")]
+
+
+def _new_partition_branch(ctx: Context) -> str | None:
+    """The declared branch the new Run would partition by, or `None` when unknown.
+
+    Mirrors `create_run._partition_branch`: `plan.branches` maps declared → created, so
+    its first key is the declared name.  When the plan is absent (form still incomplete),
+    falls back to `req.base_branch` so the check can still skip same-branch holders.
+    """
+    if ctx.plan is not None and ctx.plan.branches:
+        return next(iter(ctx.plan.branches))
+    return ctx.req.base_branch
+
+
+def _concurrent_run_text(run: Run) -> str:
+    """`run_label(run)` plus `· {folder}` when the holder named a spec or initiative folder."""
+    label = run_label(run)
+    folder = run.inputs.get("spec_folder") or run.inputs.get("initiative_folder")
+    if folder:
+        return f"{label} · {folder}"
+    return label
+
+
+def concurrent_repo_lines(ctx: Context) -> list[Line]:
+    """One `warn` line per non-terminal Run on the same Repository with a *different*
+    non-`None` `partition_branch` (story 5-2).
+
+    Same-branch holders are excluded: `branch_lines` already emits a `fail` for them, and
+    showing both a `fail` and a `warn` for the same branch is redundant.  Holders with
+    `partition_branch=None` (pre-story-5-1 runs) are excluded because they carry no branch
+    information and cannot cause the kind of merge conflict this check warns about.
+    """
+    if ctx.repository is None:
+        return []
+    new_branch = _new_partition_branch(ctx)
+    lines: list[Line] = []
+    for run in ctx.runs.list_by_repository_non_terminal(ctx.repository.id):
+        if run.partition_branch is None:
+            continue
+        if new_branch is not None and run.partition_branch == new_branch:
+            continue
+        lines.append(Line(CHECK_CONCURRENT_REPO, "warn", _concurrent_run_text(run)))
+    return lines

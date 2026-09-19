@@ -46,14 +46,16 @@ def a_row(**overrides: object) -> QueueRow:
 
 
 def test_queue_item_out_of_carries_every_field() -> None:
-    row = a_row(position=1, reason="repository lock held by epic · main")
+    # operator revision 2026-09-15: partition by (repository, branch)
+    row = a_row(position=1, reason="branch held by epic · main")
 
     item = QueueItemOut.of(row)
 
     assert item.position == 1
     assert item.run.id == row.run.id
     assert item.next_step_label == "install"
-    assert item.reason == "repository lock held by epic · main"
+    # operator revision 2026-09-15: partition by (repository, branch)
+    assert item.reason == "branch held by epic · main"
     assert item.waiting_seconds == WAITING_SECONDS
 
 

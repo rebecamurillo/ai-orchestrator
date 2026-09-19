@@ -28,6 +28,7 @@ import PlanTable from '../components/PlanTable';
 import PreflightLines from '../components/PreflightLines';
 import { formStateToQuery } from '../lib/newwf/query';
 import {
+  CONSENT_CHECK_TEXT,
   cloneCheckNote,
   preflightBody,
   repositoriesFor,
@@ -58,7 +59,14 @@ const INCOMPLETE_FORM_DETAIL =
   'every field but model and manual estimate is required before a run can start';
 
 function emptyPreflight(): PreflightOut {
-  return { lines: [], start_allowed: false, queue_note: '', rows: null, plan_error: null };
+  return {
+    lines: [],
+    start_allowed: false,
+    queue_note: '',
+    rows: null,
+    plan_error: null,
+    conflict_consent_required: false,
+  };
 }
 
 export default function NewWorkflow({ templates, projects, harnesses, initial }: Props) {
@@ -67,9 +75,11 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
   const [preflightFailed, setPreflightFailed] = useState(false);
   const [pending, setPending] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [startError, setStartError] = useState<string | undefined>(undefined);
   const [probeResults, setProbeResults] = useState<Record<string, ProbeResultOut>>({});
   const [probeInFlight, setProbeInFlight] = useState(false);
+  const [conflictConsent, setConflictConsent] = useState(false);
   const requestSeqRef = useRef(0);
   const probeSeqRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -142,6 +152,7 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
   function update(next: FormState): void {
     setState(next);
     setStartError(undefined);
+    setConflictConsent(false);
     // the last outcome describes a form that no longer exists; nothing may start on it
     setPending(true);
     const query = formStateToQuery(next).toString();
@@ -186,11 +197,14 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
             queue_note: '',
             rows: null,
             plan_error: null,
+            conflict_consent_required: false,
           });
           return;
         }
       }
-      const { data, error } = await api.POST('/runs', { body });
+      const { data, error } = await api.POST('/runs', {
+        body: { ...body, save: false, conflict_consent: conflictConsent },
+      });
       if (error) {
         setStartError(error.detail ?? error.title ?? GENERIC_FAILURE_DETAIL);
         return;
@@ -207,9 +221,47 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
     }
   }
 
+  async function saveRun(): Promise<void> {
+    const body = runBody(state, templates);
+    if (!body) {
+      setStartError(INCOMPLETE_FORM_DETAIL);
+      return;
+    }
+    setSaving(true);
+    setStartError(undefined);
+    try {
+      const { data, error } = await api.POST('/runs', {
+        // conflict_consent is never checked when save=true (AD-13); included to satisfy the type.
+        body: { ...body, save: true, conflict_consent: false },
+      });
+      if (error) {
+        setStartError(error.detail ?? error.title ?? GENERIC_FAILURE_DETAIL);
+        return;
+      }
+      if (!data) {
+        setStartError(GENERIC_FAILURE_DETAIL);
+        return;
+      }
+      window.location.assign(`/workflows/${data.run.id}`);
+    } catch {
+      setStartError(GENERIC_FAILURE_DETAIL);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const repositories = repositoriesFor(projects, state.projectId);
   const note = cloneCheckNote(repositoryById(repositories, state.repositoryId));
-  const startDisabled = starting || pending || probeInFlight || !preflight.start_allowed;
+  const startDisabled =
+    starting ||
+    saving ||
+    pending ||
+    probeInFlight ||
+    !preflight.start_allowed ||
+    (preflight.conflict_consent_required && !conflictConsent);
+  // Save is available whenever the plan was built (rows non-null), regardless of
+  // consent or harness state — a saved run has no consent to give (story 5-3, AD-13).
+  const saveDisabled = saving || starting || pending || preflight.rows === null;
 
   return (
     <div className="newwf">
@@ -265,6 +317,19 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
             {startError}
           </p>
         ) : null}
+        {preflight.conflict_consent_required ? (
+          <div className="newwf-consent" data-testid="newwf-consent">
+            <label>
+              <input
+                type="checkbox"
+                checked={conflictConsent}
+                onChange={(e) => setConflictConsent(e.target.checked)}
+                data-testid="newwf-consent-checkbox"
+              />
+              {CONSENT_CHECK_TEXT}
+            </label>
+          </div>
+        ) : null}
         <div className="newwf-bar-controls">
           <button
             type="button"
@@ -274,6 +339,15 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
             onClick={() => void startRun()}
           >
             Start run
+          </button>
+          <button
+            type="button"
+            className="newwf-save"
+            data-testid="newwf-save"
+            disabled={saveDisabled}
+            onClick={() => void saveRun()}
+          >
+            Save
           </button>
           <a className="newwf-cancel" data-testid="newwf-cancel" href="/">
             Cancel

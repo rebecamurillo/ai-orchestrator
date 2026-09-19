@@ -38,6 +38,7 @@ CHECK_METHOD_VERSION = "method version"
 CHECK_EXISTING_STORY_FILES = "existing story files"
 CHECK_CLONE_CHECK = "clone check"
 CHECK_WHAT_WILL_RUN = "what will run"
+CHECK_CONCURRENT_REPO = "concurrent branch"
 
 #: The default `queue_note` — nothing holds the Repository and the instance is under its cap.
 QUEUE_FREE = "starts immediately if the repository is free"
@@ -68,6 +69,9 @@ class PreflightRequest:
     model: str | None = None
     budget_usd: Decimal | None = None
     re_review_done: bool = False
+    #: When set, the branch-held check skips this Run as a potential holder.  Used by
+    #: `_start_saved_run` so the Run being started does not appear to hold its own branch.
+    exclude_run_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -80,3 +84,4 @@ class PreflightResult:
     queue_note: str
     rows: tuple[PlannedRow, ...] | None
     plan_error: PlanError | None
+    conflict_consent_required: bool = False

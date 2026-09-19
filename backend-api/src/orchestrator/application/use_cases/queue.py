@@ -28,6 +28,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from uuid import UUID
 
 from orchestrator.application.preflight.checks import run_label
 from orchestrator.domain.entities.run import Run
@@ -39,8 +40,13 @@ from orchestrator.domain.ports.repositories import RunRepository, StepRunReposit
 #: The fixed reasons (SPEC CAP-11, AD-12). A queue row states one of these, verbatim.
 REASON_RUNNING = "running"
 REASON_WAITING_ANSWER = "waiting for your answer"
-REASON_REPOSITORY_LOCK = "repository lock held by {label}"
-REASON_GLOBAL_CONCURRENCY = "global concurrency, held by {labels}"
+# operator revision 2026-09-15: partition by (repository, branch)
+REASON_BRANCH_HELD = "branch held by {run}"
+REASON_GLOBAL_CONCURRENCY = "global concurrency, held by {runs}"
+#: A saved Run: persisted but not yet enqueued (story 5-3, AD-6).
+REASON_SAVED = "saved — not started"
+#: A dependency-waiting Run: persisted but waiting for a predecessor (story 5-4, AD-6).
+REASON_WAITING_FOR = "waiting for run {run}"
 
 #: The engine's own two states for a held workflow (`domain/ports/engine.py::QueueState`).
 PENDING = "pending"
@@ -79,18 +85,74 @@ class QueuePorts:
 
 def list_queue(ports: QueuePorts) -> QueueView:
     """Every Run the engine is holding, joined with its rows for the reason it waits."""
-    entries = (_row(ports, entry) for entry in ports.engine.list_queue())
-    rows = [row for row in entries if row is not None]
+    engine_entries = list(ports.engine.list_queue())
+    # IDs already in the engine queue — they must not also appear as saved rows.
+    engine_run_ids: frozenset[UUID] = frozenset(entry.run_id for entry in engine_entries)
+    # One query shared by both saved and dependency-waiting helpers (P5).
+    all_queued = ports.runs.list_by_status("queued")
+    rows = [row for row in (_row(ports, entry) for entry in engine_entries) if row is not None]
+    rows += [_saved_row(ports, r) for r in _saved_runs(all_queued, engine_run_ids)]
+    rows += [
+        _dependency_row(ports, r) for r in _dependency_waiting_runs(all_queued, engine_run_ids)
+    ]
     return QueueView(items=sorted(rows, key=_order_key), max_active_runs=ports.max_active_runs)
 
 
 def _order_key(row: QueueRow) -> tuple[int, int]:
-    """Active first, then queued by position; a parked Run last (module docstring)."""
+    """Active first, then queued by position; parked last; saved after that; dependency last."""
     if row.reason == REASON_RUNNING:
         return (0, 0)
     if row.position is not None:
         return (1, row.position)
+    if row.reason == REASON_SAVED:
+        return (3, 0)
+    if row.run.after_run_id is not None:
+        return (4, 0)
     return (2, 0)
+
+
+def _saved_runs(all_queued: list[Run], engine_run_ids: frozenset[UUID]) -> list[Run]:
+    """Saved Runs: queued, not enqueued, not waiting for a predecessor (story 5-3, AD-6)."""
+    return [
+        r
+        for r in all_queued
+        if not r.engine_ref and r.id not in engine_run_ids and r.after_run_id is None
+    ]
+
+
+def _dependency_waiting_runs(all_queued: list[Run], engine_run_ids: frozenset[UUID]) -> list[Run]:
+    """Dependency-waiting Runs: queued, not enqueued, after_run_id set (story 5-4)."""
+    return [
+        r
+        for r in all_queued
+        if not r.engine_ref and r.id not in engine_run_ids and r.after_run_id is not None
+    ]
+
+
+def _dependency_row(ports: QueuePorts, run: Run) -> QueueRow:
+    """One dependency-waiting Run as a `QueueRow`, reason = REASON_WAITING_FOR."""
+    steps = ports.steps.list_for_run(run.id)
+    return QueueRow(
+        position=None,
+        run=run,
+        next_step_label=_next_step_label(run, steps),
+        reason=REASON_WAITING_FOR.format(run=str(run.after_run_id)),
+        waiting_since=run.created_at,
+        waiting_seconds=(ports.clock.now() - run.created_at).total_seconds(),
+    )
+
+
+def _saved_row(ports: QueuePorts, run: Run) -> QueueRow:
+    """One saved Run as a `QueueRow`, with position=None and reason=REASON_SAVED."""
+    steps = ports.steps.list_for_run(run.id)
+    return QueueRow(
+        position=None,
+        run=run,
+        next_step_label=_next_step_label(run, steps),
+        reason=REASON_SAVED,
+        waiting_since=run.created_at,
+        waiting_seconds=(ports.clock.now() - run.created_at).total_seconds(),
+    )
 
 
 def _row(ports: QueuePorts, entry: QueueEntry) -> QueueRow | None:
@@ -118,15 +180,27 @@ def _reason(ports: QueuePorts, run: Run, entry: QueueEntry) -> tuple[str, int | 
         return REASON_RUNNING, None
     holder = _holding_run(ports.runs, run)
     if holder is not None:
-        return REASON_REPOSITORY_LOCK.format(label=run_label(holder)), entry.position
-    labels = ", ".join(run_label(candidate) for candidate in _active_runs(ports.runs))
-    return REASON_GLOBAL_CONCURRENCY.format(labels=labels), entry.position
+        return REASON_BRANCH_HELD.format(run=run_label(holder)), entry.position
+    runs_labels = ", ".join(run_label(candidate) for candidate in _active_runs(ports.runs))
+    return REASON_GLOBAL_CONCURRENCY.format(runs=runs_labels), entry.position
 
 
 def _holding_run(runs: RunRepository, run: Run) -> Run | None:
-    """The other non-terminal Run already on this Repository, if any (AD-12's partition)."""
+    """The other non-terminal Run on this Repository with the same partition branch, if any.
+
+    Skips Runs where either side has `partition_branch = None` — old runs without the field
+    (story 5-1) are treated as non-competing (operator revision 2026-09-15).
+    """
+    if run.partition_branch is None:
+        return None
     return next(
-        (r for r in runs.list_by_repository_non_terminal(run.repository_id) if r.id != run.id),
+        (
+            r
+            for r in runs.list_by_repository_non_terminal(run.repository_id)
+            if r.id != run.id
+            and r.partition_branch is not None
+            and r.partition_branch == run.partition_branch
+        ),
         None,
     )
 

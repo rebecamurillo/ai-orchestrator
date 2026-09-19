@@ -91,6 +91,8 @@ def to_entity(row: RunRow) -> Run:
         started_at=row.started_at,
         ended_at=row.ended_at,
         worktrees_removed=row.worktrees_removed,
+        partition_branch=row.partition_branch,
+        after_run_id=row.after_run_id,
     )
 
 
@@ -140,6 +142,8 @@ def row_values(run: Run) -> dict[str, Any]:
         "started_at": run.started_at,
         "ended_at": run.ended_at,
         "worktrees_removed": run.worktrees_removed,
+        "partition_branch": run.partition_branch,
+        "after_run_id": run.after_run_id,
     }
 
 
@@ -187,6 +191,16 @@ class SQLAlchemyRunRepository:
             select(RunRow).where(
                 RunRow.repository_id == repository_id,
                 RunRow.status.not_in(sorted(TERMINAL_RUN)),
+            )
+        )
+
+    def list_by_after_run_id(self, run_id: UUID) -> list[Run]:
+        """Dependency-waiting Runs: queued, after_run_id == run_id, engine_ref == {} (story 5-4)."""
+        return self._read(
+            select(RunRow).where(
+                RunRow.after_run_id == run_id,
+                RunRow.status == "queued",
+                RunRow.engine_ref == {},
             )
         )
 

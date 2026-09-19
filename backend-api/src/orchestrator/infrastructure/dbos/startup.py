@@ -28,7 +28,7 @@ finished, whichever module happened to need it first.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from functools import partial
 
 import httpx
@@ -44,6 +44,7 @@ from orchestrator.application.steps import git_worktree as _git_worktree  # noqa
 from orchestrator.application.steps import plan_check as _plan_check  # noqa: F401
 from orchestrator.application.steps import pr_link as _pr_link  # noqa: F401
 from orchestrator.application.steps import shell as _shell  # noqa: F401
+from orchestrator.application.use_cases.dependency_sweep import sweep_dependency_waiting
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
@@ -84,7 +85,12 @@ SPEND_TIMEOUT_SECONDS = 10.0
 _SERVING: list[tuple[DbosWorkflowEngine, SessionFactory | None, Git | None]] = []
 
 
-def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -> WalkerDeps:
+def walker_deps(
+    settings: Settings,
+    session_factory: SessionFactory,
+    git: Git,
+    engine_ref: list | None = None,
+) -> WalkerDeps:
     """What the walker's steps run on: a session per step, the executors' ports, the deadline.
 
     Its own function so the wiring is assertable. Every value here comes from the typed
@@ -112,13 +118,23 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
     result`'s own scope) carries `git` too (5.9): `record_trajectory` reads the committed
     story file and `HEAD` through it, and needs no adapter `attempt_writes` does not already
     have wired elsewhere.
+
+    `engine_ref` is a late-binding list: it is empty when `walker_deps` is called (the
+    engine does not exist yet), and `build_engine` appends the engine after construction so
+    the `open_ports` closure can read `engine_ref[0]` on every later call (story 5-4).
+    `None` keeps every test that calls `walker_deps` directly working unchanged.
     """
     runner = RealProcessRunner()
     gateway = build_gateway(
         settings, httpx.Client(base_url=settings.litellm_base_url, timeout=SPEND_TIMEOUT_SECONDS)
     )
+
+    def open_ports() -> AbstractContextManager[object]:
+        engine = engine_ref[0] if engine_ref else None
+        return open_writer_ports(session_factory, git=git, engine=engine)
+
     return WalkerDeps(
-        open_ports=partial(open_writer_ports, session_factory, git=git),
+        open_ports=open_ports,
         step_ports=StepPorts(
             git=git,
             clock=SystemClock(),
@@ -156,12 +172,18 @@ def walker_deps(settings: Settings, session_factory: SessionFactory, git: Git) -
 def build_engine(
     settings: Settings, session_factory: SessionFactory, git: Git
 ) -> DbosWorkflowEngine:
-    """The durable `WorkflowEngine`, wired to the walker's ports. Opens no connection."""
-    return DbosWorkflowEngine(
-        engine_config(settings),
-        RealEngine(),
-        walker_deps(settings, session_factory, git),
-    )
+    """The durable `WorkflowEngine`, wired to the walker's ports. Opens no connection.
+
+    Uses a late-binding `engine_ref` list to break the circular dependency: `walker_deps`
+    needs the engine (for `_enqueue_dependents`), but the engine is not built until
+    `walker_deps` is ready. The list is empty when `walker_deps` is called; the engine is
+    appended after construction so every later `open_ports()` call sees it (story 5-4).
+    """
+    engine_holder: list[DbosWorkflowEngine] = []
+    deps = walker_deps(settings, session_factory, git, engine_ref=engine_holder)
+    engine = DbosWorkflowEngine(engine_config(settings), RealEngine(), deps)
+    engine_holder.append(engine)
+    return engine
 
 
 @contextmanager
@@ -208,6 +230,21 @@ def schedule_jobs(settings: Settings) -> None:
             continue
         for name, cron, job in scheduled_jobs(settings, session_factory, git):
             engine.schedule(name, cron, job)
+
+
+def dependency_startup_sweep(settings: Settings) -> None:
+    """Re-enqueue or park dependency-waiting Runs that lost their resolution in a crash.
+
+    Called once after `launch_engine()` in `main.run_migrations`. Iterates `_SERVING` —
+    a no-op when the process is not serving (every unit test) — and for each real serving
+    entry opens a DB session, runs `sweep_dependency_waiting`, then closes it. Idempotent:
+    runs that were already enqueued are invisible to `list_by_after_run_id` (story 5-4, AD-12).
+    """
+    for engine, session_factory, _git in _SERVING:
+        if session_factory is None:
+            continue
+        with open_writer_ports(session_factory, engine=engine) as ports:
+            sweep_dependency_waiting(ports, engine)
 
 
 def schedule_engine_jobs(settings: Settings) -> None:

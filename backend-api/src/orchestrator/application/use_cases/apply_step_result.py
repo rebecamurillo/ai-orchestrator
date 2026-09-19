@@ -35,21 +35,15 @@ arrives, nothing is written at all and one line is logged. The walker's step may
 been mid-flight when `signal_run` cancelled the Run; the alternative — writing to a
 terminal Run — is exactly the double write AD-8 exists to prevent.
 
-**The successor walk reads through `skipped` rows.** AD-8's step diagram says a row is
-queued when its predecessor is "done *or skipped*", and `epic@1` over an already-done Story
-ends in four consecutive `skipped` rows, so a successor rule that looked only at `seq + 1`
-would stall the Run. The walk stops — writing nothing — at the first row that is neither
-`planned` nor `skipped`: such a row is already past `planned`, and the only way to reach it
-is the walker's own re-walk after a redispatch, which owns it.
+**The successor walk reads through `skipped` rows** (AD-8: a row is queued when its predecessor
+is "done *or skipped*"). The walk stops at the first non-`planned`/non-`skipped` row — already
+past `planned`, owned by the walker's re-walk after a redispatch.
 
 `after_route(run, row, result)` is Epic 5's seam: the budget rule's second gate record and
 the `park_kind = budget` rewrite hang there. Nothing in Epic 4 passes it.
 
-**5.9's own trigger hangs here too, unconditionally.** The instant a Story frame's own
-commit-guard row itself reaches `done`, `record_trajectory` runs inside the same unit of
-work — the frame's last row, and the only point at which the trajectory's `end_sha` ("HEAD
-after the commit-guard") is a fact. It is idempotent on `(run_id, frame)`, so a durable-step
-replay of this same call records nothing twice (AD-19, AD-6).
+**5.9's trigger:** `record_trajectory` runs in the same UoW when a Story frame's commit-guard
+row reaches `done`; idempotent on `(run_id, frame)` (AD-19, AD-6).
 """
 
 from __future__ import annotations
@@ -69,7 +63,9 @@ from orchestrator.application.use_cases.writers import (
     FINISHED,
     Entry,
     WriterPorts,
+    enqueue_dependents,
     finish_run,
+    park_dependents,
     park_run,
     queue_row,
     record,
@@ -161,7 +157,11 @@ def apply_step_result(
         run = _route(ports, run, row, result, attempt)
         if after_route is not None:
             after_route(run, row, result)
+        if run.status == "failed":  # park dependents in same UoW (story 5-4)
+            park_dependents(ports, run)
         ports.uow.commit()
+    if run.status == "done":  # two-phase: commit first, enqueue after (story 5-4)
+        enqueue_dependents(ports, ports.engine, run)
 
 
 def _apply_run_updates(ports: WriterPorts, run: Run, result: StepResult) -> Run:

@@ -16,7 +16,12 @@ from pathlib import Path
 from orchestrator.application.dto import ProjectSnapshot, RepositorySnapshot, RunInputs
 from orchestrator.application.preflight import checks, lists
 from orchestrator.application.preflight.checks import Context
-from orchestrator.application.preflight.model import Line, PreflightRequest, PreflightResult
+from orchestrator.application.preflight.model import (
+    CHECK_CONCURRENT_REPO,
+    Line,
+    PreflightRequest,
+    PreflightResult,
+)
 from orchestrator.application.templates.plan import plan_run
 from orchestrator.application.templates.plan_model import Plan, PlanError, ResolvedTree
 from orchestrator.application.use_cases.clone_check import BASE_DIRECTORY
@@ -121,12 +126,14 @@ def preflight_and_plan(ports: PreflightPorts, req: PreflightRequest) -> Prefligh
         plan is not None and plan_error is None and not any(line.status == "fail" for line in lines)
     )
     rows = plan.rows if plan is not None else None
+    conflict_consent_required = any(line.check == CHECK_CONCURRENT_REPO for line in lines)
     result = PreflightResult(
         lines=tuple(lines),
         start_allowed=start_allowed,
         queue_note=checks.queue_note(ctx),
         rows=rows,
         plan_error=plan_error,
+        conflict_consent_required=conflict_consent_required,
     )
     return Preflighted(resolved=resolved, plan=plan, plan_error=plan_error, result=result)
 
@@ -149,6 +156,7 @@ def _lines(ctx: Context) -> list[Line]:
     """Every line, in FR-8's order."""
     lines: list[Line] = [checks.origin_reachable(ctx), checks.base_branch_line(ctx)]
     lines += checks.branch_lines(ctx)
+    lines += lists.concurrent_repo_lines(ctx)
     epics_line = lists.epics_yaml_line(ctx)
     if epics_line is not None:
         lines.append(epics_line)

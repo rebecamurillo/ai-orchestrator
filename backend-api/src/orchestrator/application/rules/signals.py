@@ -147,10 +147,13 @@ def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKin
         return ()
     if run.terminal_session:
         return TERMINAL_SESSION_SIGNALS
+    if run.status == "queued" and not run.engine_ref:
+        return ("start", "cancel")
     if run.status != "needs_you":
         return ("cancel",)
-    if run.park_kind is None:
-        return ()
+    # Dependency parks have no park_path; skip_story / skip_epic don't apply. (story 5-4)
+    if run.park_kind in (None, "dependency"):
+        return ("continue", "cancel") if run.park_kind == "dependency" else ()
     offered = admitted_signals(run.park_kind, park_row_kind or "")
     if run.park_reason == REBASELINE_FAILED:
         offered = tuple(kind for kind in offered if kind != "skip_story")

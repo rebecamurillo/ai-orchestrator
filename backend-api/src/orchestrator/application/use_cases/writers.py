@@ -24,6 +24,7 @@ from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
+from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
@@ -83,6 +84,10 @@ class WriterPorts:
     clock: Clock
     git: Git | None = None
     trajectories: TrajectoryRepository | None = None
+    #: Optional engine for two-phase dependent enqueue (story 5-4). `None` on every call
+    #: site that predates this field — every frozen `WriterPorts(...)` construction keeps
+    #: working unchanged. When set, `enqueue_dependents` uses it after a `done` transition.
+    engine: WorkflowEngine | None = None
 
 
 def require_run(ports: WriterPorts, run_id: UUID) -> Run:
@@ -236,3 +241,57 @@ def finish_run(ports: WriterPorts, run: Run) -> Run:
     )
     record(ports, finished, Entry(event="done", actor="machine", text=RUN_DONE))
     return finished
+
+
+#: Reason text for a dependency park: the predecessor's terminal status (story 5-4).
+DEPENDENCY_PARK_REASON = "run {run_id} ended {status}"
+
+
+def park_dependents(ports: WriterPorts, run: Run) -> None:
+    """Park every queued run waiting for `run` in the same UoW as `run`'s terminal write.
+
+    Called when `run` reaches `failed` or `cancelled`. Any run whose `after_run_id` points
+    to `run` and whose `engine_ref` is still empty (never enqueued) is directly set to
+    `needs_you` with `park_kind="dependency"` — the AD-8 `("queued", "park")` machine path
+    does not exist, so the write is direct rather than through `park_run`. A gate record is
+    appended in the same UoW, keeping the "three fields written with the record" invariant.
+    """
+    dependents = ports.runs.list_by_after_run_id(run.id)
+    if not dependents:
+        return
+    reason = DEPENDENCY_PARK_REASON.format(run_id=run.id, status=run.status)
+    for dep in dependents:
+        parked = dep.model_copy(
+            update={
+                "status": "needs_you",
+                "park_kind": "dependency",
+                "park_path": None,
+                "park_reason": reason,
+            }
+        )
+        ports.runs.update(parked)
+        record(ports, parked, Entry(event="dependency", actor="machine", path=None, text=reason))
+
+
+def enqueue_dependents(ports: WriterPorts, engine: WorkflowEngine | None, run: Run) -> None:
+    """Two-phase enqueue of every run waiting for `run` after `run` reaches `done`.
+
+    Called AFTER the predecessor's `done` write is committed. For each dependent whose
+    `engine_ref` is still empty: enqueue first (engine sees the durable predecessor row),
+    then commit the returned `engine_ref` in its own UoW. Idempotent: a second call finds
+    `engine_ref` already set and skips (list_by_after_run_id returns only engine_ref=={}).
+    Degrades to a no-op when `engine` is None (every call site that predates this story).
+    """
+    if engine is None:
+        return
+    dependents = ports.runs.list_by_after_run_id(run.id)
+    for dep in dependents:
+        partition_key = (
+            f"{dep.repository_id}:{dep.partition_branch or dep.inputs.get('base_branch', '')}"
+        )
+        engine_ref = engine.enqueue(dep.id, partition_key=partition_key)
+        with ports.uow:
+            refreshed = ports.runs.get(dep.id)
+            if refreshed is not None:
+                set_run(ports, refreshed, engine_ref=engine_ref)
+            ports.uow.commit()

@@ -145,7 +145,10 @@ def test_repo_init_persists_eight_rows_pins_one_version_and_enqueues_once() -> N
     assert [row.seq for row in rows] == list(range(1, REPO_INIT_ROW_COUNT + 1))
     assert rows[0].path == "plan"
     assert all(row.status == "planned" for row in rows)
-    assert harness.engine.calls == [("enqueue", (result.run.id, fixtures.REPOSITORY.id))]
+    # operator revision 2026-09-15: partition by (repository, branch)
+    assert harness.engine.calls == [
+        ("enqueue", (result.run.id, f"{fixtures.REPOSITORY.id}:{fixtures.INIT_BRANCH}"))
+    ]
     assert result.starts_now is True
 
 
@@ -223,7 +226,9 @@ def test_a_second_run_against_a_held_repository_still_creates_but_waits() -> Non
 def test_a_failing_line_is_a_conflict_and_writes_no_run() -> None:
     # a non-terminal Run already holding the branch `repo-init@1` would create fails line 3
     # (`branch`) without touching `plan_ref` at all — the base branch still resolves fine,
-    # so this is the fail-line path and not the `PlanError` one (AC5 below)
+    # so this is the fail-line path and not the `PlanError` one (AC5 below).
+    # operator revision 2026-09-15: partition by (repository, branch) — holder needs
+    # partition_branch set so _holding_run detects it; worktrees alone no longer trigger the check.
     holder = Run(
         id=UUID("01960000-0000-7000-9000-0000000000cc"),
         project_id=fixtures.PROJECT.id,
@@ -232,6 +237,7 @@ def test_a_failing_line_is_a_conflict_and_writes_no_run() -> None:
         template_version=1,
         status="running",
         budget_usd=BUDGET,
+        partition_branch=fixtures.INIT_BRANCH,
         worktrees=(
             Worktree(
                 branch=fixtures.INIT_BRANCH, path="/work/x", created_branch=True, pushed=False
