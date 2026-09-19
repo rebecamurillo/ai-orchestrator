@@ -11,9 +11,12 @@ verifies with the target repository's own commands, and stops only at declared c
 or when an agent is blocked. You talk to it over HTTP; humans watch the same Runs in its
 web UI.
 
-`references/api.md` in this skill is the endpoint reference. Read it when you need exact
-request fields; this file is the protocol — the order things happen in and the rules that
-keep you from fighting the machine.
+`references/api.md` in this skill is the endpoint reference — read it when you need exact
+request fields. `references/spec-folder.md` is the format of the files `epic` and
+`initiative` Runs read from the target repository (`epics.yaml`, `stories.yaml`,
+`SPEC.md`) — read it before authoring or reviewing those files. This file is the
+protocol — the order things happen in and the rules that keep you from fighting the
+machine.
 
 ## Connection
 

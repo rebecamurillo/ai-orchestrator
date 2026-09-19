@@ -61,8 +61,11 @@ project:
 /plugin install orchestrator@optimai
 ```
 
-The bundle also carries the same skill at `../plugin/skills/orchestrator/` for copying
-into a project's `.claude/skills/` directly. Either way, the project needs two values in its environment:
+The bundle also carries the same skill at `../plugin/skills/orchestrator/`;
+`../plugin/install.sh /path/to/project` copies it into a project's `.claude/skills/`,
+adds the two variables to its `.env`, and pings the API to prove the pair works. The
+skill's `references/spec-folder.md` documents the `epics.yaml` / `stories.yaml` /
+`SPEC.md` format the `epic` and `initiative` templates read. Either way, the project needs two values in its environment:
 `ORCHESTRATOR_BASE_URL` (default `http://127.0.0.1:8000`) and `ORCHESTRATOR_TOKEN`.
 
 ## The optional host stack (LiteLLM + Langfuse)
