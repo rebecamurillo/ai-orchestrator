@@ -10,9 +10,12 @@
 # Actions are pinned to a commit, for the reason `ci.yml` gives: a tag can be moved under
 # the pipeline, a commit cannot.
 #
-# The images are private, because the repository is. The host that pulls them authenticates
-# to the registry with a token in its own docker config — the docker daemon's credential,
-# never a container's environment, so AD-5 is untouched by it. DEPLOY.md says how.
+# The images are multi-arch (amd64 + arm64) and intended to be public, so any consumer
+# machine can `docker compose pull` them without a registry login (`deploy/README.md` is
+# the consumer procedure). Visibility itself is a GHCR package setting flipped once in the
+# GitHub UI after the first publish — a workflow cannot set it. Pulling with a credential,
+# where one is used, stays in the docker daemon's own config, never a container's
+# environment, so AD-5 is untouched either way.
 name: release
 
 on:
@@ -60,17 +63,17 @@ jobs:
           fi
           echo "ci is green for ${{ github.sha }} ($runs successful run(s))"
 
-  images:
+  # One native build per (component, architecture). Native, never QEMU: the backend image
+  # installs three npm CLIs and Chromium system libraries, and emulating that does not
+  # finish inside a sane timeout. Each build pushes an arch-suffixed tag
+  # (`:<tag>-amd64`, `:<tag>-arm64`) — deterministic names the merge job below can address
+  # without passing digests between jobs; they stay in the registry as the per-platform
+  # record an incident is debugged from. `backend-api/Dockerfile` already selects its Node
+  # and gh archives from `dpkg --print-architecture`, so both platforms build unchanged.
+  build:
     needs: verify
-    # arm64, natively: the deployment target is an Apple Silicon Mac mini (PRD §12), and
-    # `backend-api/Dockerfile` selects the Node and gh archives from
-    # `dpkg --print-architecture`, so an amd64 image would run under emulation or not at
-    # all. Cross-building this image on an amd64 runner under QEMU means emulating three
-    # npm CLI installs and would not finish inside a sane timeout. If this runner label is
-    # not available on the plan, the fallback is `ubuntu-latest` plus
-    # `docker/setup-qemu-action` and `platforms: linux/arm64` — correct, and slow.
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     strategy:
       # one image per job, so a web-client failure does not hide a backend-api success
       fail-fast: false
@@ -81,10 +84,24 @@ jobs:
           - component: backend-api
             context: .
             dockerfile: backend-api/Dockerfile
+            arch: amd64
+            runner: ubuntu-24.04
+          - component: backend-api
+            context: .
+            dockerfile: backend-api/Dockerfile
+            arch: arm64
+            runner: ubuntu-24.04-arm
           # its own context: the component needs nothing from the rest of the repository
           - component: web-client
             context: ./web-client
             dockerfile: ./web-client/Dockerfile
+            arch: amd64
+            runner: ubuntu-24.04
+          - component: web-client
+            context: ./web-client
+            dockerfile: ./web-client/Dockerfile
+            arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -97,30 +114,90 @@ jobs:
           # the job's own token, scoped by `packages: write` above; no repository secret
           password: ${{ github.token }}
 
-      - name: Build and push ${{ matrix.component }}
+      - name: Build and push ${{ matrix.component }} (${{ matrix.arch }})
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          platforms: linux/arm64
+          platforms: linux/${{ matrix.arch }}
           push: true
-          # Two names for one build. The tag is what DEPLOY.md pins in `.env.prod` and what
-          # an operator says out loud; the commit is what an incident is debugged from, and
-          # it is immutable in a way a tag is not. No `latest`: a stack that runs `latest`
-          # cannot answer which version it is running, which is the question every rollback
-          # starts with.
           tags: |
-            ${{ env.IMAGE_NAMESPACE }}/${{ matrix.component }}:${{ github.ref_name }}
-            ${{ env.IMAGE_NAMESPACE }}/${{ matrix.component }}:sha-${{ github.sha }}
+            ${{ env.IMAGE_NAMESPACE }}/${{ matrix.component }}:${{ github.ref_name }}-${{ matrix.arch }}
           # `docker inspect` on the host answers "what is this" without the registry
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ github.ref_name }}
-          cache-from: type=gha,scope=${{ matrix.component }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
-          # a plain manifest rather than an image index: the host pulls one platform, and
-          # an attestation manifest is one more thing that can differ between `docker pull`
-          # implementations for no benefit here
+          cache-from: type=gha,scope=${{ matrix.component }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}-${{ matrix.arch }}
+          # plain per-arch manifests: an attestation manifest is one more thing that can
+          # differ between `docker pull` implementations for no benefit here
           provenance: false
           sbom: false
+
+  # Stitch the two per-arch manifests into one multi-platform index under the names the
+  # consumer pulls. Two names for one artefact: the tag is what `deploy/.env` pins as
+  # `IMAGE_TAG` and what an operator says out loud; the commit is what an incident is
+  # debugged from, and it is immutable in a way a tag is not. No `latest`: a stack that
+  # runs `latest` cannot answer which version it is running, which is the question every
+  # rollback starts with.
+  merge:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [backend-api, web-client]
+    steps:
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish the multi-arch manifest for ${{ matrix.component }}
+        run: |
+          set -euo pipefail
+          image="${IMAGE_NAMESPACE}/${{ matrix.component }}"
+          docker buildx imagetools create \
+            --tag "${image}:${{ github.ref_name }}" \
+            --tag "${image}:sha-${{ github.sha }}" \
+            "${image}:${{ github.ref_name }}-amd64" \
+            "${image}:${{ github.ref_name }}-arm64"
+          docker buildx imagetools inspect "${image}:${{ github.ref_name }}"
+
+  # The consumer bundle: everything a machine needs to run this release without cloning
+  # the repository — `deploy/` (compose + env contract + procedure), `host/` (the optional
+  # LiteLLM/Langfuse stack) and `plugin/` (the agent-integration skill). Attached to a GitHub
+  # Release under the same tag the images carry, so the bundle and the images can never
+  # name different commits. Tag pushes only: a `workflow_dispatch` from a branch has no
+  # release to attach to.
+  bundle:
+    if: github.ref_type == 'tag'
+    needs: merge
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # create the release and upload its asset — nothing else from this job
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Package and attach the deploy bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bundle="ai-orchestrator-deploy-${{ github.ref_name }}.tar.gz"
+          tar -czf "$bundle" deploy host plugin
+          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            gh release upload "${{ github.ref_name }}" "$bundle" --clobber
+          else
+            gh release create "${{ github.ref_name }}" "$bundle" \
+              --verify-tag \
+              --title "${{ github.ref_name }}" \
+              --notes "Images: \`${IMAGE_NAMESPACE}/{backend-api,web-client}:${{ github.ref_name }}\` (linux/amd64, linux/arm64). Consumer procedure: \`deploy/README.md\` inside the attached bundle."
+          fi
