@@ -958,7 +958,7 @@ export interface components {
             /** Active Seconds */
             active_seconds: number;
             /** Budget Usd */
-            budget_usd: string;
+            budget_usd: string | null;
             /** Provisional */
             provisional: boolean;
             /** Spent Usd */
@@ -1043,6 +1043,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Mode */
+            mode?: string | null;
             /** Path */
             path: string | null;
             /** Text */
@@ -1825,6 +1827,8 @@ export interface components {
             /** Gate Record */
             gate_record: components["schemas"]["GateRecordOut"][];
             header: components["schemas"]["HeaderOut"];
+            /** Reply Available */
+            reply_available?: boolean;
             run: components["schemas"]["RunDetailSummaryOut"];
             /** Steps */
             steps: components["schemas"]["StepRowOut"][];
@@ -1844,7 +1848,7 @@ export interface components {
             /** Branch */
             branch: string;
             /** Budget Usd */
-            budget_usd: string;
+            budget_usd: string | null;
             /** Compare Urls */
             compare_urls: string[];
             /** Created At */
@@ -2032,7 +2036,7 @@ export interface components {
             /** Base Branch */
             base_branch: string;
             /** Budget Usd */
-            budget_usd: number | string;
+            budget_usd?: (number | string) | null;
             /** Harness */
             harness?: string | null;
             /** Inputs */
@@ -2101,7 +2105,7 @@ export interface components {
             /** Branch */
             branch: string;
             /** Budget Usd */
-            budget_usd: string;
+            budget_usd: string | null;
             /** Created At */
             created_at: string;
             /**
@@ -2204,6 +2208,8 @@ export interface components {
             path: string;
             /** Reason */
             reason: string | null;
+            /** Retry Prompt */
+            retry_prompt?: string | null;
             /** Seq */
             seq: number;
             /** Status */

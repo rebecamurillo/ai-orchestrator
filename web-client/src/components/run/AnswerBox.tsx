@@ -9,23 +9,40 @@
  * `disabled` while the textarea is empty is a rule and not a nicety: `signal_run` records
  * whatever the payload held, so an empty Answer would archive the Story file and re-dispatch
  * with a clause quoting nothing — a Run resumed into the same gap it stopped in.
+ *
+ * When `replyAvailable` is true (story 3-4), two labelled radio buttons let the Operator
+ * choose the delivery mode before submitting. The mode is forwarded through `onAnswer`.
  */
 import { useState } from 'react';
 
 import type { components } from '../../api/schema';
-import { ANSWER_LABEL, answerHint, type AnswerTarget } from '../../lib/run/answer';
+import {
+  ANSWER_LABEL,
+  SESSION_ANSWER_HINT,
+  answerHint,
+  type AnswerTarget,
+} from '../../lib/run/answer';
 
 type ProblemDetail = components['schemas']['ProblemDetail'];
 
 interface Props {
   target: AnswerTarget;
-  onAnswer: (text: string) => void;
+  onAnswer: (text: string, mode: string) => void;
   posting: boolean;
   error: ProblemDetail | null;
+  /** When true, show the restart/session mode selector (story 3-4). */
+  replyAvailable?: boolean;
 }
 
-export default function AnswerBox({ target, onAnswer, posting, error }: Props) {
+export default function AnswerBox({
+  target,
+  onAnswer,
+  posting,
+  error,
+  replyAvailable = false,
+}: Props) {
   const [text, setText] = useState('');
+  const [mode, setMode] = useState<'restart' | 'session'>('restart');
   const empty = text.trim().length === 0;
 
   return (
@@ -38,16 +55,43 @@ export default function AnswerBox({ target, onAnswer, posting, error }: Props) {
         onChange={(event) => setText(event.target.value)}
         aria-label="Answer to the blocking condition"
       />
-      <p className="wf-answer-hint" data-testid="wf-answer-hint">
-        {answerHint(target)}
-      </p>
+      {replyAvailable ? (
+        <div className="wf-answer-modes" data-testid="wf-answer-modes">
+          <label className="wf-answer-mode-label">
+            <input
+              type="radio"
+              name="answer-mode"
+              value="restart"
+              checked={mode === 'restart'}
+              onChange={() => setMode('restart')}
+            />
+            {' Restart — '}
+            {answerHint(target)}
+          </label>
+          <label className="wf-answer-mode-label">
+            <input
+              type="radio"
+              name="answer-mode"
+              value="session"
+              checked={mode === 'session'}
+              onChange={() => setMode('session')}
+            />
+            {' Session — '}
+            {SESSION_ANSWER_HINT}
+          </label>
+        </div>
+      ) : (
+        <p className="wf-answer-hint" data-testid="wf-answer-hint">
+          {answerHint(target)}
+        </p>
+      )}
       <div className="wf-answer-actions">
         <button
           type="button"
           className="wf-signal wf-answer-submit"
           data-testid="wf-signal-answer"
           disabled={empty || posting}
-          onClick={() => onAnswer(text.trim())}
+          onClick={() => onAnswer(text.trim(), mode)}
         >
           {ANSWER_LABEL}
         </button>

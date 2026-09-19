@@ -56,6 +56,9 @@ class KindMeta:
     with_keys: frozenset[str]
     #: True when the planner inserts the kind and a Template may not name it.
     planner_only: bool = False
+    #: Minutes of filesystem silence before the stall detector kills the process.
+    #: `None` for kinds that do not use the stall detector (shell, git.*, etc.).
+    stall_default_min: int | None = None
 
 
 #: Every step kind there is (spine "Shipped kinds"). The only enumeration of kinds.
@@ -66,8 +69,9 @@ KIND_META: dict[str, KindMeta] = {
     "shell": KindMeta("deterministic", 30, frozenset({"command"})),
     "agent": KindMeta(
         "liveness",
-        90,
+        None,
         frozenset({"harness", "model", "skill", "args", "prompt_extra"}),
+        stall_default_min=30,
     ),
     "git.commit": KindMeta("deterministic", 5, frozenset({"message"})),
     "git.push": KindMeta("deterministic", 5, frozenset({"branch"})),

@@ -71,8 +71,11 @@ describe('NewWorkflowFields', () => {
     expect(render()).toContain('placeholder="harness default"');
   });
 
-  it('marks budget required, since a run cannot start without one', () => {
-    expect(render()).toMatch(/data-testid="newwf-budget"[^>]*required|required[^>]*newwf-budget/);
+  it('marks budget optional and labels it accordingly', () => {
+    // Operator decision 2026-09-17: budget field is optional (story 3-2)
+    const markup = render();
+    expect(markup).not.toMatch(/data-testid="newwf-budget"[^>]*required|required[^>]*newwf-budget/);
+    expect(markup).toContain('(optional)');
   });
 
   it('renders the clone-check note beside the repository only when given one', () => {

@@ -82,7 +82,7 @@ class RunRow(Base):
     plan_ref: Mapped[str | None] = mapped_column(Text(), nullable=True)
     plan_refs: Mapped[dict[str, str]] = mapped_column(JSONB())
     engine_ref: Mapped[dict[str, Any]] = mapped_column(JSONB())
-    budget_usd: Mapped[Decimal] = mapped_column(MONEY)
+    budget_usd: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     spend_usd: Mapped[Decimal] = mapped_column(MONEY)
     spend_provisional: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
     manual_estimate_h: Mapped[Decimal | None] = mapped_column(HOURS, nullable=True)

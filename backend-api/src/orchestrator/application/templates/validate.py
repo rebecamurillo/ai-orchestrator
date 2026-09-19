@@ -180,6 +180,7 @@ def _step(node: LinedMap) -> Step:
         params=_params(node, params, kind),
         gate=node.get("gate"),
         timeout_min=node.get("timeout_min"),
+        stall_min=node.get("stall_min"),
         on_fail=action,
         redispatch=redispatch,
         redispatch_max=limit,

@@ -36,6 +36,7 @@ export default function GateRecord({ detail, token }: Props) {
           <span>{record.event}</span>
           <span>{record.actor}</span>
           <span>{record.text}</span>
+          {record.mode ? <span data-testid="wf-gate-mode">{record.mode}</span> : null}
         </p>
       ))}
     </section>

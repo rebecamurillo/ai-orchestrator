@@ -8,6 +8,7 @@ every private helper stay there; only the shapes they build live here, the same 
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -56,6 +57,10 @@ class RunViewPorts:
     #: (story 1-2, AD-15). Every `RunViewPorts(...)` written before this story compiles
     #: unchanged — the new field is optional with default `None`, last in the list.
     git: Git | None = None
+    #: `None` degrades to `reply_available=False` (story 3-4): a read that was not wired for
+    #: the mode selector simply publishes `reply_available=False`, and every frozen
+    #: `RunViewPorts(...)` construction predating this story keeps compiling unchanged.
+    harness_is_resumable: Callable[[str], bool] | None = None
 
 
 @dataclass(frozen=True)
@@ -210,6 +215,9 @@ class StepRowView:
     latest: LatestAttempt | None
     #: This row's own attempts, summed (5.3). Defaulted: predates this story.
     cost_usd: Decimal = Decimal("0")
+    #: The resolved retry prompt from `with_resolved["retry"]["prompt"]` (story 3-5).
+    #: `None` when the step has no retry block or the prompt key is absent.
+    retry_prompt: str | None = None
 
 
 @dataclass(frozen=True)
@@ -224,7 +232,7 @@ class StoryCell:
 @dataclass(frozen=True)
 class Cost:
     spent_usd: Decimal
-    budget_usd: Decimal
+    budget_usd: Decimal | None
     tokens_in: int
     tokens_out: int
     wall_clock_seconds: float
@@ -262,3 +270,7 @@ class RunDetailView:
     #: existing constructions and the tests that build a `RunDetailView` by hand keep
     #: compiling — `use_cases/terminal.py`'s docstring lists the five `None` cases.
     terminal: Terminal | None = None
+    #: `True` when the latest attempt has a session_id and the harness supports resume
+    #: (story 3-4). Defaulted so every `RunDetailView(...)` construction predating this
+    #: story keeps compiling. `False` whenever `harness_is_resumable` is not wired.
+    reply_available: bool = False

@@ -86,12 +86,14 @@ describe('NewWorkflowFields tooltips and mandatory marks', () => {
     expect(label).toContain('BASE BRANCH *');
   });
 
-  it('BUDGET label has a non-empty title= and * mark, no (optional)', () => {
+  it('BUDGET label has a non-empty title= and (optional) mark, no *', () => {
+    // story 3-2 (2026-09-17) made the budget optional — tracked, no cap when blank — so the
+    // story 2-5 mandatory * became (optional); the tooltip requirement is unchanged.
     const markup = renderFields();
     const label = labelContaining(markup, 'data-testid="newwf-budget"');
     expect(label).toMatch(/title="[^"]+"/);
-    expect(label).toContain('BUDGET (USD) *');
-    expect(label).not.toContain('(optional)');
+    expect(label).toContain('BUDGET (USD) (optional)');
+    expect(label).not.toContain('BUDGET (USD) *');
   });
 
   it('MODEL label has a non-empty title= and (optional) mark', () => {

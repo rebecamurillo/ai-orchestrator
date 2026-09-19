@@ -1,40 +1,15 @@
-"""The `agent` kind's **Story-file contract**: finding the file, keeping it unambiguous, and
-routing on it (AD-9, AD-13, FR-16, FR-17).
+"""The `agent` kind's **Story-file contract**: finding the file, keeping it unambiguous,
+and routing on it (AD-9, AD-13, FR-16, FR-17).
 
-Split out of `steps/agent.py` because that module is at its 400-line cap and because this is
-one subject: `story_files` asks the row's liveness glob, `archive_ambiguous` repairs an
-answer that named more than one file, and `tail` routes on the one that is left. The
-dependency runs one way — `agent.py` imports this module, never the reverse — so what both
-need (`resolved_text`, `committed`, and the three questions about which re-dispatch this is)
-lives one layer down, in `context.py`. `archive_ambiguous` is the one function here the
-*prepare* phase calls; it is here rather than in `agent.py` because it is the same glob and
-the same ambiguity rule the routing below refuses to guess at.
+Split out of `steps/agent.py` at the 400-line cap. `story_files` asks the row's liveness
+glob, `archive_ambiguous` repairs ambiguity, and `tail` routes on the one file that is left.
 
-**The order inside `tail` is AD-9's tail order, and it is the module's whole shape:**
+**Tail order (AD-9):** (1) protected-path check before routing — FR-31: anchor wins;
+(2) routing via `rules/routing.py`; (3) budget check after routing — FR-17: step keeps
+the status routing chose. `re_check` is the Operator's *Accept* path; `_spend_and_budget`
+parks `budget` on top of whatever `route` decided (FR-17).
 
-1. the protected-path check (5.6), *before* the routing — FR-31 says a modified anchor wins
-   over every route, which it cannot do from behind one;
-2. the routing (this story), which is `rules/routing.py` and nothing else: this module reads
-   the glob and the file and hands the rule plain values;
-3. the attempt's spend and the budget check (5.7), *after* the routing — FR-17 says the step
-   keeps the status its file routed to and the Run parks on top of it.
-
-The first is `protected` below, over `rules/protected_paths.py` and the anchors the walker
-resolved onto `RunEnvironment` — and `re_check` is where the Operator's *Accept* comes back
-to it, because answering a `protected_path` park re-runs this tail and dispatches nothing
-(AD-9). The third is `_spend_and_budget`: it records this attempt's spend through the
-Gateway (`application/use_cases/spend.py`), then parks `budget` on top of whatever `route`
-decided — the row keeps the status it reached, the Run stops for the Operator. A harness
-that stopped for its own `--max-budget-usd` cap (AD-10, FR-14) is folded into the same
-check rather than left to `route`, which would read the cut-off dispatch as an expect miss
-or send it down the retry path (FR-17 forbids both).
-
-**`done` still means "observed".** The row's gate is `liveness` and this module never
-changes it: a Story step is green only when the `verify` row after it says so (NFR-2). A row
-that declared no `expect` contract at all has nothing to evaluate and reports exactly what it
-observed — the shipped Templates all declare one (`application/templates/agent_row.py` writes
-`expect` onto every planned `agent` row), so that is a row from outside the dev loop, not a
-Story that escaped its contract.
+**`done` still means "observed".** Gate is `liveness`; green only when `verify` says so.
 """
 
 from __future__ import annotations
@@ -90,6 +65,10 @@ AMBIGUOUS = 2
 #: harness never got to write a file, so there is nothing for FR-16 to read.
 TIMED_OUT = "timeout {path} after {n} min"
 
+#: FR-10: the stall detector found no filesystem activity under `cwd` for `n` minutes.
+#: Verbatim format: `{path}` is the monitored worktree, `{n}` is `stall_min` (FR-10, NFR-8).
+STALLED = "stalled {path}: no activity for {n} min"
+
 #: What an anchor an attempt touched stops the Run with (AD-17), and how the files are named.
 #: A sentence of its own rather than `git_commit.py`'s: that one is about a commit that was
 #: refused, this one is about a dispatch that has already happened.
@@ -113,7 +92,11 @@ CAP_EXIT_VALUE = "error_max_budget_usd"
 
 
 def finish(
-    ctx: StepContext, attempt: Attempt, result: HarnessResult, timeout_min: float
+    ctx: StepContext,
+    attempt: Attempt,
+    result: HarnessResult,
+    timeout_min: float | None,
+    stall_min: float | None = None,
 ) -> StepResult:
     """Record what the harness did, then say what the row reached; `mark_finished` runs
     first, so a killed attempt is as fully recorded as one that exited cleanly (AD-8).
@@ -124,7 +107,7 @@ def finish(
     commit commits that edit, and that commit falls *between* attempt 1's `end_sha` and
     attempt 2's `start_sha` — inside no agent range `walk_frame.py` collects, and gone
     from the tree the commit-guard reads. FR-31's "a modified anchor wins over every route"
-    is the same sentence for this stop as for the routed ones.
+    is the same sentence for this stop as for the routed ones.  The same applies to a stall.
     """
     finished = attempt.model_copy(
         update={
@@ -137,6 +120,20 @@ def finish(
         }
     )
     committed(ctx, lambda attempts: attempts.mark_finished(finished))
+    if result.stalled:
+        hit = protected(ctx, finished)
+        if hit is not None:
+            return hit.model_copy(update={"output_ref": str(result.log_path)})
+        stall_path = result.stall_cwd if result.stall_cwd is not None else "(unknown)"
+        stall_n = stall_min if stall_min is not None else 30
+        reason = STALLED.format(path=stall_path, n=stall_n)
+        return StepResult(
+            status="error",
+            gate=ctx.row.gate,
+            output_ref=str(result.log_path),
+            reason=reason,
+            park=Park(kind="timeout", reason=reason, path=ctx.row.path),
+        )
     if result.timed_out:
         hit = protected(ctx, finished)
         if hit is not None:

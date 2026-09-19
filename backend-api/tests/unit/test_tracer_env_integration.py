@@ -69,6 +69,8 @@ def test_the_attempt_spans_traceparent_appears_verbatim_as_traceparent_in_the_en
             settings=settings,
             traceparent=span.traceparent,
         )
+        # Operator revision 2026-09-15: agent steps no longer carry a 90-min wall-clock
+        # default; `timeout_min=None` means no deadline (stall detection is the guard instead).
         harness.run(
             cwd=Path("/work/wt/a"),
             prompt="build story 5-1",
@@ -76,7 +78,7 @@ def test_the_attempt_spans_traceparent_appears_verbatim_as_traceparent_in_the_en
             model=None,
             session_id="s-1",
             budget_usd_remaining=Decimal("10"),
-            timeout_min=90.0,
+            timeout_min=None,
             log_path=Path("/work/logs/a.log"),
         )
 

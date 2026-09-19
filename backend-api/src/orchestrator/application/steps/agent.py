@@ -18,18 +18,13 @@ middle write is the one thing a *resumed* session skips — `Harness.resume` is 
 which is the very case this guards — while `end_sha` is written only by the tail.
 
 **One resume reaches this module and dispatches nothing.** A `continue` carrying accepted
-files answers a `protected_path` park (AD-17): the work is already in the worktree, so
-`agent_tail.re_check` re-runs the check and the routing over the previous attempt and
-`execute` returns that — before the orphan control, before the WIP commit, before anything
-here would put a commit of its own in front of the range about to be read.
+files runs only the check and routing over the previous attempt — `agent_tail.re_check`
+handles it before any new commits are placed in front of the range it reads.
 
 **Three re-dispatches reach this module and are not the same dispatch** (AD-9, AD-13): the
-Template's own `retry`, which resumes the session or prepends its prompt to a fresh one; a
-person's *Retry* from a stop, which archives every extra Story file an ambiguity left before
-anything reads the glob again (AD-13); a `verify` redispatch, which hands
-the agent its file back at `in-progress` with a `## Verify Failure` section (FR-10).
-`context.retrying`, `context.operator_retry` and `context.redispatched` tell them apart, off
-`StepContext` alone.
+Template's own `retry`; a person's *Retry* from a stop; and a `verify` redispatch that
+hands the agent its file back at `in-progress` with a `## Verify Failure` section (FR-10).
+`context.retrying`, `context.operator_retry` and `context.redispatched` tell them apart.
 """
 
 from __future__ import annotations
@@ -69,7 +64,7 @@ from orchestrator.application.templates.agent_row import (
     SPEC_FOLDER_KEY,
     STORY_ID_KEY,
 )
-from orchestrator.application.templates.rows import TIMEOUT_KEY
+from orchestrator.application.templates.rows import STALL_KEY, TIMEOUT_KEY
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.ids import new_id
@@ -116,8 +111,10 @@ LOCK_POLL_SECONDS, LOCK_TIMEOUT_SECONDS = 1.0, 30.0
 #: reports a refusal as `()`, so AD-17's set would come back empty and nothing would fail.
 WHOLE_TREE = "."
 
-#: `KIND_META["agent"].timeout_default_min` — what a row carrying no resolved timeout gets.
-DEFAULT_TIMEOUT_MIN = 90
+#: No wall-clock deadline by default (operator revision 2026-09-15: 90-min kill → stall).
+DEFAULT_TIMEOUT_MIN = None
+#: Minutes of filesystem silence before the stall detector kills the process (FR-10).
+DEFAULT_STALL_MIN = 30
 
 
 @dataclass(frozen=True)
@@ -144,7 +141,9 @@ class AgentExecutor:
             return found
         _orphan_control(ctx)
         _wip_commit(ctx)
-        _prepare_writes(ctx)
+        mode = ctx.resume_signal.payload.get("mode") if ctx.resume_signal else None
+        if mode != "session":
+            _prepare_writes(ctx)
         return _dispatch(ctx, found, _start(ctx))
 
 
@@ -193,9 +192,7 @@ def _harness(ctx: StepContext) -> Harness | StepResult:
 
 
 def _orphan_control(ctx: StepContext) -> None:
-    """Kill whatever the last attempt left running, wait for git to clear its own crash lock,
-    then close the attempt (AD-14, FR-12). The wait is bounded and never raises: the row goes
-    on either way, and the commit that follows reports the lock if it is still there."""
+    """Kill orphan process, wait on git lock, close interrupted attempt (AD-14, FR-12)."""
     previous = ctx.previous_attempt
     if previous is None or previous.pgid is None or previous.end_sha is not None:
         return
@@ -212,9 +209,7 @@ def _orphan_control(ctx: StepContext) -> None:
 
 
 def _wip_commit(ctx: StepContext) -> None:
-    """Commit what a previous dispatch left, so this row starts tracked (AD-9): the answer
-    archive stages the story file's old path, which only a tracked file stages as a
-    deletion. First-dispatch dirt is earlier rows' writes, owed to their commit step."""
+    """Commit leftover dirt so this row starts tracked (AD-9)."""
     if ctx.previous_attempt is None:
         return
     worktree = require_cwd(ctx)
@@ -226,15 +221,7 @@ def _wip_commit(ctx: StepContext) -> None:
 
 
 def _prepare_writes(ctx: StepContext) -> None:
-    """The orchestrator's writes into the worktree, and the one commit holding exactly them.
-
-    The archives run first: everything after them reads the glob they leave. Their renames
-    are staged alongside the files written, because they are this row's writes too — an
-    unstaged move would still be in the tree at `start_sha` and 5.6 would read it as the
-    agent's (AD-17, FR-31), and it would dirty the whole-tree commit guard while leaving the
-    index empty. Files are staged by name and the tree asked afterwards, so unchanged bytes
-    leave no empty commit.
-    """
+    """Orchestrator writes + prepare commit (skipped for session-mode delivery)."""
     moved = (*agent_answer.archive_with_answer(ctx), *agent_tail.archive_ambiguous(ctx))
     written = (_context_document(ctx), _verify_failure(ctx))
     targets = [*moved, *(target for target in written if target is not None)]
@@ -303,11 +290,7 @@ def _start(ctx: StepContext) -> Attempt:
 
 
 def _frozen_test_files(ctx: StepContext, start_sha: str | None) -> tuple[str, ...] | None:
-    """AD-17's anchors, as the *committed tree* at `start_sha` holds them (AD-17, 5.6).
-    Through `Git.list_files` and not off the worktree: 5.6 compares this set against
-    `diff_names(start_sha, end_sha)`, and globbing the filesystem would carry directory
-    entries and untracked files no commit range can name. Skipped only for an attempt whose
-    predecessor actually *reached* `start_sha`."""
+    """AD-17 anchors from committed tree at start_sha; skips if predecessor reached it."""
     previous = ctx.previous_attempt
     if start_sha is None or (previous is not None and previous.start_sha is not None):
         return None
@@ -327,7 +310,7 @@ def _dispatch(ctx: StepContext, harness: Harness, attempt: Attempt) -> StepResul
 
 
 def _planned(ctx: StepContext, harness: Harness, attempt: Attempt) -> _Dispatch:
-    """Which of the three dispatches this is, and what it carries (FR-16, AD-10).
+    """Which of the three dispatches this is, and what it carries (FR-16, AD-10, AD-13).
     `compose_prompt` never sees a retry prompt: a resumed session already holds the context
     that sentence would repeat, while a session that cannot be resumed — the contract said
     not to, the harness cannot, or the last attempt recorded none — is a new one, which
@@ -335,7 +318,12 @@ def _planned(ctx: StepContext, harness: Harness, attempt: Attempt) -> _Dispatch:
     previous = ctx.previous_attempt
     retry = agent_tail.retry_of(ctx) if retrying(ctx) else None
     session, resumable = str(new_id()), previous.session_id if previous is not None else None
-    if retry is not None and retry.resume_session and harness.capabilities.resume and resumable:
+    operator_mode = ctx.resume_signal.payload.get("mode") if ctx.resume_signal else None
+    can_res = harness.capabilities.resume and resumable is not None
+    tpl_ok = retry is not None and retry.resume_session
+    if operator_mode == "session" and can_res:
+        return _Dispatch(harness, attempt, _session_message(ctx), session, resumable)
+    if operator_mode != "restart" and tpl_ok and can_res and retry is not None:
         return _Dispatch(harness, attempt, retry.prompt, session, resumable)
     prompt = compose_prompt(ctx.with_resolved, agent_answer.resolved_signal(ctx), previous)
     if retry is not None:
@@ -348,7 +336,8 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
     resumed session skips the middle write: `Harness.resume` is one call, so no handle sits
     between two halves for a dead backend to lose."""
     run, environment = require_run(ctx), require_env(ctx)
-    timeout_min = ctx.with_resolved.get(TIMEOUT_KEY) or DEFAULT_TIMEOUT_MIN
+    timeout_min = ctx.with_resolved.get(TIMEOUT_KEY)
+    stall_min = ctx.with_resolved.get(STALL_KEY, DEFAULT_STALL_MIN)
     env = require_harness_env(ctx)(
         dispatch.attempt,
         run=run,
@@ -366,17 +355,19 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
             env=env,
             timeout_min=timeout_min,
             log_path=log_path(ctx),
+            stall_min=stall_min,
         )
-        return agent_tail.finish(ctx, dispatch.attempt, resumed, timeout_min)
+        return agent_tail.finish(ctx, dispatch.attempt, resumed, timeout_min, stall_min)
     handle = dispatch.harness.start(
         cwd=require_cwd(ctx),
         prompt=dispatch.prompt,
         env=env,
         model=(_text(ctx, MODEL_KEY) or None),
         session_id=dispatch.session_id,
-        budget_usd_remaining=run.budget_usd - run.spend_usd,
+        budget_usd_remaining=run.budget_usd - run.spend_usd if run.budget_usd is not None else None,
         timeout_min=timeout_min,
         log_path=log_path(ctx),
+        stall_min=stall_min,
     )
     # the session travels with the group: a dead backend must leave a resumable attempt
     running = dispatch.attempt.model_copy(
@@ -388,13 +379,20 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
         # the only frame holding the handle: an escape without a kill is AD-14's orphan
         require_process(ctx).kill_group(handle.pgid)
         raise
-    return agent_tail.finish(ctx, running, dispatch.harness.wait(handle), timeout_min)
+    return agent_tail.finish(ctx, running, dispatch.harness.wait(handle), timeout_min, stall_min)
 
 
 def _text(ctx: StepContext, key: str) -> str:
     """One of this row's resolved keys as a string — `STORY_ID_KEY` is the Story it works
     on, flattened onto the row by the planner (AD-7)."""
     return resolved_text(ctx.with_resolved, key)
+
+
+def _session_message(ctx: StepContext) -> str:
+    if ctx.resume_signal is not None and ctx.resume_signal.event == ANSWER_EVENT:
+        return str(ctx.resume_signal.payload.get("text", ""))
+    retry = agent_tail.retry_of(ctx)
+    return retry.prompt if retry is not None else ""
 
 
 register(KIND, AgentExecutor())

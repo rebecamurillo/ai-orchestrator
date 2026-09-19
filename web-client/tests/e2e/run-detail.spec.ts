@@ -459,4 +459,36 @@ test.describe('/workflows/[id] (Run detail)', () => {
 
     await expect(page.getByTestId('wf-header')).toBeVisible();
   });
+
+  test('shows retry-prompt sub-row when step has retry_prompt', async ({ page }) => {
+    await mockDetail(
+      page,
+      detail({
+        steps: [stepRow({ seq: 1, retry_prompt: 'some-prompt' })],
+      }),
+    );
+    await page.goto(URL);
+
+    await expect(page.getByTestId('wf-header')).toBeVisible();
+    // the Steps table lives in the tabbed region and renders once STEPS is chosen
+    await page.getByRole('button', { name: 'STEPS' }).click();
+    await expect(page.getByTestId('wf-step-1-retry-prompt')).toBeVisible();
+    await expect(page.getByTestId('wf-step-1-retry-prompt')).toContainText('some-prompt');
+  });
+
+  test('does not show retry-prompt sub-row when step has no retry_prompt', async ({ page }) => {
+    await mockDetail(
+      page,
+      detail({
+        steps: [stepRow({ seq: 1 })],
+      }),
+    );
+    await page.goto(URL);
+
+    await expect(page.getByTestId('wf-header')).toBeVisible();
+    // open STEPS so the absence is asserted against a rendered table, not an empty tab
+    await page.getByRole('button', { name: 'STEPS' }).click();
+    await expect(page.getByTestId('wf-step-1')).toBeVisible();
+    await expect(page.getByTestId('wf-step-1-retry-prompt')).toHaveCount(0);
+  });
 });

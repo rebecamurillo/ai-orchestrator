@@ -325,6 +325,7 @@ def test_the_gate_record_timestamp_carries_its_zone() -> None:
 #: The columns a later story fills, which therefore start `NULL`.
 NULLABLE = {
     "run": {
+        "budget_usd",  # Operator decision 2026-09-17: run.budget_usd nullable (story 3-2)
         "plan_ref",
         "manual_estimate_h",
         "park_kind",
@@ -808,6 +809,22 @@ def test_writing_an_attempt_the_table_does_not_hold_is_refused(method: str) -> N
 
     with pytest.raises(ValueError, match="no attempt with id"):
         getattr(attempts_repository(session), method)(an_attempt())
+
+
+def test_latest_for_run_orders_by_started_at_descending() -> None:
+    attempt = an_attempt(n=2)
+    session = RecordingSession(scalars_queue=[[AttemptRow(**attempts_module.row_values(attempt))]])
+
+    assert attempts_repository(session).latest_for_run(attempt.run_id) == attempt
+    rendered = str(session.statements[0])
+    assert "attempt.run_id" in rendered
+    assert "ORDER BY attempt.started_at DESC" in rendered
+
+
+def test_latest_for_run_is_none_when_no_attempts_exist() -> None:
+    session = RecordingSession(scalars_queue=[[]])
+
+    assert attempts_repository(session).latest_for_run(new_id()) is None
 
 
 # ── SQLAlchemyGateRecordRepository ───────────────────────────────────────────

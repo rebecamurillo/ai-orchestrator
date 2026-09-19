@@ -90,6 +90,9 @@ COMMAND_KEY = "command"
 #: are `agent_row`'s, because only that kind has them.
 TIMEOUT_KEY = "timeout_min"
 
+#: The key the planner writes onto agent rows' `with_resolved` for the stall detector.
+STALL_KEY = "stall_min"
+
 #: What one loop item is called in a label: the Story by its own id, the epic by its place.
 STORY_LABEL = "story"
 EPIC_LABEL = "epic"
@@ -345,6 +348,9 @@ def _resolved(step: Step, frame: Frame) -> dict[str, Any]:
     timeout = step.timeout_min if step.timeout_min is not None else step.meta.timeout_default_min
     if timeout is not None:
         resolved[TIMEOUT_KEY] = timeout
+    stall = step.stall_min if step.stall_min is not None else step.meta.stall_default_min
+    if stall is not None:
+        resolved[STALL_KEY] = stall
     routing = _routing(step, frame)
     if routing is not None:
         resolved[ON_FAIL_KEY] = routing

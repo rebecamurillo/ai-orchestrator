@@ -86,6 +86,10 @@ INVALID_STATUS_TOKEN = "invalid status_in token"
 #: malformed value already has its own reason.
 INVALID_VALUE = "invalid value"
 
+#: A retry block must carry a non-empty `prompt` — absent or empty is not a recoverable
+#: default (story 3-5).
+RETRY_PROMPT_REQUIRED = "retry prompt required"
+
 # --- the tree ---------------------------------------------------------------------------
 
 
@@ -149,6 +153,7 @@ class Step(BaseModel):
     #: never filled in from `meta.gate_default`.
     gate: Gate | None = None
     timeout_min: int | None = None
+    stall_min: int | None = None
     on_fail: OnFailAction | None = None
     redispatch: str | None = None
     redispatch_max: int | None = None

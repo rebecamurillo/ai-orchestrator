@@ -17,6 +17,7 @@ import StopBody from '../../src/components/run/StopBody';
 import {
   ANSWER_HINT_WITHOUT_STORY,
   ANSWER_LABEL,
+  SESSION_ANSWER_HINT,
   answerBody,
   answerHint,
   answerTarget,
@@ -292,10 +293,10 @@ describe('what the box knows', () => {
     expect(render(detail, 'BLK')).toContain(ANSWER_HINT_WITHOUT_STORY);
   });
 
-  it('posts the Operator’s text under the key signal_run stores it as', () => {
+  it('posts the Operator text with mode in payload (story 3-4: mode defaults to restart)', () => {
     expect(answerBody('post it to the channel')).toEqual({
       kind: 'answer',
-      payload: { text: 'post it to the channel' },
+      payload: { text: 'post it to the channel', mode: 'restart' },
     });
   });
 
@@ -304,5 +305,57 @@ describe('what the box knows', () => {
     expect(offersAnswer(blocked(), 'checkpoint')).toBe(false);
     expect(offersAnswer(blocked({ admitted_signals: [] }), 'blocked')).toBe(false);
     expect(offersAnswer(blocked(), null)).toBe(false);
+  });
+
+  it('includes mode: session in payload when session is passed (story 3-4)', () => {
+    expect(answerBody('the text', 'session')).toEqual({
+      kind: 'answer',
+      payload: { text: 'the text', mode: 'session' },
+    });
+  });
+});
+
+describe('mode selector in AnswerBox (story 3-4)', () => {
+  it('renders two radio inputs when replyAvailable is true', () => {
+    const html = renderToStaticMarkup(
+      createElement(AnswerBox, {
+        target: { storyId: STORY_ID, attempt: 1 },
+        onAnswer: () => {},
+        posting: false,
+        error: null,
+        replyAvailable: true,
+      }),
+    );
+
+    expect(html.match(/<input[^>]*type="radio"/g)?.length).toBe(2);
+  });
+
+  it('shows the session hint text when replyAvailable is true', () => {
+    const html = renderToStaticMarkup(
+      createElement(AnswerBox, {
+        target: { storyId: STORY_ID, attempt: 1 },
+        onAnswer: () => {},
+        posting: false,
+        error: null,
+        replyAvailable: true,
+      }),
+    );
+
+    expect(html).toContain(SESSION_ANSWER_HINT);
+  });
+
+  it('shows no radio inputs and only the restart hint when replyAvailable is false', () => {
+    const html = renderToStaticMarkup(
+      createElement(AnswerBox, {
+        target: { storyId: STORY_ID, attempt: 1 },
+        onAnswer: () => {},
+        posting: false,
+        error: null,
+        replyAvailable: false,
+      }),
+    );
+
+    expect(html).not.toContain('<input');
+    expect(html).not.toContain(SESSION_ANSWER_HINT);
   });
 });

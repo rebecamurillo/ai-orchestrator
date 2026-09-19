@@ -198,6 +198,7 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
     # Read once and shared: the detail publishes the whole gate record, and `_alert` needs
     # the park's own entry off the same list (6.6) rather than a second query for it.
     records = ports.gate_records.list_for_run(run.id)
+    reply_available = _reply_available(ports, run)
     return RunDetailView(
         run=run,
         header=_header(run, project, repository),
@@ -209,6 +210,7 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
         admitted_signals=admitted,
         summary=_summary(run, rows),
         terminal=_terminal(ports, run, park_row, _latest_of(park_attempts), project),
+        reply_available=reply_available,
     )
 
 
@@ -235,6 +237,19 @@ def _terminal(
         attempt,
         project_slug=project.slug if project is not None else "",
     )
+
+
+def _reply_available(ports: RunViewPorts, run: Run) -> bool:
+    """True when the latest attempt has a session_id and the harness supports resume (story 3-4).
+
+    `None` for `harness_is_resumable` is the safe-unwired case: the same precedent as
+    `terminal` — an unwired read publishes `reply_available=False` without failing.
+    """
+    if ports.harness_is_resumable is None:
+        return False
+    a = ports.attempts.latest_for_run(run.id)
+    harness = a.harness or "" if a is not None else ""
+    return a is not None and a.session_id is not None and ports.harness_is_resumable(harness)
 
 
 def _header(run: Run, project: Project | None, repository: Repository | None) -> Header:
@@ -279,6 +294,11 @@ def _latest_of(attempts: Sequence[Attempt]) -> Attempt | None:
 def _step_row(ports: RunViewPorts, row: StepRun, attempts: Sequence[Attempt]) -> StepRowView:
     latest = _latest_of(attempts)
     cost_usd = sum((attempt.cost_usd or Decimal("0") for attempt in attempts), Decimal("0"))
+    retry_prompt = (
+        row.with_resolved.get("retry", {}).get("prompt")
+        if isinstance(row.with_resolved.get("retry"), dict)
+        else None
+    )
     return StepRowView(
         seq=row.seq,
         path=row.path,
@@ -291,6 +311,7 @@ def _step_row(ports: RunViewPorts, row: StepRun, attempts: Sequence[Attempt]) ->
         attempts=len(attempts),
         latest=_latest_attempt(ports, latest) if latest is not None else None,
         cost_usd=cost_usd,
+        retry_prompt=retry_prompt if isinstance(retry_prompt, str) else None,
     )
 
 

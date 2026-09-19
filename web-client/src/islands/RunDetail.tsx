@@ -50,7 +50,13 @@ import { isFile } from '../lib/run/artifacts';
 import { anchoredSeq, PROMOTED_MS, stepAnchorId } from '../lib/run/anchor';
 import { isSpecCheckpoint, plannedFilePath } from '../lib/run/checkpoint';
 import { detailRequestPath, runToken, stopKind, type RunDetailOut } from '../lib/run/detail';
-import { signalBody, signalsRequestPath, type SignalIn, type SignalKind } from '../lib/run/signals';
+import {
+  retryBody,
+  signalBody,
+  signalsRequestPath,
+  type SignalIn,
+  type SignalKind,
+} from '../lib/run/signals';
 import { terminalBlock, TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
 import { startTracking, stopTracking } from '../stores/activity';
@@ -248,7 +254,9 @@ export default function RunDetail({ runId }: Props) {
           onCancelClick={() => setCancelOpen(true)}
           posting={posting}
           error={signalError}
-          onAnswer={(text) => void sendSignal('answer', answerBody(text))}
+          onAnswer={(text, mode) => void sendSignal('answer', answerBody(text, mode))}
+          onRetry={(mode) => void sendSignal('retry', retryBody(mode))}
+          replyAvailable={detail.reply_available ?? false}
           onRaiseBudget={(amount) => void sendSignal('budget_raise', budgetRaiseBody(amount))}
           onAccept={(paths) => void sendSignal('continue', acceptBody(paths))}
           runId={runId}

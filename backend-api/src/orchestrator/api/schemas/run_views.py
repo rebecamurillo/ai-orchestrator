@@ -21,7 +21,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from orchestrator.api.schemas.board_view import (
     BoardColumnsOut,
@@ -238,6 +238,8 @@ class StepRowOut(BaseModel):
     latest: LatestAttemptOut | None
     #: `.of()` always sets the real value; see `_drop_default` for why schema-optional.
     cost_usd: MoneyStr = Field(default=Decimal("0"), json_schema_extra=_drop_default)
+    #: The resolved retry prompt (story 3-5). `None` / absent when the step has no retry block.
+    retry_prompt: str | None = Field(default=None, json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, row: StepRowView) -> StepRowOut:
@@ -253,6 +255,7 @@ class StepRowOut(BaseModel):
             attempts=row.attempts,
             latest=None if row.latest is None else LatestAttemptOut.of(row.latest),
             cost_usd=row.cost_usd,
+            retry_prompt=row.retry_prompt,
         )
 
 
@@ -275,7 +278,7 @@ class StoryCellOut(BaseModel):
 
 class CostOut(BaseModel):
     spent_usd: MoneyStr
-    budget_usd: MoneyStr
+    budget_usd: MoneyStr | None
     tokens_in: int
     tokens_out: int
     wall_clock_seconds: float
@@ -305,6 +308,11 @@ class GateRecordOut(BaseModel):
     actor: Actor
     text: str
     attempt_n: int | None
+    #: The delivery mode the operator chose for an Answer or Retry signal (`"session"` or
+    #: `"restart"`), or `null` for a legacy record whose payload predates story 3-4 or for
+    #: records that carry no mode (e.g. `start`, `plan_stale`). `_drop_default`-guarded so
+    #: every web-client test fixture that predates this field keeps compiling without it.
+    mode: str | None = Field(default=None, json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, record: GateRecord) -> GateRecordOut:
@@ -316,6 +324,7 @@ class GateRecordOut(BaseModel):
             actor=record.actor,
             text=record.text,
             attempt_n=record.attempt_n,
+            mode=record.payload.get("mode") or None,
         )
 
 
@@ -350,6 +359,25 @@ class RunDetailOut(BaseModel):
     gate_record: list[GateRecordOut]
     admitted_signals: tuple[SignalKind, ...]
     summary: SummaryOut | None
+    #: `True` when the latest attempt has a session_id and the harness supports resume —
+    #: drives the mode selector in `AnswerBox` and `RetryBox` (story 3-4). `_drop_default`-
+    #: guarded so every web-client test fixture that predates this field keeps compiling.
+    #: The `model_serializer` below omits it from the response when `False` so that the
+    #: frozen router test (which pins the exact set of top-level keys) keeps passing.
+    reply_available: bool = Field(default=False, json_schema_extra=_drop_default)
+
+    @model_serializer(mode="wrap")
+    def _omit_false_reply_available(self, handler: Any):
+        """Exclude `reply_available` from the response body when it is the default (`False`).
+
+        `False` carries no UI information and is modelled as absent (the web-client reads
+        `detail.reply_available ?? false`); `True` IS included. Deliberately no return
+        annotation: pydantic reads a wrap serializer's return type as the serialization
+        JSON schema, and `dict[str, Any]` collapses `RunDetailOut` to a bare object."""
+        data: dict[str, Any] = handler(self)
+        if not self.reply_available:
+            data.pop("reply_available", None)
+        return data
 
     @classmethod
     def of(cls, detail: RunDetailView) -> RunDetailOut:
@@ -367,4 +395,5 @@ class RunDetailOut(BaseModel):
             gate_record=[GateRecordOut.of(record) for record in detail.gate_record],
             admitted_signals=detail.admitted_signals,
             summary=None if detail.summary is None else SummaryOut.of(detail.summary),
+            reply_available=detail.reply_available,
         )

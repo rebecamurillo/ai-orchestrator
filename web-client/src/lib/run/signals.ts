@@ -31,3 +31,9 @@ export function signalLabel(kind: SignalKind): string {
   if (kind === 'skip_epic') return 'Skip epic';
   return kind;
 }
+
+/** `POST /runs/{id}/signals`'s body for a mode-aware Retry (story 3-4).
+ * `mode` is `'restart'` or `'session'` — the delivery mode the Operator chose. */
+export function retryBody(mode: string): SignalIn {
+  return { kind: 'retry', payload: { mode } };
+}

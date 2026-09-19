@@ -42,34 +42,41 @@ class Outcome:
     exit_code: int | None
     #: True when `timeout_min` expired and the runner killed the group itself.
     timed_out: bool
+    #: True when the stall detector found no filesystem activity for `stall_min` minutes.
+    stalled: bool = False
 
 
 @runtime_checkable
 class ProcessRunner(Protocol):
-    """Runs one command, in its own process group, under a hard time limit."""
+    """Runs one command, in its own process group, under an activity-based stall detector."""
 
-    def start(
+    def start(  # noqa: PLR0913 — the port's own signature
         self,
         cmd: Sequence[str] | str,
         *,
         cwd: Path | None,
         env: Mapping[str, str],
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> Handle:
         """Start `cmd` in its own session, stdout and stderr appended to `log_path`.
 
         `env` is exactly what the caller passes, plus the runner's own `PATH`, `HOME`,
         `LANG`, `TERM` and `GIT_TERMINAL_PROMPT` — the orchestrator's own environment is
         never inherited beyond those five names.
+
+        `timeout_min=None` means no wall-clock deadline; the process runs until it exits
+        naturally or `stall_min` fires.  `stall_min=None` means no stall detection.
         """
         ...
 
     def wait(self, handle: Handle) -> Outcome:
-        """Block until the process ends or `timeout_min` expires.
+        """Block until the process ends, `timeout_min` expires, or a stall is detected.
 
-        On expiry: `SIGTERM` to the group, ten seconds to leave on its own, then
-        `SIGKILL` — and the outcome says so with `timed_out=True`.
+        On wall-clock expiry: `SIGTERM` to the group, ten seconds to leave on its own,
+        then `SIGKILL` — outcome has `timed_out=True`.  On stall: same kill sequence —
+        outcome has `stalled=True`.  Both flags are mutually exclusive.
         """
         ...
 

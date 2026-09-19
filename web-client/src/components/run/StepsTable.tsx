@@ -13,6 +13,7 @@
  *
  * Stateless (`renderToStaticMarkup`).
  */
+import { Fragment } from 'react';
 import type { RunDetailOut, StepRowOut } from '../../lib/run/detail';
 import { currentStepPath, stepStatusText } from '../../lib/run/detail';
 import { ageText, tokenSignal } from '../../lib/board/format';
@@ -62,29 +63,34 @@ export default function StepsTable({ detail, anchoredSeq = null, runId }: Props)
           {detail.steps.map((step) => {
             const href =
               runId && step.path ? `/workflows/${runId}/steps/${encode(step.path)}` : undefined;
-            const row = (
-              <tr
-                key={step.seq}
-                id={stepAnchorId(step.seq)}
-                data-testid={`wf-step-${step.seq}`}
-                data-current={step.path === current}
-                data-anchored={step.seq === anchoredSeq}
-              >
-                <td>{href ? <a href={href}>{step.path}</a> : step.path}</td>
-                <td>{step.kind}</td>
-                <td>{step.gate}</td>
-                <td>
-                  <span className="wf-step-token" data-signal={tokenSignal(step.token)}>
-                    {stepStatusText(step)}
-                  </span>
-                  {attemptsSuffix(step)}
-                </td>
-                <td>{timeText(step)}</td>
-                <td>{step.latest?.harness ?? '—'}</td>
-                <td>{costText(step)}</td>
-              </tr>
+            return (
+              <Fragment key={step.seq}>
+                <tr
+                  id={stepAnchorId(step.seq)}
+                  data-testid={`wf-step-${step.seq}`}
+                  data-current={step.path === current}
+                  data-anchored={step.seq === anchoredSeq}
+                >
+                  <td>{href ? <a href={href}>{step.path}</a> : step.path}</td>
+                  <td>{step.kind}</td>
+                  <td>{step.gate}</td>
+                  <td>
+                    <span className="wf-step-token" data-signal={tokenSignal(step.token)}>
+                      {stepStatusText(step)}
+                    </span>
+                    {attemptsSuffix(step)}
+                  </td>
+                  <td>{timeText(step)}</td>
+                  <td>{step.latest?.harness ?? '—'}</td>
+                  <td>{costText(step)}</td>
+                </tr>
+                {step.retry_prompt ? (
+                  <tr data-testid={`wf-step-${step.seq}-retry-prompt`}>
+                    <td colSpan={COLUMNS.length}>{step.retry_prompt}</td>
+                  </tr>
+                ) : null}
+              </Fragment>
             );
-            return row;
           })}
         </tbody>
       </table>

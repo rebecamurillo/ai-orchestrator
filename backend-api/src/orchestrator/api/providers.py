@@ -248,9 +248,13 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
     same reasoning as `create_run_ports`'s own `build_tracer` call.
 
     `terminal` (6.7): built with `build_terminal_env` and `build_harnesses` — neither starts
-    a process (AD-14), and `build_terminal_env` reads no credential (AD-5)."""
+    a process (AD-14), and `build_terminal_env` reads no credential (AD-5).
+
+    `harness_is_resumable` (story 3-4): shares the same `build_harnesses` call already
+    made for `terminal`, extracted to a local variable so neither call is duplicated."""
     session_factory = from_state(request, SESSION_FACTORY)
     settings = from_state(request, SETTINGS)
+    harnesses = build_harnesses(settings, RealProcessRunner())
     with SQLAlchemyUnitOfWork(session_factory) as uow:
         yield RunViewPorts(
             runs=SQLAlchemyRunRepository(uow.session),
@@ -264,7 +268,10 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
             tracer=build_tracer(settings),
             terminal=TerminalPorts(
                 env=build_terminal_env(settings),
-                harnesses=build_harnesses(settings, RealProcessRunner()),
+                harnesses=harnesses,
+            ),
+            harness_is_resumable=lambda name: (
+                name in harnesses and harnesses[name].capabilities.resume
             ),
             git=git_adapter(request),
         )
@@ -331,13 +338,26 @@ def open_run_ports(
 def signal_effect_ports(request: Request) -> Iterator[SignalEffectPorts]:
     """The ports `handle_signal` (4.9) runs on: `signal_run`'s own writers, plus `cancel`'s
     cleanup — a `Git`, a `ProcessRunner`, `WORK_DIR`, and one Run's environment, read the
-    same way `infrastructure/dbos/walker.py` reads it for an executor (4.8)."""
+    same way `infrastructure/dbos/walker.py` reads it for an executor (4.8).
+
+    `harness_is_resumable` and `latest_attempt_for_run` are injected into `SignalPorts` so
+    that `_check_mode` can validate `mode="session"` without the application layer importing
+    infrastructure adapters (AD-2, story 3-3).
+    """
     session_factory = from_state(request, SESSION_FACTORY)
     engine: WorkflowEngine = from_state(request, ENGINE)
     settings = from_state(request, SETTINGS)
+    harnesses = build_harnesses(settings, RealProcessRunner())
     with open_writer_ports(session_factory) as writers:
         yield SignalEffectPorts(
-            signal=SignalPorts(writers=writers, engine=engine),
+            signal=SignalPorts(
+                writers=writers,
+                engine=engine,
+                harness_is_resumable=lambda name: (
+                    name in harnesses and harnesses[name].capabilities.resume
+                ),
+                latest_attempt_for_run=writers.attempts.latest_for_run,
+            ),
             git=required_git(request, "signals"),
             process=RealProcessRunner(),
             work_dir=settings.work_dir,

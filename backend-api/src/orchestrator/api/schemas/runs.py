@@ -60,7 +60,7 @@ class RunIn(BaseModel):
     project_id: UUID
     repository_id: UUID
     base_branch: str
-    budget_usd: BudgetUsd
+    budget_usd: BudgetUsd | None = None
     inputs: dict[str, Any] = Field(default_factory=dict)
     harness: str | None = None
     model: str | None = None
@@ -94,7 +94,7 @@ class RunSummaryOut(BaseModel):
     repository: UUID
     #: The branch this Run works on, as bound at creation — `run.inputs["base_branch"]`.
     branch: str
-    budget_usd: MoneyStr
+    budget_usd: MoneyStr | None
     spend_usd: MoneyStr
     plan_ref: str | None
     created_at: UtcTimestamp

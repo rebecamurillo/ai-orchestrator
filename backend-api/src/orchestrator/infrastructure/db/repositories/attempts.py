@@ -157,6 +157,16 @@ class SQLAlchemyAttemptRepository:
         the harness columns and the usage — never the start half again."""
         self._write(attempt, FINISHED_COLUMNS)
 
+    def latest_for_run(self, run_id: UUID) -> Attempt | None:
+        """The most recently started Attempt for this Run across all rows, or `None`."""
+        row = self._session.scalars(
+            select(AttemptRow)
+            .where(AttemptRow.run_id == run_id)
+            .order_by(AttemptRow.started_at.desc())
+            .limit(1)
+        ).first()
+        return None if row is None else to_entity(row)
+
     def update(self, attempt: Attempt) -> None:
         self._write(attempt, MUTABLE_COLUMNS)
 

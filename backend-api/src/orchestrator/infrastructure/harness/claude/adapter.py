@@ -12,34 +12,18 @@ container is the sandbox instead: `dontAsk` with an explicit allowlist, and `mcp
 because a container has no personal connectors and the exclusion should be stated rather
 than assumed.
 
-**Resume keeps the tool flags.** `--resume` drops `--session-id` (the session is named by
-`--resume`) and `--max-budget-usd` (the cap belongs to a dispatch, and the retry rule is
-5.7's), and keeps `--permission-mode`, `--allowedTools` and `--disallowedTools`: a resumed
-attempt runs in the same container as the one that started it, and letting the sandbox
-depend on which call opened the turn would be a difference nothing could justify.
+**Resume** (AD-10): drops `--session-id` and `--max-budget-usd`; keeps `--permission-mode`,
+`--allowedTools`, `--disallowedTools` — a resumed attempt runs in the same container.
 
-**Usage parsing is tolerant and terminal.** After the process ends, the log is scanned for
-the harness's own result envelope — the last top-level JSON object carrying
-`"type": "result"`, falling back to the last top-level object when none does — and `usage`
-is filled from `total_cost_usd`, `usage.input_tokens` and `usage.output_tokens`. Anything
-else — no JSON, a JSON array, missing fields, a field that is present but not a number — is
-`usage = None`, never an exception: the log holds two interleaved streams, and npm's
-warnings and an exporter's errors share it with the result. The object itself is handed on
-whole as `raw_result`, because AD-10 forbids this adapter from deciding what any other
-field means; 5.7 reads the budget-cap field out of it.
+**Usage** is tolerant: the log is scanned for the last `"type": "result"` JSON object; fields
+from `total_cost_usd`, `usage.input_tokens`, `usage.output_tokens`; missing → `None`. The
+object travels as `raw_result` (AD-10 forbids deciding what other fields mean).
 
-**A dispatch is two halves** (AD-14, 5.4). `start` hands back a `HarnessHandle` carrying
-the process group, `wait` blocks on it and parses the log, and `run` is `wait(start(...))`
-— so `application/steps/agent.py` can commit `attempt.pgid` between the two. `resume` goes
-through the same private start and the same public `wait`, because a resumed attempt is the
-same process under a different argv. What the log is read *for* moved to `result.py`, whose
-public names this module re-exports.
+**Two halves** (AD-14): `start` → `HarnessHandle`; `wait` blocks and parses; `run` =
+`wait(start(...))`. `resume` uses the same halves. Log parsing is in `result.py`.
 
-**Static configuration is not this module's** (AD-10). `ANTHROPIC_BASE_URL`, the OTLP
-exporter and `DISABLE_AUTOUPDATER` are written to `~/.claude/settings.json` by
-`scripts/harness/claude.sh configure` at container start; the adapter writes nothing under
-`AGENT_HOME`. The one file it does write is the prompt, beside the log, so an attempt's
-record holds what was asked as well as what came back.
+**Static config** (AD-10): `ANTHROPIC_BASE_URL`, OTLP and `DISABLE_AUTOUPDATER` are set by
+`scripts/harness/claude.sh configure`; adapter writes only the prompt file beside the log.
 """
 
 from __future__ import annotations
@@ -219,9 +203,10 @@ class ClaudeHarness:
         env: Mapping[str, str],
         model: str | None,
         session_id: str,
-        budget_usd_remaining: Decimal,
-        timeout_min: float,
+        budget_usd_remaining: Decimal | None,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         """First dispatch, start to finish: exactly `wait(start(...))` (AD-14)."""
         return self.wait(
@@ -234,6 +219,7 @@ class ClaudeHarness:
                 budget_usd_remaining=budget_usd_remaining,
                 timeout_min=timeout_min,
                 log_path=log_path,
+                stall_min=stall_min,
             )
         )
 
@@ -245,9 +231,10 @@ class ClaudeHarness:
         env: Mapping[str, str],
         model: str | None,
         session_id: str,
-        budget_usd_remaining: Decimal,
-        timeout_min: float,
+        budget_usd_remaining: Decimal | None,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessHandle:
         """Start the dispatch and hand its group back before anything waits on it (AD-14)."""
         argv = self._argv(
@@ -264,6 +251,7 @@ class ClaudeHarness:
             timeout_min=timeout_min,
             log_path=log_path,
             session_id=session_id,
+            stall_min=stall_min,
         )
 
     def resume(  # noqa: PLR0913 — the port's own signature (AD-10)
@@ -273,8 +261,9 @@ class ClaudeHarness:
         session_id: str,
         message: str,
         env: Mapping[str, str],
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
+        stall_min: float | None = None,
     ) -> HarnessResult:
         """Continue the session this row already opened — `retry`'s path only (AD-10)."""
         argv = self._argv(
@@ -292,6 +281,7 @@ class ClaudeHarness:
                 timeout_min=timeout_min,
                 log_path=log_path,
                 session_id=session_id,
+                stall_min=stall_min,
             )
         )
 
@@ -331,11 +321,8 @@ class ClaudeHarness:
     def wait(self, handle: HarnessHandle) -> HarnessResult:
         """Wait for the process `start` returned, then read its log (AD-14).
 
-        The wait is guarded because the group is the only handle on the process and this
-        frame is the only place that holds it: a `wait` that raises would leave a coding
-        agent running in a worktree with nothing left that knows its `pgid`, which is the
-        orphan AD-14 exists to prevent. The kill is the runner's own idempotent one, so it
-        is safe on a process that already ended, and the exception still reaches the walker.
+        Guarded: a raise here would orphan the group — kill is idempotent on a finished
+        process and the original exception still reaches the walker.
         """
         try:
             outcome = self.runner.wait(Handle(pid=handle.pid, pgid=handle.pgid))
@@ -353,6 +340,8 @@ class ClaudeHarness:
             timed_out=outcome.timed_out,
             pgid=handle.pgid,
             raw_result=raw_result,
+            stalled=outcome.stalled,
+            stall_cwd=handle.cwd if outcome.stalled else None,
         )
 
     def _start(  # noqa: PLR0913 — the runner's own call, one argument per port parameter
@@ -361,16 +350,26 @@ class ClaudeHarness:
         *,
         cwd: Path,
         env: Mapping[str, str],
-        timeout_min: float,
+        timeout_min: float | None,
         log_path: Path,
         session_id: str,
+        stall_min: float | None = None,
     ) -> HarnessHandle:
         """The runner's handle, as the port's own: what `wait` needs and nothing more."""
         handle = self.runner.start(
-            argv, cwd=cwd, env=env, timeout_min=timeout_min, log_path=log_path
+            argv,
+            cwd=cwd,
+            env=env,
+            timeout_min=timeout_min,
+            log_path=log_path,
+            stall_min=stall_min,
         )
         return HarnessHandle(
-            session_id=session_id, log_path=log_path, pid=handle.pid, pgid=handle.pgid
+            session_id=session_id,
+            log_path=log_path,
+            pid=handle.pid,
+            pgid=handle.pgid,
+            cwd=cwd,
         )
 
     def probe(self) -> ProbeResult:

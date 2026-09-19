@@ -62,7 +62,7 @@ class Run(BaseModel):
     #: Opaque JSON the durable-engine adapter owns; nothing outside `infrastructure/dbos/`
     #: reads a key of it (AD-6).
     engine_ref: dict[str, Any] = Field(default_factory=dict)
-    budget_usd: Decimal
+    budget_usd: Decimal | None
     spend_usd: Decimal = Decimal("0")
     spend_provisional: bool = False
     #: Hours the Operator estimated the same work would take by hand. Immutable after start.
