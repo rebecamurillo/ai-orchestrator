@@ -24,6 +24,19 @@ steps:
     on_fail: fail
     gate: deterministic
 
+  - id: spec-gate
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: spec-gate
+      args: { folder: "{{spec_folder}}" }
+    expect:
+      files: ["{{spec_folder}}/spec-gate-result.md"]
+      status_in: [done, blocked]
+    timeout_min: 30
+    gate: liveness
+
   - id: stories
     for_each: "{{spec_folder}}/stories.yaml"
     as: story
@@ -42,9 +55,40 @@ steps:
             story: "{{story}}"
             harness: "{{harness}}"
             model: "{{model}}"
+  - id: gen-e2e
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: bmad-qa-generate-e2e-tests
+      args: { folder: "{{spec_folder}}" }
+    timeout_min: 30
+    gate: liveness
+
+  - id: commit-e2e
+    uses: git.commit
+    with: { message: "e2e: generated tests (orchestrator)" }
+    gate: deterministic
+
   - id: e2e
     run: "{{repository.quality_gate_command}}"
+    on_fail: { redispatch: gen-e2e, max: 2 }
     timeout_min: 45
+    gate: deterministic
+
+  - id: retro
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: bmad-retrospective
+      args: { folder: "{{spec_folder}}" }
+    timeout_min: 30
+    gate: liveness
+
+  - id: commit-retro
+    uses: git.commit
+    with: { message: "retro: epic retrospective (orchestrator)" }
     gate: deterministic
 
   - id: push
@@ -56,3 +100,7 @@ steps:
     uses: pr.link
     with: { branch: "{{branch}}" }
     gate: liveness
+
+  - id: done-checkpoint
+    uses: checkpoint
+    gate: human

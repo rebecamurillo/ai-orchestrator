@@ -36,12 +36,7 @@ from typing import Any
 
 import structlog
 
-from orchestrator.application.steps import agent_answer, agent_tail
-from orchestrator.application.steps.agent_answer import (
-    ANSWER_EVENT,
-    ANSWER_KEY,
-    CONDITION_KEY,
-)
+from orchestrator.application.steps import agent_answer, agent_prompt, agent_tail
 from orchestrator.application.steps.context import (
     StepContext,
     committed,
@@ -60,7 +55,6 @@ from orchestrator.application.steps.context import (
 from orchestrator.application.steps.registry import register
 from orchestrator.application.story_file import after_verify
 from orchestrator.application.templates.agent_row import (
-    PROMPT_EXTRA_KEY,
     SPEC_FOLDER_KEY,
     STORY_ID_KEY,
 )
@@ -79,15 +73,12 @@ KIND = "agent"
 #: The `with` keys this module reads, flat, the way `agent_row.py` writes them on the row.
 HARNESS_KEY = "harness"
 MODEL_KEY = "model"
-SKILL_KEY = "skill"
 
 #: The prompt, in the pieces FR-14 pins. Asserted verbatim by the prompt tests.
 DISPATCH = (
     "Run the skill {skill} in folder+id dispatch mode: "
     "spec folder {spec_folder}, story id {story_id}."
 )
-HALT = " Halt after planning."
-ANSWER = ' Answer from the operator to the blocking condition "{condition}": {answer}'
 #: How a retry prompt reaches a *new* session: in front of the dispatch sentence the session
 #: has not been told yet. A resumed one is sent the retry prompt alone.
 RETRY_PROMPT = "{retry} {dispatch}"
@@ -152,28 +143,8 @@ def compose_prompt(
     resume_signal: GateRecord | None,
     previous_attempt: Attempt | None,
 ) -> str:
-    """What the harness is asked, from the row the planner resolved (FR-14, AD-7): the
-    dispatch sentence, the Template's `prompt_extra`, the halt a spec checkpoint asks for,
-    and the Operator's answer when one resumed this row. `agent_answer.halts_after_planning`
-    is the one place that decides the halt: a first dispatch or a re-plan, and once more on
-    a Reject (6.2) — never on a `continue`, which is the plan already approved."""
-    parts = [
-        DISPATCH.format(
-            skill=resolved_text(with_resolved, SKILL_KEY),
-            spec_folder=resolved_text(with_resolved, SPEC_FOLDER_KEY),
-            story_id=resolved_text(with_resolved, STORY_ID_KEY),
-        )
-    ]
-    payload = resume_signal.payload if resume_signal is not None else {}
-    extra = resolved_text(with_resolved, PROMPT_EXTRA_KEY)
-    if extra:
-        parts.append(f" {extra}")
-    if resume_signal is not None and resume_signal.event == ANSWER_EVENT:
-        condition, answer = payload.get(CONDITION_KEY, ""), payload.get(ANSWER_KEY, "")
-        parts.append(ANSWER.format(condition=condition, answer=answer))
-    if agent_answer.halts_after_planning(with_resolved, resume_signal):
-        parts.append(HALT)
-    return "".join(parts)
+    """Delegates to `agent_prompt.compose_prompt` (FR-14, AD-7, AD-9)."""
+    return agent_prompt.compose_prompt(with_resolved, resume_signal, previous_attempt)
 
 
 def _harness(ctx: StepContext) -> Harness | StepResult:
@@ -325,7 +296,16 @@ def _planned(ctx: StepContext, harness: Harness, attempt: Attempt) -> _Dispatch:
         return _Dispatch(harness, attempt, _session_message(ctx), session, resumable)
     if operator_mode != "restart" and tpl_ok and can_res and retry is not None:
         return _Dispatch(harness, attempt, retry.prompt, session, resumable)
-    prompt = compose_prompt(ctx.with_resolved, agent_answer.resolved_signal(ctx), previous)
+    prompt_file_content: str | None = None
+    if agent_prompt.PROMPT_FILE_KEY in ctx.with_resolved:
+        filename = str(ctx.with_resolved[agent_prompt.PROMPT_FILE_KEY])
+        prompt_file_content = require_workspace(ctx, ctx.cwd).read(filename) or ""
+    prompt = agent_prompt.compose_prompt(
+        ctx.with_resolved,
+        agent_answer.resolved_signal(ctx),
+        previous,
+        prompt_file_content=prompt_file_content,
+    )
     if retry is not None:
         prompt = RETRY_PROMPT.format(retry=retry.prompt, dispatch=prompt)
     return _Dispatch(harness, attempt, prompt, session)
@@ -389,7 +369,7 @@ def _text(ctx: StepContext, key: str) -> str:
 
 
 def _session_message(ctx: StepContext) -> str:
-    if ctx.resume_signal is not None and ctx.resume_signal.event == ANSWER_EVENT:
+    if ctx.resume_signal is not None and ctx.resume_signal.event == agent_answer.ANSWER_EVENT:
         return str(ctx.resume_signal.payload.get("text", ""))
     retry = agent_tail.retry_of(ctx)
     return retry.prompt if retry is not None else ""

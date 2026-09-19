@@ -28,6 +28,7 @@ from typing import Any
 
 from orchestrator.application.dto import ProjectSnapshot, RepositorySnapshot
 from orchestrator.application.templates.expressions import (
+    ALWAYS_LITERAL,
     BARE_FIELD,
     ENTITY_FIELDS,
     EXPRESSION,
@@ -121,9 +122,14 @@ def paused(condition: str | None, scope: Mapping[str, Any]) -> bool:
     here rather than through `resolve`: the answer is a truth value, not text. A Template
     that declared none pauses at nothing, and so does one whose condition the grammar never
     allowed, which `validate()` has already refused.
+
+    The literal `ALWAYS_LITERAL` ("always") is unconditional: it returns `True` regardless
+    of scope. `task@1` uses this to encode a plan gate on every dispatch.
     """
     if condition is None:
         return False
+    if condition == ALWAYS_LITERAL:
+        return True
     reference = BARE_FIELD.match(condition)
     if reference is None:
         return False

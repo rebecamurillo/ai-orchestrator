@@ -40,10 +40,12 @@ from orchestrator.application.templates.lines import (
     line_of,
 )
 from orchestrator.application.templates.model import (
+    ALL_DIGIT_STEP_ID,
     BAD_REDISPATCH,
     CALL_TIMING,
     DUPLICATE_STEP_ID,
     EMPTY_STEPS,
+    INVALID_DISPATCH_FORM,
     INVALID_GATE,
     INVALID_ON_FAIL,
     INVALID_SLUG,
@@ -174,6 +176,9 @@ def _check_ids(walked: list[tuple[LinedMap, LinedMap | None]]) -> list[Validatio
             errors.append(problem(node.line, MISSING_KEY))
             continue
         line = key_line(node, "id", node.line)
+        if isinstance(node["id"], str) and node["id"].isdigit() and node["id"].isascii():
+            errors.append(problem(line, ALL_DIGIT_STEP_ID))
+            continue
         if not is_slug(node["id"]):
             errors.append(problem(line, INVALID_SLUG))
             continue
@@ -274,6 +279,20 @@ def _run_sugar(node: LinedMap) -> tuple[str | None, list[ValidationError]]:
     return RUN_SUGAR_KIND, []
 
 
+#: The three dispatch forms an `agent` `with` block may carry — only one at a time.
+_DISPATCH_KEYS: frozenset[str] = frozenset({"skill", "prompt", "prompt_file"})
+#: The intent key for the intent dispatch form (task@1, IMP-002 accepted 2026-09-15).
+#: NOT added to _DISPATCH_KEYS to avoid triggering INVALID_DISPATCH_FORM for skill+intent.
+_INTENT_KEYS: frozenset[str] = frozenset({"intent"})
+
+
+def _check_dispatch_form(params: LinedMap, with_line: int) -> list[ValidationError]:
+    """More than one dispatch key in the same `with` block is ambiguous and rejected."""
+    if sum(1 for k in params if k in _DISPATCH_KEYS) > 1:
+        return [problem(with_line, INVALID_DISPATCH_FORM)]
+    return []
+
+
 def _check_with(node: LinedMap, kind: str) -> list[ValidationError]:
     if "with" not in node:
         if kind == TEMPLATE_CALL_KIND:
@@ -283,7 +302,11 @@ def _check_with(node: LinedMap, kind: str) -> list[ValidationError]:
     params = as_map(node["with"])
     if params is None:
         return [problem(line, MISSING_KEY)]
-    errors = unknown_keys(params, KIND_META[kind].with_keys)
+    base = KIND_META[kind].with_keys
+    allowed = base | _DISPATCH_KEYS | _INTENT_KEYS if kind == AGENT_KIND else base
+    errors = unknown_keys(params, allowed)
+    if kind == AGENT_KIND:
+        errors += _check_dispatch_form(params, line)
     if kind == TEMPLATE_CALL_KIND:
         errors += _check_call_with(params)
     return errors

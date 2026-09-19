@@ -24,6 +24,19 @@ steps:
     on_fail: fail
     gate: deterministic
 
+  - id: spec-gate
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: spec-gate
+      args: { folder: "{{spec_folder}}" }
+    expect:
+      files: ["{{spec_folder}}/spec-gate-result.md"]
+      status_in: [done, blocked]
+    timeout_min: 30
+    gate: liveness
+
   - id: stories
     for_each: "{{spec_folder}}/stories.yaml"
     as: story

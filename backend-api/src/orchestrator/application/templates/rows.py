@@ -44,6 +44,7 @@ from orchestrator.application.templates.lists import (
     ID_KEY,
     STORIES_KIND,
     check_entries,
+    filter_only,
     list_kind,
     read_list,
     stories_directory,
@@ -183,13 +184,15 @@ def expand(entries: Sequence[Step | ForEach], frame: Frame, ctx: Context) -> lis
 def expand_loop(loop: ForEach, frame: Frame, ctx: Context) -> list[PlannedRow]:
     """One frame per entry of the list file the loop names, in the file's own order."""
     path = str(resolve(loop.source, frame.scope))
-    items, ref_used = read_list(ctx.reader, frame, path, line=loop.line)
+    raw_items, ref_used = read_list(ctx.reader, frame, path, line=loop.line)
     kind = list_kind(path)
-    check_entries(items, kind, frame, line=loop.line)
+    check_entries(raw_items, kind, frame, line=loop.line)
+    only = str(resolve(loop.only, frame.scope)) if loop.only is not None else None
+    filtered = filter_only(raw_items, only, frame, line=loop.line)
     # the list decided which commit this frame reads at; the story files follow it
     outer = replace(frame, ref=ref_used)
     rows: list[PlannedRow] = []
-    for index, entry in enumerate(items):
+    for index, entry in enumerate(filtered):
         item = _Item(loop=loop, index=index, entry=entry, kind=kind, path=path)
         rows += _item_rows(item, _item_frame(item, outer, ctx), ctx)
     return rows

@@ -66,7 +66,9 @@ def test_posting_epic_1s_text_answers_the_golden_shape(authenticated: httpx.Clie
     and an item checkpoint — the shape 3.6's diagram is drawn from.
 
     Operator revision 2026-09-15: the quality-gate reorder (b0f3898 — unit on story, e2e on
-    epic) gave the file a `setup` step and an `e2e` step; the golden shape follows it."""
+    epic) gave the file a `setup` step and an `e2e` step; the golden shape follows it.
+    Stories 4-4..4-7 (2026-09-17) added `spec-gate`, `gen-e2e`/`commit-e2e`,
+    `retro`/`commit-retro` and the final `done-checkpoint`; it follows again."""
     text = stored_yaml(authenticated, "epic", 1)
 
     body = authenticated.post(f"{TEMPLATES}/epic/graph", json={"yaml": text}).json()
@@ -75,11 +77,17 @@ def test_posting_epic_1s_text_answers_the_golden_shape(authenticated: httpx.Clie
         "checkout",
         "setup",
         "baseline",
+        "spec-gate",
         "stories.story",
         "stories.after",
+        "gen-e2e",
+        "commit-e2e",
         "e2e",
+        "retro",
+        "commit-retro",
         "push",
         "link",
+        "done-checkpoint",
     ]
     assert body["groups"] == [
         {
@@ -92,11 +100,17 @@ def test_posting_epic_1s_text_answers_the_golden_shape(authenticated: httpx.Clie
     assert body["edges"] == [
         {"from": "checkout", "to": "setup"},
         {"from": "setup", "to": "baseline"},
-        {"from": "baseline", "to": "stories.story"},
+        {"from": "baseline", "to": "spec-gate"},
+        {"from": "spec-gate", "to": "stories.story"},
         {"from": "stories.story", "to": "stories.after"},
-        {"from": "stories.after", "to": "e2e"},
-        {"from": "e2e", "to": "push"},
+        {"from": "stories.after", "to": "gen-e2e"},
+        {"from": "gen-e2e", "to": "commit-e2e"},
+        {"from": "commit-e2e", "to": "e2e"},
+        {"from": "e2e", "to": "retro"},
+        {"from": "retro", "to": "commit-retro"},
+        {"from": "commit-retro", "to": "push"},
         {"from": "push", "to": "link"},
+        {"from": "link", "to": "done-checkpoint"},
     ]
 
 
@@ -108,7 +122,9 @@ def test_epic_1s_nodes_carry_the_kind_label_and_gate_the_file_declares(
     copy unable to drift from the real answer without one of the two suites failing.
 
     Operator revision 2026-09-15: rows follow the quality-gate reorder (b0f3898), which gave
-    `epic@1` a `setup` and an `e2e` step."""
+    `epic@1` a `setup` and an `e2e` step. Stories 4-4..4-7 (2026-09-17) added `spec-gate`,
+    `gen-e2e`/`commit-e2e`, `retro`/`commit-retro` and the final `done-checkpoint`; the rows
+    follow again."""
     text = stored_yaml(authenticated, "epic", 1)
 
     body = authenticated.post(f"{TEMPLATES}/epic/graph", json={"yaml": text}).json()
@@ -117,22 +133,26 @@ def test_epic_1s_nodes_carry_the_kind_label_and_gate_the_file_declares(
         ("git.worktree", "checkout", "deterministic"),
         ("shell", "setup", "deterministic"),
         ("shell", "baseline", "deterministic"),
+        ("agent", "spec-gate", "liveness"),
         ("template", "story@1", None),
         ("checkpoint", "after", "human"),
+        ("agent", "gen-e2e", "liveness"),
+        ("git.commit", "commit-e2e", "deterministic"),
         ("shell", "e2e", "deterministic"),
+        ("agent", "retro", "liveness"),
+        ("git.commit", "commit-retro", "deterministic"),
         ("git.push", "push", "deterministic"),
         ("pr.link", "link", "liveness"),
+        ("checkpoint", "done-checkpoint", "human"),
     ]
-    assert [node["agent"] for node in body["nodes"]] == [False] * 8
-    assert [node["human"] for node in body["nodes"]] == [
-        False,
-        False,
-        False,
-        False,
-        True,
-        False,
-        False,
-        False,
+    assert [node["id"] for node in body["nodes"] if node["agent"]] == [
+        "spec-gate",
+        "gen-e2e",
+        "retro",
+    ]
+    assert [node["id"] for node in body["nodes"] if node["human"]] == [
+        "stories.after",
+        "done-checkpoint",
     ]
 
 

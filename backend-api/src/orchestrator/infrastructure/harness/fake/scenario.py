@@ -67,6 +67,8 @@ DEFAULT_FILE = "default.yaml"
 
 #: Where the per-story dispatch counter lives, under `WORK_DIR` and never in the worktree.
 COUNTER_DIRECTORY = "fake-harness"
+#: Counter filename for a dispatch whose prompt names no story id (see `counter_path`).
+NO_STORY = "-no-story-"
 #: Enough of a digest to separate two worktrees, short enough to read in a directory listing.
 DIGEST_LENGTH = 16
 
@@ -184,9 +186,15 @@ def next_attempt(work_dir: Path, cwd: Path, story_id: str) -> int:
 
 
 def counter_path(work_dir: Path, cwd: Path, story_id: str) -> Path:
-    """`{WORK_DIR}/fake-harness/{digest of the worktree}/{story_id}` — never in the worktree."""
+    """`{WORK_DIR}/fake-harness/{digest of the worktree}/{story_id}` — never in the worktree.
+
+    An empty story id (a dispatch whose prompt names no story — `epic@1`'s spec-gate,
+    gen-e2e and retro rows) files under `{NO_STORY}` rather than under the bare digest:
+    `digest / ""` IS the digest directory, and writing the counter there would replace the
+    directory every per-story counter lives in.
+    """
     digest = hashlib.sha256(str(cwd).encode(ENCODING)).hexdigest()[:DIGEST_LENGTH]
-    return work_dir / COUNTER_DIRECTORY / digest / story_id
+    return work_dir / COUNTER_DIRECTORY / digest / (story_id or NO_STORY)
 
 
 def _story_file(value: object) -> StoryFileSpec | None:

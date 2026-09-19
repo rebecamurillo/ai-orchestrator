@@ -152,6 +152,7 @@ EPIC_ROWS = [
     "checkout",
     "setup",
     "baseline",
+    "spec-gate",  # story 4-4 (2026-09-17): spec-gate agent step inserted after baseline
     "stories[0].sync",
     "stories[0].build",
     "stories[0].verify",
@@ -375,7 +376,8 @@ def initiative() -> Plan:
 
 def epic_frame(index: int, *, after: bool) -> list[str]:
     prefix = f"epics[{index}]"
-    rows = [f"{prefix}.checkout", f"{prefix}.setup", f"{prefix}.baseline"]
+    # story 4-4 (2026-09-17): spec-gate agent step inserted after baseline
+    rows = [f"{prefix}.checkout", f"{prefix}.setup", f"{prefix}.baseline", f"{prefix}.spec-gate"]
     for story in range(4):
         rows += [
             f"{prefix}.stories[{story}].{step}"
@@ -420,6 +422,9 @@ def test_an_epic_row_belongs_to_the_epic_frame_and_to_no_story(initiative: Plan)
     entry = row(initiative, "epics[1].push")
 
     assert (entry.frame, entry.story_id) == ("epics[1]", None)
+    # story 4-4 (2026-09-17): spec-gate is a top-level epic step and must also carry story_id=None
+    spec_gate = row(initiative, "epics[1].spec-gate")
+    assert (spec_gate.frame, spec_gate.story_id) == ("epics[1]", None)
 
 
 def test_an_epic_works_on_the_branch_its_list_entry_named(initiative: Plan) -> None:

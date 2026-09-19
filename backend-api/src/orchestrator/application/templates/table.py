@@ -37,6 +37,7 @@ FOR_EACH_KEYS = frozenset(
         "pause_before_item_when",
         "pause_after_item_when",
         "parallel",
+        "only",
     }
 )
 EXPECT_KEYS = frozenset({"files", "status_in"})

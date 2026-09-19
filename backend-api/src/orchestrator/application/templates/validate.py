@@ -164,6 +164,7 @@ def _entry(node: LinedMap) -> Step | ForEach:
             steps=tuple(_step(child) for child in child_steps(node)),
             pause_before_item_when=_text(node.get("pause_before_item_when")),
             pause_after_item_when=_text(node.get("pause_after_item_when")),
+            only=_text(node.get("only")),
         )
     return _step(node)
 

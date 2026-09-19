@@ -32,6 +32,7 @@ from orchestrator.domain.ports.repositories import (
     RepositoryRepository,
     RunRepository,
 )
+from orchestrator.domain.ports.skill_catalog import SkillCatalog
 from orchestrator.domain.ports.templates import TemplateVersionRepository
 
 #: The harness `plan_run`'s substitution scope falls back to when the request names none —
@@ -59,6 +60,9 @@ class PreflightPorts:
     #: `harness_probe_line` can call each adapter's `probe()`.  Defaults to empty so every
     #: existing frozen `PreflightPorts(...)` construction keeps compiling unchanged.
     harness_registry: dict[str, HarnessAdapter] = field(default_factory=dict)
+    #: `None` when not configured (dev environment); treated as "catalog unavailable" by
+    #: the installed-skill pre-flight check, which emits a `skip` line.
+    skill_catalog: SkillCatalog | None = None
 
 
 @dataclass(frozen=True)
@@ -107,6 +111,7 @@ def preflight_and_plan(ports: PreflightPorts, req: PreflightRequest) -> Prefligh
         plan=plan,
         plan_error=plan_error,
         harness_registry=ports.harness_registry,
+        skill_catalog=ports.skill_catalog,
     )
     lines = _lines(ctx)
     # The brief's formula ("no fail line and no plan_error") assumes a plan was built; a
@@ -152,6 +157,7 @@ def _lines(ctx: Context) -> list[Line]:
     lines.append(checks.checkpoints_line(ctx))
     lines += lists.spec_md_lines(ctx)
     lines.append(checks.harness_probe_line(ctx))
+    lines += lists.installed_skill_lines(ctx)
     lines.append(checks.method_version_line(ctx))
     lines.append(lists.existing_story_files_line(ctx, ids_by_path))
     lines.append(checks.clone_check_line(ctx))

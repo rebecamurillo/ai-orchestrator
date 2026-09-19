@@ -54,7 +54,7 @@ class FakeTemplateVersionRepository:
         self.descriptions[version.name] = description
 
     def list(self) -> list[TemplateSummary]:
-        names = sorted({name for name, _ in self.versions})
+        names = sorted({name for name, _ in self.versions}, key=lambda n: n + ".yaml")
         summaries = []
         for name in names:
             numbers = sorted(v for (n, v) in self.versions if n == name)

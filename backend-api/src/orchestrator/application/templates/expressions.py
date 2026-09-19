@@ -79,6 +79,8 @@ DEFAULT_KEY = "default"
 
 #: The keys written bare as `<name>.<field>` rather than interpolated.
 CONDITION_KEYS = ("pause_when", "pause_before_item_when", "pause_after_item_when")
+#: The literal that makes a `pause_when` unconditional — no field required (task@1).
+ALWAYS_LITERAL: str = "always"
 
 
 def check_expressions(root: LinedMap) -> list[ValidationError]:
@@ -130,6 +132,10 @@ def _check_for_each(node: LinedMap, types: dict[str, str]) -> list[ValidationErr
         if "{{" not in source:
             errors.append(problem(at, EXPRESSION_SYNTAX))
         errors += _scan_text(source, types, at)
+    # `only:` reads outer scope (the template's declared inputs), not the loop's item scope —
+    # this is what makes `only: "{{story_id}}"` work where `story_id` is an input, not a field.
+    if isinstance(only_val := node.get("only"), str):
+        errors += _scan_text(only_val, types, key_line(node, "only", node.line))
     declared = node.get(AS_KEY)
     item = _scope(types, declared if isinstance(declared, str) else None)
     for key in CONDITION_KEYS:
@@ -202,8 +208,14 @@ def _check_reference(
 
 
 def _check_condition(value: Any, scope: dict[str, str], line: int) -> list[ValidationError]:
-    """A single item field, written bare: `story.spec_checkpoint`, never in braces."""
+    """A single item field, written bare: `story.spec_checkpoint`, never in braces.
+
+    The literal `"always"` is also accepted — it makes a condition unconditional, with no
+    field to check. Everything else that does not match `BARE_FIELD` is `expression syntax`.
+    """
     if not isinstance(value, str):
+        return []
+    if value == ALWAYS_LITERAL:
         return []
     match = BARE_FIELD.match(value)
     if match is None:

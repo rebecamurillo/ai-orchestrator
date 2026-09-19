@@ -173,13 +173,17 @@ def test_story_has_no_human_node_and_no_group(
 
 
 def test_epic_is_the_golden_shape(templates: FakeTemplateVersionRepository) -> None:
-    """Design Notes, "Golden shape": the nodes, the group and the edges, in that order."""
+    """Design Notes, "Golden shape": the nodes, the group and the edges, in that order.
+
+    Updated 2026-09-17 (story 4-4): spec-gate agent step inserted after baseline.
+    """
     graph = graph_of("epic", templates)
 
     assert node_ids(graph) == (
         "checkout",
         "setup",
         "baseline",
+        "spec-gate",
         "stories.story",
         "stories.after",
         "e2e",
@@ -192,7 +196,8 @@ def test_epic_is_the_golden_shape(templates: FakeTemplateVersionRepository) -> N
     assert edge_pairs(graph) == (
         ("checkout", "setup"),
         ("setup", "baseline"),
-        ("baseline", "stories.story"),
+        ("baseline", "spec-gate"),
+        ("spec-gate", "stories.story"),
         ("stories.story", "stories.after"),
         ("stories.after", "e2e"),
         ("e2e", "push"),

@@ -250,6 +250,19 @@ def test_continue_on_the_done_checkpoint_resumes_the_run_to_done(
 
     response = api.post(f"{RUNS}/{run_id}/signals", json={"kind": "continue"})
     assert response.status_code == HTTP_OK, response.text
+    # story 4-5 (2026-09-17) ended the epic tail with a final human `done-checkpoint` row,
+    # so the walk now parks there once past `link`; the second Continue is what finishes it.
+    detail = poll_until(
+        api,
+        run_id,
+        lambda detail: (
+            detail["run"]["status"] == "needs_you"
+            and step_status(detail, "done-checkpoint") == "checkpoint"
+        ),
+        "the Run parking on the epic tail's own done-checkpoint",
+    )
+    response = api.post(f"{RUNS}/{run_id}/signals", json={"kind": "continue"})
+    assert response.status_code == HTTP_OK, response.text
     detail = poll_until(
         api, run_id, lambda detail: detail["run"]["status"] == "done", "the Run finishing"
     )

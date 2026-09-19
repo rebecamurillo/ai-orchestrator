@@ -37,6 +37,7 @@ from orchestrator.application.templates.plan_model import (
     ID_NOT_PREFIX_FREE,
     LIST_FILE_NOT_A_LIST,
     LIST_FILE_NOT_FOUND,
+    ONLY_NOT_IN_LIST,
     PlanError,
 )
 from orchestrator.application.templates.reader import PlanReader
@@ -146,6 +147,24 @@ def check_entries(items: Sequence[Entry], kind: str | None, frame: Frame, *, lin
         _require(entry, required, index, frame, line)
         ids.append(str(entry[ID_KEY]))
     _check_ids(ids, frame, line)
+
+
+def filter_only(
+    items: Sequence[Entry], only: str | None, frame: Frame, *, line: int
+) -> Sequence[Entry]:
+    """The entries a loop's `only:` keeps — all of them when it declares none (story 4-8).
+
+    A resolved `only` id that matches no entry is a refusal rather than an empty loop: the
+    Operator named a Story the list does not hold, and zero rows would read as "already
+    done". Lives here beside `read_list`/`check_entries` rather than in `rows.py` on line
+    count alone (the 400-line module limit).
+    """
+    if only is None:
+        return items
+    filtered = [entry for entry in items if entry.get(ID_KEY) == only]
+    if not filtered:
+        raise _refuse(frame, ONLY_NOT_IN_LIST, only, line)
+    return filtered
 
 
 def story_done(reader: PlanReader, frame: Frame, directory: str, story_id: str, line: int) -> bool:

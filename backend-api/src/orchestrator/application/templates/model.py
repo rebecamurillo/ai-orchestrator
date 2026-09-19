@@ -90,6 +90,15 @@ INVALID_VALUE = "invalid value"
 #: default (story 3-5).
 RETRY_PROMPT_REQUIRED = "retry prompt required"
 
+#: An agent step `with` block that carries more than one dispatch key (`skill`, `prompt`,
+#: `prompt_file`) cannot have a deterministic base sentence — the first one would win, but
+#: the author almost certainly intended only one.
+INVALID_DISPATCH_FORM = "invalid dispatch form"
+
+#: A step whose `id` is a string of digits only (`"1"`, `"42"`) breaks the dot-index
+#: bijection AD-15 relies on: the graph would accept it but plan indices would collide.
+ALL_DIGIT_STEP_ID = "all-digit step id"
+
 # --- the tree ---------------------------------------------------------------------------
 
 
@@ -173,6 +182,7 @@ class ForEach(BaseModel):
     steps: tuple[Step, ...] = ()
     pause_before_item_when: str | None = None
     pause_after_item_when: str | None = None
+    only: str | None = None
 
 
 class ParsedTemplate(BaseModel):

@@ -1,0 +1,8 @@
+name: green
+version: 1
+steps:
+  - id: "1"
+    uses: shell
+    with:
+      command: make test
+    gate: green

@@ -72,7 +72,8 @@ select = ["E", "F", "I", "B", "UP", "PL", "C90", "DTZ", "T20", "RUF"]
 
 [tool.ruff.format]
 # Story 9-2 left these test files with formatting that hard rule 1 forbids fixing.
-exclude = ["tests/unit/test_null_tracer.py", "tests/unit/test_providers_tracing_off.py"]
+# Story 4-5 left test_epic_tail_order.py with the same issue (ruff format disagreement on assert).
+exclude = ["tests/unit/test_null_tracer.py", "tests/unit/test_providers_tracing_off.py", "tests/unit/application/templates/test_epic_tail_order.py"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

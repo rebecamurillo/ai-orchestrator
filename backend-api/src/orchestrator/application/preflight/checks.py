@@ -43,6 +43,7 @@ from orchestrator.domain.ports.git import Git, GitError
 from orchestrator.domain.ports.harness import Harness as HarnessAdapter
 from orchestrator.domain.ports.harnesses import HarnessRepository
 from orchestrator.domain.ports.repositories import RunRepository
+from orchestrator.domain.ports.skill_catalog import SkillCatalog
 from orchestrator.domain.values import PlannedRow
 
 #: What a git command can fail with, same convention as `use_cases/clone_check.py`.
@@ -86,6 +87,9 @@ class Context:
     #: Live harness adapters keyed by name — used by `harness_probe_line` (story 2-2).
     #: Defaults to empty so every existing `Context(...)` construction keeps compiling.
     harness_registry: dict[str, HarnessAdapter] = field(default_factory=dict)
+    #: `None` when no catalog is configured (dev environment, image not yet built) — treated
+    #: as "catalog unavailable" by `installed_skill_lines`, which emits a `skip` line.
+    skill_catalog: SkillCatalog | None = None
 
     @property
     def is_initiative(self) -> bool:

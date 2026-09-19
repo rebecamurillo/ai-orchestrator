@@ -49,6 +49,8 @@ ID_NOT_PREFIX_FREE = "entry ids are not prefix-free"
 AMBIGUOUS_STORY_FILE = "ambiguous story file"
 #: A `uses: template` step names a version the resolved tree does not hold.
 CALLEE_NOT_RESOLVED = "callee not resolved"
+#: The `only:` id on a `for_each` loop matched no entry in the list file.
+ONLY_NOT_IN_LIST = "only: id not in list"
 #: The Run has no commit to plan from: the remote holds no such base branch.
 BASE_BRANCH_NOT_FOUND = "base branch not found"
 #: Every ordinal a declared branch could take is already a branch on the origin, so this

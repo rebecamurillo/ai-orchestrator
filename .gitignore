@@ -5,6 +5,7 @@
 # .gitignore files; the two rules below are the ones BMad does not ship.
 _bmad/config.user.toml
 .claude/skills/bmad-*
+.agents/skills/bmad-*
 # macOS
 .DS_Store
 

@@ -186,13 +186,19 @@ def test_every_shell_row_is_skipped_naming_the_command_it_asked_for(
 
 def test_the_readiness_run_reaches_its_agent_row(readiness_plan: Plan) -> None:
     """The whole point: nothing before the first dispatch is failed or in the way, so the
-    walk gets as far as handing the readiness Story to the harness."""
+    walk gets as far as handing the readiness Story to the harness.
+
+    Updated 2026-09-17 (story 4-4): spec-gate agent step inserted after baseline.
+    Filtering by story_id restores the invariant: the test asserts that the readiness
+    story's agent dispatch is reachable and planned, regardless of epic-level steps before it.
+    """
     agent_rows = [entry for entry in readiness_plan.rows if entry.kind == "agent"]
 
     assert agent_rows, "the shipped readiness Template dispatches no agent at all"
-    first = agent_rows[0]
+    story_rows = [e for e in agent_rows if e.story_id == READINESS_STORY_ID]
+    assert story_rows, "no agent row found for the readiness story"
+    first = story_rows[0]
     assert first.status == "planned"
-    assert first.story_id == READINESS_STORY_ID
     before = [entry for entry in readiness_plan.rows if entry.seq < first.seq]
     assert all(entry.status in ("planned", "skipped") for entry in before), [
         (entry.path, entry.status) for entry in before

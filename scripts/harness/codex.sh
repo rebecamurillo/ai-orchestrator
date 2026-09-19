@@ -12,6 +12,7 @@ export CODEX_HOME="${CODEX_HOME:-${AGENT_HOME}/.codex}"
 install() {
   npm install -g "@openai/codex@${CODEX_VERSION}"
   bmad_install_global_skills codex "${AGENT_HOME}/.agents/skills"           # Codex reads $HOME/.agents/skills (+ $CWD/.agents/skills)
+  install_operator_skills /app/ia-agents-skills "${AGENT_HOME}/.agents/skills"
 }
 
 configure() {
