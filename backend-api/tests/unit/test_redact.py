@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from orchestrator.infrastructure.git.redact import REDACTION, redact
+from orchestrator.infrastructure.redact import REDACTION, redact
 
 TOKEN = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
 

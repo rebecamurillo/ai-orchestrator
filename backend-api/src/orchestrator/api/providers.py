@@ -76,7 +76,7 @@ from orchestrator.infrastructure.db import (
 from orchestrator.infrastructure.db.environment import read_run_environment
 from orchestrator.infrastructure.harness.models import model_table
 from orchestrator.infrastructure.harness.registry import build_harnesses, build_terminal_env
-from orchestrator.infrastructure.process.logs import RealLogReader
+from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
 from orchestrator.infrastructure.process.runner import RealProcessRunner
 from orchestrator.infrastructure.skill_catalog import FsSkillCatalog
 from orchestrator.infrastructure.tracing import build_tracer
@@ -265,7 +265,7 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
             gate_records=SQLAlchemyGateRecordRepository(uow.session),
             projects=SQLAlchemyProjectRepository(uow.session),
             repositories=SQLAlchemyRepositoryRepository(uow.session),
-            logs=RealLogReader(),
+            logs=RealLogReader(log_secrets(settings)),
             clock=SystemClock(),
             tracer=build_tracer(settings),
             terminal=TerminalPorts(

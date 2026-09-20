@@ -23,7 +23,6 @@ from pathlib import Path
 import pytest
 
 from orchestrator.domain.ports.git import Git, GitError
-from orchestrator.infrastructure.git.redact import REDACTION
 from orchestrator.infrastructure.git.subprocess_git import (
     ASKPASS_NAME,
     ASKPASS_TOKEN_VAR,
@@ -33,6 +32,7 @@ from orchestrator.infrastructure.git.subprocess_git import (
     discard_partial_clone,
     tree_bytes,
 )
+from orchestrator.infrastructure.redact import REDACTION
 
 
 @pytest.fixture(autouse=True)

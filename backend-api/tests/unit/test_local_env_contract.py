@@ -86,18 +86,36 @@ def built(settings: Settings, *, log_content: bool = False) -> dict[str, str]:
 # ── the script's two aliases are the builder's two names ─────────────────────
 
 
-def test_the_script_declares_exactly_the_two_aliases_the_builder_adds() -> None:
-    assert set(alias_names(OPENCODE_SCRIPT)) == {"LANGFUSE_BASEURL", "LANGFUSE_USER_ID"}
+def test_the_script_declares_exactly_the_three_aliases_the_builder_adds() -> None:
+    """Third alias added by the fix of 2026-09-20 — see `local_aliases`' own docstring."""
+    assert set(alias_names(OPENCODE_SCRIPT)) == {
+        "LANGFUSE_BASEURL",
+        "LANGFUSE_USER_ID",
+        "OPENCODE_LANGFUSE_TAGS",
+    }
 
 
 def test_each_alias_is_derived_from_the_contract_name_the_script_names_it_from() -> None:
-    """The right-hand side of `NAME=source` is a contract name, and the builder must copy
-    that source's value — not a value of its own and not another contract name's."""
+    """The right-hand side of `NAME=source` is a contract name, and the builder must derive
+    that alias from that source — not from a value of its own and not from another contract
+    name's.
+
+    "Derived" rather than "copied" since 2026-09-20: two of the three copy their source
+    verbatim, and `OPENCODE_LANGFUSE_TAGS` renders it, because OpenCode substitutes
+    `{env:NAME}` into `opencode.json` before parsing the file and the raw JSON array's quotes
+    broke the string it landed in. `test_local_adapter.py` holds the rendering itself; what
+    this asserts is that the script and the builder name the same source.
+    """
     sources = dict(
         word.split("=", 1) for word in bash_array(OPENCODE_SCRIPT, "HARNESS_ENV_ALIASES")
     )
 
-    assert sources == {"LANGFUSE_BASEURL": "LANGFUSE_BASE_URL", "LANGFUSE_USER_ID": "ORCH_RUN_ID"}
+    assert sources == {
+        "LANGFUSE_BASEURL": "LANGFUSE_BASE_URL",
+        "LANGFUSE_USER_ID": "ORCH_RUN_ID",
+        "OPENCODE_LANGFUSE_TAGS": "ORCH_LANGFUSE_TAGS",
+    }
+    assert set(sources.values()) <= set(bash_array(CONTRACT_SCRIPT, "HARNESS_ENV_CONTRACT"))
 
 
 # ── env_for produces exactly the two script lists, plus project and base ─────
@@ -181,6 +199,27 @@ def test_the_script_writes_its_config_from_environment_names_and_never_values() 
 
     assert '"apiKey": "{env:LITELLM_API_KEY}"' in body
     assert "{env:ORCH_RUN_ID}" in body
+
+
+def test_the_tags_header_reads_the_escaped_alias_and_not_the_raw_contract_name() -> None:
+    """The defect of 2026-09-20, in the one line that carried it. `{env:ORCH_LANGFUSE_TAGS}`
+    put a JSON array's quotes inside a JSON string, so OpenCode could not parse its own config
+    and exited 1 before reading the prompt — on every dispatch, for as long as the Gateway was
+    enabled. `test_opencode_config_substitution.py` proves the replacement parses."""
+    body = OPENCODE_SCRIPT.read_text()
+
+    assert '"langfuse_tags": "{env:OPENCODE_LANGFUSE_TAGS}"' in body
+    assert "{env:ORCH_LANGFUSE_TAGS}" not in body
+
+
+def test_readiness_makes_opencode_parse_the_config_it_just_wrote() -> None:
+    """Before this, `probe` and `doctor` ran `--version` and curled the Gateway — neither
+    reads `opencode.json` — so a config every dispatch died on left readiness green."""
+    body = OPENCODE_SCRIPT.read_text()
+
+    assert "config_parses()" in body
+    assert "opencode models" in body
+    assert "config unparseable" in body
 
 
 def test_the_store_path_the_script_documents_is_the_one_the_adapter_reads() -> None:

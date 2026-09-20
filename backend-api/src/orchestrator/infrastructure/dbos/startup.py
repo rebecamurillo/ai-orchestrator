@@ -64,7 +64,7 @@ from orchestrator.infrastructure.gateway import build_gateway
 from orchestrator.infrastructure.harness import build_harness_env, build_harnesses
 from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.process import RealProcessRunner
-from orchestrator.infrastructure.process.logs import RealLogReader
+from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.terminal_jobs import engine_jobs
 from orchestrator.infrastructure.tracing import build_tracer
@@ -145,7 +145,7 @@ def walker_deps(
             harnesses=build_harnesses(settings, runner),
             harness_env=build_harness_env(settings),
             attempt_writes=partial(open_writer_ports, session_factory),
-            logs=RealLogReader(),
+            logs=RealLogReader(log_secrets(settings)),
             spend_writes=partial(open_spend_ports, session_factory, gateway),
         ),
         human_wait_seconds=settings.human_wait_seconds,

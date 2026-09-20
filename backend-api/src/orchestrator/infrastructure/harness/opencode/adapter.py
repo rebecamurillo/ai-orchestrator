@@ -47,6 +47,7 @@ that trace, and `infrastructure/tracing/user_level.py` is the rule that reads it
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from decimal import Decimal
 from pathlib import Path
@@ -89,15 +90,31 @@ MODEL_FLAG = "-m"
 #: the Gateway and therefore not a route this system can attribute spend or traces for (AD-11).
 PROVIDER = "litellm"
 
-#: The two harness-native names `scripts/harness/opencode.sh` declares in `HARNESS_ENV_ALIASES`,
+#: The three harness-native names `scripts/harness/opencode.sh` declares in `HARNESS_ENV_ALIASES`,
 #: and the contract names each is derived from. `LANGFUSE_BASEURL` is the Langfuse plugin's own
 #: spelling of `LANGFUSE_BASE_URL`; `LANGFUSE_USER_ID` is what puts the Run on every generation
-#: the plugin sends (AD-11). `tests/unit/test_local_env_contract.py` holds these against the
-#: bash array itself, so a name added to the script and not here fails there.
+#: the plugin sends (AD-11); `OPENCODE_LANGFUSE_TAGS` is `ORCH_LANGFUSE_TAGS` rendered for the
+#: one place OpenCode reads it — see `local_aliases`. `tests/unit/test_local_env_contract.py`
+#: holds these against the bash array itself, so a name added to the script and not here fails
+#: there.
 LANGFUSE_BASE_URL_ALIAS = "LANGFUSE_BASEURL"
 LANGFUSE_BASE_URL_SOURCE = "LANGFUSE_BASE_URL"
 LANGFUSE_USER_ID_ALIAS = "LANGFUSE_USER_ID"
 LANGFUSE_USER_ID_SOURCE = "ORCH_RUN_ID"
+LANGFUSE_TAGS_ALIAS = "OPENCODE_LANGFUSE_TAGS"
+LANGFUSE_TAGS_SOURCE = "ORCH_LANGFUSE_TAGS"
+
+
+def config_string_escape(value: str) -> str:
+    """`value` as it must be written *inside* a JSON string literal in `opencode.json`.
+
+    `json.dumps` renders the value as a complete JSON string; the slice drops its surrounding
+    quotes, because the quotes are already in the config file around the `{env:...}` reference
+    this value replaces. Escaping, not quoting, is the point: `"` becomes `\\"` so the string
+    the reference sits in survives the substitution.
+    """
+    return json.dumps(value)[1:-1]
+
 
 #: The suffix the prompt is written under, beside the attempt's own log — the port's convention.
 PROMPT_SUFFIX = ".prompt"
@@ -110,17 +127,38 @@ RESUME_UNSUPPORTED = "the local harness declares no resume: retry dispatches a n
 
 
 def local_aliases(contract: Mapping[str, str]) -> Mapping[str, str]:
-    """The harness-native names a `local` process receives: the plugin's two, and no other.
+    """The harness-native names a `local` process receives: the plugin's two, the config's one.
 
     An `AliasBuilder` (`env.py`) exactly: the contract in, the harness's own names out. It needs
-    no `Settings` — both values are contract values — which is what makes it a plain builder
+    no `Settings` — every value is a contract value — which is what makes it a plain builder
     rather than a factory like `codex_aliases`, and what puts it in `registry.py`'s static
     `ALIASES` table rather than in the instance table `alias_table` builds.
 
-    **AD-5 by construction.** The two values are a base URL and a Run id, so there is no value
-    here a credential could travel in; the plugin reads `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`
-    straight off the contract, and the Gateway key reaches OpenCode through
-    `"apiKey": "{env:LITELLM_API_KEY}"` in the config file — a *name*, never a value (AD-10).
+    **The third name is a *rendering* of a contract value, not a copy of one** (fix of
+    2026-09-20). OpenCode expands the `{env:NAME}` references in `opencode.json` **textually,
+    before it parses the file as JSON(C)**, so a value lands in the config as characters rather
+    than as a value. `ORCH_LANGFUSE_TAGS` is a JSON array — `["run:…","attempt:…",…]` — and its
+    quotes therefore terminate the JSON string the reference sits in:
+
+        "langfuse_tags": "{env:ORCH_LANGFUSE_TAGS}"
+          →  "langfuse_tags": "["run:…", "attempt:…"]"      ← not parseable
+
+    OpenCode answers that with `Error: Config file … is not valid JSON(C)` and exits 1 before it
+    reads a prompt, which made *every* `local` dispatch fail on a gateway-enabled install. So the
+    script references `OPENCODE_LANGFUSE_TAGS` instead and this builder escapes the value for the
+    string position it is substituted into. The two Langfuse plugin names copy their source
+    verbatim, because the plugin reads them as environment variables in the ordinary way.
+
+    The other two harnesses need no such rendering and must not have one: Claude builds
+    `ANTHROPIC_CUSTOM_HEADERS` as `name: value` lines, and Codex writes the env *name* into its
+    TOML (`env_http_headers`) and resolves it per request. Neither ever parses the tag value as
+    part of a document, which is why this is an alias and not a change to the contract itself.
+
+    **AD-5 by construction.** The three values are a base URL, a Run id and a tag list, so there
+    is no value here a credential could travel in; the plugin reads
+    `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` straight off the contract, and the Gateway key
+    reaches OpenCode through `"apiKey": "{env:LITELLM_API_KEY}"` in the config file — a *name*,
+    never a value (AD-10).
 
     **No content switch.** `briefs/7-3-opencode-adapter.md` marks it `[verify; else record "no
     content switch"]`, and the record is: the Langfuse plugin documents none. `ORCH_LOG_CONTENT`
@@ -130,6 +168,7 @@ def local_aliases(contract: Mapping[str, str]) -> Mapping[str, str]:
     return {
         LANGFUSE_BASE_URL_ALIAS: contract[LANGFUSE_BASE_URL_SOURCE],
         LANGFUSE_USER_ID_ALIAS: contract[LANGFUSE_USER_ID_SOURCE],
+        LANGFUSE_TAGS_ALIAS: config_string_escape(contract[LANGFUSE_TAGS_SOURCE]),
     }
 
 

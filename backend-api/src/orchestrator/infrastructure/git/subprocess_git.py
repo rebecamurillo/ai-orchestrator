@@ -38,8 +38,8 @@ import weakref
 from pathlib import Path
 
 from orchestrator.domain.ports.git import CloneResult, GitError, RemoteRef
-from orchestrator.infrastructure.git.redact import redact
 from orchestrator.infrastructure.git.worktrees import WorktreeCommands
+from orchestrator.infrastructure.redact import redact
 
 #: How long any one git command may take before it is a failed line.
 TIMEOUT_SECONDS = 120

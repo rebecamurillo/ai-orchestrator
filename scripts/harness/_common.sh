@@ -39,6 +39,9 @@ HARNESS_ENV_CONTRACT=(ORCH_RUN_ID ORCH_ATTEMPT_ID ORCH_STORY_ID ORCH_HARNESS ORC
 # Header values the adapter derives from the contract (same for every harness):
 #   ORCH_TAGS = run:$ORCH_RUN_ID,attempt:$ORCH_ATTEMPT_ID,story:$ORCH_STORY_ID,harness:$ORCH_HARNESS,project:$ORCH_PROJECT
 #   langfuse_session_id=$ORCH_RUN_ID  langfuse_tags=[json of ORCH_TAGS]
+#     — each harness carries that JSON array through its own header mechanism: claude in an
+#       ANTHROPIC_CUSTOM_HEADERS line, codex as an env NAME in TOML, opencode through the alias
+#       OPENCODE_LANGFUSE_TAGS, escaped, because opencode.json is substituted before it is parsed
 #   x-litellm-end-user-id=$ORCH_RUN_ID  x-litellm-session-id=$ORCH_ATTEMPT_ID  x-litellm-tags=$ORCH_TAGS   (spend logs: GET /spend/logs/v2?end_user=&session_id=)
 
 log() { printf '[harness:%s] %s\n' "${HARNESS_NAME:-?}" "$*" >&2; }
