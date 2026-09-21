@@ -49,6 +49,13 @@ model_list:
       api_key: os.environ/OMLX_API_KEY
       use_chat_completions_api: true
 
+  - model_name: local-qwen3-coder
+    litellm_params:
+      model: openai/qwen/qwen3-coder-30b
+      api_base: os.environ/OMLX_BASE_URL
+      api_key: os.environ/OMLX_API_KEY
+      use_chat_completions_api: true
+
 litellm_settings:
   # the Gateway's own spans, on the same Langfuse trace as the harness's (AD-11).
   # Needs LITELLM_OTEL_V2=true in the proxy's environment: the v1 exporter drops the

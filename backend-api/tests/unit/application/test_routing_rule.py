@@ -228,6 +228,48 @@ def test_no_matching_file_is_a_misconfigured_stop_and_never_a_retry() -> None:
     assert NO_STORY_FILE == "no story file"
 
 
+def test_no_file_after_a_failed_process_names_the_exit_and_not_the_missing_file() -> None:
+    """Operator decision, 2026-09-20. `no story file` is the right sentence for an agent that
+    ran and wrote nothing, and the wrong one for a CLI that died before reading the prompt —
+    which is what every OpenCode dispatch did while its config could not be parsed. The stop
+    itself is unchanged: same `misconfigured` park, still never auto-retried."""
+    result = routed(None, files=(), exit_code=1)
+
+    assert result.status == "error"
+    assert result.retry is None
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.park.reason == "harness exit 1"
+    assert result.park.reason == HARNESS_EXIT.format(code=1)
+    assert result.park.path == ROW_PATH
+    assert result.gate == GATE
+
+
+def test_the_exit_code_renames_the_empty_glob_and_decides_nothing_else() -> None:
+    """The distinction is a *sentence*, not a route: a failed process with no file stops
+    exactly where a clean one with no file stops, and an exit code still cannot turn a
+    missing file into progress."""
+    crashed = routed(None, files=(), exit_code=1)
+    quiet = routed(None, files=(), exit_code=0)
+
+    assert crashed.status == quiet.status
+    assert crashed.park is not None
+    assert quiet.park is not None
+    assert crashed.park.kind == quiet.park.kind
+    assert crashed.retry is quiet.retry is None
+    assert quiet.park.reason == NO_STORY_FILE
+    assert crashed.park.reason != quiet.park.reason
+
+
+def test_a_null_exit_code_with_no_file_still_reads_no_story_file() -> None:
+    """`None` is "the harness reported no failure" everywhere else in this rule, and the
+    empty glob must not be the one place it reads as a crash."""
+    result = routed(None, files=(), exit_code=None)
+
+    assert result.park is not None
+    assert result.park.reason == NO_STORY_FILE
+
+
 def test_two_matching_files_name_both_of_them_in_alphabetical_order() -> None:
     result = routed(None, files=("b.md", "a.md"))
 

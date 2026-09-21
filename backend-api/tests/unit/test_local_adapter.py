@@ -23,6 +23,7 @@ system ever calls `resume` on this adapter.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from decimal import Decimal
 from pathlib import Path
@@ -69,6 +70,7 @@ CONTRACT = {
     "LANGFUSE_PUBLIC_KEY": "pk-lf-test",
     "LANGFUSE_SECRET_KEY": "sk-lf-test",
     "LITELLM_API_KEY": "sk-virtual-key-for-a-test",
+    "ORCH_LANGFUSE_TAGS": '["run:r-1", "attempt:a-1", "story:7-3", "harness:local"]',
     "ORCH_LOG_CONTENT": "0",
 }
 
@@ -414,8 +416,14 @@ def test_resume_refuses_rather_than_quietly_starting_a_new_session(
 # ── the aliases the script declares ──────────────────────────────────────────
 
 
-def test_the_aliases_are_the_two_names_the_script_declares() -> None:
-    assert set(local_aliases(CONTRACT)) == {"LANGFUSE_BASEURL", "LANGFUSE_USER_ID"}
+def test_the_aliases_are_the_three_names_the_script_declares() -> None:
+    """Third name added by the fix of 2026-09-20: OpenCode substitutes `{env:...}` into
+    `opencode.json` before parsing it, so the tag list needs a rendering of its own."""
+    assert set(local_aliases(CONTRACT)) == {
+        "LANGFUSE_BASEURL",
+        "LANGFUSE_USER_ID",
+        "OPENCODE_LANGFUSE_TAGS",
+    }
 
 
 def test_the_plugin_is_keyed_by_the_run_the_attempt_belongs_to() -> None:
@@ -429,9 +437,30 @@ def test_the_plugin_spells_the_base_url_without_the_underscore() -> None:
 
 
 def test_the_builder_carries_no_credential_out_of_the_contract() -> None:
-    """AD-5 by construction: the two aliases are a URL and an id, so there is no value here a
-    secret could travel in — asserted rather than assumed, because the contract has three."""
+    """AD-5 by construction: the three aliases are a URL, an id and a tag list, so there is no
+    value here a secret could travel in — asserted rather than assumed, because the contract
+    has three."""
     values = set(local_aliases(CONTRACT).values())
 
     assert CONTRACT["LANGFUSE_SECRET_KEY"] not in values
     assert CONTRACT["LITELLM_API_KEY"] not in values
+
+
+def test_the_tag_list_is_escaped_for_the_json_string_it_is_substituted_into() -> None:
+    """The defect of 2026-09-20. `ORCH_LANGFUSE_TAGS` is a JSON array, and OpenCode expands
+    `{env:NAME}` textually *before* it parses `opencode.json`, so the raw value's quotes
+    terminated the string it was substituted into and the CLI exited 1 on every dispatch."""
+    escaped = local_aliases(CONTRACT)["OPENCODE_LANGFUSE_TAGS"]
+
+    assert '"' not in escaped.replace('\\"', "")
+    assert escaped == CONTRACT["ORCH_LANGFUSE_TAGS"].replace('"', '\\"')
+    assert json.loads(f'"{escaped}"') == CONTRACT["ORCH_LANGFUSE_TAGS"]
+
+
+def test_the_plugins_two_names_are_still_copied_verbatim() -> None:
+    """Only the tag list is rendered; an alias that escaped a value the plugin reads as an
+    ordinary environment variable would hand it a literal backslash."""
+    built = local_aliases(CONTRACT)
+
+    assert built["LANGFUSE_BASEURL"] == CONTRACT["LANGFUSE_BASE_URL"]
+    assert built["LANGFUSE_USER_ID"] == CONTRACT["ORCH_RUN_ID"]

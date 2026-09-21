@@ -193,13 +193,19 @@ def test_every_static_builder_takes_the_contract_and_nothing_else(env: dict[str,
     """The property that decides which table a builder belongs in (AD-5): a builder needing a
     `Settings` could not be a module-level constant without reading one inside itself, which is
     why `codex` is bound by `alias_table` and `local` is a line here."""
-    contract = {"LANGFUSE_BASE_URL": "http://langfuse:3000", "ORCH_RUN_ID": "run-1"}
+    contract = {
+        "LANGFUSE_BASE_URL": "http://langfuse:3000",
+        "ORCH_RUN_ID": "run-1",
+        "ORCH_LANGFUSE_TAGS": '["run:run-1"]',
+    }
 
     for builder in ALIASES.values():
         assert callable(builder)
     assert dict(local_aliases(contract)) == {
         "LANGFUSE_BASEURL": "http://langfuse:3000",
         "LANGFUSE_USER_ID": "run-1",
+        # escaped for the JSON string `opencode.json` substitutes it into (fix of 2026-09-20)
+        "OPENCODE_LANGFUSE_TAGS": '[\\"run:run-1\\"]',
     }
 
 
@@ -236,11 +242,15 @@ def test_a_local_attempt_gets_the_contract_and_the_plugins_two_names(
     assert "CODEX_HOME" not in built
 
 
-def test_the_terminal_environment_for_local_exports_the_plugins_names_and_no_secret(
+def test_the_terminal_environment_for_local_exports_the_harnesss_own_names_and_no_secret(
     env: dict[str, str],
 ) -> None:
     """FR-21, AD-5: the exports are the harness's own `HARNESS_ENV_ALIASES` by construction,
-    and the line goes on a screen, so it may carry identifiers and nothing else."""
+    and the line goes on a screen, so it may carry identifiers and nothing else.
+
+    Three since 2026-09-20, and the third belongs on the line for the same reason the other
+    two do: a terminal session that exported neither would drive OpenCode against a config
+    whose `{env:...}` reference resolved to nothing."""
     settings = Settings()
     run = a_run()
 
@@ -252,7 +262,11 @@ def test_the_terminal_environment_for_local_exports_the_plugins_names_and_no_sec
         traceparent=TRACEPARENT,
     )
 
-    assert set(dict(terminal.exports)) == {"LANGFUSE_BASEURL", "LANGFUSE_USER_ID"}
+    assert set(dict(terminal.exports)) == {
+        "LANGFUSE_BASEURL",
+        "LANGFUSE_USER_ID",
+        "OPENCODE_LANGFUSE_TAGS",
+    }
     rendered = str(terminal.identifiers) + str(terminal.exports)
     for secret in (
         settings.litellm_api_key,
