@@ -185,6 +185,9 @@ class LocalHarness:
     def __init__(self, runner: ProcessRunner, settings: Settings) -> None:
         self.runner = runner
         self.settings = settings
+        #: `scripts/harness/opencode.sh` installs the stubs into OpenCode's own config dir,
+        #: so this harness stands alone even though it also reads the other two.
+        self.skills_dir = settings.agent_home / ".config" / "opencode" / "skills"
 
     def run(  # noqa: PLR0913 — the port's own signature (AD-10)
         self,

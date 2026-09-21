@@ -142,6 +142,9 @@ class CodexHarness:
     def __init__(self, runner: ProcessRunner, settings: Settings) -> None:
         self.runner = runner
         self.settings = settings
+        #: `scripts/harness/codex.sh` installs the stubs here — Codex reads
+        #: `$HOME/.agents/skills` (and `$CWD/.agents/skills`).
+        self.skills_dir = settings.agent_home / ".agents" / "skills"
 
     def run(  # noqa: PLR0913 — the port's own signature (AD-10)
         self,

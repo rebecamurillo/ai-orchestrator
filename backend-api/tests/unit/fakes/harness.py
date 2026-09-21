@@ -58,9 +58,13 @@ class FakeHarness:
         pgid: int = DEFAULT_PGID,
         on_wait: Callable[[], None] | None = None,
         probe_results: list[ProbeResult] | None = None,
+        skills_dir: Path | None = None,
     ) -> None:
         self.name = name
         self.capabilities = capabilities
+        #: `None` by default: a test about dispatch renders no workflow snapshot, and one
+        #: about `agent_render` names the directory it expects in the command.
+        self.skills_dir = skills_dir
         self.results = list(results or [])
         self.pgid = pgid
         self.on_wait = on_wait

@@ -100,6 +100,10 @@ class FakeHarness:
     name = NAME
     capabilities = HarnessCapabilities(preassign_session=True, resume=True, native_tracing=False)
 
+    #: The fake harness installs no skills, so it renders no workflow (AD-16 pins the real
+    #: ones into the image; nothing puts them where this adapter runs).
+    skills_dir = None
+
     def __init__(self, runner: ProcessRunner, settings: Settings) -> None:
         self.runner = runner
         self.settings = settings

@@ -221,6 +221,7 @@ def a_world(  # noqa: PLR0913 — one keyword per double or context field, each 
     cwd: str | None = WORKTREE,
     clock: FakeClock | None = None,
     writes_failing_on: int | None = None,
+    process: FakeProcessRunner | None = None,
 ) -> World:
     """One `agent` row, wired to the shared fakes, ready to `AgentExecutor().execute(...)`."""
     the_run = run if run is not None else a_run()
@@ -245,7 +246,7 @@ def a_world(  # noqa: PLR0913 — one keyword per double or context field, each 
             git=the_git,
             clock=the_clock,
             work_dir=WORK_DIR,
-            process=FakeProcessRunner(),
+            process=process if process is not None else FakeProcessRunner(),
             workspace=lambda _root: workspace,
             run_env=RunEnvironment(
                 run_id=the_run.id,

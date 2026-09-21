@@ -194,6 +194,9 @@ class ClaudeHarness:
     def __init__(self, runner: ProcessRunner, settings: Settings) -> None:
         self.runner = runner
         self.settings = settings
+        #: `scripts/harness/claude.sh` installs the stubs here — Claude Code reads
+        #: `~/.claude/skills` and not `~/.agents/skills`.
+        self.skills_dir = settings.agent_home / ".claude" / "skills"
 
     def run(  # noqa: PLR0913 — the port's own signature (AD-10)
         self,

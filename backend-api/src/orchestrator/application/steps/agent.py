@@ -36,7 +36,7 @@ from typing import Any
 
 import structlog
 
-from orchestrator.application.steps import agent_answer, agent_prompt, agent_tail
+from orchestrator.application.steps import agent_answer, agent_prompt, agent_render, agent_tail
 from orchestrator.application.steps.context import (
     StepContext,
     committed,
@@ -133,9 +133,16 @@ class AgentExecutor:
         _orphan_control(ctx)
         _wip_commit(ctx)
         mode = ctx.resume_signal.payload.get("mode") if ctx.resume_signal else None
+        workflow: str | None = None
         if mode != "session":
             _prepare_writes(ctx)
-        return _dispatch(ctx, found, _start(ctx))
+            # before `_start`, so a renderer that failed parks without leaving an attempt
+            # open; the snapshot itself is gitignored and reaches neither commit nor sha.
+            rendered = agent_render.prerendered_workflow(ctx, found)
+            if isinstance(rendered, StepResult):
+                return rendered
+            workflow = rendered
+        return _dispatch(ctx, found, _start(ctx), workflow)
 
 
 def compose_prompt(
@@ -270,9 +277,11 @@ def _frozen_test_files(ctx: StepContext, start_sha: str | None) -> tuple[str, ..
     return tuple(sorted(p for p in tree if any(PurePosixPath(p).full_match(g) for g in globs)))
 
 
-def _dispatch(ctx: StepContext, harness: Harness, attempt: Attempt) -> StepResult:
+def _dispatch(
+    ctx: StepContext, harness: Harness, attempt: Attempt, workflow: str | None = None
+) -> StepResult:
     """Dispatch inside the attempt's span; an unwired tracer degrades to `""` (AD-11)."""
-    dispatch = _planned(ctx, harness, attempt)
+    dispatch = _planned(ctx, harness, attempt, workflow)
     tracer = ctx.ports.tracer
     if tracer is None:
         return _run(ctx, dispatch, "")
@@ -280,7 +289,9 @@ def _dispatch(ctx: StepContext, harness: Harness, attempt: Attempt) -> StepResul
         return _run(ctx, dispatch, span.traceparent)
 
 
-def _planned(ctx: StepContext, harness: Harness, attempt: Attempt) -> _Dispatch:
+def _planned(
+    ctx: StepContext, harness: Harness, attempt: Attempt, workflow: str | None = None
+) -> _Dispatch:
     """Which of the three dispatches this is, and what it carries (FR-16, AD-10, AD-13).
     `compose_prompt` never sees a retry prompt: a resumed session already holds the context
     that sentence would repeat, while a session that cannot be resumed — the contract said
@@ -305,6 +316,7 @@ def _planned(ctx: StepContext, harness: Harness, attempt: Attempt) -> _Dispatch:
         agent_answer.resolved_signal(ctx),
         previous,
         prompt_file_content=prompt_file_content,
+        workflow_path=workflow,
     )
     if retry is not None:
         prompt = RETRY_PROMPT.format(retry=retry.prompt, dispatch=prompt)

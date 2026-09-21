@@ -234,6 +234,16 @@ class Harness(Protocol):
     #: The registry key and the `attempt.harness` value: `claude`, `codex` or `local`.
     name: str
     capabilities: HarnessCapabilities
+    #: Where this harness reads its global skills from, or `None` when it installs none.
+    #:
+    #: Declared here rather than inferred by the caller because the location is the
+    #: harness's own: `scripts/harness/*.sh` installs the BMAD stubs under a different
+    #: directory per harness — `~/.claude/skills`, `~/.agents/skills`,
+    #: `~/.config/opencode/skills` — and only the adapter that mirrors its own shell script
+    #: can say which. `application/steps/agent_render.py` asks for it to render a skill's
+    #: workflow snapshot before dispatch; `None` there means "render nothing", which is why
+    #: a harness with no skills of its own answers with it rather than with a guess.
+    skills_dir: Path | None
 
     def run(  # noqa: PLR0913 — AD-10 fixes this argument list; a bundle would hide it
         self,
