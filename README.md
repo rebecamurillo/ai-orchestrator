@@ -228,6 +228,22 @@ Run statuses are `queued → running → needs_you / done / failed / cancelled`.
 with a green verify also writes one append-only trajectory row — exportable per Project as
 JSONL from the Project page.
 
+## Run it from another project
+
+The orchestrator ships as a consumer package, so a machine that never clones this
+repository can run it from the published images and a project's own agents can drive it
+over HTTP:
+
+- **Run the stack** — each release attaches `ai-orchestrator-deploy-<tag>.tar.gz` (the
+  `deploy/` compose pulling the GHCR images, the env contract, and the optional `host/`
+  stack). The procedure is `deploy/README.md`.
+- **Let a project's agents use it** — install the Claude Code plugin in the consumer
+  project: `/plugin marketplace add OptimAI-labs/ai-orchestrator`, then
+  `/plugin install orchestrator@optimai`. The skill (`plugin/skills/orchestrator/`)
+  teaches the full API protocol: project and repository setup, template discovery,
+  preflight, run creation, polling, and signals. The project needs
+  `ORCHESTRATOR_BASE_URL` and `ORCHESTRATOR_TOKEN` in its environment.
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
@@ -344,6 +360,8 @@ a diff. Team overrides: `_bmad/custom/config.toml` (committed); personal:
 ## More
 
 - **Production deploys** (GHCR images, upgrades, rollback, drain): `DEPLOY.md`
+- **Consumer package** (run a release without a checkout; agent-integration plugin):
+  `deploy/README.md`, `plugin/`
 - **Host stack in depth** (LiteLLM keys, Langfuse, oMLX, egress, backups): `host/README.md`
 - **Project brain template** (the planning-hub template repo for client products):
   [OptimAI-labs/project-brain-template](https://github.com/OptimAI-labs/project-brain-template),

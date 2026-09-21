@@ -36,14 +36,22 @@ docker inspect --format '{{index .Config.Labels "org.opencontainers.image.versio
   ghcr.io/optimai-labs/ai-orchestrator/backend-api:v1.2.0
 ```
 
-The images are built for `linux/arm64` only, on a native arm64 runner. `backend-api/Dockerfile`
-picks its Node and `gh` archives from `dpkg --print-architecture`, and the deployment target
-is Apple Silicon; an amd64 image would run under emulation or not at all.
+The images are built for `linux/amd64` and `linux/arm64`, each natively on its own runner
+and merged into one manifest per tag (per-arch tags `<tag>-amd64` / `<tag>-arm64` remain in
+the registry as the per-platform record). `backend-api/Dockerfile` picks its Node and `gh`
+archives from `dpkg --print-architecture`, so both platforms build unchanged.
 
-The repository is private, so the packages are private. The host authenticates to the
-registry with a token held in its own docker config — the **docker daemon's** credential, not
-a container's environment. No container process receives it, so AD-5 is untouched: the one
-credential a *process* holds is still `ORCHESTRATOR_TOKEN`.
+The release also attaches `ai-orchestrator-deploy-<tag>.tar.gz` to the GitHub Release: the
+consumer package (`deploy/`, `host/`, `plugin/`) for machines that run a release without
+this checkout. That path is `deploy/README.md`; this file remains the operator's own
+procedure for a host that has the checkout.
+
+The packages are intended to be **public** (flipped once per package in the GitHub UI
+after the first publish — a workflow cannot set visibility), so a consumer pulls with no
+registry login. While a package is still private, the host authenticates with a token held
+in its own docker config — the **docker daemon's** credential, not a container's
+environment. No container process receives it, so AD-5 is untouched: the one credential a
+*process* holds is still `ORCHESTRATOR_TOKEN`.
 
 ---
 

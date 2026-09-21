@@ -1,0 +1,140 @@
+# ai-orchestrator — the consumer stack: published images, no checkout.
+#
+# The repository root's `docker-compose.yml` is the development stack and builds from
+# source; `docker-compose.prod.yml` overlays it for the operator's own host. This file is
+# the third audience: a machine that has only this directory (from a release bundle) and
+# pulls the two images the release workflow published to GHCR. It is one self-contained
+# file rather than an overlay because an overlay needs the base file, and the base file
+# lives in the checkout this stack exists to not need.
+#
+#   cp .env.example .env          # once, then fill it in — IMAGE_TAG names the release
+#   docker compose pull
+#   docker compose up -d --wait
+#
+# Everything the base stack asserts still holds here: every reference uses the
+# `${VAR:?...}` fail-closed form (hard rule 7), credentials stop at the process that needs
+# them (AD-5: backend-api gets the whole contract, web-client gets four variables, the
+# browser's origin never sees the git token or the spend key), and configuration is the
+# environment (AD-20).
+#
+# What production changes, this file carries directly (the reasons are docker-compose.prod.yml's):
+# pulled images pinned by `IMAGE_TAG`, `.env` required, postgres probed with a real query
+# (`pg_isready` exits 0 against a missing database), logs rotated, `restart: always`.
+#
+# Two deliberate differences from the development stack:
+#   - postgres publishes no port: only backend-api reaches it, over the compose network.
+#     A published 5432 would collide with whatever the consumer machine already runs.
+#   - the two application ports publish on `${BIND_ADDRESS:-127.0.0.1}`. Loopback is the
+#     default posture; a consumer who sets 0.0.0.0 is exposing a single-token stack to the
+#     network and README.md § Exposure says what that means before they do.
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set it in .env, copied from .env.example}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env, copied from .env.example}
+      POSTGRES_DB: ${POSTGRES_DB:?set it in .env, copied from .env.example}
+    volumes:
+      # postgres:18 declares its volume at /var/lib/postgresql and sets
+      # PGDATA=/var/lib/postgresql/18/docker — the pre-18 /var/lib/postgresql/data would
+      # mount a directory the image no longer writes to, and the data would not persist
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      # a query, not `pg_isready`: `pg_isready` treats `FATAL: database "…" does not
+      # exist` as *accepting connections* and exits 0, so it would report healthy against
+      # a database that is not there and start backend-api into a crash loop.
+      # $$ defers the expansion to the container's shell, which has the variables above
+      test:
+        - CMD-SHELL
+        - psql -U $${POSTGRES_USER} -d $${POSTGRES_DB} -tAc 'select 1' >/dev/null
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+    restart: always
+
+  backend-api:
+    image: ghcr.io/optimai-labs/ai-orchestrator/backend-api:${IMAGE_TAG:?set it in .env — the release tag this host runs}
+    env_file:
+      # the one process that holds every credential (AD-5); required, because a stack that
+      # silently started without its contract would be misconfigured rather than refused
+      - path: .env
+        required: true
+    extra_hosts:
+      # LiteLLM, Langfuse and the model server run on the host, not in compose (AD-11)
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${BACKEND_API_PORT:?set it in .env, copied from .env.example}:${BACKEND_API_PORT:?set it in .env, copied from .env.example}"
+    volumes:
+      # base clones, worktrees and step logs
+      - work:${WORK_DIR:?set it in .env, copied from .env.example}
+      # ~/.claude ~/.codex ~/.config/opencode: the harness configs and the BMAD skill stubs
+      - agent-home:${AGENT_HOME:?set it in .env, copied from .env.example}
+    # not hardened, deliberately (Operator decision, 2026-09-11): this container is the
+    # sandbox real agents run in, and a harness may `sudo apt-get` what a target
+    # repository's install script needs. README.md § Trust says what that implies.
+    # the worktrees and the harness configs are written at run time (NFR-3)
+    read_only: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # $$ defers the expansion to the container's shell, which has the contract
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${BACKEND_API_PORT}/healthz >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      # the first start runs `alembic upgrade head` before the socket is bound
+      start_period: 60s
+    logging: *logging
+    restart: always
+
+  web-client:
+    image: ghcr.io/optimai-labs/ai-orchestrator/web-client:${IMAGE_TAG:?set it in .env — the release tag this host runs}
+    environment:
+      # exactly four (AD-5) — the one credential, the cookie signing key, where the backend
+      # is, and the port. Never GITHUB_TOKEN, never LITELLM_SPEND_KEY, never DATABASE_URL.
+      ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN:?set it in .env, copied from .env.example}
+      ORCHESTRATOR_SESSION_SECRET: ${ORCHESTRATOR_SESSION_SECRET:?set it in .env, copied from .env.example}
+      BACKEND_API_URL: ${BACKEND_API_URL:?set it in .env, copied from .env.example}
+      WEB_CLIENT_PORT: ${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}:${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Astro writes its session store under the working directory
+    read_only: false
+    depends_on:
+      backend-api:
+        condition: service_healthy
+    healthcheck:
+      # node, not curl: the slim base carries no HTTP client, and adding one to probe a
+      # server that is already node would be a package installed for a single request.
+      # `/login` is the one route that answers without a session (1.5).
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:' + (process.env.WEB_CLIENT_PORT || 4321) + '/login').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    logging: *logging
+    restart: always
+
+volumes:
+  pgdata:
+  # /work — base clones, worktrees, logs (AD-14)
+  work:
+  # the agent's home — harness configs and the BMAD skill stubs (AD-16). Seeded from the
+  # backend image the first time it is created, and not backed up (spine Operations).
+  agent-home:

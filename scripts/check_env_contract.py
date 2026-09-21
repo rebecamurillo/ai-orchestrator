@@ -24,6 +24,7 @@ from orchestrator.infrastructure.settings import Settings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_EXAMPLE = REPO_ROOT / ".env.example"
+DEFAULT_DEPLOY_ENV_EXAMPLE = REPO_ROOT / "deploy" / ".env.example"
 
 # Read by docker compose or the web-client; never by a backend-api module.
 COMPOSE_ONLY_VARIABLES = {
@@ -33,6 +34,14 @@ COMPOSE_ONLY_VARIABLES = {
     "POSTGRES_USER",
     "POSTGRES_PASSWORD",
     "POSTGRES_DB",
+}
+
+# Read by `deploy/docker-compose.yml` alone; never by the application, never valid in the
+# root contract (adding one there would fail this check as a field-less variable).
+DEPLOY_ONLY_VARIABLES = {
+    "IMAGE_TAG",
+    "COMPOSE_PROJECT_NAME",
+    "BIND_ADDRESS",
 }
 
 
@@ -99,9 +108,55 @@ def compare(settings: set[str], contract: set[str]) -> tuple[list[str], list[str
     return missing, extra, absent
 
 
+def compare_deploy(contract: set[str], deploy: set[str]) -> tuple[list[str], list[str], list[str]]:
+    """Return (contract variables the deploy copy lost, stray deploy variables, lost deploy-only).
+
+    `deploy/.env.example` is the consumer's copy of the contract: every root variable plus
+    the deploy-only block, nothing else. Hard rule 8 says a new setting lands in
+    `.env.example`; this comparison is what extends that rule to the copy a consumer
+    actually fills in.
+    """
+    missing = sorted(contract - deploy)
+    stray = sorted(deploy - contract - DEPLOY_ONLY_VARIABLES)
+    absent = sorted(DEPLOY_ONLY_VARIABLES - deploy)
+    return missing, stray, absent
+
+
+def check_deploy(contract: set[str], deploy_path: Path, name: str) -> int:
+    """Hold the consumer copy to the contract, silently on agreement.
+
+    `test_env_contract.py` pins the root success line as the whole of stdout, so this
+    check writes nothing when the copy agrees and stderr lines when it drifts.
+    """
+    try:
+        deploy = env_example_variables(deploy_path)
+    except ContractError as error:
+        sys.stderr.write(f"{error}\n")
+        return 1
+
+    lost, stray, gone = compare_deploy(contract, deploy)
+    deploy_name = f"deploy/{deploy_path.name}"
+
+    for variable in lost:
+        sys.stderr.write(f"{variable}: in {name} but missing from {deploy_name}\n")
+    for variable in stray:
+        sys.stderr.write(f"{variable}: in {deploy_name} but not in {name} or the deploy set\n")
+    for variable in gone:
+        sys.stderr.write(f"{variable}: deploy-only variable missing from {deploy_name}\n")
+
+    if lost or stray or gone:
+        sys.stderr.write(
+            f"deploy contract: {len(lost)} lost, {len(stray)} stray, {len(gone)} gone — "
+            f"{name} and {deploy_name} change together (hard rule 8)\n"
+        )
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check the AD-20 environment contract.")
     parser.add_argument("--env-example", type=Path, default=DEFAULT_ENV_EXAMPLE)
+    parser.add_argument("--deploy-env-example", type=Path, default=DEFAULT_DEPLOY_ENV_EXAMPLE)
     args = parser.parse_args(argv)
 
     try:
@@ -126,6 +181,9 @@ def main(argv: list[str] | None = None) -> int:
             f"env contract: {len(missing)} missing, {len(extra)} unexpected, "
             f"{len(absent)} lost — settings and {name} change together (AD-20)\n"
         )
+        return 1
+
+    if check_deploy(contract, args.deploy_env_example, name) != 0:
         return 1
 
     sys.stdout.write(
