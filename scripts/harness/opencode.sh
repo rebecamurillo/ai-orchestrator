@@ -18,6 +18,7 @@ install() {
   npm install -g "opencode-ai@${OPENCODE_VERSION}"
   # OpenCode reads ~/.claude/skills and ~/.agents/skills too; the codex.sh stubs suffice. Install its own dir anyway so it stands alone.
   bmad_install_global_skills opencode "${OPENCODE_CONFIG_DIR}/skills"
+  install_operator_skills /app/ia-agents-skills "${OPENCODE_CONFIG_DIR}/skills"
 }
 
 configure() {

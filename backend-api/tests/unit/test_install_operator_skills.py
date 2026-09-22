@@ -158,9 +158,9 @@ def test_agents_skills_bmad_entries_are_gitignored() -> None:
 # ── harness wiring (AD-16) ────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("harness", ("claude", "codex"))
+@pytest.mark.parametrize("harness", ("claude", "codex", "opencode"))
 def test_harness_install_calls_install_operator_skills(harness: str) -> None:
-    """install() in claude.sh and codex.sh must call install_operator_skills (AD-16)."""
+    """install() in claude.sh, codex.sh, opencode.sh must call install_operator_skills (AD-16)."""
     content = (HARNESS_DIR / f"{harness}.sh").read_text()
     assert "install_operator_skills" in content, (
         f"{harness}.sh must call install_operator_skills in install()"

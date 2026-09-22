@@ -18,6 +18,7 @@ from pathlib import Path
 
 from orchestrator.application.steps import agent_render
 from orchestrator.application.steps.agent import AgentExecutor
+from orchestrator.application.steps.agent_render import WORKFLOW_ENTRY
 from orchestrator.domain.ports.process import Outcome
 from orchestrator.domain.values import StepResult
 from tests.unit.application.steps.agent_fixtures import (
@@ -52,12 +53,22 @@ def a_render_world(
     outcome: Outcome | None = None,
     skills_dir: Path | None = SKILLS_DIR,
     script: bool = True,
+    workflow: bool = True,
     **over: object,
 ) -> World:
-    """A world whose worktree holds the renderer and whose render log holds `output`."""
+    """A world whose worktree holds the renderer and whose render log holds `output`.
+
+    `workflow` stands in for the skill directory carrying its own `workflow.md`
+    (`render_skill.py`'s own requirement, checked before the renderer ever runs); the fake
+    `Workspace` ignores the root it is asked for (`a_world`'s `workspace=lambda _root:
+    workspace`), so one flat `files` mapping is what both the worktree and the skill
+    directory read from.
+    """
     files = {RENDER_LOG: output}
     if script:
         files[SCRIPT] = "# the renderer"
+    if workflow:
+        files[WORKFLOW_ENTRY] = "# the workflow"
     process = FakeProcessRunner(default=outcome) if outcome is not None else FakeProcessRunner()
     return a_world(
         files=files,
@@ -141,7 +152,7 @@ def test_the_render_writes_beside_the_attempts_own_log_and_not_over_it() -> None
     )
 
 
-# ── the three forms that render nothing at all ───────────────────────────────
+# ── the four forms that render nothing at all ────────────────────────────────
 
 
 def test_a_row_carrying_a_literal_prompt_names_no_skill_and_renders_nothing() -> None:
@@ -161,6 +172,16 @@ def test_a_harness_that_installs_no_skills_renders_nothing() -> None:
 def test_a_worktree_without_the_renderer_dispatches_as_it_did_before() -> None:
     """A target repository that never ran `repo-init` keeps working, unrendered."""
     world = a_render_world(script=False)
+
+    assert prerender(world) is None
+    assert world.process.called("start") == []
+
+
+def test_a_skill_with_no_workflow_md_of_its_own_dispatches_as_it_did_before() -> None:
+    """An operator skill authored to `ia-agents-skills/README.md`'s contract — `SKILL.md`
+    alone, no renderer entry — is not a workflow this module renders (Operator finding,
+    2026-09-21: `spec-gate` HALTing on a missing `workflow.md` under every harness)."""
+    world = a_render_world(workflow=False)
 
     assert prerender(world) is None
     assert world.process.called("start") == []

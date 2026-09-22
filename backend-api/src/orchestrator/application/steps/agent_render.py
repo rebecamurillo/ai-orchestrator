@@ -17,10 +17,15 @@ opened a review. The command is a pure function of two paths this process alread
 it is rendered here and the agent is handed the result.
 
 **Skipping is not failing.** A row whose prompt is its own (`prompt`, `prompt_file`), a
-harness that installs no skills, and a worktree with no renderer each return `None` and
-dispatch exactly as they did before: a target repository that never ran `repo-init` must
-keep working. A renderer that *is* there and fails parks the Run instead (hard rule 7) —
-the silent improvisation this module exists to end is never an outcome it produces.
+harness that installs no skills, a worktree with no renderer, and a skill with no
+`workflow.md` of its own each return `None` and dispatch exactly as they did before: a
+target repository that never ran `repo-init` must keep working, and an operator skill
+authored to `ia-agents-skills/README.md`'s own contract — `SKILL.md` alone, no renderer
+entry — is not a workflow this module has anything to render (`render_skill.py` demands a
+`workflow.md` for every skill it is pointed at; a skill that never shipped one was never
+meant to go through it). A renderer that *is* there and fails parks the Run instead (hard
+rule 7) — the silent improvisation this module exists to end is never an outcome it
+produces.
 
 **Nothing here reaches git.** `_bmad/render/` self-ignores through its own `.gitignore`, so
 the snapshot never enters the agent's diff, the prepare commit, or `start_sha`.
@@ -63,6 +68,12 @@ HALT = "HALT:"
 
 #: The render's log, beside the attempt's own so one directory holds both.
 RENDER_LOG_SUFFIX = ".render"
+
+#: What `render_skill.py::_load_sources` requires of every skill it is pointed at. A skill
+#: directory with no entry of this name was never meant to render (see module docstring) —
+#: checked before the renderer runs, rather than let it print its own `HALT:` for a case
+#: that is not a misconfiguration.
+WORKFLOW_ENTRY = "workflow.md"
 
 #: Minutes before the runner kills the render. It reads a dozen small files and hashes
 #: them; a render still going after this is wedged, not slow.
@@ -107,24 +118,40 @@ def snapshot_from(output: str) -> str | None:
     return found[-1] if found else None
 
 
+def _missing_prerequisite(ctx: StepContext, skill_dir: Path) -> str | None:
+    """The first of the render's two prerequisites this row's worktree or skill lacks, or
+    `None` when both are present: the worktree's own `RENDER_SCRIPT`, and the skill's own
+    `WORKFLOW_ENTRY`. One function so `prerendered_workflow` reports either as a single skip
+    rather than two near-identical branches."""
+    if not require_workspace(ctx, ctx.cwd).exists(RENDER_SCRIPT):
+        return RENDER_SCRIPT
+    if not require_workspace(ctx, str(skill_dir)).exists(WORKFLOW_ENTRY):
+        return WORKFLOW_ENTRY
+    return None
+
+
 def prerendered_workflow(ctx: StepContext, harness: Harness) -> str | StepResult | None:
     """The rendered `workflow.md` for this row's skill: a path, a park, or `None`.
 
-    `None` is "this row renders nothing" and the caller dispatches unchanged. A `StepResult`
-    is a renderer that was present and failed, which parks rather than dispatching a prompt
-    whose protocol never loaded.
+    `None` is "this row renders nothing" and the caller dispatches unchanged — including a
+    skill directory that carries no `workflow.md` of its own (`ia-agents-skills/README.md`'s
+    contract asks only for `SKILL.md`; the renderer's own `workflow.md` requirement is not
+    part of it). A `StepResult` is a renderer that was present and failed, which parks
+    rather than dispatching a prompt whose protocol never loaded.
     """
     skill = _skill_of(ctx)
     if skill is None or harness.skills_dir is None:
         return None
     worktree = Path(require_cwd(ctx))
-    if not require_workspace(ctx, ctx.cwd).exists(RENDER_SCRIPT):
-        log.info(SKIPPED, path=ctx.row.path, reason=RENDER_SCRIPT, skill=skill)
+    skill_dir = harness.skills_dir / skill
+    missing = _missing_prerequisite(ctx, skill_dir)
+    if missing is not None:
+        log.info(SKIPPED, path=ctx.row.path, reason=missing, skill=skill)
         return None
     output_log = Path(f"{log_path(ctx)}{RENDER_LOG_SUFFIX}")
     process = require_process(ctx)
     handle = process.start(
-        render_argv(worktree, harness.skills_dir / skill),
+        render_argv(worktree, skill_dir),
         cwd=worktree,
         env={},
         timeout_min=RENDER_TIMEOUT_MIN,
