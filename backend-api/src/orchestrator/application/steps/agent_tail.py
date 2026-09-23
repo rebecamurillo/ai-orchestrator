@@ -21,11 +21,11 @@ from typing import Any
 from orchestrator.application.rules import budget, protected_paths
 from orchestrator.application.rules.routing import route
 from orchestrator.application.rules.signals import accepted_files
+from orchestrator.application.steps import agent_workdir
 from orchestrator.application.steps.context import (
     StepContext,
     committed,
     operator_retry,
-    require_cwd,
     require_env,
     require_run,
     require_workspace,
@@ -42,7 +42,6 @@ from orchestrator.application.templates.agent_row import (
 )
 from orchestrator.application.use_cases.spend import record_attempt_spend
 from orchestrator.domain.entities.attempt import Attempt
-from orchestrator.domain.ports.git import Change
 from orchestrator.domain.ports.harness import HarnessResult
 from orchestrator.domain.values import Park, Retry, StepResult
 
@@ -112,7 +111,7 @@ def finish(
     finished = attempt.model_copy(
         update={
             "ended_at": ctx.ports.clock.now(),
-            "end_sha": ctx.ports.git.head_sha(require_cwd(ctx)),
+            **agent_workdir.end_shas(ctx),
             "exit_code": result.exit_code,
             "session_id": result.session_id,
             "log_path": str(result.log_path),
@@ -224,14 +223,16 @@ def protected(ctx: StepContext, attempt: Attempt) -> StepResult | None:
     uncommitted, so a file written and never committed is as much a hit as a committed one.
     Nothing else is in scope: an operator commit and the orchestrator's own WIP and prepare
     commits are outside those two ends by construction, which is what makes this check
-    deterministic rather than a guess about who wrote what.
+    deterministic rather than a guess about who wrote what. A `workdir` attempt spans two
+    trees and `agent_workdir.changes` collects both, in one spelling, so everything below —
+    the anchor set, `accepted_paths`, the reason sentence, the payload — is unchanged.
 
     A hit is never retried. `apply_step_result` parks the Run on it (AD-8) and the Operator
     answers with *Accept* or a skip; `re_check` below is what an Accept comes back to.
     """
     environment = require_env(ctx)
     allowed = (*environment.accepted_paths, *protected_paths.declared(ctx.row.with_resolved))
-    hits = protected_paths.check(_changes(ctx, attempt), environment.anchors, allowed)
+    hits = protected_paths.check(agent_workdir.changes(ctx, attempt), environment.anchors, allowed)
     if not hits:
         return None
     reason = PROTECTED.format(paths=PATH_SEPARATOR.join(hit.path for hit in hits))
@@ -343,19 +344,6 @@ def usage(result: HarnessResult) -> dict[str, Any]:
         "cost_usd": figures.cost_usd,
         "cost_provisional": True,
     }
-
-
-def _changes(ctx: StepContext, attempt: Attempt) -> tuple[Change, ...]:
-    """The attempt's committed range and the tree it left, as one list of changes (AD-17).
-
-    An attempt that recorded neither SHA bounded no range — a worktree with no commit in it
-    at all — and the uncommitted tree is then the whole of what it did.
-    """
-    worktree, git = require_cwd(ctx), ctx.ports.git
-    ranged: tuple[Change, ...] = ()
-    if attempt.start_sha is not None and attempt.end_sha is not None:
-        ranged = git.diff_changes(worktree, attempt.start_sha, attempt.end_sha)
-    return (*ranged, *protected_paths.uncommitted(git.status(worktree)))
 
 
 def _reported(attempt: Attempt) -> HarnessResult:

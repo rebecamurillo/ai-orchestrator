@@ -3,11 +3,11 @@
 `n` is 1-based per row and unique with `step_run_id`, so "attempt 2 of `steps[3]`" names one
 record whatever else is running. An attempt is written in **two halves** (AD-8), and every
 optional field below belongs to one of them: `AttemptRepository.mark_started` records
-`started_at`, `start_sha`, `frozen_test_files` and `pgid` in its own unit of work *before*
-the harness is awaited, and `mark_finished` records `ended_at`, `end_sha`, `exit_code`,
-`session_id`, the usage and `log_path` right after it exits. A backend restart between the
-two finds the start half stored, which is what lets FR-12 report an interrupted attempt
-instead of losing it.
+`started_at`, `start_sha`, `root_start_sha`, `frozen_test_files` and `pgid` in its own unit
+of work *before* the harness is awaited, and `mark_finished` records `ended_at`, `end_sha`,
+`root_end_sha`, `exit_code`, `session_id`, the usage and `log_path` right after it exits. A
+backend restart between the two finds the start half stored, which is what lets FR-12 report
+an interrupted attempt instead of losing it.
 
 `status` is a `StepStatus` — the status the row reached *through this attempt*: `running`
 while in flight, then one of `done | blocked | checkpoint | error | skipped`. A second
@@ -49,6 +49,14 @@ class Attempt(BaseModel):
     start_sha: str | None = None
     #: HEAD when the harness exited — the end of it (AD-9).
     end_sha: str | None = None
+    #: The **worktree root's** HEAD at those same two moments, written only when the row
+    #: declares `workdir` — then `start_sha`/`end_sha` above bound the range inside the
+    #: submodule's own repository and these two bound the hub's, so AD-17's "agent ranges
+    #: only" stays exact in both trees (spine AD-17 amendment, hub-Run initiative workflow
+    #: H4, 2026-09-23). `None` on every row that runs at the root, which is every row that
+    #: existed before this story.
+    root_start_sha: str | None = None
+    root_end_sha: str | None = None
     #: The protected test files as they stood at the story frame's first attempt; `None` on
     #: every attempt that is not that one.
     frozen_test_files: tuple[str, ...] | None = None

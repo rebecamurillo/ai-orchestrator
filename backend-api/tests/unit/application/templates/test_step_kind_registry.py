@@ -41,10 +41,14 @@ SPINE = {
         False,
     ),
     "shell": ("deterministic", 30, frozenset({"command"}), False),
+    # Revised: `agent` gained `workdir` — the harness is dispatched inside that submodule's
+    # checkout and the attempt's own git bookkeeping happens in its repository, while the hub
+    # anchors stay checked at the worktree root (hub-Run initiative H4, spine "Template DSL
+    # v1 keys" AD-9/AD-17 amendment, 2026-09-23).
     "agent": (
         "liveness",
         None,  # operator revision 2026-09-15: no wall-clock default (stall detection instead)
-        frozenset({"harness", "model", "skill", "args", "prompt_extra"}),
+        frozenset({"harness", "model", "skill", "args", "prompt_extra", "workdir"}),
         False,
         30,  # stall_default_min
     ),

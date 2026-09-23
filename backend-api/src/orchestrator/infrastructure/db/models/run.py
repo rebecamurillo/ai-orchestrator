@@ -176,6 +176,10 @@ class AttemptRow(Base):
     engine_ref: Mapped[dict[str, Any]] = mapped_column(JSONB())
     start_sha: Mapped[str | None] = mapped_column(Text(), nullable=True)
     end_sha: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # The worktree root's own range, written only when the row declares `workdir` (AD-17's
+    # "one attempt spans two trees", hub-Run initiative workflow H4, 2026-09-23).
+    root_start_sha: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    root_end_sha: Mapped[str | None] = mapped_column(Text(), nullable=True)
     frozen_test_files: Mapped[list[str] | None] = mapped_column(JSONB(), nullable=True)
     log_path: Mapped[str | None] = mapped_column(Text(), nullable=True)
     exit_code: Mapped[int | None] = mapped_column(Integer(), nullable=True)

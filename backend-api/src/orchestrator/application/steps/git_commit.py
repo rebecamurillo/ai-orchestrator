@@ -30,15 +30,23 @@ row inside that submodule's own repository instead: `Git.commit(..., workdir=wor
 and commits there in one call, because a submodule's own tree has no spec folder to stage
 first and no separate staging call to make ahead of it. `None` back from the port is `workdir`
 not an initialized submodule — parked `misconfigured`, AD-9's own sentence, never a silent
-fall back to the worktree root. **Owed to H4:** the AD-17 protected-path check below still
-runs only over the worktree root's agent ranges, exactly as it did before this story. AD-17's
-"one attempt spans two trees" amendment needs `root_start_sha`/`root_end_sha` and a workdir
-frame's own `frozen_test_files` — machinery the `agent` executor writes and this story does
-not touch — so a workdir commit is not checked against the submodule's own protected paths
-yet; H4 wires the `agent` kind's `workdir` and is where that dual-tree check belongs.
+fall back to the worktree root.
+
+**The check runs in the submodule's tree too** (H2's IOU, paid by H4). AD-17's amendment puts
+a `workdir` attempt's `start_sha`/`end_sha` inside that submodule's repository, so the frame's
+agent ranges are diffed there — `rules/protected_paths.py::FrameAnchors` carries the row's own
+`workdir` and does it — and what this row adds to them is the submodule's *uncommitted* tree
+rather than the worktree root's. Every path either half reports is spelled `{workdir}/…`, the
+one spelling `steps/agent_workdir.py` fixes for a hub Run, so the anchor set, `accepted_paths`
+and the reason sentence are the same objects the root branch uses. One ordering difference
+follows from the two trees: the root branch answers `no changes` before checking, because
+nothing staged means nothing to judge, while a `workdir` row checks first — a clean submodule
+tree says nothing about what an earlier attempt of the frame already committed inside it.
 """
 
 from __future__ import annotations
+
+from pathlib import PurePosixPath
 
 from orchestrator.application.rules import protected_paths
 from orchestrator.application.steps import WORKDIR_KEY
@@ -86,16 +94,7 @@ class GitCommitExecutor:
         message = str(ctx.with_resolved[MESSAGE_KEY])
         workdir = resolved_text(ctx.with_resolved, WORKDIR_KEY)
         if workdir:
-            sha = git.commit(worktree, message, workdir=workdir)
-            if sha is None:
-                reason = NOT_A_SUBMODULE.format(path=workdir)
-                return StepResult(
-                    status="error",
-                    gate=ctx.row.gate,
-                    reason=reason,
-                    park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
-                )
-            return StepResult(status="done", gate=ctx.row.gate, output_ref=sha)
+            return _in_workdir(ctx, workdir, message)
         if env.spec_folder:
             git.stage(worktree, env.spec_folder)
         git.stage(worktree)
@@ -117,6 +116,38 @@ class GitCommitExecutor:
             )
         sha = git.commit(worktree, message)
         return StepResult(status="done", gate=ctx.row.gate, output_ref=sha)
+
+
+def _in_workdir(ctx: StepContext, workdir: str, message: str) -> StepResult:
+    """The `workdir` branch: check the submodule's own scope, then commit inside it (H2, H4).
+
+    The row's `workdir` is normalised once here, so `./repos/member` and `repos/member/` name
+    one prefix; the port normalises the same value again when it resolves the folder, which is
+    what keeps a Template's spelling from reaching either answer.
+    """
+    git = ctx.ports.git
+    worktree, normalised = require_cwd(ctx), str(PurePosixPath(workdir))
+    staged = tuple(f"{normalised}/{path}" for path in _changed(git.status(worktree / normalised)))
+    hits = _protected(ctx, staged, require_env(ctx).accepted_paths)
+    if hits:
+        reason = PROTECTED.format(paths=PATH_SEPARATOR.join(hits))
+        return StepResult(
+            status="error",
+            gate=ctx.row.gate,
+            reason=reason,
+            park=Park(kind="protected_path", reason=reason, path=ctx.row.path),
+            payload=protected_paths.hits_payload(hits),
+        )
+    sha = git.commit(worktree, message, workdir=workdir)
+    if sha is None:
+        reason = NOT_A_SUBMODULE.format(path=workdir)
+        return StepResult(
+            status="error",
+            gate=ctx.row.gate,
+            reason=reason,
+            park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
+        )
+    return StepResult(status="done", gate=ctx.row.gate, output_ref=sha)
 
 
 def _changed(status: str) -> tuple[str, ...]:

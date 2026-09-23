@@ -25,19 +25,32 @@ handles it before any new commits are placed in front of the range it reads.
 Template's own `retry`; a person's *Retry* from a stop; and a `verify` redispatch that
 hands the agent its file back at `in-progress` with a `## Verify Failure` section (FR-10).
 `context.retrying`, `context.operator_retry` and `context.redispatched` tell them apart.
+
+**`with {workdir}` moves the dispatch, not the worktree** (AD-9, AD-17 — ratified
+2026-09-23, hub-Run initiative workflow). The harness runs in that submodule's checkout and
+every git fact the attempt records is that repository's; the orchestrator's own writes and
+every `Workspace` read stay at the run worktree root, because the specs live in the hub.
+Which tree answers which question is `agent_workdir.py`'s whole subject, including the
+spec-path contract H3's templates encode and the dual-tree protected-path check; a row that
+declares no `workdir` reaches exactly the calls it always did.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import PurePosixPath
 from typing import Any
 
 import structlog
 
 from orchestrator.application.rules.protected_paths import uncommitted
-from orchestrator.application.steps import agent_answer, agent_prompt, agent_render, agent_tail
+from orchestrator.application.steps import (
+    agent_answer,
+    agent_prompt,
+    agent_render,
+    agent_tail,
+    agent_workdir,
+)
 from orchestrator.application.steps.context import (
     StepContext,
     committed,
@@ -84,8 +97,13 @@ DISPATCH = (
 #: has not been told yet. A resumed one is sent the retry prompt alone.
 RETRY_PROMPT = "{retry} {dispatch}"
 
-#: The two commits this module makes, and the documents it writes between them.
-WIP_MESSAGE = "wip: story {id} attempt {n} (interrupted)"
+#: The two commits this module makes, and the documents it writes between them. The WIP one
+#: is `agent_workdir`'s — the tree it lands in is that module's question — and re-exported
+#: here, beside `WHOLE_TREE`, so this module's own name still answers "what does an `agent`
+#: row commit" and "what does it freeze", the way `DISPATCH` is named here and in
+#: `agent_prompt.py` both (H4, 2026-09-23).
+WIP_MESSAGE = agent_workdir.WIP_MESSAGE
+WHOLE_TREE = agent_workdir.WHOLE_TREE
 PREPARE_MESSAGE = "orchestrator: prepare story {id} attempt {n}"
 CONTEXT_FILE = "project-context.md"
 CONTEXT_HEADING = "## Context files"
@@ -98,10 +116,6 @@ INTERRUPTED = "interrupted"
 #: git's own crash-recovery lock, and how long this row waits for git to clear it (AD-14).
 INDEX_LOCK = ".git/index.lock"
 LOCK_POLL_SECONDS, LOCK_TIMEOUT_SECONDS = 1.0, 30.0
-
-#: Every path at a ref, as a pathspec. Not `""`: git refuses that by name and the adapter
-#: reports a refusal as `()`, so AD-17's set would come back empty and nothing would fail.
-WHOLE_TREE = "."
 
 #: No wall-clock deadline by default (operator revision 2026-09-15: 90-min kill → stall).
 DEFAULT_TIMEOUT_MIN = None
@@ -131,8 +145,13 @@ class AgentExecutor:
         found = _harness(ctx)
         if isinstance(found, StepResult):
             return found
+        # beside the harness lookup and for its reason: a row naming a folder that is no
+        # initialized submodule must park before any commit is placed (AD-9, H4).
+        misconfigured = agent_workdir.verify(ctx)
+        if misconfigured is not None:
+            return misconfigured
         _orphan_control(ctx)
-        _wip_commit(ctx)
+        agent_workdir.wip_commit(ctx)
         mode = ctx.resume_signal.payload.get("mode") if ctx.resume_signal else None
         workflow: str | None = None
         if mode != "session":
@@ -185,18 +204,6 @@ def _orphan_control(ctx: StepContext) -> None:
         update={"status": "error", "ended_at": ctx.ports.clock.now(), "output_ref": INTERRUPTED}
     )
     committed(ctx, lambda attempts: attempts.mark_finished(closed))
-
-
-def _wip_commit(ctx: StepContext) -> None:
-    """Commit leftover dirt so this row starts tracked (AD-9)."""
-    if ctx.previous_attempt is None:
-        return
-    worktree = require_cwd(ctx)
-    git = ctx.ports.git
-    if not git.status(worktree).strip():
-        return
-    git.stage(worktree)
-    git.commit(worktree, WIP_MESSAGE.format(id=_text(ctx, STORY_ID_KEY), n=ctx.attempt.n))
 
 
 def _prepare_writes(ctx: StepContext) -> None:
@@ -260,13 +267,12 @@ def _context_document(ctx: StepContext) -> str | None:
 
 
 def _start(ctx: StepContext) -> Attempt:
-    """The start half, committed alone, before the process exists: `start_sha` after both
-    commits, `pgid` `None` until the harness answers (AD-8, AD-14)."""
-    start_sha = ctx.ports.git.head_sha(require_cwd(ctx))
+    """The start half, committed alone, before the process exists: the start SHAs after both
+    commits, `pgid` `None` until the harness answers (AD-8, AD-14). Which tree each SHA and
+    the frozen test set are read from is `agent_workdir.start_shas`'s (AD-17)."""
     started = ctx.attempt.model_copy(
         update={
-            "start_sha": start_sha,
-            "frozen_test_files": _frozen_test_files(ctx, start_sha),
+            **agent_workdir.start_shas(ctx),
             "pgid": None,
             "harness": _text(ctx, HARNESS_KEY),
             "model": (_text(ctx, MODEL_KEY) or None),
@@ -274,16 +280,6 @@ def _start(ctx: StepContext) -> Attempt:
     )
     committed(ctx, lambda attempts: attempts.mark_started(started))
     return started
-
-
-def _frozen_test_files(ctx: StepContext, start_sha: str | None) -> tuple[str, ...] | None:
-    """AD-17 anchors from committed tree at start_sha; skips if predecessor reached it."""
-    previous = ctx.previous_attempt
-    if start_sha is None or (previous is not None and previous.start_sha is not None):
-        return None
-    globs = require_env(ctx).test_globs
-    tree = ctx.ports.git.list_files(require_cwd(ctx), start_sha, WHOLE_TREE)
-    return tuple(sorted(p for p in tree if any(PurePosixPath(p).full_match(g) for g in globs)))
 
 
 def _dispatch(
@@ -321,7 +317,7 @@ def _planned(
         filename = str(ctx.with_resolved[agent_prompt.PROMPT_FILE_KEY])
         prompt_file_content = require_workspace(ctx, ctx.cwd).read(filename) or ""
     prompt = agent_prompt.compose_prompt(
-        ctx.with_resolved,
+        agent_workdir.prompt_scope(ctx),
         agent_answer.resolved_signal(ctx),
         previous,
         prompt_file_content=prompt_file_content,
@@ -348,9 +344,12 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
         story_id=_text(ctx, STORY_ID_KEY) or None,
         traceparent=traceparent,
     )
+    # the member checkout on a `workdir` row, the worktree root otherwise: the process's own
+    # folder, and therefore the one the stall detector watches (AD-9, AD-17, H4).
+    dispatch_cwd = agent_workdir.tree(ctx)
     if dispatch.resume_id is not None:
         resumed = dispatch.harness.resume(
-            cwd=require_cwd(ctx),
+            cwd=dispatch_cwd,
             session_id=dispatch.resume_id,
             message=dispatch.prompt,
             env=env,
@@ -360,7 +359,7 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
         )
         return agent_tail.finish(ctx, dispatch.attempt, resumed, timeout_min, stall_min)
     handle = dispatch.harness.start(
-        cwd=require_cwd(ctx),
+        cwd=dispatch_cwd,
         prompt=dispatch.prompt,
         env=env,
         model=(_text(ctx, MODEL_KEY) or None),

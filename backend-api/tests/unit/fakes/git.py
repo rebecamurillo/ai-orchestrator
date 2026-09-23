@@ -42,6 +42,14 @@ also take a **mapping**: `refs` (branch -> sha), `files` (`(ref, path)` -> text)
 `listings` (`(ref, prefix)` -> paths). A mapping that is not given is not used, so every
 caller written against the sequential script keeps exactly the behaviour it had; a key a
 mapping does not hold is the port's own "not there" — `None`, `None` and `()`.
+
+H4 adds three more of the same shape, keyed by the **tree** a call was made in: `heads`
+(path -> the `head_sha` script for that tree), `statuses` (path -> porcelain) and `changes`
+(path -> the `diff_changes` answer). A `workdir` `agent` row asks `head_sha`, `status` and
+`diff_changes` of two trees inside one attempt, and a positional script could only say "the
+second call" where the test means "the hub". Same rule as the three above: a mapping that is
+not given is not used, and a tree it does not hold falls through to the sequential script, so
+every single-tree test keeps the behaviour it had.
 """
 
 from __future__ import annotations
@@ -106,6 +114,9 @@ class FakeGit:
         refs: dict[str, str] | None = None,
         files: dict[tuple[str, str], str] | None = None,
         listings: dict[tuple[str, str], list[str]] | None = None,
+        heads: dict[str, list[Any]] | None = None,
+        statuses: dict[str, str] | None = None,
+        changes: dict[str, tuple[Change, ...]] | None = None,
     ) -> None:
         self.clock = clock
         self.seconds = seconds
@@ -113,6 +124,12 @@ class FakeGit:
         self.refs = refs
         self.files = files
         self.listings = listings
+        self.heads = heads
+        self.statuses = statuses
+        self.changes = changes
+        #: How far each per-tree `heads` script has been read — one cursor per tree, so the
+        #: hub's start/end pair is not consumed by the submodule's own two calls (H4).
+        self._head_used: dict[str, int] = {}
         self._scripts: dict[str, list[Any]] = {
             "ls_remote": ls_remote or [DEFAULT_REF],
             "base_exists": base_exists or [False],
@@ -205,6 +222,9 @@ class FakeGit:
         return answer
 
     def status(self, worktree: Path) -> str:
+        if self.statuses is not None and str(worktree) in self.statuses:
+            self._record("status", (worktree,))
+            return self.statuses[str(worktree)]
         answer: str = self._answer("status", (worktree,))
         return answer
 
@@ -226,6 +246,9 @@ class FakeGit:
         return answer
 
     def diff_changes(self, worktree: Path, from_sha: str, to_sha: str) -> tuple[Change, ...]:
+        if self.changes is not None and str(worktree) in self.changes:
+            self._record("diff_changes", (worktree, from_sha, to_sha))
+            return self.changes[str(worktree)]
         answer: tuple[Change, ...] = self._answer("diff_changes", (worktree, from_sha, to_sha))
         return answer
 
@@ -282,6 +305,13 @@ class FakeGit:
         return answer
 
     def head_sha(self, path: Path) -> str | None:
+        if self.heads is not None and str(path) in self.heads:
+            self._record("head_sha", (path,))
+            script = self.heads[str(path)]
+            index = min(self._head_used.get(str(path), 0), len(script) - 1)
+            self._head_used[str(path)] = index + 1
+            answered: str | None = script[index]
+            return answered
         answer: str | None = self._answer("head_sha", (path,))
         return answer
 

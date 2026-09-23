@@ -376,6 +376,11 @@ NULLABLE = {
         "ended_at",
         "start_sha",
         "end_sha",
+        # Added: the worktree root's own range, written only when the row declares `workdir`
+        # — an attempt that ran at the root carries neither (hub-Run initiative H4, spine
+        # AD-17 / Structural Seed amendment, 2026-09-23).
+        "root_start_sha",
+        "root_end_sha",
         "frozen_test_files",
         "log_path",
         "exit_code",

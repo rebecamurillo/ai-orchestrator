@@ -261,6 +261,37 @@ def test_the_commit_guard_is_handed_the_rule_bound_to_this_frame() -> None:
 
 
 @pytest.mark.usefixtures("executor")
+def test_the_rule_is_bound_to_the_tree_the_row_being_checked_works_in() -> None:
+    """AD-17's dual-tree amendment (hub-Run initiative H4, 2026-09-23): a `workdir` frame's
+    attempts recorded their SHAs inside the submodule, so the rule the commit-guard is handed
+    carries that row's own `workdir` and diffs the ranges there."""
+    world = a_world(
+        "running",
+        EPIC_PLAN,
+        {SYNC: "done", BUILD: "running"},
+        {
+            BUILD: {"spec_folder": SPEC_FOLDER},
+            "stories[0].commit-guard": {"workdir": "./repos/member/"},
+        },
+        worktree_path=WORKTREE,
+    )
+    an_attempt(world, BUILD, n=1, start_sha=START, end_sha=END)
+    an_attempt(world, "stories[0].commit-guard", n=1)
+
+    rule = anchors_of(seen_context(world, "stories[0].commit-guard", an_environment()))
+
+    assert rule.workdir == "repos/member"
+
+
+@pytest.mark.usefixtures("executor")
+def test_a_row_that_declares_no_workdir_binds_the_rule_to_the_worktree_root() -> None:
+    world = a_story_frame()
+    an_attempt(world, BUILD, n=1, start_sha=START, end_sha=END)
+
+    assert anchors_of(seen_context(world, BUILD, an_environment())).workdir == ""
+
+
+@pytest.mark.usefixtures("executor")
 def test_an_attempt_that_never_came_back_contributes_no_range() -> None:
     """`end_sha` is written by the tail alone: an attempt without one bounded nothing."""
     world = a_story_frame()

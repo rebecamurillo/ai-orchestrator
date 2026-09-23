@@ -202,6 +202,40 @@ def test_the_frames_own_agent_ranges_are_checked_with_it() -> None:
     assert git.called("diff_changes") == [(WORKTREE, START, END)]
 
 
+# ── a `workdir` frame's ranges live in the submodule (H4, 2026-09-23) ───────
+
+
+def a_workdir_rule(git: FakeGit) -> FrameAnchors:
+    """The rule the walker binds for a row that declares `workdir: repos/member`."""
+    return FrameAnchors(
+        git=git,
+        worktree=WORKTREE,
+        anchors=frozenset({"repos/member/tests/test_member.py"}),
+        ranges=((START, END),),
+        workdir="repos/member",
+    )
+
+
+def test_a_workdir_frames_ranges_are_diffed_inside_the_submodule() -> None:
+    """AD-17's amendment: a `workdir` row's attempts recorded their SHAs in that submodule's
+    own repository, so the commit-guard reads the range there and reports the paths it
+    answered in the one spelling every hub-Run hit carries."""
+    git = FakeGit(diff_changes=[(Change(path="tests/test_member.py", kind="modified"),)])
+
+    hits = a_workdir_rule(git).check(changed=(), accepted=())
+
+    assert hits == ("repos/member/tests/test_member.py",)
+    assert git.called("diff_changes") == [(WORKTREE / "repos/member", START, END)]
+
+
+def test_a_workdir_hit_the_operator_already_accepted_is_excluded_by_that_spelling() -> None:
+    git = FakeGit(diff_changes=[(Change(path="tests/test_member.py", kind="modified"),)])
+
+    hits = a_workdir_rule(git).check(changed=(), accepted=("repos/member/tests/test_member.py",))
+
+    assert hits == ()
+
+
 def test_a_frame_with_no_recorded_range_asks_git_nothing() -> None:
     git = FakeGit()
     rule = FrameAnchors(git=git, worktree=WORKTREE, anchors=anchors())

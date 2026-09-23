@@ -296,7 +296,7 @@ def _step_ports(ports: WalkPorts, run: Run, row: StepRun, frame: WalkFrame) -> S
     failure = _verify_failure(ports, run.id, row)
     if row.frame is None:
         return replace(ports.step, run_env=replace(environment, verify_failure=failure))
-    rule = frame_anchors(ports.step.git, run, environment, frame)
+    rule = frame_anchors(ports.step.git, run, environment, frame, row)
     return replace(
         ports.step,
         run_env=replace(environment, anchors=rule.anchors, verify_failure=failure),

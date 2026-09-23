@@ -26,7 +26,7 @@ already makes, unchanged.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -153,12 +153,22 @@ class FrameAnchors:
     anchors: frozenset[str] = field(default_factory=frozenset)
     #: `(start_sha, end_sha)` per attempt of the frame that recorded both (AD-8's two halves).
     ranges: tuple[tuple[str, str], ...] = ()
+    #: The submodule the *row being checked* declares, normalised, or `""` (AD-9, AD-17 — H4,
+    #: 2026-09-23). A `workdir` row's attempts recorded their `start_sha`/`end_sha` inside
+    #: that submodule's repository, so the ranges are diffed there and every path they answer
+    #: is re-spelled `{workdir}/…` — the one spelling every hit of a hub Run is reported in,
+    #: the one `run.accepted_paths` excludes by, and the one the frame's anchor set already
+    #: holds a workdir frame's frozen tests under (`steps/agent_workdir.py`).
+    workdir: str = ""
 
     def check(self, *, changed: Sequence[str], accepted: Sequence[str]) -> tuple[str, ...]:
         """AD-17's second call site: the frame's agent ranges, plus what the row staged."""
+        tree = self.worktree / self.workdir if self.workdir else self.worktree
         agent: list[Change] = []
         for start, end in self.ranges:
-            agent.extend(self.git.diff_changes(self.worktree, start, end))
+            agent.extend(self.git.diff_changes(tree, start, end))
+        if self.workdir:
+            agent = [replace(hit, path=f"{self.workdir}/{hit.path}") for hit in agent]
         return tuple(hit.path for hit in check([*agent, *_staged(changed)], self.anchors, accepted))
 
 

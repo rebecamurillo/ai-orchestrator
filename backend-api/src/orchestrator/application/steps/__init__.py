@@ -75,10 +75,14 @@ KIND_META: dict[str, KindMeta] = {
         "deterministic", 10, frozenset({"update", "workdir", "branch", "base"})
     ),
     "shell": KindMeta("deterministic", 30, frozenset({"command"})),
+    # Revised: `agent` gained `workdir` — the harness is dispatched in that submodule's
+    # checkout and the attempt's own git bookkeeping happens in its repository, while the hub
+    # anchors stay checked at the worktree root (hub-Run initiative H4, spine "Template DSL
+    # v1 keys" AD-9/AD-17 amendment, 2026-09-23).
     "agent": KindMeta(
         "liveness",
         None,
-        frozenset({"harness", "model", "skill", "args", "prompt_extra"}),
+        frozenset({"harness", "model", "skill", "args", "prompt_extra", "workdir"}),
         stall_default_min=30,
     ),
     # Revised: `git.commit` and `git.push` gained `workdir` — the row runs inside that
@@ -164,8 +168,9 @@ WHEN_KEY = "when"
 #: submodule instead of at the worktree root (spine "Template DSL v1 keys", AD-9,
 #: ratified 2026-09-23, hub-Run initiative workflow). Not `SUBMODULE_WORKDIR_KEY` above —
 #: that one names *which* submodule `git.submodule`'s checkout form creates or checks out;
-#: this one names *where* an unrelated kind's whole operation runs. H2 wires `git.commit` and
-#: `git.push`; the `agent` kind's own `workdir` is H4's.
+#: this one names *where* an unrelated kind's whole operation runs. H2 wired `git.commit` and
+#: `git.push`; H4 wired the `agent` kind, where the key also decides which tree each half of
+#: AD-17's dual-tree check reads (`steps/agent_workdir.py`).
 WORKDIR_KEY = "workdir"
 
 #: The kind whose step commits the working tree. Named here because `signal_run` re-resolves

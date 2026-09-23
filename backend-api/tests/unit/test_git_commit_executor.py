@@ -7,7 +7,8 @@ message being the row's own, never composed.
 
 A `with {workdir}` row (H2, 2026-09-23, spine AD-9 amendment) is asserted separately, below:
 the port is called with `workdir` instead of the staging sequence running, and `None` back
-from it parks the same sentence `git.submodule` and `git.push` do.
+from it parks the same sentence `git.submodule` and `git.push` do. H4 added the half H2 owed
+— the protected-path check over the submodule's own tree, every path spelled `{workdir}/…`.
 """
 
 from __future__ import annotations
@@ -165,6 +166,10 @@ def a_workdir_commit_row() -> StepRun:
 
 
 def test_a_workdir_row_commits_in_the_submodule_instead_of_staging_at_the_root() -> None:
+    """Revised by hub-Run initiative H4, 2026-09-23: the row now reads the *submodule's* own
+    status for AD-17's dual-tree check, so "no status call at all" — H2's placeholder for the
+    check it did not yet run — is replaced by the stronger fact that the one status read is
+    the submodule's and the root's staging sequence still never runs."""
     git = FakeGit(commit=[MEMBER_SHA])
 
     result = GitCommitExecutor().execute(a_context(a_workdir_commit_row(), git=git))
@@ -174,7 +179,7 @@ def test_a_workdir_row_commits_in_the_submodule_instead_of_staging_at_the_root()
     [(worktree, message, workdir)] = git.called("commit")
     assert (str(worktree), message, workdir) == (WORKTREE, MESSAGE, WORKDIR)
     assert git.called("stage") == []
-    assert git.called("status") == []
+    assert [str(path) for (path,) in git.called("status")] == [f"{WORKTREE}/{WORKDIR}"]
 
 
 def test_a_workdir_that_is_not_an_initialized_submodule_parks_the_spines_sentence() -> None:
@@ -190,15 +195,56 @@ def test_a_workdir_that_is_not_an_initialized_submodule_parks_the_spines_sentenc
     assert result.output_ref is None
 
 
-def test_a_workdir_row_never_runs_the_protected_path_check() -> None:
-    """Owed to H4 (module docstring): the dual-tree check needs the `agent` kind's own
-    `workdir` machinery, which this story does not touch."""
-    rule = Hits("tests/unit/test_thing.py")
-    git = FakeGit(commit=[MEMBER_SHA])
+def test_a_workdir_row_runs_the_protected_path_check_over_the_submodules_own_tree() -> None:
+    """Revised by hub-Run initiative H4, 2026-09-23. This entry was H2's placeholder and named
+    H4 as the story that would pay it: the dual-tree check needed `root_start_sha`/
+    `root_end_sha` and a workdir frame's own `frozen_test_files`, which H4 lands. What it
+    asserted — the rule is not called — is replaced by the whole of what AD-17's amendment
+    asks: the rule *is* called, over the submodule's uncommitted tree spelled `{workdir}/…`,
+    and a hit parks `protected_path` before any commit is made."""
+    rule = Hits(f"{WORKDIR}/tests/unit/test_thing.py")
+    git = FakeGit(commit=[MEMBER_SHA], status=[" M tests/unit/test_thing.py\n"])
 
     result = GitCommitExecutor().execute(
         a_context(a_workdir_commit_row(), git=git, protected_paths=rule)
     )
 
+    assert rule.calls == [((f"{WORKDIR}/tests/unit/test_thing.py",), ())]
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "protected_path"
+    assert result.reason == PROTECTED.format(paths=f"{WORKDIR}/tests/unit/test_thing.py")
+    assert result.payload == {"hits": [{"path": f"{WORKDIR}/tests/unit/test_thing.py"}]}
+    assert git.called("commit") == []
+
+
+def test_a_workdir_row_whose_submodule_tree_holds_no_anchor_commits() -> None:
+    """The other side of the check H4 added: a dirty submodule the rule reports nothing for
+    reaches the commit exactly as it did before (hub-Run initiative H4, 2026-09-23)."""
+    rule = Hits()
+    git = FakeGit(commit=[MEMBER_SHA], status=[" M src/thing.py\n"])
+
+    result = GitCommitExecutor().execute(
+        a_context(a_workdir_commit_row(), git=git, protected_paths=rule)
+    )
+
+    assert rule.calls == [((f"{WORKDIR}/src/thing.py",), ())]
     assert result.status == "done"
-    assert rule.calls == []
+    assert result.output_ref == MEMBER_SHA
+
+
+def test_a_workdir_spelled_with_a_trailing_slash_names_one_prefix() -> None:
+    """`./repos/member/` and `repos/member` are one path, so they are one hit spelling — the
+    same normalisation the adapter applies before it resolves the folder (H4, 2026-09-23)."""
+    rule = Hits()
+    git = FakeGit(commit=[MEMBER_SHA], status=[" M AGENTS.md\n"])
+    row = a_row(
+        kind=KIND,
+        with_resolved={"message": MESSAGE, "workdir": f"./{WORKDIR}/"},
+        path="stories[0].epics[0].commit-guard",
+    )
+
+    GitCommitExecutor().execute(a_context(row, git=git, protected_paths=rule))
+
+    assert rule.calls == [((f"{WORKDIR}/AGENTS.md",), ())]
+    assert [str(path) for (path,) in git.called("status")] == [f"{WORKTREE}/{WORKDIR}"]

@@ -20,11 +20,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from uuid import UUID
 
 from orchestrator.application.rules import protected_paths
 from orchestrator.application.rules.frames import rows_in_frame
+from orchestrator.application.steps import WORKDIR_KEY
 from orchestrator.application.steps.context import RunEnvironment
 from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY
 from orchestrator.application.use_cases.writers import WriterPorts
@@ -64,13 +65,19 @@ def read_frame(ports: WriterPorts, run_id: UUID, row: StepRun) -> WalkFrame:
 
 
 def frame_anchors(
-    git: Git, run: Run, environment: RunEnvironment, frame: WalkFrame
+    git: Git, run: Run, environment: RunEnvironment, frame: WalkFrame, row: StepRun | None = None
 ) -> protected_paths.FrameAnchors:
     """AD-17's anchor set and the frame's agent ranges, resolved once for two readers.
 
     Called from the only place holding both the frame's rows and the repositories (AD-8).
     The tail reads the anchor set off `RunEnvironment`; the commit-guard reaches the whole
     object through the port it already calls.
+
+    `row` is the row about to run, and the one thing read off it is its `workdir`: a frame's
+    attempts recorded their SHAs in whichever tree the `agent` row worked in, so the tree the
+    ranges are diffed in is the one *this* row names (AD-17's dual-tree amendment, H4). A
+    frame is expected to keep one tree throughout — H3's templates give an epic's `agent` and
+    `git.commit` rows the same `workdir` — and `None` is every caller that predates this.
     """
     return protected_paths.FrameAnchors(
         git=git,
@@ -81,7 +88,15 @@ def frame_anchors(
             frozen_test_files=_frozen_test_files(frame.attempts),
         ),
         ranges=_agent_ranges(frame.attempts),
+        workdir=_workdir(row),
     )
+
+
+def _workdir(row: StepRun | None) -> str:
+    """The submodule this row runs in, normalised, or `""` — the same reading
+    `steps/agent_workdir.py::declared` does, over the same resolved key (AD-9)."""
+    written = str(row.with_resolved.get(WORKDIR_KEY) or "").strip() if row is not None else ""
+    return str(PurePosixPath(written)) if written else ""
 
 
 def frame_start_sha(attempts: Sequence[Attempt]) -> str | None:

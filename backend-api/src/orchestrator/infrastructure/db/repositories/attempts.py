@@ -31,14 +31,25 @@ from orchestrator.infrastructure.db.models.run import AttemptRow
 if TYPE_CHECKING:  # pragma: no cover — typing only
     from sqlalchemy.orm import Session
 
-#: What `mark_started` writes: the half a restart has to find (AD-8).
-STARTED_COLUMNS = ("status", "started_at", "engine_ref", "start_sha", "frozen_test_files", "pgid")
+#: What `mark_started` writes: the half a restart has to find (AD-8). `root_start_sha` joins
+#: `start_sha` rather than the finished half because it is recorded at the same moment — the
+#: worktree root's HEAD when the workdir's was taken (AD-17, H4).
+STARTED_COLUMNS = (
+    "status",
+    "started_at",
+    "engine_ref",
+    "start_sha",
+    "root_start_sha",
+    "frozen_test_files",
+    "pgid",
+)
 
 #: What `mark_finished` writes: everything the harness only knows once it has exited.
 FINISHED_COLUMNS = (
     "status",
     "ended_at",
     "end_sha",
+    "root_end_sha",
     "log_path",
     "exit_code",
     "output_ref",
@@ -65,6 +76,8 @@ def to_entity(row: AttemptRow) -> Attempt:
         engine_ref=dict(row.engine_ref),
         start_sha=row.start_sha,
         end_sha=row.end_sha,
+        root_start_sha=row.root_start_sha,
+        root_end_sha=row.root_end_sha,
         frozen_test_files=(None if row.frozen_test_files is None else tuple(row.frozen_test_files)),
         log_path=row.log_path,
         exit_code=row.exit_code,
@@ -93,6 +106,8 @@ def row_values(attempt: Attempt) -> dict[str, Any]:
         "engine_ref": dict(attempt.engine_ref),
         "start_sha": attempt.start_sha,
         "end_sha": attempt.end_sha,
+        "root_start_sha": attempt.root_start_sha,
+        "root_end_sha": attempt.root_end_sha,
         "frozen_test_files": (
             None if attempt.frozen_test_files is None else list(attempt.frozen_test_files)
         ),
@@ -148,13 +163,13 @@ class SQLAlchemyAttemptRepository:
         return [to_entity(row) for row in rows]
 
     def mark_started(self, attempt: Attempt) -> None:
-        """Write `status`, `started_at`, `engine_ref`, `start_sha`, `frozen_test_files`,
-        `pgid` — and nothing the harness cannot know yet."""
+        """Write `status`, `started_at`, `engine_ref`, `start_sha`, `root_start_sha`,
+        `frozen_test_files`, `pgid` — and nothing the harness cannot know yet."""
         self._write(attempt, STARTED_COLUMNS)
 
     def mark_finished(self, attempt: Attempt) -> None:
-        """Write `status`, `ended_at`, `end_sha`, `log_path`, `exit_code`, `output_ref`,
-        the harness columns and the usage — never the start half again."""
+        """Write `status`, `ended_at`, `end_sha`, `root_end_sha`, `log_path`, `exit_code`,
+        `output_ref`, the harness columns and the usage — never the start half again."""
         self._write(attempt, FINISHED_COLUMNS)
 
     def latest_for_run(self, run_id: UUID) -> Attempt | None:
