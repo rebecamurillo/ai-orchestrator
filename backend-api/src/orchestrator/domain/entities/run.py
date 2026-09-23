@@ -92,11 +92,13 @@ class Run(BaseModel):
     #: at `create_run` time from `plan.branches`; never written again. `None` on old runs that
     #: pre-date this field — those runs are treated as non-competing for branch-partition checks.
     partition_branch: str | None = None
-    #: The Run this one must wait for before the `start` Signal may enqueue it (story 5-4).
-    #: Added in story 5-3 so the `start` handler can clear it; story 5-4 adds the setter.
-    #: `None` always in story 5-3's scope — clearing `None → None` is a no-op that seeds the
-    #: 5-4 unit-of-work invariant correctly.
-    after_run_id: UUID | None = None
+    #: The Runs this one waits for before it may enter the engine (AD-12) — a fan-in list,
+    #: empty by default, in the order the caller declared them. All of them `done` enqueues
+    #: this Run; any of them `failed | cancelled` parks it `dependency`, naming that one.
+    #: Nothing ever clears the list: resolution only considers Runs whose `engine_ref` is
+    #: null, so clearing buys nothing, and the retained edges are the durable record an
+    #: initiative's DAG is rendered from (spine AD-12/AD-13 amendment, 2026-09-23).
+    after_run_ids: tuple[UUID, ...] = ()
     #: The Langfuse trace this Run's attempt spans hang under (AD-11).
     trace_id: str | None = None
     terminal_session: bool = False

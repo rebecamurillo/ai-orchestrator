@@ -45,8 +45,10 @@ REASON_BRANCH_HELD = "branch held by {run}"
 REASON_GLOBAL_CONCURRENCY = "global concurrency, held by {runs}"
 #: A saved Run: persisted but not yet enqueued (story 5-3, AD-6).
 REASON_SAVED = "saved — not started"
-#: A dependency-waiting Run: persisted but waiting for a predecessor (story 5-4, AD-6).
-REASON_WAITING_FOR = "waiting for run {run}"
+#: A dependency-waiting Run: persisted but waiting for its predecessors (story 5-4, AD-6).
+#: Plural since the spine's 2026-09-23 amendment made `after_run_ids` a fan-in list: the
+#: sentence names every Run still standing between this one and the engine.
+REASON_WAITING_FOR = "waiting for runs {runs}"
 
 #: The engine's own two states for a held workflow (`domain/ports/engine.py::QueueState`).
 PENDING = "pending"
@@ -106,7 +108,7 @@ def _order_key(row: QueueRow) -> tuple[int, int]:
         return (1, row.position)
     if row.reason == REASON_SAVED:
         return (3, 0)
-    if row.run.after_run_id is not None:
+    if row.run.after_run_ids:
         return (4, 0)
     return (2, 0)
 
@@ -116,16 +118,14 @@ def _saved_runs(all_queued: list[Run], engine_run_ids: frozenset[UUID]) -> list[
     return [
         r
         for r in all_queued
-        if not r.engine_ref and r.id not in engine_run_ids and r.after_run_id is None
+        if not r.engine_ref and r.id not in engine_run_ids and not r.after_run_ids
     ]
 
 
 def _dependency_waiting_runs(all_queued: list[Run], engine_run_ids: frozenset[UUID]) -> list[Run]:
-    """Dependency-waiting Runs: queued, not enqueued, after_run_id set (story 5-4)."""
+    """Dependency-waiting Runs: queued, not enqueued, after_run_ids non-empty (story 5-4)."""
     return [
-        r
-        for r in all_queued
-        if not r.engine_ref and r.id not in engine_run_ids and r.after_run_id is not None
+        r for r in all_queued if not r.engine_ref and r.id not in engine_run_ids and r.after_run_ids
     ]
 
 
@@ -136,7 +136,9 @@ def _dependency_row(ports: QueuePorts, run: Run) -> QueueRow:
         position=None,
         run=run,
         next_step_label=_next_step_label(run, steps),
-        reason=REASON_WAITING_FOR.format(run=str(run.after_run_id)),
+        reason=REASON_WAITING_FOR.format(
+            runs=", ".join(str(pred_id) for pred_id in run.after_run_ids)
+        ),
         waiting_since=run.created_at,
         waiting_seconds=(ports.clock.now() - run.created_at).total_seconds(),
     )

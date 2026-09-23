@@ -79,7 +79,7 @@ instance's `GITHUB_TOKEN` must reach `url`.
 Create body (`RunIn`): required `template_name`, `template_version` (int), `project_id`,
 `repository_id`, `base_branch`, `budget_usd` (> 0); optional `inputs{}`, `harness`
 (`claude` | `codex` | `local`), `model`, `manual_estimate_h`, `re_review_done`,
-`conflict_consent`, `save` (persist, don't start), `after_run_id` (needs `save: true`).
+`conflict_consent`, `save` (persist, don't start), `after_run_ids[]` (needs `save: true`).
 
 Signal kinds: `answer` (`{text}`), `continue` (`{files[]}` for protected-path accepts),
 `retry`, `skip_story`, `skip_epic`, `budget_raise` (`{budget_usd}` above current spend),

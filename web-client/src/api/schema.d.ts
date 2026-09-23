@@ -2035,8 +2035,8 @@ export interface components {
          * @description `POST /runs`'s body: what *Start run* submits once every field is filled in.
          */
         RunIn: {
-            /** After Run Id */
-            after_run_id?: string | null;
+            /** After Run Ids */
+            after_run_ids?: string[];
             /** Base Branch */
             base_branch: string;
             /** Budget Usd */

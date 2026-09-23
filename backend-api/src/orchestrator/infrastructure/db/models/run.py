@@ -27,7 +27,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, Text, Uuid, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from orchestrator.infrastructure.db.base import Base
@@ -54,6 +54,10 @@ ATTEMPT_N_INDEX = "ix_attempt_step_run_id_n"
 #: How the Run screen reads a gate record: one Run, in the order things happened.
 GATE_RECORD_AT_INDEX = "ix_gate_record_run_id_at"
 
+#: How a terminal transition finds its dependents: `after_run_ids @> ARRAY[predecessor]`.
+#: GIN, because the question is containment in an array and no b-tree answers that.
+RUN_AFTER_RUN_IDS_INDEX = "ix_run_after_run_ids"
+
 #: Money, and the hours an Operator estimated by hand.
 MONEY = Numeric(12, 6)
 HOURS = Numeric(10, 2)
@@ -67,6 +71,7 @@ class RunRow(Base):
         Index(RUN_PROJECT_INDEX, "project_id"),
         Index(RUN_STATUS_INDEX, "status"),
         Index(RUN_REPOSITORY_STATUS_INDEX, "repository_id", "status"),
+        Index(RUN_AFTER_RUN_IDS_INDEX, "after_run_ids", postgresql_using="gin"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
@@ -107,7 +112,15 @@ class RunRow(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     worktrees_removed: Mapped[bool] = mapped_column(Boolean())
     partition_branch: Mapped[str | None] = mapped_column(Text(), nullable=True)
-    after_run_id: Mapped[UUID | None] = mapped_column(Uuid(), nullable=True)
+    #: The fan-in predecessor list (AD-12, spine amendment 2026-09-23). A real `uuid[]`
+    #: rather than `jsonb`, unlike every other list on this table, because this one *is*
+    #: queried into: `list_dependents` asks which Runs name a predecessor, and only an
+    #: array column answers that with an index. No foreign key — an array cannot carry one
+    #: in Postgres, which is why `resolve_dependent` decides for itself what a dangling id
+    #: means (`writers.DEPENDENCY_MISSING_REASON`).
+    after_run_ids: Mapped[list[UUID]] = mapped_column(
+        ARRAY(Uuid()), server_default=text("'{}'::uuid[]")
+    )
 
 
 class StepRunRow(Base):

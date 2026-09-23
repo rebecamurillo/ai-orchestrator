@@ -2,7 +2,8 @@
 
 AC coverage:
 - Operator `continue` on a dependency park clears the park and sets status to `queued`.
-- `after_run_id` is cleared on continue.
+- `after_run_ids` is retained on continue (revised for fan-in after_run_ids —
+  multi-repo initiative S1, spine AD-12/AD-13 amendment, 2026-09-23).
 - Engine `enqueue` is called (not `signal`) with the run's partition key.
 - `engine_ref` is committed after enqueue.
 - The gate record event is `"continue"` with actor `"operator"`.
@@ -48,7 +49,7 @@ def a_dependency_parked_run(**over: object) -> Run:
         "park_reason": "run abc ended failed",
         "budget_usd": BUDGET,
         "created_at": EPOCH,
-        "after_run_id": new_id(),
+        "after_run_ids": (new_id(),),
     }
     fields.update(over)
     return Run(**fields)  # type: ignore[arg-type]
@@ -97,15 +98,31 @@ def test_continue_on_dependency_park_clears_park_fields() -> None:
     assert stored.park_reason is None
 
 
-def test_continue_on_dependency_park_clears_after_run_id() -> None:
-    run = a_dependency_parked_run()
+def test_continue_on_dependency_park_retains_after_run_ids() -> None:
+    """Revised for fan-in after_run_ids (multi-repo initiative S1, spine AD-12/AD-13
+    amendment, 2026-09-23): `continue` on a dependency park no longer clears the list.
+    The Run is enqueued, so its `engine_ref` stops resolution from ever reading it again,
+    and the retained edges are the durable record an initiative's DAG is rendered from."""
+    predecessors = (new_id(), new_id())
+    run = a_dependency_parked_run(after_run_ids=predecessors)
     ports, _engine, _ = make_signal_ports(run)
 
     signal_run(ports, run.id, CONTINUE)
 
     stored = ports.writers.runs.get(run.id)
     assert stored is not None
-    assert stored.after_run_id is None
+    assert stored.after_run_ids == predecessors
+
+
+def test_continue_on_dependency_park_is_invisible_to_later_resolution() -> None:
+    """Retaining the edges is safe because `engine_ref` is what resolution filters on."""
+    run = a_dependency_parked_run()
+    ports, _engine, _ = make_signal_ports(run)
+
+    signal_run(ports, run.id, CONTINUE)
+
+    predecessor_id = run.after_run_ids[0]
+    assert ports.writers.runs.list_dependents(predecessor_id) == []
 
 
 # ── gate record ────────────────────────────────────────────────────────────────────────────

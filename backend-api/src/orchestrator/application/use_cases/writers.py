@@ -246,52 +246,133 @@ def finish_run(ports: WriterPorts, run: Run) -> Run:
 #: Reason text for a dependency park: the predecessor's terminal status (story 5-4).
 DEPENDENCY_PARK_REASON = "run {run_id} ended {status}"
 
+#: Reason text when a predecessor id no longer resolves to a stored Run (fan-in
+#: `after_run_ids`, spine AD-12 amendment 2026-09-23). `after_run_ids` is an array with no
+#: foreign key behind it, so a dangling edge is a state the resolver has to decide about,
+#: and the conservative decision is to stop for the Operator: a park is reversible — AD-13
+#: gives it Continue (start anyway) and Cancel — while skipping would leave the Run waiting
+#: for something that can never arrive, invisible outside the queue's own row.
+DEPENDENCY_MISSING_REASON = "run {run_id} is missing"
 
-def park_dependents(ports: WriterPorts, run: Run) -> None:
-    """Park every queued run waiting for `run` in the same UoW as `run`'s terminal write.
+#: The predecessor statuses that stop a dependent from ever starting on its own (AD-12).
+BLOCKING_RUN: frozenset[str] = frozenset({"failed", "cancelled"})
 
-    Called when `run` reaches `failed` or `cancelled`. Any run whose `after_run_id` points
-    to `run` and whose `engine_ref` is still empty (never enqueued) is directly set to
-    `needs_you` with `park_kind="dependency"` — the AD-8 `("queued", "park")` machine path
-    does not exist, so the write is direct rather than through `park_run`. A gate record is
-    appended in the same UoW, keeping the "three fields written with the record" invariant.
+
+def resolve_dependent(
+    ports: WriterPorts,
+    engine: WorkflowEngine | None,
+    dep: Run,
+    *,
+    own_uow: bool = True,
+) -> None:
+    """Apply AD-12's fan-in rule to one dependency-waiting Run.
+
+    The rule is a read of the dependent's *whole* predecessor list, never of one Run:
+    **all** of them `done` → the two-phase enqueue; **any** of them `failed | cancelled`
+    (or missing) → a direct `dependency` park naming that one; anything else → still
+    waiting, and nothing is written. The first blocking predecessor in declared order is
+    the one the reason names, so the sentence the Operator reads is deterministic.
+
+    `own_uow` says who owns the transaction the park is written in. `False` is the AD-8
+    path — `park_dependents`, inside the predecessor's own terminal unit of work, where the
+    spine requires the resolution to land with the status that caused it. `True` is the
+    sweep and the post-commit enqueue path, which run with no transaction open.
+
+    `after_run_ids` is never cleared here (AD-12, 2026-09-23): `list_dependents` filters on
+    `engine_ref`, so the retained edges cost nothing and are what an initiative's DAG is
+    rendered from.
     """
-    dependents = ports.runs.list_by_after_run_id(run.id)
-    if not dependents:
+    if not dep.after_run_ids:
         return
-    reason = DEPENDENCY_PARK_REASON.format(run_id=run.id, status=run.status)
-    for dep in dependents:
-        parked = dep.model_copy(
-            update={
-                "status": "needs_you",
-                "park_kind": "dependency",
-                "park_path": None,
-                "park_reason": reason,
-            }
-        )
-        ports.runs.update(parked)
-        record(ports, parked, Entry(event="dependency", actor="machine", path=None, text=reason))
+    predecessors = [(pred_id, ports.runs.get(pred_id)) for pred_id in dep.after_run_ids]
+    blocking = next(
+        (pair for pair in predecessors if pair[1] is None or pair[1].status in BLOCKING_RUN),
+        None,
+    )
+    if blocking is not None:
+        _park_dependent(ports, dep, _dependency_reason(*blocking), own_uow=own_uow)
+        return
+    if all(stored is not None and stored.status == "done" for _id, stored in predecessors):
+        _enqueue_dependent(ports, engine, dep)
 
 
-def enqueue_dependents(ports: WriterPorts, engine: WorkflowEngine | None, run: Run) -> None:
-    """Two-phase enqueue of every run waiting for `run` after `run` reaches `done`.
+def _dependency_reason(pred_id: UUID, predecessor: Run | None) -> str:
+    """What the park says: the predecessor's terminal status, or that it is gone."""
+    if predecessor is None:
+        return DEPENDENCY_MISSING_REASON.format(run_id=pred_id)
+    return DEPENDENCY_PARK_REASON.format(run_id=pred_id, status=predecessor.status)
 
-    Called AFTER the predecessor's `done` write is committed. For each dependent whose
-    `engine_ref` is still empty: enqueue first (engine sees the durable predecessor row),
-    then commit the returned `engine_ref` in its own UoW. Idempotent: a second call finds
-    `engine_ref` already set and skips (list_by_after_run_id returns only engine_ref=={}).
-    Degrades to a no-op when `engine` is None (every call site that predates this story).
+
+def _park_dependent(ports: WriterPorts, dep: Run, reason: str, *, own_uow: bool) -> None:
+    """Write the `dependency` park, in this function's own transaction or the caller's."""
+    if not own_uow:
+        _write_dependency_park(ports, dep, reason)
+        return
+    with ports.uow:
+        _write_dependency_park(ports, dep, reason)
+        ports.uow.commit()
+
+
+def _write_dependency_park(ports: WriterPorts, dep: Run, reason: str) -> None:
+    """`queued → needs_you` with the three park fields and one record, together.
+
+    Direct rather than through `park_run`: the AD-8 `("queued", "park")` machine path does
+    not exist, because every other park leaves `running`.
+    """
+    parked = dep.model_copy(
+        update={
+            "status": "needs_you",
+            "park_kind": "dependency",
+            "park_path": None,
+            "park_reason": reason,
+        }
+    )
+    ports.runs.update(parked)
+    record(ports, parked, Entry(event="dependency", actor="machine", path=None, text=reason))
+
+
+def _enqueue_dependent(ports: WriterPorts, engine: WorkflowEngine | None, dep: Run) -> None:
+    """Two-phase: enqueue first, then commit the returned `engine_ref` in its own UoW.
+
+    The order is AD-8's: the engine only ever sees a Run whose predecessor row is already
+    durable. A `None` engine degrades to a no-op — every call site that predates story 5-4,
+    and `park_dependents`, which can never reach this branch anyway.
     """
     if engine is None:
         return
-    dependents = ports.runs.list_by_after_run_id(run.id)
-    for dep in dependents:
-        partition_key = (
-            f"{dep.repository_id}:{dep.partition_branch or dep.inputs.get('base_branch', '')}"
-        )
-        engine_ref = engine.enqueue(dep.id, partition_key=partition_key)
-        with ports.uow:
-            refreshed = ports.runs.get(dep.id)
-            if refreshed is not None:
-                set_run(ports, refreshed, engine_ref=engine_ref)
-            ports.uow.commit()
+    partition_key = (
+        f"{dep.repository_id}:{dep.partition_branch or dep.inputs.get('base_branch', '')}"
+    )
+    engine_ref = engine.enqueue(dep.id, partition_key=partition_key)
+    with ports.uow:
+        refreshed = ports.runs.get(dep.id)
+        if refreshed is not None:
+            set_run(ports, refreshed, engine_ref=engine_ref)
+        ports.uow.commit()
+
+
+def park_dependents(ports: WriterPorts, run: Run) -> None:
+    """Resolve every dependent of `run` in the same UoW as `run`'s terminal write.
+
+    Called when `run` reaches `failed` or `cancelled`, from inside the unit of work that
+    wrote that status (AD-8). `run` is by construction one of each dependent's
+    predecessors and is blocking, so every resolution here is a park — which is why the
+    engine is not passed: the enqueue branch is unreachable, and saying so structurally
+    keeps this path from ever opening a second transaction inside the caller's.
+    """
+    for dep in ports.runs.list_dependents(run.id):
+        resolve_dependent(ports, None, dep, own_uow=False)
+
+
+def enqueue_dependents(ports: WriterPorts, engine: WorkflowEngine | None, run: Run) -> None:
+    """Resolve every dependent of `run` after `run`'s `done` write is committed.
+
+    Called with no transaction open, so each resolution owns its own. Idempotent: a
+    dependent that was already enqueued carries an `engine_ref` and is invisible to
+    `list_dependents`. Degrades to a no-op when `engine` is None (every call site that
+    predates story 5-4).
+    """
+    if engine is None:
+        return
+    for dep in ports.runs.list_dependents(run.id):
+        resolve_dependent(ports, engine, dep)

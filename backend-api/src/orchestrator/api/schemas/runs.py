@@ -70,8 +70,9 @@ class RunIn(BaseModel):
     #: When `True`, persist the plan but do not start execution — the `start` Signal enqueues
     #: it later (story 5-3).
     save: bool = False
-    #: When set, this Run waits for the named predecessor Run (story 5-4). Requires `save=True`.
-    after_run_id: UUID | None = None
+    #: The Runs this one waits for — a fan-in list (AD-12, spine amendment 2026-09-23).
+    #: A non-empty list requires `save=True`.
+    after_run_ids: list[UUID] = Field(default_factory=list)
 
     def as_request(self) -> CreateRunRequest:
         return CreateRunRequest(
@@ -88,7 +89,7 @@ class RunIn(BaseModel):
             re_review_done=self.re_review_done,
             conflict_consent=self.conflict_consent,
             save=self.save,
-            after_run_id=self.after_run_id,
+            after_run_ids=tuple(self.after_run_ids),
         )
 
 

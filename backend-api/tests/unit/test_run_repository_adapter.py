@@ -21,7 +21,7 @@ from uuid import UUID
 
 import pytest
 from sqlalchemy import Boolean, DateTime, Integer, Numeric, Text, Uuid
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
@@ -300,6 +300,21 @@ def test_each_run_column_has_the_type_the_migration_creates(column: str, kind: t
     assert isinstance(RUN_TABLE.columns[column].type, kind)
 
 
+def test_after_run_ids_is_a_uuid_array_that_defaults_to_empty() -> None:
+    """Fan-in after_run_ids (multi-repo initiative S1, spine AD-12 amendment, 2026-09-23).
+
+    A Postgres `uuid[] NOT NULL DEFAULT '{}'`: the list itself is the state, so a Run with
+    no predecessor holds an empty array rather than a NULL, and `list_dependents` can ask
+    one containment question instead of a NULL-aware equality.
+    """
+    column = RUN_TABLE.columns["after_run_ids"]
+
+    assert isinstance(column.type, ARRAY)
+    assert isinstance(column.type.item_type, Uuid)
+    assert column.nullable is False
+    assert column.server_default is not None
+
+
 def test_money_is_numeric_twelve_six_and_the_estimate_is_numeric_ten_two() -> None:
     """Consistency Conventions: money is `numeric(12,6)` USD, never a float."""
     money_precision, money_scale = 12, 6
@@ -339,9 +354,10 @@ NULLABLE = {
         "ended_at",
         # operator revision 2026-09-15: added by story 5-1 (nullable for old runs)
         "partition_branch",
-        # operator revision 2026-09-18: added by story 5-3 (nullable; story 5-4 sets it)
-        # anchor exception 4 granted 2026-09-18T13:17:20Z
-        "after_run_id",
+        # Revised for fan-in after_run_ids (multi-repo initiative S1, spine AD-12/AD-13
+        # amendment, 2026-09-23): the nullable `after_run_id` pointer became the NOT NULL
+        # array `after_run_ids` (default '{}'), so it leaves this set. An empty list is
+        # what "no predecessor" is now — there is no third state to spell with NULL.
     },
     "step_run": {"reason", "frame", "story_id"},
     "attempt": {
@@ -382,15 +398,28 @@ def test_every_table_is_keyed_by_its_uuid_v7_id(table: Any) -> None:
 
 
 def test_the_run_table_indexes_the_columns_the_board_and_the_queue_filter_on() -> None:
+    # Revised for fan-in after_run_ids (multi-repo initiative S1, spine AD-12/AD-13
+    # amendment, 2026-09-23): `list_dependents` asks `after_run_ids @> ARRAY[:id]` on
+    # every terminal transition, so the column joins the indexed set — as GIN, the only
+    # kind that answers array containment. Asserted below with its method, which is more
+    # than this test pinned about any of the other three.
     indexes = {index.name: index for index in RUN_TABLE.indexes}
 
-    assert set(indexes) == {"ix_run_project_id", "ix_run_status", "ix_run_repository_id_status"}
+    assert set(indexes) == {
+        "ix_run_project_id",
+        "ix_run_status",
+        "ix_run_repository_id_status",
+        "ix_run_after_run_ids",
+    }
     for index in indexes.values():
         assert index.unique is False, index.name
     assert [c.name for c in indexes["ix_run_repository_id_status"].columns] == [
         "repository_id",
         "status",
     ]
+    after_run_ids = indexes["ix_run_after_run_ids"]
+    assert [c.name for c in after_run_ids.columns] == ["after_run_ids"]
+    assert after_run_ids.dialect_options["postgresql"]["using"] == "gin"
 
 
 def test_the_step_run_table_is_unique_on_seq_and_on_path_within_one_run() -> None:

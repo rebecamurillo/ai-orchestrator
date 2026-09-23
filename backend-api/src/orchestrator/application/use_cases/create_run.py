@@ -107,10 +107,10 @@ class CreateRunRequest:
     #: When `True`, persist the plan but skip `engine.enqueue` — `engine_ref` stays `{}`,
     #: the saved marker per AD-6. The `start` Signal enqueues it later (story 5-3).
     save: bool = False
-    #: When set, this Run waits for the named predecessor Run to finish (story 5-4).
-    #: Requires `save=True`: the Run is stored but not enqueued until the predecessor
-    #: reaches a terminal status (`done` → enqueue, `failed|cancelled` → park).
-    after_run_id: UUID | None = None
+    #: The Runs this one waits for, a fan-in list (AD-12, spine amendment 2026-09-23).
+    #: A non-empty list requires `save=True`: the Run is stored but not enqueued until
+    #: every predecessor is `done` (→ enqueue) or one ends `failed | cancelled` (→ park).
+    after_run_ids: tuple[UUID, ...] = ()
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -138,10 +138,10 @@ class CreateRunResult:
 
 def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     """Re-run pre-flight, refuse what it refuses, then persist and enqueue the plan."""
-    # A dependency-waiting Run must be saved: `after_run_id` is meaningless on a Run that
-    # the engine picks up immediately — the predecessor might not even exist yet (story 5-4).
-    if req.after_run_id is not None and not req.save:
-        raise Conflict("after_run_id requires save=True")
+    # A dependency-waiting Run must be saved: `after_run_ids` is meaningless on a Run that
+    # the engine picks up immediately — a predecessor might not even exist yet (story 5-4).
+    if req.after_run_ids and not req.save:
+        raise Conflict("after_run_ids requires save=True")
     preflight_req = req.as_preflight_request()
     preflighted = preflight_and_plan(ports.preflight, preflight_req)
     if preflighted.plan_error is not None:
@@ -204,7 +204,7 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         trace_id=trace.trace_id if trace is not None else None,
         created_at=ports.clock.now(),
         partition_branch=declared_branch,
-        after_run_id=req.after_run_id,
+        after_run_ids=tuple(req.after_run_ids),
     )
     step_rows = [_step_run(run_id, row) for row in plan.rows]
 
@@ -305,10 +305,12 @@ def _inputs_dict(req: CreateRunRequest) -> dict[str, Any]:
 def _partition_branch(plan: Plan, base_branch: str) -> str:
     """The declared branch this Run partitions its queue slot by (AD-12).
 
-    For a story/epic plan, `plan.branches` has exactly one key (the declared branch name).
-    For an initiative plan (empty `plan.branches`), the base_branch is the partition key.
-    The FIRST key is used in case a template ever declares more than one branch — the Run
-    is partitioned by its first declared branch, same as the pre-flight branch-line check.
+    `plan.branches` maps each branch a Template declared to the fresh name `plan_run`
+    allocated for it (AD-7), and the FIRST declared branch is the partition key — the same
+    branch the pre-flight branch-line check reads. A story or epic plan declares one; an
+    initiative plan declares one per epic frame, and the first of them is the key, exactly
+    as for any other multi-branch Template. `base_branch` is the fallback for the only
+    remaining case, a plan that declares no branch at all (no `git.worktree` row).
     """
     return next(iter(plan.branches), base_branch)
 

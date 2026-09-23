@@ -1,58 +1,37 @@
 """Startup sweep for dependency-waiting Runs whose predecessor terminated before boot.
 
 When the process crashes between a predecessor reaching a terminal status (`done`,
-`failed`, or `cancelled`) and the dependent being enqueued or parked, the dependent
-is left in `queued` with `engine_ref={}` and `after_run_id` still set. This sweep
-re-applies the resolution on startup, making crash recovery idempotent (AD-12).
+`failed`, or `cancelled`) and the dependent being enqueued or parked, the dependent is left
+`queued` with `engine_ref={}` and its `after_run_ids` still listing that predecessor. This
+sweep re-applies the resolution on startup, which is what makes crash recovery idempotent
+(AD-12: "container start sweeps the residue of any crash").
 
-This is a pure application function: it reads from the repositories through `WriterPorts`
-and calls the same `enqueue_dependents` / `park_dependents` helpers the two main writers
-(`apply_step_result`, `signal_run`) use at run time.
+It decides nothing of its own. The rule is `writers.resolve_dependent` — the same function
+the two run-time writers (`apply_step_result`, `signal_run`) reach through
+`park_dependents` / `enqueue_dependents` — so a Run resolved at boot and a Run resolved
+mid-flight can never take different paths.
+
+This is a pure application function: it reads through `WriterPorts` and touches no adapter.
 """
 
 from __future__ import annotations
 
-from uuid import UUID
-
-from orchestrator.application.use_cases.writers import (
-    WriterPorts,
-    enqueue_dependents,
-    park_dependents,
-)
+from orchestrator.application.use_cases.writers import WriterPorts, resolve_dependent
 from orchestrator.domain.ports.engine import WorkflowEngine
-from orchestrator.domain.statuses import TERMINAL_RUN
 
 
 def sweep_dependency_waiting(ports: WriterPorts, engine: WorkflowEngine | None) -> None:
-    """Re-resolve any dependency-waiting Run left un-enqueued or un-parked by a crash.
+    """Re-resolve every dependency-waiting Run a crash left un-enqueued and un-parked.
 
-    Finds every `queued` Run whose `after_run_id` is set and `engine_ref` is empty, then
-    groups them by predecessor and checks each predecessor's status once:
+    The set is AD-12's own: `queued`, a non-empty `after_run_ids`, and an empty
+    `engine_ref`. Each one is resolved on its own — all predecessors `done` → two-phase
+    enqueue; any of them `failed | cancelled` or gone → `dependency` park naming it;
+    otherwise nothing.
 
-    - predecessor `done`: two-phase enqueue, identical to the successful run-time path.
-    - predecessor `failed | cancelled`: park in the same UoW, identical to the failed path.
-    - predecessor not found or not yet terminal: skip — nothing to do yet.
-
-    Idempotent: `list_by_after_run_id` returns only `engine_ref == {}` rows, so a run that
-    was already enqueued in a prior sweep is invisible here. Grouping by predecessor ensures
-    each predecessor's resolution is applied exactly once even when multiple dependents wait
-    for it (preventing double gate records from repeated `park_dependents` calls).
+    Idempotent in both directions, because the write each path makes is what removes the
+    Run from the set: an enqueued Run has an `engine_ref`, a parked Run is `needs_you`. A
+    second sweep therefore enqueues nothing more and writes no second gate record.
     """
-    queued_runs = ports.runs.list_by_status("queued")
-    waiting = [r for r in queued_runs if r.after_run_id is not None and not r.engine_ref]
-    if not waiting:
-        return
-
-    # Group by predecessor ID to call the resolution helpers once per predecessor.
-    predecessor_ids: set[UUID] = {r.after_run_id for r in waiting}  # type: ignore[misc]
-    for pred_id in predecessor_ids:
-        predecessor = ports.runs.get(pred_id)
-        if predecessor is None or predecessor.status not in TERMINAL_RUN:
-            continue
-        if predecessor.status == "done":
-            enqueue_dependents(ports, engine, predecessor)
-        else:
-            # failed or cancelled
-            with ports.uow:
-                park_dependents(ports, predecessor)
-                ports.uow.commit()
+    for run in ports.runs.list_by_status("queued"):
+        if run.after_run_ids and not run.engine_ref:
+            resolve_dependent(ports, engine, run)

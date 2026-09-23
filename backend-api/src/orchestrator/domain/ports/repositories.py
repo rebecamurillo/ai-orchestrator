@@ -97,12 +97,15 @@ class RunRepository(Protocol):
         """
         ...
 
-    def list_by_after_run_id(self, run_id: UUID) -> list[Run]:
-        """Every queued Run whose `after_run_id` equals `run_id` and `engine_ref` is empty.
+    def list_dependents(self, run_id: UUID) -> list[Run]:
+        """Every queued Run whose `after_run_ids` contain `run_id`, `engine_ref` empty.
 
-        Returns only dependency-waiting runs: those that have not yet been enqueued
-        (`engine_ref == {}`) so the caller does not double-enqueue an already-processing
-        dependent.
+        The fan-in read AD-12 asks a terminal transition to make (spine amendment,
+        2026-09-23). `engine_ref == {}` is what keeps an already-enqueued dependent out:
+        resolution only ever considers Runs the engine has never seen, which is also why
+        nothing clears `after_run_ids`. `status == "queued"` keeps out the dependent that
+        is already parked on a dependency (AD-13 gives it Continue and Cancel, not a
+        second automatic resolution) and the one that was cancelled.
         """
         ...
 

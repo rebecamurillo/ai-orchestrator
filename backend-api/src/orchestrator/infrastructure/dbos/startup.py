@@ -238,7 +238,7 @@ def dependency_startup_sweep(settings: Settings) -> None:
     Called once after `launch_engine()` in `main.run_migrations`. Iterates `_SERVING` —
     a no-op when the process is not serving (every unit test) — and for each real serving
     entry opens a DB session, runs `sweep_dependency_waiting`, then closes it. Idempotent:
-    runs that were already enqueued are invisible to `list_by_after_run_id` (story 5-4, AD-12).
+    runs that were already enqueued are invisible to `list_dependents` (story 5-4, AD-12).
     """
     for engine, session_factory, _git in _SERVING:
         if session_factory is None:

@@ -269,6 +269,9 @@ def _continue_dependency_run(ports: SignalPorts, run_id: UUID, signal: Signal) -
         # `needs_you → queued` is not in RUN_TRANSITIONS (the machine only allows
         # `needs_you → running` via the "continue" event), so we write directly like
         # `park_dependents` does for the inverse direction (story 5-4 design note).
+        # `after_run_ids` is deliberately NOT cleared (AD-13, spine amendment 2026-09-23):
+        # the enqueue below writes an `engine_ref`, which is what resolution filters on, so
+        # clearing would buy nothing and would erase the initiative's own DAG edge.
         run = set_run(
             writers,
             run,
@@ -276,7 +279,6 @@ def _continue_dependency_run(ports: SignalPorts, run_id: UUID, signal: Signal) -
             park_kind=None,
             park_path=None,
             park_reason=None,
-            after_run_id=None,
         )
         writers.uow.commit()
     # Enqueue outside the first commit so the Run row is durable before the engine sees it.
@@ -321,8 +323,9 @@ def _start_saved_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> Signal
             run,
             Entry(event="started_by_operator", actor="operator", path=None, text="", payload={}),
         )
-        # Clear after_run_id (story 5-4 sets it; story 5-3 adds the field and the clear).
-        run = set_run(writers, run, after_run_id=None)
+        # `after_run_ids` is left untouched (AD-13, spine amendment 2026-09-23): the Run
+        # gets an `engine_ref` below, and that — not an empty list — is what keeps a later
+        # terminal transition from resolving it a second time.
         writers.uow.commit()
     # Enqueue outside the first commit so the Run row is durable before the engine sees it.
     partition_key = (

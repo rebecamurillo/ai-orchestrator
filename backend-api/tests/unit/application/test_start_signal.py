@@ -2,7 +2,7 @@
 
 AC coverage:
 - start on a saved run re-reads Probe, records `event="started_by_operator"`, calls
-  engine.enqueue, writes engine_ref, clears after_run_id, returns SignalOutcome(resumed=False)
+  engine.enqueue, writes engine_ref, retains after_run_ids, returns SignalOutcome(resumed=False)
 - start on a non-saved run (engine_ref non-empty) raises 409
 - start on status=running raises 409
 - Probe fail line on start raises 409 and leaves engine_ref={} unchanged
@@ -85,7 +85,7 @@ def a_saved_run(
     *,
     engine_ref: dict | None = None,
     status: str = "queued",
-    after_run_id: UUID | None = None,
+    after_run_ids: tuple[UUID, ...] = (),
 ) -> Run:
     """A saved run with the inputs dict `_preflight_req_from_run` can reconstruct from."""
     return Run(
@@ -104,7 +104,7 @@ def a_saved_run(
             "model": None,
         },
         partition_branch=fixtures.INIT_BRANCH,
-        after_run_id=after_run_id,
+        after_run_ids=after_run_ids,
     )
 
 
@@ -214,17 +214,30 @@ def test_start_signal_writes_engine_ref() -> None:
     assert stored.engine_ref != {}
 
 
-def test_start_signal_clears_after_run_id() -> None:
-    # Use a non-None after_run_id so the assertion catches a regression in the clear.
-    # (story 5-3 always writes None here; story 5-4 will set non-None values before start.)
-    some_id = new_id()
+def test_start_signal_retains_after_run_ids() -> None:
+    """Revised for fan-in after_run_ids (multi-repo initiative S1, spine AD-12/AD-13
+    amendment, 2026-09-23): `start` no longer clears the dependency list. Resolution only
+    ever considers Runs whose `engine_ref` is null, so clearing bought nothing, and the
+    retained edges are the durable record an initiative's DAG is rendered from."""
+    first, second = new_id(), new_id()
     harness = StartHarness(git=fixtures.repo_init_git())
-    saved = a_saved_run(after_run_id=some_id)
+    saved = a_saved_run(after_run_ids=(first, second))
 
     harness.start(saved)
 
     stored = harness.stored_run(saved)
-    assert stored.after_run_id is None
+    assert stored.after_run_ids == (first, second)
+
+
+def test_start_signal_still_enqueues_a_run_that_kept_its_predecessors() -> None:
+    """Retaining the edges must not make `start` a no-op: the Run still enters the engine."""
+    harness = StartHarness(git=fixtures.repo_init_git())
+    saved = a_saved_run(after_run_ids=(new_id(),))
+
+    harness.start(saved)
+
+    stored = harness.stored_run(saved)
+    assert stored.engine_ref != {}
 
 
 def test_start_signal_records_started_by_operator_event() -> None:

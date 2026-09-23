@@ -146,7 +146,9 @@ def test_expire_expired_blocked_park_writes_failed_record() -> None:
 def test_expire_parks_dependency_waiting_run_when_predecessor_expires() -> None:
     """When a non-dependency park expires to failed, its dependents are parked (story 5-4 P4)."""
     predecessor = a_parked_run("blocked")
-    dependent = build_run("queued", after_run_id=predecessor.id)
+    # Revised for fan-in after_run_ids (multi-repo initiative S1, spine AD-12/AD-13
+    # amendment, 2026-09-23): the 1:1 pointer became a list.
+    dependent = build_run("queued", after_run_ids=(predecessor.id,))
     walk_ports = make_walk_ports(predecessor, extra_runs=[dependent])
 
     expire(walk_ports, predecessor.id)

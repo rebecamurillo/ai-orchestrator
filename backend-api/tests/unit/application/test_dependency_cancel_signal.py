@@ -33,7 +33,9 @@ def a_queued_run_waiting_for(predecessor_id: object, **over: object) -> Run:
         "status": "queued",
         "budget_usd": BUDGET,
         "created_at": EPOCH,
-        "after_run_id": predecessor_id,
+        # Revised for fan-in after_run_ids (multi-repo initiative S1, spine AD-12/AD-13
+        # amendment, 2026-09-23): the 1:1 pointer became a list.
+        "after_run_ids": (predecessor_id,),
         "engine_ref": {},
     }
     fields.update(over)
@@ -84,7 +86,7 @@ def test_cancel_does_not_affect_already_enqueued_dependent() -> None:
 
     stored = ports.writers.runs.get(already_running.id)
     assert stored is not None
-    # engine_ref is non-empty → list_by_after_run_id excluded it
+    # engine_ref is non-empty → list_dependents excluded it
     assert stored.status == "queued"
 
 

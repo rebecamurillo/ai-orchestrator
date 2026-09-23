@@ -1,10 +1,14 @@
-"""`create_run` with `after_run_id` — dependency setup validation (story 5-4).
+"""`create_run` with `after_run_ids` — dependency setup validation (story 5-4).
+
+Revised for fan-in after_run_ids (multi-repo initiative S1, spine AD-12/AD-13 amendment,
+2026-09-23): the 1:1 `after_run_id` request field became the list `after_run_ids`, and the
+guard reads "non-empty requires save=True".
 
 AC coverage:
-- `after_run_id` without `save=True` raises `Conflict` (409).
-- `after_run_id` with `save=True` stores the run with the dependency field set.
-- A run created with `after_run_id` is NOT enqueued (engine_ref stays {}).
-- `after_run_id=None` with `save=True` still works as the story 5-3 saved run.
+- a non-empty `after_run_ids` without `save=True` raises `Conflict` (409).
+- `after_run_ids` with `save=True` stores the run with the whole list, in declared order.
+- A run created with `after_run_ids` is NOT enqueued (engine_ref stays {}).
+- An empty `after_run_ids` with `save=True` still works as the story 5-3 saved run.
 """
 
 from __future__ import annotations
@@ -116,41 +120,60 @@ class Harness:
 # ── validation ─────────────────────────────────────────────────────────────────────────────
 
 
-def test_after_run_id_without_save_raises_conflict() -> None:
+def test_after_run_ids_without_save_raises_conflict() -> None:
     harness = Harness()
     predecessor_id = new_id()
 
-    with pytest.raises(Conflict, match="after_run_id requires save=True"):
-        harness.create(after_run_id=predecessor_id, save=False)
+    with pytest.raises(Conflict, match="after_run_ids requires save=True"):
+        harness.create(after_run_ids=(predecessor_id,), save=False)
 
 
-def test_after_run_id_with_save_false_is_the_default_and_raises() -> None:
-    """save defaults to False, so after_run_id alone raises without explicitly setting save."""
+def test_after_run_ids_with_save_false_is_the_default_and_raises() -> None:
+    """save defaults to False, so after_run_ids alone raises without explicitly setting save."""
     harness = Harness()
 
     with pytest.raises(Conflict):
-        harness.create(after_run_id=new_id())
+        harness.create(after_run_ids=(new_id(),))
+
+
+def test_a_fan_in_after_run_ids_without_save_raises_conflict() -> None:
+    """The guard is about the list being non-empty, not about its length."""
+    harness = Harness()
+
+    with pytest.raises(Conflict, match="after_run_ids requires save=True"):
+        harness.create(after_run_ids=(new_id(), new_id()), save=False)
 
 
 # ── stored run ─────────────────────────────────────────────────────────────────────────────
 
 
-def test_after_run_id_with_save_stores_run_with_dependency_field() -> None:
+def test_after_run_ids_with_save_stores_run_with_dependency_field() -> None:
     harness = Harness()
     predecessor_id = new_id()
 
-    result = harness.create(after_run_id=predecessor_id, save=True)  # type: ignore[union-attr]
+    result = harness.create(after_run_ids=(predecessor_id,), save=True)  # type: ignore[union-attr]
 
     run = harness.runs.get(result.run.id)  # type: ignore[union-attr]
     assert run is not None
-    assert run.after_run_id == predecessor_id
+    assert run.after_run_ids == (predecessor_id,)
 
 
-def test_after_run_id_with_save_does_not_enqueue() -> None:
+def test_a_fan_in_after_run_ids_is_stored_whole_and_in_declared_order() -> None:
+    harness = Harness()
+    first, second = new_id(), new_id()
+
+    result = harness.create(after_run_ids=(first, second), save=True)  # type: ignore[union-attr]
+
+    run = harness.runs.get(result.run.id)  # type: ignore[union-attr]
+    assert run is not None
+    assert run.after_run_ids == (first, second)
+
+
+def test_after_run_ids_with_save_does_not_enqueue() -> None:
     harness = Harness()
     predecessor_id = new_id()
 
-    result = harness.create(after_run_id=predecessor_id, save=True)  # type: ignore[union-attr]
+    result = harness.create(after_run_ids=(predecessor_id,), save=True)  # type: ignore[union-attr]
 
     run = harness.runs.get(result.run.id)  # type: ignore[union-attr]
     assert run is not None
@@ -158,7 +181,7 @@ def test_after_run_id_with_save_does_not_enqueue() -> None:
     assert not any(name == "enqueue" for name, _ in harness.engine.calls)
 
 
-def test_save_without_after_run_id_still_works() -> None:
+def test_save_without_after_run_ids_still_works() -> None:
     """story 5-3 saved runs continue to work unchanged."""
     harness = Harness()
 
@@ -166,5 +189,5 @@ def test_save_without_after_run_id_still_works() -> None:
 
     run = harness.runs.get(result.run.id)  # type: ignore[union-attr]
     assert run is not None
-    assert run.after_run_id is None
+    assert run.after_run_ids == ()
     assert run.engine_ref == {}

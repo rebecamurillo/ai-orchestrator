@@ -68,13 +68,13 @@ class FakeRunRepository:
             if run.repository_id == repository_id and run.status not in TERMINAL_RUN
         )
 
-    def list_by_after_run_id(self, run_id: UUID) -> list[Run]:
-        """Queued dependency-waiting runs: status='queued', after_run_id==run_id, engine_ref=={}."""
-        self.calls.append(("list_by_after_run_id", run_id))
+    def list_dependents(self, run_id: UUID) -> list[Run]:
+        """Queued dependency-waiting runs: `run_id` in after_run_ids, engine_ref=={}."""
+        self.calls.append(("list_dependents", run_id))
         return _newest_first(
             run
             for run in self.runs.values()
-            if run.after_run_id == run_id and run.status == "queued" and not run.engine_ref
+            if run_id in run.after_run_ids and run.status == "queued" and not run.engine_ref
         )
 
 

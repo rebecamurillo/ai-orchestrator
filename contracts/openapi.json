@@ -3763,17 +3763,13 @@
       "RunIn": {
         "description": "`POST /runs`'s body: what *Start run* submits once every field is filled in.",
         "properties": {
-          "after_run_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "After Run Id"
+          "after_run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "After Run Ids",
+            "type": "array"
           },
           "base_branch": {
             "title": "Base Branch",

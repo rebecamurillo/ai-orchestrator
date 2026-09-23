@@ -81,7 +81,7 @@ Never guess a template's inputs and never skip preflight.
    cannot start without a budget. Optional: `inputs` (what step 1 discovered), `harness`
    (`claude` | `codex` | `local`; null takes the instance default), `model`,
    `save: true` (persist without starting; launch later with the `start` signal),
-   `after_run_id` (chain behind a predecessor; requires `save: true`).
+   `after_run_ids` (fan in behind one or more predecessors; requires `save: true`).
    A failed preflight line answers 409; an unbuildable plan answers 422 with structured
    `errors[]` naming template, version and line.
 

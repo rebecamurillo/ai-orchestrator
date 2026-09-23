@@ -92,7 +92,10 @@ def to_entity(row: RunRow) -> Run:
         ended_at=row.ended_at,
         worktrees_removed=row.worktrees_removed,
         partition_branch=row.partition_branch,
-        after_run_id=row.after_run_id,
+        # `or ()` for the reason `spend_provisional` reads `or False` just above: the
+        # column's default is the database's, so a `RunRow` built in memory and not yet
+        # flushed still carries `None` here.
+        after_run_ids=tuple(row.after_run_ids or ()),
     )
 
 
@@ -143,7 +146,7 @@ def row_values(run: Run) -> dict[str, Any]:
         "ended_at": run.ended_at,
         "worktrees_removed": run.worktrees_removed,
         "partition_branch": run.partition_branch,
-        "after_run_id": run.after_run_id,
+        "after_run_ids": list(run.after_run_ids),
     }
 
 
@@ -194,11 +197,18 @@ class SQLAlchemyRunRepository:
             )
         )
 
-    def list_by_after_run_id(self, run_id: UUID) -> list[Run]:
-        """Dependency-waiting Runs: queued, after_run_id == run_id, engine_ref == {} (story 5-4)."""
+    def list_dependents(self, run_id: UUID) -> list[Run]:
+        """Dependency-waiting Runs: `run_id` in `after_run_ids`, queued, `engine_ref == {}`.
+
+        `contains` emits `after_run_ids @> ARRAY[:id]`, the containment form the GIN index
+        on the column answers; `= ANY(after_run_ids)` asks the same question but cannot use
+        it. The two filters are AD-12's own: a Run the engine has already seen is not
+        resolved again, and a Run that is not `queued` is either already parked on this
+        dependency (AD-13 hands it to the Operator) or terminal.
+        """
         return self._read(
             select(RunRow).where(
-                RunRow.after_run_id == run_id,
+                RunRow.after_run_ids.contains([run_id]),
                 RunRow.status == "queued",
                 RunRow.engine_ref == {},
             )

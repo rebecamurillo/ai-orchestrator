@@ -1,11 +1,16 @@
-"""`list_queue` includes dependency-waiting Runs with reason="waiting for run {id}" (story 5-4).
+"""`list_queue` includes dependency-waiting Runs with reason="waiting for runs {…}".
+
+Revised for fan-in after_run_ids (multi-repo initiative S1, spine AD-12/AD-13 amendment,
+2026-09-23): AD-12's queue reason became the plural `waiting for runs {x, …}`, because a
+Run now waits for a list of predecessors rather than for one.
 
 AC coverage:
-- A queued run with after_run_id set appears with reason=REASON_WAITING_FOR, position=None.
-- A queued run with after_run_id=None (saved run) does NOT appear as a dependency row.
+- A queued run with after_run_ids set appears with reason=REASON_WAITING_FOR, position=None.
+- Two predecessors are both named, in declared order, comma-separated.
+- A queued run with an empty after_run_ids (saved run) does NOT appear as a dependency row.
 - Dependency rows sort after saved rows (_order_key returns (4, 0)).
 - Saved run and dependency-waiting run are correctly separated.
-- _order_key for dependency rows with after_run_id is not None.
+- _order_key for dependency rows with a non-empty after_run_ids.
 """
 
 from __future__ import annotations
@@ -30,10 +35,11 @@ from tests.unit.fakes.runs import FakeRunRepository, FakeStepRunRepository
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 BUDGET = Decimal("10")
 PREDECESSOR_ID = new_id()
+SECOND_PREDECESSOR_ID = new_id()
 
 
 def a_run(
-    *, engine_ref: dict | None = None, after_run_id: object = None, status: str = "queued"
+    *, engine_ref: dict | None = None, after_run_ids: tuple = (), status: str = "queued"
 ) -> Run:
     return Run(
         id=new_id(),
@@ -45,7 +51,7 @@ def a_run(
         budget_usd=BUDGET,
         created_at=NOW,
         engine_ref=engine_ref if engine_ref is not None else {},
-        after_run_id=after_run_id,  # type: ignore[arg-type]
+        after_run_ids=after_run_ids,
     )
 
 
@@ -65,7 +71,7 @@ def ports_with(runs: list[Run]) -> tuple[QueuePorts, FakeWorkflowEngine]:
 
 
 def test_dependency_waiting_run_appears_with_waiting_for_reason() -> None:
-    dep = a_run(after_run_id=PREDECESSOR_ID)
+    dep = a_run(after_run_ids=(PREDECESSOR_ID,))
     ports, _ = ports_with([dep])
 
     view = list_queue(ports)
@@ -77,17 +83,30 @@ def test_dependency_waiting_run_appears_with_waiting_for_reason() -> None:
 
 
 def test_dependency_waiting_run_reason_matches_constant_format() -> None:
-    dep = a_run(after_run_id=PREDECESSOR_ID)
+    dep = a_run(after_run_ids=(PREDECESSOR_ID,))
     ports, _ = ports_with([dep])
 
     view = list_queue(ports)
 
-    expected_reason = REASON_WAITING_FOR.format(run=str(PREDECESSOR_ID))
+    expected_reason = REASON_WAITING_FOR.format(runs=str(PREDECESSOR_ID))
     assert view.items[0].reason == expected_reason
 
 
+def test_dependency_waiting_run_names_every_predecessor_in_declared_order() -> None:
+    """Fan-in: AD-12's `waiting for runs {x, …}` lists the whole predecessor list."""
+    dep = a_run(after_run_ids=(PREDECESSOR_ID, SECOND_PREDECESSOR_ID))
+    ports, _ = ports_with([dep])
+
+    view = list_queue(ports)
+
+    expected = REASON_WAITING_FOR.format(
+        runs=f"{PREDECESSOR_ID}, {SECOND_PREDECESSOR_ID}",
+    )
+    assert view.items[0].reason == expected
+
+
 def test_dependency_waiting_waiting_since_is_created_at() -> None:
-    dep = a_run(after_run_id=PREDECESSOR_ID)
+    dep = a_run(after_run_ids=(PREDECESSOR_ID,))
     ports, _ = ports_with([dep])
 
     view = list_queue(ports)
@@ -98,8 +117,8 @@ def test_dependency_waiting_waiting_since_is_created_at() -> None:
 # ── saved vs dependency separation ─────────────────────────────────────────────────────────
 
 
-def test_saved_run_without_after_run_id_appears_as_saved_not_dependency() -> None:
-    saved = a_run()  # after_run_id=None
+def test_saved_run_without_after_run_ids_appears_as_saved_not_dependency() -> None:
+    saved = a_run()  # after_run_ids=()
     ports, _ = ports_with([saved])
 
     view = list_queue(ports)
@@ -112,8 +131,8 @@ TWO_ROWS = 2
 
 
 def test_saved_and_dependency_runs_appear_as_separate_rows() -> None:
-    saved = a_run()  # after_run_id=None
-    dep = a_run(after_run_id=PREDECESSOR_ID)
+    saved = a_run()  # after_run_ids=()
+    dep = a_run(after_run_ids=(PREDECESSOR_ID,))
     ports, _ = ports_with([saved, dep])
 
     view = list_queue(ports)
@@ -121,7 +140,7 @@ def test_saved_and_dependency_runs_appear_as_separate_rows() -> None:
     assert len(view.items) == TWO_ROWS
     reasons = {item.reason for item in view.items}
     assert REASON_SAVED in reasons
-    expected_waiting = REASON_WAITING_FOR.format(run=str(PREDECESSOR_ID))
+    expected_waiting = REASON_WAITING_FOR.format(runs=str(PREDECESSOR_ID))
     assert expected_waiting in reasons
 
 
@@ -129,12 +148,12 @@ def test_saved_and_dependency_runs_appear_as_separate_rows() -> None:
 
 
 def test_order_key_for_dependency_row_is_4_0() -> None:
-    dep = a_run(after_run_id=PREDECESSOR_ID)
+    dep = a_run(after_run_ids=(PREDECESSOR_ID,))
     row = QueueRow(
         position=None,
         run=dep,
         next_step_label="",
-        reason=REASON_WAITING_FOR.format(run=str(PREDECESSOR_ID)),
+        reason=REASON_WAITING_FOR.format(runs=str(PREDECESSOR_ID)),
         waiting_since=NOW,
         waiting_seconds=0.0,
     )
@@ -144,7 +163,7 @@ def test_order_key_for_dependency_row_is_4_0() -> None:
 
 def test_dependency_row_sorts_after_saved_row() -> None:
     saved_run = a_run()
-    dep = a_run(after_run_id=PREDECESSOR_ID)
+    dep = a_run(after_run_ids=(PREDECESSOR_ID,))
     saved_row = QueueRow(
         position=None,
         run=saved_run,
@@ -157,7 +176,7 @@ def test_dependency_row_sorts_after_saved_row() -> None:
         position=None,
         run=dep,
         next_step_label="",
-        reason=REASON_WAITING_FOR.format(run=str(PREDECESSOR_ID)),
+        reason=REASON_WAITING_FOR.format(runs=str(PREDECESSOR_ID)),
         waiting_since=NOW,
         waiting_seconds=0.0,
     )
@@ -165,4 +184,4 @@ def test_dependency_row_sorts_after_saved_row() -> None:
     ordered = sorted([dep_row, saved_row], key=_order_key)
 
     assert ordered[0].reason == REASON_SAVED
-    assert ordered[1].run.after_run_id == PREDECESSOR_ID
+    assert ordered[1].run.after_run_ids == (PREDECESSOR_ID,)
