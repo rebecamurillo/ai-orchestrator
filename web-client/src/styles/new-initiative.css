@@ -1,0 +1,109 @@
+/**
+ * Styling for `NewInitiative.tsx` and `src/components/initiative/*` (S7): the repository
+ * table, the epic list and its own check lines, the order readout. `.newwf-*` (imported
+ * beside this file) already carries the form/pre-flight/decision-bar look this screen shares
+ * with New Workflow; every rule below is the initiative screen's own addition, hand-scoped
+ * under `.newin-` the same way `new-workflow.css` scopes its own under `.newwf-` (React has
+ * no equivalent of Astro's scoped `<style>`). Tokens only, no inline styles
+ * (`web-client/AGENTS.md`).
+ */
+
+.newin-empty {
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.newin-scroll {
+  overflow-x: auto;
+}
+
+table.newin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.newin-table th {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-rail);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  text-transform: var(--type-column-head-transform);
+  text-align: left;
+}
+
+table.newin-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.newin-epics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.newin-epic-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.newin-epic-group-head {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  text-transform: var(--type-column-head-transform);
+}
+
+.newin-epic {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.newin-epic-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.newin-epic-id {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.newin-epic-title {
+  color: var(--color-text);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.newin-epic-meta {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.newin-epic-line {
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.newin-epic-line-word[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.newin-order {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}

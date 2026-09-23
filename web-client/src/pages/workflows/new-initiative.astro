@@ -1,0 +1,93 @@
+---
+/**
+ * New initiative (S7): the form that binds `InitiativeIn`, beside the pre-flight readout —
+ * `new.astro`'s own structure, without the Template catalog that screen builds: an
+ * initiative has no per-Template inputs of its own, only the five fields `InitiativeIn`
+ * itself declares plus harness and model.
+ *
+ * Two reads build the page — `GET /projects`, `GET /harnesses` — issued together and each
+ * best effort, so a slow or failing read narrows the page rather than crashing it
+ * (`new.astro`'s own module doc).
+ *
+ * A `?project=` naming a Project the (frozen-empty, paginated) list read did not carry is
+ * resolved through `GET /projects/{id}` — `new.astro`'s own deep-link precedent.
+ *
+ * Unlike `new.astro`, there is no "nothing to bind" gate on a stored count: the form's own
+ * five fields exist regardless of how many Projects are registered, so the only readout this
+ * page swaps the form out for is "the list could not be read at all".
+ */
+import EmptyState from '../../components/EmptyState.astro';
+import Shell from '../../layouts/Shell.astro';
+import { backend } from '../../api/server';
+import NewInitiative from '../../islands/NewInitiative';
+import { defaultFormState } from '../../lib/initiative/form';
+import type { components } from '../../api/schema';
+
+export const prerender = false;
+
+type ProjectRead = components['schemas']['ProjectRead'];
+type HarnessOut = components['schemas']['HarnessOut'];
+
+const projectParam = Astro.url.searchParams.get('project');
+
+/** Every read here is best effort, and each one reports whether it actually answered — a
+ * failure must not be rendered as an empty list (`new.astro`'s own doc). */
+async function read<T>(load: () => Promise<T | null>): Promise<{ data: T | null; ok: boolean }> {
+  try {
+    const data = await load();
+    return { data, ok: data !== null };
+  } catch {
+    return { data: null, ok: false };
+  }
+}
+
+const [projectList, harnessList] = await Promise.all([
+  read<ProjectRead[]>(async () => {
+    const { data, error } = await backend().GET('/api/v1/projects');
+    return error || !data ? null : data.items;
+  }),
+  read<HarnessOut[]>(async () => {
+    const { data, error } = await backend().GET('/api/v1/harnesses');
+    return error || !data ? null : data.items;
+  }),
+]);
+
+let projects: ProjectRead[] = projectList.data ?? [];
+const harnesses: HarnessOut[] = harnessList.data ?? [];
+
+if (projectParam && !projects.some((project) => project.id === projectParam)) {
+  const { data } = await read<ProjectRead>(async () => {
+    const { data, error } = await backend().GET('/api/v1/projects/{project_id}', {
+      params: { path: { project_id: projectParam } },
+    });
+    return error || !data ? null : data;
+  });
+  if (data) projects = [...projects, data];
+}
+
+//: nothing answered — every statement about what is registered would be a guess
+const unreachable = !projectList.ok && projects.length === 0;
+
+const initial = {
+  ...defaultFormState(),
+  projectId:
+    projectParam && projects.some((project) => project.id === projectParam) ? projectParam : '',
+};
+---
+
+<Shell active="workflows" title="NEW INITIATIVE">
+  {
+    unreachable ? (
+      <EmptyState
+        testId="newin-unavailable"
+        headline="PROJECTS UNAVAILABLE"
+        lines={[
+          'The project list could not be read from backend-api, so there is nothing to bind an initiative to.',
+          'Reload the page once the connection is restored.',
+        ]}
+      />
+    ) : (
+      <NewInitiative client:load projects={projects} harnesses={harnesses} initial={initial} />
+    )
+  }
+</Shell>
