@@ -1,0 +1,5 @@
+- id: "1"
+  title: Ship the beta feature
+  description: >
+    Add src/beta_feature.py inside repos/beta so beta-epic's own SPEC.md CAP-1 holds. The
+    scripted harness finishes this Story in one dispatch.

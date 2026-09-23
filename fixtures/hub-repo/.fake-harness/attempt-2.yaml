@@ -1,0 +1,11 @@
+# alpha-epic's own `retro` (dispatch 2 of the no-story-id counter at the hub root). No
+# `expect:` is declared on this row, so any exit 0 routes it `done` — this scenario writes a
+# short file only so `commit-retro`, right after it, has something of the retro's own to
+# show for it. No `commit:` here either, for the same reason `attempt-1.yaml` has none.
+files:
+  - path: initiatives/demo/alpha-epic/retro.md
+    content: |
+      # Retrospective — alpha epic
+
+      Nothing to flag.
+exit_code: 0

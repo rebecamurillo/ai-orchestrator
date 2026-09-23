@@ -1,0 +1,9 @@
+# beta-epic's own `gen-e2e` (story H5) — `alpha`'s sibling. See
+# `members/alpha/.fake-harness/attempt-1.yaml`'s own note on the `commit: true` here.
+files:
+  - path: tests/e2e_generated.test.sh
+    content: |
+      #!/bin/sh
+      exit 0
+commit: true
+exit_code: 0

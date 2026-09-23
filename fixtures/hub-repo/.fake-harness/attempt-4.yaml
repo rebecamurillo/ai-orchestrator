@@ -1,0 +1,9 @@
+# beta-epic's own `retro` (dispatch 4 of the no-story-id counter at the hub root). No
+# `commit:`, for the same reason `attempt-2.yaml` has none.
+files:
+  - path: initiatives/demo/beta-epic/retro.md
+    content: |
+      # Retrospective — beta epic
+
+      Nothing to flag.
+exit_code: 0

@@ -39,8 +39,20 @@ services:
     # so a checkout whose `.env.e2e` predates this story would silently run the gate without
     # the scripted `fake` harness. Compose's `environment` wins over `env_file`, so this
     # holds however old the generated file is. The dev stack reads `.env` and is unaffected.
+    #
+    # `GIT_ALLOW_PROTOCOL: file` (story H5, 2026-09-23) is the one thing the hub-Run e2e
+    # fixture needs that no other suite does: `git submodule update --init` refuses the
+    # `file` transport for the clones it starts (CVE-2022-39253), even though a direct `git
+    # clone file://…` — what every other e2e fixture already relies on — is always allowed.
+    # `SubprocessGit.command_environment` mirrors this variable from the backend's own
+    # process environment exactly the way it already mirrors `PATH`; it is never a typed
+    # `Settings` field (AD-20 governs an application *setting*, and this is a passthrough),
+    # and it is declared only here — never in `.env.example` or `docker-compose.yml` — so a
+    # real deployment's environment never carries it and the CVE guard stays exactly as git
+    # ships it for every Operator's own stack.
     environment:
       ORCH_TEST_MODE: "1"
+      GIT_ALLOW_PROTOCOL: "file"
     # The gate's stack is the one that never runs a real agent (the scripted `fake`
     # harness), so the hardening the base file gives up for sudo lives here: the image's
     # `sudo` binary is inert under `no-new-privileges`, and nothing in this stack misses

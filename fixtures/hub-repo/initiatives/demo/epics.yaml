@@ -1,0 +1,25 @@
+# `initiative-hub@1`'s own `epics` loop reads this file (H3, H5). `branch` is required by
+# the list-file contract (`lists.py::REQUIRED_FIELDS`) even though this Run never reads it:
+# every epic works on the Run's own `branch` input instead of a branch of its own.
+#
+# `alpha-epic` declares no `install`, which proves the `skipped · no command` row — the
+# whole command, `cd` included, is this file's own data, and an entry that leaves the field
+# out plans a `shell` row with nothing to run rather than a bare `cd` reaching for nowhere.
+# `alpha-epic` alone carries `done_checkpoint: true`, so the Run parks after it and
+# `beta-epic` only starts once the Operator continues.
+- id: alpha-epic
+  title: Alpha epic
+  branch: epics/alpha
+  spec_folder: alpha-epic
+  workdir: repos/alpha
+  test: cd repos/alpha && sh check.sh
+  quality_gate: cd repos/alpha && sh check.sh
+  done_checkpoint: true
+- id: beta-epic
+  title: Beta epic
+  branch: epics/beta
+  spec_folder: beta-epic
+  workdir: repos/beta
+  install: cd repos/beta && true
+  test: cd repos/beta && sh check.sh
+  quality_gate: cd repos/beta && sh check.sh

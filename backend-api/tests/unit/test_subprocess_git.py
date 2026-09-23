@@ -26,6 +26,7 @@ from orchestrator.domain.ports.git import Git, GitError
 from orchestrator.infrastructure.git.subprocess_git import (
     ASKPASS_NAME,
     ASKPASS_TOKEN_VAR,
+    GIT_ALLOW_PROTOCOL_VAR,
     TIMEOUT_SECONDS,
     SubprocessGit,
     command_environment,
@@ -426,6 +427,32 @@ def test_the_environment_is_built_and_not_inherited(monkeypatch: pytest.MonkeyPa
         "GIT_ASKPASS",
         ASKPASS_TOKEN_VAR,
     }
+
+
+def test_git_allow_protocol_is_absent_when_the_process_env_does_not_set_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Production's own shape: nothing sets it, so the CVE-2022-39253 guard git ships stays
+    exactly as it is (story H5, 2026-09-23) — the same absence
+    `test_the_environment_is_built_and_not_inherited`'s exact-set assertion already pins."""
+    monkeypatch.delenv(GIT_ALLOW_PROTOCOL_VAR, raising=False)
+
+    environment = command_environment(Path("/tmp/askpass.sh"), Path("/tmp/home"), TOKEN)
+
+    assert GIT_ALLOW_PROTOCOL_VAR not in environment
+
+
+def test_git_allow_protocol_passes_through_when_the_process_env_sets_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The one route the disposable e2e stack has to let a `git.submodule` row clone a
+    `file://` member fixture: `docker-compose.e2e.yml` sets this on `backend-api`, and
+    `command_environment` mirrors it exactly like it already mirrors `PATH`."""
+    monkeypatch.setenv(GIT_ALLOW_PROTOCOL_VAR, "file")
+
+    environment = command_environment(Path("/tmp/askpass.sh"), Path("/tmp/home"), TOKEN)
+
+    assert environment[GIT_ALLOW_PROTOCOL_VAR] == "file"
 
 
 def test_the_home_is_a_private_empty_directory(git: SubprocessGit) -> None:

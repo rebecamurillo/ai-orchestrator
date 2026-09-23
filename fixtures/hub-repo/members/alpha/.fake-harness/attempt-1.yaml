@@ -1,0 +1,16 @@
+# alpha-epic's own `gen-e2e` (story H5). This row also carries `workdir: repos/alpha`, so
+# its `cwd` is the submodule too — but its prompt names no story id, so it is a separate
+# dispatch counter from Story 1's `build` (keyed by story id, `scenario.py::counter_path`),
+# and reads this file rather than `.fake-harness/1/…`.
+#
+# `commit: true` here (unlike the Story build): this is the "e2e commit" the journey's own
+# assertions look for on the member's branch, and `commit-e2e` right after it then finds
+# nothing left to commit — `done, no changes` — which is the correct outcome, not a skipped
+# row.
+files:
+  - path: tests/e2e_generated.test.sh
+    content: |
+      #!/bin/sh
+      exit 0
+commit: true
+exit_code: 0

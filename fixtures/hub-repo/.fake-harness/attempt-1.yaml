@@ -1,0 +1,18 @@
+# alpha-epic's own `spec-gate` (dispatch 1 of the no-story-id counter at the hub root: this
+# row carries no `workdir`, so it runs at the worktree root exactly like `retro`).
+#
+# No `commit:` here: `initiative-hub-epic@1` commits the hub's whole spec folder in one row,
+# `commit-retro`, at the very end of the epic — this file lands uncommitted, exactly like
+# every Story file the `stories` loop writes below it, and `expect.files` reads it straight
+# off the worktree rather than off a ref.
+files:
+  - path: initiatives/demo/alpha-epic/spec-gate-result.md
+    content: |
+      ---
+      status: done
+      ---
+
+      # Spec gate — alpha epic
+
+      Reviewed: the story is implementable as specified.
+exit_code: 0

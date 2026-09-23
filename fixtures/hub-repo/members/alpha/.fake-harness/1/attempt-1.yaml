@@ -1,0 +1,27 @@
+# alpha-epic's Story 1, first and only dispatch (story H5). `build` carries `workdir:
+# repos/alpha`, so the harness's own `cwd` is the submodule checkout and this `files:` entry
+# lands inside it — but the Story file itself still lands at the hub (H4's `prompt_scope`
+# absolutises `spec_folder` into the dispatch sentence for a `workdir` row, and the fake
+# harness's target path is computed from that absolute value, so `cwd` is overridden).
+#
+# `commit: false` (the default) on purpose: the work stays uncommitted here so
+# `initiative-hub-story@1`'s own `commit-guard` row is the one that actually commits it,
+# which is what story H5's journey asserts.
+story_file:
+  slug: work
+  content: |
+    ---
+    status: done
+    ---
+
+    # Story 1 — Ship the alpha feature
+
+    ## Auto Run Result
+
+    Status: done
+files:
+  - path: src/alpha_feature.py
+    content: |
+      # alpha feature work, story 1 (H5 hub-Run e2e fixture)
+exit_code: 0
+usage: { tokens_in: 150, tokens_out: 300, cost_usd: "0.01" }

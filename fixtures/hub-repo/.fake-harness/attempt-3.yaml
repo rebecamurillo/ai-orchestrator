@@ -1,0 +1,14 @@
+# beta-epic's own `spec-gate` (dispatch 3 of the no-story-id counter at the hub root: alpha
+# epic's spec-gate and retro were dispatches 1 and 2, in that order). No `commit:`, for the
+# same reason `attempt-1.yaml` has none.
+files:
+  - path: initiatives/demo/beta-epic/spec-gate-result.md
+    content: |
+      ---
+      status: done
+      ---
+
+      # Spec gate — beta epic
+
+      Reviewed: the story is implementable as specified.
+exit_code: 0

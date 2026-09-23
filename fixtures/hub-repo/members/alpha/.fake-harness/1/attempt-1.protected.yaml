@@ -1,0 +1,29 @@
+# The protected-path variant of Story 1's build dispatch (story H5). Never read under its
+# own name — `scenario.py::scenario_path` only ever looks for `attempt-{k}.yaml` or
+# `default.yaml` — `tests/e2e/helpers/hub_fixture.py`'s `poison_alpha` flag copies this over
+# the real `attempt-1.yaml` at fixture-materialisation time, for a Run of its own.
+#
+# It finishes the Story exactly as the real scenario does, but instead of leaving
+# `tests/smoke.test.sh` alone it *edits* it — that file is committed in the seed, so it is
+# one of AD-17's frozen test files by the time this dispatch starts, and editing it
+# uncommitted is exactly what `commit-guard` parks `protected_path` on.
+story_file:
+  slug: work
+  content: |
+    ---
+    status: done
+    ---
+
+    # Story 1 — Ship the alpha feature
+
+    ## Auto Run Result
+
+    Status: done
+files:
+  - path: tests/smoke.test.sh
+    content: |
+      #!/bin/sh
+      # tampered by the poisoned scenario (H5's protected-path case)
+      exit 1
+exit_code: 0
+usage: { tokens_in: 100, tokens_out: 200, cost_usd: "0.01" }

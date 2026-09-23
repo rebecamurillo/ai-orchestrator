@@ -80,13 +80,26 @@ GIT_DIRECTORY = ".git"
 NUL = "\0"
 
 
+#: Not a typed `Settings` field (AD-20 governs an application *setting*; this is neither —
+#: it is an environment passthrough, exactly like `PATH` two lines below). e2e-only (story
+#: H5, 2026-09-23): `git submodule update --init` refuses the `file` transport for the
+#: clones it starts (CVE-2022-39253) even though a direct `git clone file://…` — what every
+#: other e2e fixture already does — is always allowed; the hub-Run journey's fixture needs a
+#: hub *and* its member submodules over `file://` inside the disposable e2e stack.
+#: `docker-compose.e2e.yml` sets this for `backend-api`; `docker-compose.yml` and every real
+#: deployment's `.env` never do, so a production instance keeps the CVE guard exactly as git
+#: ships it — nothing here relaxes `protocol.file.allow` on its own account.
+GIT_ALLOW_PROTOCOL_VAR = "GIT_ALLOW_PROTOCOL"
+
+
 def command_environment(askpass: Path, home: Path, token: str) -> dict[str, str]:
-    """The whole environment a git command runs in. Nothing here is inherited but `PATH`.
+    """The whole environment a git command runs in. Nothing here is inherited but `PATH`,
+    and — only when the process's own environment sets it — `GIT_ALLOW_PROTOCOL`.
 
     Built rather than copied so that no other secret this process holds can reach a hook, a
     helper or a filter that a git command starts.
     """
-    return {
+    environment = {
         # `.get(name, default)` would hand back the empty string when PATH is set but
         # empty, and every command would then fail to find `git` at all
         "PATH": os.environ.get("PATH") or FALLBACK_PATH,
@@ -97,6 +110,10 @@ def command_environment(askpass: Path, home: Path, token: str) -> dict[str, str]
         "GIT_ASKPASS": str(askpass),
         ASKPASS_TOKEN_VAR: token,
     }
+    allowed = os.environ.get(GIT_ALLOW_PROTOCOL_VAR)
+    if allowed:
+        environment[GIT_ALLOW_PROTOCOL_VAR] = allowed
+    return environment
 
 
 def tree_bytes(root: Path) -> int:

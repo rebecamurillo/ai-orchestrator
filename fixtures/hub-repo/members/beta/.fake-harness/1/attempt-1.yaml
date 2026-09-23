@@ -1,0 +1,21 @@
+# beta-epic's Story 1, first and only dispatch (story H5) — `alpha`'s sibling scenario, one
+# member repository down. See `members/alpha/.fake-harness/1/attempt-1.yaml`'s own note on
+# why the Story file lands at the hub despite this row's `workdir`.
+story_file:
+  slug: work
+  content: |
+    ---
+    status: done
+    ---
+
+    # Story 1 — Ship the beta feature
+
+    ## Auto Run Result
+
+    Status: done
+files:
+  - path: src/beta_feature.py
+    content: |
+      # beta feature work, story 1 (H5 hub-Run e2e fixture)
+exit_code: 0
+usage: { tokens_in: 140, tokens_out: 280, cost_usd: "0.01" }
