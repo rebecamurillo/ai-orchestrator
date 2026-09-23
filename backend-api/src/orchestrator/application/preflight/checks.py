@@ -204,11 +204,18 @@ def _holding_run(
     branch: str,
     exclude_run_id: UUID | None = None,
 ) -> Run | None:
-    """Non-terminal Run holding `branch` on this Repository (AD-14, story 5-1)."""
+    """Non-terminal Run holding `branch` on this Repository (AD-14, story 5-1).
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23). A Run whose `engine_ref` is empty has entered no engine and
+    # materialised nothing; it is never the holder. It can enter the engine only through
+    # `start` (which re-runs exactly this check) or dependency resolution, serialized by
+    # AD-12's partition.
+    """
     if repository is None:
         return None
     for r in runs.list_by_repository_non_terminal(repository.id):
-        if r.id != exclude_run_id and r.partition_branch == branch:
+        if r.id != exclude_run_id and r.partition_branch == branch and r.engine_ref:
             return r
     return None
 

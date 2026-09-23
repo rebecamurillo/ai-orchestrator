@@ -164,6 +164,9 @@ def test_ac4_held_branch() -> None:
     )
     # operator revision 2026-09-15: partition by (repository, branch) — holder needs
     # partition_branch set so _holding_run detects it via the new check.
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23) — `engine_ref` set so the holder is in the engine, which is
+    # exactly the case that still refuses.
     holder = Run(
         id=new_id(),
         project_id=fixtures.PROJECT.id,
@@ -174,6 +177,7 @@ def test_ac4_held_branch() -> None:
         inputs={},
         budget_usd=Decimal("0"),
         partition_branch="feat/x",
+        engine_ref={"ref": 1},
         worktrees=(Worktree(branch="feat/x", path="/work/x", created_branch=True, pushed=False),),
         created_at=NOW,
     )

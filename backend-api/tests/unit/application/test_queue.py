@@ -83,7 +83,15 @@ def entry(run_id: object, state: str, position: int | None, enqueued_at: datetim
 def test_running_queued_and_parked_runs_read_the_fixed_reasons() -> None:
     # operator revision 2026-09-15: partition by (repository, branch); both runs need
     # partition_branch set to the same value for REASON_BRANCH_HELD to be reported.
-    running = a_run(repository_id=REPOSITORY_A, status="running", partition_branch="feat/x")
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23) — `engine_ref` set on `running` so it reads as the holder;
+    # the saved case is `test_a_saved_run_sharing_the_branch_is_not_the_holder` below.
+    running = a_run(
+        repository_id=REPOSITORY_A,
+        status="running",
+        partition_branch="feat/x",
+        engine_ref={"ref": 1},
+    )
     queued = a_run(repository_id=REPOSITORY_A, status="queued", partition_branch="feat/x")
     parked = a_run(
         repository_id=REPOSITORY_B,
@@ -107,6 +115,36 @@ def test_running_queued_and_parked_runs_read_the_fixed_reasons() -> None:
     assert by_id[queued.id].reason == REASON_BRANCH_HELD.format(run="epic · feat/x")
     assert by_id[parked.id].reason == REASON_WAITING_ANSWER
     assert by_id[parked.id].position is None
+
+
+# ── a saved Run sharing the branch is not the holder (multi-repo initiative S2) ────────────
+
+
+def test_a_saved_run_sharing_the_branch_is_not_the_holder() -> None:
+    """A saved Run (`engine_ref` empty) on the same (repository, branch) is not in the
+    engine and never the holder: the note falls through to the fixed global-concurrency
+    sentence, naming what is actually active elsewhere.
+
+    Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    amendment, 2026-09-23).
+    """
+    saved = a_run(
+        repository_id=REPOSITORY_A,
+        status="queued",
+        partition_branch="feat/x",
+        engine_ref={},
+    )
+    queued = a_run(repository_id=REPOSITORY_A, status="queued", partition_branch="feat/x")
+    active = a_run(repository_id=REPOSITORY_B, status="running", inputs={"branch": "feat/b"})
+    runs = FakeRunRepository([saved, queued, active])
+    engine = FakeWorkflowEngine()
+    engine.queue[queued.id] = entry(queued.id, "enqueued", 1, NOW)
+    engine.queue[active.id] = entry(active.id, "pending", None, NOW)
+
+    view = list_queue(a_ports(engine, runs))
+
+    by_id = {row.run.id: row for row in view.items}
+    assert by_id[queued.id].reason == REASON_GLOBAL_CONCURRENCY.format(runs="epic · feat/b")
 
 
 # ── AC2: global concurrency ───────────────────────────────────────────────────────────────

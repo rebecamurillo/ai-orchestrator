@@ -49,12 +49,18 @@ def entry(run_id: object, state: str, position: int | None) -> QueueEntry:
 
 def test_queued_run_reports_branch_held_when_holder_is_needs_you() -> None:
     """A needs_you run holds its partition; a second run for the same branch is
-    branch-held, not globally-constrained (story 5-1, AD-12 row 6)."""
+    branch-held, not globally-constrained (story 5-1, AD-12 row 6).
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23). `engine_ref` set on `holder`: a `needs_you` Run is mid-`recv`
+    # inside the engine (AD-12), so it is in the engine and still the holder.
+    """
     holder = a_run(
         status="needs_you",
         partition_branch="feat/s",
         park_kind="checkpoint",
         park_path="review",
+        engine_ref={"ref": 1},
     )
     waiting = a_run(status="queued", partition_branch="feat/s")
 

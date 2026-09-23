@@ -125,12 +125,23 @@ def _wire(
 def test_held_by_label_is_set_when_another_run_shares_partition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Another non-terminal Run with the same (repository_id, partition_branch) → label set."""
+    """Another non-terminal, enqueued Run with the same (repository_id, partition_branch)
+    → label set.
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23). `engine_ref` set on `holder` so it is in the engine, which
+    # is exactly the case that still holds; the saved case is the new test below.
+    """
     project = a_project()
     repository = a_repository(project.id)
     target = a_run(project, repository, partition_branch="feat/s")
     holder = a_run(
-        project, repository, template_name="epic", status="running", partition_branch="feat/s"
+        project,
+        repository,
+        template_name="epic",
+        status="running",
+        partition_branch="feat/s",
+        engine_ref={"ref": 1},
     )
     session = _RecordingSession()
 
@@ -146,6 +157,45 @@ def test_held_by_label_is_set_when_another_run_shares_partition(
 
     assert env is not None
     assert env.held_by_label == "epic · feat/s"
+
+
+# ── held_by_label is None when the only sharer is a saved Run ─────────────────
+
+
+def test_held_by_label_is_none_when_the_only_sharer_is_a_saved_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A saved Run (`engine_ref` empty) sharing the partition has materialised no worktree
+    and is not the holder.
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23).
+    """
+    project = a_project()
+    repository = a_repository(project.id)
+    target = a_run(project, repository, partition_branch="feat/s")
+    saved = a_run(
+        project,
+        repository,
+        template_name="epic",
+        status="queued",
+        partition_branch="feat/s",
+        engine_ref={},
+    )
+    session = _RecordingSession()
+
+    _wire(
+        monkeypatch,
+        run=target,
+        non_terminal=[target, saved],
+        project=project,
+        repository=repository,
+    )
+
+    env = read_run_environment(lambda: session, BMAD_VERSION, target.id)
+
+    assert env is not None
+    assert env.held_by_label is None
 
 
 # ── held_by_label is None when no other run holds the partition ────────────────

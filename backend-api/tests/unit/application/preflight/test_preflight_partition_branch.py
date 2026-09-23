@@ -1,7 +1,9 @@
 """`preflight/checks._holding_run` (story 5-1, AD-12): the branch-partition check that
 decides whether another run holds the (repository, declared-branch) slot.
 
-Three cases: match, no-match, and None partition_branch on the candidate.
+Cases: match, no-match, None partition_branch on the candidate, and — multi-repo
+initiative S2, spine AD-14 amendment, 2026-09-23 — a saved candidate (`engine_ref` empty)
+never holds the branch, whatever its `partition_branch` says.
 """
 
 from __future__ import annotations
@@ -56,13 +58,56 @@ def a_run(repository_id: object, **overrides: object) -> Run:
 
 
 def test_holding_run_returns_run_when_partition_branch_matches() -> None:
-    """A non-terminal run whose partition_branch equals the declared branch is the holder."""
+    """A non-terminal, enqueued run whose partition_branch equals the declared branch is
+    the holder.
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23). `engine_ref` set here to keep pinning "an ENQUEUED run with
+    # the same branch is still refused"; the saved case is the new test below.
+    """
     repository = a_repository()
-    holder = a_run(repository.id, partition_branch="feat/x")
+    holder = a_run(repository.id, partition_branch="feat/x", engine_ref={"ref": 1})
 
     result = _holding_run(FakeRunRepository([holder]), repository, "feat/x")
 
     assert result is holder
+
+
+# ── _holding_run returns None when the candidate is saved (engine_ref empty) ──
+
+
+def test_holding_run_returns_none_when_candidate_is_saved() -> None:
+    """A saved run (`engine_ref` empty) never holds a branch, however its
+    `partition_branch` reads — it has entered no engine and materialised nothing.
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23).
+    """
+    repository = a_repository()
+    saved = a_run(repository.id, partition_branch="feat/x", status="queued", engine_ref={})
+
+    result = _holding_run(FakeRunRepository([saved]), repository, "feat/x")
+
+    assert result is None
+
+
+def test_holding_run_reflects_the_run_starting() -> None:
+    """The lifecycle the amendment describes: a saved Run holds nothing; the same Run,
+    started (`engine_ref` written), does.
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23).
+    """
+    repository = a_repository()
+    saved = a_run(repository.id, partition_branch="feat/x", status="queued", engine_ref={})
+    runs = FakeRunRepository([saved])
+
+    assert _holding_run(runs, repository, "feat/x") is None
+
+    started = saved.model_copy(update={"engine_ref": {"ref": 1}})
+    runs.update(started)
+
+    assert _holding_run(runs, repository, "feat/x") is started
 
 
 # ── _holding_run returns None when partition_branch differs ───────────────────

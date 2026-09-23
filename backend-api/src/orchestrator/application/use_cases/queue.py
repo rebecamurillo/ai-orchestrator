@@ -192,6 +192,11 @@ def _holding_run(runs: RunRepository, run: Run) -> Run | None:
 
     Skips Runs where either side has `partition_branch = None` — old runs without the field
     (story 5-1) are treated as non-competing (operator revision 2026-09-15).
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23). The queue's `branch held by {run}` note, like pre-flight's,
+    # reads only Runs that are in the engine — a candidate with an empty `engine_ref` is
+    # skipped, whatever its `partition_branch` says.
     """
     if run.partition_branch is None:
         return None
@@ -202,6 +207,7 @@ def _holding_run(runs: RunRepository, run: Run) -> Run | None:
             if r.id != run.id
             and r.partition_branch is not None
             and r.partition_branch == run.partition_branch
+            and r.engine_ref
         ),
         None,
     )

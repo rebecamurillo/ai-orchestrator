@@ -297,9 +297,13 @@ def test_branch_lines_ok_will_create_from_base() -> None:
 def test_branch_lines_fails_when_held_by_a_non_terminal_run() -> None:
     # operator revision 2026-09-15: partition by (repository, branch) — holder needs
     # partition_branch set so _holding_run detects it via the new check.
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23) — `engine_ref` set here so the holder is enqueued (in the
+    # engine), which is exactly the case that still refuses.
     holder = run(
         template_name="epic",
         partition_branch="feat/x",
+        engine_ref={"ref": 1},
         worktrees=(Worktree(branch="feat/x", path="/work/x", created_branch=True, pushed=False),),
     )
     plan = Plan(plan_ref="sha", rows=(row(with_resolved={"branch": "feat/x"}),))
@@ -315,6 +319,34 @@ def test_branch_lines_fails_when_held_by_a_non_terminal_run() -> None:
     assert lines == [
         Line(CHECK_BRANCH, "fail", "held by run epic · feat/x", "wait for that run or cancel it")
     ]
+
+
+def test_branch_lines_ok_when_only_a_saved_run_shares_the_branch() -> None:
+    """A saved Run (`engine_ref` empty) on the same declared branch holds nothing, so the
+    line reads `ok`, not `held by run` — creation is allowed.
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23).
+    """
+    saved = run(
+        template_name="epic",
+        status="queued",
+        partition_branch="feat/x",
+        engine_ref={},
+    )
+    plan = Plan(plan_ref="sha", rows=(row(with_resolved={"branch": "feat/x"}),))
+    repository = repo()
+    lines = checks.branch_lines(
+        ctx(
+            repository=repository,
+            plan=plan,
+            git=FakeGit(refs={}),
+            req=PreflightRequest(base_branch="main"),
+            runs=FakeRunRepository([saved.model_copy(update={"repository_id": repository.id})]),
+        )
+    )
+
+    assert lines == [Line(CHECK_BRANCH, "ok", "feat/x · will create from main", None)]
 
 
 def test_holding_run_none_without_a_repository() -> None:

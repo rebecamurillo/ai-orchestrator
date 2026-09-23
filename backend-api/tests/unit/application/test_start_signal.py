@@ -109,7 +109,12 @@ def a_saved_run(
 
 
 def competing_run() -> Run:
-    """A non-terminal run holding the same partition_branch — causes a fail line."""
+    """A non-terminal, enqueued run holding the same partition_branch — causes a fail line.
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23). `engine_ref` set so this Run is in the engine — the case
+    # `start`'s re-run of pre-flight still refuses a saved Run against.
+    """
     return Run(
         id=new_id(),
         project_id=fixtures.PROJECT.id,
@@ -121,6 +126,7 @@ def competing_run() -> Run:
         created_at=NOW,
         inputs={"base_branch": fixtures.INIT_BRANCH, "harness": "claude", "model": None},
         partition_branch=fixtures.INIT_BRANCH,
+        engine_ref={"ref": 1},
     )
 
 

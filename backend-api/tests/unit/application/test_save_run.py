@@ -92,7 +92,13 @@ def existing_run_on_different_branch() -> Run:
 
 
 def existing_run_on_same_branch() -> Run:
-    """A non-terminal run on the same repository and same partition branch — causes fail line."""
+    """A non-terminal, enqueued run on the same repository and same partition branch —
+    causes fail line.
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23). `engine_ref` set so this Run is in the engine, which is
+    # exactly the case that still refuses.
+    """
     return Run(
         id=new_id(),
         project_id=fixtures.PROJECT.id,
@@ -104,6 +110,7 @@ def existing_run_on_same_branch() -> Run:
         budget_usd=BUDGET,
         created_at=NOW,
         partition_branch=fixtures.INIT_BRANCH,
+        engine_ref={"ref": 1},
     )
 
 

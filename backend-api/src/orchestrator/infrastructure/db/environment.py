@@ -93,11 +93,22 @@ def _held_by_label(run: Run, runs: SQLAlchemyRunRepository) -> str | None:
 
     Used as the executor backstop for the race between pre-flight passing and worktree
     creation (AD-14, story 5-1). `None` when `partition_branch` is not set or no holder exists.
+
+    # Revised: a saved Run holds no branch (multi-repo initiative S2, spine AD-14
+    # amendment, 2026-09-23). Since this story's pre-flight fix, two Runs may legally
+    # declare the same branch as long as at most one is in the engine at a time (a saved
+    # Run no longer collides with another saved Run at creation), so a candidate with an
+    # empty `engine_ref` is skipped here too — it has materialised no worktree and is not
+    # who this backstop races against.
     """
     if run.partition_branch is None:
         return None
     for other in runs.list_by_repository_non_terminal(run.repository_id):
-        if other.id != run.id and other.partition_branch == run.partition_branch:
+        if (
+            other.id != run.id
+            and other.partition_branch == run.partition_branch
+            and other.engine_ref
+        ):
             return f"{other.template_name} · {other.partition_branch}"
     return None
 
