@@ -26,7 +26,7 @@ from orchestrator.application.graph import Graph, build_template_graph
 from orchestrator.application.templates.validate import validate
 from orchestrator.application.use_cases.plan_run import resolve_tree
 from orchestrator.application.use_cases.templates import TemplatePorts, seed_shipped
-from orchestrator.domain.entities.template import TemplateRef
+from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
 from orchestrator.infrastructure.templates_loader import load_shipped_templates
 from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
@@ -39,6 +39,9 @@ SHIPPED_DIR = Path(__file__).resolve().parents[5] / "templates"
 PRODUCT_PINNED_NAMES = ("epic", "initiative", "repo-init", "story")
 
 AT = datetime(2026, 9, 10, tzinfo=UTC)
+
+#: The DB version a changed file lands as once a name already has a stored version 1.
+NEXT_VERSION = 2
 
 
 def seeded() -> FakeTemplateVersionRepository:
@@ -125,3 +128,78 @@ def test_the_tree_of_every_shipped_root_resolves(
         tree = resolve_tree(templates, TemplateRef(name=name, version=latest))
 
         assert tree.root.name == name
+
+
+# --- a shipped file whose content moved (S5, multi-repo initiative, 2026-09-23) -------------
+
+
+def test_initiatives_pinned_epic_call_resolves_against_the_freshly_seeded_files(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    """`initiative.yaml`'s own `uses: template, name: epic, version: 1` is unedited by S5
+    (epic.yaml's `done_checkpoint`/`when` addition is a content change only, not a bump of
+    epic's own literal `version:` field — see the story report for why); this is the
+    concrete regression check that the callee `ResolvedTree.callee()` actually finds still
+    matches after that edit, in exactly the fresh-seed shape every environment this system
+    runs in today has (no accumulated template history yet)."""
+    tree = resolve_tree(templates, TemplateRef(name="initiative", version=1))
+
+    assert tree.callee("epic", 1) is not None
+
+
+def test_a_shipped_files_content_change_lands_as_a_new_version_and_old_callers_still_resolve() -> (
+    None
+):
+    """The seeding loader handles a file whose version moved: a name that already has a
+    stored version gets its changed content seeded as the *next* version, never overwriting
+    the old one (AD-15) — and a caller pinned to the old number, such as `initiative.yaml`'s
+    own unedited `epic@1` call, still resolves it. `prior_epic` stands in for "whatever
+    epic.yaml held before this story" — a synthetic, differently-hashed file, never the real
+    shipped text (hard rule 6): the point under test is the seeding/resolution mechanism,
+    not any shipped template's content."""
+    prior_epic = TemplateVersion(name="epic", version=1, yaml=PRIOR_EPIC, hash="prior-epic-sha")
+    templates = FakeTemplateVersionRepository([prior_epic])
+    uow = FakeUnitOfWork()
+    uow.__enter__()
+    ports = TemplatePorts(uow=uow, templates=templates, clock=FakeClock(AT))
+
+    results = seed_shipped(ports, load_shipped_templates(SHIPPED_DIR))
+
+    epic_result = next(result for result in results if result.name == "epic")
+    assert epic_result.inserted_as == NEXT_VERSION
+    assert templates.list_versions("epic") == [1, NEXT_VERSION]
+    assert templates.get("epic", 1) is prior_epic
+
+    tree = resolve_tree(templates, TemplateRef(name="initiative", version=1))
+    callee = tree.callee("epic", 1)
+
+    assert callee is not None
+    # `prior_epic`'s one step id (`sync`) is what tells the old, frozen content apart from
+    # the current `templates/epic.yaml` (whose steps are `checkout`, `setup`, …).
+    assert [entry.id for entry in callee.steps] == ["sync"]
+
+
+#: A minimal, self-consistent stand-in for "epic content before S5" — never the real
+#: shipped text (hard rule 6). Its only job is to occupy `epic@1` with a hash that differs
+#: from the current `templates/epic.yaml`.
+PRIOR_EPIC = (
+    "name: epic\n"
+    "version: 1\n"
+    "inputs:\n"
+    # `initiative.yaml`'s unedited call binds this exact key set — a stand-in occupying
+    # `epic@1` must accept it or validating `initiative` at seed time refuses with a
+    # callee input mismatch, which is a fact about the caller/callee contract, not about
+    # what the real `epic.yaml` says.
+    "  project:     { type: project,    required: true }\n"
+    "  repository:  { type: repository, required: true }\n"
+    "  base_branch: { type: string,     required: true }\n"
+    "  branch:      { type: string,     required: true }\n"
+    "  spec_folder: { type: path,       required: true }\n"
+    "  epic:        { type: item,       required: false }\n"
+    "  harness:     { type: enum, values: [claude, codex, local], default: claude }\n"
+    "  model:       { type: string,     required: false }\n"
+    "steps:\n"
+    "  - id: sync\n"
+    "    uses: git.sync\n"
+    "    gate: deterministic\n"
+)

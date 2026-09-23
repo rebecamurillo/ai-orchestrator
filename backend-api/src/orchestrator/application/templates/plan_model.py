@@ -115,6 +115,10 @@ class Redispatched:
 REASON_ALREADY_DONE = "already done"
 #: The row's command resolved to nothing and named no Repository command on the way.
 REASON_NO_COMMAND = "no command"
+#: A `checkpoint` row declared `with {when}` and the resolved condition is falsy (AD-7;
+#: multi-repo initiative S5, 2026-09-23) — the same plan-time rule as the empty-command
+#: shell skip above, for a stop rather than for a command.
+REASON_NO_CHECKPOINT = "no checkpoint"
 
 
 #: What every `reason_no_field` answer begins with, and the bare fallback does too — which

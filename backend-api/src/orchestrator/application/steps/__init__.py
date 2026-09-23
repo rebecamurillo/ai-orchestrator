@@ -77,7 +77,11 @@ KIND_META: dict[str, KindMeta] = {
     "git.commit": KindMeta("deterministic", 5, frozenset({"message"})),
     "git.push": KindMeta("deterministic", 5, frozenset({"branch"})),
     "pr.link": KindMeta("liveness", 5, frozenset({"branch"})),
-    "checkpoint": KindMeta("human", None, frozenset()),
+    # Revised: the shipped-kinds row for `checkpoint` gained `when` — a resolved falsy
+    # value plans the row `skipped · no checkpoint` at plan time, the same rule the
+    # empty-command shell skip already used (multi-repo initiative S5, spine AD-7
+    # amendment, 2026-09-23).
+    "checkpoint": KindMeta("human", None, frozenset({"when"})),
     "template": KindMeta(None, None, frozenset({"name", "version", "inputs"})),
     "bmad.install": KindMeta("deterministic", 30, frozenset()),
 }
@@ -122,6 +126,12 @@ WORKTREE_KIND = "git.worktree"
 WORKTREE_MODE_KEY = "mode"
 ATTACH_MODE = "attach"
 
+#: The `with` key `checkpoint` names its condition in (AD-7). A checkpoint that declares no
+#: `when` keeps today's behaviour exactly — always a live human gate; one that declares it
+#: is planned `skipped · no checkpoint` when the resolved value is falsy, by the same
+#: plan-time rule `SHELL_KIND`'s empty command uses (multi-repo initiative S5, 2026-09-23).
+WHEN_KEY = "when"
+
 #: The kind whose step commits the working tree. Named here because `signal_run` re-resolves
 #: a skipped Story's commit message on this row (AD-13) and AD-9 says a kind is named in this
 #: table or nowhere.
@@ -161,6 +171,7 @@ __all__ = [
     "SHELL_KIND",
     "TEMPLATE_CALL_KIND",
     "TEMPLATE_KINDS",
+    "WHEN_KEY",
     "WORKTREE_KIND",
     "WORKTREE_MODE_KEY",
     "Gate",

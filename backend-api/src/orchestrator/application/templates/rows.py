@@ -5,23 +5,20 @@ that decides what a row *is* is one function here, so a rule can be read without
 the traversal it happens inside.
 
 **The path.** A top-level step is its own id; a `for_each` element `i` prefixes
-`{loop_id}[{i}]`; a `template` call inside a loop contributes no segment, and one at the
-top level contributes its id — so `initiative@1` reads `epics[0].stories[3].build` where
-`epic@1` reads `stories[3].build`, the same Story named from two depths with no
-per-Template rule. `PlannedRow.frame` is that prefix wherever the row is inside a loop and
-`None` otherwise, which is what `in_loop` is for: a call's own id is a path segment, not a
-frame — nobody skips "the `sub` frame". The label follows the same shape,
-`epic 1 · story 4-1 · build`, with the step's id read as words; a checkpoint the planner
-inserted reads `… · done checkpoint` or `… · before`, because "after" is not the question.
+`{loop_id}[{i}]`; a `template` call contributes no segment inside a loop and its own id at
+the top level — so `initiative@1` reads `epics[0].stories[3].build` where `epic@1` reads
+`stories[3].build`, the same Story named from two depths with no per-Template rule.
+`PlannedRow.frame` is that prefix inside a loop and `None` otherwise (`in_loop`); a call's
+own id is a path segment, not a frame — nobody skips "the `sub` frame". The label follows
+the same shape, `epic 1 · story 4-1 · build`, the step's id read as words; a checkpoint the
+planner inserted reads `… · done checkpoint` or `… · before`, "after" not being the question.
 
 **Two rows the planner inserts, and one flag it does not.** `pause_before_item_when` and
-`pause_after_item_when` are stops in their own right, so each becomes a `checkpoint` row,
-and only where the item's field is truthy. `pause_when` on an `agent` step is not a stop
-before or after that step but how it behaves, so it stays a flag and adds no row.
+`pause_after_item_when` each become a `checkpoint` row where the item's field is truthy;
+`pause_when` on an `agent` step is a flag instead — no stop of its own, so it adds no row.
 
 **A call is dispatched on its `call`, not on its kind.** A `uses: template` step always
-carries one and no other step ever does, so the narrowing the walker needs anyway is also
-the test — and AD-9's "no `if kind == …`" is kept without a fourth kind constant.
+carries one and no other step does, so AD-9's "no `if kind == …`" needs no fourth constant.
 """
 
 from __future__ import annotations
@@ -32,7 +29,7 @@ from typing import Any
 
 from orchestrator.application.dto import RunInputs
 from orchestrator.application.graph import UNVALIDATED
-from orchestrator.application.steps import CHECKPOINT_KIND, SHELL_KIND
+from orchestrator.application.steps import CHECKPOINT_KIND, SHELL_KIND, WHEN_KEY
 from orchestrator.application.templates.agent_row import (
     PROMPT_EXTRA_KEY,
     agent_extras,
@@ -66,6 +63,7 @@ from orchestrator.application.templates.plan_model import (
     ON_FAIL_KEY,
     PATH_SEPARATOR,
     REASON_ALREADY_DONE,
+    REASON_NO_CHECKPOINT,
     PlanError,
     Redispatched,
     ResolvedTree,
@@ -277,11 +275,13 @@ def checkpoint_row(frame: Frame, position: str) -> PlannedRow:
 def row_status(
     step: Step, frame: Frame, resolved: Mapping[str, Any]
 ) -> tuple[StepStatus, str | None]:
-    """What a row is born as, and why — the two rules that skip a row at plan time."""
+    """What a row is born as, and why — the three rules that skip a row at plan time."""
     if frame.skipped:
         return SKIPPED, REASON_ALREADY_DONE
     if step.uses == SHELL_KIND and not str(resolved.get(COMMAND_KEY) or "").strip():
         return SKIPPED, empty_command_reason(dict(step.params).get(COMMAND_KEY))
+    if step.uses == CHECKPOINT_KIND and WHEN_KEY in resolved and not resolved[WHEN_KEY]:
+        return SKIPPED, REASON_NO_CHECKPOINT
     return PLANNED, None
 
 

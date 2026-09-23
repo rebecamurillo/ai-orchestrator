@@ -41,7 +41,11 @@ SPINE = {
     "git.commit": ("deterministic", 5, frozenset({"message"}), False),
     "git.push": ("deterministic", 5, frozenset({"branch"}), False),
     "pr.link": ("liveness", 5, frozenset({"branch"}), False),
-    "checkpoint": ("human", None, frozenset(), False),
+    # Revised: the shipped-kinds row for `checkpoint` gained `when` — a resolved falsy
+    # value plans the row `skipped · no checkpoint`, the same plan-time rule the
+    # empty-command shell skip already used (multi-repo initiative S5, spine AD-7
+    # amendment, 2026-09-23).
+    "checkpoint": ("human", None, frozenset({"when"}), False),
     "template": (None, None, frozenset({"name", "version", "inputs"}), False),
     "bmad.install": ("deterministic", 30, frozenset(), False),
 }

@@ -10,6 +10,10 @@ inputs:
   epic:        { type: item,       required: false }  # bound when called from initiative
   harness:     { type: enum, values: [claude, codex, local], default: claude }
   model:       { type: string,     required: false }
+  # No bool input type exists (S5, 2026-09-23): "true" checkpoints at the end, "" or unset
+  # skips it — the planner never applies a declared default, so a Run that leaves this
+  # blank gets no stop, not a default-on one.
+  done_checkpoint: { type: string, required: false }
 steps:
   - id: checkout
     uses: git.worktree
@@ -101,6 +105,10 @@ steps:
     with: { branch: "{{branch}}" }
     gate: liveness
 
+  # `when` resolving falsy plans this row `skipped · no checkpoint` (AD-7, S5); it stays
+  # a live human gate whenever `done_checkpoint` is bound truthy — including dispatch
+  # (S6) passing "true" for an epic whose `epics.yaml` entry names a checkpoint.
   - id: done-checkpoint
     uses: checkpoint
+    with: { when: "{{done_checkpoint}}" }
     gate: human

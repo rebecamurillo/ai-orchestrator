@@ -25,6 +25,7 @@ from orchestrator.application.templates.plan_model import (
     CALLEE_NOT_RESOLVED,
     DUPLICATE_ROW_PATH,
     ON_FAIL_KEY,
+    REASON_NO_CHECKPOINT,
     REASON_NO_COMMAND,
     REASON_NO_QUALITY_GATE,
     REDISPATCH_TARGET_NOT_PLANNED,
@@ -137,6 +138,22 @@ COMMANDS = (
     run: "echo hi"
     on_fail: escalate
     gate: deterministic
+"""
+)
+
+#: `bare` keeps today's behaviour exactly — no `when` key, always a live human gate;
+#: `conditional` declares `with {when}` against the shared `extra` input, so binding it
+#: to nothing, `""`, `False` or a truthy string exercises every branch of the plan-time
+#: rule (multi-repo initiative S5, spine AD-7 amendment, 2026-09-23).
+CHECKPOINTS = (
+    HEADER.format(name="checkpoints")
+    + """  - id: bare
+    uses: checkpoint
+    gate: human
+  - id: conditional
+    uses: checkpoint
+    with: { when: "{{extra}}" }
+    gate: human
 """
 )
 
@@ -404,6 +421,45 @@ def test_a_step_that_declares_none_takes_its_kinds_default() -> None:
     resolved = row(planned(COMMANDS), "baseline").with_resolved
 
     assert resolved["timeout_min"] == KIND_META[SHELL_KIND].timeout_default_min
+
+
+# --- checkpoint `when` (S5) ----------------------------------------------------------------
+
+
+def test_a_checkpoint_with_no_when_key_keeps_todays_behaviour_and_is_always_planned() -> None:
+    entry = row(planned(CHECKPOINTS), "bare")
+
+    assert (entry.status, entry.reason) == ("planned", None)
+
+
+def test_a_checkpoint_whose_when_is_unbound_resolves_falsy_and_is_skipped() -> None:
+    """The unbound-optional-input finding (S5): `{{extra}}` resolves to `""` rather than
+    erroring, the same rule that turns an unset command into a `skipped` shell row."""
+    entry = row(planned(CHECKPOINTS), "conditional")
+
+    assert (entry.status, entry.reason) == ("skipped", REASON_NO_CHECKPOINT)
+
+
+def test_a_checkpoint_whose_when_resolves_to_an_empty_string_is_skipped() -> None:
+    entry = row(planned(CHECKPOINTS, values={"extra": ""}), "conditional")
+
+    assert (entry.status, entry.reason) == ("skipped", REASON_NO_CHECKPOINT)
+
+
+def test_a_checkpoint_whose_when_is_bound_to_the_literal_false_is_skipped() -> None:
+    """A whole-variable bind (no `.field`) passes a non-string value through raw
+    (`substitute.py`'s own rule), so a caller handing a JSON `false` reaches here as the
+    Python value, not the four characters `False`."""
+    entry = row(planned(CHECKPOINTS, values={"extra": False}), "conditional")
+
+    assert (entry.status, entry.reason) == ("skipped", REASON_NO_CHECKPOINT)
+
+
+def test_a_checkpoint_whose_when_resolves_truthy_is_planned() -> None:
+    entry = row(planned(CHECKPOINTS, values={"extra": "true"}), "conditional")
+
+    assert (entry.status, entry.reason) == ("planned", None)
+    assert entry.with_resolved["when"] == "true"
 
 
 # --- the working branch ------------------------------------------------------------------------
