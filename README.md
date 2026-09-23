@@ -10,10 +10,10 @@ the operator only at declared checkpoints or when an agent is blocked.
 | Document | Audience | Holds |
 | --- | --- | --- |
 | `README.md` (this file) | humans | boot a machine, start the stack, run an orchestration, keep the gates green |
-| `AGENTS.md` | AI agents | the hard rules, the architecture, the gates, and how to guide an operator through setup |
+| `AGENTS.md` | AI agents | the hard rules, the architecture, the gates |
 | `DEPLOY.md` | the operator of the production machine | GHCR images, upgrades, rollback, the drain rule, running without the host services |
 | `host/README.md` | whoever sets up LiteLLM / Langfuse / the model server | the optional host stack, its keys, its pitfalls |
-| `_bmad-output/planning-artifacts/mvp/` | product decisions | PRD, architecture spine (`AD-n`), epics and stories |
+| `_bmad-output/` | agents and the operator | BMAD output: the binding architecture spine (`AD-n`), the design baseline, pending specs — `_bmad-output/README.md` is the index |
 
 ## The system at a glance
 
@@ -208,10 +208,14 @@ also the API under `/api/v1` with `Authorization: Bearer $ORCHESTRATOR_TOKEN`.
 
    | Template | Runs |
    | --- | --- |
-   | `story` | one story to a verified commit |
-   | `epic` | all stories of one epic on one branch, verified, pushed |
    | `initiative` | every epic of one initiative, in order |
+   | `epic` | all stories of one epic on one branch, verified, pushed |
+   | `story-run` | one story to a verified commit |
+   | `task` | an issue-sized change through a plan gate |
    | `repo-init` | bootstrap the BMAD method into a repo, as a PR |
+
+   Those five are what `/workflows/new` offers by default; `ROOT_TEMPLATES` in `.env`
+   changes the offering, and `templates/` ships two more (`story`, `epic-local-ai`).
 
    The harness page section shows each harness's live probe; the deeper readiness
    diagnostic (`POST /harnesses/{name}/readiness`) runs a trivial story end to end and
@@ -269,44 +273,25 @@ The queue is partitioned per Repository, capped globally by `MAX_ACTIVE_RUNS`. H
 run inside the backend container as the non-root user `agent`, in git worktrees under the
 `work` volume, with an env built from an explicit contract — never the backend's own env.
 
-**Code** (backend-api, AD-2) is layered, and `import-linter` enforces the direction in
-`make lint`:
-
-```
-domain  ◄─  application  ◄─  { api, infrastructure }  ◄─  main.py
-```
-
-- `domain/` — entities, status machines, and the ports (protocols) every adapter implements
-- `application/` — use cases, step executors, template validation and planning; pure, no I/O
-- `api/` — FastAPI routers and Pydantic schemas; thin: parse → one use case → map
-- `infrastructure/` — the adapters: SQLAlchemy, DBOS, git, harness drivers, LiteLLM, Langfuse
-- `main.py` — the composition root
-
-The web-client is Astro SSR with React islands; the browser talks only to a same-origin
-proxy, and every API payload type is generated from `contracts/openapi.json` (`pnpm
-gen:api`), never written by hand. Per-component detail: `backend-api/AGENTS.md`,
-`web-client/AGENTS.md`. The binding architecture decisions (`AD-1..AD-20`) live in
-`_bmad-output/planning-artifacts/mvp/architecture/ARCHITECTURE-SPINE.md`.
+**Code** (backend-api) is layered — `domain ◄ application ◄ {api, infrastructure} ◄
+main.py` — with the direction enforced by `import-linter` in `make lint`. The web-client is
+Astro SSR with React islands; the browser talks only to a same-origin proxy, and every API
+payload type is generated from `contracts/openapi.json` (`pnpm gen:api`), never written by
+hand. The layer rules and per-component detail live in `AGENTS.md`,
+`backend-api/AGENTS.md` and `web-client/AGENTS.md`; the binding architecture decisions
+(`AD-1..AD-20`) in `_bmad-output/architecture/ARCHITECTURE-SPINE.md`.
 
 ## Quality: TDD and the gates
 
 The project is built test-first (AD-18): a story's tests exist and fail before its
-implementation exists, and existing test files are anchors — never edited, only added to.
-Unit tests run with no Postgres and no network, against shared in-memory fakes (one per
-port); e2e tests run against a real, disposable compose stack.
-
-```bash
-make lint        # ruff · mypy · import-linter · env-contract · test pairs · contract drift · eslint · prettier · tsc · astro check
-make test        # backend unit (pytest) + web-client unit (vitest), with coverage
-make e2e         # build the disposable aio-e2e stack, run e2e-api in it, destroy it
-make e2e-ui      # playwright against the built web-client (stubbed backend)
-make durability  # kill the backend mid-Run, restart, prove the Run completes
-```
-
-`make e2e` runs beside `make up` — it has its own compose project (`aio-e2e`), its own
-database, volumes and ports, and a `down -v` trap, so the suite's leftovers never land in
-the stack you develop against. `make e2e-api` alone attaches to whatever stack is
-configured and refuses any database whose name does not end in `_e2e`.
+implementation exists, and test files are protected — a revision must trace to a declared
+behaviour change (the rules are `AGENTS.md` hard rule 1). Unit tests run with no Postgres
+and no network, against shared in-memory fakes (one per port); e2e tests run in a
+disposable compose stack (`aio-e2e`) with its own database, volumes and ports, so the
+suite's leftovers never land in the stack you develop against. `make e2e-api` alone
+attaches to whatever stack is configured and refuses any database whose name does not end
+in `_e2e`. The gate commands and the enforced coverage numbers are under "Contributing"
+below.
 
 ## Contributing
 
@@ -367,5 +352,5 @@ a diff. Team overrides: `_bmad/custom/config.toml` (committed); personal:
 - **Project brain template** (the planning-hub template repo for client products):
   [OptimAI-labs/project-brain-template](https://github.com/OptimAI-labs/project-brain-template),
   source under `templates/project-brain/`
-- **Planning truth**: `_bmad-output/planning-artifacts/mvp/` — PRD, architecture spine,
-  epics and stories
+- **Architecture spine**: `_bmad-output/architecture/ARCHITECTURE-SPINE.md` (`AD-1..AD-20`);
+  the design baseline and pending specs are indexed by `_bmad-output/README.md`
