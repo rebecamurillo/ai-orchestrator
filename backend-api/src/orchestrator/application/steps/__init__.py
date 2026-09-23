@@ -67,6 +67,13 @@ KIND_META: dict[str, KindMeta] = {
     "git.worktree": KindMeta("deterministic", 5, frozenset({"base", "branch", "mode"})),
     "git.sync": KindMeta("deterministic", 5, frozenset()),
     "git.merge": KindMeta("deterministic", 5, frozenset({"from"})),
+    # Added: the shipped-kinds table gained `git.submodule` — two forms told apart by their
+    # `with` keys, bare/`{update}` for the init + update of the Run worktree's submodules and
+    # `{workdir, branch, base?}` for the create-or-checkout inside one of them
+    # (hub-Run initiative H1, spine AD-7/AD-9/AD-14 amendment, 2026-09-23).
+    "git.submodule": KindMeta(
+        "deterministic", 10, frozenset({"update", "workdir", "branch", "base"})
+    ),
     "shell": KindMeta("deterministic", 30, frozenset({"command"})),
     "agent": KindMeta(
         "liveness",
@@ -126,6 +133,24 @@ WORKTREE_KIND = "git.worktree"
 WORKTREE_MODE_KEY = "mode"
 ATTACH_MODE = "attach"
 
+#: The kind that turns a hub repository's `repos/*` gitlinks into working folders, and the
+#: four `with` keys its two forms are told apart by (spine "Template DSL v1 keys", ratified
+#: 2026-09-23). Named here rather than in `steps/git_submodule.py` alone because the
+#: validator judges the *shape* the keys make — bare or `{update}`, exclusive-or
+#: `{workdir, branch, base?}` — and `application/templates/` may not import a kind's module
+#: (AD-9: a kind's vocabulary is named once, in this table, or nowhere).
+SUBMODULE_KIND = "git.submodule"
+SUBMODULE_UPDATE_KEY = "update"
+SUBMODULE_WORKDIR_KEY = "workdir"
+SUBMODULE_BRANCH_KEY = "branch"
+SUBMODULE_BASE_KEY = "base"
+
+#: The checkout form's keys, derived from the kind's own row so the two forms are a
+#: partition of what the kind admits rather than a second list that could drift from it.
+SUBMODULE_CHECKOUT_KEYS: frozenset[str] = KIND_META[SUBMODULE_KIND].with_keys - {
+    SUBMODULE_UPDATE_KEY
+}
+
 #: The `with` key `checkpoint` names its condition in (AD-7). A checkpoint that declares no
 #: `when` keeps today's behaviour exactly — always a live human gate; one that declares it
 #: is planned `skipped · no checkpoint` when the resolved value is falsy, by the same
@@ -169,6 +194,12 @@ __all__ = [
     "PLAN_KIND",
     "PUSH_KIND",
     "SHELL_KIND",
+    "SUBMODULE_BASE_KEY",
+    "SUBMODULE_BRANCH_KEY",
+    "SUBMODULE_CHECKOUT_KEYS",
+    "SUBMODULE_KIND",
+    "SUBMODULE_UPDATE_KEY",
+    "SUBMODULE_WORKDIR_KEY",
     "TEMPLATE_CALL_KIND",
     "TEMPLATE_KINDS",
     "WHEN_KEY",

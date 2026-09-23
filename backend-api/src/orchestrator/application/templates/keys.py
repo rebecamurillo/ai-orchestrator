@@ -23,6 +23,11 @@ from orchestrator.application.steps import (
     AGENT_KIND,
     GATES,
     KIND_META,
+    SUBMODULE_BRANCH_KEY,
+    SUBMODULE_CHECKOUT_KEYS,
+    SUBMODULE_KIND,
+    SUBMODULE_UPDATE_KEY,
+    SUBMODULE_WORKDIR_KEY,
     TEMPLATE_CALL_KIND,
     TEMPLATE_KINDS,
 )
@@ -49,6 +54,7 @@ from orchestrator.application.templates.model import (
     INVALID_GATE,
     INVALID_ON_FAIL,
     INVALID_SLUG,
+    INVALID_SUBMODULE_FORM,
     INVALID_TIMEOUT,
     MISSING_KEY,
     NESTED_FOR_EACH,
@@ -293,6 +299,22 @@ def _check_dispatch_form(params: LinedMap, with_line: int) -> list[ValidationErr
     return []
 
 
+def _check_submodule_form(params: LinedMap, with_line: int) -> list[ValidationError]:
+    """A `git.submodule` `with` is one of the kind's two forms, never a mixture of them.
+
+    The spine's DSL row, verbatim: "the two forms are told apart by their keys; keys of both
+    forms together, or `workdir` without `branch`, is a validation error". Only those two
+    shapes are judged here, because only those two are what the spine fixes; every other way
+    of writing the block is decided against the *resolved* row by `steps/git_submodule.py`,
+    which is where a value rather than a key can be looked at at all.
+    """
+    present = set(params) & (SUBMODULE_CHECKOUT_KEYS | {SUBMODULE_UPDATE_KEY})
+    mixed = SUBMODULE_UPDATE_KEY in present and bool(present & SUBMODULE_CHECKOUT_KEYS)
+    if mixed or (SUBMODULE_WORKDIR_KEY in present and SUBMODULE_BRANCH_KEY not in present):
+        return [problem(with_line, INVALID_SUBMODULE_FORM)]
+    return []
+
+
 def _check_with(node: LinedMap, kind: str) -> list[ValidationError]:
     if "with" not in node:
         if kind == TEMPLATE_CALL_KIND:
@@ -307,6 +329,8 @@ def _check_with(node: LinedMap, kind: str) -> list[ValidationError]:
     errors = unknown_keys(params, allowed)
     if kind == AGENT_KIND:
         errors += _check_dispatch_form(params, line)
+    if kind == SUBMODULE_KIND:
+        errors += _check_submodule_form(params, line)
     if kind == TEMPLATE_CALL_KIND:
         errors += _check_call_with(params)
     return errors

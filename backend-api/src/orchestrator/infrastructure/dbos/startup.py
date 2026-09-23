@@ -40,6 +40,7 @@ from orchestrator.application.steps import checkpoint as _checkpoint  # noqa: F4
 from orchestrator.application.steps import git_commit as _git_commit  # noqa: F401
 from orchestrator.application.steps import git_merge as _git_merge  # noqa: F401
 from orchestrator.application.steps import git_push as _git_push  # noqa: F401
+from orchestrator.application.steps import git_submodule as _git_submodule  # noqa: F401
 from orchestrator.application.steps import git_sync as _git_sync  # noqa: F401
 from orchestrator.application.steps import git_worktree as _git_worktree  # noqa: F401
 from orchestrator.application.steps import plan_check as _plan_check  # noqa: F401

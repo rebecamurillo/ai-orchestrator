@@ -95,6 +95,13 @@ RETRY_PROMPT_REQUIRED = "retry prompt required"
 #: the author almost certainly intended only one.
 INVALID_DISPATCH_FORM = "invalid dispatch form"
 
+#: A `git.submodule` step whose `with` block is neither of the kind's two forms. The spine's
+#: DSL row states both cases in as many words: "keys of both forms together, or `workdir`
+#: without `branch`, is a validation error" (hub-Run initiative H1, 2026-09-23). Which keys
+#: are present is a structural fact a validator can settle; the *values* stay free-form, so
+#: `steps/git_submodule.py` re-asks the same question of the resolved row.
+INVALID_SUBMODULE_FORM = "invalid git.submodule form"
+
 #: A step whose `id` is a string of digits only (`"1"`, `"42"`) breaks the dot-index
 #: bijection AD-15 relies on: the graph would accept it but plan indices would collide.
 ALL_DIGIT_STEP_ID = "all-digit step id"

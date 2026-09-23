@@ -30,6 +30,16 @@ SPINE = {
     # `origin/{from}` into the current worktree's branch with `--no-ff`
     # (multi-repo initiative S4, spine AD-9/AD-13/AD-14 amendment, 2026-09-23).
     "git.merge": ("deterministic", 5, frozenset({"from"}), False),
+    # Added: the shipped-kinds table gained `git.submodule` — bare or `{update: true}` for
+    # the init + update of the Run worktree's submodules, exclusive-or
+    # `{workdir, branch, base?}` for the create-or-checkout inside one of them
+    # (hub-Run initiative H1, spine AD-7/AD-9/AD-14 amendment, 2026-09-23).
+    "git.submodule": (
+        "deterministic",
+        10,
+        frozenset({"update", "workdir", "branch", "base"}),
+        False,
+    ),
     "shell": ("deterministic", 30, frozenset({"command"}), False),
     "agent": (
         "liveness",
@@ -50,13 +60,14 @@ SPINE = {
     "bmad.install": ("deterministic", 30, frozenset(), False),
 }
 
-#: Revised from eleven by the `git.merge` row above (multi-repo initiative S4, 2026-09-23).
-TWELVE = 12
+#: Revised from twelve by the `git.submodule` row above, which was itself revised from
+#: eleven by `git.merge` (hub-Run initiative H1, 2026-09-23).
+THIRTEEN = 13
 
 
-def test_the_registry_holds_exactly_the_twelve_shipped_kinds() -> None:
+def test_the_registry_holds_exactly_the_thirteen_shipped_kinds() -> None:
     assert set(KIND_META) == set(SPINE)
-    assert len(KIND_META) == TWELVE
+    assert len(KIND_META) == THIRTEEN
 
 
 @pytest.mark.parametrize("kind", sorted(SPINE))

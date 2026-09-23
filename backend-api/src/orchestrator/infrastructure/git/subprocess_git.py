@@ -38,6 +38,7 @@ import weakref
 from pathlib import Path
 
 from orchestrator.domain.ports.git import CloneResult, GitError, RemoteRef
+from orchestrator.infrastructure.git.submodules import SubmoduleCommands
 from orchestrator.infrastructure.git.worktrees import WorktreeCommands
 from orchestrator.infrastructure.redact import redact
 
@@ -120,12 +121,15 @@ def discard_partial_clone(dest: Path, *, existed: bool) -> None:
     shutil.rmtree(dest, ignore_errors=True)
 
 
-class SubprocessGit(WorktreeCommands):
+class SubprocessGit(WorktreeCommands, SubmoduleCommands):
     """The `Git` port over `git(1)`.
 
-    The worktree, staging, commit and push half lives in `WorktreeCommands` — one adapter
-    split across two modules for the 400-line cap, sharing this class's `_run`, `_attempt`
-    and `_remote`, and with them the whole AD-5 credential path described above.
+    The worktree, staging, commit and push half lives in `WorktreeCommands` and the submodule
+    operations in `SubmoduleCommands` — one adapter split across three modules for the
+    400-line cap, all sharing this class's `_run`, `_attempt` and `_remote`, and with them the
+    whole AD-5 credential path described above. The submodule commands inherit it twice over:
+    their own invocation runs in the built environment, and the clones and fetches `git
+    submodule` spawns are child processes of that invocation (AD-14, 2026-09-23).
     """
 
     def __init__(self, token: str, timeout_seconds: int = TIMEOUT_SECONDS) -> None:

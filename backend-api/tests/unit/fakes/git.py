@@ -23,7 +23,9 @@ double would pass here and fail against a real process:
 `push`, `head_sha`, `remove_worktree` and `delete_branch` each take a list, an entry that is
 an exception is raised, and every call is logged with its arguments — which is what lets "the
 spec folder was staged before everything else" and "no push command ran" be assertions rather
-than hopes.
+than hopes. H1's `submodule_update` and `submodule_checkout` are scripted the same way; the
+second one's `None` is the port's "not an initialized submodule", which is the one answer a
+test has to ask for on purpose because it is the one that parks the Run.
 
 The planner asks the same three questions of many refs and paths, and "which answer came
 back" matters more to it than "how many answers were scripted", so three of the methods
@@ -49,6 +51,10 @@ DEFAULT_CLONE = CloneResult(seconds=1.0, bytes=4096)
 #: What `push_branch` answers when it created the branch — git's own words for it. `None`
 #: is the other answer, and it means the remote already held it (adopted, AD-14, S6).
 DEFAULT_PUSH_BRANCH = "* [new branch]"
+
+#: What `submodule_update` answers for a worktree holding none — the ordinary case for
+#: every Run that is not a hub Run (AD-14, story H1).
+DEFAULT_SUBMODULES: tuple[str, ...] = ()
 
 
 class FakeGit:
@@ -77,6 +83,8 @@ class FakeGit:
         diff: list[Any] | None = None,
         push: list[Any] | None = None,
         push_branch: list[Any] | None = None,
+        submodule_update: list[Any] | None = None,
+        submodule_checkout: list[Any] | None = None,
         head_sha: list[Any] | None = None,
         remove_worktree: list[Any] | None = None,
         delete_branch: list[Any] | None = None,
@@ -111,6 +119,14 @@ class FakeGit:
             "diff": diff or [""],
             "push": push or [""],
             "push_branch": push_branch or [DEFAULT_PUSH_BRANCH],
+            # `()` rather than a path: a fake nobody scripted stands in a worktree with no
+            # submodules, which is every Run that is not a hub Run (H1).
+            "submodule_update": (
+                submodule_update if submodule_update is not None else [DEFAULT_SUBMODULES]
+            ),
+            # a sha rather than `None`: `None` is the one answer that carries a park —
+            # "not an initialized submodule" — so it is never the unscripted default (H1).
+            "submodule_checkout": submodule_checkout or [DEFAULT_SHA],
             "head_sha": head_sha or [DEFAULT_SHA],
             "remove_worktree": remove_worktree or [None],
             "delete_branch": delete_branch or [None],
@@ -212,6 +228,18 @@ class FakeGit:
             self.refs[branch] = at_ref
             return DEFAULT_PUSH_BRANCH
         answer: str | None = self._answer("push_branch", (dest_base, branch, at_ref))
+        return answer
+
+    # ── the submodule half (H1) ──────────────────────────────────────────────
+
+    def submodule_update(self, worktree: Path) -> tuple[str, ...]:
+        answer: tuple[str, ...] = self._answer("submodule_update", (worktree,))
+        return answer
+
+    def submodule_checkout(
+        self, worktree: Path, workdir: str, branch: str, base: str | None = None
+    ) -> str | None:
+        answer: str | None = self._answer("submodule_checkout", (worktree, workdir, branch, base))
         return answer
 
     def head_sha(self, path: Path) -> str | None:

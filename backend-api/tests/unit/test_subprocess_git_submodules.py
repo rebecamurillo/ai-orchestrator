@@ -1,0 +1,446 @@
+"""`infrastructure/git/submodules.py`, against real `git` (AD-14, amended 2026-09-23).
+
+The executor is proven over `FakeGit`; what only a real process settles is how `git
+submodule` behaves **in a linked worktree** — which is the only kind of tree this system
+ever has one in. Every fixture here therefore builds AD-14's own layout: a bare hub origin
+carrying a `repos/member` submodule, a blobless `--no-checkout` base clone of it at
+`work/{project}/{repo}/base`, and the worktree added from that base at `wt/{branch}`.
+
+Four facts this module is the only place to establish, all of them empirical (story H1,
+2026-09-23):
+
+- **A linked worktree's submodules are its own.** git puts a submodule's git directory at
+  `base/.git/worktrees/{worktree}/modules/{name}`, not at the shared `base/.git/modules/`,
+  so two worktrees of one base clone each initialize their own checkout of the same
+  submodule and neither can move the other's HEAD. The hub workflow depends on that: a
+  submodule is "a working folder inside a worktree, never a second workspace" (AD-14).
+- **`submodule.{name}.url` does land in the base clone's shared config**, which worktrees
+  share, and a second `init` does **not** overwrite one already recorded. It is the same
+  URL for every worktree of one repository, so this is idempotent rather than a race.
+- **The credential path reaches the child processes.** `git submodule` does its cloning and
+  fetching in child processes, which inherit the environment `SubprocessGit` built — so
+  `GIT_ASKPASS` covers a private member repository without the adapter passing anything
+  extra (AD-5). Asserted by observing the environment a submodule child process actually
+  runs with.
+- **`file://` submodules are refused by git unless the transport is allowed** (the
+  CVE-2022-39253 guard, git ≥ 2.38). Real member repositories are `https`, so the adapter
+  must never relax that; `allow_file_transport` below does it for the fixture only, by
+  writing a global config into the private `HOME` the adapter already gives every command —
+  which is also a second proof that the child clones read the adapter's environment.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from orchestrator.infrastructure.git.submodules import UNINITIALIZED
+from orchestrator.infrastructure.git.subprocess_git import SubprocessGit
+
+TOKEN = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+BASE_BRANCH = "main"
+INTEGRATION = "integration"
+#: A hub branch cut before the gitlink existed — a worktree with nothing to initialize.
+NO_SUBMODULES = "before-the-members"
+#: A second worktree of the same base clone, to settle who owns a submodule checkout.
+OTHER = "other"
+MEMBER_BASE = "main"
+MEMBER_HELD = "feat/held-by-the-member"
+WORKDIR = "repos/member"
+SEED_FILE = "README.md"
+MEMBER_FILE = "member.txt"
+HELD_FILE = "held.txt"
+NEW_BRANCH = "feat/initiative-7"
+
+
+@pytest.fixture(autouse=True)
+def git_binary() -> str:
+    """`git` is a requirement of this suite, not a condition on running it (AD-18)."""
+    found = shutil.which("git")
+    if found is None:
+        pytest.fail("git is not on PATH: this module drives the real adapter, so install it.")
+    return found
+
+
+def run_git(*arguments: str, cwd: Path) -> str:
+    """Set up a fixture repository. The adapter is what is under test, not this."""
+    environment = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "e2e",
+        "GIT_AUTHOR_EMAIL": "e2e@example.invalid",
+        "GIT_COMMITTER_NAME": "e2e",
+        "GIT_COMMITTER_EMAIL": "e2e@example.invalid",
+        # the fixture's own `submodule add`, for the reason `allow_file_transport` exists
+        "GIT_ALLOW_PROTOCOL": "file",
+    }
+    return subprocess.run(  # fixed argv, no shell
+        ["git", *arguments], cwd=cwd, env=environment, capture_output=True, text=True, check=True
+    ).stdout
+
+
+@pytest.fixture
+def member_origin(tmp_path: Path) -> Path:
+    """A bare member repository holding `main` and one branch of its own."""
+    bare = tmp_path / "member.git"
+    run_git("init", "--quiet", "--bare", str(bare), cwd=tmp_path)
+    seed = tmp_path / "member-seed"
+    seed.mkdir()
+    run_git("init", "--quiet", f"--initial-branch={MEMBER_BASE}", ".", cwd=seed)
+    (seed / MEMBER_FILE).write_text("member\n")
+    run_git("add", "--all", cwd=seed)
+    run_git("commit", "--quiet", "--message", "member seed", cwd=seed)
+    run_git("checkout", "--quiet", "-b", MEMBER_HELD, cwd=seed)
+    (seed / HELD_FILE).write_text("only on the member's own branch\n")
+    run_git("add", "--all", cwd=seed)
+    run_git("commit", "--quiet", "--message", "member branch work", cwd=seed)
+    run_git(
+        "push",
+        "--quiet",
+        f"file://{bare}",
+        f"{MEMBER_BASE}:{MEMBER_BASE}",
+        f"{MEMBER_HELD}:{MEMBER_HELD}",
+        cwd=seed,
+    )
+    run_git("symbolic-ref", "HEAD", f"refs/heads/{MEMBER_BASE}", cwd=bare)
+    return bare
+
+
+@pytest.fixture
+def hub_origin(tmp_path: Path, member_origin: Path) -> Path:
+    """A bare hub repository whose `repos/member` gitlink points at the member origin."""
+    bare = tmp_path / "hub.git"
+    run_git("init", "--quiet", "--bare", str(bare), cwd=tmp_path)
+    seed = tmp_path / "hub-seed"
+    seed.mkdir()
+    run_git("init", "--quiet", f"--initial-branch={BASE_BRANCH}", ".", cwd=seed)
+    (seed / SEED_FILE).write_text("the hub\n")
+    run_git("add", "--all", cwd=seed)
+    run_git("commit", "--quiet", "--message", "hub seed", cwd=seed)
+    run_git("branch", NO_SUBMODULES, cwd=seed)
+    run_git("submodule", "--quiet", "add", f"file://{member_origin}", WORKDIR, cwd=seed)
+    run_git("commit", "--quiet", "--message", "add the member submodule", cwd=seed)
+    run_git("branch", INTEGRATION, cwd=seed)
+    run_git(
+        "push",
+        "--quiet",
+        f"file://{bare}",
+        f"{BASE_BRANCH}:{BASE_BRANCH}",
+        f"{INTEGRATION}:{INTEGRATION}",
+        f"{NO_SUBMODULES}:{NO_SUBMODULES}",
+        cwd=seed,
+    )
+    run_git("symbolic-ref", "HEAD", f"refs/heads/{BASE_BRANCH}", cwd=bare)
+    return bare
+
+
+def allow_file_transport(git: SubprocessGit) -> None:
+    """Let this fixture's `file://` member origin be cloned as a submodule.
+
+    git ≥ 2.38 refuses the `file` transport for a clone a *submodule* started
+    (CVE-2022-39253) unless `protocol.file.allow` says otherwise, and a repository-local
+    setting does not reach it: the clone is a child process with a repository of its own.
+    What does reach it is the adapter's own environment, so the fixture writes a global
+    config into the private empty `HOME` that `command_environment` gives every command.
+
+    Two things follow, and both are deliberate. Production is untouched — a real member
+    repository is `https`, and an adapter that passed `protocol.file.allow=always` itself
+    would be re-opening the vulnerability for every Run. And the fact that this works at all
+    is the second proof of `test_a_submodule_child_process_runs_with_the_adapters_own_env`:
+    the child clone read a config file it could only have found through `HOME`.
+    """
+    home = Path(git._home)
+    (home / ".gitconfig").write_text('[protocol "file"]\n\tallow = always\n')
+
+
+@pytest.fixture
+def git() -> SubprocessGit:
+    adapter = SubprocessGit(TOKEN)
+    allow_file_transport(adapter)
+    return adapter
+
+
+@pytest.fixture
+def base(git: SubprocessGit, hub_origin: Path, tmp_path: Path) -> Path:
+    destination = tmp_path / "work" / "acme" / "hub" / "base"
+    git.clone_base(f"file://{hub_origin}", destination)
+    git.fetch_base(destination, INTEGRATION)
+    return destination
+
+
+@pytest.fixture
+def worktree(git: SubprocessGit, base: Path, tmp_path: Path) -> Path:
+    """The initiative branch, attached by its exact name — a hub Run's own worktree."""
+    path = tmp_path / "work" / "acme" / "hub" / "wt" / INTEGRATION
+    git.worktree_add(base, path, INTEGRATION, None)
+    return path
+
+
+@pytest.fixture
+def initialized(git: SubprocessGit, worktree: Path) -> Path:
+    """The same worktree with its submodules materialised — the checkout form's precondition."""
+    git.submodule_update(worktree)
+    return worktree
+
+
+def head_of(submodule: Path) -> str:
+    return run_git("rev-parse", "HEAD", cwd=submodule).strip()
+
+
+def branch_of(submodule: Path) -> str:
+    return run_git("rev-parse", "--abbrev-ref", "HEAD", cwd=submodule).strip()
+
+
+# ── submodule_update ────────────────────────────────────────────────────────
+
+
+def test_update_materialises_the_submodule_and_answers_its_repository_relative_path(
+    git: SubprocessGit, worktree: Path
+) -> None:
+    initialized = git.submodule_update(worktree)
+
+    assert initialized == (WORKDIR,)
+    assert (worktree / WORKDIR / MEMBER_FILE).read_text() == "member\n"
+
+
+def test_an_uninitialized_submodule_is_an_empty_folder_before_the_row_runs(
+    worktree: Path,
+) -> None:
+    """What a `git.worktree` row alone leaves: a gitlink, and nothing to run a step in."""
+    assert (worktree / WORKDIR).is_dir()
+    assert list((worktree / WORKDIR).iterdir()) == []
+
+
+def test_update_is_idempotent_and_answers_the_same_paths_the_second_time(
+    git: SubprocessGit, worktree: Path
+) -> None:
+    """AD-13's `retry` re-runs the row whole, so a second update is the ordinary case."""
+    first = git.submodule_update(worktree)
+    before = head_of(worktree / WORKDIR)
+
+    assert git.submodule_update(worktree) == first
+    assert head_of(worktree / WORKDIR) == before
+
+
+def test_a_worktree_with_no_submodules_answers_nothing_rather_than_failing(
+    git: SubprocessGit, base: Path, tmp_path: Path
+) -> None:
+    """A hub branch cut before the gitlink existed: nothing to initialize is `()`, not a
+    failure — and `repo-init@1` runs on exactly such a tree."""
+    path = tmp_path / "work" / "acme" / "hub" / "wt" / NO_SUBMODULES
+    git.worktree_add(base, path, NO_SUBMODULES, None)
+
+    assert git.submodule_update(path) == ()
+
+
+def test_each_linked_worktree_gets_its_own_submodule_checkout(
+    git: SubprocessGit, base: Path, initialized: Path, tmp_path: Path
+) -> None:
+    """The load-bearing finding (H1, 2026-09-23): git stores a linked worktree's submodule
+    under `base/.git/worktrees/{worktree}/modules/`, never under the shared
+    `base/.git/modules/` — so two Runs on two branches of one hub repository each get their
+    own member checkout and neither can move the other's HEAD. The directory name is what
+    git keys that by, which under AD-14's `wt/{branch}` layout is the branch's last segment."""
+    other = tmp_path / "work" / "acme" / "hub" / "wt" / OTHER
+    git.worktree_add(base, other, OTHER, f"origin/{INTEGRATION}")
+
+    assert git.submodule_update(other) == (WORKDIR,)
+
+    first = (initialized / WORKDIR / ".git").read_text()
+    second = (other / WORKDIR / ".git").read_text()
+    assert first != second
+    assert f"worktrees/{INTEGRATION}/modules" in first
+    assert f"worktrees/{OTHER}/modules" in second
+    assert not (base / ".git" / "modules").exists()
+
+
+def test_the_submodule_url_is_recorded_once_in_the_config_the_worktrees_share(
+    git: SubprocessGit, base: Path, initialized: Path
+) -> None:
+    """A worktree shares the base clone's config, so `init` writes the URL there. It is the
+    same URL for every worktree of one repository, and a second `init` leaves it alone —
+    which is what makes the shared config idempotent rather than a race."""
+    recorded = run_git("config", f"submodule.{WORKDIR}.url", cwd=base).strip()
+
+    git.submodule_update(initialized)
+
+    assert run_git("config", f"submodule.{WORKDIR}.url", cwd=base).strip() == recorded
+
+
+def test_a_submodule_child_process_runs_with_the_adapters_own_environment(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """AD-5 reaching the clones: `git submodule` fetches and clones in child processes, and
+    the environment `SubprocessGit` built is what they inherit — so `GIT_ASKPASS` covers a
+    private member repository with nothing extra passed. `foreach` is the observable form of
+    the same inheritance the clone relies on; the adapter itself runs no shell."""
+    seen = git._run("-C", str(initialized), "submodule", "foreach", "--quiet", "echo $GIT_ASKPASS")
+
+    assert seen.strip() == str(git._askpass)
+
+
+# ── submodule_checkout ──────────────────────────────────────────────────────
+
+
+def test_a_branch_the_members_remote_holds_is_cut_from_it_and_tracks_it(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    sha = git.submodule_checkout(initialized, WORKDIR, MEMBER_HELD)
+
+    submodule = initialized / WORKDIR
+    assert sha == head_of(submodule)
+    assert branch_of(submodule) == MEMBER_HELD
+    assert (submodule / HELD_FILE).exists()
+    assert run_git("rev-parse", "--abbrev-ref", "@{upstream}", cwd=submodule).strip() == (
+        f"origin/{MEMBER_HELD}"
+    )
+
+
+def test_a_branch_neither_side_holds_is_cut_from_the_declared_base(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """The hub workflow's ordinary case: one initiative branch, created in each member
+    repository from that repository's own base branch."""
+    sha = git.submodule_checkout(initialized, WORKDIR, NEW_BRANCH, MEMBER_BASE)
+
+    submodule = initialized / WORKDIR
+    assert branch_of(submodule) == NEW_BRANCH
+    assert sha == run_git("rev-parse", f"origin/{MEMBER_BASE}", cwd=submodule).strip()
+    assert not (submodule / HELD_FILE).exists()
+
+
+def test_a_base_the_members_remote_does_not_hold_falls_back_to_the_current_head(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """AD-14: "from the submodule's current HEAD otherwise". A hub whose members do not all
+    share one base-branch name must not fail the row over a name one of them lacks."""
+    before = head_of(initialized / WORKDIR)
+
+    sha = git.submodule_checkout(initialized, WORKDIR, NEW_BRANCH, "no-such-base")
+
+    assert sha == before
+    assert branch_of(initialized / WORKDIR) == NEW_BRANCH
+
+
+def test_a_branch_with_no_base_at_all_is_cut_from_the_current_head(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    before = head_of(initialized / WORKDIR)
+
+    assert git.submodule_checkout(initialized, WORKDIR, NEW_BRANCH) == before
+
+
+def test_the_upstream_is_configured_for_a_branch_the_remote_does_not_hold_yet(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """ "Upstream set" without the remote ref existing: `branch --set-upstream-to` cannot be
+    used, because there is nothing to point at until the first push creates it (H2)."""
+    git.submodule_checkout(initialized, WORKDIR, NEW_BRANCH, MEMBER_BASE)
+
+    submodule = initialized / WORKDIR
+    assert run_git("config", f"branch.{NEW_BRANCH}.remote", cwd=submodule).strip() == "origin"
+    assert run_git("config", f"branch.{NEW_BRANCH}.merge", cwd=submodule).strip() == (
+        f"refs/heads/{NEW_BRANCH}"
+    )
+
+
+def test_a_second_checkout_of_the_same_branch_keeps_the_work_the_first_one_left(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """Idempotent means "not reset": an epic's later rows commit inside the submodule, and a
+    re-run of the checkout row must not throw that away."""
+    git.submodule_checkout(initialized, WORKDIR, NEW_BRANCH, MEMBER_BASE)
+    submodule = initialized / WORKDIR
+    (submodule / "work.txt").write_text("what the agent wrote\n")
+    run_git("add", "--all", cwd=submodule)
+    run_git("commit", "--quiet", "--message", "agent work", cwd=submodule)
+    committed = head_of(submodule)
+
+    assert git.submodule_checkout(initialized, WORKDIR, NEW_BRANCH, MEMBER_BASE) == committed
+    assert (submodule / "work.txt").exists()
+
+
+def test_a_checkout_fast_forwards_a_branch_the_member_moved_behind_this_runs_back(
+    git: SubprocessGit, initialized: Path, member_origin: Path, tmp_path: Path
+) -> None:
+    git.submodule_checkout(initialized, WORKDIR, MEMBER_HELD)
+    theirs = tmp_path / "theirs"
+    run_git(
+        "clone",
+        "--quiet",
+        f"file://{member_origin}",
+        "--branch",
+        MEMBER_HELD,
+        str(theirs),
+        cwd=tmp_path,
+    )
+    (theirs / "later.txt").write_text("landed while the run was elsewhere\n")
+    run_git("add", "--all", cwd=theirs)
+    run_git("commit", "--quiet", "--message", "later work", cwd=theirs)
+    run_git("push", "--quiet", "origin", MEMBER_HELD, cwd=theirs)
+
+    sha = git.submodule_checkout(initialized, WORKDIR, MEMBER_HELD)
+
+    assert (initialized / WORKDIR / "later.txt").exists()
+    assert sha == head_of(initialized / WORKDIR)
+
+
+def test_a_local_branch_that_cannot_fast_forward_is_left_where_it_is(
+    git: SubprocessGit, initialized: Path, member_origin: Path, tmp_path: Path
+) -> None:
+    """ "ff if possible, no error": a diverged branch is a fact for a later row to park on,
+    not a reason for the checkout row to refuse."""
+    git.submodule_checkout(initialized, WORKDIR, MEMBER_HELD)
+    submodule = initialized / WORKDIR
+    (submodule / "ours.txt").write_text("this run's work\n")
+    run_git("add", "--all", cwd=submodule)
+    run_git("commit", "--quiet", "--message", "our work", cwd=submodule)
+    ours = head_of(submodule)
+    theirs = tmp_path / "theirs"
+    run_git(
+        "clone",
+        "--quiet",
+        f"file://{member_origin}",
+        "--branch",
+        MEMBER_HELD,
+        str(theirs),
+        cwd=tmp_path,
+    )
+    (theirs / "theirs.txt").write_text("someone else's work\n")
+    run_git("add", "--all", cwd=theirs)
+    run_git("commit", "--quiet", "--message", "their work", cwd=theirs)
+    run_git("push", "--quiet", "origin", MEMBER_HELD, cwd=theirs)
+
+    assert git.submodule_checkout(initialized, WORKDIR, MEMBER_HELD) == ours
+
+
+# ── a workdir that is not an initialized submodule ──────────────────────────
+
+
+def test_a_path_that_is_not_a_submodule_at_all_answers_none(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    assert git.submodule_checkout(initialized, SEED_FILE, NEW_BRANCH) is None
+
+
+def test_a_path_the_worktree_does_not_hold_answers_none(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    assert git.submodule_checkout(initialized, "repos/absent", NEW_BRANCH) is None
+
+
+def test_a_submodule_that_was_never_initialized_answers_none_and_writes_nothing(
+    git: SubprocessGit, worktree: Path
+) -> None:
+    """The same answer as "not a submodule", because it is the same stop for the Operator:
+    AD-9's `workdir {path} is not an initialized submodule`.
+
+    Also what `UNINITIALIZED` is: git reports the gitlink with that flag in column 1, which
+    is the fact the adapter reads rather than guessing from an empty folder."""
+    assert run_git("submodule", "status", "--", WORKDIR, cwd=worktree)[0] == UNINITIALIZED
+
+    assert git.submodule_checkout(worktree, WORKDIR, NEW_BRANCH) is None
+    assert list((worktree / WORKDIR).iterdir()) == []

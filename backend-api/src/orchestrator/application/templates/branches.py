@@ -37,13 +37,21 @@ still maps declared to worked-on for pre-flight and for AD-12's partition key. T
 fresh-branch guarantee is waived for those frames and for those only; what keeps two Runs
 off one integration branch at once is the `{repository_id}:{branch}` partition, not a name
 nobody else can have.
+
+**One *kind* is exempt too** *(AD-7, ratified 2026-09-23, hub-Run initiative workflow)*. A
+`git.submodule` row's `branch` is not a branch of this Run's repository at all: it lives in
+the submodule's own one, which this allocator — which asks the *Run's* origin which ordinals
+are free — cannot reason about. So the name is taken exactly and resolved against the
+member's remote when the row executes, never here. Unlike `attach`, this is a property of the
+kind rather than of the frame: a frame whose worktree branch *is* allocated still hands its
+`git.submodule` rows the declared name.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from orchestrator.application.steps import WORKTREE_KIND
+from orchestrator.application.steps import SUBMODULE_KIND, WORKTREE_KIND
 from orchestrator.application.templates.model import Step
 from orchestrator.application.templates.plan_model import (
     BRANCH_KEY,
@@ -160,7 +168,13 @@ def fresh_params(step: Step, frame: Frame, resolved: dict[str, Any]) -> dict[str
     Only a row that names *this frame's* branch is rewritten. A Template that pushed some
     other branch would be naming a branch this Run neither created nor planned from, and
     inventing a fresh name for it would push work somewhere nobody asked for.
+
+    A `git.submodule` row is never rewritten, whatever it names: its branch belongs to the
+    submodule's repository, and an ordinal this allocator read off the *Run's* origin would
+    be an answer to a question about the wrong remote (AD-7, see the module docstring).
     """
+    if step.uses == SUBMODULE_KIND:
+        return resolved
     if frame.branch is None or frame.fresh_branch is None:
         return resolved
     if resolved.get(BRANCH_KEY) != frame.branch:

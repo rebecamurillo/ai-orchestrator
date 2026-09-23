@@ -251,6 +251,61 @@ class Git(Protocol):
         """
         ...
 
+    def submodule_update(self, worktree: Path) -> tuple[str, ...]:
+        """Init and update every submodule of the worktree; answer the initialized workdirs.
+
+        AD-14's own words (ratified 2026-09-23, hub-Run initiative workflow): "the init +
+        update of the Run's worktree's submodules". This is what turns a hub repository's
+        `repos/*` gitlinks into the working folders the rest of the workflow runs in.
+
+        - **The answer is the repository-relative path of every submodule that is now
+          initialized**, in git's own order, nested ones included. Two callers need that
+          fact for two reasons — the row reports what it materialised, and a `workdir` is
+          only a workdir once it appears here — so the adapter reports it rather than making
+          each of them ask a second question.
+        - **Idempotent.** A worktree whose submodules are already initialized at their
+          recorded commits is updated again to the same state, answers the same paths, and
+          is not a failure. AD-13's `retry` re-running the row whole is the reason.
+        - **It goes through the credential path, because a member repository may be
+          private** (AD-5). The clones `git submodule update` spawns are child processes of
+          the adapter's own command and inherit the environment `GIT_ASKPASS` lives in.
+        - **A worktree with no submodules is `()`**, not an error — the port's second
+          convention applied to "there is nothing here to initialize".
+        """
+        ...
+
+    def submodule_checkout(
+        self, worktree: Path, workdir: str, branch: str, base: str | None = None
+    ) -> str | None:
+        """Create or check out `branch` inside the submodule at `workdir`; answer its HEAD.
+
+        AD-14's own words (ratified 2026-09-23, hub-Run initiative workflow):
+        "create-or-checkout of `branch` inside the submodule at `workdir` with upstream set,
+        cut from `origin/{branch}` when that submodule's remote holds it and from the
+        submodule's current HEAD otherwise". `base` is the case in between, which the hub
+        workflow needs: an initiative branch neither repository holds yet is cut from the
+        member repository's own base branch when its remote holds one.
+
+        Everything happens in the **submodule's own repository** — its remote, its branches,
+        its HEAD. The Run's worktree is only how the submodule is located.
+
+        - **`None` is "`workdir` is not an initialized submodule"**: the port's second
+          convention applied to the one absence the caller has a sentence for, AD-9's
+          `misconfigured: workdir {path} is not an initialized submodule`. A path that is no
+          submodule at all and one whose submodule was never initialized are the same
+          answer, because they are the same stop, and neither writes anything.
+        - **The branch is taken by its exact name, never allocated** (AD-7): it lives in the
+          submodule's repository, which the Run's branch allocator cannot reason about.
+        - **Upstream is set to `origin/{branch}` even where the remote does not hold it
+          yet** — configured for the push that will create it. A branch the remote *does*
+          hold is cut from it and tracks it in the ordinary way.
+        - **Idempotent.** A submodule already on the branch is fetched and fast-forwarded
+          where that is possible and left where it is where it is not; it is never reset to
+          a start point, because work an earlier row of the same Run committed inside the
+          submodule is exactly what a reset would throw away.
+        """
+        ...
+
     def head_sha(self, path: Path) -> str | None:
         """The commit `HEAD` points at, or `None` where there is no commit yet."""
         ...
