@@ -242,6 +242,12 @@ for what they are.
 (`backend-api/tests/unit/test_harness_env_subscription.py`); the host half above is written
 from LiteLLM's own guide and has not been run against a live subscription here.
 
+**If the login expires.** `GET /harnesses/claude/probe` (and the "re-run readiness" button,
+which re-checks the Probe before dispatching) runs `claude auth status` in this mode and
+refuses immediately — `failing_reason: "not logged in (claude auth status)"` — rather than
+letting a dispatched Run discover it slowly. Recover with step 4 above: re-run
+`docker compose exec backend-api claude login`.
+
 ## Langfuse
 
 Langfuse 4.27.0, self-hosted with its own compose file, on port 3000. The stack sends traces to

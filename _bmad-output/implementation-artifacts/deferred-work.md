@@ -108,3 +108,11 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/implementation-artifacts/spec-dynamic-template-picker.md`
   summary: A required Template input left blank does not stop *Start run*; `runBody` gates only on project, repository and base branch.
   evidence: Found by the blind and edge-case reviews, 2026-09-22. Pre-existing — the old hardcoded field table marked every input mandatory and nothing enforced it either. The catalog now carries `required` per input, so the data to enforce it exists for the first time.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-claude-readiness-fast-auth-check.md`
+  summary: No test exercises subscription-mode login check together with an actually-enabled, reachable Gateway probe — every test in `test_harness_claude_subscription_login_probe.py` disables `LITELLM_BASE_URL` so only the login check itself is isolated.
+  evidence: Found by the Blind Hunter review, 2026-09-23. `host/README.md` documents subscription mode as still routing through the Gateway (forwarded OAuth token), so the two real production paths — login check, then a live gateway model-list call — are never exercised together in one test. Doing so needs a fake local HTTP server in the test, which is more than a trivial patch; the two checks are sequential and independent in the script, so the risk is low, but the combination is unverified.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-claude-readiness-fast-auth-check.md`
+  summary: `probe()`'s `[ "${CLAUDE_SUBSCRIPTION_AUTH:-false}" = "true" ]` is an exact-string comparison; a `.env` typo (`1`, `True`, `TRUE`) silently disables the new login check rather than erroring.
+  evidence: Found by the Blind Hunter review, 2026-09-23. This is the first harness script to read a boolean env var directly in bash — `scripts/harness/_common.sh` centralizes `probe_gateway_models`/`probe_output` for reuse but has no shared boolean-parsing helper. Low probability (the variable is documented and defaults correctly), but worth a shared helper if a second such flag appears.
