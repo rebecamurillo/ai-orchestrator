@@ -226,6 +226,31 @@ class Git(Protocol):
         """
         ...
 
+    def push_branch(self, dest_base: Path, branch: str, at_ref: str) -> str | None:
+        """Make sure `origin` holds `branch`, creating it at `at_ref` when it does not.
+
+        AD-14's own words (ratified 2026-09-23): "`push origin {ref}:refs/heads/{branch}`,
+        the one Git write that precedes every worktree: initiative dispatch (AD-12) calls it
+        to ensure a repository's integration branch exists, adopting the remote branch at its
+        head when the remote already holds it and creating it from the base head otherwise,
+        and it touches no worktree".
+
+        Three properties, each of which is what makes the call safe to repeat:
+
+        - **Adopt is a no-op, not a reset.** A remote that already holds the branch is left
+          exactly where it is — it may already carry merged epics — so the answer is `None`,
+          the port's second convention applied to "nothing to do", the way `sync` and `merge`
+          apply it to theirs.
+        - **Create answers with git's own output**, so the caller can record what it wrote.
+        - **It works on the base clone, never on a worktree.** `dest_base` is
+          `{work_dir}/{project}/{repo}/base` (AD-14), which is why AD-13's "`cancel` and
+          `PUT /runs/{id}/files` are the only worktree writes outside an engine step" still
+          stands with this method in the port.
+
+        Never a force: a push the remote refuses is a `GitError`, exactly as for `push`.
+        """
+        ...
+
     def head_sha(self, path: Path) -> str | None:
         """The commit `HEAD` points at, or `None` where there is no commit yet."""
         ...

@@ -73,6 +73,13 @@ SignalKind = Literal[
 ]
 SIGNAL_KINDS: tuple[SignalKind, ...] = get_args(SignalKind)
 
+#: What part a Run plays in a multi-repository initiative (AD-12, ratified 2026-09-23).
+#: Written once by `dispatch_initiative` and read back by the cross-repo DAG view. Never
+#: derived from a template name: the templates a dispatch instantiates are request inputs
+#: (AD-7), so a rename would otherwise silently re-label every member Run.
+InitiativeRole = Literal["epic", "merge", "golive"]
+INITIATIVE_ROLES: tuple[InitiativeRole, ...] = get_args(InitiativeRole)
+
 #: How a step's success is decided, including the token for a step that declared no gate.
 Gate = Literal["liveness", "deterministic", "human", "unvalidated"]
 GATES: tuple[Gate, ...] = get_args(Gate)

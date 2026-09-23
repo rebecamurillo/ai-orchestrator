@@ -33,7 +33,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from orchestrator.domain.entities.template import TemplateRef
-from orchestrator.domain.statuses import ParkKind, RunStatus
+from orchestrator.domain.statuses import InitiativeRole, ParkKind, RunStatus
 from orchestrator.domain.values import Worktree
 
 
@@ -99,6 +99,20 @@ class Run(BaseModel):
     #: null, so clearing buys nothing, and the retained edges are the durable record an
     #: initiative's DAG is rendered from (spine AD-12/AD-13 amendment, 2026-09-23).
     after_run_ids: tuple[UUID, ...] = ()
+    #: The multi-repository initiative this Run is a member of (AD-12, spine amendment
+    #: 2026-09-23): the slug `dispatch_initiative` derived from the initiative folder, or
+    #: `None` for a Run started on its own. Written once at creation and never again —
+    #: membership is a fact about how the Run was made, not a status.
+    initiative: str | None = None
+    #: What part this Run plays in that initiative. Stored rather than derived, because the
+    #: templates a dispatch instantiates are request inputs (AD-7): reading the role off a
+    #: template name would re-label every member Run the day a template is renamed.
+    initiative_role: InitiativeRole | None = None
+    #: Which `epics.yaml` entry this Run belongs to — carried by the epic Run and by the
+    #: merge Run that lands it, so the cross-repo DAG pairs them without inferring anything
+    #: from `after_run_ids`. `None` on the go-live Run, which belongs to no single epic, and
+    #: on every Run outside an initiative.
+    initiative_epic_id: str | None = None
     #: The Langfuse trace this Run's attempt spans hang under (AD-11).
     trace_id: str | None = None
     terminal_session: bool = False

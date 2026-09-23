@@ -68,6 +68,11 @@ class FakeRunRepository:
             if run.repository_id == repository_id and run.status not in TERMINAL_RUN
         )
 
+    def list_by_initiative(self, initiative: str) -> list[Run]:
+        """Every member Run of one initiative, newest first (multi-repo initiative S6)."""
+        self.calls.append(("list_by_initiative", initiative))
+        return _newest_first(run for run in self.runs.values() if run.initiative == initiative)
+
     def list_dependents(self, run_id: UUID) -> list[Run]:
         """Queued dependency-waiting runs: `run_id` in after_run_ids, engine_ref=={}."""
         self.calls.append(("list_dependents", run_id))

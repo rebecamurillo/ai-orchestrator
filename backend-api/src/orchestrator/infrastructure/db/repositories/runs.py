@@ -96,6 +96,11 @@ def to_entity(row: RunRow) -> Run:
         # column's default is the database's, so a `RunRow` built in memory and not yet
         # flushed still carries `None` here.
         after_run_ids=tuple(row.after_run_ids or ()),
+        initiative=row.initiative,
+        # the column is `text`; the entity narrows it to `InitiativeRole`, and only
+        # `dispatch_initiative` ever writes one (multi-repo initiative S6, 2026-09-23)
+        initiative_role=row.initiative_role,  # type: ignore[arg-type]
+        initiative_epic_id=row.initiative_epic_id,
     )
 
 
@@ -147,6 +152,9 @@ def row_values(run: Run) -> dict[str, Any]:
         "worktrees_removed": run.worktrees_removed,
         "partition_branch": run.partition_branch,
         "after_run_ids": list(run.after_run_ids),
+        "initiative": run.initiative,
+        "initiative_role": run.initiative_role,
+        "initiative_epic_id": run.initiative_epic_id,
     }
 
 
@@ -196,6 +204,10 @@ class SQLAlchemyRunRepository:
                 RunRow.status.not_in(sorted(TERMINAL_RUN)),
             )
         )
+
+    def list_by_initiative(self, initiative: str) -> list[Run]:
+        """Every member Run of one initiative, newest first — the cross-repo DAG's one read."""
+        return self._read(select(RunRow).where(RunRow.initiative == initiative))
 
     def list_dependents(self, run_id: UUID) -> list[Run]:
         """Dependency-waiting Runs: `run_id` in `after_run_ids`, queued, `engine_ref == {}`.

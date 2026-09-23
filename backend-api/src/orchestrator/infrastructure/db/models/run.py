@@ -58,6 +58,11 @@ GATE_RECORD_AT_INDEX = "ix_gate_record_run_id_at"
 #: GIN, because the question is containment in an array and no b-tree answers that.
 RUN_AFTER_RUN_IDS_INDEX = "ix_run_after_run_ids"
 
+#: How `GET /initiatives/{slug}` finds an initiative's member Runs (AD-12, 2026-09-23).
+#: A plain b-tree on the slug alone: the role and the epic id are rendered by that read,
+#: never filtered on.
+RUN_INITIATIVE_INDEX = "ix_run_initiative"
+
 #: Money, and the hours an Operator estimated by hand.
 MONEY = Numeric(12, 6)
 HOURS = Numeric(10, 2)
@@ -72,6 +77,7 @@ class RunRow(Base):
         Index(RUN_STATUS_INDEX, "status"),
         Index(RUN_REPOSITORY_STATUS_INDEX, "repository_id", "status"),
         Index(RUN_AFTER_RUN_IDS_INDEX, "after_run_ids", postgresql_using="gin"),
+        Index(RUN_INITIATIVE_INDEX, "initiative"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
@@ -121,6 +127,12 @@ class RunRow(Base):
     after_run_ids: Mapped[list[UUID]] = mapped_column(
         ARRAY(Uuid()), server_default=text("'{}'::uuid[]")
     )
+    #: The three initiative columns (AD-12, spine amendment 2026-09-23). All `NULL` together
+    #: for a Run started on its own; `initiative_epic_id` alone is also `NULL` on the go-live
+    #: Run, which belongs to the initiative but to no single epic.
+    initiative: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    initiative_role: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    initiative_epic_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
 
 
 class StepRunRow(Base):

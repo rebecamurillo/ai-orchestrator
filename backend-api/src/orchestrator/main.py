@@ -58,6 +58,7 @@ from orchestrator.api.routers import (
     harness_readiness,
     harnesses,
     history,
+    initiatives,
     ping,
     projects,
     queue,
@@ -321,6 +322,9 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         queue.router,
         history.router,
         trajectories.router,
+        # `POST /initiatives/preflight` registers before `GET /initiatives/{slug}` inside
+        # the router itself; the router as a whole has no ordering constraint (AD-12, S6)
+        initiatives.router,
     ):
         _mount(app, router)
     _mount(app, harness_readiness.router)

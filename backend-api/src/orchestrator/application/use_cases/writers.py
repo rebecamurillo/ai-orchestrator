@@ -293,7 +293,7 @@ def resolve_dependent(
         _park_dependent(ports, dep, _dependency_reason(*blocking), own_uow=own_uow)
         return
     if all(stored is not None and stored.status == "done" for _id, stored in predecessors):
-        _enqueue_dependent(ports, engine, dep)
+        enqueue_saved_run(ports, engine, dep)
 
 
 def _dependency_reason(pred_id: UUID, predecessor: Run | None) -> str:
@@ -331,21 +331,26 @@ def _write_dependency_park(ports: WriterPorts, dep: Run, reason: str) -> None:
     record(ports, parked, Entry(event="dependency", actor="machine", path=None, text=reason))
 
 
-def _enqueue_dependent(ports: WriterPorts, engine: WorkflowEngine | None, dep: Run) -> None:
+def enqueue_saved_run(ports: WriterPorts, engine: WorkflowEngine | None, run: Run) -> None:
     """Two-phase: enqueue first, then commit the returned `engine_ref` in its own UoW.
 
-    The order is AD-8's: the engine only ever sees a Run whose predecessor row is already
-    durable. A `None` engine degrades to a no-op — every call site that predates story 5-4,
-    and `park_dependents`, which can never reach this branch anyway.
+    The order is AD-8's: the engine only ever sees a Run whose row is already durable. A
+    `None` engine degrades to a no-op — every call site that predates story 5-4, and
+    `park_dependents`, which can never reach this branch anyway.
+
+    The partition key is AD-12's: the Run's **declared** branch, `base_branch` for a plan
+    that declares none (`golive@1`). Two callers share it rather than spelling it twice —
+    `resolve_dependent` below, and initiative dispatch's wave-0 enqueue (S6), which puts
+    exactly this Run in exactly this state: saved, `engine_ref` empty, nothing waited on.
     """
     if engine is None:
         return
     partition_key = (
-        f"{dep.repository_id}:{dep.partition_branch or dep.inputs.get('base_branch', '')}"
+        f"{run.repository_id}:{run.partition_branch or run.inputs.get('base_branch', '')}"
     )
-    engine_ref = engine.enqueue(dep.id, partition_key=partition_key)
+    engine_ref = engine.enqueue(run.id, partition_key=partition_key)
     with ports.uow:
-        refreshed = ports.runs.get(dep.id)
+        refreshed = ports.runs.get(run.id)
         if refreshed is not None:
             set_run(ports, refreshed, engine_ref=engine_ref)
         ports.uow.commit()

@@ -46,6 +46,10 @@ DEFAULT_SHA = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
 DEFAULT_REF = RemoteRef(ref="HEAD", sha=DEFAULT_SHA)
 DEFAULT_CLONE = CloneResult(seconds=1.0, bytes=4096)
 
+#: What `push_branch` answers when it created the branch — git's own words for it. `None`
+#: is the other answer, and it means the remote already held it (adopted, AD-14, S6).
+DEFAULT_PUSH_BRANCH = "* [new branch]"
+
 
 class FakeGit:
     """Scripted answers, a call log, and a clock that moves once per command."""
@@ -72,6 +76,7 @@ class FakeGit:
         diff_changes: list[Any] | None = None,
         diff: list[Any] | None = None,
         push: list[Any] | None = None,
+        push_branch: list[Any] | None = None,
         head_sha: list[Any] | None = None,
         remove_worktree: list[Any] | None = None,
         delete_branch: list[Any] | None = None,
@@ -105,6 +110,7 @@ class FakeGit:
             "diff_changes": diff_changes or [()],
             "diff": diff or [""],
             "push": push or [""],
+            "push_branch": push_branch or [DEFAULT_PUSH_BRANCH],
             "head_sha": head_sha or [DEFAULT_SHA],
             "remove_worktree": remove_worktree or [None],
             "delete_branch": delete_branch or [None],
@@ -188,6 +194,24 @@ class FakeGit:
 
     def push(self, worktree: Path, branch: str, set_upstream: bool) -> str:
         answer: str = self._answer("push", (worktree, branch, set_upstream))
+        return answer
+
+    def push_branch(self, dest_base: Path, branch: str, at_ref: str) -> str | None:
+        """Adopt-or-create, against the `refs` map when there is one (multi-repo S6).
+
+        With a `refs` map the fake answers the adapter's own rule rather than a script — a
+        branch the map already holds is adopted (`None`), one it does not is created — and
+        **records the creation in the map**, because that is what the real remote does and
+        because the very next thing dispatch does is plan an epic Run off that branch. A
+        caller that scripted `push_branch` instead gets its script, like every other method.
+        """
+        if self.refs is not None:
+            self._record("push_branch", (dest_base, branch, at_ref))
+            if self.refs.get(branch):
+                return None
+            self.refs[branch] = at_ref
+            return DEFAULT_PUSH_BRANCH
+        answer: str | None = self._answer("push_branch", (dest_base, branch, at_ref))
         return answer
 
     def head_sha(self, path: Path) -> str | None:
