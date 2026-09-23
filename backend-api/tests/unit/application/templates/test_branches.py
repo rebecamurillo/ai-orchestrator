@@ -21,6 +21,7 @@ from orchestrator.application.steps import KIND_META, PUSH_KIND, WORKTREE_KIND
 from orchestrator.application.templates.branches import (
     MAX_SUFFIX,
     BranchAllocator,
+    frame_branch,
     fresh_params,
 )
 from orchestrator.application.templates.model import ParsedTemplate, Step
@@ -126,6 +127,54 @@ def test_the_allocated_map_is_what_the_plan_carries_for_preflight() -> None:
     allocate.fresh(DECLARED)
 
     assert allocate.allocated == {DECLARED: "chore/bmad-init-1"}
+
+
+# --- the one frame that is not allocated ---------------------------------------------------------
+
+
+def test_an_attach_frame_works_on_the_name_the_template_declared() -> None:
+    """A shared integration branch is entered by its exact name (AD-7, multi-repo S3)."""
+    assert allocator(DECLARED).attach(DECLARED) == DECLARED
+
+
+def test_an_attach_branch_is_recorded_for_preflight_as_its_own_name() -> None:
+    allocate = allocator()
+    allocate.attach(DECLARED)
+
+    assert allocate.allocated == {DECLARED: DECLARED}
+
+
+def test_an_attach_branch_is_never_handed_out_as_some_other_branchs_ordinal() -> None:
+    """`feat/x-1` taken as an integration branch is not also `feat/x`'s first ordinal."""
+    allocate = allocator()
+    allocate.attach("feat/x-1")
+
+    assert allocate.fresh("feat/x") == "feat/x-2"
+
+
+def test_a_checkout_that_attaches_to_nothing_gets_no_name() -> None:
+    assert allocator().attach(None) is None
+
+
+def test_an_attach_frame_carries_the_declared_name_and_no_start_point() -> None:
+    """No fresh branch means no start point: the row keeps the `base` it was written with."""
+    assert frame_branch(allocator(), DECLARED, BASE_BRANCH, attach=True) == (DECLARED, None)
+
+
+def test_a_frame_that_does_not_attach_is_allocated_and_started_as_before() -> None:
+    assert frame_branch(allocator(DECLARED), DECLARED, BASE_BRANCH, attach=False) == (
+        "chore/bmad-init-1",
+        DECLARED,
+    )
+
+
+def test_an_attach_row_keeps_the_base_its_template_wrote() -> None:
+    """`fresh_from` is `None` for an attach frame, which is what leaves `base` alone."""
+    inner = frame(branch=DECLARED, fresh_branch=DECLARED, fresh_from=None)
+
+    resolved = fresh_params(worktree_step(), inner, {"base": BASE_BRANCH, "branch": DECLARED})
+
+    assert resolved == {"base": BASE_BRANCH, "branch": DECLARED}
 
 
 # --- where the fresh branch starts --------------------------------------------------------------

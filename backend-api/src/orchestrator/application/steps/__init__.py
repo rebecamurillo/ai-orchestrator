@@ -64,7 +64,7 @@ class KindMeta:
 #: Every step kind there is (spine "Shipped kinds"). The only enumeration of kinds.
 KIND_META: dict[str, KindMeta] = {
     "plan.check": KindMeta("deterministic", 5, frozenset(), planner_only=True),
-    "git.worktree": KindMeta("deterministic", 5, frozenset({"base", "branch"})),
+    "git.worktree": KindMeta("deterministic", 5, frozenset({"base", "branch", "mode"})),
     "git.sync": KindMeta("deterministic", 5, frozenset()),
     "shell": KindMeta("deterministic", 30, frozenset({"command"})),
     "agent": KindMeta(
@@ -111,6 +111,16 @@ PLAN_KIND = "plan.check"
 #: which kind names it, not which step mentions it first.
 WORKTREE_KIND = "git.worktree"
 
+#: The `with` key `git.worktree` names its checkout mode in, and the one value that key
+#: takes. `mode: attach` exempts the frame from branch allocation (AD-7): the declared
+#: branch is worked on by its exact name, at its origin head, which is how a Run enters a
+#: repository's shared integration branch — the fresh-branch guarantee is waived for those
+#: frames and for those only, and AD-12's `{repository_id}:{branch}` partition is what
+#: serializes the Runs that share one. A `mode` the planner does not recognise is simply not
+#: attach, and the frame allocates as any other does.
+WORKTREE_MODE_KEY = "mode"
+ATTACH_MODE = "attach"
+
 #: The kind whose step commits the working tree. Named here because `signal_run` re-resolves
 #: a skipped Story's commit message on this row (AD-13) and AD-9 says a kind is named in this
 #: table or nowhere.
@@ -137,6 +147,7 @@ LINK_KIND = "pr.link"
 #: whichever half it needs (AD-9: "the registry in `application/steps/__init__.py`").
 __all__ = [
     "AGENT_KIND",
+    "ATTACH_MODE",
     "CHECKPOINT_KIND",
     "COMMIT_KIND",
     "COMMIT_MESSAGE_KEY",
@@ -150,6 +161,7 @@ __all__ = [
     "TEMPLATE_CALL_KIND",
     "TEMPLATE_KINDS",
     "WORKTREE_KIND",
+    "WORKTREE_MODE_KEY",
     "Gate",
     "KindMeta",
     "StepContext",

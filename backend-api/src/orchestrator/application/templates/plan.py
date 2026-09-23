@@ -21,7 +21,9 @@ inside the epic frame — so it plans from the base too.
 turns each declared name into the first free ordinal of it — `chore/bmad-init-1`, then
 `-2` — and every `git.*` row carries that instead, so two Runs of one Template never meet
 on one branch (`branches.py`). The declared name is still what `plan_ref` above asks the
-remote about, and still where the fresh branch starts from.
+remote about, and still where the fresh branch starts from. A checkout declaring
+`with {mode: attach}` is the one exemption: it works on the declared branch by its exact
+name, which is how a Run joins a repository's shared integration branch (AD-7, AD-14).
 
 **The scope holds no `None`.** A Run that chose no model has no `model` to substitute, so
 the name is simply unbound and `{{model}}` resolves to `""` rather than to the four
@@ -43,7 +45,7 @@ from orchestrator.application.steps.plan_check import (
     PLAN_REFS_KEY,
     URL_KEY,
 )
-from orchestrator.application.templates.branches import BranchAllocator
+from orchestrator.application.templates.branches import BranchAllocator, frame_branch
 from orchestrator.application.templates.model import ParsedTemplate
 from orchestrator.application.templates.plan_model import (
     BASE_BRANCH_NOT_FOUND,
@@ -58,6 +60,7 @@ from orchestrator.application.templates.plan_model import (
     PlanError,
     Redispatched,
     ResolvedTree,
+    attach_mode,
     working_branch,
 )
 from orchestrator.application.templates.reader import PlanReader
@@ -96,6 +99,9 @@ def plan_run(
     scope = root_scope(inputs)
     branch = working_branch(tree.root, scope)
     ref = plan_ref(reader, branch, inputs.base_branch)
+    name, start = frame_branch(
+        allocator, branch, inputs.base_branch, attach=attach_mode(tree.root, scope)
+    )
     frame = Frame(
         prefix="",
         labels=(),
@@ -103,8 +109,8 @@ def plan_run(
         scope=scope,
         template=tree.root,
         branch=branch,
-        fresh_branch=allocator.fresh(branch),
-        fresh_from=allocator.start_point(branch, inputs.base_branch),
+        fresh_branch=name,
+        fresh_from=start,
     )
     context = Context(
         tree=tree,

@@ -21,7 +21,10 @@ from orchestrator.application.steps import (
 #: The spine's table, restated once so a drift in either direction fails here.
 SPINE = {
     "plan.check": ("deterministic", 5, frozenset(), True),
-    "git.worktree": ("deterministic", 5, frozenset({"base", "branch"}), False),
+    # Revised: the shipped-kinds row for `git.worktree` gained `mode`, whose one value
+    # `attach` takes the declared branch by its exact name at its origin head
+    # (multi-repo initiative S3, spine AD-7/AD-14 amendment, 2026-09-23).
+    "git.worktree": ("deterministic", 5, frozenset({"base", "branch", "mode"}), False),
     "git.sync": ("deterministic", 5, frozenset(), False),
     "shell": ("deterministic", 30, frozenset({"command"}), False),
     "agent": (

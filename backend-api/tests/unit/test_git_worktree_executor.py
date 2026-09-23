@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from orchestrator.application.steps import ATTACH_MODE
 from orchestrator.application.steps.context import NO_ENVIRONMENT, NO_WORKSPACE, StepExecutor
 from orchestrator.application.steps.git_worktree import (
     DIRTY,
@@ -178,6 +179,99 @@ def test_a_dirty_worktree_parks_misconfigured_naming_the_path() -> None:
     assert result.park.kind == "misconfigured"
     assert result.park.reason == DIRTY.format(path=WORKTREE)
     assert result.run_updates is None
+
+
+# ── mode: attach ────────────────────────────────────────────────────────────
+#
+# The declared branch is taken by its exact name, at its origin head (AD-7, AD-14, amended
+# 2026-09-23 by the multi-repository initiative). The planner has already decided the name;
+# what is the executor's is bringing *that* branch up to date before the worktree opens.
+
+
+def an_attach_row() -> StepRun:
+    return a_row(kind=KIND, with_resolved={**RESOLVED, "mode": ATTACH_MODE})
+
+
+def test_an_attach_row_brings_the_declared_branch_up_to_date_not_the_base() -> None:
+    git = FakeGit(base_exists=[True], branch_exists=[True])
+
+    GitWorktreeExecutor().execute(a_context(an_attach_row(), git=git))
+
+    assert [branch for _, branch in git.called("fetch_base")] == [BRANCH]
+
+
+def test_an_attach_row_checks_out_the_branch_the_origin_already_holds() -> None:
+    git = FakeGit(base_exists=[True], branch_exists=[True])
+
+    result = GitWorktreeExecutor().execute(a_context(an_attach_row(), git=git))
+
+    [(_, _, branch, start)] = git.called("worktree_add")
+    assert (branch, start) == (BRANCH, None)
+    assert result.run_updates is not None
+    assert result.run_updates.worktrees is not None
+    assert result.run_updates.worktrees[0].created_branch is False
+
+
+def test_an_attach_branch_the_origin_lacks_is_created_at_the_rows_own_base() -> None:
+    """Dispatch normally pre-creates the integration branch; the row still works if not."""
+    git = FakeGit(base_exists=[True], branch_exists=[False])
+
+    GitWorktreeExecutor().execute(a_context(an_attach_row(), git=git))
+
+    [(_, _, branch, start)] = git.called("worktree_add")
+    assert (branch, start) == (BRANCH, f"origin/{DEFAULT_BRANCH}")
+
+
+def test_an_attach_row_records_one_worktrees_entry_for_the_declared_branch() -> None:
+    result = GitWorktreeExecutor().execute(a_context(an_attach_row()))
+
+    assert result.run_updates is not None
+    assert result.run_updates.worktree_path == WORKTREE
+    assert result.run_updates.worktrees == (
+        a_worktree(branch=BRANCH, path=WORKTREE, created_branch=False),
+    )
+
+
+def test_a_dirty_worktree_is_refused_on_the_attach_path_too() -> None:
+    """Attach shares the branch; it does not share the right to throw work away."""
+    context = a_context(
+        an_attach_row(),
+        git=FakeGit(base_exists=[True], status=[" M src/thing.py\n"]),
+        workspace=FakeWorkspace(files=dict(PRESENT)),
+    )
+
+    result = GitWorktreeExecutor().execute(context)
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.reason == DIRTY.format(path=WORKTREE)
+
+
+def test_a_clean_worktree_on_an_attach_branch_is_reused_and_recorded_once() -> None:
+    git = FakeGit(base_exists=[True], status=[""])
+    context = a_context(
+        an_attach_row(),
+        git=git,
+        workspace=FakeWorkspace(files=dict(PRESENT)),
+        env=an_environment(worktrees=(a_worktree(created_branch=False),)),
+    )
+
+    result = GitWorktreeExecutor().execute(context)
+
+    assert result.reason == REUSED
+    assert git.called("worktree_add") == []
+    assert result.run_updates is not None
+    assert len(result.run_updates.worktrees or ()) == 1
+
+
+def test_a_mode_that_is_not_attach_fetches_the_base_as_any_other_row_does() -> None:
+    """The token is judged, not the presence of the key."""
+    git = FakeGit(base_exists=[True], branch_exists=[True])
+    row = a_row(kind=KIND, with_resolved={**RESOLVED, "mode": "detach"})
+
+    GitWorktreeExecutor().execute(a_context(row, git=git))
+
+    assert [branch for _, branch in git.called("fetch_base")] == [DEFAULT_BRANCH]
 
 
 # ── the install ─────────────────────────────────────────────────────────────

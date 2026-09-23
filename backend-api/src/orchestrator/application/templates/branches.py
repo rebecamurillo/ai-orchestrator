@@ -28,6 +28,15 @@ plan read would not be in the worktree the agent works in.
 The declared name keeps every other job it had. `Frame.branch` is still what `read_list`
 falls back to for a list file the base does not hold, and still what `plan_ref` asks the
 remote about; only the rows that create, push and link a branch see the fresh name.
+
+**One frame is exempt, deliberately.** A `git.worktree` declaring `with {mode: attach}`
+works *on* the branch it names — a repository's shared integration branch, which several
+Runs enter one after another on purpose (AD-7, AD-14). `attach` is that exemption: no
+ordinal, no read of the remote for one, and the name recorded as its own so `Plan.branches`
+still maps declared to worked-on for pre-flight and for AD-12's partition key. The
+fresh-branch guarantee is waived for those frames and for those only; what keeps two Runs
+off one integration branch at once is the `{repository_id}:{branch}` partition, not a name
+nobody else can have.
 """
 
 from __future__ import annotations
@@ -101,6 +110,21 @@ class BranchAllocator:
             return candidate
         raise PlanError(reason=NO_FREE_BRANCH, item=declared)
 
+    def attach(self, declared: str | None) -> str | None:
+        """The name an attach-mode frame works on: the declared one, exactly as written.
+
+        The allocator is bypassed as an *allocator* — no ordinal, and no `PlanReader.sha`
+        asking which ordinals are free — and kept as the ledger, because `Plan.branches` is
+        the one place pre-flight (AD-14) and the partition key (AD-12) read a declared name
+        back. Recorded as handed out too: an integration branch called `feat/x-1` must not
+        also be the ordinal some other declared `feat/x` is given.
+        """
+        if declared is None:
+            return None
+        self._fresh[declared] = declared
+        self._handed_out.add(declared)
+        return declared
+
     def start_point(self, declared: str | None, base: str) -> str:
         """Where the fresh branch begins: the declared branch, or the Template's own base.
 
@@ -111,6 +135,23 @@ class BranchAllocator:
         if declared is not None and self._reader.sha(declared) is not None:
             return declared
         return base
+
+
+def frame_branch(
+    allocator: BranchAllocator, declared: str | None, base_branch: str, *, attach: bool
+) -> tuple[str | None, str | None]:
+    """A frame's two branch fields: what its `git.*` rows name, and where a fresh one begins.
+
+    The one place the exemption is decided, so the root frame (`plan.py`) and a call's frame
+    (`rows.py`) cannot read `mode: attach` two ways. An attach frame has *no* fresh branch,
+    so it has no start point either and its `git.worktree` row keeps the `base` the Template
+    wrote — which is exactly the start point AD-7 gives it, because the executor checks the
+    declared branch out when the origin holds it and creates it at that `base` when it does
+    not.
+    """
+    if attach:
+        return allocator.attach(declared), None
+    return allocator.fresh(declared), allocator.start_point(declared, base_branch)
 
 
 def fresh_params(step: Step, frame: Frame, resolved: dict[str, Any]) -> dict[str, Any]:

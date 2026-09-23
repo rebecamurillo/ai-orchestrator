@@ -19,6 +19,16 @@ from `origin/{base}`. `git.push` reads the answer back off `run.worktrees[]` to 
 and `cancel` reads it to decide whether deleting the branch is safe (AD-13) — so a second
 opinion later would be a second, disagreeing answer.
 
+**`mode: attach` changes exactly one thing: which branch is brought up to date first.** The
+planner hands an attach row the branch by its exact name rather than a fresh ordinal of it
+(AD-7, `templates/branches.py`), and AD-7 asks for that branch "at its origin head" — so the
+base clone is fetched *for the declared branch* instead of for the row's `base`, and
+everything after it is the ordinary path: the branch the origin holds is checked out, one it
+does not is created at `origin/{base}`, a clean worktree is reused and a dirty one refused.
+Sharing the branch across Runs is the point of the mode (AD-14 waives the fresh-branch
+guarantee for these frames); AD-12's `{repository_id}:{branch}` partition is what keeps two
+of them from writing it at once.
+
 **`install_command` runs inside `git.worktree`, not as a row of its own** (AD-14, spine
 "Shipped kinds"): `epic@1` has no install step, and a Repository that declares no command has
 nothing to run rather than an empty row to explain. Its output goes to the row's own log,
@@ -35,6 +45,7 @@ from pathlib import Path
 
 import structlog
 
+from orchestrator.application.steps import ATTACH_MODE, WORKTREE_MODE_KEY
 from orchestrator.application.steps.context import (
     RunEnvironment,
     StepContext,
@@ -53,7 +64,9 @@ log = structlog.get_logger(__name__)
 #: The kind this module implements (AD-9: named here, beside the executor, or nowhere).
 KIND = "git.worktree"
 
-#: The two `with` keys `KIND_META` admits on this kind.
+#: Two of the three `with` keys `KIND_META` admits on this kind. The third, `mode`, and its
+#: one value come from the kind table itself rather than being spelled again here, because
+#: the planner judges that same token (AD-9: a kind's vocabulary is named once or nowhere).
 BASE_KEY = "base"
 BRANCH_KEY = "branch"
 
@@ -101,8 +114,9 @@ class GitWorktreeExecutor:
             )
         branch = str(ctx.with_resolved[BRANCH_KEY])
         base = str(ctx.with_resolved[BASE_KEY])
+        attached = ctx.with_resolved.get(WORKTREE_MODE_KEY) == ATTACH_MODE
         worktree = env.worktree_dir(ctx.ports.work_dir, branch)
-        _ensure_base(ctx, env, base)
+        _ensure_base(ctx, env, branch if attached else base)
         opened = _open_worktree(ctx, env, branch=branch, base=base)
         if isinstance(opened, StepResult):
             return opened
@@ -110,11 +124,18 @@ class GitWorktreeExecutor:
         return _install(ctx, env, worktree, updates, opened.reason)
 
 
-def _ensure_base(ctx: StepContext, env: RunEnvironment, base: str) -> None:
-    """Clone the base when it is not there, and bring it up to date when it is (AD-14)."""
+def _ensure_base(ctx: StepContext, env: RunEnvironment, branch: str) -> None:
+    """Clone the base when it is not there, and bring it up to date when it is (AD-14).
+
+    `branch` is the row's `base` on the ordinary path and the *declared* branch on the
+    attach path — the branch the worktree is about to be put on, which AD-7 wants at its
+    origin head. `fetch_base` brings every head up to date either way and then points the
+    base clone's own `HEAD` at the one named, so naming the attach branch is what makes "at
+    its origin head" a statement about this row rather than a coincidence of the refspec.
+    """
     git, base_dir = ctx.ports.git, env.base_dir(ctx.ports.work_dir)
     if git.base_exists(base_dir):
-        git.fetch_base(base_dir, base)
+        git.fetch_base(base_dir, branch)
     else:
         git.clone_base(env.repository_url, base_dir)
 

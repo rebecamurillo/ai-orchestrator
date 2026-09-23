@@ -38,7 +38,7 @@ from orchestrator.application.templates.agent_row import (
     agent_extras,
     prompt_extra,
 )
-from orchestrator.application.templates.branches import BranchAllocator, fresh_params
+from orchestrator.application.templates.branches import BranchAllocator, frame_branch, fresh_params
 from orchestrator.application.templates.lists import (
     EPICS_KIND,
     ID_KEY,
@@ -69,6 +69,7 @@ from orchestrator.application.templates.plan_model import (
     PlanError,
     Redispatched,
     ResolvedTree,
+    attach_mode,
     working_branch,
 )
 from orchestrator.application.templates.reader import PlanReader
@@ -130,10 +131,12 @@ class Frame:
     #: What the file *declared*: the name the plan is read at, never the name created.
     branch: str | None = None
     #: The name this Run creates instead (`branches.py`), carried by every `git.*` row of
-    #: the frame. `None` for a Template that checks nothing out.
+    #: the frame. `None` for a Template that checks nothing out, and the declared name
+    #: itself for a `mode: attach` checkout, which creates no name of its own (AD-7).
     fresh_branch: str | None = None
     #: Where that fresh branch begins — the declared branch when the remote holds it, so
-    #: the worktree holds the tree the plan was read from.
+    #: the worktree holds the tree the plan was read from; `None` for an attach frame,
+    #: which has none and leaves its row's `base` exactly as the Template wrote it.
     fresh_from: str | None = None
     #: True inside a `for_each` item: what makes `PlannedRow.frame` a frame and not a path.
     in_loop: bool = False
@@ -215,14 +218,17 @@ def expand_call(step: Step, call: TemplateCall, frame: Frame, ctx: Context) -> l
         )
     scope = {name: resolve(value, frame.scope) for name, value in call.inputs}
     declared = working_branch(callee, scope)
+    name, start = frame_branch(
+        ctx.allocator, declared, ctx.inputs.base_branch, attach=attach_mode(callee, scope)
+    )
     inner = replace(
         frame,
         prefix=frame.prefix if frame.in_loop else _joined(frame.prefix, step.id),
         scope=scope,
         template=callee,
         branch=declared,
-        fresh_branch=ctx.allocator.fresh(declared),
-        fresh_from=ctx.allocator.start_point(declared, ctx.inputs.base_branch),
+        fresh_branch=name,
+        fresh_from=start,
         item_name=None,
     )
     return expand(callee.steps, inner, ctx)

@@ -25,8 +25,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from orchestrator.application.steps import KIND_META, WORKTREE_KIND
-from orchestrator.application.templates.model import ForEach, ParsedTemplate
+from orchestrator.application.steps import (
+    ATTACH_MODE,
+    KIND_META,
+    WORKTREE_KIND,
+    WORKTREE_MODE_KEY,
+)
+from orchestrator.application.templates.model import ForEach, ParsedTemplate, Step
 from orchestrator.application.templates.substitute import resolve
 from orchestrator.domain.entities.template import TemplateRef
 from orchestrator.domain.errors import Invalid
@@ -173,10 +178,33 @@ def working_branch(template: ParsedTemplate, scope: Mapping[str, Any]) -> str | 
     Template that checks nothing out itself — `initiative@1`, whose worktree is inside the
     epic frame — works from the base branch instead.
     """
+    checkout = _checkout_step(template)
+    if checkout is None:
+        return None
+    return _branch_name(resolve(dict(checkout.params).get(BRANCH_KEY), scope))
+
+
+def attach_mode(template: ParsedTemplate, scope: Mapping[str, Any]) -> bool:
+    """Whether this Template's checkout attaches to the branch it declares (AD-7).
+
+    Read off the same step `working_branch` reads, and for the same reason: `mode` is a key
+    of the `git.worktree` kind, so a Template that declared it anywhere else has not asked
+    for an attach. Anything but the one token is not an attach either — the value is
+    free-form at validation time (`keys.py` checks `with` **keys**, not their values, for
+    every kind but the `template` call), so this is where the token is judged.
+    """
+    checkout = _checkout_step(template)
+    if checkout is None:
+        return False
+    return bool(resolve(dict(checkout.params).get(WORKTREE_MODE_KEY), scope) == ATTACH_MODE)
+
+
+def _checkout_step(template: ParsedTemplate) -> Step | None:
+    """The `git.worktree` step this Template checks out with, or `None` for one with none."""
     for entry in template.steps:
         if isinstance(entry, ForEach) or entry.uses != WORKTREE_KIND:
             continue
-        return _branch_name(resolve(dict(entry.params).get(BRANCH_KEY), scope))
+        return entry
     return None
 
 
