@@ -128,7 +128,16 @@ def spec_checkpoint(
             "base_branch": "main",
             "budget_usd": "5",
             "harness": "fake",
-            "inputs": {"spec_folder": SPEC_FOLDER, "branch": f"{DECLARED_BRANCH}-{uuid4().hex}"},
+            "inputs": {
+                "spec_folder": SPEC_FOLDER,
+                "branch": f"{DECLARED_BRANCH}-{uuid4().hex}",
+                # Revised (S5, multi-repo initiative, 2026-09-23): epic@1's tail
+                # `done-checkpoint` plans `skipped · no checkpoint` unless
+                # `done_checkpoint` resolves truthy (AD-7 amendment). This suite exists
+                # to walk that very checkpoint, so it has to bind the input, not leave it
+                # to a planner default that no longer exists.
+                "done_checkpoint": "true",
+            },
         },
     )
     assert started.status_code == HTTP_CREATED, started.text

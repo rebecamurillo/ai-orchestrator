@@ -27,10 +27,6 @@ HTTP_UNPROCESSABLE = 422
 
 TEMPLATES = "/api/v1/templates"
 
-#: `epic@1`'s own input count (SPEC CAP-3 AC): project, repository, base_branch, branch,
-#: spec_folder, epic, harness, model.
-EPIC_INPUT_COUNT = 8
-
 #: The version number a save answers with once a name already holds one version.
 SECOND_VERSION = 2
 
@@ -65,7 +61,17 @@ def test_epic_1_shows_its_call_its_caller_and_its_inputs(authenticated: httpx.Cl
     assert body["calls"] == [{"name": "story", "version": 1}]
     assert {"name": "initiative", "version": 1} in body["called_by"]
     assert body["pinned_by"] == 0
-    assert len(body["inputs"]) == EPIC_INPUT_COUNT
+    # Revised: an exact input count pinned shipped template content, which the
+    # exemplar-freeze ruling (2026-09-10) forbids — and it broke the moment S5 added
+    # `done_checkpoint` to epic@1 (multi-repo initiative, 2026-09-23). Structural in its
+    # place: every declared input carries its full shape, whatever epic@1 currently lists.
+    assert body["inputs"], body["inputs"]
+    for decl in body["inputs"]:
+        assert decl.keys() >= {"name", "type", "required", "default", "values"}, decl
+        assert isinstance(decl["name"], str) and decl["name"]
+        assert isinstance(decl["type"], str) and decl["type"]
+        assert isinstance(decl["required"], bool)
+        assert isinstance(decl["values"], list)
     assert body["hash"]
     assert body["created_at"]
 
