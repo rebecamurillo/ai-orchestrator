@@ -1,0 +1,147 @@
+name: initiative-hub-epic
+version: 1
+description: one epic of a hub-Run initiative, driven inside its member submodule
+inputs:
+  project:      { type: project,    required: true }
+  repository:   { type: repository, required: true }  # the hub
+  base_branch:  { type: string,     required: true }
+  branch:       { type: string,     required: true }   # the initiative branch, bound by the
+                                                          # caller — never allocated here (this
+                                                          # file checks nothing out itself)
+  spec_folder:  { type: path,       required: true }   # holds SPEC.md, stories.yaml,
+                                                          # stories/ — at the hub, never inside
+                                                          # the submodule
+  workdir:      { type: string,     required: true }   # repository-relative path of this
+                                                          # epic's member submodule
+  install:      { type: string,     required: false }  # the epic's full setup command
+  test:         { type: string,     required: false }  # the epic's full per-story command
+  quality_gate: { type: string,     required: false }  # the epic's full end-to-end command
+  epic:         { type: item,       required: false }  # bound when called from
+                                                          # initiative-hub@1 — see epic.yaml's
+                                                          # own `epic` input for why an `agent`
+                                                          # step with no story in scope still
+                                                          # wants this bound
+  harness:      { type: enum, values: [claude, codex, local], default: claude }
+  model:        { type: string,     required: false }
+  # This file is a callee only, never a root `create_run` accepts (like `story@1`), so unlike
+  # `epic@1` it declares no `done_checkpoint` input and runs no tail `checkpoint` step: the
+  # caller's `epics` loop already plans one `checkpoint` row per epic via its own
+  # `pause_after_item_when: epic.done_checkpoint` (see `initiative-hub.yaml`), and a second
+  # row here would stop the Run twice for one epic. `epic@1` carries the tail step because it
+  # is also callable directly, where nothing outside it would ever plan that stop; this file
+  # has no such case to cover.
+steps:
+  # Create or check out the initiative branch inside this epic's own submodule — cut from
+  # `origin/{{branch}}` when the member's remote already holds it, from `{{base_branch}}`
+  # otherwise (AD-7, AD-14). The branch name is taken exactly, never allocated: it lives in
+  # the submodule's own repository, which this Run's allocator cannot reason about.
+  - id: branch
+    uses: git.submodule
+    with: { workdir: "{{workdir}}", branch: "{{branch}}", base: "{{base_branch}}" }
+    gate: deterministic
+
+  # The whole command, `cd` included, is `epics.yaml`'s own data (see `initiative-hub.yaml`'s
+  # header): an entry that leaves this field out plans `skipped · no command`, never a
+  # bare shell command reaching for a folder nobody named.
+  - id: setup
+    run: "{{install}}"
+    timeout_min: 20
+    gate: deterministic
+
+  - id: baseline
+    run: "{{test}}"
+    on_fail: fail
+    gate: deterministic
+
+  # No `workdir`: the spec lives at the hub, so this agent runs at the worktree root, exactly
+  # as `epic@1`'s own `spec-gate` does.
+  - id: spec-gate
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: spec-gate
+      args: { folder: "{{spec_folder}}" }
+    expect:
+      files: ["{{spec_folder}}/spec-gate-result.md"]
+      status_in: [done, blocked]
+    timeout_min: 30
+    gate: liveness
+
+  - id: stories
+    for_each: "{{spec_folder}}/stories.yaml"
+    as: story
+    pause_after_item_when: "story.done_checkpoint"
+    steps:
+      - id: story
+        uses: template
+        with:
+          name: initiative-hub-story
+          version: 1
+          inputs:
+            project: "{{project}}"
+            repository: "{{repository}}"
+            branch: "{{branch}}"
+            spec_folder: "{{spec_folder}}"
+            workdir: "{{workdir}}"
+            story: "{{story}}"
+            test: "{{test}}"
+            harness: "{{harness}}"
+            model: "{{model}}"
+
+  # Unlike `spec-gate` and `retro`, this one carries `workdir`: the tests it writes are the
+  # member repository's own, so it dispatches inside the submodule and its Story-shaped
+  # write lands there rather than at the hub.
+  - id: gen-e2e
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: bmad-qa-generate-e2e-tests
+      args: { folder: "{{spec_folder}}" }
+      workdir: "{{workdir}}"
+    timeout_min: 30
+    gate: liveness
+
+  - id: commit-e2e
+    uses: git.commit
+    with: { workdir: "{{workdir}}", message: "e2e: generated tests (orchestrator)" }
+    gate: deterministic
+
+  - id: e2e
+    run: "{{quality_gate}}"
+    on_fail: { redispatch: gen-e2e, max: 2 }
+    timeout_min: 45
+    gate: deterministic
+
+  # No `workdir`: the retrospective writes into the spec folder, which lives at the hub.
+  - id: retro
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: bmad-retrospective
+      args: { folder: "{{spec_folder}}" }
+    timeout_min: 30
+    gate: liveness
+
+  # Hub-side, no `workdir`: stages the spec folder (SPEC.md, stories.yaml, every Story file
+  # the epic's stories wrote, the retro's own output) and everything else uncommitted at the
+  # worktree root, then commits it in one row. This is also where every Story frame's own
+  # hub-side writes land — `initiative-hub-story@1`'s `commit-guard` commits only the
+  # submodule (see that file's own note) — so this row is the one place per epic the hub's
+  # spec folder actually reaches a commit.
+  - id: commit-retro
+    uses: git.commit
+    with: { message: "retro: epic retrospective (orchestrator)" }
+    gate: deterministic
+
+  - id: push-code
+    uses: git.push
+    with: { workdir: "{{workdir}}", branch: "{{branch}}" }
+    gate: deterministic
+
+  - id: push-hub
+    uses: git.push
+    with: { branch: "{{branch}}" }
+    gate: deterministic

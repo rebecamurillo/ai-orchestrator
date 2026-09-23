@@ -1,0 +1,71 @@
+name: initiative-hub-story
+version: 1
+description: one story of a hub-Run initiative, built inside its member submodule
+inputs:
+  project:     { type: project,    required: true }
+  repository:  { type: repository, required: true }  # the hub
+  branch:      { type: string,     required: true }
+  spec_folder: { type: path,       required: true }   # at the hub
+  workdir:     { type: string,     required: true }   # this epic's member submodule
+  story:       { type: item,       required: true }   # bound by the caller's for_each
+  test:        { type: string,     required: false }  # the epic's full per-story command
+  harness:     { type: enum, values: [claude, codex, local], default: claude }
+  model:       { type: string,     required: false }
+steps:
+  # Hub-side, no `workdir`: the specs live at the hub, so a fast-forward here is how an
+  # Operator's inline edit to `stories.yaml` or a Story file reaches this frame before it
+  # dispatches — exactly the reason `story@1` opens with this same row.
+  - id: sync
+    uses: git.sync
+    gate: deterministic
+
+  # `workdir` moves the dispatch into the member checkout; the Story file itself still lands
+  # at the hub, because `agent_workdir.py::prompt_scope` absolutises `spec_folder` into the
+  # dispatch sentence for exactly this row shape (AD-9, AD-17) — `expect.files` below stays
+  # run-root relative, the way a `Workspace` rooted at the worktree root reads it.
+  - id: build
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: bmad-build-auto
+      args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
+      prompt_extra: "{{story.invoke_dev_with}}"
+      workdir: "{{workdir}}"
+    expect:
+      files: ["{{spec_folder}}/stories/{{story.id}}-*.md"]
+      status_in: [done, blocked, ready-for-dev]
+    retry:
+      max: 2
+      # Never a run-root-relative path here: a resumed session gets this prompt alone, with
+      # no dispatch sentence in front of it to absolutise `spec_folder` first (`steps/agent.
+      # py::_planned`), so `{{spec_folder}}/stories/{{story.id}}-*.md` would resolve against
+      # the member checkout this row's session is sitting in and name the wrong folder. The
+      # dispatch sentence the session already read named the real one.
+      prompt: "No story file with a terminal status was found for story {{story.id}} in the spec folder named in the dispatch sentence. Finish the story and write that file, or set status: blocked with the reason."
+      resume_session: true
+    escalate_when: "output.status == blocked"
+    pause_when: "story.spec_checkpoint"
+    timeout_min: 90
+    gate: liveness
+
+  # The full command, `cd` included, is the epic's own data (`initiative-hub.yaml`'s
+  # header): `shell` rows take no `workdir` of their own, so scoping this to the member
+  # checkout is what the passed-down `{{test}}` string already does.
+  - id: verify
+    run: "{{test}}"
+    on_fail: { redispatch: build, max: 1 }
+    timeout_min: 30
+    gate: deterministic
+
+  # `workdir` here too: this row's protected-path check reads this frame's agent range from
+  # the same tree `build` dispatched in (`walk_frame.py::frame_anchors`), and `git.commit`'s
+  # own `workdir` branch stages and commits only that submodule — never the hub. The Story
+  # file `build` wrote at the hub stays uncommitted until `initiative-hub-epic@1`'s
+  # `commit-retro` sweeps the whole spec folder in one row at the end of the epic; nothing
+  # in between needs it committed sooner; `sync`'s fast-forward tolerates an uncommitted
+  # tree exactly as `git merge --ff-only` always has.
+  - id: commit-guard
+    uses: git.commit
+    with: { workdir: "{{workdir}}", message: "story {{story.id}}: {{story.title}} (orchestrator)" }
+    gate: deterministic

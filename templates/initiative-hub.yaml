@@ -1,0 +1,86 @@
+name: initiative-hub
+version: 1
+description: >-
+  every epic of one initiative, in one Run, driven from a hub repository whose repos/*
+  submodules are the member repositories' working folders (AD-9, AD-12, AD-14)
+inputs:
+  project:           { type: project,    required: true }
+  repository:        { type: repository, required: true }  # the hub
+  base_branch:        { type: string,     required: true }
+  branch:             { type: string,     required: true }  # the initiative branch — shared
+                                                              # by the hub and every submodule
+  initiative_folder:  { type: path,       required: true }  # holds epics.yaml + one spec
+                                                              # folder per epic, all at the hub
+  harness:            { type: enum, values: [claude, codex, local], default: claude }
+  model:              { type: string,     required: false }
+
+# --- the epics.yaml convention this Run's callees read (H3, 2026-09-23) --------------------
+# One Run, one branch, every epic sequential — so this file's `epics.yaml` carries more than
+# the fan-in path's does. The list-file contract every `epics.yaml` must meet still applies
+# (`id`, `title`, `branch`, `spec_folder` — `lists.py::REQUIRED_FIELDS`); `branch` is read by
+# the fan-in dispatch path only and is unused here, because every epic works on this Run's
+# one `branch` input instead of a branch of its own. The hub-Run fields, read by
+# `initiative-hub-epic@1`:
+#
+#   workdir:         repository-relative path of the epic's member submodule, e.g. repos/api
+#   install:         the epic's FULL setup command, `cd` included, e.g.
+#                     "cd repos/api && yarn install"
+#   test:            the epic's FULL per-story verify command, `cd` included
+#   quality_gate:    the epic's FULL end-to-end command, `cd` included
+#   done_checkpoint: "true" to stop after this epic — read by the `epics` loop below, the
+#                     same way `initiative@1` reads it; see that file's own note on why
+#                     there is no `bool` type to declare it as
+#
+# `install`/`test`/`quality_gate` are each optional: an entry that omits one plans that row
+# `skipped · no command` (AD-7) — never a plan-time error. That is exactly why every command
+# a callee runs is the bare field (`run: "{{install}}"`) and never a template-built command
+# (`run: "cd {{workdir}} && {{install}}"`): `cd {{workdir}} && ` with an unbound trailing
+# field is not an empty string, so it would never be skipped and would run a bare `cd` as a
+# unit test command instead of skipping cleanly. The whole command, `cd` included, is
+# `epics.yaml`'s own data — the Operator who writes the entry is the one who knows the
+# member repository's own layout, and the Template never guesses it.
+steps:
+  # `mode: attach` is what makes this Run work *on* the initiative branch rather than be
+  # given a fresh ordinal of it: every submodule checkout below is cut from this same name,
+  # by its exact spelling, because `git.submodule`'s own branch is exempt from allocation too
+  # (AD-7, AD-14) — one declared name, taken exactly, on both sides of the gitlink.
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "{{branch}}", mode: attach }
+    gate: deterministic
+
+  # The bare form: init + update every `repos/*` submodule this hub declares, so the Run has
+  # a workdir to run each epic's steps in before the first one is dispatched.
+  - id: submodules
+    uses: git.submodule
+    gate: deterministic
+
+  - id: epics
+    for_each: "{{initiative_folder}}/epics.yaml"
+    as: epic
+    # The stop after one epic: read here, at the loop that owns it, exactly as `initiative@1`
+    # reads `epic.done_checkpoint` — never re-declared as a tail step inside the callee, so
+    # one epic costs one checkpoint row and not two (see `initiative-hub-epic.yaml`'s own
+    # note on this).
+    pause_after_item_when: "epic.done_checkpoint"
+    # parallel: reserved; sequential in the MVP, list order is the dependency, exactly as
+    # `initiative@1`'s own loop states it
+    steps:
+      - id: epic
+        uses: template
+        with:
+          name: initiative-hub-epic
+          version: 1
+          inputs:
+            project: "{{project}}"
+            repository: "{{repository}}"
+            base_branch: "{{base_branch}}"
+            branch: "{{branch}}"
+            spec_folder: "{{initiative_folder}}/{{epic.spec_folder}}"
+            workdir: "{{epic.workdir}}"
+            epic: "{{epic}}"
+            install: "{{epic.install}}"
+            test: "{{epic.test}}"
+            quality_gate: "{{epic.quality_gate}}"
+            harness: "{{harness}}"
+            model: "{{model}}"
