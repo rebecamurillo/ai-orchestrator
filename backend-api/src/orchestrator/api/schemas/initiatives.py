@@ -1,4 +1,4 @@
-"""The HTTP shape of the three initiative routes (AD-12, AD-13; spine routes row).
+"""The HTTP shape of the four initiative routes (AD-12, AD-13; spine routes row).
 
 `InitiativeIn` is one body for both `POST /initiatives/preflight` and `POST /initiatives`:
 the dispatch is the pre-flight plus the writes, so two bodies would be two chances for the
@@ -9,6 +9,9 @@ time by the use case.
 
 `GET /initiatives/{slug}` answers a single object, like every other detail endpoint here;
 `{items, next_cursor}` is the list convention and this read is not a list.
+
+`InitiativeSignalIn`/`InitiativeSignalOut` (S8) are `POST /initiatives/{slug}/signals`'s own
+body and result — AD-13's "the only signal surface above a single Run".
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ from orchestrator.application.use_cases.initiative_view import (
     MemberView,
     RepoView,
 )
+from orchestrator.application.use_cases.signal_initiative import SignalInitiativeOutcome
 from orchestrator.domain.statuses import InitiativeRole, ParkKind, RunStatus
 
 #: The same `> 0` rule `POST /runs` puts on a budget; `null` leaves the epic Runs uncapped.
@@ -246,3 +250,26 @@ class InitiativeOut(BaseModel):
             repos=[InitiativeRepoViewOut.of(repo) for repo in view.repos],
             members=[InitiativeMemberOut.of(member) for member in view.members],
         )
+
+
+class InitiativeSignalIn(BaseModel):
+    """`POST /initiatives/{slug}/signals`'s body (AD-13, S8): one signal kind, and nothing
+    else — `cancel` is the only one this surface admits, and carries no payload of its own.
+    `kind` is a plain `str` rather than `SignalKind`: any other value is well-formed at the
+    schema level and refused by `signal_initiative` itself with the domain `Invalid` (422)
+    the story asks for, the same way `signal_run.py::_check_mode` refuses an unknown `mode`.
+    """
+
+    kind: str
+
+
+class InitiativeSignalOut(BaseModel):
+    """`POST /initiatives/{slug}/signals`'s body: what was signalled, and what was already
+    terminal and so left alone."""
+
+    signalled: list[UUID]
+    skipped: list[UUID]
+
+    @classmethod
+    def of(cls, outcome: SignalInitiativeOutcome) -> InitiativeSignalOut:
+        return cls(signalled=list(outcome.signalled), skipped=list(outcome.skipped))

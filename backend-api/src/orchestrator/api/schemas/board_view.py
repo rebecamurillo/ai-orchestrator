@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from orchestrator.api.schemas.common import UtcTimestamp
 from orchestrator.application.use_cases.run_views import BoardView, Card, Progress
-from orchestrator.domain.statuses import ParkKind, RunStatus
+from orchestrator.domain.statuses import InitiativeRole, ParkKind, RunStatus
 
 
 class ProgressOut(BaseModel):
@@ -53,6 +53,12 @@ class CardOut(BaseModel):
     kind_label: str | None
     age_seconds: float
     needs_you_since: UtcTimestamp | None
+    #: The initiative this Run is a member of, and the part it plays in it (AD-12, S8) —
+    #: `RunSummaryOut`'s own two fields, carried here so a Board card or list row can show
+    #: the initiative badge too (`src/lib/initiative/badge.ts`). `null` for a Run started on
+    #: its own. Defaulted so every existing web-client fixture keeps compiling (AD-3).
+    initiative: str | None = None
+    initiative_role: InitiativeRole | None = None
 
     @classmethod
     def of(cls, card: Card) -> CardOut:
@@ -72,6 +78,8 @@ class CardOut(BaseModel):
             kind_label=card.kind_label,
             age_seconds=card.age_seconds,
             needs_you_since=card.needs_you_since,
+            initiative=card.initiative,
+            initiative_role=card.initiative_role,
         )
 
 

@@ -126,6 +126,43 @@ export function hasActiveMember(view: InitiativeOut): boolean {
   return view.members.some((member) => ACTIVE_STATUSES.has(member.status));
 }
 
+/** The statuses `POST /initiatives/{slug}/signals {kind: cancel}` (S8) still finds something
+ * to do for — `signal_initiative.py`'s own gate reads AD-13's `cancel` row directly, and its
+ * `run_statuses` is every non-terminal status, so this mirrors `ACTIVE_STATUSES` above rather
+ * than importing it: the two questions ("is anything still moving" and "is anything still
+ * cancellable") happen to read the same three tokens today, but they are asked for different
+ * reasons and a status that answers only one of them stays free to diverge from the other. */
+const CANCELLABLE_STATUSES: ReadonlySet<InitiativeMemberOut['status']> = new Set([
+  'queued',
+  'running',
+  'needs_you',
+]);
+
+/** Whether the Cancel initiative control does anything right now — `false` once every member
+ * has reached `done`/`failed`/`cancelled` (S8's own scope: "visible/enabled only when a
+ * member is still cancellable"). */
+export function hasCancellableMember(view: InitiativeOut): boolean {
+  return view.members.some((member) => CANCELLABLE_STATUSES.has(member.status));
+}
+
+/** `POST /initiatives/{slug}/signals`'s body: `cancel` is the one kind this surface admits
+ * (AD-13). */
+export function cancelInitiativeBody(): { kind: 'cancel' } {
+  return { kind: 'cancel' };
+}
+
+/** The request path `FailedFetch`-shaped refusals show for the cancel signal — computed
+ * rather than read off a `Response.url` (`detailRequestPath`'s own reason above). */
+export function signalsRequestPath(slug: string): string {
+  return `/api/initiatives/${encodeURIComponent(slug)}/signals`;
+}
+
+/** `cancel initiative {slug}? every running or waiting member Run is cancelled` — the
+ * confirm's own sentence (NFR-8: names the mechanism, states no more than the fact). */
+export function cancelConfirmText(slug: string): string {
+  return `cancel initiative ${slug}? every running or waiting member run is cancelled, dependents first`;
+}
+
 /** The request path `FailedFetch` shows and the one this island's `api.GET` call always
  * makes — computed rather than read off a `Response.url` (`board/format.ts::
  * boardRequestPath`'s own reason). */

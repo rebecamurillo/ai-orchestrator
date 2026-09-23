@@ -12,24 +12,37 @@
  * this slug — so it gets its own readout (`NO INITIATIVE UNDER {slug}`, `EmptyState.astro`'s
  * own visual language, S7's own required text) rather than `FailedFetch`'s retry-a-network-
  * call framing.
+ *
+ * **Cancel initiative (S8).** Beside the slug headline, visible/enabled only while
+ * `hasCancellableMember` finds a member still queued, running or `needs_you` — a settled
+ * initiative has nothing left for `POST /initiatives/{slug}/signals {kind: cancel}` to do.
+ * `CancelInitiativeModal` confirms; on success this re-fetches (`RunDetail.tsx`'s own rule:
+ * a signal always re-fetches rather than patching local state, AD-8's two writers again).
  */
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
 
 import { api } from '../api/client';
+import type { components } from '../api/schema';
 import FailedFetch from '../components/FailedFetch';
+import CancelInitiativeModal from '../components/initiative/CancelInitiativeModal';
 import MemberRow from '../components/initiative/MemberRow';
 import RepoSection from '../components/initiative/RepoSection';
 import {
+  cancelInitiativeBody,
   detailRequestPath,
   golivemembers,
   hasActiveMember,
+  hasCancellableMember,
   notFoundHeadline,
   repoGroups,
+  signalsRequestPath,
   type InitiativeOut,
 } from '../lib/initiative/view';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
 import '../styles/initiative-detail.css';
+
+type ProblemDetail = components['schemas']['ProblemDetail'];
 
 interface Props {
   slug: string;
@@ -44,6 +57,9 @@ type Phase =
 export default function InitiativeDetail({ slug }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [view, setView] = useState<InitiativeOut | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [signalError, setSignalError] = useState<ProblemDetail | null>(null);
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
@@ -86,6 +102,32 @@ export default function InitiativeDetail({ slug }: Props) {
     void fetchDetail();
   }, [pollTick]);
 
+  async function cancelInitiative(): Promise<void> {
+    setPosting(true);
+    setSignalError(null);
+    try {
+      const { error } = await api.POST('/initiatives/{slug}/signals', {
+        params: { path: { slug } },
+        body: cancelInitiativeBody(),
+      });
+      if (error) {
+        setSignalError(error);
+        return;
+      }
+      setCancelOpen(false);
+      await fetchDetail();
+    } catch {
+      setSignalError({
+        status: 0,
+        title: 'the request failed',
+        type: 'about:blank',
+        detail: `POST ${signalsRequestPath(slug)} → network error`,
+      });
+    } finally {
+      setPosting(false);
+    }
+  }
+
   if (phase.kind === 'loading') return null;
 
   if (phase.kind === 'not-found') {
@@ -111,10 +153,27 @@ export default function InitiativeDetail({ slug }: Props) {
 
   const groups = repoGroups(view);
   const golive = golivemembers(view);
+  const cancellable = hasCancellableMember(view);
 
   return (
     <div className="newin-detail" data-testid="newin-detail">
-      <h1 className="newin-detail-headline">{view.slug}</h1>
+      <div className="newin-detail-head">
+        <h1 className="newin-detail-headline">{view.slug}</h1>
+        <button
+          type="button"
+          className="newin-signal newin-cancel"
+          data-testid="newin-cancel-trigger"
+          disabled={!cancellable}
+          onClick={() => setCancelOpen(true)}
+        >
+          Cancel initiative
+        </button>
+      </div>
+      {signalError ? (
+        <p className="newin-signal-error" data-testid="newin-signal-error">
+          {signalError.detail ?? signalError.title}
+        </p>
+      ) : null}
       {groups.map((group) => (
         <RepoSection key={group.repositoryId} group={group} members={view.members} />
       ))}
@@ -125,6 +184,14 @@ export default function InitiativeDetail({ slug }: Props) {
             <MemberRow key={member.run_id} member={member} members={view.members} />
           ))}
         </div>
+      ) : null}
+      {cancelOpen ? (
+        <CancelInitiativeModal
+          slug={view.slug}
+          posting={posting}
+          onConfirm={() => void cancelInitiative()}
+          onDismiss={() => setCancelOpen(false)}
+        />
       ) : null}
     </div>
   );

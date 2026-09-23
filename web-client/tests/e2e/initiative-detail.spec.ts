@@ -125,4 +125,78 @@ test.describe('/workflows/initiative/[slug]', () => {
     await expect(page.getByTestId('newin-not-found')).toContainText(`NO INITIATIVE UNDER ${SLUG}`);
     await expect(page.getByTestId('fetch-failed')).toHaveCount(0);
   });
+
+  // ── initiative-wide cancel (S8, AD-13) ─────────────────────────────────────
+
+  test('Cancel initiative is disabled once every member has settled', async ({ page }) => {
+    await mockDetail(
+      page,
+      view({
+        members: view().members.map((member: Record<string, unknown>) => ({
+          ...member,
+          status: 'done',
+          park_kind: null,
+        })),
+      }),
+    );
+
+    await page.goto(`/workflows/initiative/${SLUG}`);
+
+    await expect(page.getByTestId('newin-cancel-trigger')).toBeDisabled();
+  });
+
+  test('Cancel initiative: confirming posts {kind: cancel}; dismissing posts nothing', async ({
+    page,
+  }) => {
+    await mockDetail(page, view());
+    await page.goto(`/workflows/initiative/${SLUG}`);
+    await expect(page.getByTestId('newin-cancel-trigger')).toBeEnabled();
+
+    let calls = 0;
+    await page.route(`**/api/initiatives/${SLUG}/signals`, (route: Route) => {
+      calls += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ signalled: [RUN_A_EPIC, RUN_A_MERGE, RUN_GOLIVE], skipped: [] }),
+      });
+    });
+
+    await page.getByTestId('newin-cancel-trigger').click();
+    await expect(page.getByTestId('newin-cancel-confirm')).toContainText(
+      `cancel initiative ${SLUG}?`,
+    );
+    await expect(page.getByTestId('newin-cancel-confirm')).toContainText('dependents first');
+
+    await page.getByTestId('newin-cancel-confirm-no').click();
+    await expect(page.getByTestId('newin-cancel-confirm')).toHaveCount(0);
+    expect(calls).toBe(0);
+
+    await page.getByTestId('newin-cancel-trigger').click();
+    let posted: Record<string, unknown> | null = null;
+    await page.route(`**/api/initiatives/${SLUG}/signals`, (route: Route) => {
+      posted = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ signalled: [RUN_A_EPIC, RUN_A_MERGE, RUN_GOLIVE], skipped: [] }),
+      });
+    });
+    await mockDetail(
+      page,
+      view({
+        members: view().members.map((member: Record<string, unknown>) => ({
+          ...member,
+          status: 'cancelled',
+          park_kind: null,
+        })),
+      }),
+    );
+
+    await page.getByTestId('newin-cancel-confirm-yes').click();
+
+    await expect.poll(() => posted).not.toBeNull();
+    expect(posted!.kind).toBe('cancel');
+    await expect(page.getByTestId('newin-cancel-confirm')).toHaveCount(0);
+  });
 });

@@ -96,6 +96,16 @@ describe('RunCard', () => {
     expect(markup).not.toContain('data-left-rule');
   });
 
+  it('renders the initiative badge when the card is a member (S8)', () => {
+    const markup = render({ initiative: 'q4', initiative_role: 'epic' });
+    expect(markup).toContain('run-card-initiative');
+    expect(markup).toContain('q4 · epic');
+  });
+
+  it('omits the initiative badge for a Run started on its own', () => {
+    expect(render({ initiative: null })).not.toContain('run-card-initiative');
+  });
+
   it('colours the age amber only when the card is an aged BLK/CHK (>48h)', () => {
     const ageSpan = /<span class="run-card-age"[^>]*>/;
     const aged = render({ token: 'BLK', status: 'needs_you', age_seconds: 49 * 3600 });

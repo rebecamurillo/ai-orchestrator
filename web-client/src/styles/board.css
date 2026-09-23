@@ -140,6 +140,12 @@
   line-height: var(--type-meta-line);
 }
 
+/* S8: the initiative badge (`{slug} · {role}`) — tertiary text, no signal colour (NFR-6). */
+.run-card-initiative {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-micro);
+}
+
 .run-card-foot {
   display: flex;
   align-items: baseline;
@@ -331,6 +337,12 @@
   color: var(--color-text-secondary);
   font-size: var(--type-meta);
   line-height: var(--type-meta-line);
+}
+
+/* S8: the initiative badge (`{slug} · {role}`) — tertiary text, no signal colour (NFR-6). */
+.board-list-initiative {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-micro);
 }
 
 .board-list-age {

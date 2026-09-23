@@ -78,4 +78,14 @@ describe('RunListRow', () => {
     const ageSpan = /<span class="board-list-age"[^>]*>/.exec(markup);
     expect(ageSpan?.[0]).not.toContain('data-signal');
   });
+
+  it('renders the initiative badge when the row is a member (S8)', () => {
+    const markup = render({ initiative: 'q4', initiative_role: 'merge' });
+    expect(markup).toContain('board-list-initiative');
+    expect(markup).toContain('q4 · merge');
+  });
+
+  it('omits the initiative badge for a Run started on its own', () => {
+    expect(render({ initiative: null })).not.toContain('board-list-initiative');
+  });
 });

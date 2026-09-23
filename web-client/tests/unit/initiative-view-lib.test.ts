@@ -6,13 +6,17 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  cancelConfirmText,
+  cancelInitiativeBody,
   detailRequestPath,
   golivemembers,
   hasActiveMember,
+  hasCancellableMember,
   memberHref,
   memberToken,
   notFoundHeadline,
   repoGroups,
+  signalsRequestPath,
   waitsForText,
   type InitiativeMemberOut,
   type InitiativeOut,
@@ -185,5 +189,47 @@ describe('detailRequestPath / notFoundHeadline', () => {
 
   it('states the 404 fact verbatim', () => {
     expect(notFoundHeadline('demo')).toBe('NO INITIATIVE UNDER demo');
+  });
+});
+
+describe('hasCancellableMember (S8)', () => {
+  it('is true while any member is queued, running or needs_you', () => {
+    expect(
+      hasCancellableMember({ slug: 'd', repos: [], members: [member({ status: 'queued' })] }),
+    ).toBe(true);
+    expect(
+      hasCancellableMember({ slug: 'd', repos: [], members: [member({ status: 'running' })] }),
+    ).toBe(true);
+    expect(
+      hasCancellableMember({ slug: 'd', repos: [], members: [member({ status: 'needs_you' })] }),
+    ).toBe(true);
+  });
+
+  it('is false once every member is settled', () => {
+    expect(
+      hasCancellableMember({
+        slug: 'd',
+        repos: [],
+        members: [member({ status: 'done' }), member({ status: 'cancelled' })],
+      }),
+    ).toBe(false);
+    expect(hasCancellableMember({ slug: 'd', repos: [], members: [] })).toBe(false);
+  });
+});
+
+describe('cancelInitiativeBody / signalsRequestPath / cancelConfirmText (S8)', () => {
+  it('posts exactly {kind: cancel}', () => {
+    expect(cancelInitiativeBody()).toEqual({ kind: 'cancel' });
+  });
+
+  it('builds the proxy signals path, url-encoded', () => {
+    expect(signalsRequestPath('demo slug')).toBe('/api/initiatives/demo%20slug/signals');
+  });
+
+  it('names the slug and the mechanism, never apologising (NFR-8)', () => {
+    const text = cancelConfirmText('q4');
+    expect(text).toContain('q4');
+    expect(text).toContain('dependents first');
+    expect(text.toLowerCase()).not.toContain('sorry');
   });
 });

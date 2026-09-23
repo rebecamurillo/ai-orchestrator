@@ -513,6 +513,33 @@
             "title": "Id",
             "type": "string"
           },
+          "initiative": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiative"
+          },
+          "initiative_role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "epic",
+                  "merge",
+                  "golive"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiative Role"
+          },
           "kind_label": {
             "anyOf": [
               {
@@ -2062,6 +2089,47 @@
           "branch"
         ],
         "title": "InitiativeRepoViewOut",
+        "type": "object"
+      },
+      "InitiativeSignalIn": {
+        "description": "`POST /initiatives/{slug}/signals`'s body (AD-13, S8): one signal kind, and nothing\nelse \u2014 `cancel` is the only one this surface admits, and carries no payload of its own.\n`kind` is a plain `str` rather than `SignalKind`: any other value is well-formed at the\nschema level and refused by `signal_initiative` itself with the domain `Invalid` (422)\nthe story asks for, the same way `signal_run.py::_check_mode` refuses an unknown `mode`.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "InitiativeSignalIn",
+        "type": "object"
+      },
+      "InitiativeSignalOut": {
+        "description": "`POST /initiatives/{slug}/signals`'s body: what was signalled, and what was already\nterminal and so left alone.",
+        "properties": {
+          "signalled": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Signalled",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "signalled",
+          "skipped"
+        ],
+        "title": "InitiativeSignalOut",
         "type": "object"
       },
       "InputDeclOut": {
@@ -5762,6 +5830,99 @@
           }
         ],
         "summary": "Read one initiative's cross-repository DAG",
+        "tags": [
+          "initiatives"
+        ]
+      }
+    },
+    "/api/v1/initiatives/{slug}/signals": {
+      "post": {
+        "description": "`cancel` fanned dependents-first over the initiative's non-terminal members (AD-13).",
+        "operationId": "signal_api_v1_initiatives__slug__signals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiativeSignalIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitiativeSignalOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project, Repository or initiative of that name."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The signal kind is not one this surface admits."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Signal an initiative: cancel every non-terminal member Run",
         "tags": [
           "initiatives"
         ]

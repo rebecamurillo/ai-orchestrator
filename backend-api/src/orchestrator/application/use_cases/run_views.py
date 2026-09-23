@@ -155,6 +155,8 @@ def _card(ports: RunReadPorts, run: Run, *, now: datetime) -> Card:
         kind_label=_KIND_LABELS.get(run.template_name),
         age_seconds=(now - run.created_at).total_seconds(),
         needs_you_since=_needs_you_since(ports, run) if run.status == "needs_you" else None,
+        initiative=run.initiative,
+        initiative_role=run.initiative_role,
     )
 
 

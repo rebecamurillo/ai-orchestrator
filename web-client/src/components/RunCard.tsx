@@ -19,6 +19,7 @@ import {
   progressText,
   tokenSignal,
 } from '../lib/board/format';
+import { initiativeBadgeText } from '../lib/initiative/badge';
 
 type CardOut = components['schemas']['CardOut'];
 
@@ -30,6 +31,7 @@ export default function RunCard({ card }: Props) {
   const signal = tokenSignal(card.token);
   const aged = isAgedNeedsYou(card.token, card.age_seconds);
   const progress = progressText(card.progress, card.kind_label);
+  const badge = initiativeBadgeText(card);
 
   return (
     <a
@@ -49,6 +51,7 @@ export default function RunCard({ card }: Props) {
       <p className="run-card-meta">
         {card.project_name} · {card.repository_slug}
       </p>
+      {badge ? <p className="run-card-initiative">{badge}</p> : null}
       <p className="run-card-step">
         {card.current_step_label}
         {card.status === 'cancelled' ? ' · cancelled' : ''}

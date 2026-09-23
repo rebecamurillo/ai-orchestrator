@@ -140,6 +140,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/initiatives/{slug}/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signal an initiative: cancel every non-terminal member Run
+         * @description `cancel` fanned dependents-first over the initiative's non-terminal members (AD-13).
+         */
+        post: operations["signal_api_v1_initiatives__slug__signals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ping": {
         parameters: {
             query?: never;
@@ -910,6 +930,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Initiative */
+            initiative?: string | null;
+            /** Initiative Role */
+            initiative_role?: ("epic" | "merge" | "golive") | null;
             /** Kind Label */
             kind_label: string | null;
             /** Needs You Since */
@@ -1455,6 +1479,29 @@ export interface components {
             repository_id: string;
             /** Url */
             url: string;
+        };
+        /**
+         * InitiativeSignalIn
+         * @description `POST /initiatives/{slug}/signals`'s body (AD-13, S8): one signal kind, and nothing
+         *     else — `cancel` is the only one this surface admits, and carries no payload of its own.
+         *     `kind` is a plain `str` rather than `SignalKind`: any other value is well-formed at the
+         *     schema level and refused by `signal_initiative` itself with the domain `Invalid` (422)
+         *     the story asks for, the same way `signal_run.py::_check_mode` refuses an unknown `mode`.
+         */
+        InitiativeSignalIn: {
+            /** Kind */
+            kind: string;
+        };
+        /**
+         * InitiativeSignalOut
+         * @description `POST /initiatives/{slug}/signals`'s body: what was signalled, and what was already
+         *     terminal and so left alone.
+         */
+        InitiativeSignalOut: {
+            /** Signalled */
+            signalled: string[];
+            /** Skipped */
+            skipped: string[];
         };
         /**
          * InputDeclOut
@@ -2989,6 +3036,62 @@ export interface operations {
                 };
             };
             /** @description The posted body does not match the shape below. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    signal_api_v1_initiatives__slug__signals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitiativeSignalIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitiativeSignalOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project, Repository or initiative of that name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The signal kind is not one this surface admits. */
             422: {
                 headers: {
                     [name: string]: unknown;

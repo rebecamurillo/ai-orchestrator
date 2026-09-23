@@ -1,16 +1,15 @@
 /**
  * The initiative badge a Run carries once it was dispatched as one of an initiative's
  * members (S7): `{slug} · {role}`, linking to `/workflows/initiative/{slug}`. Reads only
- * the two stored fields `RunSummaryOut`/`RunDetailSummaryOut` carry — `initiative` and
+ * the two stored fields every read model carries them on — `initiative` and
  * `initiative_role` — never a Template name (S7's own rule: "DO NOT add template-name
  * string matching anywhere").
  *
- * **`CardOut` carries neither field.** `contracts/openapi.json`'s own `CardOut` (the Board's
- * read model — `RunCard.tsx`/`RunListRow.tsx`) was not widened by story S6, so a Board card
- * or list row has no `initiative`/`initiative_role` to read at all; only the run detail's own
- * `RunDetailSummaryOut` (`RunDetailOut.run`) carries them, which is what `Header.tsx` reads
- * this module through. Widening `CardOut` is a backend-api change (AD-3: the contract is
- * generated, never hand-written) and out of this story's reach.
+ * **`CardOut` carries both fields too (S8).** The Board's read model (`RunCard.tsx`/
+ * `RunListRow.tsx`) was widened alongside the run detail's own `RunDetailSummaryOut`
+ * (`RunDetailOut.run`, read by `Header.tsx`) — the same two fields, so this one function
+ * serves every caller through the structural `InitiativeCarrier` shape below rather than a
+ * union import list that would grow every time another read model gains them.
  */
 
 /** The minimal shape either read model carries — structural rather than importing

@@ -1,4 +1,5 @@
-"""The three initiative routes over an ASGI transport (multi-repo initiative S6, AD-12).
+"""The four initiative routes over an ASGI transport (multi-repo initiative S6/S8, AD-12,
+AD-13).
 
 The rules are asserted in `tests/unit/application/initiatives/`; what only a request can
 show is here: the route shape, the status each operation answers with, the payload each
@@ -8,6 +9,7 @@ result becomes, and the problem document each refusal becomes.
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
@@ -17,12 +19,14 @@ from orchestrator.api.providers_initiatives import (
     dispatch_ports,
     initiative_preflight_ports,
     initiative_read_ports,
+    initiative_signal_ports,
 )
 from orchestrator.api.routers import initiatives as router_module
 from orchestrator.api.schemas import initiatives as schema_module
 from orchestrator.application.use_cases.dispatch_initiative import DispatchPorts
 from orchestrator.application.use_cases.initiative_view import InitiativeReadPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
+from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.main import create_app
 from tests.unit.application.initiatives import fixtures as fx
@@ -31,6 +35,7 @@ HTTP_OK = 200
 HTTP_CREATED = 201
 HTTP_CONFLICT = 409
 HTTP_NOT_FOUND = 404
+HTTP_UNPROCESSABLE = 422
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 
 INITIATIVES = "/api/v1/initiatives"
@@ -47,6 +52,7 @@ class Api:
         self.app.dependency_overrides[initiative_preflight_ports] = self._read
         self.app.dependency_overrides[dispatch_ports] = self._dispatch
         self.app.dependency_overrides[initiative_read_ports] = self._view
+        self.app.dependency_overrides[initiative_signal_ports] = self._signal
         self.token = env["ORCHESTRATOR_TOKEN"]
 
     def _read(self) -> PreflightPorts:
@@ -58,6 +64,9 @@ class Api:
 
     def _view(self) -> InitiativeReadPorts:
         yield InitiativeReadPorts(runs=self.harness.runs, repositories=self.harness.repositories)
+
+    def _signal(self) -> SignalPorts:
+        yield SignalPorts(writers=self.harness.writers, engine=self.harness.engine)
 
     def client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
@@ -90,13 +99,19 @@ def body(**overrides: object) -> dict[str, Any]:
 # ── the route shape ───────────────────────────────────────────────────────────
 
 
-def test_the_router_declares_exactly_the_three_operations() -> None:
+def test_the_router_declares_exactly_the_four_operations() -> None:
+    """Revised for multi-repo initiative S8, 2026-09-23: `POST /initiatives/{slug}/signals`
+    (AD-13's spine amendment — "the only signal surface above a single Run") is the fourth
+    operation this router now declares, exactly where S6's own module docstring said it
+    would land ("`POST /initiatives/{slug}/signals` is the fourth and belongs to a later
+    story"). The assertion widens from three routes to four; every other row is unchanged."""
     routes = [(sorted(route.methods), route.path) for route in router_module.router.routes]
 
     assert routes == [
         (["POST"], "/initiatives/preflight"),
         (["POST"], "/initiatives"),
         (["GET"], "/initiatives/{slug}"),
+        (["POST"], "/initiatives/{slug}/signals"),
     ]
     for route in router_module.router.routes:
         assert route.dependencies == []
@@ -218,6 +233,41 @@ async def test_a_slug_nothing_was_dispatched_under_is_a_404_problem(api: Api) ->
     assert response.headers["content-type"].startswith(PROBLEM_MEDIA_TYPE)
 
 
+# ── initiative-wide cancel (S8, AD-13) ───────────────────────────────────────────
+
+
+async def test_a_cancel_signals_every_member_the_dispatch_created(api: Api) -> None:
+    async with api.client() as client:
+        dispatched = (await client.post(INITIATIVES, json=body())).json()
+        response = await client.post(f"{INITIATIVES}/{fx.SLUG}/signals", json={"kind": "cancel"})
+
+    assert response.status_code == HTTP_OK
+    payload = response.json()
+    assert set(payload["signalled"]) == {m["run_id"] for m in dispatched["members"]}
+    assert payload["skipped"] == []
+    for run_id in payload["signalled"]:
+        assert api.harness.runs.runs[UUID(run_id)].status == "cancelled"
+
+
+async def test_a_kind_other_than_cancel_is_a_422_problem(api: Api) -> None:
+    async with api.client() as client:
+        await client.post(INITIATIVES, json=body())
+        response = await client.post(f"{INITIATIVES}/{fx.SLUG}/signals", json={"kind": "retry"})
+
+    assert response.status_code == HTTP_UNPROCESSABLE
+    assert response.headers["content-type"].startswith(PROBLEM_MEDIA_TYPE)
+
+
+async def test_a_slug_nothing_was_dispatched_under_refuses_the_signal_as_404(api: Api) -> None:
+    async with api.client() as client:
+        response = await client.post(
+            f"{INITIATIVES}/never-dispatched/signals", json={"kind": "cancel"}
+        )
+
+    assert response.status_code == HTTP_NOT_FOUND
+    assert response.headers["content-type"].startswith(PROBLEM_MEDIA_TYPE)
+
+
 # ── the contract ──────────────────────────────────────────────────────────────
 
 
@@ -236,7 +286,13 @@ async def test_every_published_operation_declares_the_problem_media_type(api: Ap
     async with api.client() as client:
         document = (await client.get("/openapi.json")).json()
 
-    for path in (f"{INITIATIVES}/preflight", INITIATIVES, INITIATIVES + "/{slug}"):
+    paths = (
+        f"{INITIATIVES}/preflight",
+        INITIATIVES,
+        INITIATIVES + "/{slug}",
+        INITIATIVES + "/{slug}/signals",
+    )
+    for path in paths:
         operations = document["paths"][path]
         for operation in operations.values():
             assert "401" in operation["responses"], path

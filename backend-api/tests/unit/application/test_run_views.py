@@ -197,6 +197,26 @@ def test_a_checkpoint_park_reads_chk_not_blk(harness: Harness) -> None:
     assert view.columns.needs_you[0].token == "CHK"
 
 
+def test_a_card_carries_the_runs_own_initiative_membership(harness: Harness) -> None:
+    """S8: `CardOut` widens with `initiative`/`initiative_role`, the same two fields
+    `RunSummaryOut` already carries — read straight off the stored Run, never derived."""
+    harness.runs.add(a_run(initiative="q4", initiative_role="epic"))
+
+    view = board_view(harness.board_ports(), project_id=None, now=NOW)
+
+    assert view.columns.queued[0].initiative == "q4"
+    assert view.columns.queued[0].initiative_role == "epic"
+
+
+def test_a_card_off_a_run_started_on_its_own_carries_no_initiative(harness: Harness) -> None:
+    harness.runs.add(a_run())
+
+    view = board_view(harness.board_ports(), project_id=None, now=NOW)
+
+    assert view.columns.queued[0].initiative is None
+    assert view.columns.queued[0].initiative_role is None
+
+
 def test_progress_for_an_initiative_run_counts_epics_and_stories(harness: Harness) -> None:
     """The story spec's own AC, verbatim: two epics, eight stories, three stories done, one
     epic pushed → `progress == {epics_done:1, epics_total:2, stories_done:3, stories_total:8,

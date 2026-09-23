@@ -12,11 +12,90 @@
   padding: var(--space-8);
 }
 
+.newin-detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
 .newin-detail-headline {
   color: var(--color-text);
   font-size: var(--type-detail-title);
   line-height: var(--type-detail-title-line);
   letter-spacing: var(--type-detail-title-tracking);
+}
+
+/* S8: the Cancel initiative control and its confirm — mirrors `run-detail.css`'s own
+   `.wf-signal`/`.wf-cancel`/`.wf-cancel-*` rules under the `.newin-` prefix this stylesheet
+   uses throughout. */
+.newin-signal {
+  padding: var(--space-3) var(--space-6);
+  border: 1px solid var(--color-accent);
+  background: none;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  cursor: pointer;
+}
+
+.newin-signal:disabled {
+  border-color: var(--color-line-strong);
+  color: var(--color-text-tertiary);
+  cursor: default;
+}
+
+.newin-cancel {
+  border-color: var(--color-signal-failed);
+  color: var(--color-signal-failed);
+}
+
+.newin-signal-error {
+  color: var(--color-signal-failed);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.newin-cancel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg);
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.newin-cancel-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.newin-cancel-modal-panel {
+  position: relative;
+  max-width: 420px;
+  padding: var(--space-10);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line-strong);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.newin-cancel-modal-text {
+  color: var(--color-text);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.newin-cancel-modal-actions {
+  display: flex;
+  gap: var(--space-6);
 }
 
 .newin-detail-repo {
