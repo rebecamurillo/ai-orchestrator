@@ -81,8 +81,11 @@ KIND_META: dict[str, KindMeta] = {
         frozenset({"harness", "model", "skill", "args", "prompt_extra"}),
         stall_default_min=30,
     ),
-    "git.commit": KindMeta("deterministic", 5, frozenset({"message"})),
-    "git.push": KindMeta("deterministic", 5, frozenset({"branch"})),
+    # Revised: `git.commit` and `git.push` gained `workdir` — the row runs inside that
+    # submodule's own repository instead of the worktree root (hub-Run initiative H2, spine
+    # "Template DSL v1 keys" AD-9/AD-14 amendment, 2026-09-23).
+    "git.commit": KindMeta("deterministic", 5, frozenset({"message", "workdir"})),
+    "git.push": KindMeta("deterministic", 5, frozenset({"branch", "workdir"})),
     "pr.link": KindMeta("liveness", 5, frozenset({"branch"})),
     # Revised: the shipped-kinds row for `checkpoint` gained `when` — a resolved falsy
     # value plans the row `skipped · no checkpoint` at plan time, the same rule the
@@ -157,6 +160,14 @@ SUBMODULE_CHECKOUT_KEYS: frozenset[str] = KIND_META[SUBMODULE_KIND].with_keys - 
 #: plan-time rule `SHELL_KIND`'s empty command uses (multi-repo initiative S5, 2026-09-23).
 WHEN_KEY = "when"
 
+#: The `with` key `agent`, `git.commit` and `git.push` declare when the row runs inside a
+#: submodule instead of at the worktree root (spine "Template DSL v1 keys", AD-9,
+#: ratified 2026-09-23, hub-Run initiative workflow). Not `SUBMODULE_WORKDIR_KEY` above —
+#: that one names *which* submodule `git.submodule`'s checkout form creates or checks out;
+#: this one names *where* an unrelated kind's whole operation runs. H2 wires `git.commit` and
+#: `git.push`; the `agent` kind's own `workdir` is H4's.
+WORKDIR_KEY = "workdir"
+
 #: The kind whose step commits the working tree. Named here because `signal_run` re-resolves
 #: a skipped Story's commit message on this row (AD-13) and AD-9 says a kind is named in this
 #: table or nowhere.
@@ -203,6 +214,7 @@ __all__ = [
     "TEMPLATE_CALL_KIND",
     "TEMPLATE_KINDS",
     "WHEN_KEY",
+    "WORKDIR_KEY",
     "WORKTREE_KIND",
     "WORKTREE_MODE_KEY",
     "Gate",

@@ -444,3 +444,109 @@ def test_a_submodule_that_was_never_initialized_answers_none_and_writes_nothing(
 
     assert git.submodule_checkout(worktree, WORKDIR, NEW_BRANCH) is None
     assert list((worktree / WORKDIR).iterdir()) == []
+
+
+# ── submodule_default_branch (H2) ────────────────────────────────────────────
+
+
+def test_the_default_branch_is_the_submodules_own_remote_head(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """AD-14 (ratified 2026-09-23): a `workdir` push's refusal reads the SUBMODULE's default
+    branch, never the Run Repository's — `member_origin`'s own `main`, not `hub_origin`'s."""
+    assert git.submodule_default_branch(initialized, WORKDIR) == MEMBER_BASE
+
+
+def test_a_path_that_is_not_a_submodule_answers_none_for_the_default_branch(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    assert git.submodule_default_branch(initialized, SEED_FILE) is None
+
+
+def test_an_uninitialized_submodule_answers_none_for_the_default_branch(
+    git: SubprocessGit, worktree: Path
+) -> None:
+    assert git.submodule_default_branch(worktree, WORKDIR) is None
+
+
+# ── commit and push with `workdir` (H2, spine AD-9/AD-14 amendment) ─────────
+
+
+def test_a_workdir_commit_stages_and_commits_inside_the_submodule(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    git.submodule_checkout(initialized, WORKDIR, NEW_BRANCH, MEMBER_BASE)
+    submodule = initialized / WORKDIR
+    (submodule / "work.txt").write_text("agent work\n")
+
+    sha = git.commit(initialized, "story: workdir commit (orchestrator)", workdir=WORKDIR)
+
+    assert sha == head_of(submodule)
+    assert (
+        run_git("log", "-1", "--format=%s", cwd=submodule).strip()
+        == "story: workdir commit (orchestrator)"
+    )
+    assert "orchestrator" in run_git("log", "-1", "--format=%an <%ae>", cwd=submodule)
+
+
+def test_a_workdir_commit_with_nothing_changed_answers_the_existing_head(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    git.submodule_checkout(initialized, WORKDIR, NEW_BRANCH, MEMBER_BASE)
+    submodule = initialized / WORKDIR
+    before = head_of(submodule)
+
+    sha = git.commit(initialized, "no-op", workdir=WORKDIR)
+
+    assert sha == before
+    assert head_of(submodule) == before
+
+
+def test_a_workdir_commit_to_a_path_that_is_not_a_submodule_answers_none(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    assert git.commit(initialized, "message", workdir=SEED_FILE) is None
+
+
+def test_a_workdir_push_lands_the_branch_on_the_members_own_origin(
+    git: SubprocessGit, initialized: Path, member_origin: Path
+) -> None:
+    git.submodule_checkout(initialized, WORKDIR, NEW_BRANCH, MEMBER_BASE)
+    submodule = initialized / WORKDIR
+    (submodule / "work.txt").write_text("agent work\n")
+    git.commit(initialized, "story: workdir commit (orchestrator)", workdir=WORKDIR)
+
+    output = git.push(initialized, NEW_BRANCH, True, workdir=WORKDIR)
+
+    assert output is not None
+    assert NEW_BRANCH in run_git("branch", "--list", NEW_BRANCH, cwd=member_origin)
+
+
+def test_a_workdir_push_to_a_path_that_is_not_a_submodule_answers_none(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    assert git.push(initialized, NEW_BRANCH, True, workdir=SEED_FILE) is None
+
+
+# ── the hub Run never commits a gitlink pointer move (AD-14, 2026-09-23) ────
+
+
+def test_a_dirty_submodule_pointer_is_never_swept_into_an_everything_stage(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """AD-14's own words: "the hub Run never commits gitlink pointer moves — the hub-side
+    `git.commit` (no `workdir`) stages the spec folder only, and a submodule pointer is not
+    spec content". `stage`'s gitlink exclusion is what makes that true with no `workdir`
+    involved at all: the submodule's HEAD moves (dirtying the hub's own gitlink), and an
+    ordinary `git add -A` at the worktree root still excludes it."""
+    submodule = initialized / WORKDIR
+    (submodule / "work.txt").write_text("agent work\n")
+    run_git("add", "--all", cwd=submodule)
+    run_git("commit", "--quiet", "--message", "agent work", cwd=submodule)
+    (initialized / "hub_change.txt").write_text("hub work\n")
+
+    git.stage(initialized)
+
+    staged = run_git("diff", "--cached", "--name-only", cwd=initialized).split()
+    assert staged == ["hub_change.txt"]
+    assert WORKDIR not in staged

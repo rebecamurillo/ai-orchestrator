@@ -183,8 +183,26 @@ class Git(Protocol):
         """
         ...
 
-    def commit(self, worktree: Path, message: str) -> str:
-        """Commit whatever is staged as the orchestrator, and answer with the new commit."""
+    def commit(self, worktree: Path, message: str, workdir: str | None = None) -> str | None:
+        """Commit whatever is staged as the orchestrator, and answer with the new commit.
+
+        Without `workdir`, exactly what this always was: the caller stages, then calls this,
+        and the answer is the new commit.
+
+        **With `workdir`** (AD-9, ratified 2026-09-23, hub-Run initiative workflow), the whole
+        thing runs inside that submodule's own repository instead — AD-9's own words are
+        "`ctx.cwd` is that folder and the step operates on that folder's own repository" — and
+        staging cannot be split from committing across two trees the way it is at the worktree
+        root, so this one call does both: everything in the submodule is staged, then
+        committed, as the orchestrator. `None` is the one absence with a sentence of its own,
+        the same `submodule_checkout` answers: `workdir` does not resolve to an initialized
+        submodule, and nothing was written — AD-9's `misconfigured: workdir {path} is not an
+        initialized submodule`, never a silent fall back to `worktree`.
+
+        Nothing staged in the submodule is not a failure either: it answers with the sha
+        already at the submodule's `HEAD`, exactly as "nothing to commit" is `done` at the
+        worktree root and never `git commit`'s own "nothing to commit" failure.
+        """
         ...
 
     def diff_names(self, worktree: Path, from_sha: str) -> tuple[str, ...]:
@@ -217,12 +235,22 @@ class Git(Protocol):
         """
         ...
 
-    def push(self, worktree: Path, branch: str, set_upstream: bool) -> str:
+    def push(
+        self, worktree: Path, branch: str, set_upstream: bool, workdir: str | None = None
+    ) -> str | None:
         """Push the branch to `origin`, setting its upstream when this Run created it.
 
         Never a force: a rejected push is a `GitError` the caller parks on (AD-13's
         `push_rejected`), and overwriting the remote to make it succeed is the one thing this
         system must not do on someone else's branch.
+
+        **With `workdir`** (AD-14, ratified 2026-09-23, hub-Run initiative workflow), the push
+        targets the SUBMODULE's own origin, never the Run Repository's — a member repository
+        chooses its own remote, and the hub Run's branch allocation has no say in it. `None` is
+        the same absence `commit` and `submodule_checkout` answer: `workdir` does not resolve
+        to an initialized submodule, and no command ran. `run.worktrees[]` tracks the Run's own
+        worktrees only, so a `workdir` push sets no `pushed` flag anywhere — that bookkeeping
+        stays entirely the caller's, outside this port.
         """
         ...
 
@@ -303,6 +331,19 @@ class Git(Protocol):
           where that is possible and left where it is where it is not; it is never reset to
           a start point, because work an earlier row of the same Run committed inside the
           submodule is exactly what a reset would throw away.
+        """
+        ...
+
+    def submodule_default_branch(self, worktree: Path, workdir: str) -> str | None:
+        """The submodule's own default branch — its remote's `HEAD` — or `None`.
+
+        AD-14's own words (ratified 2026-09-23, hub-Run initiative workflow): a `workdir`
+        `git.push` row's refusal of `branch == default_branch` "reads the SUBMODULE's default
+        branch, not the Run Repository's" — a member repository's trunk is its own choice, and
+        the hub Run has no say in it. Two absences share `None`, as everywhere in this port:
+        `workdir` is not an initialized submodule, and a submodule whose remote `HEAD` was
+        never recorded locally — "not there" is the honest answer to either rather than a
+        guess at which.
         """
         ...
 

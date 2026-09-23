@@ -39,16 +39,30 @@ from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 from orchestrator.infrastructure.git.worktrees import (
+    AUTHOR,
     END_OF_OPTIONS,
+    EVERYTHING,
     HEADS_NAMESPACE,
     NO_HOOKS,
+    NUL,
     ORIGIN,
     RAW_PATHS,
+    UNTRACKED_ALL,
 )
 
 #: What `git submodule status` writes in column 1 for a submodule that is not initialized —
 #: a gitlink with an empty folder under it, which is not a workdir any step can run in.
 UNINITIALIZED = "-"
+
+#: The local ref a plain clone records for the remote's own default branch, and the prefix
+#: `submodule_default_branch` strips off it to answer with the branch name alone (H2).
+ORIGIN_HEAD = "refs/remotes/origin/HEAD"
+ORIGIN_HEAD_NAMESPACE = "refs/remotes/origin/"
+
+#: What `ls-files -s` writes in the mode column for a gitlink — a submodule pointer, the same
+#: marker for every submodule whether or not it is initialized. `_gitlink_paths` reads this so
+#: `WorktreeCommands.stage` never sweeps a pointer move into a hub commit (AD-14, H2).
+GITLINK_MODE = "160000"
 
 #: How git closes a `submodule status` line: `{flag}{sha} {path} ({describe})`. The describe
 #: part is optional, so the path is what is left once it is taken off the end.
@@ -134,6 +148,87 @@ class SubmoduleCommands:
             "-C", str(submodule), "config", f"branch.{branch}.merge", f"{HEADS_NAMESPACE}{branch}"
         )
         return self._run("-C", str(submodule), "rev-parse", "HEAD").strip()
+
+    def submodule_default_branch(self: _Runner, worktree: Path, workdir: str) -> str | None:
+        """The submodule's own default branch, read from its recorded `origin/HEAD`.
+
+        AD-14's own words (ratified 2026-09-23, hub-Run initiative workflow): a `workdir`
+        `git.push` row's default-branch refusal "reads the SUBMODULE's default branch, not the
+        Run Repository's". `symbolic-ref`, not another `ls-remote`: a plain clone — which is
+        what `submodule_update`'s `git submodule update --init` makes for every new submodule —
+        already records the remote's `HEAD` locally, so this reads a fact the checkout already
+        established rather than asking the remote a second time.
+
+        `None` covers both absences the caller cannot tell apart and does not need to:
+        `workdir` is not an initialized submodule (`_submodule_dir`'s own answer), or the
+        local record of `origin/HEAD` was never made.
+        """
+        submodule = _submodule_dir(self._attempt, worktree, workdir)
+        if submodule is None:
+            return None
+        ref = self._attempt("-C", str(submodule), "symbolic-ref", "-q", ORIGIN_HEAD)
+        if ref is None:
+            return None
+        name = ref.strip()
+        if not name.startswith(ORIGIN_HEAD_NAMESPACE):
+            return None
+        return name[len(ORIGIN_HEAD_NAMESPACE) :]
+
+    def _commit_workdir(self: _Runner, worktree: Path, message: str, workdir: str) -> str | None:
+        """`WorktreeCommands.commit`'s `workdir` half (AD-9; H2) — split here for the 400-line
+        cap and because `_submodule_dir`, the resolution both this and `_push_workdir` need,
+        already lives beside `submodule_checkout`. Stage everything in the submodule, then
+        commit; nothing staged answers with the sha already at `HEAD` rather than letting
+        `git commit` fail on an empty index — the same "nothing changed is not a failure" the
+        worktree-root commit-guard reads from `git status` before ever calling this.
+        """
+        submodule = _submodule_dir(self._attempt, worktree, workdir)
+        if submodule is None:
+            return None
+        self._run("-C", str(submodule), "add", EVERYTHING)
+        dirty = self._run(
+            "-C", str(submodule), *RAW_PATHS, "status", "--porcelain", UNTRACKED_ALL
+        ).strip()
+        if not dirty:
+            head = self._attempt("-C", str(submodule), "rev-parse", "--verify", "--quiet", "HEAD")
+            return head.strip() if head else ""
+        self._run("-C", str(submodule), *NO_HOOKS, *AUTHOR, "commit", "--message", message)
+        return self._run("-C", str(submodule), "rev-parse", "HEAD").strip()
+
+    def _push_workdir(
+        self: _Runner, worktree: Path, branch: str, set_upstream: bool, workdir: str
+    ) -> str | None:
+        """`WorktreeCommands.push`'s `workdir` half (AD-14; H2) — the submodule's own origin,
+        never the Run Repository's; `None` is `_submodule_dir`'s own "not a submodule"."""
+        submodule = _submodule_dir(self._attempt, worktree, workdir)
+        if submodule is None:
+            return None
+        upstream = ("--set-upstream",) if set_upstream else ()
+        return self._run("-C", str(submodule), "push", *upstream, ORIGIN, END_OF_OPTIONS, branch)
+
+    def _gitlink_paths(self: _Runner, worktree: Path) -> tuple[str, ...]:
+        """Every path this tree's index records as a gitlink — a submodule pointer, not
+        content. `WorktreeCommands.stage` calls this through the `_Runner` protocol (the
+        400-line cap left the room for it here, beside the mode constant it reads).
+
+        `ls-files -s`, not `submodule status`: the index carries the gitlink mode (`160000`)
+        for every submodule the tree names, whether or not it was ever initialized, and
+        `stage` needs exactly that fact rather than which ones currently have a checkout. `-z`
+        for the reason every other listing in this adapter uses it — a non-ASCII path is never
+        quoted, so the exclusion pathspec built from this answer matches the path `ls-files`
+        named.
+        """
+        listing = self._attempt("-C", str(worktree), "ls-files", "-s", "-z")
+        paths: list[str] = []
+        for entry in (listing or "").split(NUL):
+            if not entry:
+                continue
+            mode, _, rest = entry.partition(" ")
+            if mode == GITLINK_MODE:
+                _, _, path = rest.partition("\t")
+                if path:
+                    paths.append(path)
+        return tuple(paths)
 
 
 def _submodule_dir(attempt: _Attempt, worktree: Path, workdir: str) -> Path | None:

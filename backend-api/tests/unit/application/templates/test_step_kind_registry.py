@@ -48,8 +48,11 @@ SPINE = {
         False,
         30,  # stall_default_min
     ),
-    "git.commit": ("deterministic", 5, frozenset({"message"}), False),
-    "git.push": ("deterministic", 5, frozenset({"branch"}), False),
+    # Revised: `git.commit` and `git.push` gained `workdir` — the row runs inside that
+    # submodule's own repository instead of the worktree root (hub-Run initiative H2, spine
+    # "Template DSL v1 keys" AD-9/AD-14 amendment, 2026-09-23).
+    "git.commit": ("deterministic", 5, frozenset({"message", "workdir"}), False),
+    "git.push": ("deterministic", 5, frozenset({"branch", "workdir"}), False),
     "pr.link": ("liveness", 5, frozenset({"branch"}), False),
     # Revised: the shipped-kinds row for `checkpoint` gained `when` — a resolved falsy
     # value plans the row `skipped · no checkpoint`, the same plan-time rule the

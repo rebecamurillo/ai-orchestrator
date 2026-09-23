@@ -4,6 +4,10 @@ Four rules, each asserted where it can only be settled here: the staging *order*
 a call log shows; "nothing staged is `done`", which is what keeps a verify row that changed
 nothing from failing a Run; the protected-path seam, over a fake that reports hits; and the
 message being the row's own, never composed.
+
+A `with {workdir}` row (H2, 2026-09-23, spine AD-9 amendment) is asserted separately, below:
+the port is called with `workdir` instead of the staging sequence running, and `None` back
+from it parks the same sentence `git.submodule` and `git.push` do.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from orchestrator.application.steps.context import NO_ENVIRONMENT, StepExecutor
 from orchestrator.application.steps.git_commit import (
     KIND,
     NO_CHANGES,
+    NOT_A_SUBMODULE,
     PROTECTED,
     GitCommitExecutor,
 )
@@ -33,6 +38,8 @@ from tests.unit.step_fixtures import (
 MESSAGE = "story 4-8: git step kinds (orchestrator)"
 SPEC_FOLDER = "_bmad-output/planning-artifacts/mvp/epics/epic-04-runs"
 DIRTY = "?? src/new.py\n M src/thing.py\n"
+WORKDIR = "repos/member"
+MEMBER_SHA = "beef0123456789abcdefbeef0123456789abcdef"
 
 
 class Hits:
@@ -144,3 +151,54 @@ def test_the_rule_is_asked_about_the_staged_paths_and_the_accepted_ones() -> Non
 def test_without_an_environment_the_executor_refuses() -> None:
     with pytest.raises(RuntimeError, match=NO_ENVIRONMENT):
         GitCommitExecutor().execute(without(a_context(a_commit_row()), run_env=None))
+
+
+# ── `with {workdir}` (H2, spine AD-9 amendment, 2026-09-23) ─────────────────
+
+
+def a_workdir_commit_row() -> StepRun:
+    return a_row(
+        kind=KIND,
+        with_resolved={"message": MESSAGE, "workdir": WORKDIR},
+        path="stories[0].epics[0].commit-guard",
+    )
+
+
+def test_a_workdir_row_commits_in_the_submodule_instead_of_staging_at_the_root() -> None:
+    git = FakeGit(commit=[MEMBER_SHA])
+
+    result = GitCommitExecutor().execute(a_context(a_workdir_commit_row(), git=git))
+
+    assert result.status == "done"
+    assert result.output_ref == MEMBER_SHA
+    [(worktree, message, workdir)] = git.called("commit")
+    assert (str(worktree), message, workdir) == (WORKTREE, MESSAGE, WORKDIR)
+    assert git.called("stage") == []
+    assert git.called("status") == []
+
+
+def test_a_workdir_that_is_not_an_initialized_submodule_parks_the_spines_sentence() -> None:
+    git = FakeGit(commit=[None])
+
+    result = GitCommitExecutor().execute(a_context(a_workdir_commit_row(), git=git))
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.park.reason == f"workdir {WORKDIR} is not an initialized submodule"
+    assert result.reason == NOT_A_SUBMODULE.format(path=WORKDIR)
+    assert result.output_ref is None
+
+
+def test_a_workdir_row_never_runs_the_protected_path_check() -> None:
+    """Owed to H4 (module docstring): the dual-tree check needs the `agent` kind's own
+    `workdir` machinery, which this story does not touch."""
+    rule = Hits("tests/unit/test_thing.py")
+    git = FakeGit(commit=[MEMBER_SHA])
+
+    result = GitCommitExecutor().execute(
+        a_context(a_workdir_commit_row(), git=git, protected_paths=rule)
+    )
+
+    assert result.status == "done"
+    assert rule.calls == []

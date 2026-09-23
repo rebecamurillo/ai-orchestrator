@@ -27,6 +27,15 @@ than hopes. H1's `submodule_update` and `submodule_checkout` are scripted the sa
 second one's `None` is the port's "not an initialized submodule", which is the one answer a
 test has to ask for on purpose because it is the one that parks the Run.
 
+H2's `commit` and `push` gained an optional `workdir` keyword. It joins the recorded call only
+when the caller passed one, so every pre-H2 `.called("commit")`/`.called("push")` unpacking —
+`agent.py`'s WIP/prepare commits, `run_files.py`'s spec edit, this kind's own earlier tests —
+keeps the exact tuple shape it always had; only a test that scripts a `workdir` sees the extra
+element. Their scripted answers are unchanged (`DEFAULT_SHA` and `""`), because a test that
+wants "not an initialized submodule" scripts `None` on purpose, the same rule H1's
+`submodule_checkout` already reads by. `submodule_default_branch` is scripted like every other
+method with no worktree-half precedent.
+
 The planner asks the same three questions of many refs and paths, and "which answer came
 back" matters more to it than "how many answers were scripted", so three of the methods
 also take a **mapping**: `refs` (branch -> sha), `files` (`(ref, path)` -> text) and
@@ -55,6 +64,11 @@ DEFAULT_PUSH_BRANCH = "* [new branch]"
 #: What `submodule_update` answers for a worktree holding none — the ordinary case for
 #: every Run that is not a hub Run (AD-14, story H1).
 DEFAULT_SUBMODULES: tuple[str, ...] = ()
+
+#: What `submodule_default_branch` answers when nobody scripted it — a name distinct from
+#: `DEFAULT_BRANCH` (`step_fixtures.py`'s hub/Run Repository default) so a test that forgets
+#: to script the comparison branch fails loudly rather than passing by coincidence (H2).
+DEFAULT_MEMBER_BRANCH = "member-main"
 
 
 class FakeGit:
@@ -85,6 +99,7 @@ class FakeGit:
         push_branch: list[Any] | None = None,
         submodule_update: list[Any] | None = None,
         submodule_checkout: list[Any] | None = None,
+        submodule_default_branch: list[Any] | None = None,
         head_sha: list[Any] | None = None,
         remove_worktree: list[Any] | None = None,
         delete_branch: list[Any] | None = None,
@@ -127,6 +142,10 @@ class FakeGit:
             # a sha rather than `None`: `None` is the one answer that carries a park —
             # "not an initialized submodule" — so it is never the unscripted default (H1).
             "submodule_checkout": submodule_checkout or [DEFAULT_SHA],
+            # a branch name rather than `None`: `None` is what a `git.push` row's default-
+            # branch comparison reads as "cannot tell yet", and a test asking for it scripts
+            # it on purpose (H2).
+            "submodule_default_branch": submodule_default_branch or [DEFAULT_MEMBER_BRANCH],
             "head_sha": head_sha or [DEFAULT_SHA],
             "remove_worktree": remove_worktree or [None],
             "delete_branch": delete_branch or [None],
@@ -192,8 +211,14 @@ class FakeGit:
     def stage(self, worktree: Path, pathspec: str | None = None) -> None:
         self._answer("stage", (worktree, pathspec))
 
-    def commit(self, worktree: Path, message: str) -> str:
-        answer: str = self._answer("commit", (worktree, message))
+    def commit(self, worktree: Path, message: str, workdir: str | None = None) -> str | None:
+        # `workdir` joins the recorded call only when the caller passed one — every existing
+        # `.called("commit")` unpacking (a dozen tests outside this story's scope: `agent.py`'s
+        # WIP/prepare commits, `run_files.py`'s spec edit) keeps its `(worktree, message)`
+        # shape unchanged, and only an H2 test that scripts a `workdir` sees the third element
+        # (H2, 2026-09-23).
+        arguments = (worktree, message) if workdir is None else (worktree, message, workdir)
+        answer: str | None = self._answer("commit", arguments)
         return answer
 
     def diff_names(self, worktree: Path, from_sha: str) -> tuple[str, ...]:
@@ -208,8 +233,18 @@ class FakeGit:
         answer: str = self._answer("diff", (worktree, from_sha, path))
         return answer
 
-    def push(self, worktree: Path, branch: str, set_upstream: bool) -> str:
-        answer: str = self._answer("push", (worktree, branch, set_upstream))
+    def push(
+        self, worktree: Path, branch: str, set_upstream: bool, workdir: str | None = None
+    ) -> str | None:
+        # Same rule as `commit`: `workdir` joins the recorded call only when given, so every
+        # existing `.called("push")` unpacking keeps its `(worktree, branch, upstream)` shape
+        # (H2, 2026-09-23).
+        arguments = (
+            (worktree, branch, set_upstream)
+            if workdir is None
+            else (worktree, branch, set_upstream, workdir)
+        )
+        answer: str | None = self._answer("push", arguments)
         return answer
 
     def push_branch(self, dest_base: Path, branch: str, at_ref: str) -> str | None:
@@ -240,6 +275,10 @@ class FakeGit:
         self, worktree: Path, workdir: str, branch: str, base: str | None = None
     ) -> str | None:
         answer: str | None = self._answer("submodule_checkout", (worktree, workdir, branch, base))
+        return answer
+
+    def submodule_default_branch(self, worktree: Path, workdir: str) -> str | None:
+        answer: str | None = self._answer("submodule_default_branch", (worktree, workdir))
         return answer
 
     def head_sha(self, path: Path) -> str | None:

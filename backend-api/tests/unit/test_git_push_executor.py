@@ -4,6 +4,10 @@ The default-branch refusal is asserted as "no push command ran", because that is
 rule actually says — it is decided from the Repository, before anything is sent. The retry
 path is asserted as an *order*: AD-13 says a `retry` on a `push_rejected` row syncs first,
 and only a call log can settle "first".
+
+A `with {workdir}` row (H2, 2026-09-23, spine AD-14 amendment) is asserted separately, below:
+the default-branch refusal compares against `Git.submodule_default_branch`, the push targets
+the submodule, and `run.worktrees[]` is left untouched.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from orchestrator.application.steps.git_push import (
 )
 from orchestrator.application.steps.git_push import (
     KIND,
+    NOT_A_SUBMODULE,
     REJECTED,
     GitPushExecutor,
 )
@@ -23,7 +28,7 @@ from orchestrator.application.steps.git_sync import DIVERGED
 from orchestrator.application.steps.registry import executor_for
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.git import GitError
-from tests.unit.fakes.git import FakeGit
+from tests.unit.fakes.git import DEFAULT_MEMBER_BRANCH, FakeGit
 from tests.unit.step_fixtures import (
     BRANCH,
     DEFAULT_BRANCH,
@@ -37,6 +42,7 @@ from tests.unit.step_fixtures import (
 
 REJECTION = "! [rejected] chore/bmad-init -> chore/bmad-init (fetch first)"
 PUSHED_OUTPUT = "To origin\n * [new branch] chore/bmad-init"
+WORKDIR = "repos/member"
 
 
 def a_push_row(branch: str = BRANCH) -> StepRun:
@@ -158,3 +164,91 @@ def test_a_retry_whose_sync_cannot_fast_forward_parks_on_the_syncs_own_sentence(
 def test_without_an_environment_the_executor_refuses() -> None:
     with pytest.raises(RuntimeError, match=NO_ENVIRONMENT):
         GitPushExecutor().execute(without(a_context(a_push_row()), run_env=None))
+
+
+# ── `with {workdir}` (H2, spine AD-14 amendment, 2026-09-23) ────────────────
+
+
+def a_workdir_push_row(branch: str = BRANCH) -> StepRun:
+    return a_row(kind=KIND, with_resolved={"branch": branch, "workdir": WORKDIR}, path="push")
+
+
+def test_a_workdir_row_pushes_the_submodule_to_its_own_origin() -> None:
+    git = FakeGit(push=[PUSHED_OUTPUT], submodule_default_branch=[DEFAULT_MEMBER_BRANCH])
+
+    result = GitPushExecutor().execute(a_context(a_workdir_push_row(), git=git))
+
+    assert result.status == "done"
+    assert result.output_ref == PUSHED_OUTPUT
+    [(worktree, branch, upstream, workdir)] = git.called("push")
+    assert (str(worktree), branch, upstream, workdir) == (WORKTREE, BRANCH, True, WORKDIR)
+
+
+def test_a_workdir_rows_default_branch_refusal_reads_the_submodules_own_branch() -> None:
+    """AD-14: "reads the SUBMODULE's default branch, not the Run Repository's" — the row's
+    `branch` matches the fake's scripted member default, not `step_fixtures.DEFAULT_BRANCH`."""
+    git = FakeGit(submodule_default_branch=[DEFAULT_MEMBER_BRANCH])
+    env = an_environment(default_branch=DEFAULT_BRANCH)
+
+    result = GitPushExecutor().execute(
+        a_context(a_workdir_push_row(DEFAULT_MEMBER_BRANCH), git=git, env=env)
+    )
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "push_rejected"
+    assert result.park.reason == REFUSED_DEFAULT.format(branch=DEFAULT_MEMBER_BRANCH)
+    assert git.called("push") == []
+
+
+def test_a_workdir_row_is_not_refused_for_the_hubs_own_default_branch() -> None:
+    """The Run Repository's default branch (`step_fixtures.DEFAULT_BRANCH`, "main") is not
+    the submodule's — a workdir row pushing a branch of that name is not the default-branch
+    case at all."""
+    git = FakeGit(push=[PUSHED_OUTPUT], submodule_default_branch=[DEFAULT_MEMBER_BRANCH])
+
+    result = GitPushExecutor().execute(
+        a_context(a_workdir_push_row(DEFAULT_BRANCH), git=git, env=an_environment())
+    )
+
+    assert result.status == "done"
+    assert git.called("push") != []
+
+
+def test_a_workdir_that_is_not_an_initialized_submodule_parks_the_spines_sentence() -> None:
+    git = FakeGit(push=[None], submodule_default_branch=[None])
+
+    result = GitPushExecutor().execute(a_context(a_workdir_push_row(), git=git))
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.park.reason == f"workdir {WORKDIR} is not an initialized submodule"
+    assert result.reason == NOT_A_SUBMODULE.format(path=WORKDIR)
+
+
+def test_a_workdir_push_a_git_error_rejects_parks_push_rejected() -> None:
+    git = FakeGit(
+        push=[GitError(command="git push", exit_code=1, output=REJECTION)],
+        submodule_default_branch=[DEFAULT_MEMBER_BRANCH],
+    )
+
+    result = GitPushExecutor().execute(a_context(a_workdir_push_row(), git=git))
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "push_rejected"
+    assert result.park.reason == REJECTED
+    assert result.output_ref == REJECTION
+
+
+def test_a_workdir_push_sets_no_pushed_flag_on_any_worktree() -> None:
+    """AD-14: "`run.worktrees[]` tracks the Run's own worktrees only, so a `workdir` push
+    sets no `pushed` flag" — unlike the hub-root push, this row's `run_updates` is `None`."""
+    git = FakeGit(push=[PUSHED_OUTPUT], submodule_default_branch=[DEFAULT_MEMBER_BRANCH])
+    env = an_environment(worktrees=(a_worktree(),))
+
+    result = GitPushExecutor().execute(a_context(a_workdir_push_row(), git=git, env=env))
+
+    assert result.status == "done"
+    assert result.run_updates is None

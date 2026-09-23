@@ -70,6 +70,9 @@ STATUS_KINDS: dict[str, ChangeKind] = {"A": "added", "D": "deleted"}
 #: as the old path gone and the new one created.
 TWO_PATH_STATUSES = "RC"
 
+#: Excludes one path from an `add -A` pathspec, in git's own pathspec-magic spelling.
+EXCLUDE_PATHSPEC = ":!{path}"
+
 #: What a merge this system made says it is. The branch, not the run: an Operator reading
 #: the integration branch's history wants to know which epic landed, and `git.merge` merges
 #: exactly one (AD-9, spine "Shipped kinds").
@@ -87,13 +90,28 @@ _Attempt = Callable[..., "str | None"]
 
 
 class _Runner(Protocol):
-    """The three helpers `SubprocessGit` already has, as this mixin needs to see them."""
+    """The helpers `SubprocessGit` already has, as this mixin needs to see them.
+
+    `_commit_workdir`/`_push_workdir`/`_gitlink_paths` are `SubmoduleCommands`'s (H2), moved
+    there for the 400-line cap and because the resolution `workdir` and gitlink exclusion both
+    need lives beside `submodule_checkout`. Declared here rather than imported: `submodules.py`
+    already imports *from* this module, and the reverse would cycle. `SubprocessGit` mixes
+    both classes into one `self`, so the methods are there at run time regardless.
+    """
 
     def _run(self, *arguments: str) -> str: ...
 
     def _attempt(self, *arguments: str) -> str | None: ...
 
     def _remote(self, branch: str) -> str: ...
+
+    def _commit_workdir(self, worktree: Path, message: str, workdir: str) -> str | None: ...
+
+    def _push_workdir(
+        self, worktree: Path, branch: str, set_upstream: bool, workdir: str
+    ) -> str | None: ...
+
+    def _gitlink_paths(self, worktree: Path) -> tuple[str, ...]: ...
 
 
 class WorktreeCommands:
@@ -214,24 +232,41 @@ class WorktreeCommands:
         return self._run("-C", str(worktree), *RAW_PATHS, "status", "--porcelain", UNTRACKED_ALL)
 
     def stage(self: _Runner, worktree: Path, pathspec: str | None = None) -> None:
-        """`git add -A`, over everything or over one pathspec the caller named."""
+        """`git add -A`, over everything or over one pathspec the caller named.
+
+        An "everything" stage excludes every gitlink the index already records, so the hub
+        Run never commits a submodule pointer move (AD-14, ratified 2026-09-23) — true even
+        of a submodule never materialised, since the index carries the gitlink whether or not
+        it is initialized. A repository with no submodules records none, so this is the exact
+        command it always was there. A named pathspec (the commit-guard's own spec-folder
+        stage) is trusted as it is: it cannot itself denote a submodule.
+        """
         arguments = ("-C", str(worktree), "add", EVERYTHING)
         if pathspec is None:
+            exclude = tuple(
+                EXCLUDE_PATHSPEC.format(path=path) for path in self._gitlink_paths(worktree)
+            )
+            if exclude:
+                self._run(*arguments, END_OF_OPTIONS, ".", *exclude)
+                return
             self._run(*arguments)
             return
         self._run(*arguments, END_OF_OPTIONS, pathspec)
 
-    def commit(self: _Runner, worktree: Path, message: str) -> str:
-        """Commit what is staged as the orchestrator, and answer with the new commit."""
-        self._run(
-            "-C",
-            str(worktree),
-            *NO_HOOKS,
-            *AUTHOR,
-            "commit",
-            "--message",
-            message,
-        )
+    def commit(
+        self: _Runner, worktree: Path, message: str, workdir: str | None = None
+    ) -> str | None:
+        """Commit what is staged as the orchestrator, and answer with the new commit.
+
+        Without `workdir`, exactly what this always was: the caller staged, and this commits.
+        With it (AD-9, ratified 2026-09-23), staging cannot be split from committing across a
+        submodule's own tree the way it can at the worktree root, so `_commit_workdir` does
+        both over the submodule `workdir` resolves to. `None` is `workdir` not an initialized
+        submodule, the same absence `submodule_checkout` and `push` give.
+        """
+        if workdir is not None:
+            return self._commit_workdir(worktree, message, workdir)
+        self._run("-C", str(worktree), *NO_HOOKS, *AUTHOR, "commit", "--message", message)
         return self._run("-C", str(worktree), "rev-parse", "HEAD").strip()
 
     def diff_names(self: _Runner, worktree: Path, from_sha: str) -> tuple[str, ...]:
@@ -289,8 +324,17 @@ class WorktreeCommands:
         """
         return self._attempt("-C", str(worktree), "diff", from_sha, END_OF_OPTIONS, path) or ""
 
-    def push(self: _Runner, worktree: Path, branch: str, set_upstream: bool) -> str:
-        """`git push origin {branch}`, with `-u` when this Run created the branch. Never forced."""
+    def push(
+        self: _Runner, worktree: Path, branch: str, set_upstream: bool, workdir: str | None = None
+    ) -> str | None:
+        """`git push origin {branch}`, with `-u` when this Run created the branch. Never forced.
+
+        With `workdir` (AD-14, ratified 2026-09-23), `_push_workdir` pushes the submodule
+        `workdir` resolves to, on its own origin — never the Run Repository's. `None` is the
+        same absence `commit` and `submodule_checkout` give.
+        """
+        if workdir is not None:
+            return self._push_workdir(worktree, branch, set_upstream, workdir)
         upstream = ("--set-upstream",) if set_upstream else ()
         return self._run("-C", str(worktree), "push", *upstream, ORIGIN, END_OF_OPTIONS, branch)
 
