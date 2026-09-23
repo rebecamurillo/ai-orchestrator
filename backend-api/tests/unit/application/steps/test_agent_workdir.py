@@ -71,9 +71,13 @@ TEST_GLOBS = ("tests/**",)
 
 
 def a_workdir_git(**over: Any) -> FakeGit:
-    """A hub worktree holding one initialized submodule, with both trees answerable apart."""
+    """A hub worktree holding one initialized submodule, with both trees answerable apart.
+
+    The submodule resolves because `FakeGit.submodule_path` answers the workdir it was asked
+    about unless a test scripts otherwise — the probe H6 replaced `submodule_update` with
+    (2026-09-23), so nothing here scripts a listing any more.
+    """
     fields: dict[str, Any] = {
-        "submodule_update": [(WORKDIR,)],
         "heads": {MEMBER: [MEMBER_START, MEMBER_END], WORKTREE: [ROOT_START, ROOT_END]},
         "statuses": {MEMBER: "", WORKTREE: ""},
         "changes": {MEMBER: (), WORKTREE: ()},
@@ -132,7 +136,9 @@ def test_a_row_declaring_no_workdir_works_in_the_worktree_root() -> None:
 
 
 def test_a_workdir_that_is_not_an_initialized_submodule_parks_the_spines_sentence() -> None:
-    world = a_workdir_world(git=a_workdir_git(submodule_update=[("repos/other",)]))
+    """`submodule_path` answering `None` is the port's "not an initialized submodule" — the
+    probe replaced the `submodule_update` listing this scripted, H6 (2026-09-23)."""
+    world = a_workdir_world(git=a_workdir_git(submodule_path=[None]))
 
     result = run(world)
 
@@ -144,8 +150,9 @@ def test_a_workdir_that_is_not_an_initialized_submodule_parks_the_spines_sentenc
 
 
 def test_an_unresolvable_workdir_leaves_no_commit_and_no_dispatch_behind() -> None:
-    """AD-9's order: the stop is a decision about a tree nothing has touched."""
-    world = a_workdir_world(git=a_workdir_git(submodule_update=[()]))
+    """AD-9's order: the stop is a decision about a tree nothing has touched — which is now
+    true of the question itself as well, the probe being read-only (H6, 2026-09-23)."""
+    world = a_workdir_world(git=a_workdir_git(submodule_path=[None]))
 
     run(world)
 
@@ -155,10 +162,44 @@ def test_an_unresolvable_workdir_leaves_no_commit_and_no_dispatch_behind() -> No
 
 
 def test_the_park_names_the_workdir_the_template_wrote_not_the_normalised_one() -> None:
-    """The Operator has to find the value in the Template, so it is echoed verbatim."""
-    world = a_workdir_world(with_resolved=contracted(workdir="./repos/other/"), git=a_workdir_git())
+    """The Operator has to find the value in the Template, so it is echoed verbatim.
+
+    The probe answers `None` for it (H6, 2026-09-23): the row names a folder this worktree
+    does not hold as a submodule, which is what the park is about."""
+    world = a_workdir_world(
+        with_resolved=contracted(workdir="./repos/other/"),
+        git=a_workdir_git(submodule_path=[None]),
+    )
 
     assert run(world).reason == "workdir ./repos/other/ is not an initialized submodule"
+
+
+# ── the verification is a read, never an update (H6, 2026-09-23) ────────────
+
+
+def test_a_workdir_dispatch_verifies_through_the_probe_and_never_updates_the_submodule() -> None:
+    """The H6 defect, as a call-log fact. `verify` asked `Git.submodule_update` — a **write**:
+    default checkout mode resets the submodule to the commit the hub's index records, and the
+    hub Run never advances that gitlink (AD-14), so the second `workdir` dispatch into one
+    submodule detached the member checkout at the stale pointer and orphaned everything an
+    earlier row had committed there. The probe answers the same question and mutates nothing,
+    so "no update ran" is what has to be asserted, not merely "the probe was asked"."""
+    world = a_workdir_world()
+
+    run(world)
+
+    assert world.git.called("submodule_path") == [(Path(WORKTREE), WORKDIR)]
+    assert world.git.called("submodule_update") == []
+
+
+def test_the_probe_is_asked_of_the_hub_worktree_with_the_normalised_workdir() -> None:
+    """Whatever spelling the Template wrote, one question is asked — and it is asked of the
+    run worktree root, the only tree that can say what its submodules are."""
+    world = a_workdir_world(with_resolved=contracted(workdir=f"./{WORKDIR}/"))
+
+    run(world)
+
+    assert world.git.called("submodule_path") == [(Path(WORKTREE), WORKDIR)]
 
 
 # ── where the harness runs, and what it is told ─────────────────────────────
@@ -515,12 +556,15 @@ def test_an_attempt_that_bounded_no_range_in_either_tree_asks_for_no_diff() -> N
 
 
 def test_a_root_row_asks_the_submodule_listing_nothing_at_all() -> None:
-    """The cost of this story is paid by the rows that use it and by no other."""
+    """The cost of this story is paid by the rows that use it and by no other. H6
+    (2026-09-23) moved the question from `submodule_update` to `submodule_path`; a root row
+    asks neither, which is strictly more than this pinned before."""
     world = a_tail_world()
 
     run(world)
 
     assert world.git.called("submodule_update") == []
+    assert world.git.called("submodule_path") == []
 
 
 def test_a_root_rows_check_reads_one_tree_and_reports_its_paths_unqualified() -> None:

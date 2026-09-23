@@ -58,8 +58,10 @@ unchanged, so a *hub* agent (or a `workdir` agent reaching into a **different** 
 that edits a file inside a submodule is still seen only as the gitlink the root range
 reports. AD-17's amendment names the mechanism for it — read `Git.status` of each initialized
 submodule and report submodule-relative paths — and the spelling above is already the one it
-would use; what it costs is a `submodule_update` on every agent attempt of every Run, which
-is a behaviour change to the non-workdir path this story is scoped to leave alone.
+would use; what it costs is enumerating the initialized submodules on every agent attempt of
+every Run, which is a behaviour change to the non-workdir path this story is scoped to leave
+alone. Whenever it is built, that enumeration is a **read** (`Git.submodule_path`'s own
+listing, never `submodule_update`): H6 is what it costs to confuse the two.
 """
 
 from __future__ import annotations
@@ -127,15 +129,22 @@ def verify(ctx: StepContext) -> StepResult | None:
 
     Asked before any commit is placed and before any attempt column is written, for the
     reason the harness lookup is asked first: a row naming a folder this worktree does not
-    hold as a submodule must stop without leaving a commit behind. `Git.submodule_update` is
-    the listing — it is idempotent and answers exactly the initialized workdirs (AD-14, H1),
-    so "is this a workdir" is the same question the `git.submodule` row already answered.
+    hold as a submodule must stop without leaving a commit behind.
+
+    `Git.submodule_path` is the probe, and that it **reads only** is the whole of why it
+    exists (H6, 2026-09-23). This asked `Git.submodule_update` until H6: idempotent about the
+    *recorded* commits, yes — but `git submodule update` in default checkout mode resets the
+    submodule to the commit the hub's index holds, and AD-14 has the hub Run never commit a
+    gitlink move, so that pointer is frozen at whatever the branch was cut with. The second
+    `workdir` dispatch into one submodule within a Run — an epic's `gen-e2e` after its story's
+    commit-guard already committed there — therefore detached the member checkout at the stale
+    pointer *before writing anything*, and everything it then committed sat on an orphan the
+    `git.push` row's branch ref never pointed at. Both rows reported `done`; the work was gone.
     """
     workdir = declared(ctx)
     if not workdir:
         return None
-    initialized = ctx.ports.git.submodule_update(require_cwd(ctx))
-    if any(str(PurePosixPath(path)) == workdir for path in initialized):
+    if ctx.ports.git.submodule_path(require_cwd(ctx), workdir) is not None:
         return None
     reason = NOT_A_SUBMODULE.format(path=resolved_text(ctx.with_resolved, WORKDIR_KEY))
     return StepResult(

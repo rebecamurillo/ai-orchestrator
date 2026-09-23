@@ -36,6 +36,13 @@ wants "not an initialized submodule" scripts `None` on purpose, the same rule H1
 `submodule_checkout` already reads by. `submodule_default_branch` is scripted like every other
 method with no worktree-half precedent.
 
+H6's `submodule_path` — the read-only probe a `workdir` dispatch verifies itself with — is
+scripted the same way, with one twist the others do not need: its unscripted answer is the
+workdir it was asked about (`RESOLVES` below), because "yes, that is an initialized
+submodule" is a fact about the argument rather than a fixed value. `None` is scripted on
+purpose, and it is the park. That the probe and `submodule_update` are different methods is
+what lets a test assert "this dispatch mutated no checkout" as a call-log fact.
+
 The planner asks the same three questions of many refs and paths, and "which answer came
 back" matters more to it than "how many answers were scripted", so three of the methods
 also take a **mapping**: `refs` (branch -> sha), `files` (`(ref, path)` -> text) and
@@ -54,7 +61,7 @@ every single-tree test keeps the behaviour it had.
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from orchestrator.domain.ports.git import Change, CloneResult, RemoteRef
@@ -72,6 +79,13 @@ DEFAULT_PUSH_BRANCH = "* [new branch]"
 #: What `submodule_update` answers for a worktree holding none — the ordinary case for
 #: every Run that is not a hub Run (AD-14, story H1).
 DEFAULT_SUBMODULES: tuple[str, ...] = ()
+
+#: What `submodule_path` answers when nobody scripted it: the workdir it was asked about,
+#: normalised — "yes, that folder is an initialized submodule". `None` is the one answer that
+#: carries a park (AD-9's `not an initialized submodule`), so it is never the unscripted
+#: default, the same rule `submodule_checkout`'s `DEFAULT_SHA` reads by (H6, 2026-09-23).
+#: A sentinel rather than a constant path, because the honest answer depends on the argument.
+RESOLVES = "<the workdir this call asked about>"
 
 #: What `submodule_default_branch` answers when nobody scripted it — a name distinct from
 #: `DEFAULT_BRANCH` (`step_fixtures.py`'s hub/Run Repository default) so a test that forgets
@@ -106,6 +120,7 @@ class FakeGit:
         push: list[Any] | None = None,
         push_branch: list[Any] | None = None,
         submodule_update: list[Any] | None = None,
+        submodule_path: list[Any] | None = None,
         submodule_checkout: list[Any] | None = None,
         submodule_default_branch: list[Any] | None = None,
         head_sha: list[Any] | None = None,
@@ -156,6 +171,9 @@ class FakeGit:
             "submodule_update": (
                 submodule_update if submodule_update is not None else [DEFAULT_SUBMODULES]
             ),
+            # the workdir it was asked about rather than `None`, for the same reason
+            # `submodule_checkout` answers a sha: `None` is the park (H6).
+            "submodule_path": submodule_path or [RESOLVES],
             # a sha rather than `None`: `None` is the one answer that carries a park —
             # "not an initialized submodule" — so it is never the unscripted default (H1).
             "submodule_checkout": submodule_checkout or [DEFAULT_SHA],
@@ -293,6 +311,13 @@ class FakeGit:
     def submodule_update(self, worktree: Path) -> tuple[str, ...]:
         answer: tuple[str, ...] = self._answer("submodule_update", (worktree,))
         return answer
+
+    def submodule_path(self, worktree: Path, workdir: str) -> str | None:
+        """The read-only probe (H6). `RESOLVES` echoes the asked-for workdir, normalised the
+        way the adapter normalises what git listed; any other scripted entry is answered as
+        it stands, which is how a test asks for the park."""
+        answer: str | None = self._answer("submodule_path", (worktree, workdir))
+        return str(PurePosixPath(workdir)) if answer == RESOLVES else answer
 
     def submodule_checkout(
         self, worktree: Path, workdir: str, branch: str, base: str | None = None

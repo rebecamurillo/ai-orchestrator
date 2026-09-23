@@ -102,6 +102,23 @@ class SubmoduleCommands:
         self._run("-C", str(worktree), *NO_HOOKS, "submodule", "update", "--init", "--recursive")
         return tuple(_initialized(self._attempt, worktree, recursive=True))
 
+    def submodule_path(self: _Runner, worktree: Path, workdir: str) -> str | None:
+        """The initialized submodule at `workdir`, normalised — or `None`. Reads only.
+
+        One `git submodule status -- {workdir}` and nothing else: no fetch, no clone, no
+        checkout, no index written. That is the point of it (H6, 2026-09-23). `submodule_update`
+        answers the same question as a side effect of *doing* something — it resets each
+        submodule to the commit the hub's index records — and the hub Run never advances that
+        gitlink (AD-14), so using it as a predicate on every `workdir` dispatch detaches a
+        submodule whose HEAD an earlier row of the same Run legitimately moved, and the work
+        committed there is orphaned off the branch `git.push` later pushes.
+
+        `_submodule_dir` already resolves exactly this, pathspec trap included (`repos` is not
+        `repos/member`), so this is that resolver's own answer with the worktree prefix taken
+        back off — the port speaks repository-relative paths, not adapter filesystem ones.
+        """
+        return _listed_submodule(self._attempt, worktree, workdir)
+
     def submodule_checkout(
         self: _Runner, worktree: Path, workdir: str, branch: str, base: str | None = None
     ) -> str | None:
@@ -232,18 +249,27 @@ class SubmoduleCommands:
 
 
 def _submodule_dir(attempt: _Attempt, worktree: Path, workdir: str) -> Path | None:
-    """The folder `workdir` names, or `None` when it is not an initialized submodule.
+    """The folder `workdir` names, or `None` when it is not an initialized submodule."""
+    listed = _listed_submodule(attempt, worktree, workdir)
+    return None if listed is None else worktree / listed
+
+
+def _listed_submodule(attempt: _Attempt, worktree: Path, workdir: str) -> str | None:
+    """`workdir` as an initialized submodule path, normalised, or `None` when it is not one.
 
     The pathspec is not trusted to be a submodule by itself: `git submodule status -- repos`
     answers happily for a submodule *under* `repos`, and running a step in `repos` because of
     that would be the silent fall back to a wrong tree AD-9 forbids. So the listed path is
     compared with the asked-for one, normalised the one way a Template's value can differ
     harmlessly (`./repos/member`, `repos/member/`).
+
+    The repository-relative answer, not the folder: `submodule_path` publishes exactly this
+    through the port, and `_submodule_dir` is the same answer joined onto the worktree (H6).
     """
     wanted = _normalised(workdir)
     for path in _initialized(attempt, worktree, recursive=False, pathspec=workdir):
         if _normalised(path) == wanted:
-            return worktree / path
+            return wanted
     return None
 
 

@@ -550,3 +550,83 @@ def test_a_dirty_submodule_pointer_is_never_swept_into_an_everything_stage(
     staged = run_git("diff", "--cached", "--name-only", cwd=initialized).split()
     assert staged == ["hub_change.txt"]
     assert WORKDIR not in staged
+
+
+# ── submodule_path: the read-only probe (H6 defect fix, 2026-09-23) ─────────
+
+
+def test_the_probe_answers_the_repository_relative_path_of_an_initialized_submodule(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    assert git.submodule_path(initialized, WORKDIR) == WORKDIR
+
+
+def test_the_probe_normalises_the_spellings_a_template_may_differ_in(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """One answer for `./repos/member`, `repos/member/` and `repos/member`, so a caller
+    comparing it with a Template's value compares one string."""
+    assert git.submodule_path(initialized, f"./{WORKDIR}/") == WORKDIR
+
+
+def test_the_probe_answers_none_for_a_path_that_is_not_a_submodule_at_all(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    assert git.submodule_path(initialized, SEED_FILE) is None
+
+
+def test_the_probe_answers_none_for_a_parent_folder_of_a_submodule(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """`git submodule status -- repos` answers happily *for the submodule under it*, and
+    running a step in `repos` because of that is AD-9's forbidden fall back to a wrong tree."""
+    assert git.submodule_path(initialized, "repos") is None
+
+
+def test_the_probe_answers_none_for_a_submodule_that_was_never_initialized(
+    git: SubprocessGit, worktree: Path
+) -> None:
+    assert git.submodule_path(worktree, WORKDIR) is None
+
+
+def test_the_probe_leaves_a_submodule_this_run_already_advanced_exactly_where_it_is(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """The H6 regression, on real git — what `agent_workdir.verify()` does on every `workdir`
+    dispatch, in the state an epic's second dispatch actually finds.
+
+    The defect this replaces, reproduced against this very adapter (story H5, confirmed here
+    2026-09-23): `verify()` asked `submodule_update`, and `git submodule update` in default
+    checkout mode resets the submodule to the commit recorded in the **hub's index** — which
+    nothing ever advances, because AD-14 keeps every hub-level commit off the gitlink. So the
+    row's own earlier commit (`commit-guard`, inside the member) was undone here: HEAD
+    detached at the stale pointer, the file gone from the checkout, and everything the
+    dispatch then committed left on an orphan the `git.push` row's branch ref never pointed
+    at — while both rows reported `done`.
+
+    Asked twice, because once was never the failing case: it is the *second* dispatch into one
+    submodule within a Run that has something to lose."""
+    git.submodule_checkout(initialized, WORKDIR, NEW_BRANCH, MEMBER_BASE)
+    submodule = initialized / WORKDIR
+    (submodule / "work.txt").write_text("agent work\n")
+    committed = git.commit(initialized, "story: workdir commit (orchestrator)", workdir=WORKDIR)
+
+    assert git.submodule_path(initialized, WORKDIR) == WORKDIR
+    assert git.submodule_path(initialized, WORKDIR) == WORKDIR
+
+    assert branch_of(submodule) == NEW_BRANCH
+    assert head_of(submodule) == committed
+    assert run_git("rev-parse", f"refs/heads/{NEW_BRANCH}", cwd=submodule).strip() == committed
+    assert (submodule / "work.txt").read_text() == "agent work\n"
+
+
+def test_the_probe_writes_nothing_the_hub_worktree_can_see(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """Reading only, as an observable fact rather than a claim about which command runs: the
+    hub's own porcelain is byte-for-byte what it was, gitlink line included."""
+    before = git.status(initialized)
+
+    git.submodule_path(initialized, WORKDIR)
+
+    assert git.status(initialized) == before

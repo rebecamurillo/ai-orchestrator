@@ -299,6 +299,36 @@ class Git(Protocol):
           the adapter's own command and inherit the environment `GIT_ASKPASS` lives in.
         - **A worktree with no submodules is `()`**, not an error — the port's second
           convention applied to "there is nothing here to initialize".
+        - **It is a write, and its idempotence is about the recorded commits, not about a
+          checkout that moved** *(H6 defect fix, 2026-09-23)*. Default checkout mode resets
+          every submodule to the commit the **hub's index** records, and nothing advances that
+          gitlink, so calling this after a row committed inside a submodule detaches that
+          submodule's HEAD at the stale pointer and orphans the commit. Only the
+          `git.submodule` update form calls it; anything that merely needs to *know* whether a
+          path is an initialized submodule calls `submodule_path` instead.
+        """
+        ...
+
+    def submodule_path(self, worktree: Path, workdir: str) -> str | None:
+        """The initialized submodule `workdir` names, repository-relative — or `None`.
+
+        AD-14's own words (ratified 2026-09-23, hub-Run initiative workflow — H6 defect fix):
+        the read-only probe. It **reads and mutates nothing**, which is the whole reason it
+        exists beside `submodule_update`: `git submodule update` in its default checkout mode
+        resets a submodule to the commit the *hub's* index records, and nothing ever advances
+        that gitlink (AD-14: the hub Run never commits gitlink pointer moves). So asking
+        `submodule_update` "is this still a submodule?" on every dispatch throws away every
+        commit an earlier row of the same Run made inside that submodule, leaving a detached
+        HEAD at the stale pointer. This answers the same question and touches no checkout.
+
+        - **The answer is the path git listed, normalised** (`./repos/member`, `repos/member/`
+          and `repos/member` are one), so a caller comparing it with a Template's value
+          compares one spelling.
+        - **`None` is "not an initialized submodule"** — the port's second convention applied
+          to the one absence that has a sentence of its own, AD-9's `misconfigured: workdir
+          {path} is not an initialized submodule`. A path that is no submodule, one under a
+          submodule, and one whose submodule was never initialized are the same answer,
+          because they are the same stop.
         """
         ...
 
