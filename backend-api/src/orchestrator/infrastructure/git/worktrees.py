@@ -26,10 +26,11 @@ Three rules the commands share:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
-from orchestrator.domain.ports.git import Change, ChangeKind
+from orchestrator.domain.ports.git import Change, ChangeKind, GitError
 
 #: Where a base clone's origin refs live. The same word `subprocess_git.py` uses.
 ORIGIN = "origin"
@@ -64,6 +65,21 @@ STATUS_KINDS: dict[str, ChangeKind] = {"A": "added", "D": "deleted"}
 #: The two letters that carry a second path: git writes `R100 old new`, and AD-17 reads that
 #: as the old path gone and the new one created.
 TWO_PATH_STATUSES = "RC"
+
+#: What a merge this system made says it is. The branch, not the run: an Operator reading
+#: the integration branch's history wants to know which epic landed, and `git.merge` merges
+#: exactly one (AD-9, spine "Shipped kinds").
+MERGE_MESSAGE = "merge {branch} (orchestrator)"
+
+#: What `--diff-filter=U` answers with, and the heading the listing is put under so a
+#: reader of the park can tell git's own words from the index's.
+UNMERGED = "U"
+CONFLICTED_HEADING = "conflicted paths:"
+
+
+#: `SubprocessGit._attempt`, as `_with_conflicts` below needs to see it: a command whose
+#: non-zero exit means "nothing there" rather than "broken".
+_Attempt = Callable[..., "str | None"]
 
 
 class _Runner(Protocol):
@@ -136,6 +152,53 @@ class WorktreeCommands:
         fetched = self._run("-C", str(worktree), "fetch", ORIGIN, END_OF_OPTIONS, branch)
         merged = self._run("-C", str(worktree), *NO_HOOKS, "merge", "--ff-only", "FETCH_HEAD")
         return fetched + merged
+
+    def merge(self: _Runner, worktree: Path, branch: str) -> str | None:
+        """Abort any merge in progress, fetch, and merge `origin/{branch}` with `--no-ff`.
+
+        **The abort is guarded by a probe, not by ignoring a failure.** `git merge --abort`
+        exits 128 when there is no merge to abort, so it cannot be run unconditionally;
+        `rev-parse --verify --quiet MERGE_HEAD` is the question it answers to. Not
+        `.git/MERGE_HEAD`: every tree this system merges in is a *linked* worktree, whose
+        `.git` is a file and whose `MERGE_HEAD` lives in the base clone's
+        `worktrees/{name}/` directory — the filesystem check would look in the wrong place
+        for every Run there is, and would quietly answer "no merge in progress" every time.
+
+        **The ancestor test decides `None` before anything is written.** A ref the branch
+        already holds is AD-13's `done · already merged`, and asking `merge-base
+        --is-ancestor` is how that stays a fact about the history rather than a guess from
+        git's "Already up to date" wording.
+
+        **A conflict is raised with the conflicted files appended.** git's own message names
+        them, but only for the paths it printed a `CONFLICT` line for; `--diff-filter=U` is
+        the index's own answer and it is what the Operator's stop shows. The conflicted
+        merge is left in place on purpose — the abort above is the next call's business.
+        """
+        if self._attempt("-C", str(worktree), "rev-parse", "--verify", "--quiet", "MERGE_HEAD"):
+            self._run("-C", str(worktree), *NO_HOOKS, "merge", "--abort")
+        self._run("-C", str(worktree), "fetch", ORIGIN, END_OF_OPTIONS, branch)
+        remote = f"{ORIGIN}/{branch}"
+        contained = self._attempt(
+            "-C", str(worktree), "merge-base", "--is-ancestor", remote, "HEAD"
+        )
+        if contained is not None:
+            return None
+        try:
+            self._run(
+                "-C",
+                str(worktree),
+                *NO_HOOKS,
+                *AUTHOR,
+                "merge",
+                "--no-ff",
+                "--message",
+                MERGE_MESSAGE.format(branch=branch),
+                END_OF_OPTIONS,
+                remote,
+            )
+        except GitError as error:
+            raise _with_conflicts(self._attempt, worktree, error) from error
+        return self._run("-C", str(worktree), "rev-parse", "HEAD").strip()
 
     def status(self: _Runner, worktree: Path) -> str:
         """`git status --porcelain`: the empty string when the worktree is clean.
@@ -244,3 +307,23 @@ class WorktreeCommands:
     def delete_branch(self: _Runner, base: Path, branch: str) -> None:
         """Delete the local branch; one already gone is not a failure (AD-13's `cancel`)."""
         self._attempt("-C", str(base), "branch", "-D", END_OF_OPTIONS, branch)
+
+
+def _with_conflicts(attempt: _Attempt, worktree: Path, error: GitError) -> GitError:
+    """The same failure, with the index's own unmerged paths appended to git's message.
+
+    A function taking the runner's `_attempt` rather than a method, because it is about
+    *reporting* a failure rather than about a git command the port names. `_attempt`, so a
+    merge that failed for some reason other than a conflict — nothing unmerged in the index
+    — leaves the error exactly as it was rather than swallowing it into a second failure.
+    """
+    listing = attempt("-C", str(worktree), "diff", "--name-only", f"--diff-filter={UNMERGED}", "-z")
+    paths = [path for path in (listing or "").split(NUL) if path]
+    if not paths:
+        return error
+    joined = "\n".join(paths)
+    return GitError(
+        command=error.command,
+        exit_code=error.exit_code,
+        output=f"{error.output}\n{CONFLICTED_HEADING}\n{joined}",
+    )

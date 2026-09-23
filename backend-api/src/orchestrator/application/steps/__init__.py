@@ -66,6 +66,7 @@ KIND_META: dict[str, KindMeta] = {
     "plan.check": KindMeta("deterministic", 5, frozenset(), planner_only=True),
     "git.worktree": KindMeta("deterministic", 5, frozenset({"base", "branch", "mode"})),
     "git.sync": KindMeta("deterministic", 5, frozenset()),
+    "git.merge": KindMeta("deterministic", 5, frozenset({"from"})),
     "shell": KindMeta("deterministic", 30, frozenset({"command"})),
     "agent": KindMeta(
         "liveness",

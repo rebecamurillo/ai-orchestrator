@@ -20,7 +20,9 @@ parked row's kind alone:
 - **`retry` lists `protected_path` among its park kinds.** The brief writes the rule as
   "`park_kind ∈ {timeout, push_rejected, misconfigured, internal, verify_failed}` or park
   row `error`". Every park kind whose row is left `error` is already in that set except
-  `protected_path` — and `plan_stale` (row `error`, Continue and Cancel only) and `budget`
+  `protected_path` and `merge_conflict` (added 2026-09-23 by AD-13's amendment, where the
+  retry re-runs the `git.merge` row whole) — and `plan_stale` (row `error`, Continue and
+  Cancel only) and `budget`
   (which keeps the row's routed status, so possibly `error`) would both be wrongly admitted
   by the "or park row `error`" half. AD-13 calls PRD §4.6 "the reason-text and
   admitted-signal contract", so the park-kind set is the one written here.
@@ -69,6 +71,12 @@ NON_TERMINAL: frozenset[RunStatus] = frozenset(RUN_STATUSES) - TERMINAL_RUN
 
 #: Every park kind: the rules whose admission does not depend on why the Run stopped.
 ANY_PARK: frozenset[ParkKind] = frozenset(PARK_KINDS)
+
+#: The park a conflicted `git.merge` leaves (AD-13, ratified 2026-09-23). Named here because
+#: it is subtracted from two `ANY_PARK` rows below: the spine gives it `retry` and `cancel`
+#: **only**, and a merge Run has neither a Story nor an epic frame for a skip to act on — so
+#: the exclusion is stated in the table rather than left to `_has_story_frame` to discover.
+MERGE_CONFLICT: ParkKind = "merge_conflict"
 
 #: The payload key a raised budget arrives under.
 BUDGET_KEY = "budget_usd"
@@ -262,19 +270,24 @@ VALID: dict[SignalKind, Rule] = {
                 "internal",
                 "verify_failed",
                 "protected_path",
+                # AD-13, amended 2026-09-23: on `merge_conflict` the `git.merge` row re-runs
+                # whole, aborting any merge in progress first. No `Git.sync` pre-step — that
+                # belongs to `push_rejected` and `verify_failed`; here the abort is the
+                # equivalent, and it lives in `Git.merge` rather than in this table.
+                "merge_conflict",
             }
         ),
         run_event="retry",
         text="retried by the operator",
     ),
     "skip_story": Rule(
-        park_kinds=ANY_PARK - frozenset({"budget", "plan_stale", "push_rejected"}),
+        park_kinds=ANY_PARK - frozenset({"budget", "plan_stale", "push_rejected", MERGE_CONFLICT}),
         extra=_has_story_frame,
         run_event="skip_story",
         text="story skipped by the operator",
     ),
     "skip_epic": Rule(
-        park_kinds=ANY_PARK - frozenset({"budget", "plan_stale"}),
+        park_kinds=ANY_PARK - frozenset({"budget", "plan_stale", MERGE_CONFLICT}),
         extra=_has_epic_frame,
         run_event="skip_epic",
         text="epic skipped by the operator",

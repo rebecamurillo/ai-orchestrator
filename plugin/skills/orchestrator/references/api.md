@@ -103,7 +103,7 @@ Signal kinds: `answer` (`{text}`), `continue` (`{files[]}` for protected-path ac
 - Step: `planned` `queued` `running` `done` `blocked` `checkpoint` `error` `skipped`.
 - Park kinds (`alert.park_kind`): `blocked` `checkpoint` `verify_failed` `budget`
   `timeout` `push_rejected` `protected_path` `misconfigured` `plan_stale` `internal`
-  `dependency`.
+  `dependency` `merge_conflict`.
 - A parked Run waits up to the instance's `HUMAN_WAIT_SECONDS` (default 30 days), then
   fails.
 

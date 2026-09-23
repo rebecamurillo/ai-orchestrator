@@ -65,7 +65,8 @@
                   "misconfigured",
                   "plan_stale",
                   "internal",
-                  "dependency"
+                  "dependency",
+                  "merge_conflict"
                 ],
                 "type": "string"
               },
@@ -548,7 +549,8 @@
                   "misconfigured",
                   "plan_stale",
                   "internal",
-                  "dependency"
+                  "dependency",
+                  "merge_conflict"
                 ],
                 "type": "string"
               },
@@ -1009,7 +1011,8 @@
                   "misconfigured",
                   "plan_stale",
                   "internal",
-                  "dependency"
+                  "dependency",
+                  "merge_conflict"
                 ],
                 "type": "string"
               },

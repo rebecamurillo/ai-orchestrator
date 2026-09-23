@@ -101,9 +101,12 @@ def test_the_step_status_tokens_are_the_ones_the_conventions_spell() -> None:
     )
 
 
-def test_the_park_kinds_are_the_eleven_the_brief_lists() -> None:
+def test_the_park_kinds_are_the_twelve_the_brief_lists() -> None:
     # operator revision 2026-09-18: "dependency" added as a new park kind (story 5-4);
     # anchor exception 4 granted 2026-09-18.
+    # revised 2026-09-23 (multi-repository initiative, story S4): "merge_conflict" added —
+    # AD-13's amended park list names it, written by the `git.merge` executor on a
+    # conflicted merge and admitting `retry` and `cancel` only.
     assert PARK_KINDS == (
         "blocked",
         "checkpoint",
@@ -116,6 +119,7 @@ def test_the_park_kinds_are_the_eleven_the_brief_lists() -> None:
         "plan_stale",
         "internal",
         "dependency",
+        "merge_conflict",
     )
 
 

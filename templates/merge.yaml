@@ -1,0 +1,44 @@
+name: merge
+version: 1
+description: one epic branch merged into the repository's integration branch, gated, pushed
+inputs:
+  project:        { type: project,    required: true }
+  repository:     { type: repository, required: true }
+  base_branch:    { type: string,     required: true }   # where the integration branch starts
+  develop_branch: { type: string,     required: true }   # the integration branch, by its name
+  from_branch:    { type: string,     required: true }   # the epic branch being merged in
+steps:
+  # `mode: attach` is what makes this Run share the integration branch rather than be given
+  # a fresh ordinal of it: every merge of every epic meets on the same branch, serialized by
+  # the `{repository_id}:{branch}` partition (AD-7, AD-12, AD-14).
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "{{develop_branch}}", mode: attach }
+    gate: deterministic
+
+  # Attaching reuses an existing worktree without fast-forwarding it, so this row is where
+  # a branch another merge Run moved is brought up to date. A branch the origin does not
+  # hold yet is a recorded no-op; one that has diverged parks `push_rejected` (AD-13/AD-14).
+  - id: sync
+    uses: git.sync
+    gate: deterministic
+
+  - id: merge
+    uses: git.merge
+    with: { from: "{{from_branch}}" }
+    gate: deterministic
+
+  - id: setup
+    run: "{{repository.install_command}}"
+    timeout_min: 20
+    gate: deterministic
+
+  - id: gate
+    run: "{{repository.quality_gate_command}}"
+    timeout_min: 45
+    gate: deterministic
+
+  - id: push
+    uses: git.push
+    with: { branch: "{{develop_branch}}" }
+    gate: deterministic

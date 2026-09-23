@@ -146,6 +146,31 @@ class Git(Protocol):
         """
         ...
 
+    def merge(self, worktree: Path, branch: str) -> str | None:
+        """Merge `origin/{branch}` into the branch this worktree is on; `None` when that ref
+        is already contained.
+
+        AD-14's own words (ratified 2026-09-23): "merge a ref into the current worktree's
+        branch, aborting any merge in progress first". Three answers, and each is a fact
+        about the two branches rather than a degree of success:
+
+        - **A merge made is its commit.** `--no-ff`, so there is always a new commit and the
+          sha is always one the caller has not seen; the `git.merge` kind records it as the
+          row's output the way `git.commit` records its own.
+        - **A ref already contained is `None`** — the port's second convention applied to
+          "nothing to merge", exactly as `sync` applies it to "no upstream". This is also how
+          a merge the Operator finished and pushed out of band ends the re-run of the row:
+          `done · already merged` (AD-13). A sha-only return could not tell this case from
+          the one above without the caller asking `head_sha` twice to re-derive a fact the
+          adapter already had.
+        - **A conflict is a `GitError`** whose `output` carries git's own message *and* the
+          conflicted-file listing, and the conflicted merge is deliberately **left in the
+          worktree**: it is what the Operator opens at the `merge_conflict` park. The next
+          call is what aborts it, which is what makes AD-13's `retry` — the row re-run whole
+          — safe rather than a refusal from a merge that was never concluded.
+        """
+        ...
+
     def status(self, worktree: Path) -> str:
         """`git status --porcelain`: the empty string when the worktree is clean."""
         ...

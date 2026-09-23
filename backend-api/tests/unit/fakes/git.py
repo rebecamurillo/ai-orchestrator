@@ -19,10 +19,11 @@ double would pass here and fail against a real process:
   `seconds` would be zero for every scenario and nothing would be asserting them.
 
 4.8 completed the port, so the worktree half is scripted the same way: `worktree_add`,
-`sync`, `status`, `stage`, `commit`, `diff_names`, `diff_changes`, `diff` (6.6), `push`,
-`head_sha`, `remove_worktree` and `delete_branch` each take a list, an entry that is an exception is
-raised, and every call is logged with its arguments — which is what lets "the spec folder was
-staged before everything else" and "no push command ran" be assertions rather than hopes.
+`sync`, `merge` (S4), `status`, `stage`, `commit`, `diff_names`, `diff_changes`, `diff` (6.6),
+`push`, `head_sha`, `remove_worktree` and `delete_branch` each take a list, an entry that is
+an exception is raised, and every call is logged with its arguments — which is what lets "the
+spec folder was staged before everything else" and "no push command ran" be assertions rather
+than hopes.
 
 The planner asks the same three questions of many refs and paths, and "which answer came
 back" matters more to it than "how many answers were scripted", so three of the methods
@@ -63,6 +64,7 @@ class FakeGit:
         list_files: list[Any] | None = None,
         worktree_add: list[Any] | None = None,
         sync: list[Any] | None = None,
+        merge: list[Any] | None = None,
         status: list[Any] | None = None,
         stage: list[Any] | None = None,
         commit: list[Any] | None = None,
@@ -93,6 +95,9 @@ class FakeGit:
             "list_files": list_files or [()],
             "worktree_add": worktree_add or [""],
             "sync": sync or [""],
+            # `None` rather than a sha: a fake nobody scripted has nothing to merge, which
+            # is the answer that changes no branch (`already merged`, S4).
+            "merge": merge if merge is not None else [None],
             "status": status or [""],
             "stage": stage or [None],
             "commit": commit or [DEFAULT_SHA],
@@ -152,6 +157,10 @@ class FakeGit:
 
     def sync(self, worktree: Path, branch: str) -> str | None:
         answer: str | None = self._answer("sync", (worktree, branch))
+        return answer
+
+    def merge(self, worktree: Path, branch: str) -> str | None:
+        answer: str | None = self._answer("merge", (worktree, branch))
         return answer
 
     def status(self, worktree: Path) -> str:

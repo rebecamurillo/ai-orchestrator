@@ -26,6 +26,10 @@ SPINE = {
     # (multi-repo initiative S3, spine AD-7/AD-14 amendment, 2026-09-23).
     "git.worktree": ("deterministic", 5, frozenset({"base", "branch", "mode"}), False),
     "git.sync": ("deterministic", 5, frozenset(), False),
+    # Added: the shipped-kinds table gained `git.merge` — `with {from}`, merging
+    # `origin/{from}` into the current worktree's branch with `--no-ff`
+    # (multi-repo initiative S4, spine AD-9/AD-13/AD-14 amendment, 2026-09-23).
+    "git.merge": ("deterministic", 5, frozenset({"from"}), False),
     "shell": ("deterministic", 30, frozenset({"command"}), False),
     "agent": (
         "liveness",
@@ -42,12 +46,13 @@ SPINE = {
     "bmad.install": ("deterministic", 30, frozenset(), False),
 }
 
-ELEVEN = 11
+#: Revised from eleven by the `git.merge` row above (multi-repo initiative S4, 2026-09-23).
+TWELVE = 12
 
 
-def test_the_registry_holds_exactly_the_eleven_shipped_kinds() -> None:
+def test_the_registry_holds_exactly_the_twelve_shipped_kinds() -> None:
     assert set(KIND_META) == set(SPINE)
-    assert len(KIND_META) == ELEVEN
+    assert len(KIND_META) == TWELVE
 
 
 @pytest.mark.parametrize("kind", sorted(SPINE))

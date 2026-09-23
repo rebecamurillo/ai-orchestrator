@@ -51,6 +51,9 @@ ParkKind = Literal[
     "plan_stale",
     "internal",
     "dependency",
+    #: A `git.merge` row whose merge conflicted (AD-13, ratified 2026-09-23). The merge is
+    #: left in the worktree for the Operator; the stop admits `retry` and `cancel` only.
+    "merge_conflict",
 ]
 PARK_KINDS: tuple[ParkKind, ...] = get_args(ParkKind)
 
