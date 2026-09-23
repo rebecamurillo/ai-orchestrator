@@ -93,7 +93,9 @@ probe() {
   if ! command -v claude >/dev/null 2>&1; then
     probe_output false "cli not installed" "" "[]"; exit 1
   fi
-  version_str=$(claude --version 2>&1 | awk '{print $NF}')
+  # Unlike codex/opencode, `claude --version` prints "<version> (Claude Code)" — the
+  # version is the first field, not the last.
+  version_str=$(claude --version 2>&1 | awk '{print $1}')
   if [ "$version_str" != "${CLAUDE_CODE_VERSION}" ]; then
     probe_output false "cli not at pinned version ${CLAUDE_CODE_VERSION}" "${version_str}" "[]"
     exit 1
