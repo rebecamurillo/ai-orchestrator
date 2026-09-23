@@ -47,6 +47,9 @@ const preview = {
     BACKEND_API_URL,
     ORCHESTRATOR_TOKEN,
     ORCHESTRATOR_SESSION_SECRET: PROBE_SESSION_SECRET,
+    // deliberately not the shipped default order, so `new-workflow.spec.ts` can prove the
+    // built server reads this at run time. Reordered, not narrowed: the specs select by name.
+    ROOT_TEMPLATES: 'task,epic,repo-init,initiative,story-run',
   },
 };
 

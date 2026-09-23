@@ -231,7 +231,22 @@ TEMPLATES[EPIC_NAME] = {
       called_by: [],
       pinned_by: 0,
       created_at: '2026-09-01T09:00:00Z',
-      inputs: [{ name: 'branch', type: 'string', required: true, default: null, values: [] }],
+      inputs: [
+        { name: 'project', type: 'project', required: true, default: null, values: [] },
+        { name: 'repository', type: 'repository', required: true, default: null, values: [] },
+        { name: 'base_branch', type: 'string', required: true, default: null, values: [] },
+        { name: 'branch', type: 'string', required: true, default: null, values: [] },
+        { name: 'spec_folder', type: 'path', required: true, default: null, values: [] },
+        { name: 'epic', type: 'item', required: false, default: null, values: [] },
+        {
+          name: 'harness',
+          type: 'enum',
+          required: false,
+          default: 'claude',
+          values: ['claude', 'codex', 'local'],
+        },
+        { name: 'model', type: 'string', required: false, default: null, values: [] },
+      ],
     },
   },
 };
@@ -263,7 +278,18 @@ TEMPLATES[INITIATIVE_NAME] = {
       pinned_by: 0,
       created_at: '2026-09-01T09:00:00Z',
       inputs: [
+        { name: 'project', type: 'project', required: true, default: null, values: [] },
+        { name: 'repository', type: 'repository', required: true, default: null, values: [] },
+        { name: 'base_branch', type: 'string', required: true, default: null, values: [] },
         { name: 'initiative_folder', type: 'path', required: true, default: null, values: [] },
+        {
+          name: 'harness',
+          type: 'enum',
+          required: false,
+          default: 'claude',
+          values: ['claude', 'codex', 'local'],
+        },
+        { name: 'model', type: 'string', required: false, default: null, values: [] },
       ],
     },
   },
@@ -282,7 +308,96 @@ TEMPLATES[REPO_INIT_NAME] = {
       called_by: [],
       pinned_by: 0,
       created_at: '2026-09-01T09:00:00Z',
-      inputs: [],
+      inputs: [
+        { name: 'project', type: 'project', required: true, default: null, values: [] },
+        { name: 'repository', type: 'repository', required: true, default: null, values: [] },
+        { name: 'base_branch', type: 'string', required: true, default: null, values: [] },
+        {
+          name: 'harness',
+          type: 'enum',
+          required: false,
+          default: 'claude',
+          values: ['claude', 'codex', 'local'],
+        },
+        { name: 'model', type: 'string', required: false, default: null, values: [] },
+      ],
+    },
+  },
+};
+
+/**
+ * The two remaining shipped root Templates. `/workflows/new` resolves every name
+ * `ROOT_TEMPLATES` offers and reads each one's declared `inputs`, so a name with no fixture
+ * here would be dropped from the dropdown. As everywhere in this file the `inputs` are the
+ * suite's own data, not a reading of `templates/*.yaml` (hard rule 6).
+ */
+export const STORY_RUN_NAME = 'story-run';
+export const TASK_NAME = 'task';
+
+TEMPLATES[STORY_RUN_NAME] = {
+  description: 'one story on its own branch, verified and pushed',
+  versions: {
+    1: {
+      id: '01a06887-79ab-759b-97a0-71c32ad939e3',
+      name: STORY_RUN_NAME,
+      version: 1,
+      yaml: 'name: story-run\nversion: 1\n',
+      hash: '1'.repeat(64),
+      calls: [],
+      called_by: [],
+      pinned_by: 0,
+      created_at: '2026-09-01T09:00:00Z',
+      inputs: [
+        { name: 'project', type: 'project', required: true, default: null, values: [] },
+        { name: 'repository', type: 'repository', required: true, default: null, values: [] },
+        { name: 'base_branch', type: 'string', required: true, default: null, values: [] },
+        { name: 'branch', type: 'string', required: true, default: null, values: [] },
+        { name: 'spec_folder', type: 'path', required: true, default: null, values: [] },
+        { name: 'story_id', type: 'string', required: true, default: null, values: [] },
+        {
+          name: 'harness',
+          type: 'enum',
+          required: false,
+          default: 'claude',
+          values: ['claude', 'codex', 'local'],
+        },
+        { name: 'model', type: 'string', required: false, default: null, values: [] },
+      ],
+    },
+  },
+};
+
+TEMPLATES[TASK_NAME] = {
+  description: 'one issue-sized change through the plan gate',
+  versions: {
+    1: {
+      id: '01a06887-79ab-759b-97a0-71c32ad939e4',
+      name: TASK_NAME,
+      version: 1,
+      yaml: 'name: task\nversion: 1\n',
+      hash: '2'.repeat(64),
+      calls: [],
+      called_by: [],
+      pinned_by: 0,
+      created_at: '2026-09-01T09:00:00Z',
+      inputs: [
+        { name: 'project', type: 'project', required: true, default: null, values: [] },
+        { name: 'repository', type: 'repository', required: true, default: null, values: [] },
+        { name: 'base_branch', type: 'string', required: true, default: null, values: [] },
+        { name: 'branch', type: 'string', required: true, default: null, values: [] },
+        { name: 'task_id', type: 'string', required: true, default: null, values: [] },
+        { name: 'title', type: 'string', required: true, default: null, values: [] },
+        { name: 'intent', type: 'string', required: true, default: null, values: [] },
+        { name: 'artifacts_dir', type: 'path', required: true, default: null, values: [] },
+        {
+          name: 'harness',
+          type: 'enum',
+          required: false,
+          default: 'claude',
+          values: ['claude', 'codex', 'local'],
+        },
+        { name: 'model', type: 'string', required: false, default: null, values: [] },
+      ],
     },
   },
 };

@@ -74,14 +74,44 @@ def test_the_file_requires_the_database_credentials() -> None:
     assert {"POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"} <= set(REQUIRED)
 
 
+#: Interpolated bare, because absence is a defined value for it: `${VAR:?}` refuses an empty
+#: value too, and `ROOT_TEMPLATES=` means "offer the default list" (Operator instruction
+#: 2026-09-22). Named explicitly so a second bare reference still fails below.
+UNGUARDED: frozenset[str] = frozenset({"ROOT_TEMPLATES"})
+
+
 def test_every_reference_is_guarded() -> None:
     """Also a guard: dropping a `:?` would quietly remove that variable from the cases below.
 
-    Read as "no variable is interpolated bare" rather than as a list of names, so a service
-    added later cannot arrive with an unguarded reference and no test to say so.
+    Read as "no variable is interpolated bare except the ones named above", so a service added
+    later cannot arrive with an unguarded reference and no test to say so.
     """
     assert REFERENCED, "nothing is interpolated — the parser is wrong"
-    assert set(REFERENCED) == set(REQUIRED), sorted(set(REFERENCED) - set(REQUIRED))
+    assert set(REFERENCED) - set(REQUIRED) == set(UNGUARDED), sorted(
+        set(REFERENCED) - set(REQUIRED) - set(UNGUARDED)
+    )
+    assert set(REQUIRED) - set(REFERENCED) == set()
+
+
+#: Both contracts carry the same bare reference, so both have to state the same fallback.
+CONTRACTS = (ENV_EXAMPLE, REPO_ROOT / "deploy" / ".env.example")
+
+
+@pytest.mark.parametrize("contract", CONTRACTS, ids=lambda path: str(path.relative_to(REPO_ROOT)))
+def test_every_unguarded_variable_states_a_default_in_the_contract(contract: Path) -> None:
+    """The exception above is only sound while the contract ships a value to fall back to.
+    The value is asserted, not just the name: `ROOT_TEMPLATES=` satisfies "is declared" and is
+    exactly the undocumented empty string this rules out.
+    """
+    declared = {
+        line.partition("=")[0].strip(): line.partition("=")[2].strip()
+        for line in contract.read_text().splitlines()
+        if "=" in line and not line.lstrip().startswith("#")
+    }
+
+    assert UNGUARDED <= set(declared), sorted(UNGUARDED - set(declared))
+    for variable in sorted(UNGUARDED):
+        assert declared[variable], f"{variable} is declared with no value in {contract}"
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="docker not on PATH")

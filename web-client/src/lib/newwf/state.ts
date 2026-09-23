@@ -2,16 +2,18 @@
  * Pure state for the New Workflow form (4.13, UX-DR8) — no DOM, no fetch, so it unit-tests
  * without rendering (`web-client/AGENTS.md`).
  *
- * `TEMPLATE_ORDER` and `TEMPLATE_INPUT_FIELDS` are the brief's own fixed enumeration, not
- * derived from `GET /templates`: this epic ships five root Templates
- * (`templates/initiative.yaml`, `templates/epic.yaml`, `templates/repo-init.yaml`,
- * `templates/story-run.yaml`, `templates/task.yaml`), `story` is never started directly
- * (IMP-001 accepted 2026-09-15, FR-33), and the list the Operator switches between never
- * depends on what the list endpoint happens to answer. The `templates` prop is read only to
- * look up `latest_version` for whichever name is selected.
- * Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template.
+ * The Template list is not here: it comes from `newwf/catalog.ts`, and every function below
+ * that needs it takes a `TemplateCatalog`. The `templates` prop is read only to look up
+ * `latest_version` for the selected name.
  */
 import type { components } from '../../api/schema';
+import {
+  fieldsFor,
+  firstTemplate,
+  offers,
+  usesHarness as catalogUsesHarness,
+  type TemplateCatalog,
+} from './catalog';
 
 type LineOut = components['schemas']['LineOut'];
 type PreflightIn = components['schemas']['PreflightIn'];
@@ -21,107 +23,19 @@ type RepositoryOut = components['schemas']['RepositoryOut'];
 type HarnessOut = components['schemas']['HarnessOut'];
 export type ProbeResultOut = components['schemas']['ProbeResultOut'];
 
-// Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
-export const TEMPLATE_ORDER = ['initiative', 'epic', 'repo-init', 'story-run', 'task'] as const;
-export type TemplateName = (typeof TEMPLATE_ORDER)[number];
-
-export const DEFAULT_TEMPLATE: TemplateName = 'initiative';
-
-export interface TemplateInputField {
-  key: string;
-  label: string;
-  tooltip: string;
-}
-
-/** Template-dependent inputs, in the brief's own words and order. */
-export const TEMPLATE_INPUT_FIELDS: Record<TemplateName, TemplateInputField[]> = {
-  initiative: [
-    {
-      key: 'initiative_folder',
-      label: 'INITIATIVE FOLDER',
-      tooltip:
-        'Path in the repository where planning output lands. Passed to the template as initiative_folder.',
-    },
-  ],
-  epic: [
-    {
-      key: 'branch',
-      label: 'WORKING BRANCH',
-      tooltip:
-        'Branch the harness creates and pushes story commits to. Passed to the template as branch.',
-    },
-    {
-      key: 'spec_folder',
-      label: 'SPEC FOLDER',
-      tooltip:
-        "Path holding the epic's stories.yaml and story spec files. Passed to the template as spec_folder.",
-    },
-  ],
-  'repo-init': [],
-  'story-run': [
-    {
-      key: 'branch',
-      label: 'WORKING BRANCH',
-      tooltip:
-        'Branch the harness creates and pushes story commits to. Passed to the template as branch.',
-    },
-    {
-      key: 'spec_folder',
-      label: 'SPEC FOLDER',
-      tooltip:
-        "Path holding the epic's stories.yaml and story spec files. Passed to the template as spec_folder.",
-    },
-    {
-      key: 'story_id',
-      label: 'STORY ID',
-      tooltip:
-        'Id of the one story from stories.yaml this Run works. Passed to the template as story_id.',
-    },
-  ],
-  // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
-  task: [
-    {
-      key: 'branch',
-      label: 'WORKING BRANCH',
-      tooltip:
-        'Branch the harness creates and pushes the change to. Passed to the template as branch.',
-    },
-    {
-      key: 'task_id',
-      label: 'TASK ID',
-      tooltip: 'Id that names the task and its spec file. Passed to the template as task_id.',
-    },
-    {
-      key: 'title',
-      label: 'TITLE',
-      tooltip: 'One-line name of the change. Passed to the template as title.',
-    },
-    {
-      key: 'intent',
-      label: 'INTENT',
-      tooltip:
-        'What the change should accomplish, in the Operator’s words. Passed to the template as intent.',
-    },
-    {
-      key: 'artifacts_dir',
-      label: 'ARTIFACTS DIR',
-      tooltip:
-        'Path in the repository where the task’s spec and review land. Passed to the template as artifacts_dir.',
-    },
-  ],
-};
-
-export function isTemplateName(value: string): value is TemplateName {
-  return (TEMPLATE_ORDER as readonly string[]).includes(value);
+/** The guard a `<select>`'s change event needs before its value becomes the Template. */
+export function isTemplateName(value: string, catalog: TemplateCatalog): boolean {
+  return offers(catalog, value);
 }
 
 export interface FormState {
-  template: TemplateName;
+  /** A Template name the catalog offers; `''` when it offers none at all. */
+  template: string;
   projectId: string;
   repositoryId: string;
   baseBranch: string;
-  /** Keyed by `TEMPLATE_INPUT_FIELDS[template]`'s own `key`s; a field the current template
-   * does not declare is dropped rather than carried across a template change. */
+  /** Keyed by the current Template's declared input names; a field the new Template does not
+   * declare is dropped rather than carried across a change. */
   inputs: Record<string, string>;
   harness: string;
   model: string;
@@ -130,11 +44,13 @@ export interface FormState {
   manualEstimateH: string;
 }
 
-export function defaultFormState(): FormState {
+/** The form as it opens: the catalog's first Template, fields seeded from its defaults. */
+export function defaultFormState(catalog: TemplateCatalog): FormState {
+  const template = firstTemplate(catalog);
   const inputs: Record<string, string> = {};
-  for (const field of TEMPLATE_INPUT_FIELDS[DEFAULT_TEMPLATE]) inputs[field.key] = '';
+  for (const field of fieldsFor(catalog, template)) inputs[field.key] = field.initial;
   return {
-    template: DEFAULT_TEMPLATE,
+    template,
     projectId: '',
     repositoryId: '',
     baseBranch: '',
@@ -147,22 +63,34 @@ export function defaultFormState(): FormState {
   };
 }
 
-/** Whether this Template dispatches to a harness at all — `repo-init` runs no agent step,
- * so the brief hides its harness list entirely. */
-export function usesHarness(template: TemplateName): boolean {
-  return template !== 'repo-init';
+/** Whether this Template dispatches a harness — by its declared inputs, never by name. */
+export function usesHarness(template: string, catalog: TemplateCatalog): boolean {
+  return catalogUsesHarness(catalog, template);
 }
 
 /**
  * Switching template keeps every field but the inputs the new template does not have, and
  * clears `harness` for a template whose form has no harness list: hiding the control while
  * still submitting its value would post a harness the Operator can no longer see or change.
+ * A field the previous Template never held opens at the new one's declared default.
  */
-export function withTemplate(state: FormState, template: TemplateName): FormState {
-  const fields = TEMPLATE_INPUT_FIELDS[template];
+export function withTemplate(
+  state: FormState,
+  template: string,
+  catalog: TemplateCatalog,
+): FormState {
+  // an unoffered name would leave a form with no fields and no version to pin
+  if (!offers(catalog, template)) return state;
   const inputs: Record<string, string> = {};
-  for (const field of fields) inputs[field.key] = state.inputs[field.key] ?? '';
-  return { ...state, template, inputs, harness: usesHarness(template) ? state.harness : '' };
+  for (const field of fieldsFor(catalog, template)) {
+    inputs[field.key] = state.inputs[field.key] ?? field.initial;
+  }
+  return {
+    ...state,
+    template,
+    inputs,
+    harness: usesHarness(template, catalog) ? state.harness : '',
+  };
 }
 
 export function withInput(state: FormState, key: string, value: string): FormState {
@@ -375,6 +303,7 @@ export function reconcileInitial(
   state: FormState,
   projects: components['schemas']['ProjectRead'][],
   harnesses: HarnessOut[],
+  catalog: TemplateCatalog,
 ): FormState {
   const repositories = repositoriesFor(projects, state.projectId);
   const repository = repositoryById(repositories, state.repositoryId);
@@ -385,7 +314,7 @@ export function reconcileInitial(
     ...state,
     repositoryId: repository ? state.repositoryId : '',
     // the brief's own rule: "a disabled harness is not selectable"
-    harness: harnessEnabled && usesHarness(state.template) ? state.harness : '',
+    harness: harnessEnabled && usesHarness(state.template, catalog) ? state.harness : '',
     // "base branch (default: repository default branch)" — seeded when the link named a
     // Repository but no branch, so a real prefill link opens a startable form
     baseBranch: state.baseBranch || repository?.default_branch || '',

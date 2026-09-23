@@ -34,7 +34,11 @@ import pytest
 
 from tests.unit.conftest import REPO_ROOT, parse_env_example
 from tests.unit.test_compose import _block, _names
-from tests.unit.test_compose_services import WEB_CLIENT_VARIABLES, mapping_keys
+from tests.unit.test_compose_services import (
+    WEB_CLIENT_OPTIONAL,
+    WEB_CLIENT_VARIABLES,
+    mapping_keys,
+)
 
 DEPLOY_COMPOSE = REPO_ROOT / "deploy" / "docker-compose.yml"
 DEPLOY_ENV_EXAMPLE = REPO_ROOT / "deploy" / ".env.example"
@@ -99,8 +103,11 @@ def test_the_database_image_is_the_same_major_as_the_base_stack() -> None:
 # ── AD-5, unchanged by the packaging ─────────────────────────────────────────
 
 
-def test_the_web_client_receives_exactly_the_four_variables_it_needs() -> None:
-    assert mapping_keys(service("web-client"), "environment") == WEB_CLIENT_VARIABLES
+# The deploy bundle carries the same five the dev stack does (Operator instruction 2026-09-22).
+def test_the_web_client_receives_exactly_the_variables_it_needs() -> None:
+    assert mapping_keys(service("web-client"), "environment") == (
+        WEB_CLIENT_VARIABLES | WEB_CLIENT_OPTIONAL
+    )
 
 
 @pytest.mark.parametrize(

@@ -41,13 +41,18 @@ COMPOSE = REPO_ROOT / "docker-compose.yml"
 APP_SERVICES = ("backend-api", "web-client")
 EVERY_SERVICE = ("postgres", *APP_SERVICES)
 
-#: AD-5: the whole of what the web-client is given. Not a subset — the set.
+#: AD-5: the whole of what the web-client is given. Not a subset — the set. `ROOT_TEMPLATES`
+#: is the fifth and is held separately below: it is not fail-closed (Operator instruction
+#: 2026-09-22), so the parametrisation here still covers all four credentials.
 WEB_CLIENT_VARIABLES = {
     "ORCHESTRATOR_TOKEN",
     "ORCHESTRATOR_SESSION_SECRET",
     "BACKEND_API_URL",
     "WEB_CLIENT_PORT",
 }
+
+#: Given to the web-client too, but interpolated bare.
+WEB_CLIENT_OPTIONAL = {"ROOT_TEMPLATES"}
 
 #: Named volumes the stack declares.
 VOLUMES = ("pgdata", "work", "agent-home")
@@ -122,17 +127,32 @@ def test_the_service_names_its_context_and_its_dockerfile(
     assert f"dockerfile: {dockerfile}" in body
 
 
-# ── AD-5: the web-client gets four variables, and no other ───────────────────
+# ── AD-5: the web-client gets five variables, and no other ───────────────────
 
 
-def test_the_web_client_receives_exactly_the_four_variables_it_needs() -> None:
-    assert mapping_keys(service("web-client"), "environment") == WEB_CLIENT_VARIABLES
+def test_the_web_client_receives_exactly_the_variables_it_needs() -> None:
+    assert mapping_keys(service("web-client"), "environment") == (
+        WEB_CLIENT_VARIABLES | WEB_CLIENT_OPTIONAL
+    )
 
 
 @pytest.mark.parametrize("variable", sorted(WEB_CLIENT_VARIABLES))
 def test_each_web_client_variable_fails_closed(variable: str) -> None:
     """Bare `${VAR}` is an empty string when unset, and the server would start unauthenticated."""
     assert f"${{{variable}:?" in service("web-client"), variable
+
+
+def test_the_optional_set_is_the_one_variable_it_was_opened_for() -> None:
+    """Bounded by enumeration, not by spelling: a name check like "contains TOKEN" passes for
+    `DATABASE_URL`. Adding a second member has to be a visible edit to this line."""
+    assert WEB_CLIENT_OPTIONAL == {"ROOT_TEMPLATES"}
+    assert not (WEB_CLIENT_OPTIONAL & WEB_CLIENT_VARIABLES)
+
+
+@pytest.mark.parametrize("variable", sorted(WEB_CLIENT_OPTIONAL))
+def test_each_optional_web_client_variable_defaults_to_empty(variable: str) -> None:
+    """`${VAR:-}` and nothing else: a default here could disagree with the application's."""
+    assert f"{variable}: ${{{variable}:-}}" in service("web-client"), variable
 
 
 @pytest.mark.parametrize(

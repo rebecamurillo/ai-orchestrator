@@ -93,12 +93,14 @@ services:
       context: ./web-client
       dockerfile: Dockerfile
     environment:
-      # exactly four (AD-5) — the one credential, the cookie signing key, where the backend
-      # is, and the port. Never GITHUB_TOKEN, never LITELLM_SPEND_KEY, never DATABASE_URL.
+      # exactly five (AD-5). Never GITHUB_TOKEN, never LITELLM_SPEND_KEY, never DATABASE_URL.
       ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN:?set it in .env, copied from .env.example}
       ORCHESTRATOR_SESSION_SECRET: ${ORCHESTRATOR_SESSION_SECRET:?set it in .env, copied from .env.example}
       BACKEND_API_URL: ${BACKEND_API_URL:?set it in .env, copied from .env.example}
       WEB_CLIENT_PORT: ${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}
+      # the one bare reference here: empty is a defined value for this variable, so there is
+      # no misconfiguration for `:?` to catch
+      ROOT_TEMPLATES: ${ROOT_TEMPLATES:-}
     ports:
       # loopback only: one operator at one machine (PRD §12); reaching it from elsewhere is
       # a host concern, the same posture NFR-4 takes for egress

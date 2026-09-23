@@ -92,3 +92,19 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/planning-artifacts/mvp/epics/epic-07-harnesses/stories/7-5-runs-history.md`
   summary: `HistoryRow.log_tail_url` names a resource nothing serves, and a history row's `trace_url` resolves per Run rather than per attempt.
   evidence: No route returns an attempt's log tail; it is embedded in `GET /runs/{id}/detail` as `log_tail: list[str]`, so 7.5's field resolves to that detail path with the gap documented at the field — its brief's Scope was "Out: nothing else", so adding a route was not open to it. Separately, `domain/entities/attempt.py` stores no trace id; only `Run.trace_id` exists, so `trace_url` is the Run's and is stated as such rather than derived into something unrecorded. Epic 8 is the read-model epic and is where both should be decided.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dynamic-template-picker.md`
+  summary: Two runtime rules outside the New Workflow form still branch on a hardcoded template name — `src/lib/run/detail.ts:235` (`run.template !== 'initiative'`) and `src/lib/projects/runs.ts:46` (`run.template.startsWith('repo-init@')`).
+  evidence: Found by the verification-gap review of the ROOT_TEMPLATES change, 2026-09-22. Both predate that change and belong to other features (a Run's progress wording; a Repository's last repo-init Run), so neither was touched. They mean "no template name is hardcoded in web-client" is not yet true of the whole component, and a template renamed or replaced would silently change both behaviours.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dynamic-template-picker.md`
+  summary: `plan.py::root_scope` never applies a Template input's declared `default:` — it substitutes only what the Run was started with, so a Run created through the API gets `""` where the Template declared a value.
+  evidence: Traced during planning, 2026-09-22. `RunInputs.values` carries the submitted inputs and nothing reads `InputDecl.default`; `RunInputs.harness` defaults from `dto.DEFAULT_HARNESS`, not from the Template's own `default: claude`. The New Workflow form now prefills declared defaults, which closes it for the UI path only.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dynamic-template-picker.md`
+  summary: A Template input declared `type: enum` renders as a free-text field; its `values` are served by the API and discarded by the form.
+  evidence: Found by the edge-case review, 2026-09-22. `InputDeclOut.values` is populated, and `deriveFields` ignores it. No shipped Template declares a bindable enum (`harness` is the only enum and the form owns it), so nothing is broken today — but an authored Template can declare one and the Operator can then submit a value the Template does not accept.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-dynamic-template-picker.md`
+  summary: A required Template input left blank does not stop *Start run*; `runBody` gates only on project, repository and base branch.
+  evidence: Found by the blind and edge-case reviews, 2026-09-22. Pre-existing — the old hardcoded field table marked every input mandatory and nothing enforced it either. The catalog now carries `required` per input, so the data to enforce it exists for the first time.

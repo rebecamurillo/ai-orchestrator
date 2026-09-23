@@ -240,7 +240,7 @@ def test_a_context_path_the_worktree_does_not_hold_is_left_out_and_never_raises(
 def test_the_prepare_commit_stages_exactly_the_document_it_wrote() -> None:
     # First dispatch: the WIP check reads no status (Operator revision, 2026-09-16), so
     # the first scripted answer is the one the prepare commit's own staging check reads.
-    world = context_world(git=FakeGit(status=[" M x", ""], head_sha=[HEAD_SHA]))
+    world = context_world(git=FakeGit(status=[f"A  {CONTEXT_FILE}", ""], head_sha=[HEAD_SHA]))
 
     run(world)
 
@@ -253,6 +253,22 @@ def test_the_prepare_commit_stages_exactly_the_document_it_wrote() -> None:
 def test_an_unchanged_document_is_staged_and_then_not_committed() -> None:
     """`status` after the staging is empty when the same bytes are already committed."""
     world = context_world(git=FakeGit(status=[""], head_sha=[HEAD_SHA]))
+
+    run(world)
+
+    assert world.git.called("stage") == [(WORKTREE_PATH, CONTEXT_FILE)]
+    assert world.git.called("commit") == []
+
+
+def test_unrelated_worktree_dirt_does_not_trigger_a_commit_of_nothing() -> None:
+    """Production incident, 2026-09-22 (Operator report): a harness's own uncommitted work
+    left the worktree dirty on a path this row never touched, and the check this replaces —
+    "is the worktree dirty at all" — read that as something to commit even though the one
+    target it staged (the context document) was already the committed text, so `stage` was a
+    no-op. `git commit` then failed on an empty index — `nothing added to commit but
+    untracked files present` — surfaced to the Operator as `internal: GitError`, unchanged on
+    retry since nothing about the worktree state ever changed between attempts."""
+    world = context_world(git=FakeGit(status=["?? somewhere/else.md"], head_sha=[HEAD_SHA]))
 
     run(world)
 

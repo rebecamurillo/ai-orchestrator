@@ -10,13 +10,23 @@ import NewWorkflowFields from '../../src/components/NewWorkflowFields';
 import HarnessList from '../../src/components/HarnessList';
 import { defaultFormState, withTemplate } from '../../src/lib/newwf/state';
 import type { components } from '../../src/api/schema';
+import {
+  OPTIONAL_INPUT_DEFAULT,
+  OPTIONAL_INPUT_TEMPLATE,
+  catalogWithDefaulted,
+  fixtureCatalog,
+} from './newwf-catalog-fixture';
 
 type HarnessOut = components['schemas']['HarnessOut'];
 
-function renderFields(state = defaultFormState()): string {
+function renderFields(
+  state = defaultFormState(fixtureCatalog()),
+  catalog = fixtureCatalog(),
+): string {
   return renderToStaticMarkup(
     createElement(NewWorkflowFields, {
       state,
+      catalog,
       projects: [],
       repositories: [],
       note: undefined,
@@ -126,14 +136,18 @@ describe('NewWorkflowFields tooltips and mandatory marks', () => {
   });
 
   it('epic template: branch label has non-empty title= and * mark', () => {
-    const markup = renderFields(withTemplate(defaultFormState(), 'epic'));
+    const markup = renderFields(
+      withTemplate(defaultFormState(fixtureCatalog()), 'epic', fixtureCatalog()),
+    );
     const label = labelContaining(markup, 'data-testid="newwf-input-branch"');
     expect(label).toMatch(/title="[^"]+"/);
     expect(label).toContain(' *');
   });
 
   it('epic template: spec_folder label has non-empty title= and * mark', () => {
-    const markup = renderFields(withTemplate(defaultFormState(), 'epic'));
+    const markup = renderFields(
+      withTemplate(defaultFormState(fixtureCatalog()), 'epic', fixtureCatalog()),
+    );
     const label = labelContaining(markup, 'data-testid="newwf-input-spec_folder"');
     expect(label).toMatch(/title="[^"]+"/);
     expect(label).toContain(' *');
@@ -161,5 +175,32 @@ describe('HarnessList tooltip and legend', () => {
     for (const t of titles) {
       expect(t, `title="${t}"`).not.toMatch(/please|successfully/i);
     }
+  });
+});
+
+/** Every bindable input on every shipped Template is `required: true` with no default, so a
+ * component that always emitted `*` — and an ignored `field.initial` — passed the suite. */
+describe('a Template input that is optional and declares a default', () => {
+  const catalog = catalogWithDefaulted();
+  const markup = (): string =>
+    renderFields(
+      withTemplate(defaultFormState(catalog), OPTIONAL_INPUT_TEMPLATE, catalog),
+      catalog,
+    );
+
+  it('reads (optional) and carries no mandatory mark', () => {
+    const label = labelContaining(markup(), 'data-testid="newwf-input-skill_dir"');
+
+    expect(label).toMatch(/title="[^"]+"/);
+    expect(label).toContain('(optional)');
+    expect(label).not.toContain(' *');
+  });
+
+  it('leaves a required input on the same Template reading *', () => {
+    expect(labelContaining(markup(), 'data-testid="newwf-input-spec_folder"')).toContain(' *');
+  });
+
+  it('opens at the declared default', () => {
+    expect(markup()).toContain(`value="${OPTIONAL_INPUT_DEFAULT}"`);
   });
 });

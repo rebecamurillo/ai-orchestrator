@@ -22,6 +22,7 @@ import { describe, expect, it } from 'vitest';
 import NewWorkflowFields from '../../src/components/NewWorkflowFields';
 import { defaultFormState, modelsFor, withHarness } from '../../src/lib/newwf/state';
 import type { components } from '../../src/api/schema';
+import { fixtureCatalog } from './newwf-catalog-fixture';
 
 type HarnessOut = components['schemas']['HarnessOut'];
 
@@ -47,7 +48,8 @@ const HARNESSES: HarnessOut[] = [
 function render(models: string[] | undefined, model = ''): string {
   return renderToStaticMarkup(
     createElement(NewWorkflowFields, {
-      state: { ...defaultFormState(), model },
+      state: { ...defaultFormState(fixtureCatalog()), model },
+      catalog: fixtureCatalog(),
       projects: [],
       repositories: [],
       models,
@@ -79,7 +81,7 @@ describe('modelsFor', () => {
 
 describe('withHarness', () => {
   it('keeps a model the newly selected harness still offers', () => {
-    const state = { ...defaultFormState(), harness: 'local', model: 'local-coder' };
+    const state = { ...defaultFormState(fixtureCatalog()), harness: 'local', model: 'local-coder' };
 
     expect(withHarness(state, 'local', HARNESSES).model).toBe('local-coder');
   });
@@ -87,23 +89,29 @@ describe('withHarness', () => {
   it('clears a model the newly selected harness does not offer', () => {
     // a select cannot show a value that is not one of its options: carrying the old string
     // would leave the control blank while the form still submitted it
-    const state = { ...defaultFormState(), harness: 'claude', model: 'claude-opus-5' };
+    const state = {
+      ...defaultFormState(fixtureCatalog()),
+      harness: 'claude',
+      model: 'claude-opus-5',
+    };
 
     expect(withHarness(state, 'local', HARNESSES).model).toBe('');
   });
 
   it('keeps a typed model when the new harness offers no list to check it against', () => {
-    const state = { ...defaultFormState(), harness: 'local', model: 'local-coder' };
+    const state = { ...defaultFormState(fixtureCatalog()), harness: 'local', model: 'local-coder' };
 
     expect(withHarness(state, 'claude', HARNESSES).model).toBe('local-coder');
   });
 
   it('records the harness that was selected, whichever way the model went', () => {
-    expect(withHarness(defaultFormState(), 'local', HARNESSES).harness).toBe('local');
+    expect(withHarness(defaultFormState(fixtureCatalog()), 'local', HARNESSES).harness).toBe(
+      'local',
+    );
   });
 
   it('changes nothing else about the form', () => {
-    const state = { ...defaultFormState(), budgetUsd: '40', baseBranch: 'main' };
+    const state = { ...defaultFormState(fixtureCatalog()), budgetUsd: '40', baseBranch: 'main' };
 
     const next = withHarness(state, 'local', HARNESSES);
 

@@ -2,10 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CLONE_CHECK_FAILED_NOTE,
-  DEFAULT_TEMPLATE,
   READINESS_LINK_LABEL,
-  TEMPLATE_INPUT_FIELDS,
-  TEMPLATE_ORDER,
   checkSlug,
   cloneCheckNote,
   defaultFormState,
@@ -24,6 +21,15 @@ import {
   withInput,
   withTemplate,
 } from '../../src/lib/newwf/state';
+import { EMPTY_CATALOG } from '../../src/lib/newwf/catalog';
+import {
+  NO_HARNESS_TEMPLATE,
+  OPTIONAL_INPUT_DEFAULT,
+  OPTIONAL_INPUT_TEMPLATE,
+  catalogWithDefaulted,
+  catalogWithQuiet,
+  fixtureCatalog,
+} from './newwf-catalog-fixture';
 import type { components } from '../../src/api/schema';
 
 type RepositoryOut = components['schemas']['RepositoryOut'];
@@ -69,60 +75,76 @@ function project(overrides: Partial<ProjectRead> = {}): ProjectRead {
   };
 }
 
-describe('TEMPLATE_ORDER and TEMPLATE_INPUT_FIELDS', () => {
-  // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
-  it('lists the five root Templates, initiative first, story never', () => {
-    // Updated 2026-09-17 (story 4-8): IMP-001 accepted 2026-09-15 — story-run is the fourth root Template
-    // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
-    expect(TEMPLATE_ORDER).toEqual(['initiative', 'epic', 'repo-init', 'story-run', 'task']);
-    expect(DEFAULT_TEMPLATE).toBe('initiative');
-    expect(TEMPLATE_ORDER).not.toContain('story');
+/**
+ * Revised 2026-09-22 (Operator instruction: templates come from `ROOT_TEMPLATES`). This
+ * pinned `TEMPLATE_ORDER`, `DEFAULT_TEMPLATE` and `TEMPLATE_INPUT_FIELDS`, none of which
+ * exist now; the rules that replaced them are pinned in `newwf-catalog.test.ts`.
+ */
+describe('the offered Templates come from the catalog', () => {
+  it('opens on the catalog’s first Template, with its fields seeded', () => {
+    const catalog = fixtureCatalog();
+
+    expect(defaultFormState(catalog).template).toBe(catalog.names[0]);
+    expect(Object.keys(defaultFormState(catalog).inputs)).toEqual(['initiative_folder']);
   });
 
-  // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
-  it('gives initiative one input, epic two, repo-init none, story-run three, task five', () => {
-    expect(TEMPLATE_INPUT_FIELDS.initiative.map((field) => field.key)).toEqual([
-      'initiative_folder',
-    ]);
-    expect(TEMPLATE_INPUT_FIELDS.epic.map((field) => field.key)).toEqual(['branch', 'spec_folder']);
-    expect(TEMPLATE_INPUT_FIELDS['repo-init']).toEqual([]);
-    // Updated 2026-09-17 (story 4-8): IMP-001 accepted 2026-09-15 — story-run is the fourth root Template
-    expect(TEMPLATE_INPUT_FIELDS['story-run'].map((f) => f.key)).toEqual([
-      'branch',
-      'spec_folder',
-      'story_id',
-    ]);
-    // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
-    expect(TEMPLATE_INPUT_FIELDS['task'].map((f) => f.key)).toEqual([
-      'branch',
-      'task_id',
-      'title',
-      'intent',
-      'artifacts_dir',
-    ]);
+  it('opens on no Template at all when the catalog offers none', () => {
+    const empty = EMPTY_CATALOG;
+
+    expect(defaultFormState(empty).template).toBe('');
+    expect(defaultFormState(empty).inputs).toEqual({});
+  });
+});
+
+/** `field.initial` is wired into three call sites and no fixture had a default, so replacing
+ * it with `''` everywhere kept the suite green. */
+describe('a Template input that declares a default', () => {
+  it('opens at that default rather than blank', () => {
+    const catalog = catalogWithDefaulted();
+
+    expect(defaultFormState(catalog).template).not.toBe(OPTIONAL_INPUT_TEMPLATE);
+    expect(
+      withTemplate(defaultFormState(catalog), OPTIONAL_INPUT_TEMPLATE, catalog).inputs,
+    ).toEqual({ spec_folder: '', skill_dir: OPTIONAL_INPUT_DEFAULT });
+  });
+
+  it('keeps what the Operator already typed instead of the default', () => {
+    const catalog = catalogWithDefaulted();
+    const typed = withInput(
+      withTemplate(defaultFormState(catalog), OPTIONAL_INPUT_TEMPLATE, catalog),
+      'skill_dir',
+      '/elsewhere',
+    );
+
+    expect(withTemplate(typed, OPTIONAL_INPUT_TEMPLATE, catalog).inputs.skill_dir).toBe(
+      '/elsewhere',
+    );
   });
 });
 
 describe('isTemplateName', () => {
-  // Updated 2026-09-17 (story 4-8): IMP-001 accepted 2026-09-15 — story-run is the fourth root Template
-  // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
-  it('accepts the five fixed names and refuses anything else', () => {
-    expect(isTemplateName('initiative')).toBe(true);
-    expect(isTemplateName('epic')).toBe(true);
-    expect(isTemplateName('repo-init')).toBe(true);
-    // Updated 2026-09-17 (story 4-8): IMP-001 accepted 2026-09-15 — story-run is the fourth root Template
-    expect(isTemplateName('story-run')).toBe(true);
-    // Updated 2026-09-17 (story 4-9): IMP-002 accepted 2026-09-15 — task is the fifth root Template
-    expect(isTemplateName('task')).toBe(true);
-    expect(isTemplateName('story')).toBe(false);
-    expect(isTemplateName('')).toBe(false);
+  it('accepts exactly what the catalog offers, and never a name outside it', () => {
+    const catalog = fixtureCatalog();
+
+    for (const name of catalog.names) {
+      expect(isTemplateName(name, catalog)).toBe(true);
+    }
+    // `story` is called by another Template and is never started directly (FR-33); with the
+    // list now configurable, what keeps it out is its absence from the catalog
+    expect(isTemplateName('story', catalog)).toBe(false);
+    expect(isTemplateName('ghost', catalog)).toBe(false);
+    expect(isTemplateName('', catalog)).toBe(false);
   });
 });
 
 describe('withTemplate', () => {
   it('keeps every other field but resets the inputs to the new template’s own keys', () => {
-    const state = withInput(defaultFormState(), 'initiative_folder', 'docs/initiative');
-    const switched = withTemplate({ ...state, projectId: 'p1' }, 'epic');
+    const state = withInput(
+      defaultFormState(fixtureCatalog()),
+      'initiative_folder',
+      'docs/initiative',
+    );
+    const switched = withTemplate({ ...state, projectId: 'p1' }, 'epic', fixtureCatalog());
 
     expect(switched.template).toBe('epic');
     expect(switched.projectId).toBe('p1');
@@ -132,7 +154,11 @@ describe('withTemplate', () => {
 
 describe('withInput', () => {
   it('sets one input key without disturbing the others', () => {
-    const state = withInput(withTemplate(defaultFormState(), 'epic'), 'branch', 'chore/x');
+    const state = withInput(
+      withTemplate(defaultFormState(fixtureCatalog()), 'epic', fixtureCatalog()),
+      'branch',
+      'chore/x',
+    );
     const next = withInput(state, 'spec_folder', 'specs/');
 
     expect(next.inputs).toEqual({ branch: 'chore/x', spec_folder: 'specs/' });
@@ -177,7 +203,7 @@ describe('latestVersion', () => {
 describe('preflightBody', () => {
   it('carries every field, template_version resolved and inputs passed through', () => {
     const templates = [{ name: 'initiative', description: null, latest_version: 1, versions: [1] }];
-    const state = withInput(defaultFormState(), 'initiative_folder', 'docs/x');
+    const state = withInput(defaultFormState(fixtureCatalog()), 'initiative_folder', 'docs/x');
 
     expect(preflightBody(state, templates)).toEqual({
       template_name: 'initiative',
@@ -194,7 +220,7 @@ describe('preflightBody', () => {
   });
 
   it('carries template_version null when the name is not yet resolved', () => {
-    expect(preflightBody(defaultFormState(), []).template_version).toBeNull();
+    expect(preflightBody(defaultFormState(fixtureCatalog()), []).template_version).toBeNull();
   });
 });
 
@@ -204,12 +230,12 @@ describe('runBody', () => {
   ];
 
   it('is null while a required field is missing', () => {
-    expect(runBody(defaultFormState(), templates)).toBeNull();
+    expect(runBody(defaultFormState(fixtureCatalog()), templates)).toBeNull();
   });
 
   it('is null while the Template’s version is unresolved', () => {
     const state = {
-      ...defaultFormState(),
+      ...defaultFormState(fixtureCatalog()),
       projectId: 'p1',
       repositoryId: 'r1',
       baseBranch: 'main',
@@ -221,7 +247,7 @@ describe('runBody', () => {
 
   it('builds the full request once every required field is set', () => {
     const state = {
-      ...defaultFormState(),
+      ...defaultFormState(fixtureCatalog()),
       projectId: 'p1',
       repositoryId: 'r1',
       baseBranch: 'main',
@@ -318,25 +344,38 @@ describe('readinessHref', () => {
   });
 });
 
+/**
+ * Revised 2026-09-22 (Operator instruction). These pinned `usesHarness('repo-init') === false`
+ * from a rule that named the Template. The rule is now "declares a `harness` input", and
+ * `repo-init` declares one and has a `uses: agent` step, so hiding the list was wrong.
+ */
 describe('usesHarness', () => {
-  it('is false only for repo-init, which runs no agent step', () => {
-    expect(usesHarness('initiative')).toBe(true);
-    expect(usesHarness('epic')).toBe(true);
-    expect(usesHarness('repo-init')).toBe(false);
+  it('is true for every Template that declares a harness input', () => {
+    const catalog = catalogWithQuiet();
+
+    expect(usesHarness('initiative', catalog)).toBe(true);
+    expect(usesHarness('epic', catalog)).toBe(true);
+    expect(usesHarness('repo-init', catalog)).toBe(true);
+  });
+
+  it('is false for one that declares none', () => {
+    expect(usesHarness(NO_HARNESS_TEMPLATE, catalogWithQuiet())).toBe(false);
   });
 });
 
 describe('withTemplate — the harness it carries', () => {
-  it('clears a chosen harness when switching to repo-init', () => {
-    const state = { ...defaultFormState(), harness: 'claude' };
+  it('clears a chosen harness when switching to a Template that dispatches none', () => {
+    const catalog = catalogWithQuiet();
+    const state = { ...defaultFormState(catalog), harness: 'claude' };
 
-    expect(withTemplate(state, 'repo-init').harness).toBe('');
+    expect(withTemplate(state, NO_HARNESS_TEMPLATE, catalog).harness).toBe('');
   });
 
   it('keeps it when switching between two templates that dispatch one', () => {
-    const state = { ...defaultFormState(), harness: 'claude' };
+    const catalog = catalogWithQuiet();
+    const state = { ...defaultFormState(catalog), harness: 'claude' };
 
-    expect(withTemplate(state, 'epic').harness).toBe('claude');
+    expect(withTemplate(state, 'epic', catalog).harness).toBe('claude');
   });
 });
 
@@ -352,17 +391,21 @@ describe('reconcileInitial', () => {
 
   it('drops a repository that does not belong to the named project', () => {
     const projects = [project({ id: 'p1', repositories: [repository({ id: 'r1' })] })];
-    const state = { ...defaultFormState(), projectId: 'p1', repositoryId: 'r-other' };
+    const state = {
+      ...defaultFormState(fixtureCatalog()),
+      projectId: 'p1',
+      repositoryId: 'r-other',
+    };
 
-    expect(reconcileInitial(state, projects, []).repositoryId).toBe('');
+    expect(reconcileInitial(state, projects, [], fixtureCatalog()).repositoryId).toBe('');
   });
 
   it('keeps a repository that does belong to it, and seeds the base branch from it', () => {
     const repo = repository({ id: 'r1', default_branch: 'trunk' });
     const projects = [project({ id: 'p1', repositories: [repo] })];
-    const state = { ...defaultFormState(), projectId: 'p1', repositoryId: 'r1' };
+    const state = { ...defaultFormState(fixtureCatalog()), projectId: 'p1', repositoryId: 'r1' };
 
-    const reconciled = reconcileInitial(state, projects, []);
+    const reconciled = reconcileInitial(state, projects, [], fixtureCatalog());
 
     expect(reconciled.repositoryId).toBe('r1');
     expect(reconciled.baseBranch).toBe('trunk');
@@ -372,30 +415,36 @@ describe('reconcileInitial', () => {
     const repo = repository({ id: 'r1', default_branch: 'trunk' });
     const projects = [project({ id: 'p1', repositories: [repo] })];
     const state = {
-      ...defaultFormState(),
+      ...defaultFormState(fixtureCatalog()),
       projectId: 'p1',
       repositoryId: 'r1',
       baseBranch: 'release/1',
     };
 
-    expect(reconcileInitial(state, projects, []).baseBranch).toBe('release/1');
+    expect(reconcileInitial(state, projects, [], fixtureCatalog()).baseBranch).toBe('release/1');
   });
 
   it('drops a harness that is not enabled — a disabled one is not selectable', () => {
-    const state = { ...defaultFormState(), harness: 'claude' };
+    const state = { ...defaultFormState(fixtureCatalog()), harness: 'claude' };
 
-    expect(reconcileInitial(state, [], [disabled]).harness).toBe('');
+    expect(reconcileInitial(state, [], [disabled], fixtureCatalog()).harness).toBe('');
   });
 
   it('keeps an enabled harness', () => {
-    const state = { ...defaultFormState(), harness: 'codex' };
+    const state = { ...defaultFormState(fixtureCatalog()), harness: 'codex' };
 
-    expect(reconcileInitial(state, [], [enabled]).harness).toBe('codex');
+    expect(reconcileInitial(state, [], [enabled], fixtureCatalog()).harness).toBe('codex');
   });
 
-  it('drops even an enabled harness for repo-init, whose form has no harness list', () => {
-    const state = { ...withTemplate(defaultFormState(), 'repo-init'), harness: 'codex' };
+  // Revised 2026-09-22 (Operator instruction): `repo-init` declares a harness input, so the
+  // Template with no harness list is now one that declares none.
+  it('drops even an enabled harness for a Template whose form has no harness list', () => {
+    const catalog = catalogWithQuiet();
+    const state = {
+      ...withTemplate(defaultFormState(catalog), NO_HARNESS_TEMPLATE, catalog),
+      harness: 'codex',
+    };
 
-    expect(reconcileInitial(state, [], [enabled]).harness).toBe('');
+    expect(reconcileInitial(state, [], [enabled], catalog).harness).toBe('');
   });
 });

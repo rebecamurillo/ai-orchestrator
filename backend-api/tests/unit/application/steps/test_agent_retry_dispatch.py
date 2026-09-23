@@ -412,7 +412,7 @@ def test_the_section_names_the_command_the_code_and_the_log_tail() -> None:
 def test_the_prepare_commit_carries_the_story_file_it_rewrote() -> None:
     world = a_tail_world(
         previous=a_previous("done"),
-        git=FakeGit(status=["", " M x", ""], head_sha=[HEAD_SHA]),
+        git=FakeGit(status=["", f"M  {STORY_PATH}", ""], head_sha=[HEAD_SHA]),
     )
 
     run(failing_verify(world))

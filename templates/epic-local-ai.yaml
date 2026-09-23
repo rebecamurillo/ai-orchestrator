@@ -1,36 +1,18 @@
 name: epic-local-ai
 version: 1
 description: every story of one epic, one small agent session per build step, for open-source coding agents
-# Why this Template exists, and how it differs from `epic@1` / `story@1`:
+# Dispatches `prompt:` instead of `skill:`, once per build step: open-weight models behind the
+# `local` harness do not hold the whole bmad-build-auto workflow in one session, and several
+# emit tool calls as text, so a skill dispatch never runs.
 #
-# `story@1` hands the whole `bmad-build-auto` workflow to one session: the harness is asked to
-# run a skill, the orchestrator pre-renders `workflow.md`, and the agent carries four steps, a
-# status machine, a review panel and the HALT contract in one context. Open-weight models
-# behind the `local` harness do not hold that (Operator finding, 2026-09-21 — six attempts,
-# six different fumbles), and several of them emit tool calls as text, so a skill dispatch
-# never runs at all.
+# Each agent row reports through its own marker under `{spec_folder}/stories/.auto/`, because
+# FR-16 routes an `agent` row only on a Story file saying `done` — a step ending at `draft` or
+# `in-review` would park the Run. A `verify` redispatch rewrites that marker with the failing
+# command and its log tail (FR-10).
 #
-# So this Template dispatches `prompt:` instead of `skill:`, once per build step. Each step is
-# a new session with one file to read and one thing to do, and nothing of the renderer's
-# protocol is assumed. The step files themselves are the ones `bmad.install` already put in the
-# harness's own skills directory — `skill_dir` below names it — read raw, with their unrendered
-# placeholders explained in each prompt rather than resolved.
-#
-# **The step markers.** FR-16 routes an `agent` row on one thing: a Story file whose frontmatter
-# says `done`. A build step that legitimately ends at `draft`, `ready-for-dev`, `in-progress` or
-# `in-review` would therefore park the Run every time. So each row's `expect.files` points at
-# its own marker under `{spec_folder}/stories/.auto/` — the step says `done` there when it
-# finished its own step, `blocked` when it has a question — while the Story spec itself keeps
-# the status the method gives it. The marker is also what a `verify` redispatch rewrites
-# (FR-10): the failing command, its exit code and its log tail are appended to the marker the
-# fix row is about to read.
-#
-# **The two fix rows.** The Template DSL routes a failed command backwards and nowhere else
-# (`on_fail: {redispatch, max}`, to an `agent` step written earlier), so a fix agent cannot be
-# conditional on the gate that has not run yet. `unit-fix` and `gate-fix` therefore run the
-# command themselves first and stop immediately when it is green; the `run:` row after each one
-# is the deterministic gate that decides, and it redispatches back into the fix row when it is
-# red. The cost is one cheap agent turn per gate on a green story.
+# `unit-fix` and `gate-fix` run their command themselves and stop when it is green: the DSL
+# routes a failure backwards only, so a fix agent cannot be conditional on a gate that has not
+# run yet. The `run:` row after each one is the gate that decides.
 inputs:
   project:     { type: project,    required: true }
   repository:  { type: repository, required: true }

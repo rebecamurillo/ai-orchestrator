@@ -7,13 +7,13 @@
  * the brief's own list, issued together and each best effort so a slow or failing read
  * narrows the page rather than crashing it.
  *
- * The island offers a fixed three-name Template list (`initiative`, `epic`, `repo-init`), so
- * every one of those names needs a resolvable `latest_version` before *Start run* can build
- * a `POST /runs` body: a name the list read did not carry is resolved individually through
- * `GET /templates/{name}/versions`. That is not only a deep-link concern — the shared e2e
- * stub answers `GET /api/v1/templates` unconditionally empty (3.5's own Design Notes, which
- * protect the frozen `shell.spec.ts`), and a real instance's list is paginated, so the list
- * read is never the authority on whether a shipped root Template exists.
+ * The Template list comes from `ROOT_TEMPLATES`. Each name it lists needs a `latest_version`
+ * resolved here — without one *Start run* can build no `POST /runs` body — and the Template's
+ * own declared `inputs`, which are what the form asks for. The list read answers neither
+ * reliably (the shared e2e stub answers `GET /api/v1/templates` unconditionally empty, and a
+ * real instance's list is paginated), so a missing name is resolved through
+ * `GET /templates/{name}/versions` and every surviving one through
+ * `GET /templates/{name}/{version}`. A name that resolves to neither is dropped.
  *
  * A `?project=` naming a Project the (equally forced-empty, equally paginated) list read did
  * not carry is resolved the same way, through `GET /projects/{project_id}` — the route
@@ -25,12 +25,14 @@
  * visit against a reachable backend with nothing stored still renders `NO TEMPLATE TO BIND`,
  * which is what the frozen `shell.spec.ts` asserts.
  */
+import { ROOT_TEMPLATES } from 'astro:env/server';
 import EmptyState from '../../components/EmptyState.astro';
 import Shell from '../../layouts/Shell.astro';
 import { backend } from '../../api/server';
 import NewWorkflow from '../../islands/NewWorkflow';
+import { buildCatalog, parseRootTemplates } from '../../lib/newwf/catalog';
 import { parseFormStateFromQuery } from '../../lib/newwf/query';
-import { TEMPLATE_ORDER, reconcileInitial } from '../../lib/newwf/state';
+import { reconcileInitial } from '../../lib/newwf/state';
 import type { components } from '../../api/schema';
 
 export const prerender = false;
@@ -38,6 +40,9 @@ export const prerender = false;
 type TemplateSummary = components['schemas']['TemplateSummaryOut'];
 type ProjectRead = components['schemas']['ProjectRead'];
 type HarnessOut = components['schemas']['HarnessOut'];
+type InputDeclOut = components['schemas']['InputDeclOut'];
+
+const rootTemplates = parseRootTemplates(ROOT_TEMPLATES);
 
 const projectParam = Astro.url.searchParams.get('project');
 
@@ -72,20 +77,15 @@ let projects: ProjectRead[] = projectList.data ?? [];
 const harnesses: HarnessOut[] = harnessList.data ?? [];
 
 /**
- * The root Templates the island offers that the list read did not carry — resolved one at a
- * time so the dropdown never offers a name whose version *Start run* cannot pin. Without
- * this, arriving at `?template=initiative` and switching to `epic` leaves `latest_version`
- * unresolvable for the selected name, and *Start run* can build no body at all.
- *
- * Only attempted once there is reason to believe this instance has Templates: either the
- * list read already carried one, or a link named one. A bare visit to an instance whose list
- * is empty asks for no Template by name and gets no per-name probing — it is the "nothing is
- * stored" readout, which is what the frozen `shell.spec.ts` measures.
+ * The offered Templates the list read did not carry, so the dropdown never offers a name
+ * whose version *Start run* cannot pin. Only attempted once there is reason to believe this
+ * instance has Templates — the list carried one, or a link named one — so a bare visit to an
+ * empty instance still renders the "nothing is stored" readout `shell.spec.ts` measures.
  */
 const namedByLink = Astro.url.searchParams.has('template') || projectParam !== null;
 const unresolved =
   templates.length > 0 || namedByLink
-    ? TEMPLATE_ORDER.filter((name) => !templates.some((template) => template.name === name))
+    ? rootTemplates.filter((name) => !templates.some((template) => template.name === name))
     : [];
 
 const resolved = await Promise.all(
@@ -107,6 +107,36 @@ const resolved = await Promise.all(
 );
 templates = [...templates, ...resolved.filter((entry) => entry !== null)];
 
+/**
+ * What each offered Template asks for. `TemplateSummaryOut` carries no `inputs`, so the
+ * declarations come from the version read — one call per offered name, issued together.
+ *
+ * Failures are counted, not only dropped: "this instance does not store it" and "the read did
+ * not answer" are two different sentences to put on screen (NFR-8).
+ */
+let detailsUnread = 0;
+const details = await Promise.all(
+  rootTemplates.map(async (name) => {
+    const version = templates.find((template) => template.name === name)?.latest_version;
+    if (version === undefined || version === null) return null;
+    const { data, ok } = await read<InputDeclOut[]>(async () => {
+      const { data, error } = await backend().GET('/api/v1/templates/{name}/{version}', {
+        params: { path: { name, version } },
+      });
+      return error || !data ? null : data.inputs;
+    });
+    if (!ok || data === null) {
+      detailsUnread += 1;
+      return null;
+    }
+    return [name, data] as const;
+  }),
+);
+const catalog = buildCatalog(
+  rootTemplates,
+  Object.fromEntries(details.filter((entry) => entry !== null)),
+);
+
 if (projectParam && !projects.some((project) => project.id === projectParam)) {
   const { data } = await read<ProjectRead>(async () => {
     const { data, error } = await backend().GET('/api/v1/projects/{project_id}', {
@@ -117,13 +147,17 @@ if (projectParam && !projects.some((project) => project.id === projectParam)) {
   if (data) projects = [...projects, data];
 }
 
-const hasTemplates = templates.length > 0;
-//: nothing answered at all — every statement about what is stored would be a guess
-const unreachable = !templateList.ok && templates.length === 0;
+//: the catalog, not the list read: a stored Template `ROOT_TEMPLATES` does not name is one
+//: there is no form to bind
+const hasTemplates = catalog.names.length > 0;
+//: nothing answered — every statement about what is stored would be a guess
+const unreachable =
+  (!templateList.ok && templates.length === 0) || (!hasTemplates && detailsUnread > 0);
 const initial = reconcileInitial(
-  parseFormStateFromQuery(Astro.url.searchParams),
+  parseFormStateFromQuery(Astro.url.searchParams, catalog),
   projects,
   harnesses,
+  catalog,
 );
 ---
 
@@ -143,7 +177,7 @@ const initial = reconcileInitial(
         testId="newwf-empty"
         headline="NO TEMPLATE TO BIND"
         lines={[
-          'No template version is stored, so there are no inputs to bind and no plan to show.',
+          'No template named by ROOT_TEMPLATES is stored, so there are no inputs to bind and no plan to show.',
           'Templates are listed on /templates; a run is started from one of them.',
         ]}
       />
@@ -151,6 +185,7 @@ const initial = reconcileInitial(
       <NewWorkflow
         client:load
         templates={templates}
+        catalog={catalog}
         projects={projects}
         harnesses={harnesses}
         initial={initial}

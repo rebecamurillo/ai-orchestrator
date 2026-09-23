@@ -75,9 +75,26 @@ async function openForm(page: Page, url: string = LINK): Promise<void> {
 }
 
 test.describe('/workflows/new', () => {
-  test('pre-selects initiative, shows its input, and swaps to epic on switch; repo-init hides the harness list', async ({
+  /**
+   * Revised 2026-09-22 (Operator instruction). This asserted the harness list was absent for
+   * `repo-init`, which declares a `harness` input and has a `uses: agent` step — so hiding it
+   * submitted an empty harness for a Run that dispatches one. The hidden branch keeps its
+   * coverage in `tests/unit/newwf-catalog.test.ts`, against a Template declaring no harness.
+   */
+  /** With `ROOT_TEMPLATES` unset, a page that ignored the variable and one that read it look
+   * identical. `playwright.config.ts` runs the preview server on a non-default order. */
+  test('offers the Templates ROOT_TEMPLATES names, in the order it names them', async ({
     page,
   }) => {
+    await mockPreflight(page, preflightBody());
+    await openForm(page);
+
+    const options = page.getByTestId('newwf-template').locator('option');
+
+    await expect(options).toHaveText(['task', 'epic', 'repo-init', 'initiative', 'story-run']);
+  });
+
+  test('renders each Template’s own declared inputs, swapping them on switch', async ({ page }) => {
     await mockPreflight(page, preflightBody());
     await openForm(page);
 
@@ -93,7 +110,17 @@ test.describe('/workflows/new', () => {
 
     await page.getByTestId('newwf-template').selectOption('repo-init');
 
-    await expect(page.getByTestId('newwf-harness-claude')).toHaveCount(0);
+    // declares project, repository, base_branch, harness and model and nothing else: every
+    // one of those has its own control, so the Template contributes no field of its own
+    await expect(page.getByTestId('newwf-input-branch')).toHaveCount(0);
+    await expect(page.getByTestId('newwf-input-spec_folder')).toHaveCount(0);
+    // and it declares a harness, so the list it used to hide is shown
+    await expect(page.getByTestId('newwf-harness-claude')).toBeVisible();
+
+    await page.getByTestId('newwf-template').selectOption('task');
+
+    await expect(page.getByTestId('newwf-input-task_id')).toBeVisible();
+    await expect(page.getByTestId('newwf-input-artifacts_dir')).toBeVisible();
   });
 
   test('a harness with a failing probe reads its failing_reason line and is not selectable (Operator decision 2026-09-17: probe-based gating)', async ({

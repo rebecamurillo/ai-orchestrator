@@ -138,6 +138,7 @@ def test_the_allowlist_covers_exactly_the_non_backend_contract_variables() -> No
         "ORCHESTRATOR_SESSION_SECRET",
         "BACKEND_API_URL",
         "WEB_CLIENT_PORT",
+        "ROOT_TEMPLATES",  # Operator instruction 2026-09-22; web-client only
         "POSTGRES_USER",
         "POSTGRES_PASSWORD",
         "POSTGRES_DB",

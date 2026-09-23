@@ -12,18 +12,26 @@ import { describe, expect, it } from 'vitest';
 import NewWorkflowFields from '../../src/components/NewWorkflowFields';
 import { defaultFormState, withTemplate } from '../../src/lib/newwf/state';
 import type { components } from '../../src/api/schema';
+import { fixtureCatalog } from './newwf-catalog-fixture';
 
 type ProjectRead = components['schemas']['ProjectRead'];
 type RepositoryOut = components['schemas']['RepositoryOut'];
 
 function render(
-  state = defaultFormState(),
+  state = defaultFormState(fixtureCatalog()),
   projects: ProjectRead[] = [],
   repositories: RepositoryOut[] = [],
   note: string | undefined = undefined,
 ): string {
   return renderToStaticMarkup(
-    createElement(NewWorkflowFields, { state, projects, repositories, note, onChange: () => {} }),
+    createElement(NewWorkflowFields, {
+      state,
+      catalog: fixtureCatalog(),
+      projects,
+      repositories,
+      note,
+      onChange: () => {},
+    }),
   );
 }
 
@@ -40,14 +48,16 @@ describe('NewWorkflowFields', () => {
   it('renders initiative’s one input, and epic’s two instead', () => {
     expect(render()).toContain('data-testid="newwf-input-initiative_folder"');
 
-    const epic = render(withTemplate(defaultFormState(), 'epic'));
+    const epic = render(withTemplate(defaultFormState(fixtureCatalog()), 'epic', fixtureCatalog()));
     expect(epic).toContain('data-testid="newwf-input-branch"');
     expect(epic).toContain('data-testid="newwf-input-spec_folder"');
     expect(epic).not.toContain('newwf-input-initiative_folder');
   });
 
   it('renders no template input at all for repo-init', () => {
-    expect(render(withTemplate(defaultFormState(), 'repo-init'))).not.toContain('newwf-input-');
+    expect(
+      render(withTemplate(defaultFormState(fixtureCatalog()), 'repo-init', fixtureCatalog())),
+    ).not.toContain('newwf-input-');
   });
 
   it('carries every test id the brief names for a field', () => {
@@ -80,8 +90,8 @@ describe('NewWorkflowFields', () => {
 
   it('renders the clone-check note beside the repository only when given one', () => {
     expect(render()).not.toContain('newwf-field-note');
-    expect(render(defaultFormState(), [], [], 'clone check failed · new runs blocked')).toContain(
-      'clone check failed · new runs blocked',
-    );
+    expect(
+      render(defaultFormState(fixtureCatalog()), [], [], 'clone check failed · new runs blocked'),
+    ).toContain('clone check failed · new runs blocked');
   });
 });

@@ -100,6 +100,7 @@ Open `.env` and set these — the rest can keep their defaults:
 | `POSTGRES_PASSWORD` | a random string |
 | `GITHUB_TOKEN` | a token that can clone the client's target repositories (read by git only; a harness never receives it) |
 | `LITELLM_BASE_URL`, `LANGFUSE_BASE_URL` | per your mode from step 3 — blank to disable |
+| `ROOT_TEMPLATES` | optional — the workflow templates `/workflows/new` offers, comma-separated, in the order you write them. Blank or unset offers the five shipped ones. Name a template you authored in `templates/` here to make it startable; a name nothing stores is ignored. Read at start-up, so a change needs a restart |
 
 ```bash
 python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"

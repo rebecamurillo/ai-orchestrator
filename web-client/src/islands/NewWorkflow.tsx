@@ -26,6 +26,7 @@ import HarnessList from '../components/HarnessList';
 import NewWorkflowFields from '../components/NewWorkflowFields';
 import PlanTable from '../components/PlanTable';
 import PreflightLines from '../components/PreflightLines';
+import type { TemplateCatalog } from '../lib/newwf/catalog';
 import { formStateToQuery } from '../lib/newwf/query';
 import {
   CONSENT_CHECK_TEXT,
@@ -47,6 +48,7 @@ type PreflightOut = components['schemas']['PreflightOut'];
 
 interface Props {
   templates: TemplateSummary[];
+  catalog: TemplateCatalog;
   projects: ProjectRead[];
   harnesses: HarnessOut[];
   initial: FormState;
@@ -69,7 +71,7 @@ function emptyPreflight(): PreflightOut {
   };
 }
 
-export default function NewWorkflow({ templates, projects, harnesses, initial }: Props) {
+export default function NewWorkflow({ templates, catalog, projects, harnesses, initial }: Props) {
   const [state, setState] = useState<FormState>(initial);
   const [preflight, setPreflight] = useState<PreflightOut>(emptyPreflight());
   const [preflightFailed, setPreflightFailed] = useState(false);
@@ -155,7 +157,7 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
     setConflictConsent(false);
     // the last outcome describes a form that no longer exists; nothing may start on it
     setPending(true);
-    const query = formStateToQuery(next).toString();
+    const query = formStateToQuery(next, catalog).toString();
     const url = query ? `${window.location.pathname}?${query}` : window.location.pathname;
     window.history.replaceState(null, '', url);
     schedulePreflight();
@@ -273,13 +275,14 @@ export default function NewWorkflow({ templates, projects, harnesses, initial }:
         >
           <NewWorkflowFields
             state={state}
+            catalog={catalog}
             projects={projects}
             repositories={repositories}
             models={probeResults[state.harness]?.models ?? []}
             note={note}
             onChange={update}
           />
-          {usesHarness(state.template) ? (
+          {usesHarness(state.template, catalog) ? (
             <HarnessList
               harnesses={harnesses}
               selected={state.harness}

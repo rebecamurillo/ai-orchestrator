@@ -29,13 +29,14 @@ hands the agent its file back at `in-progress` with a `## Verify Failure` sectio
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
 
 import structlog
 
+from orchestrator.application.rules.protected_paths import uncommitted
 from orchestrator.application.steps import agent_answer, agent_prompt, agent_render, agent_tail
 from orchestrator.application.steps.context import (
     StepContext,
@@ -209,9 +210,17 @@ def _prepare_writes(ctx: StepContext) -> None:
     git = ctx.ports.git
     for target in targets:
         git.stage(worktree, target)
-    if not git.status(worktree).strip():
+    if not _staged(git.status(worktree), targets):
         return
     git.commit(worktree, PREPARE_MESSAGE.format(id=_text(ctx, STORY_ID_KEY), n=ctx.attempt.n))
+
+
+def _staged(status: str, targets: Sequence[str]) -> bool:
+    """Whether staging `targets` reached the index — a harness's own leftover work can dirty
+    a path this row never touched, and reading *that* as "something to commit" attempted a
+    commit of nothing whenever a target's `stage` was a no-op (`GitError`: nothing added)."""
+    names = frozenset(targets)
+    return any(change.path in names for change in uncommitted(status))
 
 
 def _verify_failure(ctx: StepContext) -> str | None:

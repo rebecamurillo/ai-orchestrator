@@ -8,3 +8,5 @@
 export const BACKEND_API_URL = 'http://backend-api.invalid:8000';
 export const ORCHESTRATOR_TOKEN = 'unit-placeholder-token';
 export const ORCHESTRATOR_SESSION_SECRET = 'unit-placeholder-session-secret';
+/** Blank: what an instance that sets nothing has, meaning "offer the default list". */
+export const ROOT_TEMPLATES = '';

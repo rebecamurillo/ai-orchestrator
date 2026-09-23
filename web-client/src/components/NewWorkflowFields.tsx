@@ -18,15 +18,13 @@
  * (`modelsFor`); this component only renders the answer.
  */
 import type { components } from '../api/schema';
+import { fieldsFor, type TemplateCatalog } from '../lib/newwf/catalog';
 import {
-  TEMPLATE_INPUT_FIELDS,
-  TEMPLATE_ORDER,
   isTemplateName,
   repositoryById,
   withInput,
   withTemplate,
   type FormState,
-  type TemplateName,
 } from '../lib/newwf/state';
 
 type ProjectRead = components['schemas']['ProjectRead'];
@@ -34,6 +32,7 @@ type RepositoryOut = components['schemas']['RepositoryOut'];
 
 interface Props {
   state: FormState;
+  catalog: TemplateCatalog;
   projects: ProjectRead[];
   repositories: RepositoryOut[];
   /**
@@ -51,6 +50,7 @@ interface Props {
 
 export default function NewWorkflowFields({
   state,
+  catalog,
   projects,
   repositories,
   models = [],
@@ -69,10 +69,10 @@ export default function NewWorkflowFields({
           value={state.template}
           onChange={(event) => {
             const value = event.target.value;
-            if (isTemplateName(value)) onChange(withTemplate(state, value as TemplateName));
+            if (isTemplateName(value, catalog)) onChange(withTemplate(state, value, catalog));
           }}
         >
-          {TEMPLATE_ORDER.map((name) => (
+          {catalog.names.map((name) => (
             <option key={name} value={name}>
               {name}
             </option>
@@ -143,9 +143,11 @@ export default function NewWorkflowFields({
         />
       </label>
 
-      {TEMPLATE_INPUT_FIELDS[state.template].map((field) => (
+      {fieldsFor(catalog, state.template).map((field) => (
         <label className="newwf-field" key={field.key} title={field.tooltip}>
-          <span className="newwf-field-label">{field.label} *</span>
+          <span className="newwf-field-label">
+            {field.label} {field.required ? '*' : '(optional)'}
+          </span>
           <input
             type="text"
             data-testid={`newwf-input-${field.key}`}

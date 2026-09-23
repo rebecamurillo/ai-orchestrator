@@ -78,8 +78,8 @@ run_backend() {
 }
 
 run_web() {
-	# astro dev reads BACKEND_API_URL, ORCHESTRATOR_TOKEN, ORCHESTRATOR_SESSION_SECRET
-	# and WEB_CLIENT_PORT from the environment exported above
+	# astro dev reads BACKEND_API_URL, ORCHESTRATOR_TOKEN, ORCHESTRATOR_SESSION_SECRET,
+	# WEB_CLIENT_PORT and ROOT_TEMPLATES from the environment exported above
 	exec pnpm --dir web-client dev
 }
 

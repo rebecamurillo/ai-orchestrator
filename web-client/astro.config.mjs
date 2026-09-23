@@ -25,6 +25,17 @@ export default defineConfig({
       ORCHESTRATOR_TOKEN: envField.string({ context: 'server', access: 'secret' }),
       // signs the `orch_session` cookie; declared here, used by 1.5
       ORCHESTRATOR_SESSION_SECRET: envField.string({ context: 'server', access: 'secret' }),
+      // which Templates `/workflows/new` offers, comma-separated. `secret` despite carrying
+      // no credential: Astro inlines a `public` variable at build time and reads a `secret`
+      // one at run time, and the image is built with this unset. The default is `''` because
+      // `envField` applies its own only to an absent variable, while blank must mean the
+      // default too — `newwf/catalog.ts::parseRootTemplates` owns that fallback.
+      ROOT_TEMPLATES: envField.string({
+        context: 'server',
+        access: 'secret',
+        optional: true,
+        default: '',
+      }),
     },
   },
 });
