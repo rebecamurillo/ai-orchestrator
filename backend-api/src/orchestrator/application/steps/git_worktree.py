@@ -11,7 +11,10 @@ between a clone and a fetch without either one touching the filesystem itself (A
 **A worktree that is already there is reused when it is clean and refused when it is not.**
 AD-14 says so in as many words. The refusal is `misconfigured`, because a dirty worktree is
 a state of the machine an Operator has to look at, and re-creating it would throw away work
-nobody looked at.
+nobody looked at. **Submodule state is not part of the question** (AD-14, ratified
+2026-09-24, H7): a hub Run advances each member onto the initiative branch and never commits
+the gitlink move, so an advanced submodule is a permanent, intended divergence rather than
+dirt, and the check asks `status(ignore_submodules=True)`.
 
 **Whether this Run created the branch is decided once, here.** `branch_exists(origin/{branch})`
 answers it: an existing branch is checked out and tracks its origin, an absent one is created
@@ -148,7 +151,11 @@ def _open_worktree(
     base_dir = env.base_dir(ctx.ports.work_dir)
     worktree = env.worktree_dir(ctx.ports.work_dir, branch)
     if require_workspace(ctx, str(worktree)).exists(ROOT):
-        if git.status(worktree).strip():
+        # Submodule state is not this worktree's own dirt (AD-14, H7 defect fix 2026-09-24):
+        # `git.submodule` puts each member on the initiative branch and the hub Run never
+        # commits the gitlink move, so the divergence is permanent and intended. Counting it
+        # refused every second Run on the worktree, and every retry after a park.
+        if git.status(worktree, ignore_submodules=True).strip():
             reason = DIRTY.format(path=worktree)
             return StepResult(
                 status="error",

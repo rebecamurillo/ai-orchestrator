@@ -171,8 +171,17 @@ class Git(Protocol):
         """
         ...
 
-    def status(self, worktree: Path) -> str:
-        """`git status --porcelain`: the empty string when the worktree is clean."""
+    def status(self, worktree: Path, *, ignore_submodules: bool = False) -> str:
+        """`git status --porcelain`: the empty string when the worktree is clean.
+
+        **`ignore_submodules` leaves submodule state out of the answer entirely** (AD-14,
+        ratified 2026-09-24, hub-Run initiative workflow — H7 defect fix): neither a gitlink
+        the index and the submodule's HEAD disagree about, nor the submodule's own tree. It is
+        for the one caller judging a **worktree's own** cleanliness where a Run advances the
+        submodules on purpose — the `git.worktree` reuse-when-clean check, since the hub Run
+        never commits the pointer move `git.submodule` makes, so that divergence is permanent
+        and intended rather than dirt. Default `False` for every other caller, unchanged.
+        """
         ...
 
     def stage(self, worktree: Path, pathspec: str | None = None) -> None:

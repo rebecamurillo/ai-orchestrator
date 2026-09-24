@@ -8,6 +8,8 @@ is `tests/unit/test_subprocess_git_worktrees.py`'s.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from orchestrator.application.steps import ATTACH_MODE
@@ -179,6 +181,73 @@ def test_a_dirty_worktree_parks_misconfigured_naming_the_path() -> None:
     assert result.park.kind == "misconfigured"
     assert result.park.reason == DIRTY.format(path=WORKTREE)
     assert result.run_updates is None
+
+
+# ── submodule state is not the worktree's own dirt (H7, 2026-09-24) ─────────
+#
+# A hub Run's `git.submodule` rows put every member submodule on the initiative branch, and
+# AD-14 keeps that pointer move off the hub's own commits for good — so the hub's index
+# records one commit while the member's HEAD is another, permanently and on purpose. A
+# reuse check that counted that divergence refused a worktree with nothing wrong with it,
+# on every second Run and on every retry after a park.
+
+
+def test_a_worktree_whose_only_change_is_an_advanced_submodule_is_reused() -> None:
+    """The observed defect: ` M repos/application` and nothing else, parked forever."""
+    git = FakeGit(
+        base_exists=[True],
+        status=[" M repos/application\n"],
+        status_ignoring_submodules=[""],
+    )
+    context = a_context(
+        a_worktree_row(),
+        git=git,
+        workspace=FakeWorkspace(files=dict(PRESENT)),
+        env=an_environment(worktrees=(a_worktree(),)),
+    )
+
+    result = GitWorktreeExecutor().execute(context)
+
+    assert result.status == "done"
+    assert result.reason == REUSED
+    assert git.called("worktree_add") == []
+
+
+def test_the_reuse_check_asks_git_to_leave_submodule_state_out_of_the_answer() -> None:
+    """The exclusion is the port's, not a string the executor filters afterwards: only the
+    adapter can tell a gitlink line from a path that merely looks like one."""
+    git = FakeGit(base_exists=[True], status=[""])
+    context = a_context(
+        a_worktree_row(),
+        git=git,
+        workspace=FakeWorkspace(files=dict(PRESENT)),
+    )
+
+    GitWorktreeExecutor().execute(context)
+
+    assert git.called("status") == [(Path(WORKTREE), True)]
+
+
+def test_a_modified_tracked_file_still_refuses_once_submodules_are_ignored() -> None:
+    """What the exclusion must not cost: the hub's own dirt is still a refusal, with the
+    reason AD-14 always gave."""
+    git = FakeGit(
+        base_exists=[True],
+        status=[" M src/thing.py\n M repos/application\n"],
+        status_ignoring_submodules=[" M src/thing.py\n"],
+    )
+    context = a_context(
+        a_worktree_row(),
+        git=git,
+        workspace=FakeWorkspace(files=dict(PRESENT)),
+    )
+
+    result = GitWorktreeExecutor().execute(context)
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.park.reason == DIRTY.format(path=WORKTREE)
 
 
 # ── mode: attach ────────────────────────────────────────────────────────────

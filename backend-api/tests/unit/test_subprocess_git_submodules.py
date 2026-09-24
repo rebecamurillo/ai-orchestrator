@@ -630,3 +630,49 @@ def test_the_probe_writes_nothing_the_hub_worktree_can_see(
     git.submodule_path(initialized, WORKDIR)
 
     assert git.status(initialized) == before
+
+
+# ── status(ignore_submodules=True) ──────────────────────────────────────────
+#
+# The reuse-when-clean check's own question (AD-14, H7 defect fix 2026-09-24). Only a real
+# process settles it: the divergence it must not see is one the hub's index and the member's
+# HEAD disagree about, which no scripted porcelain string can be wrong about in the same way.
+
+
+def advance_the_member(git: SubprocessGit, initialized: Path) -> str:
+    """Put the member on the initiative branch and commit in it — what a hub Run does to
+    every submodule, and what AD-14 then keeps off the hub's own commits for good."""
+    git.submodule_checkout(initialized, WORKDIR, NEW_BRANCH, MEMBER_BASE)
+    (initialized / WORKDIR / "work.txt").write_text("agent work\n")
+    committed = git.commit(initialized, "story: workdir commit (orchestrator)", workdir=WORKDIR)
+    assert committed is not None
+    return committed
+
+
+def test_an_advanced_submodule_is_dirt_only_while_submodule_state_is_counted(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """The observed defect, on real git: the hub worktree's own tree is untouched, and the
+    plain porcelain still says ` M repos/member` — so the reuse check parked `misconfigured`
+    on every second Run and on every retry after a park."""
+    advance_the_member(git, initialized)
+
+    assert WORKDIR in git.status(initialized)
+    assert git.status(initialized, ignore_submodules=True) == ""
+
+
+def test_a_modified_file_at_the_hub_is_reported_with_submodules_ignored_or_counted(
+    git: SubprocessGit, initialized: Path
+) -> None:
+    """What the exclusion must not cost: only the gitlink leaves the answer. The hub's own
+    modification is in both, and it is what still refuses the worktree."""
+    advance_the_member(git, initialized)
+    (initialized / SEED_FILE).write_text("edited at the hub\n")
+
+    counted = git.status(initialized)
+    ignored = git.status(initialized, ignore_submodules=True)
+
+    assert SEED_FILE in counted
+    assert SEED_FILE in ignored
+    assert WORKDIR in counted
+    assert WORKDIR not in ignored

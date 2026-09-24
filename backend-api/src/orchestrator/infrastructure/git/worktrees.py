@@ -59,8 +59,14 @@ EVERYTHING = "-A"
 #: holding non-ASCII or special bytes (`"sp\303\251cs/SPEC.md"`), which is a *different
 #: string* from the one the anchor set and the `AGENTS.md` basename are compared against —
 #: `core.quotePath=false` prints the bytes, the same reason `-z` is used everywhere else here.
+#: A third `status` option, so it sits beside those two *after* the subcommand and never in
+#: the `-c` prefix, and asked for only by the reuse-when-clean check: `=all` drops both a
+#: gitlink the hub's index and the submodule's HEAD disagree about and whatever the
+#: submodule's own tree is doing, which is the *worktree's own* cleanliness AD-14 means where
+#: a Run advances its members on purpose (H7, 2026-09-24).
 UNTRACKED_ALL = "--untracked-files=all"
 RAW_PATHS = ("-c", "core.quotePath=false")
+IGNORE_SUBMODULES = "--ignore-submodules=all"
 
 #: `--name-status` letters this system distinguishes; anything else — `M`, `T`, `U` — is a
 #: modification, which is what AD-17 needs to know about a path that was already there.
@@ -133,22 +139,10 @@ class WorktreeCommands:
         if head is not None:
             self._run("-C", str(base), "update-ref", "--no-deref", "HEAD", head.strip())
         path.parent.mkdir(parents=True, exist_ok=True)
+        arguments = ("-C", str(base), *NO_HOOKS, "worktree", "add")
         if start_point is None:
-            return self._run(
-                "-C", str(base), *NO_HOOKS, "worktree", "add", str(path), END_OF_OPTIONS, branch
-            )
-        return self._run(
-            "-C",
-            str(base),
-            *NO_HOOKS,
-            "worktree",
-            "add",
-            "-b",
-            branch,
-            str(path),
-            END_OF_OPTIONS,
-            start_point,
-        )
+            return self._run(*arguments, str(path), END_OF_OPTIONS, branch)
+        return self._run(*arguments, "-b", branch, str(path), END_OF_OPTIONS, start_point)
 
     def sync(self: _Runner, worktree: Path, branch: str) -> str | None:
         """Fetch the branch and fast-forward onto it; `None` when the origin does not hold it.
@@ -222,14 +216,19 @@ class WorktreeCommands:
             raise _with_conflicts(self._attempt, worktree, error) from error
         return self._run("-C", str(worktree), "rev-parse", "HEAD").strip()
 
-    def status(self: _Runner, worktree: Path) -> str:
+    def status(self: _Runner, worktree: Path, *, ignore_submodules: bool = False) -> str:
         """`git status --porcelain`: the empty string when the worktree is clean.
 
         Every untracked file by name and every path unquoted — see `UNTRACKED_ALL` and
         `RAW_PATHS` above for why AD-17 needs both. The return type is unchanged: one string,
         one line per path, which is what `git_commit.py` and `rules/protected_paths.py` read.
+        `ignore_submodules` adds the third option, so a hub worktree whose members a Run
+        advanced on purpose reports its own tree and nothing else (AD-14, H7); every other
+        caller passes nothing and gets the exact command it always got.
         """
-        return self._run("-C", str(worktree), *RAW_PATHS, "status", "--porcelain", UNTRACKED_ALL)
+        ignore = (IGNORE_SUBMODULES,) if ignore_submodules else ()
+        arguments = ("-C", str(worktree), *RAW_PATHS, "status", "--porcelain", UNTRACKED_ALL)
+        return self._run(*arguments, *ignore)
 
     def stage(self: _Runner, worktree: Path, pathspec: str | None = None) -> None:
         """`git add -A`, over everything or over one pathspec the caller named.

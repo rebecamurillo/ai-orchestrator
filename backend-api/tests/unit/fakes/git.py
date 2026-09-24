@@ -43,6 +43,12 @@ submodule" is a fact about the argument rather than a fixed value. `None` is scr
 purpose, and it is the park. That the probe and `submodule_update` are different methods is
 what lets a test assert "this dispatch mutated no checkout" as a call-log fact.
 
+H7's `status` gained a keyword-only `ignore_submodules`, and follows H2's rule twice over: it
+joins the recorded call only when it is asked for, so every existing `.called("status")`
+unpacking keeps its one-element shape, and its *answer* comes from a second script,
+`status_ignoring_submodules`, only when a test wrote one — a test that scripted `status` alone
+gets that answer for both forms, which is every test written before the flag existed.
+
 The planner asks the same three questions of many refs and paths, and "which answer came
 back" matters more to it than "how many answers were scripted", so three of the methods
 also take a **mapping**: `refs` (branch -> sha), `files` (`(ref, path)` -> text) and
@@ -112,6 +118,7 @@ class FakeGit:
         sync: list[Any] | None = None,
         merge: list[Any] | None = None,
         status: list[Any] | None = None,
+        status_ignoring_submodules: list[Any] | None = None,
         stage: list[Any] | None = None,
         commit: list[Any] | None = None,
         diff_names: list[Any] | None = None,
@@ -159,6 +166,10 @@ class FakeGit:
             # is the answer that changes no branch (`already merged`, S4).
             "merge": merge if merge is not None else [None],
             "status": status or [""],
+            # Not a port method of its own: the answer `status(ignore_submodules=True)` gives
+            # when a test scripted one. Unscripted, the flag changes nothing the fake says,
+            # so every test written before H7 keeps the answer it scripted (H7, 2026-09-24).
+            "status_ignoring_submodules": status_ignoring_submodules or [],
             "stage": stage or [None],
             "commit": commit or [DEFAULT_SHA],
             "diff_names": diff_names or [()],
@@ -239,11 +250,30 @@ class FakeGit:
         answer: str | None = self._answer("merge", (worktree, branch))
         return answer
 
-    def status(self, worktree: Path) -> str:
+    def status(self, worktree: Path, *, ignore_submodules: bool = False) -> str:
+        """Porcelain, optionally with submodule state left out of it (H7, 2026-09-24).
+
+        Same rule H2 gave `commit`'s `workdir`: the flag joins the recorded call only when it
+        is asked for, so every pre-H7 `.called("status")` unpacking — `git_commit.py`'s two,
+        `agent_workdir.py`'s pair — keeps its one-element `(worktree,)` shape, and only a
+        test that asks for the exclusion sees the second element.
+
+        The *answer* it gives comes from the `status_ignoring_submodules` script when a test
+        wrote one, and from the ordinary `status` path when none did: a fake scripts answers
+        rather than simulating git, and only a test knows which of its porcelain lines is a
+        gitlink. So a test asserting the exclusion scripts both forms, and every other test
+        keeps the answer it already scripted.
+        """
+        arguments: tuple[Any, ...] = (worktree, True) if ignore_submodules else (worktree,)
+        if ignore_submodules and self._scripts["status_ignoring_submodules"]:
+            self._record("status", arguments)
+            ignoring: str = self._scripted("status_ignoring_submodules")
+            return ignoring
         if self.statuses is not None and str(worktree) in self.statuses:
-            self._record("status", (worktree,))
+            self._record("status", arguments)
             return self.statuses[str(worktree)]
-        answer: str = self._answer("status", (worktree,))
+        self._record("status", arguments)
+        answer: str = self._scripted("status")
         return answer
 
     def stage(self, worktree: Path, pathspec: str | None = None) -> None:
@@ -356,6 +386,15 @@ class FakeGit:
 
     def _answer(self, method: str, arguments: tuple[Any, ...]) -> Any:
         self._record(method, arguments)
+        return self._scripted(method)
+
+    def _scripted(self, method: str) -> Any:
+        """The next entry of one script, without recording a call.
+
+        Split out of `_answer` (H7, 2026-09-24) for the one method whose answer may come from
+        a script named differently from the call it logs: `status(ignore_submodules=True)` is
+        still a `status` call in the log.
+        """
         script = self._scripts[method]
         index = min(self._used[method], len(script) - 1)
         self._used[method] = index + 1
