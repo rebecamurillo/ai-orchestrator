@@ -19,6 +19,7 @@ import pytest
 
 from orchestrator.application.steps.context import NO_ENVIRONMENT, StepExecutor
 from orchestrator.application.steps.git_commit import (
+    COMMIT_FAILED,
     KIND,
     NO_CHANGES,
     NOT_A_SUBMODULE,
@@ -27,6 +28,7 @@ from orchestrator.application.steps.git_commit import (
 )
 from orchestrator.application.steps.registry import executor_for
 from orchestrator.domain.entities.step_run import StepRun
+from orchestrator.domain.ports.git import GitError
 from tests.unit.fakes.git import DEFAULT_SHA, FakeGit
 from tests.unit.step_fixtures import (
     WORKTREE,
@@ -108,6 +110,56 @@ def test_an_untracked_file_alone_is_a_change_worth_committing() -> None:
 
     assert GitCommitExecutor().execute(a_context(a_commit_row(), git=git)).status == "done"
     assert git.called("commit")
+
+
+def test_a_worktree_whose_only_change_is_an_advanced_submodule_is_done_with_no_changes() -> None:
+    """The bug this regresses (2026-09-24): the status read has to exclude gitlinks the same
+    way `git.worktree`'s dirty check does (AD-14, H7), or a hub Run whose member advanced onto
+    its own branch looks like something to commit when nothing was actually staged for it —
+    `Git.stage`'s own "everything" call already excludes every gitlink. Before the fix, this
+    reached `git commit` with nothing staged, which failed and surfaced as an unhandled
+    `GitError` — `internal: GitError` on the Run, with no reason an Operator could act on."""
+    git = FakeGit(status=[" M repos/application\n"], status_ignoring_submodules=[""])
+
+    result = GitCommitExecutor().execute(a_context(a_commit_row(), git=git))
+
+    assert result.status == "done"
+    assert result.reason == NO_CHANGES
+    assert git.called("commit") == []
+
+
+def test_a_failed_stage_parks_misconfigured_with_gits_output_instead_of_raising() -> None:
+    error = GitError(command="git add -A", exit_code=128, output="fatal: unable to write")
+    git = FakeGit(stage=[error])
+
+    result = GitCommitExecutor().execute(a_context(a_commit_row(), git=git))
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.reason == COMMIT_FAILED
+    assert result.output_ref == "fatal: unable to write"
+
+
+def test_a_failed_commit_parks_misconfigured_with_gits_output_instead_of_raising() -> None:
+    """The exact failure a live hub Run hit (2026-09-24): staging excluded a submodule
+    gitlink, the status check had not yet been taught to agree, so the row tried to commit
+    nothing and git refused with exit 1. This asserts the general case — any `git commit`
+    failure parks a readable reason instead of leaking a `GitError` to the registry."""
+    error = GitError(
+        command="git commit --message retro",
+        exit_code=1,
+        output="no changes added to commit",
+    )
+    git = FakeGit(status=[DIRTY], commit=[error])
+
+    result = GitCommitExecutor().execute(a_context(a_commit_row(), git=git))
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.reason == COMMIT_FAILED
+    assert result.output_ref == "no changes added to commit"
 
 
 def test_with_no_rule_wired_nothing_is_protected_and_the_commit_happens() -> None:
@@ -231,6 +283,32 @@ def test_a_workdir_row_whose_submodule_tree_holds_no_anchor_commits() -> None:
     assert rule.calls == [((f"{WORKDIR}/src/thing.py",), ())]
     assert result.status == "done"
     assert result.output_ref == MEMBER_SHA
+
+
+def test_a_workdir_rows_failed_status_parks_misconfigured_with_gits_output() -> None:
+    error = GitError(command="git status", exit_code=128, output="fatal: not a repository")
+    git = FakeGit(status=[error])
+
+    result = GitCommitExecutor().execute(a_context(a_workdir_commit_row(), git=git))
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.reason == COMMIT_FAILED
+    assert result.output_ref == "fatal: not a repository"
+
+
+def test_a_workdir_rows_failed_commit_parks_misconfigured_with_gits_output() -> None:
+    error = GitError(command="git commit", exit_code=1, output="nothing to commit")
+    git = FakeGit(commit=[error])
+
+    result = GitCommitExecutor().execute(a_context(a_workdir_commit_row(), git=git))
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.reason == COMMIT_FAILED
+    assert result.output_ref == "nothing to commit"
 
 
 def test_a_workdir_spelled_with_a_trailing_slash_names_one_prefix() -> None:

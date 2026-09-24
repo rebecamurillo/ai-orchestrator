@@ -15,16 +15,19 @@ import pytest
 from orchestrator.application.steps import ATTACH_MODE
 from orchestrator.application.steps.context import NO_ENVIRONMENT, NO_WORKSPACE, StepExecutor
 from orchestrator.application.steps.git_worktree import (
+    BASE_CLONE_FAILED,
     DIRTY,
     INSTALL_FAILED,
     INSTALL_TIMED_OUT,
     KIND,
     NO_INSTALL,
     REUSED,
+    WORKTREE_OPEN_FAILED,
     GitWorktreeExecutor,
 )
 from orchestrator.application.steps.registry import executor_for
 from orchestrator.domain.entities.step_run import StepRun
+from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.ports.process import Outcome
 from tests.unit.fakes.git import FakeGit
 from tests.unit.fakes.process import FakeProcessRunner
@@ -81,6 +84,33 @@ def test_a_base_clone_that_is_already_there_is_fetched_rather_than_cloned() -> N
     assert git.called("clone_base") == []
 
 
+def test_a_failed_clone_parks_misconfigured_with_gits_output_instead_of_raising() -> None:
+    error = GitError(command="git clone", exit_code=128, output="fatal: could not resolve host")
+    git = FakeGit(base_exists=[False], clone_base=[error])
+
+    result = GitWorktreeExecutor().execute(a_context(a_worktree_row(), git=git))
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.reason == BASE_CLONE_FAILED
+    assert result.output_ref == "fatal: could not resolve host"
+    assert git.called("worktree_add") == []
+
+
+def test_a_failed_fetch_parks_misconfigured_with_gits_output_instead_of_raising() -> None:
+    error = GitError(command="git fetch", exit_code=1, output="fatal: unable to access")
+    git = FakeGit(base_exists=[True], fetch_base=[error])
+
+    result = GitWorktreeExecutor().execute(a_context(a_worktree_row(), git=git))
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.reason == BASE_CLONE_FAILED
+    assert result.output_ref == "fatal: unable to access"
+
+
 # ── opening the worktree ────────────────────────────────────────────────────
 
 
@@ -111,6 +141,33 @@ def test_a_branch_the_origin_holds_is_checked_out_and_tracks_it() -> None:
     assert result.run_updates is not None
     assert result.run_updates.worktrees is not None
     assert result.run_updates.worktrees[0].created_branch is False
+
+
+def test_a_failed_worktree_add_parks_misconfigured_with_gits_output_instead_of_raising() -> None:
+    error = GitError(command="git worktree add", exit_code=128, output="fatal: already exists")
+    git = FakeGit(base_exists=[True], branch_exists=[False], worktree_add=[error])
+
+    result = GitWorktreeExecutor().execute(a_context(a_worktree_row(), git=git))
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.reason == WORKTREE_OPEN_FAILED
+    assert result.output_ref == "fatal: already exists"
+
+
+def test_a_failed_dirty_check_parks_misconfigured_with_gits_output_instead_of_raising() -> None:
+    error = GitError(command="git status", exit_code=128, output="fatal: not a repository")
+    git = FakeGit(base_exists=[True], status=[error])
+    context = a_context(a_worktree_row(), git=git, workspace=FakeWorkspace(files=dict(PRESENT)))
+
+    result = GitWorktreeExecutor().execute(context)
+
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.reason == WORKTREE_OPEN_FAILED
+    assert result.output_ref == "fatal: not a repository"
 
 
 def test_the_run_updates_name_the_worktree_the_run_now_works_in() -> None:

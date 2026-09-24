@@ -13,7 +13,18 @@ is declared.
 agent finished without a file change, a `skip_story` whose frame wrote nothing: all of them
 reach this row, and a Run that failed because there was nothing to commit would be a Run that
 failed for succeeding. `git status --porcelain` decides it, after the staging, so an untracked
-file counts.
+file counts — but it asks with `ignore_submodules=True`, the same flag `git.worktree`'s dirty
+check reads by (AD-14, H7, 2026-09-24): staging excludes every gitlink the tree records, so a
+hub Run whose only outstanding change is a member advanced onto its own branch has nothing
+staged, and the status read has to agree or this row sees a "change" that `git commit` then
+refuses as empty.
+
+**A git failure here is `error`, never an unhandled exception.** Staging, reading status and
+writing the commit can each fail — a lock file, a hook, a disk gone full — and the row parks
+`misconfigured` with git's own (redacted) output next to it, the same shape `git.submodule`,
+`git.push`, `git.sync` and `git.merge` park with. Letting one through would reach the
+executor registry's own catch-all instead, which reports only the exception's class name and
+sends the Operator to `docker compose logs` for the reason it already had.
 
 **The protected-path check happens before the commit and never after it.** AD-17 puts it
 here, over the union of the frame's agent ranges and the uncommitted tree, and a hit is
@@ -57,6 +68,7 @@ from orchestrator.application.steps.context import (
     resolved_text,
 )
 from orchestrator.application.steps.registry import register
+from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.values import Park, StepResult
 
 #: The kind this module implements (AD-9: named here, beside the executor, or nowhere).
@@ -79,6 +91,11 @@ PATH_SEPARATOR = ", "
 #: and `git.push` park with, because it is the same stop.
 NOT_A_SUBMODULE = "workdir {path} is not an initialized submodule"
 
+#: What a staging, status or commit command that failed for a git reason parks with. The
+#: command's own (redacted) output travels in `output_ref`, the same split every other git
+#: kind's park uses.
+COMMIT_FAILED = "commit failed"
+
 #: What `git status --porcelain` separates its entries with, and how a changed path is read
 #: out of one: `XY path`, three characters of status and then the name.
 STATUS_PREFIX = 3
@@ -95,10 +112,14 @@ class GitCommitExecutor:
         workdir = resolved_text(ctx.with_resolved, WORKDIR_KEY)
         if workdir:
             return _in_workdir(ctx, workdir, message)
-        if env.spec_folder:
-            git.stage(worktree, env.spec_folder)
-        git.stage(worktree)
-        changed = _changed(git.status(worktree))
+        try:
+            if env.spec_folder:
+                git.stage(worktree, env.spec_folder)
+            git.stage(worktree)
+            status = git.status(worktree, ignore_submodules=True)
+        except GitError as error:
+            return _park(ctx, COMMIT_FAILED, output=error.output)
+        changed = _changed(status)
         if not changed:
             return StepResult(status="done", gate=ctx.row.gate, reason=NO_CHANGES)
         hits = _protected(ctx, changed, env.accepted_paths)
@@ -114,7 +135,10 @@ class GitCommitExecutor:
                 # check` answers no kinds and its member set is frozen (its own docstring).
                 payload=protected_paths.hits_payload(hits),
             )
-        sha = git.commit(worktree, message)
+        try:
+            sha = git.commit(worktree, message)
+        except GitError as error:
+            return _park(ctx, COMMIT_FAILED, output=error.output)
         return StepResult(status="done", gate=ctx.row.gate, output_ref=sha)
 
 
@@ -127,7 +151,11 @@ def _in_workdir(ctx: StepContext, workdir: str, message: str) -> StepResult:
     """
     git = ctx.ports.git
     worktree, normalised = require_cwd(ctx), str(PurePosixPath(workdir))
-    staged = tuple(f"{normalised}/{path}" for path in _changed(git.status(worktree / normalised)))
+    try:
+        status = git.status(worktree / normalised)
+    except GitError as error:
+        return _park(ctx, COMMIT_FAILED, output=error.output)
+    staged = tuple(f"{normalised}/{path}" for path in _changed(status))
     hits = _protected(ctx, staged, require_env(ctx).accepted_paths)
     if hits:
         reason = PROTECTED.format(paths=PATH_SEPARATOR.join(hits))
@@ -138,7 +166,10 @@ def _in_workdir(ctx: StepContext, workdir: str, message: str) -> StepResult:
             park=Park(kind="protected_path", reason=reason, path=ctx.row.path),
             payload=protected_paths.hits_payload(hits),
         )
-    sha = git.commit(worktree, message, workdir=workdir)
+    try:
+        sha = git.commit(worktree, message, workdir=workdir)
+    except GitError as error:
+        return _park(ctx, COMMIT_FAILED, output=error.output)
     if sha is None:
         reason = NOT_A_SUBMODULE.format(path=workdir)
         return StepResult(
@@ -148,6 +179,20 @@ def _in_workdir(ctx: StepContext, workdir: str, message: str) -> StepResult:
             park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
         )
     return StepResult(status="done", gate=ctx.row.gate, output_ref=sha)
+
+
+def _park(ctx: StepContext, reason: str, *, output: str | None) -> StepResult:
+    """A staging, status or commit command that failed for a git reason — the same shape
+    `git.submodule`, `git.push`, `git.sync` and `git.merge` park with, so this row never
+    leaves an unhandled `GitError` for the executor registry's own catch-all to report as
+    the exception's class name alone."""
+    return StepResult(
+        status="error",
+        gate=ctx.row.gate,
+        output_ref=output,
+        reason=reason,
+        park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
+    )
 
 
 def _changed(status: str) -> tuple[str, ...]:

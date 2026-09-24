@@ -39,6 +39,13 @@ because it is this row's output.
 
 The Run's own columns — `worktree_path`, `worktrees[]` — are returned as `RunUpdates` and
 written by `apply_step_result` (AD-8). Nothing here writes a status or a Run.
+
+**A git command that fails for a git reason is `error`, never an unhandled exception.** The
+clone/fetch and the branch/worktree checks each run inside their own `try`, and a `GitError`
+parks `misconfigured` with git's own (redacted) output — the same shape `git.commit`,
+`git.submodule`, `git.push` and `git.sync` park with. Letting one through would reach the
+executor registry's own catch-all instead, which reports only the exception's class name and
+sends the Operator to `docker compose logs` for the reason it already had.
 """
 
 from __future__ import annotations
@@ -59,6 +66,7 @@ from orchestrator.application.steps.context import (
 )
 from orchestrator.application.steps.registry import register
 from orchestrator.application.templates.rows import TIMEOUT_KEY
+from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.statuses import ParkKind
 from orchestrator.domain.values import Park, RunUpdates, StepResult, Worktree
 
@@ -88,6 +96,13 @@ INSTALL_FAILED = "install failed: exit {code}"
 INSTALL_TIMED_OUT = "timeout {path} after {n} min"
 #: AD-14 backstop: another Run holds the same (repository, branch) partition (story 5-1).
 HELD_BY = "branch held by {run}"
+#: What a failed clone or fetch of the base parks with. Git's own (redacted) output travels
+#: in `output_ref`, the same split every other git kind's park uses — a row never leaves an
+#: unhandled `GitError` for the executor registry's own catch-all, which reports only the
+#: exception's class name.
+BASE_CLONE_FAILED = "base clone failed"
+#: What a failed `branch_exists`, `worktree_add` or dirty-check `status` parks with.
+WORKTREE_OPEN_FAILED = "worktree open failed"
 
 
 @dataclass(frozen=True)
@@ -119,7 +134,9 @@ class GitWorktreeExecutor:
         base = str(ctx.with_resolved[BASE_KEY])
         attached = ctx.with_resolved.get(WORKTREE_MODE_KEY) == ATTACH_MODE
         worktree = env.worktree_dir(ctx.ports.work_dir, branch)
-        _ensure_base(ctx, env, branch if attached else base)
+        ensured = _ensure_base(ctx, env, branch if attached else base)
+        if ensured is not None:
+            return ensured
         opened = _open_worktree(ctx, env, branch=branch, base=base)
         if isinstance(opened, StepResult):
             return opened
@@ -127,7 +144,7 @@ class GitWorktreeExecutor:
         return _install(ctx, env, worktree, updates, opened.reason)
 
 
-def _ensure_base(ctx: StepContext, env: RunEnvironment, branch: str) -> None:
+def _ensure_base(ctx: StepContext, env: RunEnvironment, branch: str) -> StepResult | None:
     """Clone the base when it is not there, and bring it up to date when it is (AD-14).
 
     `branch` is the row's `base` on the ordinary path and the *declared* branch on the
@@ -135,12 +152,20 @@ def _ensure_base(ctx: StepContext, env: RunEnvironment, branch: str) -> None:
     origin head. `fetch_base` brings every head up to date either way and then points the
     base clone's own `HEAD` at the one named, so naming the attach branch is what makes "at
     its origin head" a statement about this row rather than a coincidence of the refspec.
+
+    A clone or fetch can fail for a git reason — a network blip, a revoked token, a server
+    gone away — and that is `error` + park here, never an exception this function lets
+    through: `None` back is "went fine", the same shape `_open_worktree` answers with.
     """
     git, base_dir = ctx.ports.git, env.base_dir(ctx.ports.work_dir)
-    if git.base_exists(base_dir):
-        git.fetch_base(base_dir, branch)
-    else:
-        git.clone_base(env.repository_url, base_dir)
+    try:
+        if git.base_exists(base_dir):
+            git.fetch_base(base_dir, branch)
+        else:
+            git.clone_base(env.repository_url, base_dir)
+    except GitError as error:
+        return _git_failed(ctx, BASE_CLONE_FAILED, error.output)
+    return None
 
 
 def _open_worktree(
@@ -150,28 +175,32 @@ def _open_worktree(
     git = ctx.ports.git
     base_dir = env.base_dir(ctx.ports.work_dir)
     worktree = env.worktree_dir(ctx.ports.work_dir, branch)
-    if require_workspace(ctx, str(worktree)).exists(ROOT):
-        # Submodule state is not this worktree's own dirt (AD-14, H7 defect fix 2026-09-24):
-        # `git.submodule` puts each member on the initiative branch and the hub Run never
-        # commits the gitlink move, so the divergence is permanent and intended. Counting it
-        # refused every second Run on the worktree, and every retry after a park.
-        if git.status(worktree, ignore_submodules=True).strip():
-            reason = DIRTY.format(path=worktree)
-            return StepResult(
-                status="error",
-                gate=ctx.row.gate,
-                reason=reason,
-                park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
-            )
-        log.info(REUSED, path=ctx.row.path, worktree=str(worktree))
-        recorded = env.worktree_at(str(worktree))
-        created = recorded.created_branch if recorded is not None else False
-        return _Opened(created_branch=created, reason=REUSED)
-    if git.branch_exists(base_dir, branch):
-        git.worktree_add(base_dir, worktree, branch, None)
-        return _Opened(created_branch=False, reason=None)
-    git.worktree_add(base_dir, worktree, branch, f"origin/{base}")
-    return _Opened(created_branch=True, reason=None)
+    try:
+        if require_workspace(ctx, str(worktree)).exists(ROOT):
+            # Submodule state is not this worktree's own dirt (AD-14, H7 defect fix
+            # 2026-09-24): `git.submodule` puts each member on the initiative branch and the
+            # hub Run never commits the gitlink move, so the divergence is permanent and
+            # intended. Counting it refused every second Run on the worktree, and every
+            # retry after a park.
+            if git.status(worktree, ignore_submodules=True).strip():
+                reason = DIRTY.format(path=worktree)
+                return StepResult(
+                    status="error",
+                    gate=ctx.row.gate,
+                    reason=reason,
+                    park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
+                )
+            log.info(REUSED, path=ctx.row.path, worktree=str(worktree))
+            recorded = env.worktree_at(str(worktree))
+            created = recorded.created_branch if recorded is not None else False
+            return _Opened(created_branch=created, reason=REUSED)
+        if git.branch_exists(base_dir, branch):
+            git.worktree_add(base_dir, worktree, branch, None)
+            return _Opened(created_branch=False, reason=None)
+        git.worktree_add(base_dir, worktree, branch, f"origin/{base}")
+        return _Opened(created_branch=True, reason=None)
+    except GitError as error:
+        return _git_failed(ctx, WORKTREE_OPEN_FAILED, error.output)
 
 
 def _run_updates(
@@ -220,6 +249,18 @@ def _install(
         log_path=str(output),
         reason=opened,
         run_updates=updates,
+    )
+
+
+def _git_failed(ctx: StepContext, reason: str, output: str | None) -> StepResult:
+    """A base clone/fetch or a worktree open that failed for a git reason — the same shape
+    `git.submodule`, `git.push`, `git.sync` and `git.commit` park with."""
+    return StepResult(
+        status="error",
+        gate=ctx.row.gate,
+        output_ref=output,
+        reason=reason,
+        park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
     )
 
 
