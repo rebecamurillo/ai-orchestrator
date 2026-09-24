@@ -150,7 +150,7 @@ test.describe('activity tracking (8.2)', () => {
     // Install fake clock before navigation so setInterval is captured.
     await page.clock.install();
     const graphLoaded = page.waitForResponse(`**/api/runs/${RUN_ID}/graph`);
-    await page.goto(`${URL}?view=diagram`);
+    await page.goto(URL);
     await graphLoaded;
 
     // Give the page focus (document.hasFocus() must be true for ticks to count).

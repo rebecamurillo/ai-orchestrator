@@ -5,9 +5,11 @@
  * `diagram-svg.test.ts` owns the existing template-graph assertions; this file owns the
  * run-graph additions so the two stay independent and `diagram-svg.test.ts` stays frozen.
  *
- * `RunDiagram.tsx` is imported here to satisfy `check-test-pairs.mjs` (AD-18): the island
- * mounts real effects and is fully tested by `tests/e2e/run-diagram.spec.ts`, but the pair
- * check needs at least one import.
+ * 2026-09-24, run-diagram v3: the `RunDiagram` island this file imported to satisfy
+ * `check-test-pairs.mjs` is deleted — it was an unreachable duplicate of `DiagramSection`
+ * and survived only to be named here. Its pairing stub goes with it. Every assertion below
+ * is about `lib/diagram/svg.tsx`, which the **template** diagram still renders, and stands
+ * unchanged.
  */
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -16,8 +18,6 @@ import { describe, expect, it } from 'vitest';
 import { DiagramGroup, DiagramNode } from '../../src/lib/diagram/svg';
 import { layoutGraph } from '../../src/lib/diagram/layout';
 import { STORY_GRAPH, EPIC_GRAPH } from './diagram-fixtures';
-// Satisfies check-test-pairs — see module doc above
-import RunDiagram from '../../src/islands/RunDiagram';
 
 function placedStoryNode() {
   return layoutGraph(STORY_GRAPH).nodes.find((p) => p.node.id === 'build')!;
@@ -151,11 +151,5 @@ describe('DiagramGroup status prop (Epic 8)', () => {
     const markup = renderToStaticMarkup(createElement(DiagramGroup, { placed: placedEpicGroup() }));
 
     expect(markup).not.toContain('diagram-group-token');
-  });
-});
-
-describe('RunDiagram island', () => {
-  it('is exported as the function component [id].astro mounts for ?view=diagram', () => {
-    expect(typeof RunDiagram).toBe('function');
   });
 });

@@ -1,10 +1,15 @@
 /*
  * Run-graph status colours for `.diagram-node` and `.diagram-group` (story 1-5, AD-15).
  *
- * Imported by DiagramSection and RunDiagram — the two components that render live run
- * graphs. Template diagrams (`diagram.css` alone) carry no status and do not import this.
- * Keeping the status rules here (not in `diagram.css`) preserves `diagram-island.test.ts`'s
- * assertion that the template diagram has no signal colours.
+ * 2026-09-24, run-diagram v3: nothing imports this any more. The run diagram is a React Flow
+ * surface whose colours live in `flow.css`, and `RunDiagram.tsx` — the last SVG run-graph
+ * renderer — is deleted. The file is kept beside the run-status props of `lib/diagram/svg.tsx`
+ * that it dresses, which this rework was told not to touch; both are reachable again the day
+ * another surface renders a run graph as SVG, and neither is loaded until one does.
+ *
+ * Template diagrams (`diagram.css` alone) carry no status and never imported this. Keeping
+ * the status rules here rather than in `diagram.css` is what preserves
+ * `diagram-island.test.ts`'s assertion that the template diagram has no signal colours.
  *
  * Rules placed AFTER the `.diagram-node[data-agent='true']` rule in `diagram.css` so
  * equal-specificity source-order wins (0,3,0). Colour comes only from `data-status`

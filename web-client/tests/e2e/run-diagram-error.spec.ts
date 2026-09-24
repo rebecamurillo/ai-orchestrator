@@ -1,72 +1,35 @@
 /**
- * Run diagram view (8.1) — graph fetch error handling.
+ * The embedded run diagram — graph fetch error handling.
  *
- * Covers the I/O matrix row: "Graph fetch error — FailedFetch with Retry; polling stopped;
- * Retry handler calls fetchGraph again."
+ * 2026-09-24, v3: `?view=diagram` and its redirect are deleted, so the run detail is reached
+ * at its own URL. Three cases: the failed request takes the diagram's place with its retry
+ * control, a failing `/graph` is asked once rather than on every tick, and polling *resumes*
+ * once the retry clears the error — the last of these because a suppression that never lifts
+ * would freeze the diagram against a live Run and keep the other two green.
+ *
+ * The clock is faked (`run-activity.spec.ts`'s precedent): sleeping through two real 5 s poll
+ * intervals makes the suite slow and the interval a number hard-coded in two places.
  */
 
-import { expect, test, type Route } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 
+import { runDetail, STARTED_AT } from '../fixtures/run-detail';
+import type { components } from '../../src/api/schema';
+
+type RunGraphOut = components['schemas']['RunGraphOut'];
+
+/** This spec's own Run, distinct from `run-diagram.spec.ts`'s. */
 const RUN_ID = '01a06887-79ab-759b-97a0-71c32ad939ab';
 const BASE_URL = `/workflows/${RUN_ID}`;
-const DIAGRAM_URL = `${BASE_URL}?view=diagram`;
+const NOW = new Date(Date.parse(STARTED_AT) + 60_000);
+/** `$poll` ticks every 5 s while a Run is running (`stores/poll.ts`). */
+const POLL_MS = 5_000;
 
-function minimalDetail(): Record<string, unknown> {
-  return {
-    header: {
-      meta: {
-        project: 'Err Test',
-        repository: 'orchestrator',
-        base_branch: 'main',
-        folder: 'docs',
-        template: 'initiative',
-        version: 1,
-        harness: 'claude',
-        started_at: '2026-09-11T10:00:00Z',
-        worktree_path: null,
-      },
-    },
-    alert: null,
-    steps: [],
-    stories: [],
-    cost: {
-      spent_usd: '0.00',
-      budget_usd: '10.00',
-      tokens_in: 0,
-      tokens_out: 0,
-      wall_clock_seconds: 0,
-      active_seconds: 0,
-      provisional: false,
-      trace_url: null,
-    },
-    gate_record: [],
-    admitted_signals: ['cancel'],
-    summary: null,
-    run: {
-      id: RUN_ID,
-      status: 'running',
-      admitted_signals: ['cancel'],
-      branch: 'epics/8',
-      budget_usd: '10.00',
-      compare_urls: [],
-      created_at: '2026-09-11T10:00:00Z',
-      inputs: {},
-      manual_estimate_h: null,
-      plan_ref: null,
-      project: '11111111-1111-1111-1111-111111111111',
-      repository: '22222222-2222-2222-2222-222222222222',
-      spend_usd: '0.00',
-      template: 'initiative',
-      terminal_session: false,
-      version: 1,
-      worktree_path: null,
-      worktrees: [],
-      accepted_paths: [],
-    },
-  };
+function minimalDetail() {
+  return runDetail([], { stories: [], run: { id: RUN_ID, branch: 'epics/8' } });
 }
 
-function minimalGraph(): Record<string, unknown> {
+function minimalGraph(): RunGraphOut {
   return {
     nodes: [
       {
@@ -87,26 +50,24 @@ function minimalGraph(): Record<string, unknown> {
   };
 }
 
-test.describe('/workflows/[id]?view=diagram — graph fetch error', () => {
+async function mockDetail(page: Page): Promise<void> {
+  // the trailing `**` admits the `?opened=true` of the first fetch (story 8-3)
+  await page.route(`**/api/runs/${RUN_ID}/detail**`, (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(minimalDetail()),
+    }),
+  );
+}
+
+test.describe('/workflows/[id] — graph fetch error', () => {
   test('graph fetch error shows fetch-failed; retry re-calls /graph and clears the error', async ({
     page,
   }) => {
     let graphCallCount = 0;
 
-    // operator revision 2026-09-18: story 8-3 put `?opened=true` on the first detail fetch; the
-    // trailing `**` admits the query string a bare glob never matches. `run-detail-last-opened.
-    // spec.ts` AC1/AC3 assert the new behaviour. This file was left out of the same revision on
-    // main because the diagram was a page of its own then and fetched `/graph` whichever way the
-    // detail went; since story 1-4 it is a section of the Run detail, so an unmocked detail took
-    // the whole surface down and no graph was ever asked for.
-    await page.route(`**/api/runs/${RUN_ID}/detail**`, (route: Route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(minimalDetail()),
-      }),
-    );
-
+    await mockDetail(page);
     await page.route(`**/api/runs/${RUN_ID}/graph`, async (route: Route) => {
       graphCallCount++;
       if (graphCallCount === 1) {
@@ -124,9 +85,10 @@ test.describe('/workflows/[id]?view=diagram — graph fetch error', () => {
       }
     });
 
-    await page.goto(DIAGRAM_URL);
+    await page.clock.install({ time: NOW });
+    await page.goto(BASE_URL);
 
-    // Error state: FailedFetch rendered, wf-diagram absent, polling stopped
+    // Error state: FailedFetch rendered, wf-diagram absent
     await expect(page.locator('[data-testid="fetch-failed"]')).toBeVisible();
     await expect(page.locator('[data-testid="wf-diagram"]')).not.toBeVisible();
     expect(graphCallCount).toBe(1);
@@ -142,5 +104,71 @@ test.describe('/workflows/[id]?view=diagram — graph fetch error', () => {
     // Error cleared after successful retry, diagram visible
     await expect(page.locator('[data-testid="fetch-failed"]')).not.toBeVisible();
     await expect(page.locator('[data-testid="wf-diagram"]')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('asks a failing /graph once, not again on every poll tick', async ({ page }) => {
+    // the island this replaced called `stopPolling()`, which is the *shared* loop the Run
+    // detail runs on — stopping it took the whole surface's refresh down with the diagram's.
+    // The section skips its own re-fetch while it is in the error phase instead, so the
+    // readout cannot self-clear without the retry control being pressed.
+    let graphCallCount = 0;
+
+    await mockDetail(page);
+    await page.route(`**/api/runs/${RUN_ID}/graph`, async (route: Route) => {
+      graphCallCount++;
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'service unavailable' }),
+      });
+    });
+
+    await page.clock.install({ time: NOW });
+    await page.goto(BASE_URL);
+    await expect(page.locator('[data-testid="fetch-failed"]')).toBeVisible();
+
+    // the run is `running`, so the shared poll ticks; run through two of them
+    await page.clock.runFor(POLL_MS * 2 + 500);
+
+    expect(graphCallCount).toBe(1);
+    await expect(page.locator('[data-testid="fetch-failed"]')).toBeVisible();
+    await expect(page.locator('[data-testid="wf-diagram"]')).toHaveCount(0);
+  });
+
+  test('resumes polling once the retry has cleared the error', async ({ page }) => {
+    // the suppression above must lift: a sticky guard would freeze the diagram against a
+    // live Run for as long as the page is open, and pass both of the cases before this one
+    let graphCallCount = 0;
+
+    await mockDetail(page);
+    await page.route(`**/api/runs/${RUN_ID}/graph`, async (route: Route) => {
+      graphCallCount++;
+      await route.fulfill(
+        graphCallCount === 1
+          ? {
+              status: 503,
+              contentType: 'application/json',
+              body: JSON.stringify({ detail: 'service unavailable' }),
+            }
+          : {
+              status: 200,
+              contentType: 'application/json',
+              body: JSON.stringify(minimalGraph()),
+            },
+      );
+    });
+
+    await page.clock.install({ time: NOW });
+    await page.goto(BASE_URL);
+    await expect(page.locator('[data-testid="fetch-failed"]')).toBeVisible();
+
+    await page.locator('[data-testid="fetch-retry"]').click();
+    await expect(page.locator('[data-testid="wf-diagram"]')).toBeVisible();
+    const afterRetry = graphCallCount;
+
+    await page.clock.runFor(POLL_MS + 500);
+
+    await expect.poll(() => graphCallCount).toBeGreaterThan(afterRetry);
+    await expect(page.locator('[data-testid="fetch-failed"]')).toHaveCount(0);
   });
 });

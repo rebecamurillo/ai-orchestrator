@@ -1,0 +1,453 @@
+/*
+ * The v3 run diagram's own stylesheet (EXPERIENCE-v1 §2.2, artboard `RunDiagram-v3.html`).
+ *
+ * `@xyflow/react/dist/base.css` is the only stylesheet imported from the package — it is
+ * structure (the pane, the transform, the edge layer) and nothing else. Every cosmetic
+ * decision the library would otherwise make is made here, in this repository, against the
+ * tokens of `tokens.css`: `tests/unit/stylesheets.test.ts` globs `src/**`, so a colour
+ * decided here is a colour a gate can see, and a `node_modules` import is not.
+ *
+ * The `--xy-*` block below is that mapping: React Flow reads those custom properties, and
+ * every one of them is a token of ours. Radius is 0 everywhere, there is no media query, and
+ * no colour is spelled out — every one is read from a `--color-` token of `tokens.css`.
+ *
+ * **Diagram dialect** (NFR-6 amended for this surface): a node's border states its status —
+ * done green, running blue, error red, blocked/checkpoint amber, queued grey, skipped faint.
+ * The blue border belongs to the current step alone; a running *ancestor* is `inflight`,
+ * which is the strong hairline and the blue `RUN` word token, never a second blue rectangle.
+ * `skipped` and `cancelled` are never green.
+ */
+
+.wf-flow {
+  /* what React Flow itself reads */
+  --xy-background-color: var(--color-surface-inset);
+  --xy-edge-stroke: var(--color-line-strong);
+  --xy-edge-stroke-selected: var(--color-line-strong);
+  --xy-edge-stroke-width: 1;
+  --xy-connectionline-stroke: var(--color-line-strong);
+  --xy-attribution-background-color: var(--color-surface);
+  --xy-handle-background-color: var(--color-line-strong);
+  --xy-node-background-color: var(--color-surface);
+  --xy-node-border: 1px solid var(--color-line);
+  --xy-node-color: var(--color-text);
+  --xy-selection-background-color: var(--color-surface-raised);
+  --xy-selection-border: 1px solid var(--color-line-strong);
+
+  height: 620px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface-inset);
+  font-family: var(--font-mono);
+}
+
+/* ── the bar above the canvas ────────────────────────────────────────────── */
+
+.wf-flow-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-8);
+  border: 1px solid var(--color-line);
+  border-bottom: none;
+}
+
+.wf-flow-head {
+  font-size: var(--type-section-head);
+  letter-spacing: var(--type-section-head-tracking);
+  text-transform: var(--type-section-head-transform);
+  color: var(--color-text-secondary);
+}
+
+.wf-flow-ctl {
+  padding: var(--space-2) var(--space-5);
+  border: 1px solid var(--color-line-strong);
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  cursor: pointer;
+}
+
+.wf-flow-ctl:first-of-type {
+  margin-left: auto;
+}
+
+.wf-flow-zoom {
+  min-width: 40px;
+  text-align: right;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+/* ── the rank heads ──────────────────────────────────────────────────────── */
+
+/* a node of the canvas, so it pans and zooms with the column it names */
+.wf-flow-head-node {
+  display: block;
+  width: 100%;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  text-transform: var(--type-column-head-transform);
+  white-space: nowrap;
+}
+
+/* the heads name the columns; they are not something to pick up */
+.wf-flow .react-flow__node-runHead {
+  cursor: default;
+}
+
+/* ── the canvas itself ───────────────────────────────────────────────────── */
+
+.wf-flow .react-flow__pane {
+  background: var(--color-surface-inset);
+}
+
+/* handles anchor the edges; they are not a control on this surface */
+.wf-flow .react-flow__handle {
+  width: 1px;
+  height: 1px;
+  min-width: 1px;
+  min-height: 1px;
+  border: none;
+  border-radius: 0;
+  opacity: 0;
+}
+
+.wf-flow .react-flow__node {
+  border-radius: 0;
+  font-family: var(--font-mono);
+  cursor: move;
+}
+
+.wf-flow .react-flow__attribution {
+  background: var(--color-surface);
+  font-size: var(--type-column-head);
+}
+
+.wf-flow .react-flow__attribution a {
+  color: var(--color-text-tertiary);
+}
+
+.wf-flow-edge .react-flow__edge-path {
+  stroke: var(--color-line-strong);
+  stroke-width: 1;
+}
+
+.wf-flow-edge-retry .react-flow__edge-path {
+  stroke: var(--color-signal-failed);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.5;
+}
+
+.wf-flow-edge-retry .react-flow__edge-text {
+  fill: var(--color-signal-failed);
+  font-size: var(--type-micro);
+}
+
+.wf-flow-edge-retry .react-flow__edge-textbg {
+  fill: var(--color-surface-inset);
+}
+
+/* ── a card ──────────────────────────────────────────────────────────────── */
+
+.wf-node {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-line);
+  border-radius: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: left;
+  /* a card is a fixed box: a long title is cut with an ellipsis and kept in the `title`
+     attribute, rather than spilling across the card beside it */
+  overflow: hidden;
+}
+
+/* an unrecognised token states nothing rather than a confident grey `queued` */
+.wf-node[data-status='none'] {
+  border-color: var(--color-line);
+}
+
+.wf-node[data-status='done'] {
+  border-color: var(--color-signal-run);
+}
+
+.wf-node[data-status='running'] {
+  border-color: var(--color-signal-criterion);
+}
+
+/* a running ancestor: the strong hairline, and the blue stays on the word token */
+.wf-node[data-status='inflight'] {
+  border-color: var(--color-line-strong);
+}
+
+.wf-node[data-status='error'] {
+  border-color: var(--color-signal-failed);
+}
+
+.wf-node[data-status='blocked'],
+.wf-node[data-status='checkpoint'] {
+  border-color: var(--color-signal-needs-you);
+}
+
+.wf-node[data-status='queued'] {
+  border-color: var(--color-line);
+}
+
+.wf-node[data-status='skipped'],
+.wf-node[data-status='cancelled'] {
+  border-color: var(--color-line);
+  opacity: 0.4;
+}
+
+.wf-node-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.wf-node-eyebrow {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-eyebrow);
+  letter-spacing: var(--type-eyebrow-tracking);
+  text-transform: var(--type-eyebrow-transform);
+  white-space: nowrap;
+}
+
+.wf-node-eyebrow[data-now='true'] {
+  color: var(--color-accent);
+}
+
+.wf-node-caret {
+  padding: 0;
+  margin-right: var(--space-3);
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-eyebrow);
+  cursor: pointer;
+}
+
+.wf-node-token {
+  margin-left: auto;
+  font-size: var(--type-status-token);
+  letter-spacing: var(--type-status-token-tracking);
+  white-space: nowrap;
+  color: var(--color-text-tertiary);
+}
+
+.wf-node-token[data-token='DON'] {
+  color: var(--color-signal-run);
+}
+
+.wf-node-token[data-token='RUN'] {
+  color: var(--color-signal-criterion);
+}
+
+.wf-node-token[data-token='BLK'],
+.wf-node-token[data-token='CHK'] {
+  color: var(--color-signal-needs-you);
+}
+
+.wf-node-token[data-token='ERR'] {
+  color: var(--color-signal-failed);
+}
+
+.wf-node-title {
+  margin: var(--space-2) 0 0;
+  font-size: var(--type-row-title);
+  line-height: var(--type-row-title-line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf-node-meta {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── the guardrail strip ─────────────────────────────────────────────────── */
+
+.wf-guardrail {
+  display: flex;
+  align-items: center;
+  margin-top: auto;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-micro);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.wf-guardrail[data-muted='true'] {
+  opacity: 0.55;
+}
+
+.wf-guardrail-entry {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* the separator is markup, not `content`: a generated `·` is absent from the accessible
+   name, and the strip read `syncverifycommit-guard` */
+.wf-guardrail-sep {
+  color: var(--color-line-strong);
+}
+
+/* one glyph per state, so the dot is a shape as well as a hue: a 4px square that differed
+   only in colour was colour alone to anyone who cannot separate the hues */
+.wf-guardrail-dot {
+  margin-right: var(--space-1);
+  color: var(--color-line-strong);
+  font-size: var(--type-column-head);
+  font-style: normal;
+  line-height: 1;
+}
+
+.wf-guardrail-dot[data-status='done'] {
+  color: var(--color-signal-run);
+}
+
+.wf-guardrail-dot[data-status='running'] {
+  color: var(--color-signal-criterion);
+}
+
+/* a guardrail row is never the current step, so `inflight` is the ancestor reading: the
+   strong hairline the card itself takes */
+.wf-guardrail-dot[data-status='inflight'] {
+  color: var(--color-line-strong);
+}
+
+.wf-guardrail-dot[data-status='error'] {
+  color: var(--color-signal-failed);
+}
+
+.wf-guardrail-dot[data-status='blocked'],
+.wf-guardrail-dot[data-status='checkpoint'] {
+  color: var(--color-signal-needs-you);
+}
+
+.wf-guardrail-dot[data-status='queued'],
+.wf-guardrail-dot[data-status='none'] {
+  color: var(--color-text-tertiary);
+}
+
+/* quieter than every other state, and never green (NFR-2) */
+.wf-guardrail-dot[data-status='skipped'],
+.wf-guardrail-dot[data-status='cancelled'] {
+  color: var(--color-line);
+}
+
+.wf-guardrail-more {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
+}
+
+/* ── the agent card's CTA row ────────────────────────────────────────────── */
+
+.wf-node-ctarow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+
+.wf-node-duration {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.wf-node-cta {
+  display: inline-block;
+  margin-left: auto;
+  text-decoration: none;
+  padding: var(--space-1) var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* ── a retry chip in the attempts gutter ─────────────────────────────────── */
+
+.wf-retry {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-signal-failed);
+  background: var(--color-surface);
+  font-size: var(--type-micro);
+  line-height: var(--type-micro-line);
+}
+
+.wf-retry-try {
+  color: var(--color-text-secondary);
+}
+
+.wf-retry-outcome {
+  color: var(--color-text-tertiary);
+}
+
+.wf-retry-failed {
+  color: var(--color-signal-failed);
+  font-style: normal;
+}
+
+/* ── the surrounds ───────────────────────────────────────────────────────── */
+
+/* the loading state (EXPERIENCE-v1 §2.2 *States*): a block, never a spinner */
+.wf-diagram-skeleton {
+  height: 200px;
+  background: var(--color-surface-raised);
+}
+
+/* spoken, never seen — the guardrail status words and the tree's list alternative */
+.wf-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.wf-diagram-empty {
+  margin: 0;
+  padding: var(--space-8);
+  border: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+  font-size: var(--type-body);
+}
+
+.wf-diagram-footer {
+  padding: var(--space-5) var(--space-8);
+  border: 1px solid var(--color-line);
+  border-top: none;
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+}

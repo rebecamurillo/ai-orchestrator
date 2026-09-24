@@ -79,22 +79,6 @@
   line-height: var(--type-row-body-line);
 }
 
-.wf-toggle {
-  display: flex;
-  gap: var(--space-5);
-}
-
-.wf-toggle span {
-  color: var(--color-text-tertiary);
-  font-size: var(--type-control);
-  letter-spacing: var(--type-control-tracking);
-  text-transform: var(--type-control-transform);
-}
-
-.wf-toggle span[aria-current='true'] {
-  color: var(--color-text);
-}
-
 .wf-alert {
   padding: var(--space-5) var(--space-8);
   border-left: 2px solid var(--color-line-strong);
@@ -180,10 +164,8 @@
   overflow-x: auto;
 }
 
-.wf-diagram-skeleton {
-  height: 200px;
-  background: var(--color-surface-raised);
-}
+/* `.wf-diagram-skeleton` moved to `flow.css` with the v3 rework: the element is rendered by
+   `DiagramSection`, and a component that renders a class imports the sheet that styles it. */
 
 .wf-summary-col {
   display: flex;

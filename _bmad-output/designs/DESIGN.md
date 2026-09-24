@@ -2,7 +2,7 @@
 title: AI Orchestrator — Design
 status: final
 created: 2026-08-25
-updated: 2026-08-25
+updated: 2026-09-24
 name: AI Orchestrator
 description: Single-operator control surface for an autonomous development pipeline. Instrument-dark — a severe all-monospace readout on a fixed column grid, where colour is signal and never decoration. Dark-first, from scratch, no inherited UI system.
 colors:
@@ -202,6 +202,36 @@ components:
     title: '{typography.row-title}'
     step: '{typography.meta}'
     statusChip: '{components.status-chip}'
+  # diagram surface (added 2026-09-24 — run detail §2.2 v3; the only components
+  # whose border carries a signal colour, per the EXPERIENCE diagram dialect)
+  diagram-node:
+    background: '{colors.surface}'
+    border: '{spacing.hairline} solid <signal colour of the node status>'
+    radius: '{rounded.DEFAULT}'
+    padding: '{spacing.5}'
+    eyebrow: '{typography.eyebrow}'
+    title: '{typography.row-title}'
+    meta: '{typography.meta}'
+    statusToken: '{components.status-token}'
+    cursor: 'grab'
+    cta: '{components.button}'
+  diagram-guardrail:
+    borderTop: '{spacing.hairline} solid {colors.line}'
+    padding: '{spacing.3} {spacing.5}'
+    typography: '{typography.micro}'
+    color: '{colors.text-tertiary}'
+    dotSize: '4px'
+    dotColor: '<signal colour of the guarded step>'
+    separator: ' · '
+  diagram-retry-chip:
+    background: '{colors.surface}'
+    border: '{spacing.hairline} solid {colors.signal-infra}'
+    radius: '{rounded.DEFAULT}'
+    padding: '{spacing.2} {spacing.4}'
+    typography: '{typography.micro}'
+    edge: '{spacing.hairline} dashed {colors.signal-infra}'
+    edgeOpacity: '0.5'
+    edgeLabel: '{typography.micro}'
   alert-banner:
     background: '{colors.surface-raised}'
     borderLeft: '2px solid <signal colour of the alert type>'
@@ -419,6 +449,12 @@ Rounded corners, pill badges, and circular indicators are the visual grammar of 
 **Key/value table** — `{components.kv-table}`. Label left in `{colors.text-tertiary}`, value right-aligned in `{colors.text}`, hairline between rows. Used for structured output, cost, and gate results. Values that are ratios are printed as ratios (`$4.18 / $15.00`, `2/2`, `14/14`), never as bars or dials.
 
 **Artifact tree** — `{components.artifact-tree}`. An indented file list, `{spacing.7}` 14px per level, guide rules in `{colors.line}`. Each node: filename in `{typography.row-body}`, right-aligned modified timestamp in `{colors.text-tertiary}`. A file changed since the operator's last view is promoted from `{colors.text-secondary}` to `{colors.text}` and carries a single `{colors.accent}` 7px chip to its left. [ASSUMPTION] The changed-since-last-viewed chip is inferred: the memlog settles that last-viewed timestamps are tracked from day one and that the diff-since-last-viewed *tab* is deferred, but does not specify how "changed" is signalled in the meantime. Using the accent rather than a signal colour keeps "new to you" distinct from "wrong."
+
+**Diagram node** — `{components.diagram-node}` *(added 2026-09-24, run detail §2.2 v3)*. The one place in the product where a **border** carries a signal colour rather than a 7px chip — the EXPERIENCE diagram dialect amends the one-signal-per-surface rule for this surface, and only for it. A card is a `{colors.surface}` rectangle whose border states its status, carrying in fixed order: eyebrow (`epic`, `story`, `agent`, or the word `now` in `{colors.accent}` on the current step), title in `{typography.row-title}`, chip + token right-aligned, then meta. The body is a drag handle, so its cursor is `grab` and it is **not** a link; an agent card ends with one `{components.button}` reading *Open step*, which is the only navigation out of the card. Colour is never alone: the three-letter token is always present and always authoritative.
+
+**Diagram guardrail** — `{components.diagram-guardrail}` *(added 2026-09-24)*. The thin strip at the foot of an epic or story card naming the deterministic and checkpoint steps it owns: a 4px status dot plus the step word, entries joined by ` · `, `{typography.micro}` in `{colors.text-tertiary}` above a `{colors.line}` hairline. Five entries, then `+k`. It is the quietest element on the card by design — it states that the process is guarded without competing with the agents, which are the subject. Not interactive, never a link, never a connected box.
+
+**Diagram retry chip** — `{components.diagram-retry-chip}` *(added 2026-09-24)*. A failed agent attempt, drawn rather than counted: a small `{colors.signal-infra}`-bordered card reading `try n` over `failed` (plus `exit {code}` where the code is known), sitting in a gutter right of its agent card, joined to it by a dashed `{colors.signal-infra}` curve at 50 % opacity labelled `retry`. Red appears here and on error borders only; a run that retried nothing shows no red and no gutter.
 
 **Empty state** — `{components.empty-state}`. Centred, generous vertical padding, uppercase `{typography.surface-title}` headline, then `{typography.meta}` body at 1.9 line-height listing *what is happening instead*. An empty state in this product is a readout too: "Nothing needs you" is followed by the three runs that are in flight and when the next return is expected. Never an illustration, never a call-to-action button as the only content.
 

@@ -3,8 +3,10 @@
  * Run detail (4.15, SPEC CAP-15, FR-23, story 1-4): header, alert banner, stop zone, embedded
  * diagram, summary column, and tabbed gate/steps/session region. RunDetail always mounts here.
  *
- * `?view=diagram` redirects 301 to `/workflows/{id}` — the diagram is now embedded inside
- * RunDetail's layout via DiagramSection. RunDiagram is no longer mounted from this page.
+ * The route takes no `view` parameter (EXPERIENCE-v1 §2.2, 2026-09-24). `?view=diagram` was a
+ * surface of its own until 2026-09-15 and a 301 back to here until the v3 diagram rework;
+ * the redirect is deleted with the toggle that pointed at it, so an old bookmark now serves
+ * the run detail directly, with the diagram embedded in it, and no extra round trip.
  *
  * No server-side read of its own — RunDetail does its own polled fetch client:load.
  */
@@ -14,10 +16,6 @@ import RunDetail from '../../islands/RunDetail';
 export const prerender = false;
 
 const { id } = Astro.params;
-
-if (Astro.url.searchParams.get('view') === 'diagram') {
-  return Astro.redirect(`/workflows/${id}`, 301);
-}
 ---
 
 <Shell active="workflows" title="RUN DETAIL">

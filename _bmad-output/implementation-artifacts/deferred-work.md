@@ -116,3 +116,27 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/implementation-artifacts/spec-claude-readiness-fast-auth-check.md`
   summary: `probe()`'s `[ "${CLAUDE_SUBSCRIPTION_AUTH:-false}" = "true" ]` is an exact-string comparison; a `.env` typo (`1`, `True`, `TRUE`) silently disables the new login check rather than erroring.
   evidence: Found by the Blind Hunter review, 2026-09-23. This is the first harness script to read a boolean env var directly in bash — `scripts/harness/_common.sh` centralizes `probe_gateway_models`/`probe_output` for reuse but has no shared boolean-parsing helper. Low probability (the variable is documented and defaults correctly), but worth a shared helper if a second such flag appears.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-run-diagram-hierarchy-view.md`
+  summary: `backend-api/tests/unit/test_process_runner_reaping.py::test_killing_a_group_this_process_already_waited_on_is_a_prompt_no_op` races under the full suite.
+  evidence: Failed once with `ProcessLookupError` during `make test` on 2026-09-24, passed 3/3 in isolation and green on the next full run. Zero backend files were touched by the diagram story, so it is pre-existing — a nondeterministic assertion under hard rule 1 case (c), not a behaviour change.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-run-diagram-hierarchy-view.md`
+  summary: The run-status half of `web-client/src/lib/diagram/svg.tsx` and all of `web-client/src/styles/diagram-status.css` are now dead, but still gated and still tested.
+  evidence: Deleting `RunDiagram.tsx` removed the last caller that passed `status`/`token`/`current`/`substeps` to `DiagramNode` and `status`/`k`/`n` to `DiagramGroup`; the only remaining caller, `src/islands/Diagram.tsx`, passes none of them. `diagram-status.css` is imported by nothing. The spec's Never list put `svg.tsx` off-limits, so all three reviewers flagged it and it was knowingly left in place.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-run-diagram-hierarchy-view.md`
+  summary: The run diagram canvas has no keyboard path for panning or zooming.
+  evidence: React Flow gives the pane no tab stop and exposes no prop to add one. Mitigated but not closed — cards are focusable in reading order and nothing is reachable only by panning. Closing it needs a focus wrapper with its own affordance, which was out of scope for this story.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-run-diagram-hierarchy-view.md`
+  summary: `web-client/src/lib/diagram/run-tree.ts` is 647 lines, the largest module in `src/lib`.
+  evidence: `web-client/AGENTS.md` caps components at 300 lines and states no limit for `src/lib`; `src/lib/run/detail.ts` at 368 is the precedent. Much of the file is doc and interfaces, but a split along model/derivation lines would be reasonable before it grows further.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-run-diagram-hierarchy-view.md`
+  summary: `@xyflow/react` (~60 kB gzip) loads eagerly into the `RunDetail` island on every Run; `FlowCanvas` is never lazily imported.
+  evidence: The mount guard already defers rendering until after `useEffect`, which is exactly the seam for `React.lazy`/dynamic `import()`. Raised by the blind-hunter reviewer in both rounds; deferred to keep this story front-end-behaviour only.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-run-diagram-hierarchy-view.md`
+  summary: Hot-path lookups in `run-tree.ts`/`flow-layout.ts` are quadratic and re-run on every 5 s poll.
+  evidence: `labelOfFirstMember` runs `graph.nodes.find` per group after sorting members, `containerOf` walks the path per row, and `flowLayout` runs `cards.find` inside the retry loop; `detail.steps` is a fresh array each fetch so the memo never holds. Immaterial at the 35-node fixture, worth indexing by id for a large hub Run.

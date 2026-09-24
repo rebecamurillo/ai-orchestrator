@@ -1,43 +1,57 @@
 /**
- * The embedded run diagram (story 1-4): fetches `GET /runs/{id}/graph` independently of the
- * RunDetail poll, collapses the result into the four-column tree, and renders the SVG in-place.
+ * The embedded run diagram (v3, 2026-09-24): fetch, expansion state, the bar above the
+ * canvas, the column heads and the footer readout under it. The model is
+ * `lib/diagram/run-tree.ts`, the placement is `lib/diagram/flow-layout.ts`, and the React
+ * Flow element is `diagram/FlowCanvas.tsx` — this component owns only what has to touch the
+ * network and the operator's state.
  *
- * `detail` is passed as a prop — RunDetail owns the polled detail fetch and passes it down so
- * DiagramSection does not open a second detail poll. The graph is a separate, lazier datum:
- * a graph-fetch error shows `fetch-failed` inside `wf-diagram-main` only; the stop zone,
- * summary column, and tab region continue to render off the already-loaded `detail` prop.
+ * `detail` is passed as a prop: `RunDetail` owns the polled detail fetch, so this section
+ * never opens a second detail poll, and the failed-attempt join reads the steps that fetch
+ * already returned. The graph is the separate, lazier datum — a graph-fetch error shows the
+ * full-surface failed-request readout inside `wf-diagram-main` only, and the stop zone,
+ * summary column and tab region keep rendering off the loaded `detail`.
  *
- * Story 1-5: story-aggregate nodes expand/collapse on click; leaf step nodes navigate to
- * `/workflows/{runId}/steps/{dot-index-path}`. The `$poll` store drives graph re-fetches;
- * `expandedGroups` state is preserved across poll ticks. The group containing the current
- * step starts expanded on the first fetch.
+ * **The mount guard.** This section is a child of the `RunDetail` island, so `client:only`
+ * cannot reach it and Astro renders it on the server. React Flow measures a DOM that is not
+ * there; the skeleton stands in until the first `useEffect` has run, which is the browser.
+ *
+ * **A failing `/graph` is asked once, not every five seconds.** The island this replaced
+ * called `stopPolling()`, which is the *shared* loop the Run detail runs on — stopping it
+ * would take the whole surface's refresh down with the diagram's. So the poll effect skips
+ * its own re-fetch while the phase is `error`, and the retry control is what asks again.
+ *
+ * **Expansion survives a poll, and follows the Run.** `expandedGroups` is state here. Every
+ * time the *path to the current step* changes — a step starting on a Run opened while
+ * queued, or the Run moving into another epic — that path's ancestors are **merged** in, so
+ * the footer never names a step that is nowhere on the canvas. Merged, never replaced: what
+ * the operator opened by hand stays open.
+ *
+ * **The column heads are nodes of the canvas** (`flow-layout.ts`), not a strip above it: the
+ * columns live inside a pannable, scaled transform, and a static row would sit over the
+ * wrong ones after the first pan.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
+import type { Edge, ReactFlowInstance } from '@xyflow/react';
 
 import { api } from '../../api/client';
 import type { components } from '../../api/schema';
 import FailedFetch from '../FailedFetch';
+import FlowCanvas, { type CardNode } from './diagram/FlowCanvas';
 import { ageText } from '../../lib/board/format';
-import { layoutGraph } from '../../lib/diagram/layout';
-import { DiagramEdge, DiagramGroup, DiagramNode } from '../../lib/diagram/svg';
-import { buildRunTree, findCurrentStep, STORY_GROUP_PATTERN } from '../../lib/diagram/tree';
-import { encode } from '../../lib/step-path';
+import { flowLayout } from '../../lib/diagram/flow-layout';
 import {
-  runToken,
-  stateAgeSeconds,
-  type RunDetailOut,
-  type StepRowOut,
-} from '../../lib/run/detail';
+  buildHierarchy,
+  defaultExpanded,
+  findCurrentStep,
+  footerText,
+  RUN_STATUS_WORD,
+} from '../../lib/diagram/run-tree';
+import { runToken, stateAgeSeconds, type RunDetailOut } from '../../lib/run/detail';
 import { $poll } from '../../stores/poll';
-import '../../styles/diagram.css';
-import '../../styles/diagram-status.css';
+import '../../styles/flow.css';
 
 type RunGraphOut = components['schemas']['RunGraphOut'];
-type RunNodeOut = components['schemas']['RunNodeOut'];
-type RunGroupOut = components['schemas']['RunGroupOut'];
-type NodeOut = components['schemas']['NodeOut'];
-type GroupOut = components['schemas']['GroupOut'];
 
 interface Props {
   runId: string;
@@ -46,41 +60,25 @@ interface Props {
 
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'error'; status: number | null };
 
-const TOKEN_WORD: Record<string, string> = {
-  QUE: 'queued',
-  RUN: 'running',
-  BLK: 'blocked',
-  CHK: 'checkpoint',
-  DON: 'done',
-  ERR: 'failed',
-  CAN: 'cancelled',
-  SKP: 'skipped',
-};
-
-function nodeSeq(nodeId: string, steps: StepRowOut[]): number | null {
-  const exact = steps.find((s) => s.path === nodeId);
-  if (exact) return exact.seq;
-  const prefix = steps.find((s) => s.path.startsWith(`${nodeId}/`));
-  return prefix?.seq ?? null;
-}
-
-function pathLabel(id: string): string {
-  return id
-    .split('/')
-    .map((segment) => segment.replace('-', ' '))
-    .join(' · ');
-}
+export const EMPTY_PLAN_TEXT = 'no steps planned';
 
 export default function DiagramSection({ runId, detail }: Props) {
+  const [mounted, setMounted] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [graph, setGraph] = useState<RunGraphOut | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [resetCount, setResetCount] = useState(0);
+  const [zoom, setZoom] = useState(1);
   const requestSeqRef = useRef(0);
-  const initializedRef = useRef(false);
+  /** The ancestor path of the current step, as last seen — `null` before the first fetch. */
+  const currentPathRef = useRef<string | null>(null);
+  const instanceRef = useRef<ReactFlowInstance<CardNode, Edge> | null>(null);
   const pollTick = useStore($poll);
-  const mountedTickRef = useRef(pollTick);
+  const handledTickRef = useRef(pollTick);
+  /** Read inside the poll effect so a phase change alone never re-fires it. */
+  const phaseRef = useRef(phase.kind);
 
-  async function fetchGraph(): Promise<void> {
+  const fetchGraph = useCallback(async (): Promise<void> => {
     const seq = ++requestSeqRef.current;
     try {
       const result = await api.GET('/runs/{run_id}/graph', {
@@ -93,48 +91,72 @@ export default function DiagramSection({ runId, detail }: Props) {
       }
       setGraph(result.data);
       setPhase({ kind: 'ready' });
-      // On the first successful fetch, pre-expand groups that contain the current step.
-      if (!initializedRef.current) {
-        initializedRef.current = true;
-        const currentStep = findCurrentStep(result.data);
-        if (currentStep) {
-          const ancestorIds = result.data.groups
-            .filter((g) => STORY_GROUP_PATTERN.test(g.id) && g.members.includes(currentStep.id))
-            .map((g) => g.id);
-          if (ancestorIds.length > 0) {
-            setExpandedGroups(new Set(ancestorIds));
-          }
+      // Open the path to the current step whenever that path changes — on the first fetch,
+      // when a Run opened while `queued` starts its first step, and when the Run moves into
+      // an epic the operator had closed. Merged into what is already open: a seeding that
+      // replaced the set wiped every epic the operator had expanded by hand.
+      const open = defaultExpanded(result.data);
+      const signature = [...open].sort().join(',');
+      if (signature !== currentPathRef.current) {
+        currentPathRef.current = signature;
+        if (open.size > 0) {
+          setExpandedGroups((previous) => new Set([...previous, ...open]));
         }
       }
     } catch {
       if (seq !== requestSeqRef.current) return;
       setPhase({ kind: 'error', status: null });
     }
-  }
-
-  useEffect(() => {
-    void fetchGraph();
-    // Fetch once on mount; retry only via the FailedFetch button.
   }, [runId]);
 
-  // Re-fetch on poll tick without resetting expandedGroups.
+  // Written in an effect, never in the render body: under React 19's concurrent rendering a
+  // discarded render would otherwise leave the ref describing a phase that never committed,
+  // and the poll effect reads it.
   useEffect(() => {
-    if (pollTick === mountedTickRef.current) return;
-    void fetchGraph();
-  }, [pollTick]);
+    phaseRef.current = phase.kind;
+  }, [phase.kind]);
 
-  const tree = useMemo(
-    () => (graph ? buildRunTree(graph, expandedGroups) : null),
-    [graph, expandedGroups],
+  // The mount guard: React Flow never renders server-side.
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    void fetchGraph();
+    // Fetch once on mount; every later fetch is the poll effect below or the retry control.
+  }, [fetchGraph]);
+
+  useEffect(() => {
+    if (pollTick === handledTickRef.current) return;
+    handledTickRef.current = pollTick;
+    if (phaseRef.current === 'error') return;
+    void fetchGraph();
+  }, [pollTick, fetchGraph]);
+
+  const onToggle = useCallback((id: string) => {
+    setExpandedGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const onInit = useCallback((instance: ReactFlowInstance<CardNode, Edge>) => {
+    instanceRef.current = instance;
+  }, []);
+
+  const hierarchy = useMemo(
+    () => (graph === null ? null : buildHierarchy(graph, detail.steps, expandedGroups)),
+    [graph, detail.steps, expandedGroups],
   );
 
-  const layout = useMemo(() => {
-    if (!tree) return null;
-    return layoutGraph(tree as { nodes: NodeOut[]; edges: typeof tree.edges; groups: GroupOut[] });
-  }, [tree]);
+  const layout = useMemo(() => (hierarchy === null ? null : flowLayout(hierarchy)), [hierarchy]);
 
-  if (phase.kind === 'loading') {
-    return <div className="wf-diagram-skeleton" aria-busy="true" />;
+  if (!mounted || phase.kind === 'loading') {
+    return (
+      <div className="wf-diagram-skeleton" role="status" aria-busy="true">
+        <span className="wf-visually-hidden">loading the run diagram</span>
+      </div>
+    );
   }
 
   if (phase.kind === 'error') {
@@ -142,103 +164,81 @@ export default function DiagramSection({ runId, detail }: Props) {
       <FailedFetch
         method="GET"
         path={`/api/runs/${runId}/graph`}
-        status={(phase as { kind: 'error'; status: number | null }).status}
+        status={phase.status}
         onRetry={() => void fetchGraph()}
       />
     );
   }
 
-  if (!graph || !layout) return null;
+  if (graph === null || layout === null || hierarchy === null) return null;
 
   const token = runToken(detail.run, detail.alert);
-  const now = Date.now();
-  const currentStep = findCurrentStep(graph);
-  const totalSteps = detail.steps.length;
-  const currentStepRow = currentStep
-    ? (detail.steps.find((s) => s.path === currentStep.id) ?? null)
-    : null;
-  const seq = currentStepRow?.seq;
-  const storiesDone = detail.stories.filter((s) => s.state === 'done').length;
-  const storiesTotal = detail.stories.length;
-  const statusWord = TOKEN_WORD[token] ?? token.toLowerCase();
-  const age = ageText(stateAgeSeconds(detail, now));
-  const footerText =
-    currentStep !== null && seq !== undefined
-      ? `step ${seq} of ${totalSteps} · ${pathLabel(currentStep.id)} · ${statusWord} ${age} · ${storiesDone}/${storiesTotal} stories`
-      : `${storiesDone}/${storiesTotal} stories`;
+  const currentNode = findCurrentStep(graph);
+  const currentRow =
+    currentNode === null
+      ? null
+      : (detail.steps.find((step) => step.path === currentNode.id) ?? null);
+  const storiesDone = detail.stories.filter((story) => story.state === 'done').length;
+  const footer = footerText(
+    currentRow === null ? null : { seq: currentRow.seq, label: currentRow.label },
+    { steps: detail.steps.length, storiesDone, stories: detail.stories.length },
+    {
+      word: RUN_STATUS_WORD[token] ?? token.toLowerCase(),
+      age: ageText(stateAgeSeconds(detail, Date.now())),
+    },
+  );
 
-  const stepsDone = detail.steps.filter((s) => s.status === 'done').length;
+  // the plan itself has no rows — not "the model drew nothing", which is a different fact
+  // and would be a defect rather than a state (`buildHierarchy` draws a root for any row)
+  if (graph.nodes.length === 0) {
+    return (
+      <div>
+        <p className="wf-diagram-empty">{EMPTY_PLAN_TEXT}</p>
+        <footer className="wf-diagram-footer" data-testid="wf-diagram-footer">
+          {footer}
+        </footer>
+      </div>
+    );
+  }
+
+  const stepsDone = detail.steps.filter((step) => step.status === 'done').length;
 
   return (
     <div>
-      <div className="wf-diagram-heads">
-        <span>RUN</span>
-        <span>EPICS</span>
-        <span>STORIES</span>
-        <span>STEPS</span>
-      </div>
-      <div
-        data-testid="wf-diagram"
-        role="img"
-        aria-label={`run ${detail.run.branch} · ${stepsDone}/${totalSteps} steps`}
-      >
-        <svg
-          className="diagram-svg"
-          width={layout.width}
-          height={layout.height}
-          viewBox={`0 0 ${layout.width} ${layout.height}`}
+      <div className="wf-flow-bar">
+        <span className="wf-flow-head">DIAGRAM</span>
+        <button
+          type="button"
+          className="wf-flow-ctl"
+          data-testid="wf-diagram-fit"
+          onClick={() => void instanceRef.current?.fitView()}
         >
-          {layout.groups.map((placed) => {
-            const runGroup = placed.group as RunGroupOut;
-            return (
-              <DiagramGroup
-                key={placed.group.id}
-                placed={placed}
-                status={runGroup.status}
-                k={runGroup.k ?? 0}
-                n={runGroup.n ?? 0}
-              />
-            );
-          })}
-          {layout.edges.map((placed) => (
-            <DiagramEdge key={placed.id} placed={placed} />
-          ))}
-          {layout.nodes.map((placed) => {
-            const runNode = placed.node as RunNodeOut & { substeps?: string[] };
-            const id = placed.node.id;
-            const stepSeq = nodeSeq(id, detail.steps);
-            // Story aggregate nodes (kind='story') expand/collapse; leaf step nodes navigate.
-            const onClick =
-              placed.node.kind === 'story'
-                ? () =>
-                    setExpandedGroups((prev) => {
-                      const s = new Set(prev);
-                      if (s.has(id)) {
-                        s.delete(id);
-                      } else {
-                        s.add(id);
-                      }
-                      return s;
-                    })
-                : stepSeq !== null
-                  ? () =>
-                      window.location.assign(`/workflows/${runId}/steps/${encode(placed.node.id)}`)
-                  : undefined;
-            return (
-              <DiagramNode
-                key={id}
-                placed={placed}
-                status={runNode.status}
-                token={runNode.token}
-                current={runNode.current}
-                substeps={runNode.substeps}
-                onClick={onClick}
-              />
-            );
-          })}
-        </svg>
+          fit
+        </button>
+        <button
+          type="button"
+          className="wf-flow-ctl"
+          data-testid="wf-diagram-reset"
+          onClick={() => setResetCount((previous) => previous + 1)}
+        >
+          reset layout
+        </button>
+        <span className="wf-flow-zoom" data-testid="wf-diagram-zoom">
+          {Math.round(zoom * 100)}%
+        </span>
       </div>
-      <footer data-testid="wf-diagram-footer">{footerText}</footer>
+      <FlowCanvas
+        layout={layout}
+        runId={runId}
+        onToggle={onToggle}
+        resetKey={`${resetCount}|${[...expandedGroups].sort().join(',')}`}
+        onInit={onInit}
+        onZoom={setZoom}
+        label={`run ${detail.run.branch} · ${stepsDone}/${detail.steps.length} steps`}
+      />
+      <footer className="wf-diagram-footer" data-testid="wf-diagram-footer">
+        {footer}
+      </footer>
     </div>
   );
 }

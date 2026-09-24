@@ -75,7 +75,7 @@ function detail(): RunDetailOut {
 }
 
 describe('Header', () => {
-  it('carries the crumb, token, branch, meta and toggle testids', () => {
+  it('carries the crumb, token, branch and meta testids, and no view toggle', () => {
     const now = new Date('2026-09-07T09:01:00Z').getTime();
     const html = renderToStaticMarkup(
       createElement(Header, { detail: detail(), token: 'RUN', now }),
@@ -88,9 +88,11 @@ describe('Header', () => {
     expect(html).toContain('epics/1');
     expect(html).toContain('data-testid="wf-meta"');
     expect(html).toContain('demo · demo-repo · main · docs/initiative · initiative v1 · claude');
-    expect(html).toContain('data-testid="wf-toggle-diagram"');
-    expect(html).toContain('DIAGRAM');
-    expect(html).toContain('aria-disabled="true"');
+    // 2026-09-24, run-diagram v3 (EXPERIENCE-v1 delta 21): the `DIAGRAM · DETAIL` toggle and
+    // the `?view=diagram` redirect it pointed at are deleted, so the header has no toggle to
+    // assert. What the toggle was here to prove — that the header states the run's identity
+    // and its meta line unabridged — is asserted above and is unchanged.
+    expect(html).not.toContain('wf-toggle-diagram');
   });
 
   it('colours the token by its own signal', () => {
