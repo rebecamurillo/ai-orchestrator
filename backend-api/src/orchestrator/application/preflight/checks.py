@@ -88,8 +88,9 @@ class Context:
     #: Live harness adapters keyed by name — used by `harness_probe_line` (story 2-2).
     #: Defaults to empty so every existing `Context(...)` construction keeps compiling.
     harness_registry: dict[str, HarnessAdapter] = field(default_factory=dict)
-    #: `None` when no catalog is configured (dev environment, image not yet built) — treated
-    #: as "catalog unavailable" by `installed_skill_lines`, which emits a `skip` line.
+    #: `None` when no catalog is configured at all, which only a unit test's context is —
+    #: `installed_skill_lines` `skip`s that, and `fail`s a catalog it cannot read (hub-Run
+    #: operations, skills install fix, 2026-09-24).
     skill_catalog: SkillCatalog | None = None
 
     @property

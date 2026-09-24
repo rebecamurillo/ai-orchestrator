@@ -65,8 +65,9 @@ class PreflightPorts:
     #: `harness_probe_line` can call each adapter's `probe()`.  Defaults to empty so every
     #: existing frozen `PreflightPorts(...)` construction keeps compiling unchanged.
     harness_registry: dict[str, HarnessAdapter] = field(default_factory=dict)
-    #: `None` when not configured (dev environment); treated as "catalog unavailable" by
-    #: the installed-skill pre-flight check, which emits a `skip` line.
+    #: `None` only when no catalog is configured, which the composition root never does
+    #: (`api/providers.py` builds one unconditionally) — a catalog that *cannot be read* is
+    #: a `fail` line, not a `skip` (hub-Run operations, skills install fix, 2026-09-24).
     skill_catalog: SkillCatalog | None = None
 
 

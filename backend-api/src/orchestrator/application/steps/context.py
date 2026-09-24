@@ -1,10 +1,9 @@
 """What an executor is handed and what it must be (AD-9): `StepContext` and `StepExecutor`.
 
-One kind, one module, one protocol. An executor is a pure function over its context: it
-reads the row the planner recorded, does the kind's work through the ports it was given,
-and returns a `StepResult`. It never writes a status, never reaches a repository, and never
-imports `infrastructure` — `StepPorts` is built once in `main.py` and travels here (AD-2,
-AD-8).
+One kind, one module, one protocol. An executor is a pure function over its context: it reads the
+row the planner recorded, does the kind's work through the ports it was given, and returns a
+`StepResult`. It never writes a status, never reaches a repository, and never imports
+`infrastructure` — `StepPorts` is built once in `main.py` and travels here (AD-2, AD-8).
 
 `StepContext` is the spine's own field list. Two of them carry a rule: `with_resolved` is
 the row's, not the Template's — the planner resolved every expression before the Run
@@ -26,9 +25,9 @@ facts the row cannot carry — the Repository's clone, its `install_command`, it
 so `attempt_row` reads them once and hands them over as a frozen `RunEnvironment` inside
 `StepPorts`: the executor reads a value, never a repository (AD-8).
 
-**Epic 5's fields** (`harnesses`, `harness_env`, `attempt_writes`, `logs`, `spend_writes`)
-are `agent`-kind and walker-only — defaulted `None` so every prior `StepPorts(...)` keeps
-working. Most refuse when unset (`require_*` below); `spend_writes` degrades (5.7).
+**Epic 5's fields** (`harnesses`, `harness_env`, `attempt_writes`, `logs`, `spend_writes`) and
+`skill_catalog` are `agent`-kind and walker-only — defaulted `None` so every prior `StepPorts(...)`
+keeps working. Most refuse when unset (`require_*` below); the last two degrade (5.7, 2026-09-24).
 
 **The three questions at the end are how an executor knows which re-dispatch it is**: AD-9
 closes `StepContext`'s field list, so `retrying`/`operator_retry`/`redispatched` read the
@@ -57,6 +56,7 @@ from orchestrator.domain.ports.logs import LogReader
 from orchestrator.domain.ports.process import ProcessRunner
 from orchestrator.domain.ports.protected_paths import ProtectedPaths
 from orchestrator.domain.ports.repositories import AttemptRepository
+from orchestrator.domain.ports.skill_catalog import SkillCatalog
 from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.ports.workspace import Workspace
 from orchestrator.domain.values import StepResult, Worktree
@@ -218,6 +218,7 @@ class StepPorts:
     #: The attempt's own spend scope (5.7). `None` skips the budget read — see the module
     #: docstring's "degrades like `tracer`" — rather than raising like `attempt_writes`.
     spend_writes: SpendWrites | None = None
+    skill_catalog: SkillCatalog | None = None
 
 
 @dataclass(frozen=True)
@@ -248,11 +249,10 @@ class StepExecutor(Protocol):
 
 
 def log_path(ctx: StepContext) -> Path:
-    """`/work/logs/{run_id}/{seq:03d}-{attempt_n}.log` — one path, computed the same way
-
-    by every kind that starts a process. Nothing here reads the filesystem: the path is a
-    pure function of the Run, the row and the attempt, so any kind can compute it before
-    `ProcessRunner.start` creates the file it names.
+    """`/work/logs/{run_id}/{seq:03d}-{attempt_n}.log` — one path, computed the same way by every
+    kind that starts a process. Nothing here reads the filesystem: the path is a pure function of
+    the Run, the row and the attempt, so any kind can compute it before `ProcessRunner.start`
+    creates the file it names.
     """
     return (
         Path(ctx.ports.work_dir)
@@ -353,15 +353,15 @@ def committed(ctx: StepContext, write: Callable[[AttemptRepository], None]) -> N
 def retrying(ctx: StepContext) -> bool:
     """Whether this attempt is the Template's own `retry` firing again (AD-9, FR-16).
 
-    An automatic re-queue only ever follows `error` (a retry) or `done` (a verify
-    redispatch), and every Operator resume carries a `resume_signal` — so "no signal, and
-    the attempt before this one ended `error`" is nearly a retry, and `end_sha` is the rest
-    of it. A backend killed mid-dispatch leaves exactly that shape too: `start_attempt`
-    closes the interrupted attempt `error` and the walk restarts with no signal at all.
-    `end_sha` is written only by the tail, so it alone means "the dispatch came back" —
-    the same discriminator `agent.py::_orphan_control` uses, for the same reason `ended_at`
-    cannot be one. Without it a crash recovery would resume the killed session with a retry
-    prompt and never be counted against `retry_count`, which AD-9 forbids.
+    An automatic re-queue only ever follows `error` (a retry) or `done` (a verify redispatch), and
+    every Operator resume carries a `resume_signal` — so "no signal, and the attempt before this
+    one ended `error`" is nearly a retry, and `end_sha` is the rest of it. A backend killed
+    mid-dispatch leaves exactly that shape too: `start_attempt` closes the interrupted attempt
+    `error` and the walk restarts with no signal at all. `end_sha` is written only by the tail, so
+    it alone means "the dispatch came back" — the same discriminator `agent.py::_orphan_control`
+    uses, for the same reason `ended_at` cannot be one. Without it a crash recovery would resume
+    the killed session with a retry prompt and never be counted against `retry_count`, which AD-9
+    forbids.
     """
     previous = ctx.previous_attempt
     return (

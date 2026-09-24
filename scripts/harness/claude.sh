@@ -18,10 +18,22 @@ HARNESS_ENV_ALIASES=(ANTHROPIC_AUTH_TOKEN=LITELLM_API_KEY ANTHROPIC_CUSTOM_HEADE
 # `claude login` inside the container; both are host-side and documented in host/README.md.
 : "${CLAUDE_CODE_VERSION:=2.1.258}"
 
+# Claude reads ~/.claude/skills, not ~/.agents/skills. Named once: `install`, `skills` and
+# `doctor` must not drift, and `skills-manifest.json` — the instance's skill catalog — is
+# written one level above it.
+SKILLS_DIR="${AGENT_HOME}/.claude/skills"
+
 install() {
   npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
-  bmad_install_global_skills claude-code "${AGENT_HOME}/.claude/skills"     # Claude reads ~/.claude/skills, not ~/.agents/skills
-  install_operator_skills /app/ia-agents-skills "${AGENT_HOME}/.claude/skills"
+  bmad_install_global_skills claude-code "${SKILLS_DIR}"
+  install_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
+}
+
+# Container start, not image build: the operator skills alone, idempotently. `install` is
+# not re-run at boot because it `npm install`s a CLI; see `_common.sh::sync_operator_skills`
+# for why the boot-time copy exists at all (the `agent-home` volume shadows the image).
+skills() {
+  sync_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
 }
 
 configure() {
@@ -87,7 +99,7 @@ JSON
 
 doctor() {
   claude --version
-  doctor_skill_present "${AGENT_HOME}/.claude/skills"
+  doctor_skill_present "${SKILLS_DIR}"
   doctor_gateway
   doctor_claude_login
 }
@@ -161,7 +173,9 @@ probe() {
 
 case "${1:-}" in
   install)                install ;;
+  # `skills` reads no Gateway or Langfuse value, exactly as `install` does not
+  skills)                 skills ;;
   configure|doctor)       require_harness_env; "$1" ;;
   probe)                  require_harness_env; probe ;;
-  *)                      echo "usage: $0 install|configure|doctor|probe" >&2; exit 2 ;;
+  *)                      echo "usage: $0 install|skills|configure|doctor|probe" >&2; exit 2 ;;
 esac

@@ -9,10 +9,20 @@ HARNESS_ENV_ALIASES=()
 : "${CODEX_VERSION:=0.152.1}"
 export CODEX_HOME="${CODEX_HOME:-${AGENT_HOME}/.codex}"
 
+# Codex reads $HOME/.agents/skills (+ $CWD/.agents/skills). Named once so `install` and
+# `skills` cannot drift; `skills-manifest.json` is written one level above it.
+SKILLS_DIR="${AGENT_HOME}/.agents/skills"
+
 install() {
   npm install -g "@openai/codex@${CODEX_VERSION}"
-  bmad_install_global_skills codex "${AGENT_HOME}/.agents/skills"           # Codex reads $HOME/.agents/skills (+ $CWD/.agents/skills)
-  install_operator_skills /app/ia-agents-skills "${AGENT_HOME}/.agents/skills"
+  bmad_install_global_skills codex "${SKILLS_DIR}"
+  install_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
+}
+
+# Container start, not image build: the operator skills alone, idempotently, because the
+# `agent-home` volume shadows the image (`_common.sh::sync_operator_skills`).
+skills() {
+  sync_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
 }
 
 configure() {
@@ -78,7 +88,7 @@ OTEL
 
 doctor() {
   codex --version
-  doctor_skill_present "${AGENT_HOME}/.agents/skills"
+  doctor_skill_present "${SKILLS_DIR}"
   doctor_gateway
 }
 
@@ -101,7 +111,9 @@ probe() {
 
 case "${1:-}" in
   install)                install ;;
+  # `skills` reads no Gateway or Langfuse value, exactly as `install` does not
+  skills)                 skills ;;
   configure|doctor)       require_harness_env; "$1" ;;
   probe)                  require_harness_env; probe ;;
-  *)                      echo "usage: $0 install|configure|doctor|probe" >&2; exit 2 ;;
+  *)                      echo "usage: $0 install|skills|configure|doctor|probe" >&2; exit 2 ;;
 esac

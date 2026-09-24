@@ -194,14 +194,28 @@ def _story_status(text: str) -> str | None:
 
 
 def installed_skill_lines(ctx: Context) -> list[Line]:
-    """One line per missing skill, `ok` when all are present, `skip` when catalog is absent.
+    """One line per missing skill, `ok` when all are present, `fail` when the catalog cannot
+    be read at all.
 
     Returns an empty list when the plan is `None` or has no `skill:` agent steps — nothing
-    to check.  Returns a single `skip` line when the catalog is unavailable (either
-    `ctx.skill_catalog` is `None` or `installed_skills()` returns `None`).  Returns one
-    `fail` line per missing skill name when some are absent; returns a single `ok` line when
-    every named skill is installed.  Lives here rather than in `checks.py` on line count
-    alone (the 400-line module limit), like every plural-line check before it.
+    to check, and the only case an unreadable catalog stays quiet in.  Returns one `fail`
+    line per missing skill name when some are absent; returns a single `ok` line when every
+    named skill is installed.  Lives here rather than in `checks.py` on line count alone
+    (the 400-line module limit), like every plural-line check before it.
+
+    **An unreadable catalog is a `fail`, naming every skill it could not verify** (hub-Run
+    operations, skills install fix, 2026-09-24).  It was a `skip` until then, and that made
+    this check inert for the life of an instance: the manifest lives under `${AGENT_HOME}`,
+    which the `agent-home` volume mounts over, so an instance whose volume predated the
+    manifest reported `skip · catalog unavailable` for every Run it ever planned — and a
+    harness handed a skill name it cannot resolve does not fail, it improvises.  The same fix
+    writes the manifest at every container start
+    (`infrastructure/skills_install.py`), so an unreadable catalog now means a broken
+    instance, and a Run that would dispatch a skill into one must not be created.
+
+    A `Context` carrying **no catalog port at all** is the one case that still `skip`s, and
+    it is a different fact: not "the manifest could not be read" but "this process wired
+    nothing to read it with", which only a unit test's context ever is.
     """
     if ctx.plan is None:
         return []
@@ -214,9 +228,22 @@ def installed_skill_lines(ctx: Context) -> list[Line]:
             skill_names.append(skill)
     if not skill_names:
         return []
-    installed = ctx.skill_catalog.installed_skills() if ctx.skill_catalog is not None else None
+    if ctx.skill_catalog is None:
+        # the one genuinely unknowable case: this *process* wired no catalog port at all,
+        # which the composition root never does (`api/providers.py::_preflight_ports` builds
+        # one unconditionally, and `test_preflight_installed_skill.py` pins that) — so it is
+        # a unit test's context, never an instance serving a request
+        return [Line(CHECK_INSTALLED_SKILL, "skip", "no catalog configured")]
+    installed = ctx.skill_catalog.installed_skills()
     if installed is None:
-        return [Line(CHECK_INSTALLED_SKILL, "skip", "catalog unavailable")]
+        return [
+            Line(
+                CHECK_INSTALLED_SKILL,
+                "fail",
+                f"catalog unavailable: cannot verify {', '.join(skill_names)}",
+                fix="restart backend-api — it installs the operator skills at start-up",
+            )
+        ]
     missing = [name for name in skill_names if name not in installed]
     if missing:
         return [

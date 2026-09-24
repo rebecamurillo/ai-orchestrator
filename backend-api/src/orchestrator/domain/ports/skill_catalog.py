@@ -2,8 +2,10 @@
 
 `installed_skills` returns `None` when the manifest is unavailable (file not found,
 unreadable, or unparseable) and a `frozenset[str]` of names otherwise.  `None` means
-"catalog unavailable" and is treated as `skip` by the pre-flight check; an empty
-frozenset means "no skills installed".
+"catalog unavailable", and the pre-flight check answers it with a `fail` naming every skill
+it could not verify — a manifest that cannot be read is a broken instance, not a quiet one
+(hub-Run operations, skills install fix, 2026-09-24).  An empty frozenset means "no skills
+installed", which is a different fact and fails per name.
 """
 
 from __future__ import annotations

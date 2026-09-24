@@ -222,6 +222,7 @@ def a_world(  # noqa: PLR0913 — one keyword per double or context field, each 
     clock: FakeClock | None = None,
     writes_failing_on: int | None = None,
     process: FakeProcessRunner | None = None,
+    skill_catalog: Any = None,
 ) -> World:
     """One `agent` row, wired to the shared fakes, ready to `AgentExecutor().execute(...)`."""
     the_run = run if run is not None else a_run()
@@ -265,6 +266,10 @@ def a_world(  # noqa: PLR0913 — one keyword per double or context field, each 
             harnesses=harnesses if harnesses is not None else {HARNESS_NAME: the_harness},
             harness_env=harness_env,
             attempt_writes=_writes(repository, uows, the_clock, writes_failing_on),
+            # `None` by default, which is how every world built before the hub-Run
+            # operations skills install fix (2026-09-24) keeps dispatching unchanged:
+            # `steps/agent_skill.py` refuses nothing without a catalog to refuse it by.
+            skill_catalog=skill_catalog,
         ),
     )
     ports = context.ports

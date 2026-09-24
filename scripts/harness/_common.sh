@@ -65,14 +65,109 @@ bmad_install_global_skills() {
   log "BMAD ${BMAD_VERSION} skill stubs → $dest ($(ls "$dest" | wc -l | tr -d ' ') skills)"
 }
 
+# Where the operator skills are read from. `/app/ia-agents-skills` in the image and
+# `<repo>/ia-agents-skills` in a non-image run (`make local`) are the same expression: both
+# are the grandparent of this file's own directory. Overridable so a test can point it at a
+# scratch tree without reaching into any harness script.
+_harness_scripts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+: "${OPERATOR_SKILLS_SRC:=$(dirname "$(dirname "$_harness_scripts_dir")")/ia-agents-skills}"
+
+# One JSON array of the arguments, escaped. Printed, not returned.
+_json_array() {
+  local json='[' i=0 name escaped
+  for name in "$@"; do
+    escaped="${name//\\/\\\\}"     # \ → \\
+    escaped="${escaped//\"/\\\"}"  # " → \"
+    [ "$i" -gt 0 ] && json="${json},"
+    json="${json}\"${escaped}\""
+    i=$((i+1))
+  done
+  printf '%s]' "$json"
+}
+
+# A digest of a directory's file names and contents, so two skill trees can be compared
+# without diffutils. python3 is already this file's dependency (probe_gateway_models).
+_dir_digest() {
+  python3 - "$1" <<'PY'
+import hashlib, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+digest = hashlib.sha256()
+for path in sorted(root.rglob("*")):
+    digest.update(path.relative_to(root).as_posix().encode() + b"\0")
+    if path.is_file():
+        digest.update(path.read_bytes())
+print(digest.hexdigest())
+PY
+}
+
+# Write the sorted skills-manifest.json one level above $1 (the dest skills dir), naming
+# every skill directory now present in it. This file is the instance's skill catalog: the
+# installed-skill pre-flight check reads it (infrastructure/skill_catalog.py), and a run
+# time that cannot read it can only report "catalog unavailable".
+# Sets SKILLS_MANIFEST_PATH and SKILLS_MANIFEST_COUNT for the caller.
+write_skills_manifest() {
+  local dest="$1" manifest d
+  manifest="$(dirname "$dest")/skills-manifest.json"
+  local skill_names=()
+  if [ -d "$dest" ]; then
+    while IFS= read -r d; do
+      skill_names+=("$(basename "$d")")
+    done < <(find "$dest" -mindepth 1 -maxdepth 1 -type d | sort)
+  fi
+  printf '{"skills":%s}\n' "$(_json_array "${skill_names[@]+"${skill_names[@]}"}")" > "$manifest"
+  SKILLS_MANIFEST_PATH="$manifest"
+  SKILLS_MANIFEST_COUNT="${#skill_names[@]}"
+  log "skills manifest → $manifest (${#skill_names[@]} skills)"
+}
+
+# Operator skills at container start (hub-Run operations, skills install fix, 2026-09-24).
+# `install_operator_skills` below runs during `docker build` and refuses a name that already
+# exists, because at build time that can only be a collision with a BMAD stub. This one runs
+# on every boot, against a dest that already holds whatever an earlier boot installed, and is
+# therefore idempotent rather than refusing: `${AGENT_HOME}` is the mount point of the
+# `agent-home` volume, and Docker seeds a named volume from the image only while the volume
+# is empty — so a skill added to the image after the volume was created is invisible at run
+# time, silently, for the life of the volume, and so is the manifest that names it.
+#
+# Copies a skill the dest lacks, replaces one whose image copy differs (the image is the
+# source of truth — an instance must not run a skill nobody shipped), leaves an identical one
+# alone, never removes anything, and always rewrites the manifest. Prints one JSON line on
+# stdout naming what changed, which is what the backend logs.
+sync_operator_skills() {
+  local src="$1" dest="$2" d name
+  local installed=() updated=()
+  mkdir -p "$dest"
+  if [ -d "$src" ]; then
+    while IFS= read -r d; do
+      name="$(basename "$d")"
+      if [ ! -d "$dest/$name" ]; then
+        cp -R "$d" "$dest/"
+        installed+=("$name")
+      elif [ "$(_dir_digest "$d")" != "$(_dir_digest "$dest/$name")" ]; then
+        rm -rf "${dest:?}/${name:?}"
+        cp -R "$d" "$dest/"
+        updated+=("$name")
+      fi
+    done < <(find "$src" -mindepth 1 -maxdepth 1 -type d | sort)
+  else
+    log "operator skills source not found, nothing to copy: $src"
+  fi
+  write_skills_manifest "$dest"
+  log "operator skills → $dest (installed ${#installed[@]}, updated ${#updated[@]})"
+  printf '{"dest":"%s","installed":%s,"updated":%s,"skills":%s}\n' \
+    "$dest" \
+    "$(_json_array "${installed[@]+"${installed[@]}"}")" \
+    "$(_json_array "${updated[@]+"${updated[@]}"}")" \
+    "$SKILLS_MANIFEST_COUNT"
+}
+
 # Operator skills: copy every subdirectory from $1 (ia-agents-skills source) into $2 (dest
 # skills dir), detect name collisions against already-installed stubs, and write a sorted
 # skills-manifest.json one level above $2. Called after bmad_install_global_skills so
-# stubs are already present when collision detection runs. AD-16.
+# stubs are already present when collision detection runs. AD-16. Build time only — a boot
+# runs `sync_operator_skills` above, which is idempotent where this one refuses.
 install_operator_skills() {
   local src="$1" dest="$2"
-  local manifest
-  manifest="$(dirname "$dest")/skills-manifest.json"
 
   # Collect ALL collision names before deciding to exit (operator sees every problem at once).
   local collisions=()
@@ -98,25 +193,7 @@ install_operator_skills() {
   fi
 
   # Write sorted skills-manifest.json enumerating every skill dir now present in dest.
-  local skill_names=()
-  if [ -d "$dest" ]; then
-    while IFS= read -r d; do
-      skill_names+=("$(basename "$d")")
-    done < <(find "$dest" -mindepth 1 -maxdepth 1 -type d | sort)
-  fi
-  local json='{"skills":['
-  local i=0
-  local name escaped
-  for name in "${skill_names[@]+"${skill_names[@]}"}"; do
-    escaped="${name//\\/\\\\}"   # \ → \\
-    escaped="${escaped//\"/\\\"}"  # " → \"
-    [ "$i" -gt 0 ] && json="${json},"
-    json="${json}\"${escaped}\""
-    i=$((i+1))
-  done
-  json="${json}]}"
-  printf '%s\n' "$json" > "$manifest"
-  log "skills manifest → $manifest (${#skill_names[@]} skills)"
+  write_skills_manifest "$dest"
 }
 
 doctor_skill_present() {  # $1 = skills dir

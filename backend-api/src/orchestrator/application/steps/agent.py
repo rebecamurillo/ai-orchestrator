@@ -48,6 +48,7 @@ from orchestrator.application.steps import (
     agent_answer,
     agent_prompt,
     agent_render,
+    agent_skill,
     agent_tail,
     agent_workdir,
 )
@@ -146,8 +147,9 @@ class AgentExecutor:
         if isinstance(found, StepResult):
             return found
         # beside the harness lookup and for its reason: a row naming a folder that is no
-        # initialized submodule must park before any commit is placed (AD-9, H4).
-        misconfigured = agent_workdir.verify(ctx)
+        # initialized submodule — or a skill this instance cannot resolve, which a harness
+        # answers by improvising — must park before any commit is placed (AD-9, H4).
+        misconfigured = agent_workdir.verify(ctx) or agent_skill.verify(ctx)
         if misconfigured is not None:
             return misconfigured
         _orphan_control(ctx)

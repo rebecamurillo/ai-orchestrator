@@ -5,6 +5,23 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+#: Where `scripts/harness/_common.sh::write_skills_manifest` leaves the catalog, relative to
+#: `AGENT_HOME`. Claude's copy is the one the orchestrator reads: all three harnesses receive
+#: the same operator skills and the same BMAD stubs, under three different directories, so
+#: any one of them answers "can this instance resolve this skill name".
+MANIFEST_RELATIVE = Path(".claude") / "skills-manifest.json"
+
+
+def manifest_path(agent_home: Path) -> Path:
+    """The skills manifest for an instance whose harness home is `agent_home`.
+
+    One statement of the path, because two readers need it — `api/providers.py` builds the
+    catalog pre-flight reads, and `infrastructure/dbos/startup.py` builds the one the
+    `agent` kind refuses an unresolvable skill with — and a drift between them would be
+    invisible until a Run dispatched a skill nobody could resolve.
+    """
+    return agent_home / MANIFEST_RELATIVE
+
 
 class FsSkillCatalog:
     """Reads the skills manifest from a path on the local filesystem.

@@ -3,7 +3,9 @@
 
 Every row of the I/O matrix in the story spec is covered here:
 
-(a) catalog unavailable (`FakeSkillCatalog(None)`) → single `skip` line
+(a) catalog unreadable (`FakeSkillCatalog(None)`) → single `fail` line naming every skill
+    it could not verify (hub-Run operations, skills install fix, 2026-09-24; it was a
+    `skip` line until then, and that is exactly what made the guard inert in production)
 (b) no skill steps in plan → empty list
 (c) skill present → single `ok` line
 (d) one skill absent → one `fail` line naming the skill
@@ -11,15 +13,18 @@ Every row of the I/O matrix in the story spec is covered here:
 (f) plan is `None` → empty list
 
 Plus:
-- `skill_catalog=None` on `Context` → also treated as catalog unavailable
+- `skill_catalog=None` on `Context` → `skip`, and a proof that the composition root never
+  builds one that way, so the `skip` is unreachable outside a unit test
 - `FsSkillCatalog` adapter: reads JSON manifest; returns `None` on missing/malformed file
 """
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
+from orchestrator.api import providers
 from orchestrator.application.preflight import lists
 from orchestrator.application.preflight.checks import Context
 from orchestrator.application.preflight.model import CHECK_INSTALLED_SKILL, PreflightRequest
@@ -111,11 +116,20 @@ def test_installed_skill_lines_returns_empty_for_agent_step_without_skill_key() 
 
 
 # ---------------------------------------------------------------------------
-# (a) catalog unavailable: FakeSkillCatalog(None) → single skip line
+# (a) catalog unavailable: FakeSkillCatalog(None) → single fail line naming the skills
+#
+# Was a `skip` line until the hub-Run operations skills install fix, 2026-09-24. The
+# declared behaviour change: a degradation may not hide an unresolvable skill. In
+# production `skip · catalog unavailable` was the *only* thing this check ever printed —
+# the manifest lives under `${AGENT_HOME}`, which a named volume shadows — so a Template
+# dispatching a skill the instance could not resolve was created, dispatched, and left the
+# harness to improvise for 177 seconds. Since the same fix installs the skills (and so
+# writes the manifest) at every container start, an unavailable catalog now means a broken
+# instance, and a Run that would dispatch a skill into it must not be created.
 # ---------------------------------------------------------------------------
 
 
-def test_installed_skill_lines_skips_when_installed_skills_returns_none() -> None:
+def test_installed_skill_lines_fails_when_installed_skills_returns_none() -> None:
     plan = _plan(_row(kind="agent", skill="bmad-build-auto"))
     ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(None))
 
@@ -123,12 +137,18 @@ def test_installed_skill_lines_skips_when_installed_skills_returns_none() -> Non
 
     assert len(result) == 1
     assert result[0].check == CHECK_INSTALLED_SKILL
-    assert result[0].status == "skip"
+    assert result[0].status == "fail"
     assert "catalog unavailable" in result[0].text
+    # the degradation may not hide which skill went unverified
+    assert "bmad-build-auto" in result[0].text
+    assert result[0].fix is not None
 
 
-def test_installed_skill_lines_skips_when_skill_catalog_is_none() -> None:
-    """Context with no catalog at all (skill_catalog=None) is treated as unavailable."""
+def test_installed_skill_lines_skips_when_no_catalog_port_is_wired() -> None:
+    """A `Context` with no catalog *port* states a different fact from one whose manifest
+    cannot be read: not "unreadable" but "this process wired nothing to read it with", which
+    only a unit test's context ever is.  It stays a `skip`; the test below is what keeps
+    that from becoming a hiding place (hub-Run operations, skills install fix, 2026-09-24)."""
     plan = _plan(_row(kind="agent", skill="bmad-build-auto"))
     ctx = _ctx(plan=plan, skill_catalog=None)
 
@@ -136,6 +156,44 @@ def test_installed_skill_lines_skips_when_skill_catalog_is_none() -> None:
 
     assert len(result) == 1
     assert result[0].status == "skip"
+    assert result[0].text == "no catalog configured"
+
+
+def test_the_composition_root_always_wires_a_catalog() -> None:
+    """What makes the `skip` above unreachable in production: `_preflight_ports` builds a
+    `FsSkillCatalog` unconditionally, with no branch that could leave it `None`.  Read off
+    the composition root's own source, the way `test_graph_text_router.py` reads the router
+    ordering it pins (hub-Run operations, skills install fix, 2026-09-24)."""
+    source = inspect.getsource(providers._preflight_ports)
+
+    assert "skill_catalog=FsSkillCatalog(manifest_path(settings.agent_home))" in source
+    assert "skill_catalog=None" not in source
+
+
+def test_installed_skill_lines_names_every_unverified_skill_when_unavailable() -> None:
+    """Two skills, one unreadable catalog: both names appear (hub-Run operations, skills
+    install fix, 2026-09-24)."""
+    plan = _plan(
+        _row(kind="agent", skill="bmad-x", seq=1),
+        _row(kind="agent", skill="spec-gate", seq=2),
+    )
+    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(None))
+
+    result = lists.installed_skill_lines(ctx)
+
+    assert len(result) == 1
+    assert result[0].status == "fail"
+    assert "bmad-x" in result[0].text
+    assert "spec-gate" in result[0].text
+
+
+def test_installed_skill_lines_stays_silent_when_unavailable_and_no_skill_is_named() -> None:
+    """The one genuinely unknowable case that stays quiet: nothing to verify (hub-Run
+    operations, skills install fix, 2026-09-24)."""
+    plan = _plan(_row(kind="git.worktree"))
+    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(None))
+
+    assert lists.installed_skill_lines(ctx) == []
 
 
 # ---------------------------------------------------------------------------

@@ -14,11 +14,21 @@ HARNESS_ENV_ALIASES=(LANGFUSE_BASEURL=LANGFUSE_BASE_URL LANGFUSE_USER_ID=ORCH_RU
 : "${LANGFUSE_OPENCODE_PLUGIN_VERSION:=0.3.0}"
 OPENCODE_CONFIG_DIR="${AGENT_HOME}/.config/opencode"
 
+# OpenCode's own skills dir. Named once so `install`, `skills` and `doctor` cannot drift;
+# `skills-manifest.json` is written one level above it.
+SKILLS_DIR="${OPENCODE_CONFIG_DIR}/skills"
+
 install() {
   npm install -g "opencode-ai@${OPENCODE_VERSION}"
   # OpenCode reads ~/.claude/skills and ~/.agents/skills too; the codex.sh stubs suffice. Install its own dir anyway so it stands alone.
-  bmad_install_global_skills opencode "${OPENCODE_CONFIG_DIR}/skills"
-  install_operator_skills /app/ia-agents-skills "${OPENCODE_CONFIG_DIR}/skills"
+  bmad_install_global_skills opencode "${SKILLS_DIR}"
+  install_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
+}
+
+# Container start, not image build: the operator skills alone, idempotently, because the
+# `agent-home` volume shadows the image (`_common.sh::sync_operator_skills`).
+skills() {
+  sync_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
 }
 
 configure() {
@@ -106,7 +116,7 @@ config_parses() {
 
 doctor() {
   opencode --version
-  doctor_skill_present "${OPENCODE_CONFIG_DIR}/skills"
+  doctor_skill_present "${SKILLS_DIR}"
   config_parses \
     && log "config parses: ${OPENCODE_CONFIG_DIR}/opencode.json" \
     || { log "config unparseable: ${OPENCODE_CONFIG_DIR}/opencode.json"; return 1; }
@@ -135,7 +145,9 @@ probe() {
 
 case "${1:-}" in
   install)                install ;;
+  # `skills` reads no Gateway or Langfuse value, exactly as `install` does not
+  skills)                 skills ;;
   configure|doctor)       require_harness_env; "$1" ;;
   probe)                  require_harness_env; probe ;;
-  *)                      echo "usage: $0 install|configure|doctor|probe" >&2; exit 2 ;;
+  *)                      echo "usage: $0 install|skills|configure|doctor|probe" >&2; exit 2 ;;
 esac

@@ -114,6 +114,7 @@ from orchestrator.infrastructure.git import SubprocessGit
 from orchestrator.infrastructure.harness import build_harnesses  # noqa: F401
 from orchestrator.infrastructure.logging import configure_logging
 from orchestrator.infrastructure.settings import Settings
+from orchestrator.infrastructure.skills_install import install_operator_skills
 from orchestrator.infrastructure.templates_loader import load_shipped_templates
 
 log = structlog.get_logger(__name__)
@@ -185,16 +186,18 @@ def seed_shipped_templates(settings: Settings) -> list[SeedResult]:
 
 
 def run_migrations(settings: Settings) -> str:
-    """The pre-serve start-up step: schema to head, the shipped Templates and the harness
-    table seeded.
+    """The pre-serve start-up step: schema to head, operator skills in, seeds applied.
 
     Combined under this one name for the reason the module docstring gives: every test that
     replaces `main.run_migrations` takes exactly one argument, `settings`. The durable
-    engine's launch is the fourth step for the same reason and one of its own (AD-6, FR-12):
+    engine's launch is the last step for the same reason and one of its own (AD-6, FR-12):
     recovery of the Runs an earlier container was walking begins at that call, and it must
     not begin against a schema that has not been migrated.
     """
     head = db_migrations.run_migrations(settings)
+    # the `agent-home` volume shadows the image, so the skills and their manifest are
+    # (re)installed on every boot, after the migration and before the launch (AD-16)
+    install_operator_skills(settings)
     seed_shipped_templates(settings)
     seed_harness_table(settings)
     # last, and inside this function: see `infrastructure/dbos/startup.py`. A process that

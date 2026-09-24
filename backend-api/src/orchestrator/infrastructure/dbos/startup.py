@@ -68,6 +68,7 @@ from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.process import RealProcessRunner
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
 from orchestrator.infrastructure.settings import Settings
+from orchestrator.infrastructure.skill_catalog import FsSkillCatalog, manifest_path
 from orchestrator.infrastructure.terminal_jobs import engine_jobs
 from orchestrator.infrastructure.tracing import build_tracer
 from orchestrator.infrastructure.workspace import FsWorkspace
@@ -149,6 +150,11 @@ def walker_deps(
             attempt_writes=partial(open_writer_ports, session_factory),
             logs=RealLogReader(log_secrets(settings)),
             spend_writes=partial(open_spend_ports, session_factory, gateway),
+            # the same catalog `api/providers.py` hands pre-flight, read at dispatch time so
+            # a Run planned before the instance changed underneath it still parks instead of
+            # letting a harness improvise on an unresolvable skill name
+            # (hub-Run operations, skills install fix, 2026-09-24)
+            skill_catalog=FsSkillCatalog(manifest_path(settings.agent_home)),
         ),
         human_wait_seconds=settings.human_wait_seconds,
         read_environment=partial(

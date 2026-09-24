@@ -57,16 +57,26 @@ class FakeUow:
 def test_run_migrations_migrates_then_seeds_and_returns_the_head(
     env: dict[str, str], monkeypatch: pytest.MonkeyPatch, recorder: _Recorder
 ) -> None:
-    """Pins all three start-up collaborators, in order (SPEC CAP-3, story 4.3 adds the
-    harness seed beside the template one). `Settings()` here still carries the real,
-    unreachable `.env.example` `DATABASE_URL` (AD-20) — a fourth collaborator added to
-    `run_migrations` without a matching `monkeypatch.setattr` here would reach it for real
-    and raise, failing this test outright rather than letting `recorder.order` pass quietly
-    short of the truth."""
+    """Pins all four start-up collaborators, in order (SPEC CAP-3, story 4.3 adds the
+    harness seed beside the template one; the hub-Run operations skills install fix,
+    2026-09-24, adds the operator-skill install between the migration and the seeds).
+    `Settings()` here still carries the real, unreachable `.env.example` `DATABASE_URL`
+    (AD-20) — a fifth collaborator added to `run_migrations` without a matching
+    `monkeypatch.setattr` here would reach it for real and raise, failing this test outright
+    rather than letting `recorder.order` pass quietly short of the truth.
+
+    Why the skills install is a start-up step at all: it copies `ia-agents-skills` into
+    `${AGENT_HOME}`, the mount point of the `agent-home` volume, which Docker seeds from the
+    image only while it is empty. Without a copy on every boot, a skill added to the image
+    after the volume was created is invisible at run time, silently and forever."""
 
     def fake_migrate(settings: Settings) -> str:
         recorder.order.append("migrate")
         return "0004_template"
+
+    def fake_skills(settings: Settings) -> list[Any]:
+        recorder.order.append("skills")
+        return []
 
     def fake_seed(settings: Settings) -> list[SeedResult]:
         recorder.order.append("seed")
@@ -77,13 +87,57 @@ def test_run_migrations_migrates_then_seeds_and_returns_the_head(
         return []
 
     monkeypatch.setattr(main_module.db_migrations, "run_migrations", fake_migrate)
+    monkeypatch.setattr(main_module, "install_operator_skills", fake_skills)
     monkeypatch.setattr(main_module, "seed_shipped_templates", fake_seed)
     monkeypatch.setattr(main_module, "seed_harness_table", fake_harness_seed)
 
     head = main_module.run_migrations(Settings())
 
-    assert recorder.order == ["migrate", "seed", "harness"]
+    assert recorder.order == ["migrate", "skills", "seed", "harness"]
     assert head == "0004_template"
+
+
+def test_run_migrations_installs_the_operator_skills_before_it_seeds(
+    env: dict[str, str], monkeypatch: pytest.MonkeyPatch, recorder: _Recorder
+) -> None:
+    """The volume-shadowing fix, stated on its own so it cannot be dropped by a later
+    reordering of the line above (hub-Run operations, skills install fix, 2026-09-24)."""
+    monkeypatch.setattr(
+        main_module.db_migrations, "run_migrations", lambda settings: "0004_template"
+    )
+    monkeypatch.setattr(main_module, "seed_shipped_templates", lambda settings: [])
+    monkeypatch.setattr(main_module, "seed_harness_table", lambda settings: [])
+    monkeypatch.setattr(
+        main_module,
+        "install_operator_skills",
+        lambda settings: recorder.order.append("skills") or [],
+    )
+
+    main_module.run_migrations(Settings())
+
+    assert recorder.order == ["skills"]
+
+
+def test_run_migrations_never_installs_skills_when_the_migration_fails(
+    env: dict[str, str], monkeypatch: pytest.MonkeyPatch, recorder: _Recorder
+) -> None:
+    """Migration first stays migration first (spine Operations): a database that cannot be
+    migrated fails the container before anything else is attempted."""
+
+    def exploding_migrate(settings: Settings) -> str:
+        raise RuntimeError("relation already exists")
+
+    monkeypatch.setattr(main_module.db_migrations, "run_migrations", exploding_migrate)
+    monkeypatch.setattr(
+        main_module,
+        "install_operator_skills",
+        lambda settings: recorder.order.append("skills") or [],
+    )
+
+    with pytest.raises(RuntimeError, match="relation already exists"):
+        main_module.run_migrations(Settings())
+
+    assert recorder.order == []
 
 
 def test_run_migrations_never_seeds_when_the_migration_fails(
