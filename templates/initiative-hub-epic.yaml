@@ -53,20 +53,17 @@ steps:
     on_fail: fail
     gate: deterministic
 
-  # No `workdir`: the spec lives at the hub, so this agent runs at the worktree root, exactly
-  # as `epic@1`'s own `spec-gate` does.
-  - id: spec-gate
-    uses: agent
-    with:
-      harness: "{{harness}}"
-      model: "{{model}}"
-      skill: spec-gate
-      args: { folder: "{{spec_folder}}" }
-    expect:
-      files: ["{{spec_folder}}/spec-gate-result.md"]
-      status_in: [done, blocked]
-    timeout_min: 30
-    gate: liveness
+  # There is deliberately no `spec-gate` row here (2026-09-24). `epic@1` declares one that
+  # dispatches `skill: spec-gate`, and no such skill is installed by BMAD 6.11 — every
+  # installed skill is `bmad-*` prefixed. A harness handed a name it cannot resolve does not
+  # fail: it improvises, which in the first live hub Run meant three minutes of work, an
+  # unasked-for edit to the epic's own `SPEC.md` (parked by AD-17, correctly), and no
+  # `spec-gate-result.md`, so the row then stopped `misconfigured: no story file`. A gate
+  # that cannot run is not a gate, and one that edits an anchor on its way to failing is
+  # worse than none. The epic's specs are the Operator's anchors, reviewed before dispatch;
+  # the stories below are what this Run is here to build. Restore a row here when a skill
+  # that actually validates a spec folder exists to dispatch — `epic@1` carries the same
+  # broken reference and wants the same treatment.
 
   - id: stories
     for_each: "{{spec_folder}}/stories.yaml"

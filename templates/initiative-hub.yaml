@@ -70,7 +70,7 @@ steps:
         uses: template
         with:
           name: initiative-hub-epic
-          version: 1
+          version: 2
           inputs:
             project: "{{project}}"
             repository: "{{repository}}"
