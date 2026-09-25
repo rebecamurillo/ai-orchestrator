@@ -1,5 +1,7 @@
 ---
 id: SPEC-step-handling
+title: "Step handling: skip, resume, cancel"
+capabilities: [CAP-1, CAP-2, CAP-3, CAP-4, CAP-5, CAP-6]
 companions: [current-behaviour.md]
 sources: []
 ---
