@@ -119,7 +119,22 @@ export default function StopBody({
   replyAvailable = false,
 }: Props) {
   const kind = stopKind(detail, token);
-  if (kind === null) return null;
+  if (kind === null) {
+    if (!detail.admitted_signals.includes('cancel')) return null;
+    return (
+      <div className="wf-stop-actions">
+        <button
+          type="button"
+          className="wf-signal wf-cancel"
+          data-testid="wf-cancel"
+          disabled={posting !== null}
+          onClick={onCancelClick}
+        >
+          Cancel run
+        </button>
+      </div>
+    );
+  }
 
   const isQuestion = kind === 'blocked' || kind === 'misconfigured';
   const offered = isQuestion

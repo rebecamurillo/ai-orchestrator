@@ -254,6 +254,8 @@ describe('StopBody · failed', () => {
 });
 
 describe('StopBody · other states', () => {
+  // story 2, 2026-09-25 declared behaviour change: running/queued now render cancel when
+  // admitted; this test pins the no-cancel path (admitted_signals: [] for all four cases).
   it('renders nothing for running, done, cancelled or queued', () => {
     for (const [status, token] of [
       ['running', 'RUN'],
@@ -261,7 +263,12 @@ describe('StopBody · other states', () => {
       ['cancelled', 'CAN'],
       ['queued', 'QUE'],
     ] as const) {
-      const detail: RunDetailOut = { ...base(), run: { ...base().run, status }, alert: null };
+      const detail: RunDetailOut = {
+        ...base(),
+        run: { ...base().run, status, admitted_signals: [] },
+        alert: null,
+        admitted_signals: [],
+      };
       expect(render(detail, token)).toBe('');
     }
   });
