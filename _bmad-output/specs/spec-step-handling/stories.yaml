@@ -1,0 +1,95 @@
+- id: "1"
+  title: Skip one step
+  description: >-
+    CAP-1. Add the skip_step signal kind and the Skip step control, so the operator
+    can skip the row a Run is parked on and the Run continues at the next one.
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    The step machine already holds the edges this drives — STEP_TRANSITIONS has
+    (blocked|checkpoint|error, skip) -> skipped. Add no new edge and no (running, skip).
+    What is missing is the kind: SignalKind and RUN_TRANSITIONS in domain/statuses.py,
+    a Rule in application/rules/signals_table.py::VALID, and the offer in
+    application/rules/signals.py. AD-13's spine row is already ratified (2026-09-25) and
+    is the contract — read it before writing the Rule. Admitted on every park kind with
+    no exclusions, unlike skip_story and skip_epic; the two stops it cannot reach are
+    the two that park no skippable row (dependency, which names none, and a budget park
+    taken after a row ended done), and each is a refusal with its own sentence, not a
+    silent no-op. signal_run is the only writer (AD-8). On the UI it sits beside Skip
+    story and Skip epic in StopBody as a confirm, in the same shape those two use.
+- id: "2"
+  title: Cancel a Run while it is running
+  description: >-
+    CAP-5. Render the Cancel control on a Run that is running or queued, not only on
+    one that has parked. The server already admits the signal and the effects exist.
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    Almost nothing is missing on the server: run_admitted_signals already returns
+    ("cancel",) for a non-terminal unparked Run and ("start", "cancel") for a saved one,
+    RUN_TRANSITIONS holds (queued|running|needs_you, cancel), signal_effects._apply_cancel
+    does the kill/remove/delete, and CancelModal is already wired in RunDetail.tsx. The
+    gap is one early return: StopBody.tsx returns null when stopKind is null, and the only
+    control that opens the modal lives inside it. Move the Cancel affordance so it renders
+    whenever admitted_signals includes cancel, without changing what StopBody does at a
+    stop. Verify the confirm still names the branch.
+- id: "3"
+  title: The local harness resumes an OpenCode session
+  description: >-
+    CAP-4. Give the local adapter a real resume via `opencode run --session {id}`, so
+    every shipped harness resumes and local Runs become reply_available.
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    infrastructure/harness/opencode/adapter.py declares capabilities.resume = False and
+    refuses resume() with RESUME_UNSUPPORTED, on the stated ground that OpenCode continues
+    no session. That ground is wrong: run.ts at tag v1.18.26 — the pinned OPENCODE_VERSION
+    — declares --session "session id to continue". Do not bump the version; nothing here
+    needs a newer CLI. Pass --session and the recorded id, never --continue (it guesses the
+    last session of a directory other attempts share) and never --fork (it mints a new
+    session id, breaking spend and trace attribution, AD-11). An id the store no longer
+    holds exits 1 with "Session not found" — report it as that attempt's failure, never
+    fall back to a fresh session (hard rule 7). Add resume_command so the Run detail's
+    terminal block stops being hidden for local. AD-10 is amended and ratified 2026-09-25;
+    the adapter docstring's resume paragraph is what it replaces.
+- id: "4"
+  title: Retry carries the operator's instruction and resumes by default
+  description: >-
+    CAP-2 and CAP-3. The Retry control takes free text that reaches both the resumed
+    session and the fresh dispatch, resume becomes the default, and a stop that cannot
+    resume says why.
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    Three separate defects, one slice. (a) application/steps/agent.py::_session_message
+    sends the template's retry.prompt in session mode, or "" when the template declared
+    none — the spine has said "the recorded session resumes with the Operator's
+    instruction" since 2026-09-15, so the code is what is wrong. The signal's own text
+    is the instruction; a template retry {prompt} stands in only when the operator
+    supplied none, never the reverse. (b) The restart path takes the same text as its
+    retry prompt in front of the composed dispatch. (c) signal_run._check_mode defaults
+    an absent mode to restart; it now defaults to session when reply_available and to
+    restart otherwise (AD-13, ratified 2026-09-25). On the client, RetryBox defaults its
+    radio to restart and renders at all only when reply_available — both change: it always
+    renders, it carries a text field, and when resume is unavailable it states which of
+    the two reasons applies (no session recorded, or this harness has no resume) and that
+    restart is the only path left. Copy states the mechanism and never apologises (NFR-8).
+    Land after story 3 so the new default is true for local Runs too.
+- id: "5"
+  title: The step-run page shows attempts as a table
+  description: >-
+    CAP-6. Replace the run-on attempt list on /workflows/{id}/steps/{path} with aligned
+    columns so one step's history is readable across.
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    islands/StepDetail.tsx renders attempts as a flex-wrap <ul> of buttons whose labels
+    are dot-joined strings, and styles/step-detail.css declares no table rule in its 252
+    lines — that is the run-on text the operator reported. Render a real table: attempt
+    number, status token, harness, model, duration, cost, exit code, newest first, the
+    selected row still selecting and the prompt/result and reach-agent affordances intact.
+    components/run/StepsTable.tsx and the table.wf-steps rules in run-detail.css are the
+    house pattern to follow — follow them, do not touch them; the Run detail STEPS tab is
+    explicitly out of scope. base.css already gives a bare table width and border-collapse;
+    the padding, header and border rules are yours to add under a hand-scoped class, no
+    inline styles. The status token stays the only signal-coloured cell (NFR-6).
