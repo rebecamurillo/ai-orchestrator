@@ -48,19 +48,21 @@ Stories: 1–5 (all done)
 - Story 5 (medium): keyboard accessibility (`tabIndex`/`onKeyDown`) on `<tr>` rows — CSS/accessibility gap, no automated test.
 - Story 3 (low): `resume_command` unquoted `cwd` — paths under `/work/` have no spaces; latent risk.
 
-## Verification (2026-09-25 dispatch re-run)
+## Verification (2026-09-25 dispatch re-run, story-id `.`)
 
 All five generated test files were re-verified against the committed implementation:
 
 - **TypeScript typecheck** (`pnpm tsc --noEmit`): passes cleanly across all four Playwright specs.
+- **Unit test suite** (`make test`): 7309 backend + 1740 frontend tests pass; 100 % branch coverage on `domain/` and `application/`; all coverage thresholds met.
 - **testid / selector cross-check**: all `data-testid` values and CSS class selectors in the four
-  Playwright specs were confirmed present in the component source:
-  - `wf-cancel` (×2), `wf-cancel-confirm-yes` — `StopBody.tsx`, `CancelModal.tsx`
-  - `wf-signal-skip_step`, `wf-confirm-skip_step-{yes,keep,line}` — dynamic in `StopBody.tsx` / `ConfirmAction.tsx`
+  Playwright specs confirmed present in the current component source:
+  - `wf-cancel` (×2), `wf-cancel-confirm-yes` — `StopBody.tsx:132`, `CancelModal.tsx:35`
+  - `wf-signal-skip_step`, `wf-confirm-skip_step-{yes,keep,line}` — dynamic in `StopBody.tsx:338` / `ConfirmAction.tsx`
   - `wf-retry-box`, `wf-signal-retry`, `wf-retry-instruction` — `RetryBox.tsx` static literals
   - `.wf-retry-unavailable` — CSS class on the unavailability `<p>` in `RetryBox.tsx` (class selector, not testid — correct)
-  - `step-detail` — `StepDetail.tsx`; `step-prompt-{n}`, `step-reach-{n}` — dynamic in `AttemptsTable.tsx`
-  - `step-drawer` — `HelperDrawer.tsx` (rendered inside StepDetail's tree; `getByTestId` locates it correctly)
+  - `step-detail` — `StepDetail.tsx:133`; `step-prompt-{n}`, `step-reach-{n}` — dynamic in `AttemptsTable.tsx:98,109`
+  - `step-drawer` — `HelperDrawer.tsx:44` (rendered inside StepDetail's tree; `getByTestId` locates it correctly)
+  - `wf-header` — `Header.tsx:29`
 - **No new tests needed**: no story added, no implementation gap found, no testid mismatch.
 
 ## Next Steps
