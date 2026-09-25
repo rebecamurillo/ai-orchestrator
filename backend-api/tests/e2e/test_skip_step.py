@@ -95,9 +95,7 @@ def test_mode(api: httpx.Client) -> None:
 
 
 @pytest.fixture(scope="module")
-def parked(
-    api: httpx.Client, gates: GatesFixture, test_mode: None
-) -> Iterator[dict[str, Any]]:
+def parked(api: httpx.Client, gates: GatesFixture, test_mode: None) -> Iterator[dict[str, Any]]:
     """A Run on a fresh gates clone, walked until it parks `blocked` on story 1."""
     project_id = create_project(api)
     created = api.post(
@@ -208,11 +206,7 @@ def test_the_gate_record_holds_exactly_one_skip_step_naming_the_operator(
     skipped: dict[str, Any],
 ) -> None:
     """AD-13: `gate_record` carries `event: "skip_step"` and `actor: "operator"`."""
-    skips = [
-        entry
-        for entry in skipped["detail"]["gate_record"]
-        if entry["event"] == "skip_step"
-    ]
+    skips = [entry for entry in skipped["detail"]["gate_record"] if entry["event"] == "skip_step"]
 
     assert len(skips) == 1
     assert skips[0]["actor"] == "operator"
