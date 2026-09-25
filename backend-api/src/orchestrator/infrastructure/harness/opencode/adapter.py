@@ -30,11 +30,13 @@ two sources rather than one. The stream is the first (`events.py`); the session 
 fallback (`sessions.py`), which is why `HarnessHandle` carries the worktree — `wait` is the half
 that reads, and `start` is the half that was told the directory.
 
-**There is no resume** (`capabilities.resume = False`). `research/tracing.md` §OpenCode and the
-brief agree: `opencode run` opens a session, and this system does not continue one across
-attempts. `application/steps/agent.py` reads the capability and retries by prepending the retry
-prompt to a fresh dispatch (5.5), and `resume_command` is `None` so the Run detail hides the
-terminal block entirely (FR-21, 6.7) rather than printing a line that cannot work.
+**Resume** (AD-10 amended story 3, 2026-09-25): `opencode run --session {id}` continues a
+session at `OPENCODE_VERSION=1.18.26`. `capabilities.resume = True`. `resume()` builds the
+invocation via `_resume_argv` (no `-m` flag — the continued session retains its original model
+configuration). `resume_command` returns the operator's paste-able line
+(`cd {worktree} && opencode run --session {id}`) rather than `None`, so the Run detail shows
+the terminal block (FR-21, 6.7). A `session_not_found` exit-1 is a reported failure; the
+`session_id` in the result stays the tried id, never replaced by a fresh one (hard rule 7).
 
 **Tracing is by identity, never by parent** (AD-11, `capabilities.native_tracing = False`).
 OpenCode honours no inbound `TRACEPARENT` — it still receives one, because the contract is exact
@@ -84,6 +86,7 @@ FORMAT_FLAG = "--format"
 FORMAT_JSON = "json"
 DIR_FLAG = "--dir"
 MODEL_FLAG = "-m"
+SESSION_FLAG = "--session"
 
 #: The provider id `scripts/harness/opencode.sh configure` writes into `opencode.json`. A model
 #: named without it would resolve against whichever provider OpenCode defaults to, which is not
@@ -118,12 +121,6 @@ def config_string_escape(value: str) -> str:
 
 #: The suffix the prompt is written under, beside the attempt's own log — the port's convention.
 PROMPT_SUFFIX = ".prompt"
-
-#: Why `resume` refuses instead of dispatching. `capabilities.resume` is `False`, so
-#: `application/steps/agent.py` never calls it; a fresh dispatch here would silently discard the
-#: session the caller asked to continue, which is the kind of quiet substitution hard rule 7
-#: exists to prevent.
-RESUME_UNSUPPORTED = "the local harness declares no resume: retry dispatches a new session"
 
 
 def local_aliases(contract: Mapping[str, str]) -> Mapping[str, str]:
@@ -176,11 +173,10 @@ class LocalHarness:
     """OpenCode, non-interactive, in the worktree, under the runner's own deadline."""
 
     name = "local"
-    #: All three `False`, and each is a claim this adapter makes rather than an omission.
-    #: `preassign_session`: OpenCode names its own session. `resume`: there is no resume form,
-    #: so `retry` re-dispatches (5.5). `native_tracing`: no inbound `TRACEPARENT` is honoured —
-    #: the plugin's own trace is found by user and session instead (AD-11).
-    capabilities = HarnessCapabilities(preassign_session=False, resume=False, native_tracing=False)
+    #: `preassign_session`: OpenCode names its own session. `resume` (story 3, 2026-09-25):
+    #: `opencode run --session {id}` continues a session — `True`. `native_tracing`: no inbound
+    #: `TRACEPARENT` is honoured — the plugin's own trace is found by user and session (AD-11).
+    capabilities = HarnessCapabilities(preassign_session=False, resume=True, native_tracing=False)
 
     def __init__(self, runner: ProcessRunner, settings: Settings) -> None:
         self.runner = runner
@@ -263,24 +259,37 @@ class LocalHarness:
         log_path: Path,
         stall_min: float | None = None,
     ) -> HarnessResult:
-        """Refuse: this harness declares `capabilities.resume = False` (see `RESUME_UNSUPPORTED`).
+        """Continue `session_id` with `message` via `opencode run --session {session_id}` (AD-10).
 
-        Unreachable in this system — `application/steps/agent.py` asks the capability before it
-        ever calls this — and stated as a refusal rather than as a fresh dispatch, because a
-        caller that asked to continue a session and silently got a new one would record the
-        wrong session id against the attempt and lose the turn's context without saying so.
+        Exactly `wait(start_handle)` shaped as a single call: `_resume_argv` builds the argv
+        (no `-m` — the session retains its own model), `_record_prompt` writes the message
+        beside the log, and the handle carries the known `session_id` so `wait` falls back to
+        it when the stream reports none (story 3, 2026-09-25).
         """
-        raise NotImplementedError(RESUME_UNSUPPORTED)
+        argv = self._resume_argv(cwd, session_id=session_id, message=message)
+        self._record_prompt(log_path, message)
+        handle = self.runner.start(
+            argv,
+            cwd=cwd,
+            env=env,
+            timeout_min=timeout_min,
+            log_path=log_path,
+            stall_min=stall_min,
+        )
+        return self.wait(
+            HarnessHandle(
+                session_id=session_id, log_path=log_path, pid=handle.pid, pgid=handle.pgid, cwd=cwd
+            )
+        )
 
     def resume_command(self, cwd: str, session_id: str) -> str | None:
-        """`None`: there is no line an Operator could paste to take this session over (FR-21).
+        """The line an Operator can paste to take this session over by hand (FR-21, AD-10).
 
-        The read model hides the whole terminal block for a harness whose `capabilities.resume`
-        is `False` (`application/use_cases/terminal.py`), so this is never rendered; answering
-        `None` rather than a plausible-looking command is what keeps that true if the read model
-        ever asks without checking first.
+        `cd {cwd} && opencode run --session {session_id}` — the minimal form; no `--format` or
+        `--dir` flags because the operator runs this in their own terminal, not as a
+        machine-readable dispatch.
         """
-        return None
+        return f"cd {cwd} && {EXECUTABLE} {RUN} {SESSION_FLAG} {session_id}"
 
     def wait(self, handle: HarnessHandle) -> HarnessResult:
         """Wait for the process `start` returned, then read its stream (AD-14, AD-10).
@@ -291,9 +300,10 @@ class LocalHarness:
         to prevent. The kill is the runner's own idempotent one, so it is safe on a process that
         already ended, and the exception still reaches the walker.
 
-        The session is the stream's, then the store's, then nothing at all — and "nothing at
-        all" is a reported fact rather than an exception: 7.4's `session id recorded` readiness
-        line is what fails on it.
+        The session is the stream's first; then `handle.session_id` when non-empty (resume path,
+        where the attempted id is always known); then the store (start path, where `handle.
+        session_id` is `""`); then `None` — reported fact, not an exception (story 3, 2026-09-25).
+        7.4's `session id recorded` readiness line is what fails on it.
         """
         try:
             outcome = self.runner.wait(Handle(pid=handle.pid, pgid=handle.pgid))
@@ -304,8 +314,10 @@ class LocalHarness:
             raise
         stream = stream_events(read_text(handle.log_path))
         raw_result = result_object(stream)
+        captured = session_id_from(stream)
+        stored = self._stored_session(handle)
         return HarnessResult(
-            session_id=session_id_from(stream) or self._stored_session(handle),
+            session_id=captured if captured is not None else (handle.session_id or stored),
             exit_code=outcome.exit_code,
             log_path=handle.log_path,
             usage=usage_from(raw_result),
@@ -338,6 +350,26 @@ class LocalHarness:
             str(cwd),
             MODEL_FLAG,
             f"{PROVIDER}/{model or self.settings.local_models[0]}",
+            message,
+        ]
+
+    def _resume_argv(self, cwd: Path, *, session_id: str, message: str) -> list[str]:
+        """The resume command line (AD-10, story 3, 2026-09-25).
+
+        No `-m` flag: the continued session retains its original model configuration; forcing a
+        model on resume could conflict with what the session already has. `--dir` is kept for
+        correctness — it tells OpenCode which directory this is running in, the same rationale
+        as in `_argv`.
+        """
+        return [
+            EXECUTABLE,
+            RUN,
+            FORMAT_FLAG,
+            FORMAT_JSON,
+            DIR_FLAG,
+            str(cwd),
+            SESSION_FLAG,
+            session_id,
             message,
         ]
 

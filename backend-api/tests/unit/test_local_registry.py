@@ -277,15 +277,15 @@ def test_the_terminal_environment_for_local_exports_the_harnesss_own_names_and_n
         assert secret.get_secret_value() not in rendered
 
 
-# ── FR-21: registered, and still no terminal — now for the adapter's reason ──
+# ── FR-21: registered, and now resumable — the terminal carries the session ──
 
 
-def test_a_parked_local_attempt_has_no_terminal_because_it_cannot_resume(
+def test_a_parked_local_attempt_now_has_a_terminal_command(
     env: dict[str, str],
 ) -> None:
-    """`test_terminal_command.py`'s `local` row and `test_codex_registry.py`'s both still say
-    `terminal: null`, and this is why they still hold now that the registry does hold the name:
-    `_resumable_harness` asks `capabilities.resume`, which this adapter declares `False`."""
+    """story 3, 2026-09-25 declared behaviour change: `capabilities.resume` is now `True`;
+    a parked `local` attempt with a recorded `session_id` gets a terminal command containing
+    `--session`."""
     settings = Settings()
     attempt = an_attempt(a_run(), "local", status="blocked", session_id=SESSION)
     run = a_run(id=attempt.run_id, status="needs_you", worktree_path="/work/acme/wt/feat-x")
@@ -301,5 +301,6 @@ def test_a_parked_local_attempt_has_no_terminal_because_it_cannot_resume(
         project_slug="acme",
     )
 
-    assert terminal is None
-    assert build_harnesses(settings, FakeProcessRunner())["local"].capabilities.resume is False
+    assert terminal is not None
+    assert build_harnesses(settings, FakeProcessRunner())["local"].capabilities.resume is True
+    assert "--session" in terminal.command

@@ -13,12 +13,12 @@ an unbound model falls back to the first `LOCAL_MODELS` alias, a stream that nam
 falls through to the store, a store that cannot be read is not an exception — none of which
 changes when a flag name turns out to differ.
 
-Two capabilities are `False` and are pinned here because nothing else would catch them.
-`preassign_session`: OpenCode names its own session, so the caller's pre-allocated id never
-reaches the command line and only `wait` can report one. `resume`: there is no resume form at
-all, so `resume_command` is `None` — `application/steps/agent.py` reads the capability and
-retries with the prompt prepended to a fresh session (5.5), which is why nothing in this
-system ever calls `resume` on this adapter.
+Two of three capabilities are `False` and are pinned here because nothing else would catch
+them. `preassign_session`: OpenCode names its own session, so the caller's pre-allocated id
+never reaches the command line and only `wait` can report one. `resume` (story 3, 2026-09-25):
+`opencode run --session {id}` continues a session; this adapter now declares `capabilities.resume
+= True` and `resume()` uses that flag. `resume_command` returns the operator's paste-able line
+(`cd {cwd} && opencode run --session {id}`).
 """
 
 from __future__ import annotations
@@ -153,8 +153,13 @@ def test_it_answers_to_the_name_the_harness_table_holds(harness: LocalHarness) -
 
 def test_it_claims_none_of_the_three_capabilities(harness: LocalHarness) -> None:
     assert harness.capabilities.preassign_session is False
-    assert harness.capabilities.resume is False
     assert harness.capabilities.native_tracing is False
+
+
+def test_it_claims_resume(harness: LocalHarness) -> None:
+    """story 3, 2026-09-25 declared behaviour change: `opencode run --session` continues a
+    session, so the adapter flips `capabilities.resume = True`."""
+    assert harness.capabilities.resume is True
 
 
 # ── the argv ─────────────────────────────────────────────────────────────────
@@ -388,29 +393,96 @@ def test_a_wait_that_raises_kills_the_group_it_was_handed(
     assert [call["pgid"] for call in runner.called("kill_group")] == [handle.pgid]
 
 
-# ── resume: there is none, and that is stated rather than faked ──────────────
+# ── resume ───────────────────────────────────────────────────────────────────
 
 
-def test_there_is_no_paste_able_resume_line(harness: LocalHarness) -> None:
-    """FR-21, 6.7: the read model hides the block for a harness with no resume form, and a
-    line that looked resumable would be worse than none."""
-    assert harness.resume_command(str(WORKTREE), SESSION_ID) is None
+def test_resume_command_returns_the_opencode_session_line(harness: LocalHarness) -> None:
+    """story 3, 2026-09-25 declared behaviour change: `resume_command` now returns the
+    operator's paste-able line because `capabilities.resume` is `True`."""
+    result = harness.resume_command(str(WORKTREE), SESSION_ID)
+
+    assert result == f"cd {WORKTREE} && opencode run --session {SESSION_ID}"
 
 
-def test_resume_refuses_rather_than_quietly_starting_a_new_session(
+def test_resume_argv_uses_session_flag_not_model_flag(
+    harness: LocalHarness, runner: FakeProcessRunner, log_path: Path
+) -> None:
+    """story 3, 2026-09-25: AD-10 — invocation written once; `--session` not `--continue` or
+    `--fork`; no `-m` flag (the continued session retains its original model configuration)."""
+    with_stream(log_path, "turn")
+
+    harness.resume(
+        cwd=WORKTREE,
+        session_id=SESSION_ID,
+        message="continue",
+        env=ENV,
+        timeout_min=TIMEOUT_MIN,
+        log_path=log_path,
+    )
+
+    cmd = runner.called("start")[0]["cmd"]
+    assert "--session" in cmd
+    assert SESSION_ID in cmd
+    assert "-m" not in cmd
+    assert not any("litellm/" in arg for arg in cmd)
+
+
+def test_resume_result_carries_the_session_id_it_was_given(
     harness: LocalHarness, log_path: Path
 ) -> None:
-    """`application/steps/agent.py` gates on `capabilities.resume`, so this is unreachable;
-    a fresh dispatch here would silently discard the session the caller asked to continue."""
-    with pytest.raises(NotImplementedError):
-        harness.resume(
-            cwd=WORKTREE,
-            session_id=SESSION_ID,
-            message="continue",
-            env=ENV,
-            timeout_min=TIMEOUT_MIN,
-            log_path=log_path,
-        )
+    """story 3, 2026-09-25: stream has no session event; the handle's known session_id is the
+    fallback — the store is never consulted for a resume (Design Notes)."""
+    with_stream(log_path, "no-session")
+
+    result = harness.resume(
+        cwd=WORKTREE,
+        session_id=SESSION_ID,
+        message="continue",
+        env=ENV,
+        timeout_min=TIMEOUT_MIN,
+        log_path=log_path,
+    )
+
+    assert result.session_id == SESSION_ID
+
+
+def test_a_failed_resume_reports_the_attempted_session_id(
+    settings: Settings, log_path: Path
+) -> None:
+    """story 3, 2026-09-25: hard rule 7 — a `session_not_found` exit-1 is a reported failure;
+    `result.session_id` stays the tried id, never `None` or a fresh session id."""
+    runner = FakeProcessRunner(default=Outcome(exit_code=1, timed_out=False))
+    harness = LocalHarness(runner, settings)
+    with_stream(log_path, "no-session")
+
+    result = harness.resume(
+        cwd=WORKTREE,
+        session_id=SESSION_ID,
+        message="continue",
+        env=ENV,
+        timeout_min=TIMEOUT_MIN,
+        log_path=log_path,
+    )
+
+    assert result.exit_code == 1
+    assert result.session_id == SESSION_ID
+
+
+def test_resume_records_the_message_beside_the_log(harness: LocalHarness, log_path: Path) -> None:
+    """story 3, 2026-09-25: prompt written at `{log_path}.prompt` so the attempt record holds
+    what was asked (same convention as the first dispatch)."""
+    with_stream(log_path, "turn")
+
+    harness.resume(
+        cwd=WORKTREE,
+        session_id=SESSION_ID,
+        message="a continuation message",
+        env=ENV,
+        timeout_min=TIMEOUT_MIN,
+        log_path=log_path,
+    )
+
+    assert Path(f"{log_path}.prompt").read_text() == "a continuation message"
 
 
 # ── the aliases the script declares ──────────────────────────────────────────

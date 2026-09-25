@@ -332,22 +332,24 @@ def test_the_codex_terminal_command_carries_no_secret_value(env: dict[str, str])
     assert "GITHUB_TOKEN" not in terminal.command  # type: ignore[attr-defined]
 
 
-def test_a_harness_the_registry_still_does_not_hold_has_no_terminal(env: dict[str, str]) -> None:
-    """`local` is 7.3's; until it is registered the answer stays `terminal: null`, which is what
-    the two rows left in `test_terminal_command.py` continue to state."""
+def test_a_parked_local_attempt_now_has_a_terminal_command(env: dict[str, str]) -> None:
+    """`local` gains resume in story 3 (2026-09-25 declared behaviour change): the adapter
+    now declares `capabilities.resume = True` and `resume_command` returns the `--session` line,
+    so `resume_command` here returns a non-None Terminal."""
     settings = Settings()
     attempt = a_parked_attempt().model_copy(update={"harness": "local"})
 
-    assert (
-        resume_command(
-            TerminalPorts(
-                env=build_terminal_env(settings),
-                harnesses=build_harnesses(settings, FakeProcessRunner()),
-            ),
-            a_parked_run(attempt),
-            an_agent_row(attempt),
-            attempt,
-            project_slug="acme",
-        )
-        is None
+    terminal = resume_command(
+        TerminalPorts(
+            env=build_terminal_env(settings),
+            harnesses=build_harnesses(settings, FakeProcessRunner()),
+        ),
+        a_parked_run(attempt),
+        an_agent_row(attempt),
+        attempt,
+        project_slug="acme",
     )
+
+    assert terminal is not None
+    assert "--session" in terminal.command  # type: ignore[attr-defined]
+    assert CODEX_SESSION in terminal.command  # type: ignore[attr-defined]

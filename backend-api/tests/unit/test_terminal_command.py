@@ -522,13 +522,13 @@ def test_a_run_with_no_worktree_has_no_terminal(settings: Settings) -> None:
     )
 
 
-@pytest.mark.parametrize("harness", ["local", ""])
+@pytest.mark.parametrize("harness", [""])
 def test_a_harness_the_registry_does_not_hold_has_no_terminal(
     harness: str, settings: Settings
 ) -> None:
-    """Epic 7's harnesses, and a row that recorded none at all: `local` is the brief's own
-    example, and the answer is `terminal: null` rather than a command for a CLI that is not
-    installed."""
+    """A row that recorded no harness at all: the answer is `terminal: null` rather than a
+    command for a CLI that is not installed. (story 3, 2026-09-25: `local` was removed from
+    this parametrize — it IS in the registry and IS resumable after that story.)"""
     attempt = an_attempt(harness)
 
     assert (
@@ -537,6 +537,15 @@ def test_a_harness_the_registry_does_not_hold_has_no_terminal(
         )
         is None
     )
+
+
+def test_local_resume_command_names_the_session(settings: Settings) -> None:
+    """story 3, 2026-09-25: local IS resumable; the command carries `--session` and the
+    attempt's session id so the operator can paste it to take the session over by hand (FR-21)."""
+    command = build(settings, harness="local")
+
+    assert "--session" in command
+    assert SESSION in command
 
 
 def test_a_harness_that_cannot_resume_has_no_terminal(settings: Settings) -> None:
