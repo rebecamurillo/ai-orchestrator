@@ -133,9 +133,9 @@ describe('StopBody · Skip step', () => {
 
   it('the skip_step ConfirmAction posts skip_step on confirm', () => {
     // The ConfirmAction is keyed on `kind="skip_step"` and its onConfirm is wired to
-    // `() => onSignal('skip_step')` in StopBody. ConfirmAction's own contract
-    // (run-confirm-action.test.ts) guarantees the closed trigger has the right testid and
-    // that onConfirm is called on confirm click. Together they pin the end-to-end wiring.
+    // `() => onSignal('skip_step')` in StopBody. `renderToStaticMarkup` cannot assert
+    // callbacks; the test verifies the closed trigger renders (testid present, count=1).
+    // Interactive confirm-and-post behaviour requires a Playwright spec (not yet landed).
     const html = stopped('timeout', WITH_SKIP_STEP);
 
     // The closed trigger is the element the Operator clicks to open the confirm.

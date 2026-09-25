@@ -2,13 +2,53 @@
 title: 'Skip one step'
 type: 'feature'
 created: '2026-09-25'
-status: 'in-review'
+status: 'done'
 baseline_revision: 'f8b9909311863aef6cd0d8fd68d81a20ad9e496c'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      admitted_signals("dependency", "agent") includes skip_step (ANY_PARK), but
+      run_admitted_signals short-circuits for dependency so the API is correct; the
+      coarse function's return for dependency parks is untested.
+    evidence: |-
+      admitted_signals checks park_kind in rule.park_kinds; dependency is in ANY_PARK so
+      it would appear. run_admitted_signals returns () before reaching admitted_signals for
+      dependency parks, so the UI and API are correct. No test covers this corner case.
+    location: >-
+      backend-api/src/orchestrator/application/rules/signals.py:100-114
+    severity: low
+  - summary: >-
+      _skip_step tested only with blocked-status row; checkpoint and error row statuses
+      not explicitly exercised through the effect layer.
+    evidence: |-
+      test_a_skip_step_marks_the_parked_row_skipped_and_resumes_the_run uses parked("blocked",
+      BUILD, "blocked"). STEP_TRANSITIONS has skip edges for all three statuses so the code
+      is correct, but checkpoint and error paths through _skip_step are not separately asserted.
+    location: >-
+      backend-api/tests/unit/application/test_signal_run.py:200
+    severity: low
+  - summary: >-
+      No Playwright e2e test verifies the skip_step ConfirmAction confirm-and-post flow;
+      onConfirm wiring is unverifiable from renderToStaticMarkup.
+    evidence: |-
+      run-stop-body-skip-step.test.ts uses renderToStaticMarkup which cannot assert callbacks.
+      run-detail-skip-story.spec.ts and run-detail-skip-epic.spec.ts use Playwright but neither
+      includes skip_step in admitted_signals. A wrong onConfirm would be undetected.
+      make e2e-ui gate not yet required for this spec's story loop.
+    location: >-
+      web-client/tests/unit/run-stop-body-skip-step.test.ts:134
+    severity: medium
+  - summary: >-
+      Workspace state after skip_step on push_rejected or merge_conflict parks — the effect
+      does no workspace cleanup; the walker inherits whatever state the parked step left.
+    evidence: |-
+      _skip_step calls _skip and resume_from with no git operations. push_rejected leaves
+      commits ready to push; merge_conflict leaves a mid-merge workspace. Walker's own
+      setup logic is responsible for cleanup, but this interaction is untested.
+    severity: medium
 ---
 
 <intent-contract>
@@ -94,6 +134,17 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-09-25 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 3: (high 0, medium 0, low 3)
+- defer: 4: (high 0, medium 2, low 2)
+- reject: 6
+- addressed_findings:
+  - `[low]` `[patch]` Stale merge_conflict comment in test_signal_rules.py said "the two skips are excluded"; updated to note story 1 adds skip_step (admitted on all park kinds, no exclusions)
+  - `[low]` `[patch]` Incorrect comment in run-stop-body-skip-step.test.ts claimed run-confirm-action.test.ts "guarantees onConfirm is called on confirm click" (it uses renderToStaticMarkup, no such guarantee); corrected to state callback wiring requires a Playwright spec
+  - `[low]` `[patch]` signalLabel('skip_step') was positioned between cancel and skip_story, breaking semantic grouping; moved after skip_epic to group with other skip_ kinds
+
 ## Design Notes
 
 `_skip_step` is the simplest of the skip effects: one `_skip(ports, row)` call, then `resume_from` to queue the next unfinished row starting from the parked seq. No frame traversal, no commit-message rewrite, no story-frame logic. `validate`'s `row_statuses` check handles both refusal cases (dependency: `park_row is None`; budget/done: `park_row.status not in {"blocked","checkpoint","error"}`), so the effect function can assert `_parked(park_row)` without additional guards.
@@ -106,3 +157,39 @@ The `signals` chain in `StopBody` must rename the intermediate skip_epic result 
 - `make lint` — expected: zero errors (ruff, mypy strict on domain+application, import-linter, eslint, tsc)
 - `make test` — expected: all unit tests pass including new skip_step tests; 100 % branch coverage on `domain/` and `application/`
 - `make openapi` — expected: `contracts/openapi.json` regenerated with `skip_step` in `SignalIn.kind` enum, `pnpm gen:api` succeeds
+
+## Auto Run Result
+
+**Status:** done
+
+**Implemented change:** Added `skip_step` as a new `SignalKind`/`RunEvent` with `("needs_you", "skip_step") → "running"` in `RUN_TRANSITIONS`, a `Rule` admitted on all 12 park kinds with `row_statuses={"blocked","checkpoint","error"}`, a `_skip_step` effect that skips the parked row and resumes the Run, and a confirm button in `StopBody` beside *Skip story* and *Skip epic*.
+
+**Files changed:**
+- `backend-api/src/orchestrator/domain/statuses.py` — `skip_step` added to `SignalKind`, `RunEvent`, `RUN_TRANSITIONS`
+- `backend-api/src/orchestrator/application/rules/signals_table.py` — `skip_step` Rule added to `VALID`
+- `backend-api/src/orchestrator/application/use_cases/signal_effects.py` — `_skip_step` function and `EFFECTS` entry added
+- `contracts/openapi.json` — `skip_step` in `SignalIn.kind` enum (5 locations); `pnpm gen:api` regenerated `schema.d.ts`
+- `web-client/src/api/schema.d.ts` — `skip_step` in all `SignalKind` unions (generated)
+- `web-client/src/lib/run/signals.ts` — `signalLabel` case for `skip_step`
+- `web-client/src/lib/run/skip.ts` — `SKIP_STEP_LABEL`, `skipStepConfirmLine`, `offersSkipStep` added
+- `web-client/src/components/run/StopBody.tsx` — `skip_step` appended to `signals` chain; `ConfirmAction` branch in `buttons.map`
+- `backend-api/tests/unit/application/test_signal_rules.py` — `STOPS` updated; 3 new `skip_step` tests
+- `backend-api/tests/unit/application/test_signal_run.py` — 2 new `skip_step` effect tests
+- `web-client/tests/unit/run-stop-body-skip-step.test.ts` — new test file (3 tests)
+- `web-client/tests/unit/run-skip-lib.test.ts` — 5 new assertions for skip.ts exports
+- `web-client/tests/unit/run-signals-lib-skip.test.ts` — 1 new `signalLabel` assertion
+- 10 existing test files updated: signal list assertions updated for `skip_step` (story 1, 2026-09-25 declared behaviour change)
+
+**Review findings breakdown:**
+- Patches applied: 3 (all low severity) — stale merge_conflict comment; incorrect test comment about onConfirm guarantees; signalLabel ordering
+- Items deferred: 4 — admitted_signals("dependency") coverage gap (low); _skip_step checkpoint/error row coverage (low); onConfirm wiring e2e test (medium, requires make e2e-ui gate); workspace state after skip on push_rejected/merge_conflict (medium)
+- Items rejected: 6 — budget STOPS ordering follows AD-13; refusal sentences are generic INVALID (distinct per park kind, per intent); test fixture validity; cross-label consistency test; confirm line component test; effect skip record
+
+**Follow-up review recommended:** false (3 low patches; score=3, threshold=5)
+
+**Verification performed:**
+- `make lint` — zero errors (ruff, mypy strict, import-linter, eslint, tsc, prettier, test pairs)
+- `make test` — 7295 backend + 1723 frontend tests pass; 100 % branch coverage on domain/ and application/
+- `make openapi` — `contracts/openapi.json` and `web-client/src/api/schema.d.ts` regenerated with `skip_step`
+
+**Residual risks:** The `onConfirm` wiring for the skip_step ConfirmAction is unverifiable from `renderToStaticMarkup`; a wrong callback would be undetected until a Playwright e2e spec is added (deferred). Workspace state after skip_step on push_rejected/merge_conflict parks is untested (deferred).

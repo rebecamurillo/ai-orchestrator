@@ -47,8 +47,8 @@ STOPS: dict[ParkKind, tuple[str, tuple[SignalKind, ...]]] = {
     "plan_stale": ("plan.check", ("continue", "skip_step", "cancel")),
     "internal": ("agent", ("retry", "skip_step", "skip_story", "skip_epic", "cancel")),
     # Added 2026-09-23 (multi-repository initiative, story S4): AD-13's amended park list —
-    # `merge_conflict` "admits `retry` and `cancel` only", so the two skips are excluded in
-    # the table itself rather than left to the frame predicates a merge Run has no frame for.
+    # `merge_conflict` originally admitted `retry` and `cancel` only; story 1 (2026-09-25)
+    # adds `skip_step` (admitted on every park kind, no exclusions).
     "merge_conflict": ("git.merge", ("retry", "skip_step", "cancel")),
 }
 

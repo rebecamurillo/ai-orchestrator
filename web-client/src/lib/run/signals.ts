@@ -27,9 +27,9 @@ export function signalLabel(kind: SignalKind): string {
   if (kind === 'continue') return 'Continue';
   if (kind === 'retry') return 'Retry';
   if (kind === 'cancel') return 'Cancel run';
-  if (kind === 'skip_step') return 'Skip step';
   if (kind === 'skip_story') return 'Skip story';
   if (kind === 'skip_epic') return 'Skip epic';
+  if (kind === 'skip_step') return 'Skip step';
   return kind;
 }
 
