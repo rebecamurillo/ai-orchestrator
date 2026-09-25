@@ -256,7 +256,7 @@ describe('StopBody · failed', () => {
 describe('StopBody · other states', () => {
   // story 2, 2026-09-25 declared behaviour change: running/queued now render cancel when
   // admitted; this test pins the no-cancel path (admitted_signals: [] for all four cases).
-  it('renders nothing for running, done, cancelled or queued', () => {
+  it('renders nothing when cancel is not admitted (running, done, cancelled, queued)', () => {
     for (const [status, token] of [
       ['running', 'RUN'],
       ['done', 'DON'],

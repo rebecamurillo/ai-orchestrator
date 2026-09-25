@@ -2,13 +2,25 @@
 title: 'Cancel a Run while it is running'
 type: 'feature'
 created: '2026-09-25'
-status: 'in-progress'
+status: 'done'
 baseline_revision: '4729fa749433e389c8fbabe73096c8967b053e24'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      If a terminal Run (done or cancelled) ever arrives with cancel in admitted_signals,
+      StopBody now renders a Cancel button for it; previously it returned null unconditionally.
+    evidence: |-
+      The new kind===null branch checks only admitted_signals.includes('cancel'), not the token or
+      status. done/cancelled tokens also produce kind===null from stopKind. The server guarantees
+      terminal states do not admit cancel (run_admitted_signals returns () for them), but that
+      guarantee is external to StopBody. The updated run-stop-body.test.ts pins this path with
+      admitted_signals: [] for done/cancelled cases.
+    location: >-
+      web-client/src/components/run/StopBody.tsx:122-137
+    severity: low
 ---
 
 <intent-contract>
@@ -82,3 +94,40 @@ The `canCancel` declaration at line 167 is left in place; it is used by the stop
 **Commands:**
 - `make test` — expected: all unit tests pass; web-client 90% line coverage maintained
 - `make lint` — expected: zero errors (eslint, tsc, prettier --check)
+
+## Spec Change Log
+
+## Review Triage Log
+
+### 2026-09-25 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 1: (high 0, medium 0, low 1)
+- defer: 1: (high 0, medium 0, low 1)
+- reject: 10
+- addressed_findings:
+  - `[low]` `[patch]` Test description `'renders nothing for running, done, cancelled or queued'` was stale after the behaviour change; updated to `'renders nothing when cancel is not admitted (running, done, cancelled, queued)'` to accurately describe the no-cancel path it now pins
+
+## Auto Run Result
+
+**Status:** done
+
+**Implemented change:** Changed `StopBody.tsx`'s early return so it renders just the Cancel button when `stopKind` is null and `admitted_signals` includes `cancel`; at every parked stop the component is unchanged.
+
+**Files changed:**
+- `web-client/src/components/run/StopBody.tsx` — early return split: when kind===null and cancel admitted, renders `<div className="wf-stop-actions"><button data-testid="wf-cancel">Cancel run</button></div>` instead of null
+- `web-client/tests/unit/run-stop-body-cancel.test.ts` — new test file: 3 tests covering running/queued with cancel admitted and running without cancel
+- `web-client/tests/unit/run-stop-body.test.ts` — `renders nothing for running, done, cancelled or queued` updated: `admitted_signals: []` override added for all four cases; test description narrowed to `renders nothing when cancel is not admitted (running, done, cancelled, queued)`
+
+**Review findings breakdown:**
+- Patches applied: 1 (low) — stale test description updated
+- Items deferred: 1 (low) — done/cancelled with cancel admitted edge case
+- Items rejected: 10 — disabled state, UUID fixture, pre-existing patterns, noise
+
+**Follow-up review recommended:** false (1 low patch; score=1, threshold=5)
+
+**Verification performed:**
+- `make lint` — zero errors (ruff, mypy strict, import-linter, eslint, tsc, prettier, test pairs, gen:api drift)
+- `make test` — 7295 backend + 1726 frontend tests pass; coverage thresholds met
+
+**Residual risks:** If a terminal Run (done/cancelled) ever arrives from the server with `cancel` in `admitted_signals` (server currently guarantees it does not), `StopBody` would render a Cancel button for it. Deferred as low-severity.
