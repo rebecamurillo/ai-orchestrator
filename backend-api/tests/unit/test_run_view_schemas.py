@@ -356,3 +356,75 @@ def test_run_detail_out_omits_reply_available_when_false() -> None:
     dumped = RunDetailOut.of(detail).model_dump()
 
     assert "reply_available" not in dumped
+
+
+def _a_detail(**over: object) -> RunDetailView:
+    """Minimal `RunDetailView` for serializer-level assertions."""
+    return RunDetailView(
+        run=a_run(),
+        header=Header(
+            project="Acme",
+            repository="acme-app",
+            base_branch="main",
+            folder="",
+            template="repo-init",
+            version=1,
+            harness=None,
+            started_at=None,
+            worktree_path=None,
+        ),
+        alert=None,
+        steps=[],
+        stories=[],
+        cost=Cost(
+            spent_usd=Decimal("0"),
+            budget_usd=None,
+            tokens_in=0,
+            tokens_out=0,
+            wall_clock_seconds=0.0,
+            active_seconds=0,
+            provisional=False,
+        ),
+        gate_record=[],
+        admitted_signals=(),
+        summary=None,
+        **over,  # type: ignore[arg-type]
+    )
+
+
+# ── resume_unavailable_reason serialization (story 4, 2026-09-25) ────────────
+
+
+def test_resume_unavailable_reason_included_in_serialized_output_when_set() -> None:
+    """resume_unavailable_reason='no_session' → key is present in model_dump().
+
+    story 4, 2026-09-25: _omit_false_reply_available only pops the field when None;
+    a non-None value must survive serialization so the web-client sees it.
+    """
+    detail = _a_detail(resume_unavailable_reason="no_session")
+
+    dumped = RunDetailOut.of(detail).model_dump()
+
+    assert dumped["resume_unavailable_reason"] == "no_session"
+
+
+def test_resume_unavailable_reason_omitted_when_none() -> None:
+    """resume_unavailable_reason=None → key is absent from model_dump().
+
+    story 4, 2026-09-25: _omit_false_reply_available pops the field when None
+    to keep the response schema compact (same pattern as reply_available=False).
+    """
+    detail = _a_detail()  # resume_unavailable_reason defaults to None
+
+    dumped = RunDetailOut.of(detail).model_dump()
+
+    assert "resume_unavailable_reason" not in dumped
+
+
+def test_resume_unavailable_reason_no_capability_included_in_serialized_output() -> None:
+    """resume_unavailable_reason='no_capability' → key is present in model_dump()."""
+    detail = _a_detail(resume_unavailable_reason="no_capability")
+
+    dumped = RunDetailOut.of(detail).model_dump()
+
+    assert dumped["resume_unavailable_reason"] == "no_capability"

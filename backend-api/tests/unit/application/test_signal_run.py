@@ -79,6 +79,7 @@ def test_an_answer_re_queues_the_blocked_story_and_resumes_the_run() -> None:
 
 
 def test_the_answer_record_is_the_operators_own_words_at_the_parked_row() -> None:
+    """story 4, 2026-09-25: _check_mode now writes mode into payload for absent-mode signals."""
     world = parked("blocked", BUILD, "blocked")
 
     send(world, "answer", text="use the psycopg adapter")
@@ -86,7 +87,8 @@ def test_the_answer_record_is_the_operators_own_words_at_the_parked_row() -> Non
     line = world.records()[0]
     assert (line.event, line.actor, line.path) == ("answer", "operator", BUILD)
     assert line.text == "use the psycopg adapter"
-    assert line.payload == {"text": "use the psycopg adapter"}
+    # _check_mode defaults absent mode to "restart" (reply_available=False with default ports)
+    assert line.payload == {"text": "use the psycopg adapter", "mode": "restart"}
 
 
 def test_resuming_clears_the_three_park_fields_together() -> None:

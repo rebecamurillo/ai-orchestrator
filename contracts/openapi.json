@@ -3885,6 +3885,17 @@
             "title": "Reply Available",
             "type": "boolean"
           },
+          "resume_unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Unavailable Reason"
+          },
           "run": {
             "$ref": "#/components/schemas/RunDetailSummaryOut"
           },

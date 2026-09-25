@@ -1,16 +1,20 @@
 """`_check_mode` in `signal_run`: gate validation for `mode="session"` on Answer and Retry.
 
-Five TDD cases (story 3-3):
+Six TDD cases (stories 3-3, 4):
 
 1. mode=session accepted when harness_is_resumable=True and latest attempt has session_id.
 2. mode=session rejected when harness does not support resume (harness_is_resumable=False).
 3. mode=session rejected when harness supports resume but session_id is None.
 4. Unknown mode value rejected before any gate record is written.
-5. Absent mode defaults to "restart" — no Invalid raised, signal proceeds normally.
+5. Absent mode defaults to "restart" when reply_available=False — signal proceeds normally
+   and gate record captures mode="restart" (story 4, 2026-09-25: _check_mode now calls
+   harness_is_resumable to compute the default; old behaviour of never calling it removed).
+6. Absent mode defaults to "session" when reply_available=True — gate record captures
+   mode="session" (story 4, 2026-09-25).
 
 Each test reaches `signal_run` directly with a customised `SignalPorts`.  The run is parked
 at a blocked story build row so that `validate` admits the `answer` signal before `_check_mode`
-runs.  For `retry` coverage, test 5 also uses a `retry` signal on an errored row.
+runs.  For `retry` coverage, test 6 uses a `retry` signal.
 """
 
 from __future__ import annotations
@@ -146,19 +150,18 @@ def test_unknown_mode_rejected_before_gate_is_recorded() -> None:
     assert world.ports.records.list_for_run(world.run.id) == []  # type: ignore[attr-defined]
 
 
-# ── 5: absent mode defaults to restart ───────────────────────────────────────
+# ── 5: absent mode defaults to restart when reply_available=False ─────────────
 
 
-def test_absent_mode_defaults_to_restart_and_is_never_rejected() -> None:
-    """No mode key in payload → treated as mode='restart'; harness_is_resumable not called."""
+def test_absent_mode_defaults_to_restart_when_reply_available_is_false() -> None:
+    """No mode key in payload and reply_available=False → defaults to restart; run proceeds.
+
+    story 4, 2026-09-25 declared behaviour change: _check_mode now calls harness_is_resumable
+    to compute the default (session when available, restart otherwise). When reply_available
+    is False the default is restart and the run proceeds normally.
+    """
     world = _parked_world()
-    # Deliberately wire resumable=False to prove the check is never called for absent mode
-    ports = SignalPorts(
-        writers=world.ports,  # type: ignore[attr-defined]
-        engine=world.engine,  # type: ignore[attr-defined]
-        harness_is_resumable=lambda _: False,
-        latest_attempt_for_run=lambda _: None,
-    )
+    ports = _signal_ports(world, resumable=False, session_id=None)
 
     outcome = signal_run(
         ports,
@@ -167,6 +170,32 @@ def test_absent_mode_defaults_to_restart_and_is_never_rejected() -> None:
     )
 
     assert outcome.run.status == "running"
+    records = world.ports.records.list_for_run(world.run.id)  # type: ignore[attr-defined]
+    assert records[0].payload.get("mode") == "restart"
+
+
+# ── 6: absent mode defaults to session when reply_available=True ─────────────
+
+
+def test_absent_mode_defaults_to_session_when_reply_available() -> None:
+    """No mode key in payload, reply_available=True → defaults to session; gate record captures it.
+
+    story 4, 2026-09-25: _check_mode writes 'session' into signal.payload when session_id
+    exists and harness is resumable, so the gate record and _planned both read the default.
+    Uses `answer` (admitted on blocked park) with no mode key to test the absent-mode path.
+    """
+    world = _parked_world()
+    ports = _signal_ports(world, resumable=True, session_id="s-123")
+
+    outcome = signal_run(
+        ports,
+        world.run.id,  # type: ignore[attr-defined]
+        Signal(kind="answer", payload={"text": "continue"}),
+    )
+
+    assert outcome.run.status == "running"
+    records = world.ports.records.list_for_run(world.run.id)  # type: ignore[attr-defined]
+    assert records[0].payload.get("mode") == "session"
 
 
 # ── default sentinel callables ────────────────────────────────────────────────

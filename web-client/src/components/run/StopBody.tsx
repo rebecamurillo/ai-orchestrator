@@ -81,11 +81,13 @@ interface Props {
    * both boxes. Optional because neither box appears outside the one stop that admits it,
    * and a caller that renders no such stop has nothing to hand it. */
   onAnswer?: (text: string, mode: string) => void;
-  /** The mode-aware Retry (story 3-4): only rendered when `replyAvailable` is true.
+  /** The mode-aware Retry (story 3-4, 4): rendered whenever `retry` is admitted.
    * Optional like the other payload callbacks — a caller without a `RetryBox` omits it. */
-  onRetry?: (mode: string) => void;
-  /** When true, `RetryBox` is shown instead of the plain Retry button (story 3-4). */
+  onRetry?: (mode: string, text: string) => void;
+  /** When true, both restart and session modes are available in `RetryBox` (story 3-4). */
   replyAvailable?: boolean;
+  /** Why session resume is unavailable; passed through to `RetryBox` (story 4, 2026-09-25). */
+  resumeUnavailableReason?: string | null;
   /** The raised budget (6.6, FR-17) — a figure, so like the Answer it is reported with its
    * payload rather than by kind alone. Optional for the same reason: no other stop has one. */
   onRaiseBudget?: (budgetUsd: string) => void;
@@ -117,6 +119,7 @@ export default function StopBody({
   runId = '',
   plannedFile = null,
   replyAvailable = false,
+  resumeUnavailableReason = null,
 }: Props) {
   const kind = stopKind(detail, token);
   if (kind === null) {
@@ -171,10 +174,11 @@ export default function StopBody({
   // for that kind steps aside here, exactly as `skip_story`'s does for its confirm. Every
   // other stop's `continue` button is untouched (`plan_stale`, `checkpoint`).
   const accepting = offersAccept(detail, kind);
-  // When `replyAvailable` is true and `retry` is admitted, `RetryBox` takes the place of
-  // the plain Retry button — `retry` is filtered out of `buttons` so the two do not both
-  // render (story 3-4). The `RetryBox` renders its own button inside the actions block.
-  const hasRetryBox = replyAvailable && signals.includes('retry');
+  // When `retry` is admitted, `RetryBox` takes the place of the plain Retry button — `retry`
+  // is filtered out of `buttons` so the two do not both render (story 3-4, 4). The
+  // `RetryBox` renders its own button inside the actions block. `replyAvailable` controls
+  // which modes are offered inside the box, not whether the box renders.
+  const hasRetryBox = signals.includes('retry');
   const buttonsAfterAccept = accepting ? signals.filter((s) => s !== 'continue') : signals;
   const buttons = hasRetryBox
     ? buttonsAfterAccept.filter((s) => s !== 'retry')
@@ -288,6 +292,8 @@ export default function StopBody({
               onRetry={onRetry}
               posting={posting !== null}
               error={posting === null && error ? error : null}
+              replyAvailable={replyAvailable}
+              resumeUnavailableReason={resumeUnavailableReason ?? null}
             />
           ) : null}
           {buttons.map((s) =>

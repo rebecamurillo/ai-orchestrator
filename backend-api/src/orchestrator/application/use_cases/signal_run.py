@@ -172,13 +172,23 @@ def _check_mode(ports: SignalPorts, run: Run, signal: Signal) -> None:
     """Refuse an unknown or unavailable `mode` before any gate record is written (story 3-3).
 
     Runs only for `answer` and `retry` — the two kinds that carry `mode`. An absent `mode`
-    defaults to `"restart"` and is never refused; a present `"restart"` is always accepted.
-    `"session"` is accepted only when the run's harness supports resume *and* the latest
-    attempt recorded a session_id — the two facts that together define reply_available (AD-10).
+    defaults to `"session"` when reply_available is True, else `"restart"` (story 4,
+    2026-09-25); the default is written into `signal.payload` so `_planned` reads it and the
+    gate record captures it. A present `"restart"` is always accepted. `"session"` is
+    accepted only when the run's harness supports resume *and* the latest attempt recorded a
+    session_id — the two facts that together define reply_available (AD-10).
     """
     if signal.kind not in _MODE_KINDS:
         return
-    mode = signal.payload.get(_MODE_KEY, _MODE_RESTART)
+    if _MODE_KEY not in signal.payload:
+        attempt = ports.latest_attempt_for_run(run.id)
+        reply_available = (
+            attempt is not None
+            and attempt.session_id is not None
+            and ports.harness_is_resumable(attempt.harness or "")
+        )
+        signal.payload[_MODE_KEY] = _MODE_SESSION if reply_available else _MODE_RESTART
+    mode = signal.payload[_MODE_KEY]
     if mode not in _KNOWN_MODES:
         raise Invalid(f"unknown mode: {mode}")
     if mode != _MODE_SESSION:

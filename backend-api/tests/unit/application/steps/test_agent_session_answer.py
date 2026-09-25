@@ -169,3 +169,76 @@ def test_mode_session_overrides_template_resume_session_false() -> None:
     assert resumed[0]["session_id"] == PREV_SESSION
     assert resumed[0]["message"] == RETRY_PROMPT
     assert world.harness.called("start") == []
+
+
+# ── 5: session retry message uses operator text (story 4, 2026-09-25) ────────
+
+
+def test_session_retry_message_uses_operator_text_when_provided() -> None:
+    """Retry mode=session with operator text → resume receives operator text, not template prompt.
+
+    story 4, 2026-09-25: _session_message prefers signal.payload["text"] over retry.prompt.
+    """
+    operator_instruction = "fix the enum"
+    payload = {"mode": "session", "text": operator_instruction}
+    resume = a_gate_record(an_agent_row(), "retry", payload)
+    world = a_tail_world(
+        previous=_a_previous(),
+        resume=resume,
+        git=FakeGit(status=["", ""], head_sha=[HEAD_SHA, END_SHA]),
+    )
+
+    run(world)
+
+    resumed = world.harness.called("resume")
+    assert len(resumed) == 1
+    assert resumed[0]["message"] == operator_instruction
+
+
+# ── 6: restart retry uses operator text in front of dispatch (story 4, 2026-09-25) ──
+
+
+def test_restart_retry_uses_operator_text_in_front_of_dispatch() -> None:
+    """Retry mode=restart with operator text → start prompt begins with the operator's text.
+
+    story 4, 2026-09-25: _planned restart path uses operator_text over retry.prompt when provided.
+    mode=restart forces the fresh-dispatch path regardless of harness resume capability.
+    """
+    operator_instruction = "use psycopg"
+    payload = {"mode": "restart", "text": operator_instruction}
+    resume = a_gate_record(an_agent_row(), "retry", payload)
+    world = a_tail_world(
+        previous=_a_previous(),
+        resume=resume,
+        git=FakeGit(status=["", ""], head_sha=[HEAD_SHA, END_SHA]),
+    )
+
+    run(world)
+
+    started = world.harness.called("start")
+    assert len(started) == 1
+    assert started[0]["prompt"].startswith(operator_instruction + " ")
+
+
+# ── 7: restart retry, no text, template hint used (story 4, 2026-09-25) ──────
+
+
+def test_restart_retry_no_text_uses_template_retry_prompt_as_hint() -> None:
+    """Retry mode=restart, no operator text, template has retry prompt → prompt starts with it.
+
+    story 4, 2026-09-25: I/O matrix row 4 — when the operator supplies no text, the template
+    retry.prompt stands in as the hint prefix (unchanged from template-auto-retry behaviour).
+    """
+    resume = a_gate_record(an_agent_row(), "retry", {"mode": "restart"})
+    world = a_tail_world(
+        previous=_a_previous(),
+        resume=resume,
+        git=FakeGit(status=["", ""], head_sha=[HEAD_SHA, END_SHA]),
+        # with_resolved uses contracted() default which carries retry.prompt = RETRY_PROMPT
+    )
+
+    run(world)
+
+    started = world.harness.called("start")
+    assert len(started) == 1
+    assert started[0]["prompt"].startswith(RETRY_PROMPT + " ")

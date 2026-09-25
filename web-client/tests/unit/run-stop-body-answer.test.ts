@@ -235,7 +235,9 @@ describe('where the Answer box does not appear', () => {
     const html = render(detail, 'BLK');
 
     expect(html).toContain('data-testid="wf-stop-misconfigured"');
-    expect(html).not.toContain('<textarea');
+    // story 4, 2026-09-25: RetryBox now renders whenever retry is admitted, so the stop has
+    // a textarea (the retry instruction). The specific Answer textarea is still absent.
+    expect(html).not.toContain('data-testid="wf-answer"');
   });
 
   it('is absent at a checkpoint — 6.2 is the story that gives that stop its own controls', () => {

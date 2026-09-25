@@ -56,6 +56,7 @@ from orchestrator.application.steps.context import (
     StepContext,
     committed,
     log_path,
+    operator_retry,
     redispatched,
     require_cwd,
     require_env,
@@ -299,11 +300,8 @@ def _dispatch(
 def _planned(
     ctx: StepContext, harness: Harness, attempt: Attempt, workflow: str | None = None
 ) -> _Dispatch:
-    """Which of the three dispatches this is, and what it carries (FR-16, AD-10, AD-13).
-    `compose_prompt` never sees a retry prompt: a resumed session already holds the context
-    that sentence would repeat, while a session that cannot be resumed — the contract said
-    not to, the harness cannot, or the last attempt recorded none — is a new one, which
-    needs the sentence and gets the retry prompt in front of it."""
+    """Which of the three dispatches this is (FR-16, AD-10, AD-13). Template auto-retries,
+    operator retries, and operator restarts each prepend to the composed dispatch."""
     previous = ctx.previous_attempt
     retry = agent_tail.retry_of(ctx) if retrying(ctx) else None
     session, resumable = str(new_id()), previous.session_id if previous is not None else None
@@ -325,8 +323,10 @@ def _planned(
         prompt_file_content=prompt_file_content,
         workflow_path=workflow,
     )
-    if retry is not None:
-        prompt = RETRY_PROMPT.format(retry=retry.prompt, dispatch=prompt)
+    if retry is not None or (operator_retry(ctx) and operator_mode == "restart"):
+        op = str(ctx.resume_signal.payload.get("text", "")) if ctx.resume_signal else ""
+        hint = retry.prompt if retry else getattr(agent_tail.retry_of(ctx), "prompt", "")
+        prompt = RETRY_PROMPT.format(retry=op or hint, dispatch=prompt) if op or hint else prompt
     return _Dispatch(harness, attempt, prompt, session)
 
 
@@ -391,8 +391,8 @@ def _text(ctx: StepContext, key: str) -> str:
 
 
 def _session_message(ctx: StepContext) -> str:
-    if ctx.resume_signal is not None and ctx.resume_signal.event == agent_answer.ANSWER_EVENT:
-        return str(ctx.resume_signal.payload.get("text", ""))
+    if ctx.resume_signal is not None and (t := str(ctx.resume_signal.payload.get("text", ""))):
+        return t
     retry = agent_tail.retry_of(ctx)
     return retry.prompt if retry is not None else ""
 

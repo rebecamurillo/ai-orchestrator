@@ -279,3 +279,7 @@ class RunDetailView:
     #: (story 3-4). Defaulted so every `RunDetailView(...)` construction predating this
     #: story keeps compiling. `False` whenever `harness_is_resumable` is not wired.
     reply_available: bool = False
+    #: Why session resume is unavailable: `"no_session"` (no attempt or no session_id
+    #: recorded), `"no_capability"` (session recorded but harness cannot resume), or `None`
+    #: when `reply_available=True` or `harness_is_resumable` is not wired (story 4, 2026-09-25).
+    resume_unavailable_reason: str | None = None

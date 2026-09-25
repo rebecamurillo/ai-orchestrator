@@ -2143,6 +2143,8 @@ export interface components {
             header: components["schemas"]["HeaderOut"];
             /** Reply Available */
             reply_available?: boolean;
+            /** Resume Unavailable Reason */
+            resume_unavailable_reason?: string | null;
             run: components["schemas"]["RunDetailSummaryOut"];
             /** Steps */
             steps: components["schemas"]["StepRowOut"][];

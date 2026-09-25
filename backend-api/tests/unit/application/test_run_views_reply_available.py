@@ -141,3 +141,56 @@ def test_reply_available_false_when_harness_is_resumable_not_wired() -> None:
     detail = run_detail(ports, run.id)
 
     assert detail.reply_available is False
+    # story 4: unwired path yields None, not a reason string
+    assert detail.resume_unavailable_reason is None
+
+
+# ── resume_unavailable_reason (story 4, 2026-09-25) ──────────────────────────
+
+
+def test_resume_unavailable_reason_is_none_when_reply_available() -> None:
+    """session_id set and harness resumable → reply_available=True, reason=None.
+
+    story 4, 2026-09-25: _reply_status returns (True, None) for the available case.
+    """
+    run = _run()
+    row = _row(run)
+    attempt = _attempt(run, row, session_id="ses-abc123", harness="claude")
+    ports = _ports(run, row, attempt, harness_is_resumable=lambda name: name == "claude")
+
+    detail = run_detail(ports, run.id)
+
+    assert detail.reply_available is True
+    assert detail.resume_unavailable_reason is None
+
+
+def test_resume_unavailable_reason_is_no_session_when_session_id_is_none() -> None:
+    """session_id=None → reply_available=False, reason='no_session'.
+
+    story 4, 2026-09-25: _reply_status returns (False, 'no_session') when no session recorded.
+    """
+    run = _run()
+    row = _row(run)
+    attempt = _attempt(run, row, session_id=None, harness="claude")
+    ports = _ports(run, row, attempt, harness_is_resumable=lambda name: True)
+
+    detail = run_detail(ports, run.id)
+
+    assert detail.reply_available is False
+    assert detail.resume_unavailable_reason == "no_session"
+
+
+def test_resume_unavailable_reason_is_no_capability_when_harness_not_resumable() -> None:
+    """session_id set but harness not resumable → reply_available=False, reason='no_capability'.
+
+    story 4, 2026-09-25: _reply_status returns (False, 'no_capability') when harness cannot resume.
+    """
+    run = _run()
+    row = _row(run)
+    attempt = _attempt(run, row, session_id="ses-abc123", harness="opencode")
+    ports = _ports(run, row, attempt, harness_is_resumable=lambda name: False)
+
+    detail = run_detail(ports, run.id)
+
+    assert detail.reply_available is False
+    assert detail.resume_unavailable_reason == "no_capability"

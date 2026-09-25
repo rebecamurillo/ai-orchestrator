@@ -33,8 +33,11 @@ export function signalLabel(kind: SignalKind): string {
   return kind;
 }
 
-/** `POST /runs/{id}/signals`'s body for a mode-aware Retry (story 3-4).
- * `mode` is `'restart'` or `'session'` — the delivery mode the Operator chose. */
-export function retryBody(mode: string): SignalIn {
-  return { kind: 'retry', payload: { mode } };
+/** `POST /runs/{id}/signals`'s body for a mode-aware Retry (story 3-4, 4).
+ * `mode` is `'restart'` or `'session'` — the delivery mode the Operator chose.
+ * `text` is the operator's own instruction; omitted when empty so gate records stay clean. */
+export function retryBody(mode: string, text: string): SignalIn {
+  const payload: Record<string, string> = { mode };
+  if (text.trim()) payload.text = text;
+  return { kind: 'retry', payload };
 }

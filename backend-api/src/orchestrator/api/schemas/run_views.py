@@ -365,18 +365,18 @@ class RunDetailOut(BaseModel):
     #: The `model_serializer` below omits it from the response when `False` so that the
     #: frozen router test (which pins the exact set of top-level keys) keeps passing.
     reply_available: bool = Field(default=False, json_schema_extra=_drop_default)
+    resume_unavailable_reason: str | None = Field(default=None, json_schema_extra=_drop_default)
 
     @model_serializer(mode="wrap")
     def _omit_false_reply_available(self, handler: Any):
-        """Exclude `reply_available` from the response body when it is the default (`False`).
-
-        `False` carries no UI information and is modelled as absent (the web-client reads
-        `detail.reply_available ?? false`); `True` IS included. Deliberately no return
-        annotation: pydantic reads a wrap serializer's return type as the serialization
-        JSON schema, and `dict[str, Any]` collapses `RunDetailOut` to a bare object."""
+        """Omit `reply_available` when `False`, `resume_unavailable_reason` when `None`.
+        Deliberately no return annotation: pydantic reads it as the JSON schema, collapsing
+        `RunDetailOut` to a bare object."""
         data: dict[str, Any] = handler(self)
         if not self.reply_available:
             data.pop("reply_available", None)
+        if self.resume_unavailable_reason is None:
+            data.pop("resume_unavailable_reason", None)
         return data
 
     @classmethod
@@ -396,4 +396,5 @@ class RunDetailOut(BaseModel):
             admitted_signals=detail.admitted_signals,
             summary=None if detail.summary is None else SummaryOut.of(detail.summary),
             reply_available=detail.reply_available,
+            resume_unavailable_reason=detail.resume_unavailable_reason,
         )

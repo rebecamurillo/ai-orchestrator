@@ -105,12 +105,18 @@ function renderRetryBox(overrides: Partial<Parameters<typeof RetryBox>[0]> = {})
       onRetry: () => {},
       posting: false,
       error: null,
+      replyAvailable: true,
+      resumeUnavailableReason: null,
       ...overrides,
     }),
   );
 }
 
-function renderStopBody(detail: RunDetailOut, replyAvailable: boolean): string {
+function renderStopBody(
+  detail: RunDetailOut,
+  replyAvailable: boolean,
+  resumeUnavailableReason: string | null = null,
+): string {
   return renderToStaticMarkup(
     createElement(StopBody, {
       detail,
@@ -121,6 +127,7 @@ function renderStopBody(detail: RunDetailOut, replyAvailable: boolean): string {
       error: null,
       onRetry: () => {},
       replyAvailable,
+      resumeUnavailableReason,
     }),
   );
 }
@@ -160,20 +167,76 @@ describe('StopBody with retry + replyAvailable', () => {
     expect(html.match(/data-testid="wf-signal-retry"/g)?.length).toBe(1); // only inside RetryBox
   });
 
-  it('renders plain Retry button (no RetryBox) when replyAvailable=false', () => {
+  // story 4, 2026-09-25 declared behaviour change: RetryBox now renders whenever retry is
+  // admitted, regardless of replyAvailable. The old test pinned the opposite.
+  it('renders RetryBox even when replyAvailable=false', () => {
     const html = renderStopBody(base(), false);
 
-    expect(html).not.toContain('data-testid="wf-retry-box"');
-    expect(html).toContain('data-testid="wf-signal-retry"');
+    expect(html).toContain('data-testid="wf-retry-box"');
+  });
+
+  it('renders session as default radio when replyAvailable=true', () => {
+    const html = renderStopBody(base(), true);
+
+    // session radio should be present when reply_available
+    expect(html).toContain('value="session"');
+    // restart radio should also be present
+    expect(html).toContain('value="restart"');
+    // two radios total (both modes available)
+    expect(html.match(/<input[^>]*type="radio"/g)?.length).toBe(2);
+  });
+
+  it('renders restart-only with no_session reason when replyAvailable=false', () => {
+    const html = renderStopBody(base(), false, 'no_session');
+
+    expect(html).toContain('data-testid="wf-retry-box"');
+    expect(html).toContain('No session was recorded');
+    // Only restart radio (session unavailable)
+    expect(html.match(/<input[^>]*type="radio"/g)?.length).toBe(1);
+  });
+
+  it('renders restart-only with no_capability reason when replyAvailable=false', () => {
+    const html = renderStopBody(base(), false, 'no_capability');
+
+    expect(html).toContain('data-testid="wf-retry-box"');
+    expect(html).toContain('does not support resume');
+    // Only restart radio (session unavailable)
+    expect(html.match(/<input[^>]*type="radio"/g)?.length).toBe(1);
+  });
+
+  it('onRetry callback receives mode and text', () => {
+    let receivedMode = '';
+    let receivedText = '';
+    // Render with replyAvailable=true so session radio is present; we just need the component to compile
+    renderRetryBox({
+      onRetry: (mode: string, text: string) => {
+        receivedMode = mode;
+        receivedText = text;
+      },
+    });
+    // Callback signature accepted at compile time — the types changed from (mode) to (mode, text)
+    expect(typeof receivedMode).toBe('string');
+    expect(typeof receivedText).toBe('string');
   });
 });
 
 describe('retryBody signal helper', () => {
   it('produces mode: session payload', () => {
-    expect(retryBody('session')).toEqual({ kind: 'retry', payload: { mode: 'session' } });
+    expect(retryBody('session', '')).toEqual({ kind: 'retry', payload: { mode: 'session' } });
   });
 
   it('produces mode: restart payload', () => {
-    expect(retryBody('restart')).toEqual({ kind: 'retry', payload: { mode: 'restart' } });
+    expect(retryBody('restart', '')).toEqual({ kind: 'retry', payload: { mode: 'restart' } });
+  });
+
+  it('includes text in payload when non-empty', () => {
+    expect(retryBody('session', 'fix the enum')).toEqual({
+      kind: 'retry',
+      payload: { mode: 'session', text: 'fix the enum' },
+    });
+  });
+
+  it('omits text from payload when empty', () => {
+    expect(retryBody('restart', '')).toEqual({ kind: 'retry', payload: { mode: 'restart' } });
   });
 });

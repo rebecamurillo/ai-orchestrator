@@ -113,7 +113,12 @@ describe('StopBody · blocked', () => {
 });
 
 describe('StopBody · misconfigured', () => {
-  it('shows the condition and the log tail, and contains no textarea', () => {
+  // story 4, 2026-09-25 declared behaviour change: RetryBox now renders whenever `retry` is
+  // admitted, so the stop now has a textarea (the retry instruction field). The old assertion
+  // `not.toContain('<textarea')` pinned the absence of a textarea; it is replaced by the more
+  // specific `not.toContain('data-testid="wf-answer"')` which asserts the Answer textarea is
+  // not present (answer is not admitted), plus a positive assertion on the retry textarea.
+  it('shows the condition and the log tail, no Answer textarea; retry textarea is present', () => {
     const detail: RunDetailOut = {
       ...base(),
       alert: { token: 'BLK', reason: 'no story file', park_kind: 'misconfigured' },
@@ -163,7 +168,9 @@ describe('StopBody · misconfigured', () => {
     expect(html).toContain('data-testid="wf-signal-retry"');
     expect(html).toContain('data-testid="wf-signal-skip_story"');
     expect(html).toContain('data-testid="wf-cancel"');
-    expect(html).not.toContain('<textarea');
+    // story 4, 2026-09-25: RetryBox always renders when retry admitted; answer not admitted
+    expect(html).not.toContain('data-testid="wf-answer"');
+    expect(html).toContain('data-testid="wf-retry-instruction"');
     expect(html).not.toContain('data-testid="wf-signal-continue"');
   });
 

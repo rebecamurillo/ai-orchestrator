@@ -200,7 +200,7 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
     # Read once and shared: the detail publishes the whole gate record, and `_alert` needs
     # the park's own entry off the same list (6.6) rather than a second query for it.
     records = ports.gate_records.list_for_run(run.id)
-    reply_available = _reply_available(ports, run)
+    reply_available, resume_unavailable_reason = _reply_status(ports, run)
     return RunDetailView(
         run=run,
         header=_header(run, project, repository),
@@ -213,6 +213,7 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
         summary=_summary(run, rows),
         terminal=_terminal(ports, run, park_row, _latest_of(park_attempts), project),
         reply_available=reply_available,
+        resume_unavailable_reason=resume_unavailable_reason,
     )
 
 
@@ -241,17 +242,24 @@ def _terminal(
     )
 
 
-def _reply_available(ports: RunViewPorts, run: Run) -> bool:
-    """True when the latest attempt has a session_id and the harness supports resume (story 3-4).
+def _reply_status(ports: RunViewPorts, run: Run) -> tuple[bool, str | None]:
+    """Reply availability and the reason when unavailable (story 4, 2026-09-25).
 
-    `None` for `harness_is_resumable` is the safe-unwired case: the same precedent as
-    `terminal` — an unwired read publishes `reply_available=False` without failing.
+    Returns `(True, None)` when the latest attempt has a session_id and the harness supports
+    resume; `(False, "no_session")` when no attempt exists or no session_id was recorded;
+    `(False, "no_capability")` when a session_id was recorded but the harness cannot resume;
+    `(False, None)` when `harness_is_resumable` is not wired (safe-unwired case, same
+    precedent as `terminal`).
     """
     if ports.harness_is_resumable is None:
-        return False
+        return False, None
     a = ports.attempts.latest_for_run(run.id)
-    harness = a.harness or "" if a is not None else ""
-    return a is not None and a.session_id is not None and ports.harness_is_resumable(harness)
+    if a is None or a.session_id is None:
+        return False, "no_session"
+    harness = a.harness or ""
+    if not ports.harness_is_resumable(harness):
+        return False, "no_capability"
+    return True, None
 
 
 def _header(run: Run, project: Project | None, repository: Repository | None) -> Header:

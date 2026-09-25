@@ -255,8 +255,9 @@ export default function RunDetail({ runId }: Props) {
           posting={posting}
           error={signalError}
           onAnswer={(text, mode) => void sendSignal('answer', answerBody(text, mode))}
-          onRetry={(mode) => void sendSignal('retry', retryBody(mode))}
+          onRetry={(mode, text) => void sendSignal('retry', retryBody(mode, text))}
           replyAvailable={detail.reply_available ?? false}
+          resumeUnavailableReason={detail.resume_unavailable_reason ?? null}
           onRaiseBudget={(amount) => void sendSignal('budget_raise', budgetRaiseBody(amount))}
           onAccept={(paths) => void sendSignal('continue', acceptBody(paths))}
           runId={runId}
