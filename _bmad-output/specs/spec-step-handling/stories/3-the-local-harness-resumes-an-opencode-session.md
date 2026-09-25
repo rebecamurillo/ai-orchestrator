@@ -2,13 +2,23 @@
 title: 'The local harness resumes an OpenCode session'
 type: 'feature'
 created: '2026-09-25'
-status: 'in-progress'
+status: 'done'
 baseline_revision: '6b130348969d1fb575ee276b54d89d3ee9732fce'
 review_loop_iteration: 0
 followup_review_recommended: false
 context: []
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      `resume_command` does not quote `cwd` in the shell output; a path with spaces would break
+      the operator paste command.
+    evidence: |-
+      `f"cd {cwd} && opencode run --session {session_id}"` — no quoting around `{cwd}`. Paths
+      in this system are machine-generated worktree paths under `/work/…` without spaces, so
+      the risk is latent rather than active.
+    location: >-
+      backend-api/src/orchestrator/infrastructure/harness/opencode/adapter.py:292
+    severity: low
 ---
 
 <intent-contract>
@@ -109,3 +119,47 @@ Removing `RESUME_UNSUPPORTED` removes dead code; if mypy or ruff flag it as unus
 **Commands:**
 - `make test` — expected: all unit tests pass; 100 % branch coverage on `domain/` and `application/`; the four new resume tests pass; the revised capability/resume_command/terminal tests pass
 - `make lint` — expected: zero errors (ruff, mypy strict, import-linter); `RESUME_UNSUPPORTED` not referenced anywhere causes no import error
+
+## Spec Change Log
+
+## Review Triage Log
+
+### 2026-09-25 — Review pass
+- intent_gap: 0
+- bad_spec: 0
+- patch: 4: (high 0, medium 0, low 4)
+- defer: 1: (high 0, medium 0, low 1)
+- reject: 13
+- addressed_findings:
+  - `[low]` `[patch]` No exact argv equality assertion for `_resume_argv`; sibling adapters both use `==` assertion; dropping `--format json` would silently break stream parsing — added exact list equality and explicit `--continue`/`--fork` negative assertions to `test_resume_argv_uses_session_flag_not_model_flag`
+  - `[low]` `[patch]` `domain/ports/harness.py` `resume_command` docstring named `local` as having `capabilities.resume = False (7.3)` — updated to remove the stale example and note story 3 (2026-09-25)
+  - `[low]` `[patch]` `application/use_cases/terminal.py` module docstring listed `local` as a `None`-returning harness — removed the stale parenthetical
+  - `[low]` `[patch]` `test_local_registry.py` module docstring stated "local is the first registered harness that declares no resume, so FR-21's terminal block is None for it" — contradicted the test in the same file; updated to describe the new behaviour
+
+## Auto Run Result
+
+**Status:** done
+
+**Implemented change:** Flipped `LocalHarness.capabilities.resume = True`, implemented `resume()` with `opencode run --session {session_id}` via `_resume_argv`, implemented `resume_command()` returning the operator's paste-able line, and updated `wait()`'s session_id fallback chain so a resume handle's known id is preserved even on exit-1 (hard rule 7).
+
+**Files changed:**
+- `backend-api/src/orchestrator/infrastructure/harness/opencode/adapter.py` — added `SESSION_FLAG`; removed `RESUME_UNSUPPORTED`; flipped `capabilities.resume = True`; implemented `resume()` and `resume_command()`; added `_resume_argv()`; updated `wait()` fallback chain; updated module and capability docstrings
+- `backend-api/tests/unit/test_local_adapter.py` — updated module docstring; split capability assertion; replaced old resume tests with 5 new tests covering argv, session_id fallback, exit-1 handling, prompt recording, and resume_command format
+- `backend-api/tests/unit/test_local_registry.py` — updated module docstring (story 3 patch); replaced `test_a_parked_local_attempt_has_no_terminal_because_it_cannot_resume` with `test_a_parked_local_attempt_now_has_a_terminal_command`
+- `backend-api/tests/unit/test_terminal_command.py` — removed `"local"` from no-terminal parametrize; added `test_local_resume_command_names_the_session`
+- `backend-api/tests/unit/test_codex_registry.py` — updated `test_a_harness_the_registry_still_does_not_hold_has_no_terminal` → `test_a_parked_local_attempt_now_has_a_terminal_command`
+- `backend-api/src/orchestrator/domain/ports/harness.py` — updated `resume_command` docstring (story 3 patch)
+- `backend-api/src/orchestrator/application/use_cases/terminal.py` — updated module docstring (story 3 patch)
+
+**Review findings breakdown:**
+- Patches applied: 4 (all low) — exact argv assertion, 3 stale docstring fixes
+- Items deferred: 1 (low) — `resume_command` unquoted cwd (paths are machine-generated, spaces highly unlikely)
+- Items rejected: 13 — diff truncation artifacts, caller invariants, pre-existing patterns, speculative edge cases, cosmetic noise
+
+**Follow-up review recommended:** false (4 low patches; score=4, threshold=5)
+
+**Verification performed:**
+- `make lint` — zero errors (ruff, mypy strict, import-linter, eslint, tsc, prettier, test pairs, gen:api drift)
+- `make test` — 7299 backend + 1726 frontend tests pass; 100% branch coverage on `domain/` and `application/`; all new resume tests pass
+
+**Residual risks:** `resume_command` output contains unquoted `cwd`; a path with spaces would break the operator paste command. Paths are machine-generated worktree paths under `/work/…` — spaces are highly unlikely. Deferred as low-severity.

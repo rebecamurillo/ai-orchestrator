@@ -23,7 +23,7 @@ are exported comes from `HARNESS_ENV_ALIASES` through the `AliasBuilder`
 every stop the escape hatch does not apply to, and there are six of them: a park row that is
 not an `agent` row, a Run with no worktree, an attempt that never got a session id, a harness
 the registry does not hold, a harness whose `capabilities.resume` is `False`, and a harness
-whose adapter answers no resume line at all (7.3's `local` does both). Each is asked in that
+whose adapter answers no resume line at all. Each is asked in that
 order, and each answers `None` rather than raising: a read model that 500s because a Run
 parked somewhere unusual would be worse than one that hides an optional section.
 """

@@ -20,9 +20,11 @@ What was revised, and what is restated here:
   is a plain `AliasBuilder` needing no `Settings`, and that a `local` attempt's environment
   really carries the two names `scripts/harness/opencode.sh` declares.
 
-And one thing the registry could not say before: `local` is the first registered harness that
-declares no resume, so FR-21's terminal block is `None` for it — not because the registry lacks
-the name, which is what made that answer true until today, but because the adapter says so.
+And one thing the registry could not say before: `local` is the first registered harness whose
+terminal command is now shown — story 3 (2026-09-25) flipped `capabilities.resume = True` for
+the `LocalHarness`, so `resume_command` returns the `--session` line and FR-21's terminal block
+is shown. `test_codex_registry.py` states the cross-registry invariants; this file states the
+local-specific ones.
 """
 
 from __future__ import annotations

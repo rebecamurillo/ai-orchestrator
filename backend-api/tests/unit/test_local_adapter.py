@@ -421,10 +421,19 @@ def test_resume_argv_uses_session_flag_not_model_flag(
     )
 
     cmd = runner.called("start")[0]["cmd"]
-    assert "--session" in cmd
-    assert SESSION_ID in cmd
-    assert "-m" not in cmd
-    assert not any("litellm/" in arg for arg in cmd)
+    assert cmd == [
+        "opencode",
+        "run",
+        "--format",
+        "json",
+        "--dir",
+        str(WORKTREE),
+        "--session",
+        SESSION_ID,
+        "continue",
+    ]
+    assert "--continue" not in cmd
+    assert "--fork" not in cmd
 
 
 def test_resume_result_carries_the_session_id_it_was_given(

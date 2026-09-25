@@ -316,11 +316,11 @@ class Harness(Protocol):
     def resume_command(self, cwd: str, session_id: str) -> str | None:
         """The shell line an operator can paste to take the session over by hand (FR-21).
 
-        `None` is the answer of a harness that has no resume form at all — `local`, whose
-        `capabilities.resume` is `False` (7.3). The read model already hides the terminal
-        block for such a harness, so this is belt and braces rather than a second rule: a
-        plausible-looking line for a session that cannot be continued would be worse than
-        no line, and an adapter should be able to say so in the return value.
+        `None` is the answer of a harness that has no resume form at all. The read model
+        already hides the terminal block for such a harness, so this is belt and braces
+        rather than a second rule: a plausible-looking line for a session that cannot be
+        continued would be worse than no line, and an adapter should be able to say so in
+        the return value. `local` answers a real line after story 3 (2026-09-25).
         """
         ...
 
