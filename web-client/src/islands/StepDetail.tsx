@@ -20,32 +20,9 @@ import { api } from '../api/client';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
 import LogViewer from '../components/run/LogViewer';
 import HelperDrawer, { type DrawerContent } from '../components/run/HelperDrawer';
+import AttemptsTable, { type AttemptDetail } from '../components/run/AttemptsTable';
 import { decode } from '../lib/step-path';
 import '../styles/step-detail.css';
-
-interface AttemptDetail {
-  id: string;
-  n: number;
-  status: string;
-  token: string;
-  started_at: string | null;
-  ended_at: string | null;
-  seconds: number | null;
-  harness: string | null;
-  model: string | null;
-  session_id: string | null;
-  exit_code: number | null;
-  cost_usd: string | null;
-  cost_provisional: boolean;
-  tokens_in: number | null;
-  tokens_out: number | null;
-  dispatch_prompt: string | null;
-  retry_prompt: string | null;
-  result: string | null;
-  command: string | null;
-  resume_command?: string | null;
-  session_lifetime_ends_at?: string | null;
-}
 
 interface StepDetail {
   seq: number;
@@ -204,41 +181,12 @@ export default function StepDetail({ runId, dotPath }: Props) {
       ) : (
         <div className="wf-step-detail-attempts">
           <h3>attempts</h3>
-          <ul className="wf-step-detail-attempt-list">
-            {detail.attempts.map((attempt) => (
-              <li key={attempt.n}>
-                <button
-                  type="button"
-                  data-selected={attempt.n === selectedN}
-                  onClick={() => setSelectedN(attempt.n)}
-                >
-                  attempt {attempt.n} · {attempt.token}
-                  {attempt.harness && ` · ${attempt.harness}`}
-                  {attempt.seconds != null && ` · ${Math.round(attempt.seconds)}s`}
-                </button>
-                {attempt.command === null && (
-                  <>
-                    <button
-                      type="button"
-                      data-testid={`step-prompt-${attempt.n}`}
-                      onClick={() => toggleDrawer(attempt.n, 'prompt-result')}
-                    >
-                      prompt · result
-                    </button>
-                    {attempt.resume_command != null && (
-                      <button
-                        type="button"
-                        data-testid={`step-reach-${attempt.n}`}
-                        onClick={() => toggleDrawer(attempt.n, 'reach-agent')}
-                      >
-                        reach agent
-                      </button>
-                    )}
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
+          <AttemptsTable
+            attempts={detail.attempts}
+            selectedN={selectedN}
+            onSelect={setSelectedN}
+            onDrawer={toggleDrawer}
+          />
 
           {selectedAttempt && (
             <div className="wf-step-detail-attempt" data-testid="step-detail-attempt">
