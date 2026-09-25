@@ -1,6 +1,7 @@
 # Test Automation Summary — spec-step-handling
 
 Generated: 2026-09-25  
+Verified: 2026-09-25 (dispatch re-run, story-id `.`)  
 Spec: `_bmad-output/specs/spec-step-handling/SPEC.md`  
 Stories: 1–5 (all done)
 
@@ -46,6 +47,21 @@ Stories: 1–5 (all done)
 - Story 1 (medium): workspace state after skip_step on `push_rejected`/`merge_conflict` parks — no test; backend integration concern.
 - Story 5 (medium): keyboard accessibility (`tabIndex`/`onKeyDown`) on `<tr>` rows — CSS/accessibility gap, no automated test.
 - Story 3 (low): `resume_command` unquoted `cwd` — paths under `/work/` have no spaces; latent risk.
+
+## Verification (2026-09-25 dispatch re-run)
+
+All five generated test files were re-verified against the committed implementation:
+
+- **TypeScript typecheck** (`pnpm tsc --noEmit`): passes cleanly across all four Playwright specs.
+- **testid / selector cross-check**: all `data-testid` values and CSS class selectors in the four
+  Playwright specs were confirmed present in the component source:
+  - `wf-cancel` (×2), `wf-cancel-confirm-yes` — `StopBody.tsx`, `CancelModal.tsx`
+  - `wf-signal-skip_step`, `wf-confirm-skip_step-{yes,keep,line}` — dynamic in `StopBody.tsx` / `ConfirmAction.tsx`
+  - `wf-retry-box`, `wf-signal-retry`, `wf-retry-instruction` — `RetryBox.tsx` static literals
+  - `.wf-retry-unavailable` — CSS class on the unavailability `<p>` in `RetryBox.tsx` (class selector, not testid — correct)
+  - `step-detail` — `StepDetail.tsx`; `step-prompt-{n}`, `step-reach-{n}` — dynamic in `AttemptsTable.tsx`
+  - `step-drawer` — `HelperDrawer.tsx` (rendered inside StepDetail's tree; `getByTestId` locates it correctly)
+- **No new tests needed**: no story added, no implementation gap found, no testid mismatch.
 
 ## Next Steps
 
