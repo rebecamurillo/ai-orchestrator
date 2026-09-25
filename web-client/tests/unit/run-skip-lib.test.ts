@@ -11,10 +11,13 @@ import { describe, expect, it } from 'vitest';
 import type { RunDetailOut, SignalKind } from '../../src/lib/run/detail';
 import {
   KEEP_LABEL,
+  SKIP_STEP_LABEL,
   SKIP_STORY_LABEL,
   SKIP_STORY_STOP_KINDS,
   compareLinkText,
+  offersSkipStep,
   offersSkipStory,
+  skipStepConfirmLine,
   skipStoryConfirmLine,
   skippedIds,
 } from '../../src/lib/run/skip';
@@ -77,6 +80,39 @@ describe('skipStoryConfirmLine', () => {
   it('labels the two buttons the brief names', () => {
     expect(SKIP_STORY_LABEL).toBe('Skip story');
     expect(KEEP_LABEL).toBe('Keep');
+  });
+});
+
+// ── skip_step: story 1, 2026-09-25 behaviour change ───────────────────────────
+
+describe('SKIP_STEP_LABEL', () => {
+  it('is the brief-named button label', () => {
+    expect(SKIP_STEP_LABEL).toBe('Skip step');
+  });
+});
+
+describe('skipStepConfirmLine', () => {
+  it('states the mechanism verbatim, naming the path', () => {
+    expect(skipStepConfirmLine('some/path')).toBe(
+      'skip some/path: marks it skipped and continues at the next row',
+    );
+  });
+
+  it('uses "this step" when path is null', () => {
+    expect(skipStepConfirmLine(null)).toBe(
+      'skip this step: marks it skipped and continues at the next row',
+    );
+  });
+});
+
+describe('offersSkipStep', () => {
+  it('returns true when skip_step is in admitted signals', () => {
+    expect(offersSkipStep(['skip_step'])).toBe(true);
+  });
+
+  it('returns false when skip_step is absent', () => {
+    expect(offersSkipStep([])).toBe(false);
+    expect(offersSkipStep(['retry', 'cancel'])).toBe(false);
   });
 });
 

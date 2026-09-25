@@ -280,6 +280,16 @@ VALID: dict[SignalKind, Rule] = {
         run_event="retry",
         text="retried by the operator",
     ),
+    # AD-13, ratified 2026-09-25 (story 1): skip the one parked row and resume at the next.
+    # park_kinds=ANY_PARK so the Operator can skip from any stop kind; row_statuses narrows
+    # to the three statuses a parked row can be in — `dependency` (no park_row) and any park
+    # whose row is `done` are both refused at `validate` by the row_statuses check.
+    "skip_step": Rule(
+        park_kinds=ANY_PARK,
+        row_statuses=frozenset({"blocked", "checkpoint", "error"}),
+        run_event="skip_step",
+        text="step skipped by the operator",
+    ),
     "skip_story": Rule(
         park_kinds=ANY_PARK - frozenset({"budget", "plan_stale", "push_rejected", MERGE_CONFLICT}),
         extra=_has_story_frame,

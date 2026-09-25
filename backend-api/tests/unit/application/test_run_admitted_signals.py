@@ -55,7 +55,8 @@ def test_a_parked_run_with_no_park_kind_admits_nothing() -> None:
 def test_a_parked_run_delegates_to_admitted_signals_with_its_park_and_row_kind() -> None:
     run = build_run(status="needs_you", park_kind="push_rejected", park_path="push")
 
-    assert run_admitted_signals(run, "git.push") == ("retry", "skip_epic", "cancel")
+    # story 1 (2026-09-25): skip_step admitted on every park kind.
+    assert run_admitted_signals(run, "git.push") == ("retry", "skip_step", "skip_epic", "cancel")
 
 
 def test_a_parked_run_without_a_looked_up_row_kind_answers_conservatively() -> None:

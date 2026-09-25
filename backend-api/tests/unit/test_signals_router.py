@@ -193,7 +193,8 @@ async def test_get_renders_admitted_signals_for_a_push_rejected_park(api: Api) -
     assert response.status_code == HTTP_OK, response.text
     body = response.json()
     assert body["status"] == "needs_you"
-    assert body["admitted_signals"] == ["retry", "skip_epic", "cancel"]
+    # story 1 (2026-09-25): skip_step admitted on every park kind.
+    assert body["admitted_signals"] == ["retry", "skip_step", "skip_epic", "cancel"]
 
 
 async def test_get_an_unknown_run_is_a_404(api: Api) -> None:

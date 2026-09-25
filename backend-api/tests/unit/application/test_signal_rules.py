@@ -29,20 +29,27 @@ from tests.unit.application.writer_fixtures import build_rows, build_run
 
 #: PRD §4.6, transcribed: `park_kind -> (park row kind, the actions the stop offers)`.
 STOPS: dict[ParkKind, tuple[str, tuple[SignalKind, ...]]] = {
-    "blocked": ("agent", ("answer", "skip_story", "skip_epic", "cancel")),
-    "checkpoint": ("agent", ("answer", "continue", "skip_story", "skip_epic", "cancel")),
-    "verify_failed": ("shell", ("retry", "skip_story", "skip_epic", "cancel")),
-    "budget": ("agent", ("budget_raise", "cancel")),
-    "timeout": ("shell", ("retry", "skip_story", "skip_epic", "cancel")),
-    "push_rejected": ("git.push", ("retry", "skip_epic", "cancel")),
-    "protected_path": ("agent", ("continue", "retry", "skip_story", "skip_epic", "cancel")),
-    "misconfigured": ("agent", ("retry", "skip_story", "skip_epic", "cancel")),
-    "plan_stale": ("plan.check", ("continue", "cancel")),
-    "internal": ("agent", ("retry", "skip_story", "skip_epic", "cancel")),
+    # PRD §4.6, story 1 (2026-09-25): `skip_step` added to all 11 park-kind entries.
+    "blocked": ("agent", ("answer", "skip_step", "skip_story", "skip_epic", "cancel")),
+    "checkpoint": (
+        "agent",
+        ("answer", "continue", "skip_step", "skip_story", "skip_epic", "cancel"),
+    ),
+    "verify_failed": ("shell", ("retry", "skip_step", "skip_story", "skip_epic", "cancel")),
+    "budget": ("agent", ("skip_step", "budget_raise", "cancel")),
+    "timeout": ("shell", ("retry", "skip_step", "skip_story", "skip_epic", "cancel")),
+    "push_rejected": ("git.push", ("retry", "skip_step", "skip_epic", "cancel")),
+    "protected_path": (
+        "agent",
+        ("continue", "retry", "skip_step", "skip_story", "skip_epic", "cancel"),
+    ),
+    "misconfigured": ("agent", ("retry", "skip_step", "skip_story", "skip_epic", "cancel")),
+    "plan_stale": ("plan.check", ("continue", "skip_step", "cancel")),
+    "internal": ("agent", ("retry", "skip_step", "skip_story", "skip_epic", "cancel")),
     # Added 2026-09-23 (multi-repository initiative, story S4): AD-13's amended park list —
     # `merge_conflict` "admits `retry` and `cancel` only", so the two skips are excluded in
     # the table itself rather than left to the frame predicates a merge Run has no frame for.
-    "merge_conflict": ("git.merge", ("retry", "cancel")),
+    "merge_conflict": ("git.merge", ("retry", "skip_step", "cancel")),
 }
 
 
@@ -268,3 +275,30 @@ def test_an_infinite_budget_is_refused_rather_than_accepted_as_unbounded() -> No
 
     with pytest.raises(Conflict):
         validate(run, a_row(), Signal(kind="budget_raise", payload={BUDGET_KEY: "Infinity"}))
+
+
+# ── skip_step: story 1, 2026-09-25 behaviour change ──────────────────────────
+
+
+def test_a_skip_step_is_admitted_on_every_non_dependency_park_kind() -> None:
+    """AD-13, ratified 2026-09-25: park_kinds=ANY_PARK (story 1)."""
+    non_dep = [pk for pk in PARK_KINDS if pk != "dependency"]
+    for park_kind in non_dep:
+        assert "skip_step" in admitted_signals(park_kind, "agent"), (
+            f"expected skip_step for {park_kind}"
+        )
+
+
+def test_a_skip_step_on_a_dependency_park_is_refused() -> None:
+    """Dependency parks have no park_row (park_path=None); row_statuses check refuses it."""
+    run = build_run("needs_you", park_kind="dependency", park_path=None)
+
+    assert "invalid for status needs_you / park dependency" in refused(run, None, "skip_step")
+
+
+def test_a_skip_step_on_a_done_row_is_refused() -> None:
+    """row_statuses={blocked,checkpoint,error}; a `done` row is outside that set."""
+    run = parked("budget")
+    row = a_row("agent", "done")
+
+    assert "invalid for status needs_you / park budget" in refused(run, row, "skip_step")

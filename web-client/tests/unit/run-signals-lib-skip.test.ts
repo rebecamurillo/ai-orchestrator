@@ -11,4 +11,9 @@ describe('signalLabel · skips', () => {
     expect(signalLabel('skip_story')).toBe('Skip story');
     expect(signalLabel('skip_epic')).toBe('Skip epic');
   });
+
+  // story 1, 2026-09-25 behaviour change
+  it('reads Skip step', () => {
+    expect(signalLabel('skip_step')).toBe('Skip step');
+  });
 });

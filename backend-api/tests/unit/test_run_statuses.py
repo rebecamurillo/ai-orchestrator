@@ -49,6 +49,7 @@ EXPECTED_RUN: dict[tuple[RunStatus, RunEvent], RunStatus] = {
     ("needs_you", "answer"): "running",
     ("needs_you", "continue"): "running",
     ("needs_you", "retry"): "running",
+    ("needs_you", "skip_step"): "running",
     ("needs_you", "skip_story"): "running",
     ("needs_you", "skip_epic"): "running",
     ("needs_you", "budget_raise"): "running",
@@ -123,13 +124,15 @@ def test_the_park_kinds_are_the_twelve_the_brief_lists() -> None:
     )
 
 
-def test_the_signal_kinds_are_the_eleven_ad_13_names() -> None:
+def test_the_signal_kinds_are_the_twelve_ad_13_names() -> None:
     # operator revision 2026-09-18: "start" added for the deferred-start signal (story 5-3);
     # anchor exception 4 granted 2026-09-18T13:17:20Z.
+    # story 1 (2026-09-25): "skip_step" added as the twelfth kind (SPEC-step-handling CAP-1).
     assert SIGNAL_KINDS == (
         "answer",
         "continue",
         "retry",
+        "skip_step",
         "skip_story",
         "skip_epic",
         "budget_raise",

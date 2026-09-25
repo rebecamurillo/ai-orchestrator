@@ -181,6 +181,32 @@ def test_retry_re_queues_the_errored_row_as_a_new_attempt() -> None:
     assert world.records()[0].text == "retried by the operator"
 
 
+# ── skip_step: story 1, 2026-09-25 behaviour change ──────────────────────────
+
+
+def test_a_skip_step_marks_the_parked_row_skipped_and_resumes_the_run() -> None:
+    """AD-13, ratified 2026-09-25: the one parked row is skipped; the Run resumes."""
+    world = parked("blocked", BUILD, "blocked")
+
+    outcome = send(world, "skip_step")
+
+    assert world.status_of(BUILD) == "skipped"
+    assert world.row(BUILD).reason == SKIPPED_BY_OPERATOR
+    assert outcome.run.status == "running"
+    assert outcome.resumed
+    assert engine_calls(world) == ["signal"]
+
+
+def test_a_skip_step_with_nothing_left_ends_the_run() -> None:
+    """AD-13, ratified 2026-09-25: no next row → Effect.finished=True → Run done."""
+    world = parked("blocked", "stories[0].build", "blocked", plan=(("stories[0].build", "agent"),))
+
+    outcome = send(world, "skip_step")
+
+    assert outcome.run.status == "done"
+    assert engine_calls(world) == ["cancel"]
+
+
 # ── skip_story ───────────────────────────────────────────────────────────────
 
 

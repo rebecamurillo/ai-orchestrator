@@ -105,7 +105,8 @@ def test_the_same_stop_without_a_session_offers_its_own_actions() -> None:
 
     offered = signals.run_admitted_signals(run, "agent")
 
-    assert offered == ("answer", "skip_story", "skip_epic", "cancel")
+    # story 1 (2026-09-25): skip_step admitted on every park kind.
+    assert offered == ("answer", "skip_step", "skip_story", "skip_epic", "cancel")
     assert "terminal_release" not in offered
 
 

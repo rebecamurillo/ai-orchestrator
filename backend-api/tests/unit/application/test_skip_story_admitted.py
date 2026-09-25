@@ -49,7 +49,8 @@ def test_the_writer_and_the_table_name_the_same_sentence() -> None:
 def test_the_re_baseline_park_offers_retry_skip_epic_and_cancel() -> None:
     run = a_run(REBASELINE_FAILED)
 
-    assert run_admitted_signals(run, "shell") == ("retry", "skip_epic", "cancel")
+    # story 1 (2026-09-25): skip_step admitted on every park kind.
+    assert run_admitted_signals(run, "shell") == ("retry", "skip_step", "skip_epic", "cancel")
 
 
 def test_an_ordinary_verify_failure_still_offers_skip_story() -> None:
@@ -57,7 +58,14 @@ def test_an_ordinary_verify_failure_still_offers_skip_story() -> None:
     untouched for every other way that park is reached."""
     run = a_run("verify failed 2/2")
 
-    assert run_admitted_signals(run, "shell") == ("retry", "skip_story", "skip_epic", "cancel")
+    # story 1 (2026-09-25): skip_step admitted on every park kind.
+    assert run_admitted_signals(run, "shell") == (
+        "retry",
+        "skip_step",
+        "skip_story",
+        "skip_epic",
+        "cancel",
+    )
 
 
 def test_the_prd_table_itself_is_not_narrowed() -> None:

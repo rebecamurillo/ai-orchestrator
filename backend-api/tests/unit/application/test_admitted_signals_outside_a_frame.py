@@ -40,8 +40,10 @@ def a_stop(path: str, template: str = "repo-init") -> tuple[str, ...]:
 # ── the stop with no frame around it ────────────────────────────────────────
 
 
-def test_a_checkpoint_outside_every_loop_offers_continue_and_cancel_only() -> None:
-    assert a_stop(CONTEXT_REVIEW) == ("continue", "cancel")
+def test_a_checkpoint_outside_every_loop_offers_continue_skip_step_and_cancel() -> None:
+    # story 1 (2026-09-25): skip_step is admitted on every park kind including checkpoint —
+    # no frame predicate narrows it, so it appears even when there is no story or epic to skip.
+    assert a_stop(CONTEXT_REVIEW) == ("continue", "skip_step", "cancel")
 
 
 def test_it_offers_no_skip_story_because_there_is_no_story_to_skip() -> None:

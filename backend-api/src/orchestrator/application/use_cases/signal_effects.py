@@ -178,6 +178,21 @@ def _retry(
     return Effect()
 
 
+def _skip_step(
+    ports: WriterPorts, _run: Run, _rows: Sequence[StepRun], park_row: StepRun | None, _s: Signal
+) -> Effect:
+    """Skip the one parked row and resume the Run at the next unfinished row (AD-13, story 1).
+
+    `validate`'s `row_statuses` check handles both refusal cases before this function
+    is reached: `dependency` parks have `park_row=None`, and any row whose status is
+    outside `{blocked, checkpoint, error}` is refused with a 409 — so `_parked` can
+    assert safely here.
+    """
+    row = _parked(park_row)
+    _skip(ports, row)
+    return Effect(finished=not resume_from(ports, row))
+
+
 def _skip_story(
     ports: WriterPorts, _run: Run, rows: Sequence[StepRun], park_row: StepRun | None, _s: Signal
 ) -> Effect:
@@ -333,6 +348,7 @@ EFFECTS: dict[SignalKind, EffectFn] = {
     "answer": _answer,
     "continue": _continue,
     "retry": _retry,
+    "skip_step": _skip_step,
     "skip_story": _skip_story,
     "skip_epic": _skip_epic,
     "budget_raise": _budget_raise,

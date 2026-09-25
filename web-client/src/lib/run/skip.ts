@@ -67,6 +67,24 @@ export function offersSkipStory(
   );
 }
 
+// ── skip_step (story 1, 2026-09-25) ──────────────────────────────────────────
+
+/** The confirm button's label for *Skip step* (story 1, AD-13 ratified 2026-09-25). */
+export const SKIP_STEP_LABEL = 'Skip step';
+
+/** The inline confirm line, verbatim (NFR-8): names the mechanism — marks the row skipped
+ * and resumes at the next row. `path` is the parked row's own path, or `null` when the
+ * detail does not resolve one (the confirm still states what will happen). */
+export function skipStepConfirmLine(path: string | null): string {
+  return `skip ${path ?? 'this step'}: marks it skipped and continues at the next row`;
+}
+
+/** Whether this stop shows *Skip step*: `admitted_signals` alone decides — `skip_step` is
+ * valid on any park kind and any admitted stop, so there is no stop-kind filter here. */
+export function offersSkipStep(admitted: readonly SignalKind[]): boolean {
+  return admitted.includes('skip_step');
+}
+
 /** The Story ids a `done` Run gave up on, or `[]` — what the compare-link line names beside
  * the URL (`{url} · skipped: {ids}`, FR-11). */
 export function skippedIds(detail: RunDetailOut): string[] {

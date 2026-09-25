@@ -45,11 +45,14 @@ import { signalLabel, type SignalKind } from '../../lib/run/signals';
 import {
   KEEP_LABEL,
   SKIP_EPIC_LABEL,
+  SKIP_STEP_LABEL,
   SKIP_STORY_LABEL,
   currentEpicNumber,
   offersSkipEpic,
+  offersSkipStep,
   offersSkipStory,
   skipEpicConfirmLine,
+  skipStepConfirmLine,
   skipStoryConfirmLine,
 } from '../../lib/run/skip';
 import { terminalBlock } from '../../lib/run/terminal';
@@ -138,11 +141,17 @@ export default function StopBody({
   // admitted on (`blockedSignals`/`checkpointSignals`, 5.10/6.2) — this appends it, as a
   // confirm, on the remaining five (`verify_failed`, `timeout`, `protected_path`,
   // `internal`, `push_rejected`), the same sibling-filter pattern `offersSkipStory` uses.
-  const signals =
+  const withSkipEpic =
     offersSkipEpic(detail, kind, detail.admitted_signals) && !withSkipStory.includes('skip_epic')
       ? [...withSkipStory, 'skip_epic' as SignalKind]
       : withSkipStory;
   const skipEpicLine = skipEpicConfirmLine(currentEpicNumber(detail), kind === 'push_rejected');
+  // *Skip step* (story 1, AD-13 ratified 2026-09-25): appended whenever `admitted_signals`
+  // carries it — no stop-kind filter, the server decides. Comes last in the button row.
+  const signals =
+    offersSkipStep(detail.admitted_signals) && !withSkipEpic.includes('skip_step')
+      ? [...withSkipEpic, 'skip_step' as SignalKind]
+      : withSkipEpic;
   // The Accept *is* `continue` on this stop, and it posts a payload — so the plain button
   // for that kind steps aside here, exactly as `skip_story`'s does for its confirm. Every
   // other stop's `continue` button is untouched (`plan_stale`, `checkpoint`).
@@ -158,6 +167,8 @@ export default function StopBody({
   const canCancel = detail.admitted_signals.includes('cancel');
   const tail = logTail(detail);
   const path = currentStepPath(detail);
+  // `path` must be declared before `skipStepLine` — the confirm line names the parked row.
+  const skipStepLine = skipStepConfirmLine(path);
   const row = stepAt(detail.steps, path);
   const files = kind === 'misconfigured' ? misconfiguredFiles(detail.alert?.reason) : [];
   // FR-21's second path; `null` hides the section. *Release* lives inside the block rather
@@ -283,6 +294,17 @@ export default function StopBody({
                 label={SKIP_EPIC_LABEL}
                 line={skipEpicLine}
                 confirmLabel={SKIP_EPIC_LABEL}
+                keepLabel={KEEP_LABEL}
+                disabled={posting !== null}
+                onConfirm={() => onSignal(s)}
+              />
+            ) : s === 'skip_step' ? (
+              <ConfirmAction
+                key={s}
+                kind={s}
+                label={SKIP_STEP_LABEL}
+                line={skipStepLine}
+                confirmLabel={SKIP_STEP_LABEL}
                 keepLabel={KEEP_LABEL}
                 disabled={posting !== null}
                 onConfirm={() => onSignal(s)}
