@@ -87,6 +87,24 @@ Signal kinds: `answer` (`{text}`), `continue` (`{files[]}` for protected-path ac
 `terminal_resume` (human-in-terminal flow). Admission depends on status and `park_kind`
 — always read `admitted_signals` first; a non-admitted kind answers 409.
 
+## Initiatives (multi-repo fan-in)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/api/v1/initiatives/preflight` | Every refusal line, the repo table, and the DAG a dispatch would build |
+| POST | `/api/v1/initiatives` | Dispatch → 201: one epic Run per entry + merge Runs + one go-live Run, saved in topological order, wave 0 enqueued |
+| GET | `/api/v1/initiatives/{slug}` | The initiative's cross-repository DAG and member Runs |
+| POST | `/api/v1/initiatives/{slug}/signals` | `{kind: "cancel"}` — cancel every non-terminal member, dependents first |
+
+Body (preflight and dispatch, identical): required `project_id`, `repository_id` (the
+**hub** — the repo whose `{initiative_folder}/epics.yaml` describes the work),
+`base_branch`, `initiative_folder`; optional `epic_template` / `merge_template` /
+`golive_template` (default `epic` / `merge` / `golive`), `harness`, `model`,
+`budget_usd_per_epic` (merge and go-live Runs get none). The slug is the initiative
+folder's basename. The `epics.yaml` this flow reads needs `repo` per entry — see
+`spec-folder.md`. Note: the hub-style flavor (`initiative-hub`) is **not** this API — it
+is one ordinary `POST /runs`.
+
 ## Fleet and harnesses
 
 | Method | Path | Purpose |
