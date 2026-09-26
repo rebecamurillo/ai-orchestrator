@@ -121,7 +121,9 @@ class RunSummaryOut(BaseModel):
     initiative_role: InitiativeRole | None = None
 
     @classmethod
-    def of(cls, run: Run, *, park_row_kind: str | None = None) -> RunSummaryOut:
+    def of(
+        cls, run: Run, *, park_row_kind: str | None = None, park_row_status: str | None = None
+    ) -> RunSummaryOut:
         return cls(
             id=run.id,
             status=run.status,
@@ -134,7 +136,9 @@ class RunSummaryOut(BaseModel):
             spend_usd=run.spend_usd,
             plan_ref=run.plan_ref,
             created_at=run.created_at,
-            admitted_signals=run_admitted_signals(run, park_row_kind),
+            admitted_signals=run_admitted_signals(
+                run, park_row_kind, park_row_status=park_row_status
+            ),
             initiative=run.initiative,
             initiative_role=run.initiative_role,
         )

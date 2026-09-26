@@ -376,6 +376,20 @@ def test_admitted_signals_matches_the_park(harness: Harness) -> None:
     assert "retry" in detail.admitted_signals
 
 
+def test_a_budget_park_on_a_finished_row_offers_no_skip_step(harness: Harness) -> None:
+    """The parked row's `status` is threaded beside its `kind` (Operator, 2026-09-26), so the
+    Run detail offers only what `validate` would admit: a `budget` park is stamped onto the
+    row that has just ended `done`, and `skip_step` needs `blocked`, `checkpoint` or `error`.
+    """
+    run = a_run(status="needs_you", park_kind="budget", park_path="build")
+    harness.runs.add(run)
+    harness.steps.add_many([a_row(run, "build", seq=1, status="done", kind="agent")])
+
+    detail = run_detail(harness.ports(), run.id)
+
+    assert detail.admitted_signals == ("budget_raise", "cancel")
+
+
 def test_a_done_run_with_a_skipped_story_reports_it_and_the_links(harness: Harness) -> None:
     run = a_run(
         template_name="epic",

@@ -289,8 +289,9 @@ def get_run(ports: RunReadPorts, run_id: UUID) -> Run:
     return run
 
 
-def park_row_kind_of(ports: RunReadPorts, run: Run) -> str | None:
-    """The parked row's `kind`, for `RunSummaryOut.of(run, park_row_kind=...)` (4.9).
+def park_row_of(ports: RunReadPorts, run: Run) -> StepRun | None:
+    """The row this Run is parked on, for `RunSummaryOut.of`'s two row arguments (4.9, and
+    the `skip_step` offer's own `park_row_status` — Operator, 2026-09-26).
 
     `None` whenever there is nothing useful to look up: the Run is not `needs_you`, no
     `StepRunRepository` was wired (4.4's own read ports), or — a stored Run should never
@@ -298,7 +299,13 @@ def park_row_kind_of(ports: RunReadPorts, run: Run) -> str | None:
     """
     if run.status != "needs_you" or ports.steps is None:
         return None
-    row = row_at(ports.steps.list_for_run(run.id), run.park_path)
+    return row_at(ports.steps.list_for_run(run.id), run.park_path)
+
+
+def park_row_kind_of(ports: RunReadPorts, run: Run) -> str | None:
+    """The parked row's `kind` alone — `park_row_of`'s answer read for the one field 4.9
+    named, kept for the callers that ask only that."""
+    row = park_row_of(ports, run)
     return row.kind if row is not None else None
 
 

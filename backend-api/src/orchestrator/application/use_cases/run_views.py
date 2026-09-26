@@ -195,7 +195,11 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
     project = ports.projects.get(run.project_id)
     repository = ports.repositories.get(run.repository_id)
     park_row = row_at(rows, run.park_path)
-    admitted = run_admitted_signals(run, park_row.kind if park_row is not None else None)
+    admitted = run_admitted_signals(
+        run,
+        park_row.kind if park_row is not None else None,
+        park_row_status=park_row.status if park_row is not None else None,
+    )
     park_attempts = attempts_by_row.get(park_row.id, ()) if park_row is not None else ()
     # Read once and shared: the detail publishes the whole gate record, and `_alert` needs
     # the park's own entry off the same list (6.6) rather than a second query for it.

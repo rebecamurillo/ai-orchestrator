@@ -153,9 +153,24 @@ def over_budget(
         api.post(f"{RUNS}/{run_id}/signals", json={"kind": "cancel"})
 
 
-def test_the_budget_stop_offers_only_a_raise_and_a_cancel(over_budget: dict[str, Any]) -> None:
-    """PRD §4.6's own row for this park: no skips, because none is admitted on it."""
-    assert over_budget["detail"]["admitted_signals"] == ["budget_raise", "cancel"]
+def test_the_budget_stop_offers_a_skip_step_beside_the_raise_and_the_cancel(
+    over_budget: dict[str, Any],
+) -> None:
+    """PRD §4.6's row for this park as story 1 of step-handling revised it (SPEC.md: "Skip is
+    admitted on every park kind", operator decision 2026-09-25): `skip_story` and `skip_epic`
+    stay refused on `budget`, and `skip_step` is admitted on all twelve — the Operator decides
+    whether a row is worth skipping, the table does not decide for them.
+
+    What makes it admitted *here* is the row: this park lands on story 1's own `blocked` build
+    row (the fixture's first dispatch), and `blocked` is one of the three statuses the step
+    machine has a `skip` edge from — so the offer and `validate` agree, which is what the
+    assertion below and `test_the_budget_stop_over_a_finished_row_offers_no_skip_step` pin from
+    the two sides. This test previously asserted `["budget_raise", "cancel"]` and pinned the
+    pre-story-1 set exactly; revised 2026-09-26 on the Operator's word, with the row status it
+    depends on now asserted beside it.
+    """
+    assert over_budget["detail"]["admitted_signals"] == ["skip_step", "budget_raise", "cancel"]
+    assert step_status(over_budget["detail"], STORY_1_BUILD) == "blocked"
 
 
 def test_the_banner_names_the_spend_against_the_budget(over_budget: dict[str, Any]) -> None:
@@ -249,6 +264,27 @@ def test_the_second_park_kept_the_status_the_row_routed_to(
     """FR-17: the budget park sits *on top of* the route, it does not replace it."""
     assert step_status(over_budget_on_a_done_row, STORY_1_BUILD) == "done"
     assert over_budget_on_a_done_row["run"]["status"] == "needs_you"
+
+
+def test_the_budget_stop_over_a_finished_row_offers_no_skip_step(
+    api: httpx.Client, over_budget: dict[str, Any], over_budget_on_a_done_row: dict[str, Any]
+) -> None:
+    """The other half of story 1's rule, over the wire (Operator, 2026-09-26). `skip_step` is
+    admitted on every park *kind*, but `validate` admits it only from a row that is `blocked`,
+    `checkpoint` or `error` — and this is the stop story 1's own brief names as one of the two
+    Skip step cannot reach: "a budget park taken after a row ended `done`". The offer reads the
+    parked row's status for exactly this reason, so what the stop advertises is what a POST to
+    it is allowed to do — asserted here from both sides, the second being the refusal, which
+    changes no state.
+    """
+    assert over_budget_on_a_done_row["admitted_signals"] == ["budget_raise", "cancel"]
+
+    refused = api.post(
+        f"{RUNS}/{over_budget['id']}/signals",
+        json={"kind": "skip_step"},
+    )
+
+    assert refused.status_code == HTTP_CONFLICT, refused.text
 
 
 def test_raising_over_a_done_row_resumes_the_walk_at_the_next_row(

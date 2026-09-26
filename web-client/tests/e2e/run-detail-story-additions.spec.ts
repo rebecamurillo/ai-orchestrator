@@ -269,7 +269,18 @@ test.describe('/workflows/[id] — 5.10 additions', () => {
       'two matches, refusing to guess',
     );
     await expect(page.getByTestId('wf-signal-retry')).toBeVisible();
-    await expect(page.locator('textarea')).toHaveCount(0);
+    // Story 4 of step-handling (2026-09-25) gave Retry its own instruction box, so a stop that
+    // admits `retry` — this one does — now renders exactly one textarea: the instruction.
+    // `expect(page.locator('textarea')).toHaveCount(0)` stood here from 5.10, written before
+    // that box existed, and counted every textarea on the page to mean "no Answer box"
+    // (declared behaviour change, Operator 2026-09-26). What it pinned is now pinned directly
+    // — the Answer box is absent by each of its own test ids — and the textarea that *is*
+    // present is pinned to the retry instruction rather than merely tolerated.
+    await expect(page.getByTestId('wf-answer')).toHaveCount(0);
+    await expect(page.getByTestId('wf-answer-modes')).toHaveCount(0);
+    await expect(page.getByTestId('wf-signal-answer')).toHaveCount(0);
+    await expect(page.getByTestId('wf-retry-instruction')).toHaveCount(1);
+    await expect(page.locator('textarea')).toHaveCount(1);
     await expect(page.getByTestId('wf-question')).toHaveCount(0);
 
     await page.screenshot({

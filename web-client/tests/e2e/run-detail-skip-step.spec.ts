@@ -91,7 +91,23 @@ function detail(overrides: Record<string, unknown> = {}): Record<string, unknown
       provisional: false,
       trace_url: null,
     },
-    gate_record: [],
+    // The park's own gate record, as `_alert` publishes it for every stop: `currentStepPath`
+    // (`src/lib/run/detail.ts`) reads the parked row's path off the last record matching the
+    // alert's `park_kind`, and the confirm line names that path. A stop with an empty
+    // `gate_record` is a state no parked Run can be in — `record()` writes the entry in the
+    // same transaction as the park (AD-8) — so the fixture carries it (fixture defect fixed
+    // 2026-09-26; the assertion it made possible is unchanged and now reachable).
+    gate_record: [
+      {
+        id: 'g1',
+        at: '2026-09-07T09:11:00Z',
+        path: BUILD,
+        event: 'verify_failed',
+        actor: 'machine',
+        text: 'exit 1',
+        attempt_n: 1,
+      },
+    ],
     admitted_signals: ['retry', 'skip_step', 'skip_story', 'skip_epic', 'cancel'],
     reply_available: false,
     resume_unavailable_reason: null,

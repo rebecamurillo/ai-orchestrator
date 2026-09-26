@@ -78,6 +78,12 @@ __all__ = [
 #: the Run's own `terminal_session` is what makes it true.
 TERMINAL_SESSION_SIGNALS: tuple[SignalKind, ...] = ("cancel", "terminal_release")
 
+#: `validate`'s own `row_statuses` column for `skip_step`, read off the table once so the
+#: offer and the refusal cannot drift (Operator, 2026-09-26): the three statuses the step
+#: machine has a `skip` edge from. `or frozenset()` is mypy's due on `Rule.row_statuses`
+#: being optional; the table sets it, and `test_signal_rules.py` is what holds it set.
+SKIP_STEP_ROW_STATUSES: frozenset[str] = VALID["skip_step"].row_statuses or frozenset()
+
 
 def validate(run: Run, park_row: StepRun | None, signal: Signal) -> Rule:
     """The `Rule` for this signal here, or `Conflict` (409) naming why it does not apply."""
@@ -119,7 +125,9 @@ def row_at(rows: Sequence[StepRun], path: str | None) -> StepRun | None:
     return next((row for row in rows if row.path == path), None)
 
 
-def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKind, ...]:
+def run_admitted_signals(
+    run: Run, park_row_kind: str | None, *, park_row_status: str | None = None
+) -> tuple[SignalKind, ...]:
     """One Run's own *Signals admitted*, for the read model 4.9 adds to `RunSummaryOut`.
 
     `admitted_signals(park_kind, row_kind)` answers "what does this stop admit"; a Run
@@ -127,7 +135,17 @@ def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKin
     which also has to answer for a Run that is not parked at all: `[cancel]` while it runs
     (AD-13: `cancel` applies to every non-terminal status), and nothing once it is terminal.
     `park_row_kind` is the parked row's `kind`, or `None` when the caller has not looked it
-    up (`RunSummaryOut`'s list view does not, and answers conservatively without it).
+    up (`RunSummaryOut`'s list view does not, and answers conservatively without it), and
+    `park_row_status` is that row's `status` on the same terms.
+
+    **Skip step needs a row the step machine can skip** (Operator, 2026-09-26). `VALID`
+    gives `skip_step` a `row_statuses` column and `validate` enforces it, but a park kind
+    and a row kind cannot see a status: without `park_row_status` this would offer *Skip
+    step* at a stop taken after its row ended — a `budget` park, which `budget_second_record`
+    stamps onto the row that has just finished — and the POST would come back 409. The
+    step-handling spec names that stop as one of the two Skip step cannot reach (story 1),
+    so the offer is narrowed to `validate`'s own column wherever the caller looked the row
+    up. Where it did not, the coarse answer above stands: no control is rendered off it.
 
     **One stop is narrower than its park kind** (6.4, FR-20): a `verify_failed` park whose
     reason is `REBASELINE_FAILED` is the re-baseline of a Story the Operator has *already*
@@ -157,12 +175,16 @@ def run_admitted_signals(run: Run, park_row_kind: str | None) -> tuple[SignalKin
     offered = admitted_signals(run.park_kind, park_row_kind or "")
     if run.park_reason == REBASELINE_FAILED:
         offered = tuple(kind for kind in offered if kind != "skip_story")
-    return _skippable(run, offered)
+    return _skippable(run, offered, park_row_status)
 
 
-def _skippable(run: Run, offered: tuple[SignalKind, ...]) -> tuple[SignalKind, ...]:
+def _skippable(
+    run: Run, offered: tuple[SignalKind, ...], park_row_status: str | None
+) -> tuple[SignalKind, ...]:
     path = run.park_path
     dropped: set[SignalKind] = set()
+    if park_row_status is not None and park_row_status not in SKIP_STEP_ROW_STATUSES:
+        dropped.add("skip_step")
     if path is None or story_frame(path) is None:
         dropped.add("skip_story")
     if run.template_name != EPIC_TEMPLATE and (path is None or epic_frame(path) is None):
