@@ -71,6 +71,10 @@ COUNTER_DIRECTORY = "fake-harness"
 NO_STORY = "-no-story-"
 #: Enough of a digest to separate two worktrees, short enough to read in a directory listing.
 DIGEST_LENGTH = 16
+#: Where the last sentence-bearing dispatch for a cwd is remembered — `resume`'s own fallback.
+LAST_DISPATCH_FILE = "-last-dispatch-"
+#: `remember`'s file is exactly two lines — spec_folder, then story_id.
+_DISPATCH_LINES = 2
 
 ENCODING = "utf-8"
 
@@ -183,6 +187,41 @@ def next_attempt(work_dir: Path, cwd: Path, story_id: str) -> int:
     except OSError:
         return following
     return following
+
+
+def remember(work_dir: Path, cwd: Path, dispatch: Dispatch) -> None:
+    """Record `dispatch` as the last one a sentence in this cwd actually named.
+
+    `resume`'s own message never carries the sentence (`agent.py::_session_message` sends
+    the operator's own words alone, which is correct for a real harness's session — the
+    context already lives server-side), so `recall` is the only way this harness's *own*
+    stand-in for that context — parsed out of the text, since it keeps no real session —
+    can still find "the same story" a session-mode resume continues. Silent on a write
+    failure, the same tolerance `next_attempt` keeps and for the same reason: a scenario
+    file is test input, and losing the memory only costs the *next* resume its fallback.
+    """
+    try:
+        path = _last_dispatch_path(work_dir, cwd)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"{dispatch.spec_folder}\n{dispatch.story_id}", encoding=ENCODING)
+    except OSError:
+        return
+
+
+def recall(work_dir: Path, cwd: Path) -> Dispatch:
+    """The last sentence-bearing dispatch remembered for this cwd, or the empty one."""
+    try:
+        lines = _last_dispatch_path(work_dir, cwd).read_text(encoding=ENCODING).splitlines()
+    except OSError:
+        return Dispatch()
+    if len(lines) != _DISPATCH_LINES:
+        return Dispatch()
+    return Dispatch(spec_folder=lines[0], story_id=lines[1])
+
+
+def _last_dispatch_path(work_dir: Path, cwd: Path) -> Path:
+    digest = hashlib.sha256(str(cwd).encode(ENCODING)).hexdigest()[:DIGEST_LENGTH]
+    return work_dir / COUNTER_DIRECTORY / digest / LAST_DISPATCH_FILE
 
 
 def counter_path(work_dir: Path, cwd: Path, story_id: str) -> Path:

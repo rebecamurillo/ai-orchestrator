@@ -37,13 +37,12 @@ declares no `workdir` reaches exactly the calls it always did.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 import structlog
 
-from orchestrator.application.rules.protected_paths import uncommitted
 from orchestrator.application.steps import (
     agent_answer,
     agent_prompt,
@@ -58,7 +57,6 @@ from orchestrator.application.steps.context import (
     log_path,
     operator_retry,
     redispatched,
-    require_cwd,
     require_env,
     require_harness_env,
     require_harnesses,
@@ -106,7 +104,7 @@ RETRY_PROMPT = "{retry} {dispatch}"
 #: `agent_prompt.py` both (H4, 2026-09-23).
 WIP_MESSAGE = agent_workdir.WIP_MESSAGE
 WHOLE_TREE = agent_workdir.WHOLE_TREE
-PREPARE_MESSAGE = "orchestrator: prepare story {id} attempt {n}"
+PREPARE_MESSAGE = agent_answer.PREPARE_MESSAGE
 CONTEXT_FILE = "project-context.md"
 CONTEXT_HEADING = "## Context files"
 CONTEXT_MISSING = "context path missing: {path}"
@@ -157,7 +155,11 @@ class AgentExecutor:
         agent_workdir.wip_commit(ctx)
         mode = ctx.resume_signal.payload.get("mode") if ctx.resume_signal else None
         workflow: str | None = None
-        if mode != "session":
+        if mode == "session":
+            # no fresh context for the agent — the live session has it — but FR-18's
+            # archive is the orchestrator's own bookkeeping and must still land first.
+            agent_answer.commit_targets(ctx, agent_answer.archive_with_answer(ctx))
+        else:
             _prepare_writes(ctx)
             # before `_start`, so a renderer that failed parks without leaving an attempt
             # open; the snapshot itself is gitignored and reaches neither commit nor sha.
@@ -210,27 +212,11 @@ def _orphan_control(ctx: StepContext) -> None:
 
 
 def _prepare_writes(ctx: StepContext) -> None:
-    """Orchestrator writes + prepare commit (skipped for session-mode delivery)."""
+    """Orchestrator writes + prepare commit (the archive alone in session mode — `execute`)."""
     moved = (*agent_answer.archive_with_answer(ctx), *agent_tail.archive_ambiguous(ctx))
     written = (_context_document(ctx), _verify_failure(ctx))
     targets = [*moved, *(target for target in written if target is not None)]
-    if not targets:
-        return
-    worktree = require_cwd(ctx)
-    git = ctx.ports.git
-    for target in targets:
-        git.stage(worktree, target)
-    if not _staged(git.status(worktree), targets):
-        return
-    git.commit(worktree, PREPARE_MESSAGE.format(id=_text(ctx, STORY_ID_KEY), n=ctx.attempt.n))
-
-
-def _staged(status: str, targets: Sequence[str]) -> bool:
-    """Whether staging `targets` reached the index — a harness's own leftover work can dirty
-    a path this row never touched, and reading *that* as "something to commit" attempted a
-    commit of nothing whenever a target's `stage` was a no-op (`GitError`: nothing added)."""
-    names = frozenset(targets)
-    return any(change.path in names for change in uncommitted(status))
+    agent_answer.commit_targets(ctx, targets)
 
 
 def _verify_failure(ctx: StepContext) -> str | None:
@@ -391,6 +377,16 @@ def _text(ctx: StepContext, key: str) -> str:
 
 
 def _session_message(ctx: StepContext) -> str:
+    """The session's next turn: the Operator's own words, except an Answer, which still
+    owes FR-18's clause verbatim — `resolved_signal` reads its condition off the archive
+    `execute` makes before this prompt is built, session mode included."""
+    resolved = agent_answer.resolved_signal(ctx)
+    if resolved is not None and resolved.event == agent_answer.ANSWER_EVENT:
+        payload = resolved.payload
+        return agent_prompt.ANSWER.format(
+            condition=payload.get(agent_answer.CONDITION_KEY, ""),
+            answer=payload.get(agent_answer.ANSWER_KEY, ""),
+        ).strip()
     if ctx.resume_signal is not None and (t := str(ctx.resume_signal.payload.get("text", ""))):
         return t
     retry = agent_tail.retry_of(ctx)

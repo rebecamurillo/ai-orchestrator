@@ -1,41 +1,61 @@
 """`mode="session"` on Answer and Retry: the resume-without-re-plan path (story 3-3).
 
-Two load-bearing claims about Answer mode=session:
-1. `_prepare_writes` is skipped — no archive, no prepare commit, no context-document write.
-2. `agent_tail.finish` runs in full — `mark_finished` is called, so the attempt is closed.
+Two load-bearing claims about Answer mode=session (revised 2026-09-26 — the QA gate's
+`make e2e` caught session mode silently dropping both of FR-18's obligations on every
+Answer redispatch, real harnesses included, not only the `fake` one it happened to surface
+on; Operator-authorized fix, same pass):
+1. The archive still runs, and still lands in the prepare commit — only the
+   context-document and verify-failure writes are trimmed, because those exist for a
+   fresh dispatch's sake and a live session already has that context.
+2. The dispatch message still carries FR-18's Answer clause verbatim, its condition read
+   back from that same archive — `agent_tail.finish` runs in full afterwards exactly as
+   before, `mark_finished` included.
 
 Two load-bearing claims about operator mode overriding the template:
 3. `mode="restart"` on a Retry overrides `template.retry.resume_session=True` → fresh dispatch.
 4. `mode="session"` on a Retry forces resume even when `template.retry.resume_session=False`.
 
-The first two are asserted through what the `FakeGit` and `FakeAttemptRepository` call logs
-record; the latter two through whether `FakeHarness.called("resume")` is non-empty.
+The first two are asserted through what the `FakeGit`, `FakeHarness` and
+`FakeAttemptRepository` call logs record; the latter two through whether
+`FakeHarness.called("resume")` is non-empty.
 """
 
 from __future__ import annotations
 
+from orchestrator.application.steps import agent_answer, agent_prompt
 from orchestrator.application.steps.agent import AgentExecutor
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.values import StepResult
 from tests.unit.application.steps.agent_fixtures import (
     HEAD_SHA,
+    STORY_ID,
     World,
     a_gate_record,
     an_agent_row,
     an_attempt,
 )
 from tests.unit.application.steps.agent_tail_fixtures import (
+    ANSWERS,
+    DONE_STORY,
     END_SHA,
     RETRY_PROMPT,
+    STORY_PATH,
+    a_story,
     a_tail_world,
     contracted,
 )
 from tests.unit.fakes.git import FakeGit
+from tests.unit.fakes.harness import FakeHarness
 
 #: A session id no real harness would produce, so an assertion on it cannot pass by coincidence.
 PREV_SESSION = "s-prev-3-3"
 #: The answer text the operator sends via mode=session.
 ANSWER_TEXT = "use the psycopg adapter"
+#: The `Blocking condition:` line the archived file carries, and the Answer clause quotes back.
+CONDITION = "missing driver"
+#: `agent_answer.archive_path`'s own formula, restated for the `FakeGit` status script below
+#: — it has to name the archived path before `world.ctx` exists to build one from it.
+ARCHIVED_PATH = f"{ANSWERS}/{STORY_ID}-attempt-1.md"
 
 
 def run(world: World) -> StepResult:
@@ -56,39 +76,49 @@ def _a_previous(**over: object) -> Attempt:
 
 
 def _session_answer_world(**over: object) -> World:
-    """A world where the operator chose mode=session on an Answer signal."""
+    """A world where the operator chose mode=session on an Answer signal.
+
+    `story` seeds the *blocked* file the archive moves away before the resumed dispatch —
+    what a real Answer always finds at that path — and `on_resume` writes the terminal one
+    back, standing in for what the resumed session's own work would leave, so
+    `agent_tail.finish` still has a Story file to route on afterwards.
+    """
     resume = a_gate_record(an_agent_row(), "answer", {"mode": "session", "text": ANSWER_TEXT})
-    return a_tail_world(
+    harness = FakeHarness()
+    world = a_tail_world(
         previous=_a_previous(),
         resume=resume,
-        git=FakeGit(status=["", ""], head_sha=[HEAD_SHA, END_SHA]),
+        story=a_story(status="blocked", condition=CONDITION),
+        harness=harness,
+        git=FakeGit(status=["", f"A  {ARCHIVED_PATH}"], head_sha=[HEAD_SHA, END_SHA]),
         **over,  # type: ignore[arg-type]
     )
+    harness.on_resume = lambda: world.workspace.write(STORY_PATH, DONE_STORY)
+    return world
 
 
 # ── 1: _prepare_writes is skipped for mode=session Answer ────────────────────
 
 
-def test_session_answer_skips_archive_and_prepare_commit() -> None:
-    """`_prepare_writes` is not called: no staging or prepare-commit for the archive.
-
-    The WIP commit guard runs (clean tree → no commit), and the session mode guard skips
-    `_prepare_writes` entirely, so neither `git.stage` nor the prepare `git.commit` appear
-    in the call log.
-    """
+def test_session_answer_still_archives_and_commits_before_dispatch() -> None:
+    """FR-18's archive still runs and still lands in the prepare commit, even though the
+    context-document and verify-failure writes `_prepare_writes` also makes are trimmed:
+    the archive is the orchestrator's own bookkeeping, not context for the agent, and the
+    Answer clause's condition is read back out of it (`agent_answer`'s own module docstring)."""
     world = _session_answer_world()
 
     run(world)
 
-    # No staging for archive (prepare_writes skipped)
-    assert world.git.called("stage") == []
-    # No prepare commit (prepare_writes skipped)
+    staged = {path for _, path in world.git.called("stage")}
+    assert staged == {STORY_PATH, agent_answer.archive_path(world.ctx)}
     prepare_commits = [msg for _, msg in world.git.called("commit") if "prepare" in msg]
-    assert prepare_commits == []
+    assert len(prepare_commits) == 1
 
 
-def test_session_answer_calls_harness_resume_with_inherited_session_and_answer_text() -> None:
-    """Harness.resume is called with the previous session_id and the operator's answer text."""
+def test_session_answer_resume_carries_inherited_session_and_the_answer_clause() -> None:
+    """`Harness.resume` inherits the previous session_id, and its message still carries
+    FR-18's Answer clause verbatim — not the operator's bare text — quoting back the
+    condition the archived file recorded."""
     world = _session_answer_world()
 
     run(world)
@@ -96,7 +126,8 @@ def test_session_answer_calls_harness_resume_with_inherited_session_and_answer_t
     resumed = world.harness.called("resume")
     assert len(resumed) == 1
     assert resumed[0]["session_id"] == PREV_SESSION
-    assert resumed[0]["message"] == ANSWER_TEXT
+    expected = agent_prompt.ANSWER.format(condition=CONDITION, answer=ANSWER_TEXT).strip()
+    assert resumed[0]["message"] == expected
 
 
 # ── 2: agent_tail.finish runs for mode=session Answer ────────────────────────

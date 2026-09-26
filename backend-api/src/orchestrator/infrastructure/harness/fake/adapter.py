@@ -179,6 +179,7 @@ class FakeHarness:
                 session_id=session_id,
                 timeout_min=timeout_min,
                 log_path=log_path,
+                recall_ok=True,
             )
         )
 
@@ -225,9 +226,19 @@ class FakeHarness:
         session_id: str,
         timeout_min: float,
         log_path: Path,
+        recall_ok: bool = False,
     ) -> HarnessHandle:
-        """Read the next scenario for this story, write what it writes, start what it runs."""
+        """Read the next scenario for this story, write what it writes, start what it runs.
+
+        `recall_ok` is `resume`'s alone: a fresh `start` (including a "no story" row like
+        `spec-gate` or `retro`, whose prompt never carries the sentence either) must read
+        exactly what its own prompt names, never a different row's remembered story.
+        """
         dispatch = scenarios.dispatch_of(prompt)
+        if dispatch.story_id or dispatch.spec_folder:
+            scenarios.remember(self.settings.work_dir, cwd, dispatch)
+        elif recall_ok:
+            dispatch = scenarios.recall(self.settings.work_dir, cwd)
         which = scenarios.next_attempt(self.settings.work_dir, cwd, dispatch.story_id)
         scenario = scenarios.load(scenarios.scenario_path(cwd, dispatch.story_id, which))
         log_path.parent.mkdir(parents=True, exist_ok=True)

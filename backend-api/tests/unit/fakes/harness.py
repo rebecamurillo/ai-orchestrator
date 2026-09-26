@@ -57,6 +57,7 @@ class FakeHarness:
         results: list[HarnessResult] | None = None,
         pgid: int = DEFAULT_PGID,
         on_wait: Callable[[], None] | None = None,
+        on_resume: Callable[[], None] | None = None,
         probe_results: list[ProbeResult] | None = None,
         skills_dir: Path | None = None,
     ) -> None:
@@ -68,6 +69,11 @@ class FakeHarness:
         self.results = list(results or [])
         self.pgid = pgid
         self.on_wait = on_wait
+        #: `resume`'s own `on_wait`: a session-mode dispatch never calls `wait`, so a test
+        #: that has to simulate what the resumed agent itself would have written back
+        #: (`agent_tail.finish` routes on a Story file no fake process here can produce)
+        #: needs a hook on `resume` directly, run before its own call is recorded.
+        self.on_resume = on_resume
         self.calls: list[dict[str, Any]] = []
         self._probe_queue: list[ProbeResult] = list(probe_results or [])
 
@@ -150,6 +156,8 @@ class FakeHarness:
         log_path: Path,
         stall_min: float | None = None,
     ) -> HarnessResult:
+        if self.on_resume is not None:
+            self.on_resume()
         self.calls.append(
             {
                 "method": "resume",

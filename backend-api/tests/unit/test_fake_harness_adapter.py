@@ -343,3 +343,45 @@ def test_the_resume_command_names_the_scenarios_rather_than_a_session_that_does_
 
     assert line.startswith("cd /work/wt/x && ")
     assert SESSION in line
+
+
+def test_a_session_mode_resume_with_no_dispatch_sentence_still_reaches_the_next_scenario(
+    harness: FakeHarness, worktree: Path, log_path: Path
+) -> None:
+    """`agent.py::_session_message` sends the operator's own words alone (story 4), never
+    the sentence `dispatch_of` parses — the fallback this proves is what still lets a
+    session-mode Answer reach the story's next scripted attempt."""
+    scripted(worktree, "story_file: { slug: notify, content: first }", name="attempt-1.yaml")
+    scripted(worktree, "story_file: { slug: notify, content: second }", name="attempt-2.yaml")
+    dispatch(harness, worktree, log_path)
+
+    result = harness.resume(
+        cwd=worktree,
+        session_id=SESSION,
+        message="Post to the project's channel only",
+        env={},
+        timeout_min=1.0,
+        log_path=log_path,
+    )
+
+    assert result.session_id == SESSION
+    story = worktree / SPEC_FOLDER / "stories" / f"{STORY_ID}-notify.md"
+    assert story.read_text() == "second"
+
+
+def test_a_fresh_no_story_dispatch_never_recalls_a_different_rows_story(
+    harness: FakeHarness, worktree: Path, log_path: Path
+) -> None:
+    """`spec-gate`, `gen-e2e` and `retro` carry no sentence either, but they are always
+    dispatched through `start`/`run`, never `resume` — `recall_ok` is `resume`'s alone, so
+    a fresh no-story `start` must still read `.fake-harness/default.yaml`, not a story a
+    prior row in this same worktree happened to remember."""
+    scripted(worktree, "story_file: { slug: notify, content: first }", name="attempt-1.yaml")
+    dispatch(harness, worktree, log_path)
+    (worktree / ".fake-harness" / "default.yaml").write_text("files: [{ path: ROOT.md }]")
+
+    dispatch(harness, worktree, log_path, prompt="run the retro skill, no story involved")
+
+    story = worktree / SPEC_FOLDER / "stories" / f"{STORY_ID}-notify.md"
+    assert (worktree / "ROOT.md").exists()
+    assert story.read_text() == "first"

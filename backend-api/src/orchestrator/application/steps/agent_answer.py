@@ -40,15 +40,17 @@ never stored — the gate record the Operator's signal wrote is append-only (AD-
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 
+from orchestrator.application.rules import protected_paths
 from orchestrator.application.steps import agent_tail
 from orchestrator.application.steps.context import (
     StepContext,
+    require_cwd,
     require_workspace,
     resolved_text,
 )
@@ -87,6 +89,9 @@ ARCHIVED_NAME = "{story_id}-attempt-{n}.md"
 #: What is appended to the archived file. `story_file.appended` supplies the blank line in
 #: front and the newline at the end, so this is the block itself.
 HUMAN_ANSWER = "## Human Answer\n\n{at} · operator\n\n{answer}"
+
+#: `commit_targets`'s prepare-commit message (moved here from `agent.py`'s 400-line cap).
+PREPARE_MESSAGE = "orchestrator: prepare story {id} attempt {n}"
 
 #: What a resume with nothing to archive logs. A first dispatch is a valid outcome here —
 #: an agent that blocked before writing its Story file leaves the glob empty — so this is an
@@ -215,3 +220,24 @@ def _story_id(ctx: StepContext) -> str:
 
 def _text(ctx: StepContext, key: str) -> str:
     return resolved_text(ctx.with_resolved, key)
+
+
+def commit_targets(ctx: StepContext, targets: Sequence[str]) -> None:
+    """Stage `targets` and make the prepare commit, or nothing for none staged."""
+    if not targets:
+        return
+    worktree = require_cwd(ctx)
+    git = ctx.ports.git
+    for target in targets:
+        git.stage(worktree, target)
+    if not _staged(git.status(worktree), targets):
+        return
+    git.commit(worktree, PREPARE_MESSAGE.format(id=_story_id(ctx), n=ctx.attempt.n))
+
+
+def _staged(status: str, targets: Sequence[str]) -> bool:
+    """Whether staging `targets` reached the index — a harness's own leftover work can dirty
+    a path this row never touched, and reading *that* as "something to commit" attempted a
+    commit of nothing whenever a target's `stage` was a no-op (`GitError`: nothing added)."""
+    names = frozenset(targets)
+    return any(change.path in names for change in protected_paths.uncommitted(status))
