@@ -81,7 +81,7 @@ from orchestrator.application.steps.context import (
 )
 from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY, STORY_ID_KEY
 from orchestrator.domain.entities.attempt import Attempt
-from orchestrator.domain.ports.git import Change
+from orchestrator.domain.ports.git import Change, GitError
 from orchestrator.domain.values import Park, StepResult
 
 #: AD-9's own sentence for a `workdir` that is not a workdir — the same words
@@ -91,6 +91,10 @@ NOT_A_SUBMODULE = "workdir {path} is not an initialized submodule"
 #: The WIP commit this row places in whichever tree it works in (AD-9). Named here because
 #: the tree it lands in is this module's question; `steps/agent.py` re-exports it.
 WIP_MESSAGE = "wip: story {id} attempt {n} (interrupted)"
+
+#: What the sweep parks with when git refuses one of its commands — `git_commit.py`'s
+#: `commit failed` one phase earlier, so the two read as the same kind of stop.
+WIP_FAILED = "wip commit failed"
 
 #: Every path at a ref, as a pathspec. Not `""`: git refuses that by name and the adapter
 #: reports a refusal as `()`, so AD-17's set would come back empty and nothing would fail.
@@ -155,25 +159,73 @@ def verify(ctx: StepContext) -> StepResult | None:
     )
 
 
-def wip_commit(ctx: StepContext) -> None:
-    """Commit leftover dirt so this row starts tracked (AD-9), in the tree it works in.
+def wip_commit(ctx: StepContext) -> StepResult | None:
+    """Commit leftover dirt so this row starts tracked (AD-9), in **both** trees it spans.
 
     The workdir form is one call and not two: `Git.commit(..., workdir=…)` stages and commits
     inside the submodule together, because staging cannot be split from committing across two
     trees (the port's own words, H2).
+
+    **The hub half is swept too** (Operator decision, 2026-09-26). This asked only the tree
+    the harness runs in, which on a `workdir` row is the submodule — so everything an agent
+    wrote at the hub root stayed untracked for the life of the Run, because the per-story
+    `git.commit` row declares the same `workdir` and commits inside the same submodule. AD-9
+    says the row starts *tracked*, and `start_shas` already records `root_start_sha` as half
+    of this attempt's frame: a dirty hub at that sha is the same unattributed tree the
+    submodule sweep exists to prevent, one repository over. It is also what made the archive
+    rename fatal — `git add -A -- {gone, never tracked}` exits 128 — and what left a `done`
+    Story's own file sitting at `??` attempt after attempt.
+
+    The two halves stay separate questions, and neither triggers the other: a dirty submodule
+    is committed through `workdir`, a dirty hub is staged and committed at the root. The hub's
+    own dirtiness is read with `ignore_submodules`, which is exactly the scope `Git.stage`
+    commits at the root — it excludes every gitlink, so AD-14's "a hub Run never commits a
+    submodule pointer move" holds, and a hub whose only change is the pointer the submodule
+    half just moved reads as clean rather than as a commit of nothing.
+
+    **A git failure here is this row's park, carrying git's output** (Operator decision,
+    2026-09-26), for the reason `agent_prepare.writes` gives: an unhandled `GitError` reaches
+    the Operator as the exception's class name and an `internal` park, which is neither
+    readable nor answerable. The park is spelled here rather than shared with that module
+    because the import runs the other way — `agent_prepare` reaches this one through
+    `agent_tail` — and because the two name different reasons; `git_commit.py`, `git.push`,
+    `git.sync` and `git.merge` each spell their own for the same reason.
     """
     if ctx.previous_attempt is None:
-        return
+        return None
+    try:
+        _sweep(ctx)
+    except GitError as error:
+        return _git_park(ctx, WIP_FAILED, error)
+    return None
+
+
+def _sweep(ctx: StepContext) -> None:
+    """The sweep itself — every git call it makes is inside `wip_commit`'s one `except`."""
     git, root = ctx.ports.git, require_cwd(ctx)
-    if not git.status(tree(ctx)).strip():
-        return
     message = WIP_MESSAGE.format(id=resolved_text(ctx.with_resolved, STORY_ID_KEY), n=ctx.attempt.n)
     workdir = declared(ctx)
-    if workdir:
-        git.commit(root, message, workdir=workdir)
+    if not workdir:
+        if git.status(root).strip():
+            git.stage(root)
+            git.commit(root, message)
         return
-    git.stage(root)
-    git.commit(root, message)
+    if git.status(tree(ctx)).strip():
+        git.commit(root, message, workdir=workdir)
+    if git.status(root, ignore_submodules=True).strip():
+        git.stage(root)
+        git.commit(root, message)
+
+
+def _git_park(ctx: StepContext, reason: str, error: GitError) -> StepResult:
+    """A git command that failed for a git reason, reported with what git said."""
+    return StepResult(
+        status="error",
+        gate=ctx.row.gate,
+        output_ref=error.output,
+        reason=reason,
+        park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
+    )
 
 
 def start_shas(ctx: StepContext) -> dict[str, Any]:

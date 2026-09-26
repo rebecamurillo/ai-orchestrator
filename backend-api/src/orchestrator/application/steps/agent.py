@@ -4,9 +4,18 @@ and routes on the Story file the agent wrote (FR-16), at gate `liveness` either 
 
 **AD-9's side-effect order is the shape of `execute`, verbatim**: orphan control, WIP commit,
 the orchestrator's own writes, prepare commit, `start_sha`, prompt, dispatch, `mark_finished`.
-The harness lookup runs first, being a pure read: a row naming a harness this instance lacks
-must park without leaving a commit behind. The harness then receives exactly what
-`HarnessEnv` returned and nothing of this process's own (AD-5, AD-10).
+The three in the middle are `_prepare`'s, and what each of them *is* lives one module over —
+the WIP sweep in `agent_workdir.py`, the writes and the prepare commit in `agent_prepare.py`
+— but the order stays here, where the sequence is the rule. The harness lookup runs first,
+being a pure read: a row naming a harness this instance lacks must park without leaving a
+commit behind. The harness then receives exactly what `HarnessEnv` returned and nothing of
+this process's own (AD-5, AD-10).
+
+**No git failure leaves this kind as an exception class** (Operator decision, 2026-09-26).
+Every phase that runs a git command answers a park carrying git's own output instead of
+raising, because an unhandled one reaches `steps/registry.py`'s catch-all, which records
+`internal: {ClassName}`, no output and no harness — a stop the Operator can neither read
+nor, by AD-13's table, answer.
 
 **Three writes, three units of work** (AD-8): `mark_started` before the process exists, the
 `pgid` update between `Harness.start` and `Harness.wait`, `mark_finished` after it exits. That
@@ -37,15 +46,15 @@ declares no `workdir` reaches exactly the calls it always did.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 import structlog
 
-from orchestrator.application.rules.protected_paths import uncommitted
 from orchestrator.application.steps import (
     agent_answer,
+    agent_prepare,
     agent_prompt,
     agent_render,
     agent_skill,
@@ -56,8 +65,6 @@ from orchestrator.application.steps.context import (
     StepContext,
     committed,
     log_path,
-    redispatched,
-    require_cwd,
     require_env,
     require_harness_env,
     require_harnesses,
@@ -68,9 +75,7 @@ from orchestrator.application.steps.context import (
     retrying,
 )
 from orchestrator.application.steps.registry import register
-from orchestrator.application.story_file import after_verify
 from orchestrator.application.templates.agent_row import (
-    SPEC_FOLDER_KEY,
     STORY_ID_KEY,
 )
 from orchestrator.application.templates.rows import STALL_KEY, TIMEOUT_KEY
@@ -105,10 +110,10 @@ RETRY_PROMPT = "{retry} {dispatch}"
 #: `agent_prompt.py` both (H4, 2026-09-23).
 WIP_MESSAGE = agent_workdir.WIP_MESSAGE
 WHOLE_TREE = agent_workdir.WHOLE_TREE
-PREPARE_MESSAGE = "orchestrator: prepare story {id} attempt {n}"
-CONTEXT_FILE = "project-context.md"
-CONTEXT_HEADING = "## Context files"
-CONTEXT_MISSING = "context path missing: {path}"
+PREPARE_MESSAGE = agent_prepare.PREPARE_MESSAGE
+CONTEXT_FILE = agent_prepare.CONTEXT_FILE
+CONTEXT_HEADING = agent_prepare.CONTEXT_HEADING
+CONTEXT_MISSING = agent_prepare.CONTEXT_MISSING
 
 #: The reasons this row leaves, and what an interrupted attempt carries instead of one.
 UNKNOWN_HARNESS = "harness misconfigured: unknown harness {name}"
@@ -153,18 +158,37 @@ class AgentExecutor:
         if misconfigured is not None:
             return misconfigured
         _orphan_control(ctx)
-        agent_workdir.wip_commit(ctx)
-        mode = ctx.resume_signal.payload.get("mode") if ctx.resume_signal else None
-        workflow: str | None = None
-        if mode != "session":
-            _prepare_writes(ctx)
-            # before `_start`, so a renderer that failed parks without leaving an attempt
-            # open; the snapshot itself is gitignored and reaches neither commit nor sha.
-            rendered = agent_render.prerendered_workflow(ctx, found)
-            if isinstance(rendered, StepResult):
-                return rendered
-            workflow = rendered
-        return _dispatch(ctx, found, _start(ctx), workflow)
+        prepared = _prepare(ctx, found)
+        if isinstance(prepared, StepResult):
+            return prepared
+        return _dispatch(ctx, found, _start(ctx), prepared)
+
+
+def _prepare(ctx: StepContext, harness: Harness) -> StepResult | str | None:
+    """AD-9's second, third and fourth side effects, in order: the WIP sweep, the
+    orchestrator's own writes with the prepare commit, and the prerendered workflow.
+
+    Answers the workflow path the dispatch carries — or the park any of the three is, which
+    the caller tells apart by type. All three make git or filesystem calls that can refuse,
+    and **each refusal is a park with the failure's own words**: an unhandled one reaches
+    the Operator as the exception's class name and an `internal` stop (`agent_prepare.py`,
+    Operator decision 2026-09-26).
+
+    A session-mode delivery skips all three and answers `None`: the session it resumes
+    already holds everything they would place in front of it (AD-13).
+    """
+    swept = agent_workdir.wip_commit(ctx)
+    if swept is not None:
+        return swept
+    mode = ctx.resume_signal.payload.get("mode") if ctx.resume_signal else None
+    if mode == "session":
+        return None
+    refused = agent_prepare.writes(ctx)
+    if refused is not None:
+        return refused
+    # before `_start`, so a renderer that failed parks without leaving an attempt
+    # open; the snapshot itself is gitignored and reaches neither commit nor sha.
+    return agent_render.prerendered_workflow(ctx, harness)
 
 
 def compose_prompt(
@@ -206,66 +230,6 @@ def _orphan_control(ctx: StepContext) -> None:
         update={"status": "error", "ended_at": ctx.ports.clock.now(), "output_ref": INTERRUPTED}
     )
     committed(ctx, lambda attempts: attempts.mark_finished(closed))
-
-
-def _prepare_writes(ctx: StepContext) -> None:
-    """Orchestrator writes + prepare commit (skipped for session-mode delivery)."""
-    moved = (*agent_answer.archive_with_answer(ctx), *agent_tail.archive_ambiguous(ctx))
-    written = (_context_document(ctx), _verify_failure(ctx))
-    targets = [*moved, *(target for target in written if target is not None)]
-    if not targets:
-        return
-    worktree = require_cwd(ctx)
-    git = ctx.ports.git
-    for target in targets:
-        git.stage(worktree, target)
-    if not _staged(git.status(worktree), targets):
-        return
-    git.commit(worktree, PREPARE_MESSAGE.format(id=_text(ctx, STORY_ID_KEY), n=ctx.attempt.n))
-
-
-def _staged(status: str, targets: Sequence[str]) -> bool:
-    """Whether staging `targets` reached the index — a harness's own leftover work can dirty
-    a path this row never touched, and reading *that* as "something to commit" attempted a
-    commit of nothing whenever a target's `stage` was a no-op (`GitError`: nothing added)."""
-    names = frozenset(targets)
-    return any(change.path in names for change in uncommitted(status))
-
-
-def _verify_failure(ctx: StepContext) -> str | None:
-    """FR-10: the Story file a `verify` row sent back, at `in-progress` and carrying what
-    failed. Nothing is written when the walker resolved no facts, or when the glob names
-    other than one file — a rewrite on a guess is the ambiguity liveness refuses."""
-    if not redispatched(ctx):
-        return None
-    fail = require_env(ctx).verify_failure
-    matches = agent_tail.story_files(ctx) or ()
-    if fail is None or len(matches) != 1:
-        return None
-    workspace = require_workspace(ctx, ctx.cwd)
-    text = workspace.read(matches[0]) or ""
-    workspace.write(matches[0], after_verify(text, fail.command, fail.exit_code, fail.log_tail))
-    return matches[0]
-
-
-def _context_document(ctx: StepContext) -> str | None:
-    """`{spec_folder}/project-context.md`, or `None` when the row names no spec folder; a
-    path the worktree lacks is logged and left out, and the heading is always written."""
-    spec_folder = _text(ctx, SPEC_FOLDER_KEY)
-    if not spec_folder:
-        return None
-    workspace = require_workspace(ctx, ctx.cwd)
-    project = require_env(ctx).project
-    kept = []
-    for path in project.context_paths:
-        if workspace.exists(path):
-            kept.append(f"- {path}")
-        else:
-            log.info(CONTEXT_MISSING.format(path=path), path=ctx.row.path, context_path=path)
-    target = f"{spec_folder}/{CONTEXT_FILE}"
-    body = "\n".join([project.context_text, "", CONTEXT_HEADING, "", *kept])
-    workspace.write(target, f"{body}\n")
-    return target
 
 
 def _start(ctx: StepContext) -> Attempt:

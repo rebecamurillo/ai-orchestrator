@@ -46,9 +46,11 @@ from typing import Any
 
 import structlog
 
+from orchestrator.application.rules import protected_paths
 from orchestrator.application.steps import agent_tail
 from orchestrator.application.steps.context import (
     StepContext,
+    require_cwd,
     require_workspace,
     resolved_text,
 )
@@ -115,6 +117,12 @@ def archive_with_answer(ctx: StepContext) -> tuple[str, ...]:
 
     Returned as `(source, destination)` so the caller stages the rename whole; see the
     module docstring for why an unstaged one would be attributed to the agent.
+
+    **An untracked source is the destination alone** (Operator decision, 2026-09-26). The
+    reason to stage a rename's source is that the tree at `start_sha` still holds it; a file
+    git never tracked is in no tree, so there is nothing there to attribute and nothing for
+    `git add` to match once the move has happened — it exits 128 on the pathspec. The
+    question is asked *before* the move, which is the only moment it can be answered.
     """
     signal = answering(ctx)
     if signal is None:
@@ -125,11 +133,12 @@ def archive_with_answer(ctx: StepContext) -> tuple[str, ...]:
             log.info(NO_FILE_TO_ARCHIVE, path=ctx.row.path, story_id=_story_id(ctx))
         return ()
     source, destination = matches[0], archive_path(ctx)
+    never_tracked = source in protected_paths.untracked(ctx.ports.git.status(require_cwd(ctx)))
     workspace = require_workspace(ctx, ctx.cwd)
     workspace.move(source, destination)
     block = HUMAN_ANSWER.format(at=_iso(ctx.ports.clock.now()), answer=answer_text(signal))
     workspace.write(destination, appended(workspace.read(destination) or "", block))
-    return (source, destination)
+    return (destination,) if never_tracked else (source, destination)
 
 
 def archive_path(ctx: StepContext) -> str:

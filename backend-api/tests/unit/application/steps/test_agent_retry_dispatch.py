@@ -355,9 +355,14 @@ def test_both_ends_of_the_rename_are_staged_into_the_prepare_commit() -> None:
     world = ambiguous(
         resume=an_operator(),
         # A first dispatch has no predecessor, so the WIP check reads no status (Operator
-        # revision, 2026-09-16): the first answer is the prepare commit's own check.
+        # revision, 2026-09-16). Two answers are read, in this order (Operator decision,
+        # 2026-09-26): the archive's own "which of these paths has git never tracked" —
+        # clean, so both of them are tracked and both ends of the rename are reported —
+        # and then the prepare commit's own check. Same assertions as before, one more
+        # scripted answer in front of them.
         git=FakeGit(
-            status=[" R specs/notifications/stories/4-1-notify.md", ""], head_sha=[HEAD_SHA]
+            status=["", " R specs/notifications/stories/4-1-notify.md", ""],
+            head_sha=[HEAD_SHA],
         ),
     )
 

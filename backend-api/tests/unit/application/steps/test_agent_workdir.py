@@ -55,6 +55,10 @@ from tests.unit.fakes.git import FakeGit
 WORKDIR = "repos/member"
 MEMBER = f"{WORKTREE}/{WORKDIR}"
 
+#: `(worktree, message)` — the root form of `Git.commit`. The `workdir` form records a third
+#: element, so the length is what tells a hub commit from a submodule one (H2's fake rule).
+ROOT_COMMIT_CALL = 2
+
 #: Four distinct SHAs, so "which tree answered" is never a coincidence.
 MEMBER_START = "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111"
 MEMBER_END = "bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222"
@@ -304,8 +308,20 @@ def test_a_clean_member_checkout_makes_no_wip_commit() -> None:
     assert [call for call in world.git.called("commit") if call[1].startswith("wip:")] == []
 
 
-def test_the_hub_being_dirty_is_not_the_member_checkout_being_dirty() -> None:
-    """The WIP commit asks the tree the harness will run in, and only that one."""
+def test_a_dirty_hub_is_swept_at_the_root_while_the_member_checkout_is_left_alone() -> None:
+    """Operator decision, 2026-09-26: the WIP sweep is of **both** trees the attempt spans.
+
+    Replaces `the hub being dirty is not the member checkout being dirty`, which asserted
+    that a dirty hub produced no WIP commit at all. That is what left every file an agent
+    wrote at the hub root untracked for the life of a Run — the per-story `git.commit` row
+    declares the same `workdir` and commits inside the same submodule — and it is what made
+    the Answer archive's rename fatal on 2026-09-25: `git add -A -- {a path git never
+    tracked, and now moved}` exits 128, which the Operator saw as `internal: GitError`.
+
+    The property the old test was really protecting is kept and asserted below more
+    thoroughly than it was: the hub's dirt is committed *at the root*, never through the
+    submodule, so the member checkout the harness is about to run in is untouched. The
+    clean-member case stays a separate test above."""
     world = a_workdir_world(
         previous=a_workdir_attempt(end_sha=None),
         git=a_workdir_git(statuses={MEMBER: "", WORKTREE: " M src/hub.py\n"}),
@@ -313,7 +329,12 @@ def test_the_hub_being_dirty_is_not_the_member_checkout_being_dirty() -> None:
 
     run(world)
 
-    assert [call for call in world.git.called("commit") if call[1].startswith("wip:")] == []
+    wip = [call for call in world.git.called("commit") if call[1].startswith("wip:")]
+    assert wip == [(Path(WORKTREE), "wip: story 4-1 attempt 2 (interrupted)")]
+    # the root form: staged first, then committed, and with no `workdir` element — the
+    # submodule was clean and nothing may be committed inside it.
+    assert (Path(WORKTREE), None) in world.git.called("stage")
+    assert all(len(call) == ROOT_COMMIT_CALL for call in wip)
 
 
 # ── the frozen test set: globs on workdir-relative paths ────────────────────

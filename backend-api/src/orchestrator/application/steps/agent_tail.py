@@ -26,6 +26,7 @@ from orchestrator.application.steps.context import (
     StepContext,
     committed,
     operator_retry,
+    require_cwd,
     require_env,
     require_run,
     require_workspace,
@@ -298,7 +299,9 @@ def archive_ambiguous(ctx: StepContext) -> tuple[str, ...]:
     every rename are reported**: `agent.py` stages them into the prepare commit, so the move
     is the orchestrator's own recorded write and `start_sha` is read off a clean tree —
     without that, 5.6's `diff_names(start_sha, end_sha)` would attribute this rename to the
-    agent, which AD-17 and FR-31 forbid.
+    agent, which AD-17 and FR-31 forbid. **Both ends except an untracked source**, which is
+    the destination alone for the reason `agent_answer.archive_with_answer` states: a path
+    no tree holds needs no staging, and `git add` cannot be asked about one that is gone.
     """
     if not (operator_retry(ctx) or retrying(ctx)):
         return ()
@@ -306,6 +309,7 @@ def archive_ambiguous(ctx: StepContext) -> tuple[str, ...]:
     if len(matches) < AMBIGUOUS:
         return ()
     workspace = require_workspace(ctx, ctx.cwd)
+    never_tracked = protected_paths.untracked(ctx.ports.git.status(require_cwd(ctx)))
     answers = ANSWERS_DIRECTORY.format(
         spec_folder=resolved_text(ctx.with_resolved, SPEC_FOLDER_KEY)
     )
@@ -314,7 +318,7 @@ def archive_ambiguous(ctx: StepContext) -> tuple[str, ...]:
     for path in (match for match in matches if match != newest):
         archived = f"{answers}/{PurePosixPath(path).name}"
         workspace.move(path, archived)
-        moved += [path, archived]
+        moved += [archived] if path in never_tracked else [path, archived]
     return tuple(moved)
 
 
