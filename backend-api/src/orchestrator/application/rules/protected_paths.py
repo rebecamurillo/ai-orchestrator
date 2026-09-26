@@ -118,6 +118,25 @@ def uncommitted(status: str) -> tuple[Change, ...]:
     return tuple(changes)
 
 
+def untracked(status: str) -> frozenset[str]:
+    """The paths `git status --porcelain` reported as untracked — the `??` lines, by name.
+
+    Separate from `uncommitted` on purpose, and not derivable from it: there, an untracked
+    file is an `added` change like any other, which is the right answer for AD-17 and the
+    wrong one here. What this answers is *what git has never heard of*, and it exists for
+    the one question only the index can settle — whether `git add -A -- {path}` is a command
+    at all. For a tracked path that has just been moved away it is (the deletion reaches the
+    index); for an untracked one it is `fatal: pathspec '{path}' did not match any files`,
+    exit 128, which the archive rename hit in production on 2026-09-25 and reported to the
+    Operator as a bare `internal: GitError`.
+    """
+    names: set[str] = set()
+    for line in status.splitlines():
+        if line[:STATUS_PREFIX].strip() == UNTRACKED:
+            names.add(line[STATUS_PREFIX:].strip())
+    return frozenset(names)
+
+
 def check(
     changed: Sequence[Change], protected: frozenset[str], accepted: Sequence[str]
 ) -> tuple[Change, ...]:

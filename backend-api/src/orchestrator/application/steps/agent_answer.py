@@ -40,7 +40,7 @@ never stored — the gate record the Operator's signal wrote is append-only (AD-
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -90,9 +90,6 @@ ARCHIVED_NAME = "{story_id}-attempt-{n}.md"
 #: front and the newline at the end, so this is the block itself.
 HUMAN_ANSWER = "## Human Answer\n\n{at} · operator\n\n{answer}"
 
-#: `commit_targets`'s prepare-commit message (moved here from `agent.py`'s 400-line cap).
-PREPARE_MESSAGE = "orchestrator: prepare story {id} attempt {n}"
-
 #: What a resume with nothing to archive logs. A first dispatch is a valid outcome here —
 #: an agent that blocked before writing its Story file leaves the glob empty — so this is an
 #: `info` line naming the row, never a park.
@@ -120,6 +117,12 @@ def archive_with_answer(ctx: StepContext) -> tuple[str, ...]:
 
     Returned as `(source, destination)` so the caller stages the rename whole; see the
     module docstring for why an unstaged one would be attributed to the agent.
+
+    **An untracked source is the destination alone** (Operator decision, 2026-09-26). The
+    reason to stage a rename's source is that the tree at `start_sha` still holds it; a file
+    git never tracked is in no tree, so there is nothing there to attribute and nothing for
+    `git add` to match once the move has happened — it exits 128 on the pathspec. The
+    question is asked *before* the move, which is the only moment it can be answered.
     """
     signal = answering(ctx)
     if signal is None:
@@ -130,11 +133,12 @@ def archive_with_answer(ctx: StepContext) -> tuple[str, ...]:
             log.info(NO_FILE_TO_ARCHIVE, path=ctx.row.path, story_id=_story_id(ctx))
         return ()
     source, destination = matches[0], archive_path(ctx)
+    never_tracked = source in protected_paths.untracked(ctx.ports.git.status(require_cwd(ctx)))
     workspace = require_workspace(ctx, ctx.cwd)
     workspace.move(source, destination)
     block = HUMAN_ANSWER.format(at=_iso(ctx.ports.clock.now()), answer=answer_text(signal))
     workspace.write(destination, appended(workspace.read(destination) or "", block))
-    return (source, destination)
+    return (destination,) if never_tracked else (source, destination)
 
 
 def archive_path(ctx: StepContext) -> str:
@@ -220,24 +224,3 @@ def _story_id(ctx: StepContext) -> str:
 
 def _text(ctx: StepContext, key: str) -> str:
     return resolved_text(ctx.with_resolved, key)
-
-
-def commit_targets(ctx: StepContext, targets: Sequence[str]) -> None:
-    """Stage `targets` and make the prepare commit, or nothing for none staged."""
-    if not targets:
-        return
-    worktree = require_cwd(ctx)
-    git = ctx.ports.git
-    for target in targets:
-        git.stage(worktree, target)
-    if not _staged(git.status(worktree), targets):
-        return
-    git.commit(worktree, PREPARE_MESSAGE.format(id=_story_id(ctx), n=ctx.attempt.n))
-
-
-def _staged(status: str, targets: Sequence[str]) -> bool:
-    """Whether staging `targets` reached the index — a harness's own leftover work can dirty
-    a path this row never touched, and reading *that* as "something to commit" attempted a
-    commit of nothing whenever a target's `stage` was a no-op (`GitError`: nothing added)."""
-    names = frozenset(targets)
-    return any(change.path in names for change in protected_paths.uncommitted(status))
