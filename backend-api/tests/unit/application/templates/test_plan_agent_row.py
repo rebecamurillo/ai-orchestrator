@@ -239,10 +239,11 @@ def test_a_loop_in_the_same_file_binds_the_entry_under_its_own_as_name() -> None
     }
 
 
-def test_the_entry_supplies_the_prompt_when_the_template_bound_none() -> None:
-    assert resolved(planned(IN_LOOP), "things[0].work")[PROMPT_EXTRA_KEY] == (
-        "read the brief first"
-    )
+def test_an_entry_supplies_nothing_the_template_did_not_bind() -> None:
+    """Revised 2026-09-27 (Operator decision: prompt prose lives in the template): the
+    `invoke_dev_with` fallback was method knowledge in code — a Template that binds nothing
+    appends nothing, whatever the entry carries."""
+    assert resolved(planned(IN_LOOP), "things[0].work")[PROMPT_EXTRA_KEY] == ""
 
 
 def test_an_entry_that_says_nothing_extra_appends_nothing() -> None:
@@ -250,7 +251,7 @@ def test_an_entry_that_says_nothing_extra_appends_nothing() -> None:
 
 
 def test_what_the_template_bound_wins_over_the_entrys_own() -> None:
-    """A Template that wrote a `prompt_extra` meant it; the entry is only the fallback."""
+    """A Template that wrote a `prompt_extra` meant it; the entry supplies nothing else."""
     assert resolved(planned(IN_LOOP_WITH_PROMPT), "things[0].work")[PROMPT_EXTRA_KEY] == (
         "read the runbook"
     )

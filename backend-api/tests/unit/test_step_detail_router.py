@@ -133,6 +133,9 @@ def _agent_step(run_id: UUID, *, status: str = "running") -> StepRun:
             "story_id": STORY_ID,
             "harness": "claude",
             "model": "claude-opus-4-5",
+            # the planner-resolved clause every skill row carries since 2026-09-27
+            # (Operator decision: prompt prose lives in the template)
+            "prompts": {"dispatch": "Run the skill {skill}: {spec_folder}, {story_id}."},
         },
     )
 

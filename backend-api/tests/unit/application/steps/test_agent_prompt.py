@@ -1,8 +1,12 @@
-"""`compose_prompt`: the sentence FR-14 pins, and the two things that may follow it.
+"""`compose_prompt`: the row's own clauses, filled and joined (FR-14).
 
-The prompt is the whole interface between a Template and a coding agent, so it is asserted
-as a whole string rather than by substring: a missing space or a reordered clause is a
-different instruction, and nothing else in the system would notice.
+Revised 2026-09-27 (Operator decision: prompt prose lives in the Template): every sentence
+below comes from the fixture's `prompts` clauses — the same texts the shipped templates
+declare — and what this module pins is the composition: which clause fires when, what fills
+its placeholders, and that the orchestrator adds no words of its own. The prompt is the
+whole interface between a Template and a coding agent, so it is asserted as a whole string
+rather than by substring: a missing space or a reordered clause is a different instruction,
+and nothing else in the system would notice.
 """
 
 from __future__ import annotations
@@ -95,3 +99,35 @@ def test_the_previous_attempt_is_accepted_and_changes_nothing_yet() -> None:
     row = an_agent_row()
 
     assert prompt(resolved(), previous_attempt=an_attempt(row, 1)) == f"{FIRST} Read X."
+
+
+# ── the orchestrator adds no words of its own (Operator decision, 2026-09-27) ───────────
+
+
+def test_an_undeclared_answer_clause_appends_the_operators_words_alone() -> None:
+    """Their words are not orchestrator prose; no clause means no quoting around them."""
+    row = an_agent_row()
+    record = a_gate_record(row, "answer", {"condition": "C", "answer": "use the queue"})
+
+    assert prompt(resolved(prompts={}), resume_signal=record) == "Read X. use the queue"
+
+
+def test_a_row_with_no_clauses_at_all_composes_from_empty_parts_without_raising() -> None:
+    """A stored version predating the clauses is a validation concern, never a `KeyError`
+    inside a durable step."""
+    bare = resolved(prompts={}, prompt_extra="")
+
+    assert prompt(bare) == ""
+
+
+def test_a_clause_naming_an_unknown_token_keeps_it_as_literal_prose() -> None:
+    unknown = resolved(prompts={"dispatch": "Go to {storyid} now."}, prompt_extra="")
+
+    assert prompt(unknown) == "Go to {storyid} now."
+
+
+def test_a_filled_value_is_never_rescanned_for_tokens_of_its_own() -> None:
+    """One literal-insertion pass: a spec folder spelled `{answer}` arrives verbatim."""
+    tricky = resolved(spec_folder="{answer}", prompt_extra="")
+
+    assert "spec folder {answer}," in prompt(tricky)

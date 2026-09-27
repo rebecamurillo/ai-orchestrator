@@ -46,6 +46,27 @@ from tests.unit.fakes.workspace import FakeWorkspace
 
 WORK_DIR = "/work"
 PROJECT_SLUG = "acme"
+
+#: The prose the shipped templates declare (Operator decision, 2026-09-27: prompt prose
+#: lives in the Template; these are the planner-resolved clauses a row carries). The texts
+#: are the shipped ones so every dispatch assertion in these suites reads real sentences.
+DISPATCH_CLAUSE = (
+    "Run the skill {skill} in folder+id dispatch mode: "
+    "spec folder {spec_folder}, story id {story_id}."
+)
+RENDERED_CLAUSE = (
+    "The workflow for skill {skill} is already rendered at {path}. "
+    "Read that file fully and follow it; every step, status and halt this dispatch owes "
+    "is defined there. Do not run render_skill.py yourself."
+)
+ANSWER_CLAUSE = 'Answer from the operator to the blocking condition "{condition}": {answer}'
+HALT_CLAUSE = "Halt after planning."
+PROMPTS = {
+    "dispatch": DISPATCH_CLAUSE,
+    "rendered": RENDERED_CLAUSE,
+    "answer": ANSWER_CLAUSE,
+    "halt": HALT_CLAUSE,
+}
 WORKTREE = "/work/acme/widgets/wt/feat-x"
 #: The row path the shipped `epic@1` plan gives a Story's `build` step — the one the
 #: timeout sentence in this story's acceptance criteria is written with.
@@ -151,6 +172,7 @@ def resolved(**over: Any) -> dict[str, Any]:
         "skill": SKILL,
         "args": {"spec_folder": SPEC_FOLDER, "story_id": STORY_ID},
         "prompt_extra": PROMPT_EXTRA,
+        "prompts": dict(PROMPTS),
         "story_id": STORY_ID,
         "spec_folder": SPEC_FOLDER,
         "spec_checkpoint": False,

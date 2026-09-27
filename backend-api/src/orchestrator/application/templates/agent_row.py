@@ -14,10 +14,10 @@ chose the name, so neither is guessed. A Template with no entry at all is not a 
 an `agent` step outside every loop is a dispatch with no Story behind it, and the three keys
 that describe one read `None`.
 
-**`prompt_extra` prefers what the Template bound.** `story@1` binds
-`{{story.invoke_dev_with}}` itself, so the two agree; a Template that binds something else
-means it, and one that binds nothing still gets the entry's own `invoke_dev_with`, because
-that is the field the method uses to tell a dispatch what to read first (FR-14).
+**`prompt_extra` is what the Template bound, full stop** (Operator decision, 2026-09-27).
+`story@1` binds `{{story.invoke_dev_with}}` itself; a Template that binds something else
+means it, and one that binds nothing appends nothing — the old fallback to the entry's own
+`invoke_dev_with` was method knowledge living in code rather than in the file.
 
 `pause_when` is the one agent extra that is *not* a row: a stop declared on the step is how
 the step behaves, not a stop before or after it, so it stays the flag 4.6 reads (AD-7).
@@ -58,9 +58,6 @@ RETRY_KEY = "retry"
 #: nothing to resolve. No executor in this epic reads it; it is on the row because AD-7 says
 #: the plan decides, and a Template that declared it must not have it dropped on the way.
 ESCALATE_WHEN_KEY = "escalate_when"
-
-#: The list-file field an entry tells a dispatch what to read first in.
-INVOKE_DEV_WITH = "invoke_dev_with"
 
 
 def agent_extras(agent: AgentExtras, frame: Frame) -> dict[str, Any]:
@@ -123,8 +120,12 @@ def _has_story_contract(agent: AgentExtras, frame: Frame) -> bool:
 
 
 def prompt_extra(resolved: Mapping[str, Any], frame: Frame) -> str:
-    """What the Template bound, or the entry's own `invoke_dev_with`, or nothing at all."""
-    return str(resolved.get(PROMPT_EXTRA_KEY) or field(frame, INVOKE_DEV_WITH) or "")
+    """Exactly what the Template bound, or nothing at all (Operator decision, 2026-09-27:
+    the `invoke_dev_with` fallback was method knowledge in code — a Template that wants the
+    entry's field binds `prompt_extra: "{{story.invoke_dev_with}}"`, as the shipped ones do).
+    """
+    del frame  # the entry no longer supplies anything the Template did not bind
+    return str(resolved.get(PROMPT_EXTRA_KEY) or "")
 
 
 def item(frame: Frame) -> Mapping[str, Any] | None:
@@ -142,9 +143,3 @@ def _declared(frame: Frame) -> Any:
     """What this Template's `item` input holds, where it declared one."""
     names = [decl.name for decl in frame.template.inputs if decl.type == ITEM_TYPE]
     return frame.scope.get(names[0]) if names else None
-
-
-def field(frame: Frame, name: str) -> Any:
-    """One field of the bound entry, or `None` when there is no entry to read it off."""
-    entry = item(frame)
-    return None if entry is None else entry.get(name)

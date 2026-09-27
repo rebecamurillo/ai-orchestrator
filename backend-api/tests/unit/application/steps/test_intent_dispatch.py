@@ -1,22 +1,31 @@
-"""story 4-9 (2026-09-17): intent dispatch form in compose_prompt —
-DISPATCH_INTENT and INTENT_KEY are architectural anchors"""
+"""story 4-9 (2026-09-17): the intent dispatch form in `compose_prompt`.
+
+Revised 2026-09-27 (Operator decision: prompt prose lives in the Template): the
+`DISPATCH_INTENT` constant is gone — the intent form is a `dispatch` clause naming
+`{intent}`, filled at runtime with the Operator's pasted text, inserted literally so
+braces inside it stay inert.
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
 from orchestrator.application.steps.agent import compose_prompt
-
-# DISPATCH_INTENT, HALT, INTENT_KEY imports are the hard TDD gate
-from orchestrator.application.steps.agent_prompt import DISPATCH_INTENT, HALT, INTENT_KEY
+from orchestrator.application.steps.agent_prompt import INTENT_KEY
 from tests.unit.application.steps.agent_fixtures import a_gate_record, an_agent_row
+
+#: The clauses shipped `task@1` declares, as the planner leaves them on the row.
+INTENT_DISPATCH = "Run the skill {skill} with the following intent:\n\n{intent}"
+HALT = "Halt after planning."
+PROMPTS = {"dispatch": INTENT_DISPATCH, "halt": HALT}
 
 
 def resolved(**over: Any) -> dict[str, Any]:
-    """Minimal with_resolved for intent dispatch tests — no prompt_extra, spec_checkpoint False."""
+    """Minimal with_resolved for intent dispatch tests — no prompt_extra, no checkpoint."""
     base: dict[str, Any] = {
         "skill": "bmad-build-auto",
         "spec_checkpoint": False,
+        "prompts": dict(PROMPTS),
     }
     base.update(over)
     return base
@@ -30,40 +39,43 @@ def prompt(with_resolved: dict[str, Any], **over: Any) -> str:
     )
 
 
-def test_intent_dispatch_uses_dispatch_intent_prefix_and_intent_text() -> None:
-    r = resolved(**{INTENT_KEY: "gh-47: Fix auth"}, skill="bmad-build-auto")
-    expected = DISPATCH_INTENT.format(skill="bmad-build-auto") + "gh-47: Fix auth"
+def test_intent_dispatch_fills_the_clause_with_skill_and_intent() -> None:
+    r = resolved(**{INTENT_KEY: "gh-47: Fix auth"})
+
+    expected = "Run the skill bmad-build-auto with the following intent:\n\ngh-47: Fix auth"
     assert prompt(r) == expected
 
 
 def test_intent_with_curly_braces_does_not_raise() -> None:
-    intent = "Fix {auth} bug"
-    r = resolved(**{INTENT_KEY: intent})
-    p = prompt(r)
-    assert "Fix {auth} bug" in p
+    """The fill is one literal-insertion pass: braces in the pasted text stay inert."""
+    r = resolved(**{INTENT_KEY: "Fix {auth} bug"})
+
+    assert "Fix {auth} bug" in prompt(r)
 
 
-def test_intent_dispatch_adds_halt_when_spec_checkpoint() -> None:
+def test_an_intent_naming_a_placeholder_is_not_rescanned() -> None:
+    """A pasted `{skill}` arrives as those six characters, never as the skill's name."""
+    r = resolved(**{INTENT_KEY: "mention {skill} verbatim"})
+
+    assert prompt(r).endswith("mention {skill} verbatim")
+
+
+def test_intent_dispatch_adds_the_halt_clause_when_spec_checkpoint() -> None:
     r = resolved(spec_checkpoint=True, **{INTENT_KEY: "gh-47: Fix auth"})
-    p = prompt(r)
-    assert p.endswith(HALT)
+
+    assert prompt(r).endswith(HALT)
 
 
 def test_intent_dispatch_no_halt_on_continue_resume() -> None:
     row = an_agent_row()
     r = resolved(spec_checkpoint=True, **{INTENT_KEY: "gh-47: Fix auth"})
-    p = prompt(r, resume_signal=a_gate_record(row, "continue"))
-    assert HALT not in p
+
+    assert HALT not in prompt(r, resume_signal=a_gate_record(row, "continue"))
 
 
-def test_no_intent_falls_back_to_dispatch_sentence() -> None:
-    """Without an intent key the folder+id DISPATCH form is used (regression guard)."""
-    r = resolved()  # no intent key
-    p = prompt(r)
-    assert p.startswith("Run the skill")
-    assert "folder+id dispatch mode" in p
+def test_a_clause_without_the_intent_token_sends_the_clause_alone() -> None:
+    """The clause decides what the intent contributes: a template whose dispatch names no
+    `{intent}` sends its own sentence and the pasted text goes nowhere."""
+    r = resolved(prompts={"dispatch": "Run the skill {skill}."}, **{INTENT_KEY: "gh-47: Fix auth"})
 
-
-def test_dispatch_intent_constant_value() -> None:
-    """Pins the exact prefix the harness sees — a silent change here would alter all tasks."""
-    assert DISPATCH_INTENT == "Run the skill {skill} with the following intent:\n\n"
+    assert prompt(r) == "Run the skill bmad-build-auto."

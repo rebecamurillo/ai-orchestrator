@@ -18,11 +18,14 @@ from pathlib import Path
 
 import pytest
 
-from orchestrator.application.steps.agent import DISPATCH
 from orchestrator.infrastructure.harness.fake import FakeHarness
 from orchestrator.infrastructure.harness.fake import scenario as scenarios
 from orchestrator.infrastructure.harness.fake.adapter import _apply
 from orchestrator.infrastructure.settings import Settings
+
+# Revised 2026-09-27 (Operator decision: prompt prose lives in the template): the
+# dispatch sentence is the shipped clause the shared fixture carries, not a constant.
+from tests.unit.application.steps.agent_fixtures import DISPATCH_CLAUSE as DISPATCH
 from tests.unit.fakes.process import FakeProcessRunner
 
 SPEC_FOLDER = "specs/gates"

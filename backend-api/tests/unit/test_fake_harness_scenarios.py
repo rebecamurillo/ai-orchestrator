@@ -13,8 +13,11 @@ from pathlib import Path
 
 import pytest
 
-from orchestrator.application.steps.agent import DISPATCH
 from orchestrator.infrastructure.harness.fake import scenario as scenarios
+
+# Revised 2026-09-27 (Operator decision: prompt prose lives in the template): the
+# dispatch sentence is the shipped clause the shared fixture carries, not a constant.
+from tests.unit.application.steps.agent_fixtures import DISPATCH_CLAUSE as DISPATCH
 
 SPEC_FOLDER = "specs/gates"
 STORY_ID = "1"

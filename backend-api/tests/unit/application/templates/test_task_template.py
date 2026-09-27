@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from orchestrator.application.steps.agent import compose_prompt
-from orchestrator.application.steps.agent_prompt import DISPATCH_INTENT, INTENT_KEY
+from orchestrator.application.steps.agent_prompt import INTENT_KEY
 from orchestrator.application.templates.plan import plan_run
 from orchestrator.application.templates.plan_model import ResolvedTree
 from orchestrator.application.templates.validate import validate
@@ -77,7 +77,9 @@ def test_task_plan_has_unconditional_spec_checkpoint() -> None:
     agent_rows = [r for r in plan.rows if r.kind == "agent"]
     assert agent_rows, "No agent rows in task plan"
     assert all(r.with_resolved.get("spec_checkpoint") for r in agent_rows)
-    # intent must flow through the planner into with_resolved so compose_prompt can use it
+    # intent must flow through the planner into with_resolved so compose_prompt can use it.
+    # Revised 2026-09-27 (Operator decision: the prose is the template's own clause) — what
+    # is pinned is the flow-through, never the shipped file's sentence (hard rule 6).
     assert all(r.with_resolved.get(INTENT_KEY) == "gh-47: Fix the auth bug" for r in agent_rows)
     first_prompt = compose_prompt(agent_rows[0].with_resolved, None, None)
-    assert first_prompt.startswith(DISPATCH_INTENT.format(skill="bmad-build-auto"))
+    assert "gh-47: Fix the auth bug" in first_prompt

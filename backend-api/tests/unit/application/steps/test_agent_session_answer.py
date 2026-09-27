@@ -22,12 +22,13 @@ The first two are asserted through what the `FakeGit`, `FakeHarness` and
 
 from __future__ import annotations
 
-from orchestrator.application.steps import agent_answer, agent_prompt
+from orchestrator.application.steps import agent_answer
 from orchestrator.application.steps.agent import AgentExecutor
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.values import StepResult
 from tests.unit.application.steps.agent_fixtures import (
     HEAD_SHA,
+    PROMPTS,
     STORY_ID,
     World,
     a_gate_record,
@@ -126,7 +127,7 @@ def test_session_answer_resume_carries_inherited_session_and_the_answer_clause()
     resumed = world.harness.called("resume")
     assert len(resumed) == 1
     assert resumed[0]["session_id"] == PREV_SESSION
-    expected = agent_prompt.ANSWER.format(condition=CONDITION, answer=ANSWER_TEXT).strip()
+    expected = PROMPTS["answer"].format(condition=CONDITION, answer=ANSWER_TEXT).strip()
     assert resumed[0]["message"] == expected
 
 

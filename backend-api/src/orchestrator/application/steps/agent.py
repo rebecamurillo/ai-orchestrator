@@ -95,20 +95,12 @@ KIND = "agent"
 HARNESS_KEY = "harness"
 MODEL_KEY = "model"
 
-#: The prompt, in the pieces FR-14 pins. Asserted verbatim by the prompt tests.
-DISPATCH = (
-    "Run the skill {skill} in folder+id dispatch mode: "
-    "spec folder {spec_folder}, story id {story_id}."
-)
-#: How a retry prompt reaches a *new* session: in front of the dispatch sentence the session
-#: has not been told yet. A resumed one is sent the retry prompt alone.
-RETRY_PROMPT = "{retry} {dispatch}"
-
 #: The two commits this module makes, and the documents it writes between them. The WIP one
 #: is `agent_workdir`'s — the tree it lands in is that module's question — and re-exported
 #: here, beside `WHOLE_TREE`, so this module's own name still answers "what does an `agent`
-#: row commit" and "what does it freeze", the way `DISPATCH` is named here and in
-#: `agent_prompt.py` both (H4, 2026-09-23).
+#: row commit" and "what does it freeze" (H4, 2026-09-23). The prompt itself has no
+#: constant to re-export any more: since the Operator decision of 2026-09-27 every sentence
+#: is the row's own `prompts` clause, and `agent_prompt.py` only fills and joins them.
 WIP_MESSAGE = agent_workdir.WIP_MESSAGE
 WHOLE_TREE = agent_workdir.WHOLE_TREE
 PREPARE_MESSAGE = agent_prepare.PREPARE_MESSAGE
@@ -293,7 +285,10 @@ def _planned(
     if retry is not None or (operator_retry(ctx) and operator_mode == "restart"):
         op = str(ctx.resume_signal.payload.get("text", "")) if ctx.resume_signal else ""
         hint = retry.prompt if retry else getattr(agent_tail.retry_of(ctx), "prompt", "")
-        prompt = RETRY_PROMPT.format(retry=op or hint, dispatch=prompt) if op or hint else prompt
+        # the retry text in front of the dispatch a *new* session has not been told yet; a
+        # resumed one was sent the retry prompt alone above. Both texts are the Template's
+        # own — the separator is the one thing composed here (Operator decision, 2026-09-27).
+        prompt = f"{op or hint} {prompt}" if op or hint else prompt
     return _Dispatch(harness, attempt, prompt, session)
 
 
@@ -363,11 +358,7 @@ def _session_message(ctx: StepContext) -> str:
     `execute` makes before this prompt is built, session mode included."""
     resolved = agent_answer.resolved_signal(ctx)
     if resolved is not None and resolved.event == agent_answer.ANSWER_EVENT:
-        payload = resolved.payload
-        return agent_prompt.ANSWER.format(
-            condition=payload.get(agent_answer.CONDITION_KEY, ""),
-            answer=payload.get(agent_answer.ANSWER_KEY, ""),
-        ).strip()
+        return agent_prompt.answer_clause(ctx.with_resolved, resolved).strip()
     if ctx.resume_signal is not None and (t := str(ctx.resume_signal.payload.get("text", ""))):
         return t
     retry = agent_tail.retry_of(ctx)
