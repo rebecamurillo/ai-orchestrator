@@ -53,12 +53,30 @@ END_SHA = "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d"
 AUTO_RUN_RESULT = "## Auto Run Result"
 
 
+#: The seven conditions the shipped templates declare under `misconfigured_when` — a code
+#: table until the Operator decision of 2026-09-27 made the contract the row's own.
+CONDITIONS = (
+    "no subagents",
+    "no stories.yaml found",
+    "story id not found in stories.yaml",
+    "version-control metadata not writable",
+    "no epic spec found",
+    "unrecognized status in existing story file",
+    "ambiguous story file match",
+)
+
+
 def contracted(**over: Any) -> dict[str, Any]:
-    """The `with_resolved` of a *planned* `agent` row: `expect` and `retry` included."""
+    """The `with_resolved` of a *planned* `agent` row: `expect` and `retry` included,
+    with the routing vocabulary the shipped `story@1` declares (2026-09-27)."""
     extras: dict[str, Any] = {
         EXPECT_KEY: {
             "files": [STORY_GLOB],
-            "status_in": ["done", "blocked", "ready-for-dev"],
+            "status_in": [],
+            "success": ["done"],
+            "blocked": ["blocked"],
+            "checkpoint": ["ready-for-dev"],
+            "misconfigured_when": list(CONDITIONS),
         },
         RETRY_KEY: {"max": RETRY_MAX, "prompt": RETRY_PROMPT, "resume_session": True},
     }

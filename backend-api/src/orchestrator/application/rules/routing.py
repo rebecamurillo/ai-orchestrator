@@ -18,43 +18,47 @@ reached: an empty glob reads `harness exit {code}` rather than `no story file` w
 process itself died, because the two send an Operator somewhere different. `_liveness` has
 the argument and the reasoning.
 
-**`expect.status_in` is not consulted here.** The Template's list is what the *planner*
-validates a Template against; the routing tokens are FR-16's, fixed, and they differ on
-purpose: the shipped `story@1` lists `ready-for-dev` as expected, yet `ready-for-dev` without
-a declared spec checkpoint is a Story that stopped early and takes the retry path.
+**The tokens are the row's own declaration** (Operator decision, 2026-09-27). The Template's
+`expect.success` / `expect.blocked` / `expect.checkpoint` lists say which written statuses
+mean what, and `expect.misconfigured_when` names the blocking-condition sentences that are a
+broken installation rather than a question — so a non-BMAD method routes on its own
+vocabulary by declaring it, and the shipped defaults below are exactly FR-16's original
+three tokens. One asymmetry is kept on purpose: a `checkpoint` token without a declared spec
+checkpoint is a Story that stopped early and takes the retry path.
 
-**Nothing here is ever retried automatically except the retry path itself** (AD-9). `blocked`
-is a question for the Operator; every liveness failure and every configuration condition is
-`misconfigured`, and a `misconfigured` Run waits for a person. The retry path is bounded by
-the row's own counter against the contract's `max`, and when it is used up the same sentence
-becomes the park reason — so the Operator reads the same words the gate record counted.
+**Nothing here is ever retried automatically except the retry path itself** (AD-9). A
+`blocked` token is a question for the Operator; every liveness failure and every declared
+misconfigured condition is `misconfigured`, and a `misconfigured` Run waits for a person.
+The retry path is bounded by the row's own counter against the contract's `max`, and when it
+is used up the same sentence becomes the park reason — so the Operator reads the same words
+the gate record counted.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 
 from orchestrator.application.story_file import StoryFile
 from orchestrator.domain.statuses import Gate
 from orchestrator.domain.values import Park, Retry, StepResult
 
-#: The three statuses FR-16 routes forward, by name.
-DONE = "done"
-BLOCKED = "blocked"
-READY_FOR_DEV = "ready-for-dev"
 
-#: The `Blocking condition:` texts that are a broken installation rather than a question.
-#: A stop on one of these offers no Answer box — the Run detail reads `park_kind`, and this
-#: park is `misconfigured`, not `blocked` (PRD §4.6, FR-16).
-CONFIGURATION_CONDITIONS: tuple[str, ...] = (
-    "no subagents",
-    "no stories.yaml found",
-    "story id not found in stories.yaml",
-    "version-control metadata not writable",
-    "no epic spec found",
-    "unrecognized status in existing story file",
-    "ambiguous story file match",
-)
+@dataclass(frozen=True)
+class RouteContract:
+    """The row's declared result contract: which written tokens route where (FR-16)."""
+
+    success: tuple[str, ...] = ()
+    blocked: tuple[str, ...] = ()
+    checkpoint: tuple[str, ...] = ()
+    misconfigured_when: tuple[str, ...] = field(default=())
+
+
+#: What a row that declares no routing lists routes by — FR-16's original tokens, so every
+#: stored template keeps its behaviour with zero edits. No conditions: the seven
+#: `bmad-build-auto` sentences that used to be a code table are the shipped templates'
+#: own `misconfigured_when` declarations now (Operator decision, 2026-09-27).
+DEFAULT = RouteContract(success=("done",), blocked=("blocked",), checkpoint=("ready-for-dev",))
 
 #: Every reason this rule can leave, verbatim as PRD §4.6 prints them.
 NO_STORY_FILE = "no story file"
@@ -77,10 +81,11 @@ def route(  # noqa: PLR0913, PLR0917 — the FR-16 table's own columns, in its o
     retry_count: int,
     retry: Retry | None,
     *,
+    contract: RouteContract = DEFAULT,
     gate: Gate,
     path: str,
 ) -> StepResult:
-    """What the dispatch reached, by FR-16's table alone.
+    """What the dispatch reached, by FR-16's table over the row's own contract.
 
     `gate` and `path` are keyword-only because they are facts of the *row* rather than of the
     contract: the gate the planner recorded (AD-7) travels back out unchanged on every
@@ -91,16 +96,16 @@ def route(  # noqa: PLR0913, PLR0917 — the FR-16 table's own columns, in its o
     if live is not None:
         return _parked(live, gate=gate, path=path)
     assert story_file is not None  # `_liveness` answers for every other shape
-    if story_file.status == BLOCKED:
-        return _blocked(story_file, gate=gate, path=path)
-    if story_file.status == READY_FOR_DEV and spec_checkpoint:
+    if story_file.status in contract.blocked:
+        return _blocked(story_file, contract, gate=gate, path=path)
+    if story_file.status in contract.checkpoint and spec_checkpoint:
         return StepResult(
             status="checkpoint",
             gate=gate,
             reason=SPEC_CHECKPOINT,
             park=Park(kind="checkpoint", reason=SPEC_CHECKPOINT, path=path),
         )
-    if story_file.status != DONE:
+    if story_file.status not in contract.success:
         reason = UNEXPECTED_STATUS.format(status=story_file.status)
         return _retry(reason, retry, retry_count, gate=gate, path=path)
     if exit_code:
@@ -137,9 +142,12 @@ def _liveness(
     return None
 
 
-def _blocked(story_file: StoryFile, *, gate: Gate, path: str) -> StepResult:
-    """A `blocked` file: the Operator's question, unless the condition says it is ours."""
-    if story_file.blocking_condition in CONFIGURATION_CONDITIONS:
+def _blocked(
+    story_file: StoryFile, contract: RouteContract, *, gate: Gate, path: str
+) -> StepResult:
+    """A blocked file: the Operator's question, unless the row declared the condition a
+    broken installation (`expect.misconfigured_when`, Operator decision 2026-09-27)."""
+    if story_file.blocking_condition in contract.misconfigured_when:
         reason = MISCONFIGURED_HARNESS.format(condition=story_file.blocking_condition)
         return _parked(reason, gate=gate, path=path)
     section = story_file.auto_run_result

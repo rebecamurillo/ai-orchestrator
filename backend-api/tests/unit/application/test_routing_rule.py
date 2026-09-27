@@ -16,13 +16,14 @@ import pytest
 
 from orchestrator.application.rules.routing import (
     AMBIGUOUS_STORY_FILE,
-    CONFIGURATION_CONDITIONS,
+    DEFAULT,
     HARNESS_EXIT,
     MISCONFIGURED_HARNESS,
     NO_STORY_FILE,
     SPEC_CHECKPOINT,
     UNEXPECTED_STATUS,
     UNREADABLE_FRONTMATTER,
+    RouteContract,
     route,
 )
 from orchestrator.application.story_file import StoryFile
@@ -34,6 +35,24 @@ ROW_PATH = "epics[0].stories[3].build"
 ONE = ("specs/notifications/stories/4-1-notify.md",)
 SECTION = "## Auto Run Result\n\nStatus: blocked\nBlocking condition: intent gap"
 RETRY = Retry(prompt="Finish the story and write that file.", max=2, resume_session=True)
+
+#: The seven conditions the shipped templates declare (they were a code table until the
+#: Operator decision of 2026-09-27 made the contract the row's own).
+CONDITIONS = (
+    "no subagents",
+    "no stories.yaml found",
+    "story id not found in stories.yaml",
+    "version-control metadata not writable",
+    "no epic spec found",
+    "unrecognized status in existing story file",
+    "ambiguous story file match",
+)
+DECLARED = RouteContract(
+    success=DEFAULT.success,
+    blocked=DEFAULT.blocked,
+    checkpoint=DEFAULT.checkpoint,
+    misconfigured_when=CONDITIONS,
+)
 
 
 def a_story(status: str, condition: str | None = None, result: str = "") -> StoryFile:
@@ -50,6 +69,7 @@ def routed(  # noqa: PLR0913 — one keyword per column of the FR-16 table
     spec_checkpoint: bool = False,
     retry_count: int = 0,
     retry: Retry | None = RETRY,
+    contract: RouteContract = DEFAULT,
 ) -> StepResult:
     return route(
         story,
@@ -58,6 +78,7 @@ def routed(  # noqa: PLR0913 — one keyword per column of the FR-16 table
         spec_checkpoint,
         retry_count,
         retry,
+        contract=contract,
         gate=GATE,
         path=ROW_PATH,
     )
@@ -94,12 +115,15 @@ def test_a_blocked_file_with_no_condition_at_all_is_still_a_question() -> None:
     assert result.park.kind == "blocked"
 
 
-@pytest.mark.parametrize("condition", CONFIGURATION_CONDITIONS)
-def test_each_configuration_condition_is_a_misconfigured_stop_and_not_a_question(
+@pytest.mark.parametrize("condition", CONDITIONS)
+def test_a_declared_condition_is_a_misconfigured_stop_and_not_a_question(
     condition: str,
 ) -> None:
-    """No Answer is offered on these: the UI reads `park_kind`, and this one is not `blocked`."""
-    result = routed(a_story("blocked", condition, SECTION))
+    """Revised 2026-09-27 (Operator decision: the contract is the row's own): the seven
+    strings moved from a code table into the shipped templates' `misconfigured_when` — a
+    row that declares them parks exactly as the table used to. No Answer is offered on
+    these: the UI reads `park_kind`, and this one is not `blocked`."""
+    result = routed(a_story("blocked", condition, SECTION), contract=DECLARED)
 
     assert result.status == "error"
     assert result.park is not None
@@ -108,16 +132,14 @@ def test_each_configuration_condition_is_a_misconfigured_stop_and_not_a_question
     assert result.reason == MISCONFIGURED_HARNESS.format(condition=condition)
 
 
-def test_the_seven_conditions_are_the_whole_configuration_list() -> None:
-    assert CONFIGURATION_CONDITIONS == (
-        "no subagents",
-        "no stories.yaml found",
-        "story id not found in stories.yaml",
-        "version-control metadata not writable",
-        "no epic spec found",
-        "unrecognized status in existing story file",
-        "ambiguous story file match",
-    )
+def test_the_default_contract_declares_no_conditions_so_every_block_is_a_question() -> None:
+    """Revised 2026-09-27, same decision: a row that names no `misconfigured_when` gets an
+    Answer box on any condition — the code table is gone."""
+    result = routed(a_story("blocked", "no subagents", SECTION))
+
+    assert result.status == "blocked"
+    assert result.park is not None
+    assert result.park.kind == "blocked"
 
 
 # ── the spec checkpoint ──────────────────────────────────────────────────────
@@ -338,3 +360,49 @@ def test_every_stop_is_one_park_kind_of_the_table_on_this_row(result: StepResult
 def test_no_row_of_the_table_ever_asks_for_a_redispatch(result: StepResult) -> None:
     """Going back to an earlier row is the verify step's decision, never this one's."""
     assert result.redispatch is None
+
+
+# ── the row's own vocabulary (Operator decision, 2026-09-27) ─────────────────
+
+
+CUSTOM = RouteContract(success=("shipped",), blocked=("stuck",), checkpoint=("plan-ready",))
+
+
+def test_a_custom_success_token_routes_done() -> None:
+    assert routed(a_story("shipped"), contract=CUSTOM).status == "done"
+
+
+def test_a_custom_blocked_token_is_the_operators_question() -> None:
+    result = routed(a_story("stuck", "intent gap", SECTION), contract=CUSTOM)
+
+    assert result.status == "blocked"
+    assert result.park is not None
+    assert result.park.kind == "blocked"
+
+
+def test_a_custom_checkpoint_token_stops_at_a_declared_spec_checkpoint() -> None:
+    result = routed(a_story("plan-ready"), spec_checkpoint=True, contract=CUSTOM)
+
+    assert result.status == "checkpoint"
+
+
+def test_a_checkpoint_token_without_the_flag_takes_the_retry_path() -> None:
+    """The asymmetry FR-16 always had, kept: stopped-early is not progress."""
+    result = routed(a_story("plan-ready"), contract=CUSTOM)
+
+    assert result.status == "error"
+    assert result.reason == UNEXPECTED_STATUS.format(status="plan-ready")
+    assert result.retry == RETRY
+
+
+def test_the_default_tokens_route_nowhere_under_a_custom_contract() -> None:
+    result = routed(a_story("done"), contract=CUSTOM)
+
+    assert result.reason == UNEXPECTED_STATUS.format(status="done")
+
+
+def test_the_exit_code_overrules_any_success_token_not_only_done() -> None:
+    result = routed(a_story("shipped"), exit_code=1, contract=CUSTOM)
+
+    assert result.status == "error"
+    assert result.reason == HARNESS_EXIT.format(code=1)

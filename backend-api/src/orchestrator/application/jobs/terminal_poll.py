@@ -43,9 +43,8 @@ from uuid import UUID
 import structlog
 
 from orchestrator.application import story_file
-from orchestrator.application.rules.routing import DONE
 from orchestrator.application.rules.signals import TERMINAL_RESUMED
-from orchestrator.application.steps.agent_tail import STORY_FILE_GLOB
+from orchestrator.application.steps.agent_tail import STORY_FILE_GLOB, route_contract_of
 from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY, STORY_ID_KEY
 from orchestrator.application.use_cases.signal_run import SignalPorts, signal_run
 from orchestrator.domain.entities.run import Run
@@ -165,7 +164,8 @@ def _is_clean(ports: TerminalPollPorts, run: Run, park_row: StepRun | None) -> b
 
 
 def _story_is_done(workspace: Workspace, park_row: StepRun) -> bool:
-    """FR-16's own glob and FR-16's own `done`, read from the worktree the Operator edits.
+    """FR-16's own glob and the row's own success tokens (Operator decision, 2026-09-27),
+    read from the worktree the Operator edits.
 
     Exactly one match, as `rules/routing.py::_liveness` requires: zero is a Story that was
     never written and several is an ambiguity nothing here may resolve — both are "not done
@@ -180,7 +180,7 @@ def _story_is_done(workspace: Workspace, park_row: StepRun) -> bool:
     if len(matches) != 1:
         return False
     parsed = story_file.parse(matches[0], workspace.read(matches[0]) or "")
-    return parsed is not None and parsed.status == DONE
+    return parsed is not None and parsed.status in route_contract_of(resolved).success
 
 
 def _record_end_sha(ports: TerminalPollPorts, run: Run, park_row: StepRun) -> None:

@@ -19,8 +19,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from orchestrator.application.rules import budget, protected_paths
-from orchestrator.application.rules.routing import route
+from orchestrator.application.rules import budget, protected_paths, routing
 from orchestrator.application.rules.signals import accepted_files
 from orchestrator.application.steps import agent_workdir
 from orchestrator.application.steps.context import (
@@ -160,13 +159,14 @@ def tail(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> StepResul
     files = story_files(ctx)
     if files is None:
         return StepResult(status="done", gate=ctx.row.gate, output_ref=log)
-    routed = route(
+    routed = routing.route(
         _parsed(ctx, files),
         files,
         result.exit_code,
         bool(ctx.with_resolved.get(SPEC_CHECKPOINT_KEY)),
         ctx.row.retry_count,
         retry_of(ctx),
+        contract=route_contract_of(ctx.with_resolved),
         gate=ctx.row.gate,
         path=ctx.row.path,
     )
@@ -299,6 +299,36 @@ def liveness_globs(with_resolved: Mapping[str, Any]) -> tuple[str, ...]:
             spec_folder=spec_folder,
             story_id=resolved_text(with_resolved, STORY_ID_KEY),
         ),
+    )
+
+
+def route_contract_of(with_resolved: Mapping[str, Any]) -> routing.RouteContract:
+    """The row's declared result contract, or FR-16's defaults when it declares no lists
+    (Operator decision, 2026-09-27) — the mirror of `retry_of`, pure over the mapping so
+    the terminal poll can ask the same question of a parked row.
+
+    `misconfigured_when` rides along either way: a row may keep the default tokens and
+    still name the conditions that are a broken installation rather than a question.
+    """
+    expect = with_resolved.get(EXPECT_KEY)
+    declared = expect if isinstance(expect, Mapping) else {}
+    lists = {
+        key: tuple(str(token) for token in declared.get(key) or ())
+        for key in ("success", "blocked", "checkpoint", "misconfigured_when")
+    }
+    conditions = lists["misconfigured_when"]
+    if not (lists["success"] or lists["blocked"] or lists["checkpoint"]):
+        return routing.RouteContract(
+            success=routing.DEFAULT.success,
+            blocked=routing.DEFAULT.blocked,
+            checkpoint=routing.DEFAULT.checkpoint,
+            misconfigured_when=conditions,
+        )
+    return routing.RouteContract(
+        success=lists["success"],
+        blocked=lists["blocked"],
+        checkpoint=lists["checkpoint"],
+        misconfigured_when=conditions,
     )
 
 

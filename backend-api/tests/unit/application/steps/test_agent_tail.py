@@ -26,6 +26,7 @@ from tests.unit.application.steps.agent_fixtures import (
     resolved,
 )
 from tests.unit.application.steps.agent_tail_fixtures import (
+    CONDITIONS,
     LOG_PATH,
     OTHER_PATH,
     RETRY_MAX,
@@ -39,17 +40,6 @@ from tests.unit.application.steps.agent_tail_fixtures import (
     retried,
 )
 from tests.unit.fakes.harness import FakeHarness
-
-#: The seven conditions FR-16 calls configuration failures rather than questions.
-CONDITIONS = (
-    "no subagents",
-    "no stories.yaml found",
-    "story id not found in stories.yaml",
-    "version-control metadata not writable",
-    "no epic spec found",
-    "unrecognized status in existing story file",
-    "ambiguous story file match",
-)
 
 
 def run(world: World) -> StepResult:
@@ -113,7 +103,9 @@ def test_a_blocked_file_is_the_question_the_operator_reads_verbatim() -> None:
 
 
 @pytest.mark.parametrize("condition", CONDITIONS)
-def test_a_configuration_condition_stops_the_run_misconfigured(condition: str) -> None:
+def test_a_declared_condition_stops_the_run_misconfigured(condition: str) -> None:
+    """Revised 2026-09-27 (Operator decision): the row declares the conditions —
+    `contracted()` carries the shipped seven — and routing consults the row, not a table."""
     world = a_tail_world(story=a_story("blocked", condition))
 
     result = run(world)
