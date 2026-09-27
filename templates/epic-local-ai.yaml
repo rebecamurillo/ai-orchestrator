@@ -115,12 +115,12 @@ steps:
             file in this step.
         expect:
           files: ["{{spec_folder}}/stories/.auto/{{story.id}}-01-clarify.md"]
-          status_in: [done, blocked]
+          success: [done]
+          blocked: [blocked]
         retry:
           max: 1
           prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-01-clarify.md. Do the step again and write that marker last, with status done or status blocked."
           resume_session: false
-        escalate_when: "output.status == blocked"
         timeout_min: 30
         gate: liveness
 
@@ -189,12 +189,12 @@ steps:
             file in this step.
         expect:
           files: ["{{spec_folder}}/stories/.auto/{{story.id}}-02-plan.md"]
-          status_in: [done, blocked]
+          success: [done]
+          blocked: [blocked]
         retry:
           max: 1
           prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-02-plan.md. Do the step again and write that marker last, with status done or status blocked."
           resume_session: false
-        escalate_when: "output.status == blocked"
         timeout_min: 45
         gate: liveness
 
@@ -264,12 +264,12 @@ steps:
             SPEC.md, stories.yaml, epics.yaml or any AGENTS.md.
         expect:
           files: ["{{spec_folder}}/stories/.auto/{{story.id}}-03-implement.md"]
-          status_in: [done, blocked]
+          success: [done]
+          blocked: [blocked]
         retry:
           max: 1
           prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-03-implement.md. Finish the implementation and write that marker last, with status done or status blocked."
           resume_session: false
-        escalate_when: "output.status == blocked"
         timeout_min: 120
         gate: liveness
 
@@ -345,12 +345,12 @@ steps:
             or any AGENTS.md.
         expect:
           files: ["{{spec_folder}}/stories/.auto/{{story.id}}-04-review.md"]
-          status_in: [done, blocked]
+          success: [done]
+          blocked: [blocked]
         retry:
           max: 1
           prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-04-review.md. Finish the review and write that marker last, with status done or status blocked."
           resume_session: false
-        escalate_when: "output.status == blocked"
         timeout_min: 60
         gate: liveness
 
@@ -415,12 +415,12 @@ steps:
             Do not modify SPEC.md, stories.yaml, epics.yaml or any AGENTS.md.
         expect:
           files: ["{{spec_folder}}/stories/.auto/{{story.id}}-05-unit.md"]
-          status_in: [done, blocked]
+          success: [done]
+          blocked: [blocked]
         retry:
           max: 1
           prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-05-unit.md. Run the unit tests, settle what they report, and write that marker last, with status done or status blocked."
           resume_session: false
-        escalate_when: "output.status == blocked"
         timeout_min: 60
         gate: liveness
 
@@ -490,12 +490,12 @@ steps:
             Do not modify SPEC.md, stories.yaml, epics.yaml or any AGENTS.md.
         expect:
           files: ["{{spec_folder}}/stories/.auto/{{story.id}}-06-gate.md"]
-          status_in: [done, blocked]
+          success: [done]
+          blocked: [blocked]
         retry:
           max: 1
           prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-06-gate.md. Run the quality gate, settle what it reports, and write that marker last, with status done or status blocked."
           resume_session: false
-        escalate_when: "output.status == blocked"
         timeout_min: 90
         gate: liveness
 

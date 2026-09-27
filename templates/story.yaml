@@ -22,14 +22,31 @@ steps:
       skill: bmad-build-auto
       args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
       prompt_extra: "{{story.invoke_dev_with}}"
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+      halt: "Halt after planning."
     expect:
       files: ["{{spec_folder}}/stories/{{story.id}}-*.md"]
-      status_in: [done, blocked, ready-for-dev]
+      success: [done]
+      blocked: [blocked]
+      checkpoint: [ready-for-dev]
+      misconfigured_when:
+        - no subagents
+        - no stories.yaml found
+        - story id not found in stories.yaml
+        - version-control metadata not writable
+        - no epic spec found
+        - unrecognized status in existing story file
+        - ambiguous story file match
     retry:
       max: 2
       prompt: "No story file with a terminal status was found at {{spec_folder}}/stories/{{story.id}}-*.md. Finish the story and write that file, or set status: blocked with the reason."
       resume_session: true
-    escalate_when: "output.status == blocked"
     pause_when: "story.spec_checkpoint"
     timeout_min: 90
     gate: liveness

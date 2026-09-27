@@ -36,14 +36,31 @@ steps:
       model: "{{model}}"
       skill: bmad-build-auto
       intent: "{{intent}}"
+    prompts:
+      dispatch: "Run the skill {skill} with the following intent:\n\n{intent}"
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+      halt: "Halt after planning."
     expect:
       files: ["{{artifacts_dir}}/spec-{{task_id}}-*.md"]
-      status_in: [done, blocked, ready-for-dev]
+      success: [done]
+      blocked: [blocked]
+      checkpoint: [ready-for-dev]
+      misconfigured_when:
+        - no subagents
+        - no stories.yaml found
+        - story id not found in stories.yaml
+        - version-control metadata not writable
+        - no epic spec found
+        - unrecognized status in existing story file
+        - ambiguous story file match
     retry:
       max: 2
       prompt: "No spec file with a terminal status was found at {{artifacts_dir}}/spec-{{task_id}}-*.md. Finish the task and write that file, or set status: blocked with the reason."
       resume_session: true
-    escalate_when: "output.status == blocked"
     pause_when: always
     timeout_min: 90
     gate: liveness

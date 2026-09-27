@@ -30,8 +30,14 @@ steps:
       model: "{{model}}"
       skill: bmad-project-context
       args: { intent: setup, target: "." }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
     writes: ["AGENTS.md"]
-    escalate_when: "output.status == blocked"
     timeout_min: 45
     gate: liveness
 

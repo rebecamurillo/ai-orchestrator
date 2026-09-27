@@ -35,9 +35,17 @@ steps:
       model: "{{model}}"
       skill: spec-gate
       args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
     expect:
       files: ["{{spec_folder}}/spec-gate-result.md"]
-      status_in: [done, blocked]
+      success: [done]
+      blocked: [blocked]
     timeout_min: 30
     gate: liveness
 
@@ -66,6 +74,13 @@ steps:
       model: "{{model}}"
       skill: bmad-qa-generate-e2e-tests
       args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
     timeout_min: 30
     gate: liveness
 
@@ -87,6 +102,13 @@ steps:
       model: "{{model}}"
       skill: bmad-retrospective
       args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
     timeout_min: 30
     gate: liveness
 
