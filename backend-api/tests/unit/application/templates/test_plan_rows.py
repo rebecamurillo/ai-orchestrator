@@ -365,7 +365,16 @@ def test_an_agent_row_carries_the_pause_flag_rather_than_a_row_of_its_own() -> N
 def test_an_agent_row_carries_its_expect_and_retry_resolved() -> None:
     resolved = row(planned(PAUSED, git=things_git()), "things[0].work").with_resolved
 
-    assert resolved["expect"] == {"files": [], "status_in": ["done"]}
+    # Revised 2026-09-27 (Operator decision: declarable result contract) — the routing
+    # lists ride the same dict, empty when the file declares none.
+    assert resolved["expect"] == {
+        "files": [],
+        "status_in": ["done"],
+        "success": [],
+        "blocked": [],
+        "checkpoint": [],
+        "misconfigured_when": [],
+    }
     assert resolved["retry"] == {"max": 2, "prompt": "again for t1", "resume_session": True}
 
 

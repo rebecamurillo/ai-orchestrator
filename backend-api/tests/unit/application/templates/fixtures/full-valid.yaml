@@ -54,6 +54,10 @@ steps:
     expect:
       files: ["{{spec_folder}}/SPEC.md"]
       status_in: [done, blocked]
+      success: [done]
+      blocked: [blocked]
+      checkpoint: [ready-for-dev]
+      misconfigured_when: ["no workspace"]
     retry:
       max: 2
       prompt: finish the story or say why not

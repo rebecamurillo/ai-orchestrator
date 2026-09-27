@@ -76,6 +76,12 @@ def agent_extras(agent: AgentExtras, frame: Frame) -> dict[str, Any]:
         EXPECT_KEY: {
             "files": [resolve(glob, frame.scope) for glob in agent.expect_files],
             "status_in": list(agent.expect_status_in),
+            # The declared result contract (Operator decision, 2026-09-27) — literal
+            # tokens, like `status_in`: a status a method writes is not an expression.
+            "success": list(agent.expect_success),
+            "blocked": list(agent.expect_blocked),
+            "checkpoint": list(agent.expect_checkpoint),
+            "misconfigured_when": list(agent.expect_misconfigured_when),
         },
         RETRY_KEY: {
             "max": agent.retry_max,
@@ -103,7 +109,15 @@ def _prompt_clauses(agent: AgentExtras, frame: Frame) -> dict[str, str]:
 
 
 def _has_story_contract(agent: AgentExtras, frame: Frame) -> bool:
-    if agent.expect_files or agent.expect_status_in:
+    declared = (
+        agent.expect_files,
+        agent.expect_status_in,
+        agent.expect_success,
+        agent.expect_blocked,
+        agent.expect_checkpoint,
+        agent.expect_misconfigured_when,
+    )
+    if any(declared):
         return True
     return bool(frame.story_id) and bool(frame.scope.get(SPEC_FOLDER_KEY))
 

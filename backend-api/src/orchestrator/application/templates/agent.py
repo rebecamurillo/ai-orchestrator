@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from orchestrator.application.templates.lines import LinedMap, as_map, as_seq, key_line
 from orchestrator.application.templates.model import (
+    CONFLICTING_ROUTE,
     INVALID_STATUS_TOKEN,
     INVALID_VALUE,
     MISSING_KEY,
@@ -41,6 +42,13 @@ RETRY_KEY = "retry"
 FILES_KEY = "files"
 STATUS_IN_KEY = "status_in"
 
+#: The three routing lists (Operator decision, 2026-09-27). Tokens are free-form — a
+#: non-BMAD method names its own — so the only checks are text-shaped entries and no token
+#: routed two ways at once. `misconfigured_when` is checked for shape alone: its entries
+#: are blocking-condition sentences, not status tokens, so the cross-list rule ignores it.
+ROUTE_KEYS = ("success", "blocked", "checkpoint")
+MISCONFIGURED_WHEN_KEY = "misconfigured_when"
+
 
 def check_agent_extras(node: LinedMap) -> list[ValidationError]:
     """Sub-key membership and `status_in` tokens; nothing deeper (the brief's boundary)."""
@@ -55,6 +63,7 @@ def check_agent_extras(node: LinedMap) -> list[ValidationError]:
         errors += unknown_keys(sub, allowed)
     errors += _check_status_tokens(node)
     errors += _check_expect_files(node)
+    errors += _check_route_lists(node)
     errors += _check_writes(node)
     errors += _check_prompt_clauses(node)
     return errors + _check_retry_shapes(node)
@@ -91,6 +100,28 @@ def _check_writes(node: LinedMap) -> list[ValidationError]:
     if paths is None:
         return [problem(line, INVALID_VALUE)]
     return [problem(line, INVALID_VALUE) for path in paths if not isinstance(path, str)]
+
+
+def _check_route_lists(node: LinedMap) -> list[ValidationError]:
+    """Entries are non-empty text, and no status token routes two ways at once."""
+    expect = as_map(node.get(EXPECT_KEY))
+    if expect is None:
+        return []
+    errors: list[ValidationError] = []
+    seen: dict[str, str] = {}
+    for key in (*ROUTE_KEYS, MISCONFIGURED_WHEN_KEY):
+        tokens = as_seq(expect.get(key))
+        if tokens is None:
+            continue
+        line = key_line(expect, key, expect.line)
+        for token in tokens:
+            if not isinstance(token, str) or not token:
+                errors.append(problem(line, INVALID_VALUE))
+            elif key != MISCONFIGURED_WHEN_KEY:
+                if token in seen and seen[token] != key:
+                    errors.append(problem(line, CONFLICTING_ROUTE))
+                seen[token] = key
+    return errors
 
 
 def _check_prompt_clauses(node: LinedMap) -> list[ValidationError]:

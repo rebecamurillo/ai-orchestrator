@@ -45,7 +45,9 @@ FOR_EACH_KEYS = frozenset(
         "only",
     }
 )
-EXPECT_KEYS = frozenset({"files", "status_in"})
+EXPECT_KEYS = frozenset(
+    {"files", "status_in", "success", "blocked", "checkpoint", "misconfigured_when"}
+)
 RETRY_KEYS = frozenset({"max", "prompt", "resume_session"})
 REDISPATCH_KEYS = frozenset({"redispatch", "max"})
 

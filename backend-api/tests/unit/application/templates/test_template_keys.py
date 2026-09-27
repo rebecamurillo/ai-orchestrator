@@ -17,6 +17,7 @@ from orchestrator.application.templates.model import (
     BAD_DEFAULT,
     BAD_REDISPATCH,
     CALL_TIMING,
+    CONFLICTING_ROUTE,
     DUPLICATE_STEP_ID,
     EMPTY_STEPS,
     INVALID_GATE,
@@ -404,6 +405,51 @@ def test_a_prompt_clause_that_is_not_text_is_an_invalid_value() -> None:
 
 def test_prompts_on_a_step_of_any_other_kind_is_unknown() -> None:
     assert check(HEAD + GATED + "    prompts:\n      dispatch: go\n")[0] == [UNKNOWN_KEY]
+
+
+# --- the routing lists (Operator decision, 2026-09-27: the result contract is declared) ---
+
+
+def test_the_routing_lists_take_free_form_tokens() -> None:
+    text = (
+        HEAD
+        + AGENT
+        + (
+            "    expect:\n"
+            "      success: [shipped]\n"
+            "      blocked: [stuck]\n"
+            "      checkpoint: [plan-ready]\n"
+            "      misconfigured_when: ['no workspace']\n"
+        )
+    )
+
+    assert check(text)[0] == []
+
+
+def test_status_in_still_binds_to_the_six_tokens_while_success_does_not() -> None:
+    """The legacy list keeps its vocabulary; the routing lists are the method's own."""
+    text = HEAD + AGENT + "    expect:\n      status_in: [shipped]\n      success: [shipped]\n"
+
+    assert check(text)[0] == [INVALID_STATUS_TOKEN]
+
+
+@pytest.mark.parametrize("written", ["[3]", "['']"])
+def test_a_routing_entry_that_is_not_non_empty_text_is_an_invalid_value(written: str) -> None:
+    assert check(HEAD + AGENT + f"    expect:\n      success: {written}\n")[0] == [INVALID_VALUE]
+
+
+def test_a_token_in_two_routing_lists_routes_twice() -> None:
+    text = HEAD + AGENT + "    expect:\n      success: [done]\n      blocked: [done]\n"
+
+    assert check(text)[0] == [CONFLICTING_ROUTE]
+
+
+def test_the_same_condition_may_be_blocked_and_misconfigured_when() -> None:
+    """`misconfigured_when` names blocking-condition sentences, not status tokens; the
+    cross-list rule does not read it."""
+    text = HEAD + AGENT + "    expect:\n      blocked: [stuck]\n      misconfigured_when: [stuck]\n"
+
+    assert check(text)[0] == []
 
 
 def test_an_enum_value_that_is_not_text_is_an_invalid_value() -> None:

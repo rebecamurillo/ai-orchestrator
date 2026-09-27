@@ -279,6 +279,10 @@ def test_the_agent_extras_are_read_off_the_step(
     assert build.agent.prompt_rendered == "The workflow is rendered at {path}."
     assert build.agent.prompt_answer == 'Answer to "{condition}": {answer}'
     assert build.agent.prompt_halt == "Halt after planning."
+    assert build.agent.expect_success == ("done",)
+    assert build.agent.expect_blocked == ("blocked",)
+    assert build.agent.expect_checkpoint == ("ready-for-dev",)
+    assert build.agent.expect_misconfigured_when == ("no workspace",)
 
 
 def test_an_agent_that_declares_no_extras_still_gets_the_defaults(
@@ -298,6 +302,8 @@ def test_an_agent_that_declares_no_extras_still_gets_the_defaults(
     assert build.agent.prompt_rendered is None
     assert build.agent.prompt_answer is None
     assert build.agent.prompt_halt is None
+    assert build.agent.expect_success == ()
+    assert build.agent.expect_misconfigured_when == ()
 
 
 def test_a_with_map_keeps_its_nested_maps_and_lists_without_the_line_bookkeeping(

@@ -87,6 +87,26 @@ IN_LOOP_WITH_PROMPTS = (
 """
 )
 
+#: The same, with a declared result contract in a vocabulary of the Template's own.
+WITH_ROUTES = (
+    HEADER.format(name="with-routes")
+    + """  - id: things
+    for_each: "{{spec_folder}}/things.yaml"
+    as: thing
+    steps:
+      - id: work
+        uses: agent
+        with: { harness: "{{harness}}" }
+        expect:
+          files: ["{{spec_folder}}/out-*.md"]
+          success: [shipped]
+          blocked: [stuck]
+          checkpoint: [plan-ready]
+          misconfigured_when: ["no workspace"]
+        gate: liveness
+"""
+)
+
 #: An `agent` step no loop encloses: a dispatch with no entry behind it.
 ALONE = (
     HEADER.format(name="alone")
@@ -177,6 +197,17 @@ def test_an_agent_row_carries_its_expect_and_retry_with_the_globs_filled_in() ->
     assert row[RETRY_KEY]["max"] == fixtures.RETRY_MAX
     assert row[RETRY_KEY]["resume_session"] is True
     assert fixtures.SPEC_FOLDER in row[RETRY_KEY]["prompt"]
+
+
+def test_an_agent_row_carries_the_routing_lists_its_template_declared() -> None:
+    """Operator decision, 2026-09-27: the result contract is the row's own declaration,
+    carried literally — a status token a method writes is not an expression."""
+    row = resolved(planned(WITH_ROUTES), "things[0].work")
+
+    assert row[EXPECT_KEY]["success"] == ["shipped"]
+    assert row[EXPECT_KEY]["blocked"] == ["stuck"]
+    assert row[EXPECT_KEY]["checkpoint"] == ["plan-ready"]
+    assert row[EXPECT_KEY]["misconfigured_when"] == ["no workspace"]
 
 
 # --- the entry a loop in the same file bound ----------------------------------------------------

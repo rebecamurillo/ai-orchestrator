@@ -106,6 +106,11 @@ INVALID_SUBMODULE_FORM = "invalid git.submodule form"
 #: bijection AD-15 relies on: the graph would accept it but plan indices would collide.
 ALL_DIGIT_STEP_ID = "all-digit step id"
 
+#: A status token named in more than one of `expect.success` / `expect.blocked` /
+#: `expect.checkpoint` routes two ways at once, which is no route at all (Operator
+#: decision, 2026-09-27: routing is the row's own declaration).
+CONFLICTING_ROUTE = "status routed twice"
+
 # --- the tree ---------------------------------------------------------------------------
 
 
@@ -134,6 +139,15 @@ class AgentExtras(BaseModel):
     line: int
     expect_files: tuple[str, ...] = ()
     expect_status_in: tuple[str, ...] = ()
+    #: The declared result contract (Operator decision, 2026-09-27): which written status
+    #: tokens mean success / an operator question / a spec checkpoint, and which blocking
+    #: conditions are a broken installation rather than a question. Free-form tokens — a
+    #: non-BMAD method declares its own vocabulary; `STATUS_TOKENS` binds only the legacy
+    #: `status_in` and `escalate_when`.
+    expect_success: tuple[str, ...] = ()
+    expect_blocked: tuple[str, ...] = ()
+    expect_checkpoint: tuple[str, ...] = ()
+    expect_misconfigured_when: tuple[str, ...] = ()
     retry_max: int | None = None
     retry_prompt: str | None = None
     retry_resume_session: bool = True
