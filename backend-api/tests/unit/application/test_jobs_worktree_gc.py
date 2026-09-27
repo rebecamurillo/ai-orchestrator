@@ -59,7 +59,6 @@ def an_environment(run_id: UUID) -> RunEnvironment:
         repository_slug="r",
         repository_url="https://github.com/org/r.git",
         default_branch="main",
-        install_command="",
         bmad_version="6.11.0",
         spec_folder=None,
     )

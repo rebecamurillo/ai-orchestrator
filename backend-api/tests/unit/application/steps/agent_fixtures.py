@@ -255,7 +255,6 @@ def a_world(  # noqa: PLR0913 — one keyword per double or context field, each 
                 repository_slug="widgets",
                 repository_url="https://github.com/acme/widgets.git",
                 default_branch="main",
-                install_command="",
                 bmad_version="6.11.0",
                 spec_folder=SPEC_FOLDER,
                 run=the_run,

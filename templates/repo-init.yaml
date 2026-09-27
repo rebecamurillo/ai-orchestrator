@@ -13,6 +13,11 @@ steps:
     with: { base: "{{base_branch}}", branch: "chore/bmad-init" }
     gate: deterministic
 
+  - id: setup
+    run: "{{repository.install_command}}"
+    timeout_min: 20
+    gate: deterministic
+
   - id: install
     uses: bmad.install
     timeout_min: 30

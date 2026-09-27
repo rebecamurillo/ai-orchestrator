@@ -51,7 +51,7 @@ def test_the_environment_is_frozen_so_no_executor_can_edit_what_it_was_handed() 
     env = an_environment()
 
     with pytest.raises(FrozenInstanceError):
-        env.install_command = "rm -rf /"  # type: ignore[misc]
+        env.repository_url = "https://evil.example/repo.git"  # type: ignore[misc]
 
 
 def test_the_base_clone_path_is_ad_14s_one_layout() -> None:

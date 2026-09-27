@@ -1,4 +1,9 @@
-"""The three kinds that start a process name the file that process wrote.
+"""The kinds that start a process name the file that process wrote.
+
+Revised 2026-09-27 (Operator decision: `install_command` is a declared template row, not a
+`git.worktree` side effect): the `git.worktree` section is gone with the process it ran —
+the install now goes through the `shell` rows asserted below — and
+`test_git_worktree_executor.py` pins that the kind starts no process at all.
 
 A row whose command fails is the one row an Operator most needs to read, and the only thing
 that can tell them why is the file `ProcessRunner.start` appended stdout and stderr into.
@@ -19,25 +24,20 @@ from pathlib import Path
 from orchestrator.application.steps.bmad_install import KIND as BMAD_KIND
 from orchestrator.application.steps.bmad_install import BmadInstallExecutor
 from orchestrator.application.steps.context import StepContext, log_path
-from orchestrator.application.steps.git_worktree import KIND as WORKTREE_KIND
-from orchestrator.application.steps.git_worktree import GitWorktreeExecutor
 from orchestrator.application.steps.shell import KIND as SHELL_KIND
 from orchestrator.application.steps.shell import ShellExecutor
 from orchestrator.domain.ports.process import Outcome
 from orchestrator.domain.values import StepResult
-from tests.unit.fakes.git import FakeGit
 from tests.unit.fakes.process import FakeProcessRunner
 from tests.unit.fakes.workspace import FakeWorkspace
 from tests.unit.step_fixtures import (
     BMAD_VERSION,
-    DEFAULT_BRANCH,
     a_context,
     a_row,
     an_environment,
 )
 
-#: The Repository's own `install_command`, and the two ways it can end badly.
-INSTALL = "make install"
+#: The two ways a command can end badly, and the one way it ends well.
 NOT_FOUND = Outcome(exit_code=127, timed_out=False)
 CLEAN = Outcome(exit_code=0, timed_out=False)
 KILLED = Outcome(exit_code=None, timed_out=True)
@@ -45,21 +45,6 @@ KILLED = Outcome(exit_code=None, timed_out=True)
 #: The verify command a `shell` row runs, and the exit that sends the Run back.
 VERIFY = "make test"
 FAILED = Outcome(exit_code=1, timed_out=False)
-
-
-def a_worktree_context(outcome: Outcome, *, command: str = INSTALL) -> StepContext:
-    """A `git.worktree` row over a Repository that declares an `install_command`."""
-    row = a_row(
-        kind=WORKTREE_KIND,
-        with_resolved={"base": DEFAULT_BRANCH, "branch": "chore/bmad-init", "timeout_min": 5},
-    )
-    return a_context(
-        row,
-        env=an_environment(install_command=command),
-        git=FakeGit(base_exists=[True], branch_exists=[False]),
-        process=FakeProcessRunner(outcomes={command: outcome}),
-        workspace=FakeWorkspace(),
-    )
 
 
 def a_bmad_context(outcome: Outcome) -> StepContext:
@@ -103,50 +88,6 @@ def assert_names_its_log(result: StepResult, ctx: StepContext) -> None:
     """The result names the same file the runner was told to append into."""
     assert result.log_path == the_log_of(ctx)
     assert result.log_path == str(started_with(ctx))
-
-
-# ── git.worktree: the Repository's install_command ──────────────────────────
-
-
-def test_a_failed_install_names_the_log_it_wrote() -> None:
-    """Exit 127 — the command is not in the image — is unreadable without the log."""
-    ctx = a_worktree_context(NOT_FOUND)
-
-    result = GitWorktreeExecutor().execute(ctx)
-
-    assert result.status == "error"
-    assert result.park is not None
-    assert_names_its_log(result, ctx)
-
-
-def test_a_killed_install_names_the_log_it_wrote() -> None:
-    ctx = a_worktree_context(KILLED)
-
-    result = GitWorktreeExecutor().execute(ctx)
-
-    assert result.status == "error"
-    assert_names_its_log(result, ctx)
-
-
-def test_an_install_that_worked_names_its_log_too() -> None:
-    """A green row's output is worth reading; only a row that ran nothing has none."""
-    ctx = a_worktree_context(CLEAN)
-
-    result = GitWorktreeExecutor().execute(ctx)
-
-    assert result.status == "done"
-    assert_names_its_log(result, ctx)
-
-
-def test_a_repository_with_no_install_command_names_no_log() -> None:
-    """No process ran, so there is no file to name — and `tail` must not be sent a path
-    to a file nothing ever wrote."""
-    ctx = a_worktree_context(CLEAN, command="")
-
-    result = GitWorktreeExecutor().execute(ctx)
-
-    assert result.status == "done"
-    assert result.log_path is None
 
 
 # ── bmad.install ────────────────────────────────────────────────────────────

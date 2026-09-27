@@ -21,7 +21,7 @@ every row of every Run, but a `Workspace` is rooted at `run.worktree_path`, so
 holding a stale rooted instance.
 
 **`run_env` is resolved by the walker, not fetched by the executor.** An executor needs
-facts the row cannot carry — the Repository's clone, its `install_command`, its worktrees —
+facts the row cannot carry — the Repository's clone, its default branch, its worktrees —
 so `attempt_row` reads them once and hands them over as a frozen `RunEnvironment` inside
 `StepPorts`: the executor reads a value, never a repository (AD-8).
 
@@ -134,8 +134,6 @@ class RunEnvironment:
     repository_slug: str
     repository_url: str
     default_branch: str
-    #: `""` when the Repository declares none — `git.worktree` then runs nothing.
-    install_command: str
     #: The `BMAD_VERSION` this instance runs (AD-16), for `bmad.install`.
     bmad_version: str
     #: The Run input every dev-loop Template declares, or `None` (`repo-init@1` has none).

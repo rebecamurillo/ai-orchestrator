@@ -92,7 +92,7 @@ TIMEOUT_SECONDS = 10.0
 SERVICE = "backend-api"
 COMPOSE = ("docker", "compose")
 
-#: How long the Repository's install command holds the `checkout` row. Long enough to be
+#: How long the Repository's install command holds the `setup` row. Long enough to be
 #: caught running twice over — once before the kill, once after it — and short enough that
 #: both scenarios together stay inside the brief's own five-minute budget. The row's timeout
 #: is `git.worktree`'s own default of five minutes, so this never reaches it.
@@ -120,7 +120,7 @@ DONE = "done"
 
 #: The rows AD-7 and the two Templates below plan, in order.
 PLAN = "plan"
-CHECKOUT = "checkout"
+SETUP = "setup"
 PAUSE = "pause"
 AFTER = "after"
 
@@ -133,9 +133,10 @@ ERROR = "error"
 RUN_STARTED = "start"
 RUN_FINISHED = "done"
 
-#: Scenario 1: one row that holds a real child process, then one that does not. `git.worktree`
-#: runs the Repository's `install_command` inside itself (AD-14), which is what makes the
-#: `checkout` row long-lived without an executor written for this test.
+#: Scenario 1: one row that holds a real child process, then one that does not. The
+#: Repository's `install_command` is a declared `setup` row since the Operator decision of
+#: 2026-09-27 (`git.worktree` runs no install of its own any more), which is what makes the
+#: `setup` row long-lived without an executor written for this test.
 INSTALL_TEMPLATE = (
     "name: {name}\nversion: 1\ndescription: e2e durability install\n"
     "inputs:\n"
@@ -146,6 +147,10 @@ INSTALL_TEMPLATE = (
     "  - id: checkout\n"
     "    uses: git.worktree\n"
     "    with: {{ base: '{{{{base_branch}}}}', branch: '{branch}' }}\n"
+    "    gate: deterministic\n"
+    "  - id: setup\n"
+    "    uses: shell\n"
+    "    with: {{ command: '{{{{repository.install_command}}}}' }}\n"
     "    gate: deterministic\n"
     "  - id: after\n"
     "    uses: shell\n"
@@ -577,7 +582,7 @@ def interrupted(
     settings: Settings,
     sessions: Any,
 ) -> Iterator[dict[str, Any]]:
-    """One Run, killed while `checkout` runs its install, brought back, and watched to `done`.
+    """One Run, killed while `setup` runs its install, brought back, and watched to `done`.
 
     Everything the scenario observes is gathered here, once: the tests below are assertions
     over it, not seven kills. The container is resolved first, so a run with no stack to kill
@@ -592,7 +597,7 @@ def interrupted(
     )
     run_id = start_run(api, INSTALL_TEMPLATE, repository_id, project_id)
     try:
-        wait_for_row(sessions, run_id, CHECKOUT, RUNNING)
+        wait_for_row(sessions, run_id, SETUP, RUNNING)
         before_groups = wait_for_process(marker)
         plan_before = attempts_of(sessions, run_id, PLAN)
 
@@ -601,7 +606,7 @@ def interrupted(
         wait_healthy(api, restart)
         after = generation()
 
-        wait_for_attempt(sessions, run_id, CHECKOUT, 2)
+        wait_for_attempt(sessions, run_id, SETUP, 2)
         wait_for_process(marker)
         samples = [len(process_groups(marker)) for _ in _every(SAMPLES, SAMPLE_INTERVAL_SECONDS)]
 
@@ -632,7 +637,7 @@ def test_the_run_resumes_after_the_restart_and_reaches_done(
     """FR-12's headline: a killed Run is finished by the process that comes after it."""
     if interrupted["status"] != DONE:
         pytest.fail(ended_badly(sessions, interrupted))
-    assert [row.status for row in rows_of(sessions, interrupted["id"])] == [DONE] * 3
+    assert [row.status for row in rows_of(sessions, interrupted["id"])] == [DONE] * 4
 
 
 def ended_badly(sessions: Any, scenario: dict[str, Any]) -> str:
@@ -665,7 +670,7 @@ def test_the_interrupted_row_records_its_lost_attempt_and_the_one_that_replaced_
     closed `ended_at` is the whole of what the interruption stores; the word `interrupted`
     itself is a log line in `start_attempt`, not a field.
     """
-    attempts = attempts_of(sessions, interrupted["id"], CHECKOUT)
+    attempts = attempts_of(sessions, interrupted["id"], SETUP)
 
     assert [attempt.n for attempt in attempts] == [1, 2]
     assert attempts[0].status == ERROR
@@ -678,7 +683,7 @@ def test_no_other_row_of_the_interrupted_run_ran_twice(
 ) -> None:
     """The rows either side of the interrupted one ran once each: the restart re-executed the
     step that was in flight and replayed the rest."""
-    once = [row.path for row in rows_of(sessions, interrupted["id"]) if row.path != CHECKOUT]
+    once = [row.path for row in rows_of(sessions, interrupted["id"]) if row.path != SETUP]
 
     for path in once:
         assert [a.n for a in attempts_of(sessions, interrupted["id"], path)] == [1], path

@@ -142,7 +142,6 @@ def test_every_field_a_git_executor_reads_comes_off_the_three_rows(
     assert env.repository_slug == "widgets"
     assert env.repository_url == repository.url
     assert env.default_branch == "main"
-    assert env.install_command == "uv sync"
     assert env.bmad_version == BMAD_VERSION
     assert env.spec_folder == SPEC_FOLDER
     assert env.worktrees == (WORKTREE,)

@@ -55,7 +55,6 @@ def a_run_environment(run_id: UUID) -> RunEnvironment:
         repository_slug="widget",
         repository_url="https://github.com/acme/widget",
         default_branch="main",
-        install_command="",
         bmad_version="1.0.0",
         spec_folder=None,
     )

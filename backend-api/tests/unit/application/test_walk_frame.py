@@ -44,7 +44,6 @@ def a_run_environment(world: World) -> RunEnvironment:
         repository_slug="widget",
         repository_url="https://github.test/acme/widget.git",
         default_branch="main",
-        install_command="",
         bmad_version="1.0.0",
         spec_folder=SPEC_FOLDER,
     )

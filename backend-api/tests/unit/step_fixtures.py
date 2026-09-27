@@ -48,7 +48,6 @@ def an_environment(**overrides: Any) -> RunEnvironment:
         "repository_slug": REPOSITORY_SLUG,
         "repository_url": REPOSITORY_URL,
         "default_branch": DEFAULT_BRANCH,
-        "install_command": "",
         "bmad_version": BMAD_VERSION,
         "spec_folder": None,
     }

@@ -1,9 +1,10 @@
-"""`application/steps/git_worktree.py`: the worktree, and the install that follows it.
+"""`application/steps/git_worktree.py`: the worktree, and nothing but the worktree.
 
-Every branch AD-14 gives the kind, over the shared `Git`, `Workspace` and `ProcessRunner`
-fakes: the base clone ensured, the three ways a worktree can be opened, the two `RunUpdates`
-it produces, and the Repository's own `install_command`. What a real `git worktree add` does
-is `tests/unit/test_subprocess_git_worktrees.py`'s.
+Every branch AD-14 gives the kind, over the shared `Git` and `Workspace` fakes: the base
+clone ensured, the three ways a worktree can be opened, and the two `RunUpdates` it
+produces. The Repository's `install_command` is a declared template row since the Operator
+decision of 2026-09-27, so the one thing asserted about processes here is that none start.
+What a real `git worktree add` does is `tests/unit/test_subprocess_git_worktrees.py`'s.
 """
 
 from __future__ import annotations
@@ -17,10 +18,7 @@ from orchestrator.application.steps.context import NO_ENVIRONMENT, NO_WORKSPACE,
 from orchestrator.application.steps.git_worktree import (
     BASE_CLONE_FAILED,
     DIRTY,
-    INSTALL_FAILED,
-    INSTALL_TIMED_OUT,
     KIND,
-    NO_INSTALL,
     REUSED,
     WORKTREE_OPEN_FAILED,
     GitWorktreeExecutor,
@@ -28,7 +26,6 @@ from orchestrator.application.steps.git_worktree import (
 from orchestrator.application.steps.registry import executor_for
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.git import GitError
-from orchestrator.domain.ports.process import Outcome
 from tests.unit.fakes.git import FakeGit
 from tests.unit.fakes.process import FakeProcessRunner
 from tests.unit.fakes.workspace import FakeWorkspace
@@ -46,7 +43,6 @@ from tests.unit.step_fixtures import (
 )
 
 RESOLVED = {"base": DEFAULT_BRANCH, "branch": BRANCH, "timeout_min": 5}
-INSTALL = "uv sync"
 
 #: A `FakeWorkspace` whose root answers `exists(".")` — what "the worktree is already there"
 #: looks like to the executor.
@@ -400,92 +396,32 @@ def test_a_mode_that_is_not_attach_fetches_the_base_as_any_other_row_does() -> N
     assert [branch for _, branch in git.called("fetch_base")] == [DEFAULT_BRANCH]
 
 
-# ── the install ─────────────────────────────────────────────────────────────
+# ── no install of its own ───────────────────────────────────────────────────
+# Operator decision, 2026-09-27: `install_command` is a declared template row (`shell`),
+# never a side effect of `git.worktree`. The section this replaces asserted the hidden run.
 
 
-def test_a_repository_that_declares_no_install_command_runs_nothing_and_says_so() -> None:
+def test_the_executor_starts_no_process_at_all() -> None:
+    """The install a Repository declares belongs to a `setup` row the template writes; the
+    worktree row's whole job is the worktree."""
     runner = FakeProcessRunner()
 
     result = GitWorktreeExecutor().execute(a_context(a_worktree_row(), process=runner))
 
-    assert result.reason == NO_INSTALL
-    assert runner.called("start") == []
-
-
-def test_a_whitespace_only_install_command_is_no_command_at_all() -> None:
-    runner = FakeProcessRunner()
-    context = a_context(a_worktree_row(), process=runner, env=an_environment(install_command="   "))
-
-    assert GitWorktreeExecutor().execute(context).reason == NO_INSTALL
-    assert runner.called("start") == []
-
-
-def test_the_install_command_runs_in_the_new_worktree_under_the_rows_timeout() -> None:
-    runner = FakeProcessRunner()
-    context = a_context(
-        a_worktree_row(), process=runner, env=an_environment(install_command=INSTALL)
-    )
-
-    result = GitWorktreeExecutor().execute(context)
-
-    [call] = runner.called("start")
-    assert call["cmd"] == INSTALL
-    assert str(call["cwd"]) == WORKTREE
-    assert call["timeout_min"] == RESOLVED["timeout_min"]
-    assert call["env"] == {}
     assert result.status == "done"
-    assert result.output_ref == str(call["log_path"])
+    assert runner.called("start") == []
 
 
-def test_a_failing_install_parks_misconfigured_with_the_exit_code_and_the_log() -> None:
-    runner = FakeProcessRunner(outcomes={"false": Outcome(exit_code=1, timed_out=False)})
-    context = a_context(
-        a_worktree_row(), process=runner, env=an_environment(install_command="false")
-    )
+def test_a_fresh_worktree_reports_done_with_its_updates_and_no_log() -> None:
+    """No process ran, so there is no file to name — and `tail` must not be sent a path
+    to a file nothing ever wrote."""
+    result = GitWorktreeExecutor().execute(a_context(a_worktree_row()))
 
-    result = GitWorktreeExecutor().execute(context)
-
-    assert result.status == "error"
-    assert result.park is not None
-    assert result.park.kind == "misconfigured"
-    assert result.park.reason == INSTALL_FAILED.format(code=1)
-    assert result.output_ref is not None
-
-
-def test_a_failed_install_still_records_the_worktree_it_made() -> None:
-    """`cancel` removes a worktree by reading `run.worktrees[]` (AD-13)."""
-    runner = FakeProcessRunner(outcomes={"false": Outcome(exit_code=1, timed_out=False)})
-    context = a_context(
-        a_worktree_row(), process=runner, env=an_environment(install_command="false")
-    )
-
-    result = GitWorktreeExecutor().execute(context)
-
+    assert result.status == "done"
+    assert result.reason is None
+    assert result.log_path is None
     assert result.run_updates is not None
     assert result.run_updates.worktree_path == WORKTREE
-
-
-def test_an_install_the_runner_killed_parks_timeout_rather_than_misconfigured() -> None:
-    runner = FakeProcessRunner(outcomes={INSTALL: Outcome(exit_code=None, timed_out=True)})
-    context = a_context(
-        a_worktree_row(), process=runner, env=an_environment(install_command=INSTALL)
-    )
-
-    result = GitWorktreeExecutor().execute(context)
-
-    assert result.park is not None
-    assert result.park.kind == "timeout"
-    assert result.park.reason == INSTALL_TIMED_OUT.format(path="checkout", n=5)
-
-
-def test_an_install_row_with_no_resolved_timeout_falls_back_to_the_kinds_own() -> None:
-    runner = FakeProcessRunner()
-    row = a_row(kind=KIND, with_resolved={"base": DEFAULT_BRANCH, "branch": BRANCH})
-    context = a_context(row, process=runner, env=an_environment(install_command=INSTALL))
-
-    GitWorktreeExecutor().execute(context)
-
-    assert runner.called("start")[0]["timeout_min"] == 5  # noqa: PLR2004 — the kind's default
 
 
 # ── the wiring the composition root owes it ─────────────────────────────────

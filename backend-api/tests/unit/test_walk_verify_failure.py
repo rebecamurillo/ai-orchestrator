@@ -97,7 +97,6 @@ def ports_of(world: World, logs: FakeLogReader | None = None) -> WalkPorts:
                 repository_slug="widgets",
                 repository_url="https://github.com/acme/widgets.git",
                 default_branch="main",
-                install_command="",
                 bmad_version="6.11.0",
                 spec_folder="specs/notifications",
             ),

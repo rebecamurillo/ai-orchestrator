@@ -49,6 +49,11 @@ steps:
     with: { base: "{{base_branch}}", branch: "{{branch}}", mode: attach }
     gate: deterministic
 
+  - id: setup
+    run: "{{repository.install_command}}"
+    timeout_min: 20
+    gate: deterministic
+
   # The bare form: init + update every `repos/*` submodule this hub declares, so the Run has
   # a workdir to run each epic's steps in before the first one is dispatched.
   - id: submodules

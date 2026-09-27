@@ -73,7 +73,6 @@ def read_run_environment(
             repository_slug=repository.slug,
             repository_url=repository.url,
             default_branch=repository.default_branch,
-            install_command=repository.install_command,
             bmad_version=bmad_version,
             spec_folder=str(spec_folder) if spec_folder else None,
             worktrees=run.worktrees,

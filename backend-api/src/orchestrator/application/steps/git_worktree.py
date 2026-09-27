@@ -1,7 +1,6 @@
-"""The `git.worktree` kind: the worktree a Run works in, and the install that follows it
-(AD-14, FR-9).
+"""The `git.worktree` kind: the worktree a Run works in, and nothing else (AD-14, FR-9).
 
-Four things happen here, in this order, and each of them is a rule rather than a step of a
+Three things happen here, in this order, and each of them is a rule rather than a step of a
 recipe:
 
 **The base clone is ensured, never assumed.** `/work/{project}/{repo}/base` may not exist —
@@ -32,10 +31,13 @@ Sharing the branch across Runs is the point of the mode (AD-14 waives the fresh-
 guarantee for these frames); AD-12's `{repository_id}:{branch}` partition is what keeps two
 of them from writing it at once.
 
-**`install_command` runs inside `git.worktree`, not as a row of its own** (AD-14, spine
-"Shipped kinds"): `epic@1` has no install step, and a Repository that declares no command has
-nothing to run rather than an empty row to explain. Its output goes to the row's own log,
-because it is this row's output.
+**No install runs here** (Operator decision, 2026-09-27, superseding the AD-14 sentence
+that put it inside this kind): the Repository's `install_command` is a `setup` row the
+template declares — `run: "{{repository.install_command}}"` — so what a Run executes is
+readable off its template, and a Repository that declares no command plans that row
+`skipped` rather than running an invisible nothing. The hidden run this replaces also ran
+*in addition to* the declared `setup` rows the shipped templates already carried, so every
+install executed twice.
 
 The Run's own columns — `worktree_path`, `worktrees[]` — are returned as `RunUpdates` and
 written by `apply_step_result` (AD-8). Nothing here writes a status or a Run.
@@ -59,15 +61,11 @@ from orchestrator.application.steps import ATTACH_MODE, WORKTREE_MODE_KEY
 from orchestrator.application.steps.context import (
     RunEnvironment,
     StepContext,
-    log_path,
     require_env,
-    require_process,
     require_workspace,
 )
 from orchestrator.application.steps.registry import register
-from orchestrator.application.templates.rows import TIMEOUT_KEY
 from orchestrator.domain.ports.git import GitError
-from orchestrator.domain.statuses import ParkKind
 from orchestrator.domain.values import Park, RunUpdates, StepResult, Worktree
 
 log = structlog.get_logger(__name__)
@@ -81,19 +79,12 @@ KIND = "git.worktree"
 BASE_KEY = "base"
 BRANCH_KEY = "branch"
 
-#: `KIND_META["git.worktree"].timeout_default_min` — what an install gets when the row
-#: carries no resolved timeout of its own.
-DEFAULT_TIMEOUT_MIN = 5
-
 #: The path a `Workspace` is asked about to learn whether its own root is there at all.
 ROOT = "."
 
 #: The reasons this row leaves, each read by the acceptance criterion that names it.
 REUSED = "reused worktree"
-NO_INSTALL = "no install_command"
 DIRTY = "worktree dirty: {path}"
-INSTALL_FAILED = "install failed: exit {code}"
-INSTALL_TIMED_OUT = "timeout {path} after {n} min"
 #: AD-14 backstop: another Run holds the same (repository, branch) partition (story 5-1).
 HELD_BY = "branch held by {run}"
 #: What a failed clone or fetch of the base parks with. Git's own (redacted) output travels
@@ -115,7 +106,7 @@ class _Opened:
 
 
 class GitWorktreeExecutor:
-    """Ensure the base clone, then the worktree, then run the Repository's install."""
+    """Ensure the base clone, then the worktree — the install is the template's own row."""
 
     def execute(self, ctx: StepContext) -> StepResult:
         env = require_env(ctx)
@@ -141,7 +132,9 @@ class GitWorktreeExecutor:
         if isinstance(opened, StepResult):
             return opened
         updates = _run_updates(env, worktree, branch, created_branch=opened.created_branch)
-        return _install(ctx, env, worktree, updates, opened.reason)
+        return StepResult(
+            status="done", gate=ctx.row.gate, reason=opened.reason, run_updates=updates
+        )
 
 
 def _ensure_base(ctx: StepContext, env: RunEnvironment, branch: str) -> StepResult | None:
@@ -217,41 +210,6 @@ def _run_updates(
     return RunUpdates(worktree_path=path, worktrees=entries)
 
 
-def _install(
-    ctx: StepContext,
-    env: RunEnvironment,
-    worktree: Path,
-    updates: RunUpdates,
-    opened: str | None,
-) -> StepResult:
-    """The Repository's `install_command` in the new worktree, or the reason there is none."""
-    command = env.install_command.strip()
-    if not command:
-        log.info(NO_INSTALL, path=ctx.row.path)
-        return StepResult(
-            status="done", gate=ctx.row.gate, reason=opened or NO_INSTALL, run_updates=updates
-        )
-    timeout_min = ctx.with_resolved.get(TIMEOUT_KEY, DEFAULT_TIMEOUT_MIN)
-    output = log_path(ctx)
-    process = require_process(ctx)
-    handle = process.start(command, cwd=worktree, env={}, timeout_min=timeout_min, log_path=output)
-    outcome = process.wait(handle)
-    if outcome.timed_out:
-        reason = INSTALL_TIMED_OUT.format(path=ctx.row.path, n=timeout_min)
-        return _failed(ctx, reason, output, "timeout", updates)
-    if outcome.exit_code != 0:
-        reason = INSTALL_FAILED.format(code=outcome.exit_code)
-        return _failed(ctx, reason, output, "misconfigured", updates)
-    return StepResult(
-        status="done",
-        gate=ctx.row.gate,
-        output_ref=str(output),
-        log_path=str(output),
-        reason=opened,
-        run_updates=updates,
-    )
-
-
 def _git_failed(ctx: StepContext, reason: str, output: str | None) -> StepResult:
     """A base clone/fetch or a worktree open that failed for a git reason — the same shape
     `git.submodule`, `git.push`, `git.sync` and `git.commit` park with."""
@@ -261,26 +219,6 @@ def _git_failed(ctx: StepContext, reason: str, output: str | None) -> StepResult
         output_ref=output,
         reason=reason,
         park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
-    )
-
-
-def _failed(
-    ctx: StepContext, reason: str, output: Path, kind: ParkKind, updates: RunUpdates
-) -> StepResult:
-    """A failed install: the row errors and the Run stops on the log the Operator opens.
-
-    The updates travel with the failure. The worktree exists whatever the install did, and
-    `cancel` removes it and deletes the branch it created by reading `run.worktrees[]`
-    (AD-13) — a park that forgot to record it would leave both behind.
-    """
-    return StepResult(
-        status="error",
-        gate=ctx.row.gate,
-        output_ref=str(output),
-        log_path=str(output),
-        reason=reason,
-        park=Park(kind=kind, reason=reason, path=ctx.row.path),
-        run_updates=updates,
     )
 
 

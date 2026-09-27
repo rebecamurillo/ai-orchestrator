@@ -88,7 +88,6 @@ def an_environment(**over: object) -> RunEnvironment:
         "repository_slug": "widgets",
         "repository_url": "https://github.com/acme/widgets.git",
         "default_branch": "main",
-        "install_command": "",
         "bmad_version": "6.11.0",
         "spec_folder": SPEC_FOLDER,
     }
