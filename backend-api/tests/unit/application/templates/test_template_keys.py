@@ -371,6 +371,41 @@ def test_an_expect_files_that_is_not_a_list_is_left_to_the_shape_rules() -> None
     assert check(HEAD + AGENT + "    expect:\n      files: one\n")[0] == []
 
 
+# --- prompts (Operator decision, 2026-09-27: agent prose lives in the template) -----------
+
+
+def test_a_prompts_block_with_the_four_clauses_is_accepted() -> None:
+    text = (
+        HEAD
+        + AGENT
+        + (
+            "    prompts:\n"
+            "      dispatch: Run the skill {skill}.\n"
+            "      rendered: Read {path} first.\n"
+            "      answer: 'Answer to \"{condition}\": {answer}'\n"
+            "      halt: Halt after planning.\n"
+        )
+    )
+
+    assert check(text)[0] == []
+
+
+def test_a_prompts_sub_key_the_table_does_not_accept_is_unknown() -> None:
+    assert check(HEAD + AGENT + "    prompts:\n      preamble: hi\n")[0] == [UNKNOWN_KEY]
+
+
+def test_a_prompts_block_that_is_not_a_map_is_missing_a_key() -> None:
+    assert check(HEAD + AGENT + "    prompts: go\n")[0] == [MISSING_KEY]
+
+
+def test_a_prompt_clause_that_is_not_text_is_an_invalid_value() -> None:
+    assert check(HEAD + AGENT + "    prompts:\n      dispatch: [a]\n")[0] == [INVALID_VALUE]
+
+
+def test_prompts_on_a_step_of_any_other_kind_is_unknown() -> None:
+    assert check(HEAD + GATED + "    prompts:\n      dispatch: go\n")[0] == [UNKNOWN_KEY]
+
+
 def test_an_enum_value_that_is_not_text_is_an_invalid_value() -> None:
     text = HEAD + "inputs:\n  h:\n    type: enum\n    values: [1, 2]\n" + GATED
 

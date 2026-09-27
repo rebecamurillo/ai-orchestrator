@@ -27,7 +27,12 @@ INPUT_KEYS = frozenset({"type", "required", "default", "values"})
 STEP_KEYS = frozenset({"id", "uses", "run", "with", "gate", "timeout_min", "stall_min", "on_fail"})
 WRITES_KEY = "writes"
 
-AGENT_KEYS = frozenset({"expect", "retry", "escalate_when", "pause_when", WRITES_KEY})
+#: The `prompts` block: the prose a dispatch is composed from, one clause per moment
+#: (Operator decision, 2026-09-27 — prompt prose lives in the Template).
+PROMPTS_KEY = "prompts"
+PROMPTS_KEYS = frozenset({"dispatch", "rendered", "answer", "halt"})
+
+AGENT_KEYS = frozenset({"expect", "retry", "escalate_when", "pause_when", WRITES_KEY, PROMPTS_KEY})
 FOR_EACH_KEYS = frozenset(
     {
         "id",
@@ -53,7 +58,9 @@ TEXT_TYPES = frozenset({"string", "path"})
 CALL_TIMING_KEYS = ("timeout_min", "stall_min", "on_fail")
 
 #: Deep type checking inside `expect` and `retry` is out of scope; membership is not.
-SUB_MAPS = (("expect", EXPECT_KEYS), ("retry", RETRY_KEYS))
+#: `prompts` joins them for membership; its clause values are checked to be text, because
+#: a clause is handed to the harness verbatim and a list is not a sentence.
+SUB_MAPS = (("expect", EXPECT_KEYS), ("retry", RETRY_KEYS), (PROMPTS_KEY, PROMPTS_KEYS))
 
 #: The lowest `on_fail.max`, `timeout_min` and `version` a Template may write.
 MIN_COUNT = 1

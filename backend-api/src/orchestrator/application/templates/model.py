@@ -140,6 +140,12 @@ class AgentExtras(BaseModel):
     escalate_when: str | None = None
     pause_when: str | None = None
     writes: tuple[str, ...] = ()
+    #: The `prompts` clauses — the prose the dispatch is composed from (Operator decision,
+    #: 2026-09-27: agent-bound prose lives in the Template, never in orchestrator code).
+    prompt_dispatch: str | None = None
+    prompt_rendered: str | None = None
+    prompt_answer: str | None = None
+    prompt_halt: str | None = None
 
 
 class TemplateCall(BaseModel):

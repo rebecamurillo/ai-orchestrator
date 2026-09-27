@@ -21,6 +21,7 @@ from orchestrator.application.templates.model import (
     ValidationError,
 )
 from orchestrator.application.templates.table import (
+    PROMPTS_KEY,
     RETRY_KEYS,
     SUB_MAPS,
     WRITES_KEY,
@@ -55,6 +56,7 @@ def check_agent_extras(node: LinedMap) -> list[ValidationError]:
     errors += _check_status_tokens(node)
     errors += _check_expect_files(node)
     errors += _check_writes(node)
+    errors += _check_prompt_clauses(node)
     return errors + _check_retry_shapes(node)
 
 
@@ -89,6 +91,19 @@ def _check_writes(node: LinedMap) -> list[ValidationError]:
     if paths is None:
         return [problem(line, INVALID_VALUE)]
     return [problem(line, INVALID_VALUE) for path in paths if not isinstance(path, str)]
+
+
+def _check_prompt_clauses(node: LinedMap) -> list[ValidationError]:
+    """A clause is handed to the harness verbatim, so a value that is not text is not a
+    clause (Operator decision, 2026-09-27). Membership is `SUB_MAPS`'s, above."""
+    prompts = as_map(node.get(PROMPTS_KEY))
+    if prompts is None:
+        return []
+    errors: list[ValidationError] = []
+    for key, value in prompts.items():
+        if not isinstance(value, str):
+            errors.append(problem(key_line(prompts, key, prompts.line), INVALID_VALUE))
+    return errors
 
 
 def _check_retry_shapes(node: LinedMap) -> list[ValidationError]:

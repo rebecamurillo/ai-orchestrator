@@ -46,6 +46,11 @@ steps:
         spec_folder: "{{spec_folder}}"
         globs: [tests, docs]
       prompt_extra: "{{epic.title}}"
+    prompts:
+      dispatch: "Run the skill {skill} in folder {spec_folder}."
+      rendered: "The workflow is rendered at {path}."
+      answer: 'Answer to "{condition}": {answer}'
+      halt: "Halt after planning."
     expect:
       files: ["{{spec_folder}}/SPEC.md"]
       status_in: [done, blocked]

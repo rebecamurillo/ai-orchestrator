@@ -44,6 +44,10 @@ STORY_ID_KEY = "story_id"
 SPEC_FOLDER_KEY = "spec_folder"
 #: What is appended to the harness prompt (FR-14).
 PROMPT_EXTRA_KEY = "prompt_extra"
+#: The Template's own prose for the dispatch, one clause per moment (Operator decision,
+#: 2026-09-27): `{{ }}` resolved here at plan time (AD-7), single-brace runtime tokens —
+#: `{skill}`, `{path}`, `{condition}`, `{answer}` … — left for `compose_prompt` to fill.
+PROMPTS_KEY = "prompts"
 #: `pause_when`, resolved: whether this Story stops for a spec review after planning.
 SPEC_CHECKPOINT_KEY = "spec_checkpoint"
 #: The `expect` and `retry` contracts, flattened by the parser and re-nested for the row.
@@ -81,7 +85,21 @@ def agent_extras(agent: AgentExtras, frame: Frame) -> dict[str, Any]:
     }
     if not _has_story_contract(agent, frame):
         del extras[EXPECT_KEY]
+    clauses = _prompt_clauses(agent, frame)
+    if clauses:
+        extras[PROMPTS_KEY] = clauses
     return extras
+
+
+def _prompt_clauses(agent: AgentExtras, frame: Frame) -> dict[str, str]:
+    """Each declared clause, plan-time resolved; an undeclared one stays off the row."""
+    declared = (
+        ("dispatch", agent.prompt_dispatch),
+        ("rendered", agent.prompt_rendered),
+        ("answer", agent.prompt_answer),
+        ("halt", agent.prompt_halt),
+    )
+    return {name: resolve(text, frame.scope) for name, text in declared if text is not None}
 
 
 def _has_story_contract(agent: AgentExtras, frame: Frame) -> bool:

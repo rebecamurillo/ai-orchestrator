@@ -212,6 +212,7 @@ def _on_fail(node: LinedMap) -> tuple[Any, str | None, int | None]:
 def _agent(node: LinedMap) -> AgentExtras:
     expect = as_map(node.get("expect")) or LinedMap()
     retry = as_map(node.get("retry")) or LinedMap()
+    prompts = as_map(node.get("prompts")) or LinedMap()
     return AgentExtras(
         line=node.line,
         expect_files=tuple(as_seq(expect.get("files")) or ()),
@@ -222,6 +223,10 @@ def _agent(node: LinedMap) -> AgentExtras:
         escalate_when=_text(node.get("escalate_when")),
         pause_when=_text(node.get("pause_when")),
         writes=tuple(as_seq(node.get(WRITES_KEY)) or ()),
+        prompt_dispatch=_text(prompts.get("dispatch")),
+        prompt_rendered=_text(prompts.get("rendered")),
+        prompt_answer=_text(prompts.get("answer")),
+        prompt_halt=_text(prompts.get("halt")),
     )
 
 

@@ -18,6 +18,7 @@ from orchestrator.application.templates.agent_row import (
     ESCALATE_WHEN_KEY,
     EXPECT_KEY,
     PROMPT_EXTRA_KEY,
+    PROMPTS_KEY,
     RETRY_KEY,
     SPEC_CHECKPOINT_KEY,
     SPEC_FOLDER_KEY,
@@ -66,6 +67,24 @@ IN_LOOP = (
 IN_LOOP_WITH_PROMPT = IN_LOOP.replace(
     'with: { harness: "{{harness}}" }',
     'with: { harness: "{{harness}}", prompt_extra: "read the runbook" }',
+)
+
+#: The same, with the prose the dispatch is composed from (Operator decision, 2026-09-27):
+#: `{{ }}` resolves at plan time, single-brace runtime tokens travel to the executor as is.
+IN_LOOP_WITH_PROMPTS = (
+    HEADER.format(name="with-prompts")
+    + """  - id: things
+    for_each: "{{spec_folder}}/things.yaml"
+    as: thing
+    steps:
+      - id: work
+        uses: agent
+        with: { harness: "{{harness}}" }
+        prompts:
+          dispatch: "Run the skill {skill}: folder {{spec_folder}}, thing {{thing.id}}."
+          halt: "Halt after planning."
+        gate: liveness
+"""
 )
 
 #: An `agent` step no loop encloses: a dispatch with no entry behind it.
@@ -161,6 +180,22 @@ def test_an_agent_row_carries_its_expect_and_retry_with_the_globs_filled_in() ->
 
 
 # --- the entry a loop in the same file bound ----------------------------------------------------
+
+
+def test_declared_prompt_clauses_are_resolved_onto_the_row_at_plan_time() -> None:
+    """`{{ }}` is the planner's (AD-7); `{skill}` is the executor's and travels untouched."""
+    row = resolved(planned(IN_LOOP_WITH_PROMPTS), "things[0].work")
+
+    assert row[PROMPTS_KEY] == {
+        "dispatch": f"Run the skill {{skill}}: folder {FOLDER}, thing t1.",
+        "halt": "Halt after planning.",
+    }
+
+
+def test_a_step_that_declares_no_prompts_carries_no_prompts_key() -> None:
+    row = resolved(planned(IN_LOOP), "things[0].work")
+
+    assert PROMPTS_KEY not in row
 
 
 def test_a_loop_in_the_same_file_binds_the_entry_under_its_own_as_name() -> None:
