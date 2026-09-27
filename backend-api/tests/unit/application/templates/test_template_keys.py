@@ -18,8 +18,11 @@ from orchestrator.application.templates.model import (
     BAD_REDISPATCH,
     CALL_TIMING,
     CONFLICTING_ROUTE,
+    DISPATCH_PROMPT_REQUIRED,
     DUPLICATE_STEP_ID,
     EMPTY_STEPS,
+    HALT_PROMPT_REQUIRED,
+    INVALID_DISPATCH_FORM,
     INVALID_GATE,
     INVALID_INPUT_TYPE,
     INVALID_ON_FAIL,
@@ -31,6 +34,7 @@ from orchestrator.application.templates.model import (
     NESTED_FOR_EACH,
     NON_LITERAL_VERSION,
     PARALLEL_RESERVED,
+    RENDERED_PROMPT_REQUIRED,
     RETRY_PROMPT_REQUIRED,
     SECOND_FOR_EACH,
     UNKNOWN_KEY,
@@ -442,6 +446,76 @@ def test_a_token_in_two_routing_lists_routes_twice() -> None:
     text = HEAD + AGENT + "    expect:\n      success: [done]\n      blocked: [done]\n"
 
     assert check(text)[0] == [CONFLICTING_ROUTE]
+
+
+# --- the prose a dispatch owes (Operator decision, 2026-09-27) ----------------------------
+
+SKILLED = (
+    "steps:\n  - id: build\n    uses: agent\n    with:\n"
+    "      skill: bmad-build-auto\n    gate: liveness\n"
+)
+CLAUSES = (
+    "    prompts:\n      dispatch: Run the skill {skill}.\n      rendered: Read {path} first.\n"
+)
+
+
+def test_a_skill_form_with_both_owed_clauses_is_accepted() -> None:
+    assert check(HEAD + SKILLED + CLAUSES)[0] == []
+
+
+def test_a_skill_form_without_a_dispatch_clause_is_refused() -> None:
+    text = HEAD + SKILLED + "    prompts:\n      rendered: Read {path} first.\n"
+
+    assert check(text)[0] == [DISPATCH_PROMPT_REQUIRED]
+
+
+def test_a_skill_form_without_a_rendered_clause_is_refused() -> None:
+    text = HEAD + SKILLED + "    prompts:\n      dispatch: Run the skill {skill}.\n"
+
+    assert check(text)[0] == [RENDERED_PROMPT_REQUIRED]
+
+
+def test_a_bare_skill_form_is_refused_for_both() -> None:
+    assert check(HEAD + SKILLED)[0] == [DISPATCH_PROMPT_REQUIRED, RENDERED_PROMPT_REQUIRED]
+
+
+def test_a_pause_when_without_a_halt_clause_is_refused_whatever_the_form() -> None:
+    text = HEAD + SKILLED + CLAUSES + "    pause_when: always\n"
+
+    assert check(text)[0] == [HALT_PROMPT_REQUIRED]
+
+
+def test_a_pause_when_with_a_halt_clause_is_accepted() -> None:
+    text = HEAD + SKILLED + CLAUSES + "      halt: Halt after planning.\n    pause_when: always\n"
+
+    assert check(text)[0] == []
+
+
+def test_an_own_prompt_row_may_not_also_carry_a_dispatch_clause() -> None:
+    text = (
+        HEAD
+        + "steps:\n  - id: build\n    uses: agent\n    with:\n      prompt: Do X.\n"
+        + "    gate: liveness\n    prompts:\n      dispatch: Run the skill {skill}.\n"
+    )
+
+    assert check(text)[0] == [INVALID_DISPATCH_FORM]
+
+
+def test_an_own_prompt_row_may_carry_the_answer_and_halt_clauses() -> None:
+    text = (
+        HEAD
+        + "steps:\n  - id: build\n    uses: agent\n    with:\n      prompt: Do X.\n"
+        + "    gate: liveness\n    prompts:\n      halt: Halt after planning.\n"
+        + "    pause_when: always\n"
+    )
+
+    assert check(text)[0] == []
+
+
+def test_a_bare_agent_with_neither_skill_nor_prompt_owes_no_clause() -> None:
+    """A dispatch with no base text is prose-free by construction; requiring clauses of it
+    would make every minimal fixture template invalid for nothing."""
+    assert check(HEAD + AGENT)[0] == []
 
 
 def test_the_same_condition_may_be_blocked_and_misconfigured_when() -> None:

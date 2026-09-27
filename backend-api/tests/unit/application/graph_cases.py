@@ -72,6 +72,9 @@ steps:
   - id: two
     uses: agent
     with: { skill: bmad-build-auto }
+    prompts:
+      dispatch: "Run the skill {skill}."
+      rendered: "Read {path} first."
     gate: liveness
   - id: three
     run: "make test"

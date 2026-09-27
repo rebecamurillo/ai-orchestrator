@@ -108,6 +108,7 @@ PAUSED = (
         expect: { status_in: [done] }
         retry: { max: 2, prompt: "again for {{thing.id}}" }
         pause_when: "thing.review"
+        prompts: { halt: "Halt after planning." }
         gate: liveness
 """
 )

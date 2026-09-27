@@ -14,9 +14,13 @@ from __future__ import annotations
 from orchestrator.application.templates.lines import LinedMap, as_map, as_seq, key_line
 from orchestrator.application.templates.model import (
     CONFLICTING_ROUTE,
+    DISPATCH_PROMPT_REQUIRED,
+    HALT_PROMPT_REQUIRED,
+    INVALID_DISPATCH_FORM,
     INVALID_STATUS_TOKEN,
     INVALID_VALUE,
     MISSING_KEY,
+    RENDERED_PROMPT_REQUIRED,
     RETRY_PROMPT_REQUIRED,
     STATUS_TOKENS,
     ValidationError,
@@ -66,6 +70,7 @@ def check_agent_extras(node: LinedMap) -> list[ValidationError]:
     errors += _check_route_lists(node)
     errors += _check_writes(node)
     errors += _check_prompt_clauses(node)
+    errors += _check_required_prompts(node)
     return errors + _check_retry_shapes(node)
 
 
@@ -121,6 +126,44 @@ def _check_route_lists(node: LinedMap) -> list[ValidationError]:
                 if token in seen and seen[token] != key:
                     errors.append(problem(line, CONFLICTING_ROUTE))
                 seen[token] = key
+    return errors
+
+
+#: The `with` keys of the own-text dispatch forms, and the skill key (Operator decision,
+#: 2026-09-27): a row with `skill` and neither of these owes `prompts.dispatch` and
+#: `prompts.rendered`; a row carrying its own text may not also carry them.
+OWN_TEXT_KEYS = ("prompt", "prompt_file")
+SKILL_KEY = "skill"
+WITH_KEY = "with"
+PAUSE_WHEN_KEY = "pause_when"
+DISPATCH_CLAUSE = "dispatch"
+RENDERED_CLAUSE = "rendered"
+HALT_CLAUSE = "halt"
+
+
+def _check_required_prompts(node: LinedMap) -> list[ValidationError]:
+    """The prose a dispatch owes is declared, or the file is refused (2026-09-27).
+
+    The skill form owes `dispatch` and `rendered`; a `pause_when` owes `halt` whatever the
+    form, because the checkpoint contract depends on the agent being asked to stop. The
+    own-text forms may not also carry `dispatch`/`rendered` — two base sentences is the
+    same ambiguity `_check_dispatch_form` refuses among the `with` keys.
+    """
+    params = as_map(node.get(WITH_KEY)) or LinedMap()
+    prompts = as_map(node.get(PROMPTS_KEY)) or LinedMap()
+    own_text = any(key in params for key in OWN_TEXT_KEYS)
+    line = key_line(node, PROMPTS_KEY, node.line) if PROMPTS_KEY in node else node.line
+    errors: list[ValidationError] = []
+    if own_text:
+        if DISPATCH_CLAUSE in prompts or RENDERED_CLAUSE in prompts:
+            errors.append(problem(line, INVALID_DISPATCH_FORM))
+    elif SKILL_KEY in params:
+        if DISPATCH_CLAUSE not in prompts:
+            errors.append(problem(line, DISPATCH_PROMPT_REQUIRED))
+        if RENDERED_CLAUSE not in prompts:
+            errors.append(problem(line, RENDERED_PROMPT_REQUIRED))
+    if PAUSE_WHEN_KEY in node and HALT_CLAUSE not in prompts:
+        errors.append(problem(line, HALT_PROMPT_REQUIRED))
     return errors
 
 

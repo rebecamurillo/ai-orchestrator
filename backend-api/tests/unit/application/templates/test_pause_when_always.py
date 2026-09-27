@@ -22,6 +22,10 @@ steps:
     uses: agent
     with:
       skill: bmad-build-auto
+    prompts:
+      dispatch: "Run the skill {skill}: spec folder {spec_folder}, story id {story_id}."
+      rendered: "The workflow for skill {skill} is rendered at {path}; read and follow it."
+      halt: "Halt after planning."
     pause_when: always
     gate: liveness
 """

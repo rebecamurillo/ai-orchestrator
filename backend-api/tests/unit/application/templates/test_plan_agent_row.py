@@ -59,6 +59,7 @@ IN_LOOP = (
         uses: agent
         with: { harness: "{{harness}}" }
         pause_when: "thing.review"
+        prompts: { halt: "Halt after planning." }
         gate: liveness
 """
 )
@@ -223,8 +224,14 @@ def test_declared_prompt_clauses_are_resolved_onto_the_row_at_plan_time() -> Non
     }
 
 
-def test_a_step_that_declares_no_prompts_carries_no_prompts_key() -> None:
+def test_a_step_that_declares_only_a_halt_carries_only_that_clause() -> None:
     row = resolved(planned(IN_LOOP), "things[0].work")
+
+    assert row[PROMPTS_KEY] == {"halt": "Halt after planning."}
+
+
+def test_a_step_that_declares_no_prompts_carries_no_prompts_key() -> None:
+    row = resolved(planned(ALONE), "work")
 
     assert PROMPTS_KEY not in row
 

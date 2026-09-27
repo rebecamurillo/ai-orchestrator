@@ -22,6 +22,10 @@ steps:
       skill: bmad-build-auto
       args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
       prompt_extra: "{{story.invoke_dev_with}}"
+    prompts:
+      dispatch: "Run the skill {skill}: spec folder {spec_folder}, story id {story_id}."
+      rendered: "The workflow for skill {skill} is rendered at {path}; read and follow it."
+      halt: "Halt after planning."
     expect:
       files: ["{{spec_folder}}/stories/{{story.id}}-*.md"]
       status_in: [done, blocked, ready-for-dev]

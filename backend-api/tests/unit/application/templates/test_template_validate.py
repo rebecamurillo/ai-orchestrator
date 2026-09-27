@@ -298,8 +298,8 @@ def test_an_agent_that_declares_no_extras_still_gets_the_defaults(
     assert build.agent.retry_max is None
     assert build.agent.retry_resume_session is True
     assert build.agent.escalate_when is None
-    assert build.agent.prompt_dispatch is None
-    assert build.agent.prompt_rendered is None
+    assert build.agent.prompt_dispatch is not None
+    assert build.agent.prompt_rendered is not None
     assert build.agent.prompt_answer is None
     assert build.agent.prompt_halt is None
     assert build.agent.expect_success == ()

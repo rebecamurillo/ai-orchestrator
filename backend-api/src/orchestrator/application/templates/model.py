@@ -111,6 +111,16 @@ ALL_DIGIT_STEP_ID = "all-digit step id"
 #: decision, 2026-09-27: routing is the row's own declaration).
 CONFLICTING_ROUTE = "status routed twice"
 
+#: The prose a dispatch owes must be declared (Operator decision, 2026-09-27: the
+#: orchestrator sends no words a template did not write). A skill dispatch with no
+#: `prompts.dispatch` would send a near-empty prompt; one with no `prompts.rendered` would
+#: leave a rendered workflow the agent is never pointed at (the improvisation the clause
+#: exists to end); a `pause_when` with no `prompts.halt` is a checkpoint the agent is never
+#: asked to stop for.
+DISPATCH_PROMPT_REQUIRED = "dispatch prompt required"
+RENDERED_PROMPT_REQUIRED = "rendered prompt required"
+HALT_PROMPT_REQUIRED = "halt prompt required"
+
 # --- the tree ---------------------------------------------------------------------------
 
 

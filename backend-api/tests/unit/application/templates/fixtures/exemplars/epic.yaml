@@ -31,6 +31,9 @@ steps:
       model: "{{model}}"
       skill: spec-gate
       args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill}: spec folder {spec_folder}, story id {story_id}."
+      rendered: "The workflow for skill {skill} is rendered at {path}; read and follow it."
     expect:
       files: ["{{spec_folder}}/spec-gate-result.md"]
       status_in: [done, blocked]
