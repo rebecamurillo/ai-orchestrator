@@ -9,13 +9,20 @@ and the two facts the prompt's Answer clause is built from. The dependency runs 
 `agent.py` back.
 
 **The archive is the whole mechanism, and it is why the re-dispatch plans fresh.** A Story
-file at `{spec_folder}/stories/{id}-*.md` is what `bmad-build-auto` resumes from; moving it
-to `stories/.answers/{id}-attempt-{n}.md` leaves the glob empty, so the next dispatch is a
+file the row's liveness glob matches is what the method resumes from; moving it to
+`.answers/{id}-attempt-{n}.md` beside that glob leaves it empty, so the next dispatch is a
 first dispatch and the agent plans again — this time with the Operator's answer in front of
 it. `n` is the *previous* attempt's number, because the file being archived is the one that
 attempt wrote. Both ends of the move are returned so `agent.py` stages them into the prepare
 commit: an unstaged rename would still be in the tree at `start_sha`, and 5.6 would read it
 as the agent's own edit (AD-17, FR-31).
+
+**The directory is the row's own contract** (Operator decision, 2026-09-27): the parent of
+the first declared `expect.files` glob, `.answers` beside the files the row expects — which
+for the FR-16 fallback glob is exactly the `{spec_folder}/stories/.answers` FR-18 named. A
+row with no glob to derive it from (no contract, an empty spec folder, or a parent that is
+itself a pattern) archives nothing, where it used to format the absolute
+`/stories/.answers/-attempt-{n}.md` and write outside the worktree.
 
 **Exactly one match, or nothing.** The brief scopes the archive to a single
 `stories/{id}-*.md`; none is logged and proceeds as a first dispatch, and *more* than one is
@@ -42,6 +49,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from pathlib import PurePosixPath
 from typing import Any
 
 import structlog
@@ -50,9 +58,11 @@ from orchestrator.application.rules import protected_paths
 from orchestrator.application.steps import agent_tail
 from orchestrator.application.steps.context import (
     StepContext,
+    operator_retry,
     require_cwd,
     require_workspace,
     resolved_text,
+    retrying,
 )
 from orchestrator.application.story_file import (
     AUTO_RUN_RESULT,
@@ -62,7 +72,6 @@ from orchestrator.application.story_file import (
 )
 from orchestrator.application.templates.agent_row import (
     SPEC_CHECKPOINT_KEY,
-    SPEC_FOLDER_KEY,
     STORY_ID_KEY,
 )
 from orchestrator.domain.entities.gate_record import GateRecord
@@ -83,7 +92,16 @@ ANSWER_KEY = "answer"
 #: change to both. The two are asserted equal by this module's own test.
 TEXT_KEY = "text"
 
-#: The archive, exactly as FR-18 names it, under `agent_tail.ANSWERS_DIRECTORY`.
+#: The directory both archives move into, beside the files the row's glob expects, and how
+#: many matches make an ambiguity (AD-13).
+ANSWERS_DIR_NAME = ".answers"
+AMBIGUOUS = 2
+
+#: What a glob's parent may not contain and still name a directory a file can move into.
+GLOB_CHARS = "*?["
+
+#: The archive, exactly as FR-18 names it. The stem is the row's `story_id`, or the row
+#: path's last segment for a row that carries none (Operator decision, 2026-09-27).
 ARCHIVED_NAME = "{story_id}-attempt-{n}.md"
 
 #: What is appended to the archived file. `story_file.appended` supplies the blank line in
@@ -92,8 +110,10 @@ HUMAN_ANSWER = "## Human Answer\n\n{at} · operator\n\n{answer}"
 
 #: What a resume with nothing to archive logs. A first dispatch is a valid outcome here —
 #: an agent that blocked before writing its Story file leaves the glob empty — so this is an
-#: `info` line naming the row, never a park.
+#: `info` line naming the row, never a park. Its sibling below is the row whose contract
+#: derives no directory to archive into; the file stays where the glob found it.
 NO_FILE_TO_ARCHIVE = "no file to archive"
+NO_ARCHIVE_DIRECTORY = "no archive directory"
 
 #: The condition a spec checkpoint's Answer quotes back: the plan was read and refused, so
 #: there is no `Blocking condition:` line anywhere to read (6.2 sends this as a Reject).
@@ -133,6 +153,9 @@ def archive_with_answer(ctx: StepContext) -> tuple[str, ...]:
             log.info(NO_FILE_TO_ARCHIVE, path=ctx.row.path, story_id=_story_id(ctx))
         return ()
     source, destination = matches[0], archive_path(ctx)
+    if destination is None:
+        log.info(NO_ARCHIVE_DIRECTORY, path=ctx.row.path, story_id=_story_id(ctx))
+        return ()
     never_tracked = source in protected_paths.untracked(ctx.ports.git.status(require_cwd(ctx)))
     workspace = require_workspace(ctx, ctx.cwd)
     workspace.move(source, destination)
@@ -141,15 +164,74 @@ def archive_with_answer(ctx: StepContext) -> tuple[str, ...]:
     return (destination,) if never_tracked else (source, destination)
 
 
-def archive_path(ctx: StepContext) -> str:
-    """`{spec_folder}/stories/.answers/{id}-attempt-{n}.md`, the one name FR-18 pins.
+def archive_path(ctx: StepContext) -> str | None:
+    """`{answers}/{id}-attempt-{n}.md`, the one name FR-18 pins — or `None` for a row with
+    no directory to derive it in.
 
     Pure, and computed the same way twice on purpose: the prepare phase moves the file to
     it, and the dispatch that follows reads the condition back out of it, with nothing
     carried between them but the row itself.
     """
-    answers = agent_tail.ANSWERS_DIRECTORY.format(spec_folder=_text(ctx, SPEC_FOLDER_KEY))
-    return f"{answers}/{ARCHIVED_NAME.format(story_id=_story_id(ctx), n=previous_n(ctx))}"
+    answers = answers_directory(ctx)
+    if answers is None:
+        return None
+    stem = _story_id(ctx) or ctx.row.path.split(".")[-1]
+    return f"{answers}/{ARCHIVED_NAME.format(story_id=stem, n=previous_n(ctx))}"
+
+
+def answers_directory(ctx: StepContext) -> str | None:
+    """`.answers` beside the files the row's own liveness glob expects, or `None`.
+
+    The first glob's parent is the anchor — `{spec_folder}/stories` under the FR-16
+    fallback, which keeps FR-18's spelling — and a parent still holding a pattern character
+    names no directory a file can be moved into.
+    """
+    globs = agent_tail.liveness_globs(ctx.with_resolved)
+    if not globs:
+        return None
+    parent = str(PurePosixPath(globs[0]).parent)
+    if any(character in parent for character in GLOB_CHARS):
+        return None
+    return f"{parent}/{ANSWERS_DIR_NAME}"
+
+
+def archive_ambiguous(ctx: StepContext) -> tuple[str, ...]:
+    """AD-13: a re-run after `ambiguous story file` keeps the newest match and archives the
+    rest, so the ambiguity cannot compound over attempts.
+
+    Both kinds of re-run are covered. The Operator's *Retry* is the one that matters:
+    `ambiguous story file` is a `misconfigured` stop, and AD-9 never re-executes one of
+    those automatically, so a person choosing Retry is the only way that row runs again.
+    The Template's own `retry` is covered too — it can only ever have seen one file, so
+    this returns immediately, and the hook stays right if the routing ever changes.
+
+    Newest is by mtime and then by name, so the choice is never a coin toss. **Both ends of
+    every rename are reported**: `agent.py` stages them into the prepare commit, so the move
+    is the orchestrator's own recorded write and `start_sha` is read off a clean tree —
+    without that, 5.6's `diff_names(start_sha, end_sha)` would attribute this rename to the
+    agent, which AD-17 and FR-31 forbid. **Both ends except an untracked source**, which is
+    the destination alone for the reason `archive_with_answer` states: a path no tree holds
+    needs no staging, and `git add` cannot be asked about one that is gone. A row with no
+    derivable `answers_directory` moves nothing and leaves the ambiguity for the routing to
+    report (Operator decision, 2026-09-27).
+    """
+    if not (operator_retry(ctx) or retrying(ctx)):
+        return ()
+    matches = agent_tail.story_files(ctx) or ()
+    if len(matches) < AMBIGUOUS:
+        return ()
+    answers = answers_directory(ctx)
+    if answers is None:
+        return ()
+    workspace = require_workspace(ctx, ctx.cwd)
+    never_tracked = protected_paths.untracked(ctx.ports.git.status(require_cwd(ctx)))
+    newest = max(matches, key=lambda path: (workspace.mtime(path), path))
+    moved: list[str] = []
+    for path in (match for match in matches if match != newest):
+        archived = f"{answers}/{PurePosixPath(path).name}"
+        workspace.move(path, archived)
+        moved += [archived] if path in never_tracked else [path, archived]
+    return tuple(moved)
 
 
 def previous_n(ctx: StepContext) -> int:
@@ -204,7 +286,10 @@ def condition(ctx: StepContext) -> str:
     """
     if ctx.with_resolved.get(SPEC_CHECKPOINT_KEY):
         return SPEC_REJECTED
-    text = require_workspace(ctx, ctx.cwd).read(archive_path(ctx)) or ""
+    archived = archive_path(ctx)
+    if archived is None:
+        return ""
+    text = require_workspace(ctx, ctx.cwd).read(archived) or ""
     return blocking_condition(section(text, AUTO_RUN_RESULT)) or ""
 
 

@@ -126,7 +126,7 @@ def test_no_story_file_is_logged_and_proceeds_as_a_first_dispatch() -> None:
 
 def test_two_matches_are_left_alone_rather_than_chosen_between() -> None:
     """Two files is `ambiguous story file`, which only a Retry's de-ambiguation may resolve
-    (`agent_tail.archive_ambiguous`); guessing here would make that choice invisibly."""
+    (`agent_answer.archive_ambiguous`); guessing here would make that choice invisibly."""
     world = a_blocked_world(files={STORY_PATH: BLOCKED_FILE, OTHER_PATH: BLOCKED_FILE})
 
     assert agent_answer.archive_with_answer(world.ctx) == ()
@@ -135,11 +135,18 @@ def test_two_matches_are_left_alone_rather_than_chosen_between() -> None:
 
 
 def test_the_archived_name_falls_back_to_the_attempt_before_this_one() -> None:
-    """A context that recorded no previous attempt still names a file rather than raising."""
+    """A context that recorded no previous attempt still names a file rather than raising.
+
+    Revised 2026-09-27 (Operator decision: contract-derived archive paths): `archive_path`
+    now answers `None` for a row with no derivable directory, so the name is read off a
+    narrowed value rather than a bare `str`.
+    """
     world = a_world(with_resolved=resolved(expect=EXPECT), resume=an_answer())
 
     assert agent_answer.previous_n(world.ctx) == 1
-    assert agent_answer.archive_path(world.ctx).endswith(f"{STORY_ID}-attempt-1.md")
+    path = agent_answer.archive_path(world.ctx)
+    assert path is not None
+    assert path.endswith(f"{STORY_ID}-attempt-1.md")
 
 
 # ── what the prompt is told ─────────────────────────────────────────────────────────────
@@ -221,3 +228,63 @@ def test_the_payload_key_matches_the_one_signal_run_actually_stores() -> None:
     """This module reads the signal's storage contract rather than importing it; the two are
     asserted equal here so a rename of either fails one test instead of no test."""
     assert agent_answer.TEXT_KEY == SIGNAL_ANSWER_KEY
+
+
+# ── the archive directory is derived from the row's own contract ────────────────────────
+# Operator decision, 2026-09-27: a row that declares no `spec_folder` (task@1) used to
+# archive to the absolute `/stories/.answers/-attempt-N.md`; the directory is now the
+# declared glob's parent, and a row with nothing to derive it from archives nothing.
+
+ARTIFACTS_GLOB = "artifacts/spec-*.md"
+ARTIFACTS_FILE = "artifacts/spec-T1-plan.md"
+#: The stem falls back from the (absent) story id to the row path's last segment.
+ARTIFACTS_ARCHIVED = "artifacts/.answers/build-attempt-1.md"
+
+
+def a_folderless_world(
+    files: dict[str, str] | None = None, *, expect: dict[str, Any] | None = None
+) -> World:
+    """A task-shaped row: no spec folder, no story id, its own `expect.files` glob."""
+    row = an_agent_row()
+    contract = expect if expect is not None else {"files": [ARTIFACTS_GLOB], "status_in": []}
+    return a_world(
+        with_resolved=resolved(spec_folder="", story_id="", expect=contract),
+        files=files if files is not None else {ARTIFACTS_FILE: BLOCKED_FILE},
+        previous=an_attempt(row, 1),
+        resume=an_answer(),
+    )
+
+
+def test_a_row_without_a_spec_folder_archives_beside_its_declared_glob() -> None:
+    world = a_folderless_world()
+
+    moved = agent_answer.archive_with_answer(world.ctx)
+
+    assert moved == (ARTIFACTS_FILE, ARTIFACTS_ARCHIVED)
+    assert not any(path.startswith("/") for path in moved)
+
+
+def test_the_condition_reads_back_from_the_contract_derived_archive() -> None:
+    """The next dispatch recomputes the same path with nothing carried but the row."""
+    world = a_folderless_world()
+    agent_answer.archive_with_answer(world.ctx)
+
+    assert agent_answer.condition(world.ctx) == CONDITION
+
+
+def test_a_glob_whose_parent_is_itself_a_pattern_archives_nothing() -> None:
+    """`specs/*/stories` names no directory a file can be moved into."""
+    world = a_folderless_world(
+        files={STORY_PATH: BLOCKED_FILE},
+        expect={"files": [f"specs/*/stories/{STORY_ID}-*.md"], "status_in": []},
+    )
+
+    assert agent_answer.archive_with_answer(world.ctx) == ()
+    assert world.workspace.read(STORY_PATH) is not None
+
+
+def test_a_row_with_no_derivable_directory_has_no_archive_path_and_an_empty_condition() -> None:
+    world = a_folderless_world(expect={"status_in": ["done"]})
+
+    assert agent_answer.archive_path(world.ctx) is None
+    assert agent_answer.condition(world.ctx) == ""

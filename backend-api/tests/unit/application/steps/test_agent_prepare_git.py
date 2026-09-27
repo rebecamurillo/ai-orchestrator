@@ -34,7 +34,6 @@ from orchestrator.application.rules.signals import ANSWER_KEY as SIGNAL_ANSWER_K
 from orchestrator.application.steps import (
     agent_answer,
     agent_prepare,
-    agent_tail,
     agent_workdir,
 )
 from orchestrator.application.steps.agent import AgentExecutor
@@ -184,10 +183,32 @@ def test_de_ambiguation_reports_an_untracked_loser_as_its_destination_alone() ->
         git=FakeGit(status=[f"?? {other}"], head_sha=[HEAD_SHA]),
     )
 
-    moved = agent_tail.archive_ambiguous(world.ctx)
+    moved = agent_answer.archive_ambiguous(world.ctx)
 
     # the tie is broken by name, so `STORY_PATH` is kept and `other` — the `??` one — moves
     assert moved == (f"{SPEC_FOLDER}/stories/.answers/{STORY_ID}-notify-2.md",)
+
+
+def test_de_ambiguation_without_a_derivable_archive_directory_moves_nothing() -> None:
+    """Operator decision, 2026-09-27: the archive directory is the declared glob's parent;
+    a parent that is itself a pattern names no directory, so the ambiguity is left for the
+    routing to report rather than archived into a path that does not exist."""
+    other = f"{SPEC_FOLDER}/stories/{STORY_ID}-notify-2.md"
+    row = an_agent_row()
+    world = a_world(
+        with_resolved=resolved(
+            expect={"files": [f"specs/*/stories/{STORY_ID}-*.md"], "status_in": []},
+            retry={"max": 2, "prompt": "again"},
+        ),
+        files={STORY_PATH: BLOCKED_FILE, other: BLOCKED_FILE},
+        previous=an_attempt(row, 1, status="error"),
+        resume=a_gate_record(row, "retry"),
+        git=FakeGit(status=[f"?? {other}"], head_sha=[HEAD_SHA]),
+    )
+
+    assert agent_answer.archive_ambiguous(world.ctx) == ()
+    assert world.workspace.read(STORY_PATH) is not None
+    assert world.workspace.read(other) is not None
 
 
 # ── the report: git's own words, never an exception class ───────────────────

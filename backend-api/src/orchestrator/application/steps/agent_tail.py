@@ -1,8 +1,9 @@
-"""The `agent` kind's **Story-file contract**: finding the file, keeping it unambiguous,
-and routing on it (AD-9, AD-13, FR-16, FR-17).
+"""The `agent` kind's **Story-file contract**: finding the file and routing on it
+(AD-9, AD-13, FR-16, FR-17).
 
 Split out of `steps/agent.py` at the 400-line cap. `story_files` asks the row's liveness
-glob, `archive_ambiguous` repairs ambiguity, and `tail` routes on the one file that is left.
+glob and `tail` routes on the one file that is left; the archive that repairs ambiguity
+lives with the Answer archive in `agent_answer.py`, beside the directory both derive.
 
 **Tail order (AD-9):** (1) protected-path check before routing — FR-31: anchor wins;
 (2) routing via `rules/routing.py`; (3) budget check after routing — FR-17: step keeps
@@ -15,7 +16,7 @@ parks `budget` on top of whatever `route` decided (FR-17).
 from __future__ import annotations
 
 from collections.abc import Mapping
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 from orchestrator.application.rules import budget, protected_paths
@@ -25,13 +26,10 @@ from orchestrator.application.steps import agent_workdir
 from orchestrator.application.steps.context import (
     StepContext,
     committed,
-    operator_retry,
-    require_cwd,
     require_env,
     require_run,
     require_workspace,
     resolved_text,
-    retrying,
 )
 from orchestrator.application.story_file import StoryFile, parse
 from orchestrator.application.templates.agent_row import (
@@ -53,13 +51,10 @@ RETRY_MAX = "max"
 RETRY_PROMPT = "prompt"
 RETRY_RESUME_SESSION = "resume_session"
 
-#: The liveness glob FR-16 names, for a row whose `expect` declared none of its own.
+#: The liveness glob FR-16 names, for a row whose `expect` declared none of its own. It
+#: needs a spec folder to stand on: a row that resolves none globs nothing rather than the
+#: filesystem root (Operator decision, 2026-09-27).
 STORY_FILE_GLOB = "{spec_folder}/stories/{story_id}-*.md"
-
-#: Where AD-13's de-ambiguation puts every match it is not keeping — the same folder FR-18's
-#: Answer archives a blocked Story file to — and how many matches make an ambiguity.
-ANSWERS_DIRECTORY = "{spec_folder}/stories/.answers"
-AMBIGUOUS = 2
 
 #: What a dispatch that ran past its deadline leaves. Not an exit code and not a route: the
 #: harness never got to write a file, so there is nothing for FR-16 to read.
@@ -280,46 +275,31 @@ def story_files(ctx: StepContext) -> tuple[str, ...] | None:
         return None
     workspace = require_workspace(ctx, ctx.cwd)
     found: set[str] = set()
-    for pattern in _globs(ctx, expect):
+    for pattern in liveness_globs(ctx.with_resolved):
         found.update(workspace.glob(pattern))
     return tuple(sorted(found))
 
 
-def archive_ambiguous(ctx: StepContext) -> tuple[str, ...]:
-    """AD-13: a re-run after `ambiguous story file` keeps the newest match and archives the
-    rest, so the ambiguity cannot compound over attempts.
-
-    Both kinds of re-run are covered. The Operator's *Retry* is the one that matters:
-    `ambiguous story file` is a `misconfigured` stop, and AD-9 never re-executes one of
-    those automatically, so a person choosing Retry is the only way that row runs again.
-    The Template's own `retry` is covered too — it can only ever have seen one file, so
-    this returns immediately, and the hook stays right if the routing ever changes.
-
-    Newest is by mtime and then by name, so the choice is never a coin toss. **Both ends of
-    every rename are reported**: `agent.py` stages them into the prepare commit, so the move
-    is the orchestrator's own recorded write and `start_sha` is read off a clean tree —
-    without that, 5.6's `diff_names(start_sha, end_sha)` would attribute this rename to the
-    agent, which AD-17 and FR-31 forbid. **Both ends except an untracked source**, which is
-    the destination alone for the reason `agent_answer.archive_with_answer` states: a path
-    no tree holds needs no staging, and `git add` cannot be asked about one that is gone.
-    """
-    if not (operator_retry(ctx) or retrying(ctx)):
+def liveness_globs(with_resolved: Mapping[str, Any]) -> tuple[str, ...]:
+    """`expect.files` as the planner resolved it (AD-7), or FR-16's own glob for a row whose
+    Template declared no `files` at all — or nothing, for a row with no `expect` mapping or
+    with a spec folder that resolved empty, whose fallback would otherwise be the absolute
+    `/stories/-*.md` (Operator decision, 2026-09-27)."""
+    expect = with_resolved.get(EXPECT_KEY)
+    if not isinstance(expect, Mapping):
         return ()
-    matches = story_files(ctx) or ()
-    if len(matches) < AMBIGUOUS:
+    declared = tuple(str(pattern) for pattern in expect.get(EXPECT_FILES) or ())
+    if declared:
+        return declared
+    spec_folder = resolved_text(with_resolved, SPEC_FOLDER_KEY)
+    if not spec_folder:
         return ()
-    workspace = require_workspace(ctx, ctx.cwd)
-    never_tracked = protected_paths.untracked(ctx.ports.git.status(require_cwd(ctx)))
-    answers = ANSWERS_DIRECTORY.format(
-        spec_folder=resolved_text(ctx.with_resolved, SPEC_FOLDER_KEY)
+    return (
+        STORY_FILE_GLOB.format(
+            spec_folder=spec_folder,
+            story_id=resolved_text(with_resolved, STORY_ID_KEY),
+        ),
     )
-    newest = max(matches, key=lambda path: (workspace.mtime(path), path))
-    moved: list[str] = []
-    for path in (match for match in matches if match != newest):
-        archived = f"{answers}/{PurePosixPath(path).name}"
-        workspace.move(path, archived)
-        moved += [archived] if path in never_tracked else [path, archived]
-    return tuple(moved)
 
 
 def retry_of(ctx: StepContext) -> Retry | None:
@@ -374,15 +354,3 @@ def _parsed(ctx: StepContext, files: tuple[str, ...]) -> StoryFile | None:
     if len(files) != 1:
         return None
     return parse(files[0], require_workspace(ctx, ctx.cwd).read(files[0]) or "")
-
-
-def _globs(ctx: StepContext, expect: Mapping[str, Any]) -> tuple[str, ...]:
-    """`expect.files` as the planner resolved it (AD-7), or FR-16's own glob for a row
-    whose Template declared no `files` at all."""
-    declared = tuple(str(pattern) for pattern in expect.get(EXPECT_FILES) or ())
-    return declared or (
-        STORY_FILE_GLOB.format(
-            spec_folder=resolved_text(ctx.with_resolved, SPEC_FOLDER_KEY),
-            story_id=resolved_text(ctx.with_resolved, STORY_ID_KEY),
-        ),
-    )

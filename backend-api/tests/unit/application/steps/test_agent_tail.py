@@ -18,7 +18,13 @@ from orchestrator.application.steps import agent_tail
 from orchestrator.application.steps.agent import AgentExecutor
 from orchestrator.domain.ports.harness import HarnessResult
 from orchestrator.domain.values import StepResult
-from tests.unit.application.steps.agent_fixtures import ROW_PATH, World, resolved
+from tests.unit.application.steps.agent_fixtures import (
+    ROW_PATH,
+    SPEC_FOLDER,
+    STORY_ID,
+    World,
+    resolved,
+)
 from tests.unit.application.steps.agent_tail_fixtures import (
     LOG_PATH,
     OTHER_PATH,
@@ -324,3 +330,30 @@ def test_neither_seam_is_answering_anything_yet() -> None:
 
     assert result.park is None
     assert result.status == "done"
+
+
+# ── the liveness glob, as one pure answer ────────────────────────────────────
+# Operator decision, 2026-09-27: a row whose `spec_folder` resolves empty used to fall back
+# to the absolute `/stories/-*.md`; the FR-16 fallback now needs a spec folder to stand on.
+
+
+def test_declared_files_are_the_liveness_globs() -> None:
+    row = resolved(expect={"files": ["artifacts/spec-*.md"], "status_in": []})
+
+    assert agent_tail.liveness_globs(row) == ("artifacts/spec-*.md",)
+
+
+def test_the_fr16_fallback_glob_is_built_from_the_spec_folder_and_story_id() -> None:
+    row = resolved(expect={"status_in": ["done"]})
+
+    assert agent_tail.liveness_globs(row) == (f"{SPEC_FOLDER}/stories/{STORY_ID}-*.md",)
+
+
+def test_an_empty_spec_folder_globs_nothing_rather_than_the_filesystem_root() -> None:
+    row = resolved(spec_folder="", expect={"status_in": ["done"]})
+
+    assert agent_tail.liveness_globs(row) == ()
+
+
+def test_a_row_with_no_expect_mapping_has_no_liveness_globs() -> None:
+    assert agent_tail.liveness_globs(resolved()) == ()

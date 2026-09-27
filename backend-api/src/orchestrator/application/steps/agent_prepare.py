@@ -80,7 +80,7 @@ def writes(ctx: StepContext, *, moves_only: bool = False) -> StepResult | None:
 
 def _write_and_commit(ctx: StepContext, *, moves_only: bool) -> None:
     """The phase itself. Every git call it makes is inside `writes`'s one `except`."""
-    moved = (*agent_answer.archive_with_answer(ctx), *agent_tail.archive_ambiguous(ctx))
+    moved = (*agent_answer.archive_with_answer(ctx), *agent_answer.archive_ambiguous(ctx))
     written: tuple[str | None, ...] = (
         () if moves_only else (_context_document(ctx), _verify_failure(ctx))
     )
