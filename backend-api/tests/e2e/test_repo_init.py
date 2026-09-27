@@ -77,9 +77,12 @@ INIT_BRANCH = f"{DECLARED_BRANCH}-1"
 COMMIT_SUBJECT = "chore: initialise BMAD method (orchestrator)"
 
 #: The rows `repo-init@1` plans, in order (`templates/repo-init.yaml` plus AD-7's row 1).
+#: `setup` is the declared install row (Operator decision, 2026-09-27); this module's
+#: repository declares no `install_command`, so it plans `skipped · no command`.
 ROWS = (
     "plan",
     "checkout",
+    "setup",
     "install",
     "context",
     "context-review",
@@ -324,7 +327,8 @@ def test_every_planned_row_ran_in_order(initialised: dict[str, Any], sessions: A
     rows = rows_of(sessions, initialised["id"])
 
     assert [row.path for row in rows] == list(ROWS)
-    assert [row.status for row in rows] == ["done"] * len(ROWS)
+    expected = ["skipped" if row == "setup" else "done" for row in ROWS]
+    assert [row.status for row in rows] == expected
 
 
 def test_the_run_records_the_worktree_it_created_and_pushed(

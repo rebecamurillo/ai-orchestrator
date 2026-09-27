@@ -28,6 +28,7 @@ PROBLEM_MEDIA_TYPE = "application/problem+json"
 #: `repo-init@1` ships seven steps and no loop.
 REPO_INIT_NODES = [
     "checkout",
+    "setup",
     "install",
     "context",
     "context-review",
@@ -115,7 +116,7 @@ def test_story_1_marks_its_agent_step(authenticated: httpx.Client) -> None:
     assert build["gate"] == "liveness"
 
 
-def test_repo_init_1_is_seven_nodes_chained_with_no_group(authenticated: httpx.Client) -> None:
+def test_repo_init_1_is_eight_nodes_chained_with_no_group(authenticated: httpx.Client) -> None:
     body = authenticated.get(f"{TEMPLATES}/repo-init/1/graph").json()
 
     assert [node["id"] for node in body["nodes"]] == REPO_INIT_NODES
