@@ -218,6 +218,8 @@ services:
       # oMLX is a host process; a container reaches it through the gateway, not localhost
       OMLX_BASE_URL: ${OMLX_BASE_URL:-http://host.docker.internal:8000/v1}
       OMLX_API_KEY: ${OMLX_API_KEY:-not-set}
+      OPENROUTER_API_BASE: ${OPENROUTER_API_BASE:-https://openrouter.ai/api/v1}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-not-set}
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     ports:

@@ -56,6 +56,12 @@ model_list:
       api_base: os.environ/OMLX_BASE_URL
       api_key: os.environ/OMLX_API_KEY
       use_chat_completions_api: true
+  - model_name: openrouter-qwen3-coder-480b
+    litellm_params:
+      model: openrouter/qwen/qwen3-coder
+      api_base: os.environ/OPENROUTER_API_BASE
+      api_key: os.environ/OPENROUTER_API_KEY
+      use_chat_completions_api: true
 
 litellm_settings:
   # the Gateway's own spans, on the same Langfuse trace as the harness's (AD-11).
