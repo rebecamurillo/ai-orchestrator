@@ -392,7 +392,7 @@ function initRepository(repositoryId) {
   const running = (project.runs ?? []).find(
     (run) =>
       run.repository_id === repositoryId &&
-      run.template.startsWith('repo-init@') &&
+      run.is_init === true &&
       !REPO_INIT_TERMINAL_TOKENS.has(run.token),
   );
   if (running) {
@@ -411,6 +411,9 @@ function initRepository(repositoryId) {
       id: runId,
       token: 'DON',
       template: 'repo-init@1',
+      // the server marks the Run it dispatched from INIT_TEMPLATE (`ProjectRunOut.is_init`);
+      // the page reads that flag, never the label (Operator decision 2026-09-30)
+      is_init: true,
       branch: repository.default_branch,
       repository_id: repositoryId,
       current_step_label: 'link',
