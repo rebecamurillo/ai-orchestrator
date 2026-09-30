@@ -136,11 +136,11 @@ class RunEnvironment:
     default_branch: str
     #: The `BMAD_VERSION` this instance runs (AD-16), for `bmad.install`.
     bmad_version: str
-    #: The Run input every dev-loop Template declares, or `None` (`repo-init@1` has none).
+    #: The Run input a dev-loop Template declares, or `None` for one that declares none.
     spec_folder: str | None
     #: Every worktree this Run has made so far, as `run.worktrees[]` stands now.
     worktrees: tuple[Worktree, ...] = ()
-    #: Every compare URL this Run has recorded so far (`initiative@1` records one per epic).
+    #: Every compare URL this Run has recorded so far (one per epic, for an epic loop).
     compare_urls: tuple[str, ...] = ()
     #: `run.accepted_paths` — files an earlier `continue` let through (AD-9).
     accepted_paths: tuple[str, ...] = ()

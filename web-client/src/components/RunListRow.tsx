@@ -8,7 +8,6 @@
  */
 import type { components } from '../api/schema';
 import { ageText, isAgedNeedsYou, progressText, tokenSignal } from '../lib/board/format';
-import { initiativeBadgeText } from '../lib/initiative/badge';
 
 type CardOut = components['schemas']['CardOut'];
 
@@ -20,7 +19,6 @@ export default function RunListRow({ card }: Props) {
   const signal = tokenSignal(card.token);
   const aged = isAgedNeedsYou(card.token, card.age_seconds);
   const progress = progressText(card.progress, card.kind_label);
-  const badge = initiativeBadgeText(card);
 
   return (
     <a
@@ -37,7 +35,6 @@ export default function RunListRow({ card }: Props) {
       <span className="board-list-branch">{card.branch}</span>
       <span className="board-list-step">{card.current_step_label}</span>
       <span className="board-list-progress">{progress}</span>
-      {badge ? <span className="board-list-initiative">{badge}</span> : null}
       <span className="board-list-age" data-signal={aged ? 'needs-you' : undefined}>
         {ageText(card.age_seconds)}
       </span>

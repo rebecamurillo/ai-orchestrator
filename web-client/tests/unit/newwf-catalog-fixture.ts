@@ -21,6 +21,9 @@ function decl(
 
 /** The fixture Template with an optional, defaulted, bindable input, and that default. */
 export const OPTIONAL_INPUT_TEMPLATE = 'defaulted';
+
+/** The fixture Template a Run can never start from: it declares a required `item` input. */
+export const CALLEE_ONLY_TEMPLATE = 'called-only';
 export const OPTIONAL_INPUT_DEFAULT = '/home/agent/skills/bmad-build-auto';
 
 const PROJECT = decl('project', 'project');
@@ -65,6 +68,17 @@ export const FIXTURE_INPUTS: Record<string, InputDeclOut[]> = {
     HARNESS,
     MODEL,
   ],
+  /** A Template only ever reached through a caller's `for_each`: its `item` input is
+   * *required*, which is the declaration that keeps it out of the derived offer (FR-33). */
+  [CALLEE_ONLY_TEMPLATE]: [
+    PROJECT,
+    REPOSITORY,
+    BASE_BRANCH,
+    decl('spec_folder', 'path'),
+    decl('unit', 'item'),
+    HARNESS,
+    MODEL,
+  ],
   /** The one shape no shipped Template has: an optional bindable input with a default.
    * Without it, `(optional)` and the prefill are unreachable from any test. */
   [OPTIONAL_INPUT_TEMPLATE]: [
@@ -78,8 +92,9 @@ export const FIXTURE_INPUTS: Record<string, InputDeclOut[]> = {
   ],
 };
 
-/** The order the default `ROOT_TEMPLATES` asks for (`task` left the shipped set — Operator
- * decision, 2026-09-30). `task` stays a fixture-owned name below. */
+/** The order a `ROOT_TEMPLATES` line asks for in these tests. Fixture-owned names, not a
+ * default the product holds: since the Operator decision of 2026-09-30 no list of Template
+ * names lives in `src/` at all. */
 export const FIXTURE_ORDER = ['initiative', 'epic', 'repo-init', 'story-run'];
 
 /** `FIXTURE_ORDER` plus the optional-input Template, for the tests that need that shape. */

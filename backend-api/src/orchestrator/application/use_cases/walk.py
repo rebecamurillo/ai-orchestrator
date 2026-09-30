@@ -287,7 +287,7 @@ def _step_ports(ports: WalkPorts, run: Run, row: StepRun, frame: WalkFrame) -> S
     **Only a row inside a Story frame is given the rule.** AD-17 is frame-scoped: its frozen
     test set is that frame's first attempt's, and outside a frame there is no agent range at
     all — so all that would be left of the check is "anything staged whose basename is
-    `AGENTS.md`". `repo-init@1`'s `bmad.install` row stages exactly that, written by the
+    `AGENTS.md`". A `bmad.install` row stages exactly that, written by the
     orchestrator, and would park a Run on the system's own file.
     """
     environment = ports.step.run_env

@@ -50,7 +50,8 @@ from orchestrator.application.use_cases.create_run import (
     RunReadPorts,
     create_run,
     get_run,
-    park_row_of,
+    park_row_in,
+    run_rows,
 )
 from orchestrator.application.use_cases.run_views import board_view
 from orchestrator.infrastructure.clock import SystemClock
@@ -142,11 +143,15 @@ def list_runs(
 def get(run_id: UUID, ports: ReadPorts) -> RunSummaryOut:
     """The minimal Run read model; `GET /runs/{run_id}` gains the full one in 4.12."""
     run = get_run(ports, run_id)
-    # Both row fields come off one lookup: the kind decides the row-kind signals (4.9), the
-    # status decides whether *Skip step* is offered at all (Operator, 2026-09-26).
-    park_row = park_row_of(ports, run)
+    # Every row comes off one lookup: the parked row's kind decides the row-kind signals
+    # (4.9), its status decides whether *Skip step* is offered at all (Operator,
+    # 2026-09-26), and the whole list decides whether the plan is one epic, which is what
+    # *Skip epic* turns on (Operator decision 2026-09-30).
+    rows = run_rows(ports, run)
+    park_row = park_row_in(run, rows)
     return RunSummaryOut.of(
         run,
         park_row_kind=park_row.kind if park_row is not None else None,
         park_row_status=park_row.status if park_row is not None else None,
+        rows=rows,
     )

@@ -31,7 +31,8 @@ EPICS_FILENAME = "epics.yaml"
 STORIES_FILENAME = "stories.yaml"
 SPEC_FILENAME = "SPEC.md"
 STATUS_KEY = "status"
-#: The Run input `initiative@1` binds its epic list under (same key as `walk_frame.py`).
+#: The Run input a Template binds its epic list's own folder under (same key as
+#: `walk_frame.py`); a plan that does not name one leaves the list's entries bare.
 INITIATIVE_FOLDER_KEY = "initiative_folder"
 FRONTMATTER_FENCE = "---"
 STORY_SUFFIX = ".md"
@@ -66,7 +67,7 @@ def _entries(ctx: Context, path: str) -> tuple[Entry, ...]:
 
 
 def epics_entries(ctx: Context) -> tuple[Entry, ...]:
-    """Every `epics.yaml` entry the plan read (`()` unless this is an initiative Run)."""
+    """Every `epics.yaml` entry the plan read (`()` unless the plan reads one at all)."""
     entries: list[Entry] = []
     for path in _list_paths(ctx, EPICS_FILENAME):
         entries.extend(_entries(ctx, path))
@@ -74,8 +75,10 @@ def epics_entries(ctx: Context) -> tuple[Entry, ...]:
 
 
 def epics_yaml_line(ctx: Context) -> Line | None:
-    """Line 4: initiative only. `None` means "does not apply", not "skip"."""
-    if not ctx.is_initiative:
+    """Line 4: plans that read an epics list only. `None` means "does not apply", not
+    "skip" — `Context.reads_epics_list` is the fact, not a Template's name (Operator
+    decision 2026-09-30: no template name hardcoded in product code)."""
+    if not ctx.reads_epics_list:
         return None
     if list_error_target(ctx) == CHECK_EPICS_YAML:
         assert ctx.plan_error is not None  # `list_error_target` only names this when set
@@ -112,10 +115,11 @@ def spec_folders(ctx: Context) -> tuple[str, ...]:
     """Every spec folder the plan touches: each epic's, or the request's own single one.
 
     An epic's `spec_folder` is relative to the Initiative folder (PRD §3), the same
-    composition `initiative@1` declares — so each entry is prefixed with the request's
-    `initiative_folder` when one is typed; without it the bare entries stand.
+    composition a Template looping over an epics list declares — so each entry is prefixed
+    with the request's `initiative_folder` when one is typed; without it the bare entries
+    stand.
     """
-    if ctx.is_initiative:
+    if ctx.reads_epics_list:
         entries = epics_entries(ctx)
         if not entries:
             return ()

@@ -102,7 +102,7 @@ def _read(
     return ProjectRead.of(
         view,
         use_cases.embedded_repositories(ports, view.id),
-        project_runs.embedded_runs(ports.runs, ports.steps, view.id),
+        project_runs.embedded_runs(ports.runs, ports.steps, view.id, ports.init_template),
         trajectory_export.trajectory_count(trajectories, view.id),
         monthly_spend_usd=m.monthly_spend_usd,
         monthly_spend_provisional=m.monthly_spend_provisional,

@@ -101,18 +101,17 @@ export function compareLinkText(detail: RunDetailOut, url: string): string {
  * *Skip epic*'s own facts (6.5, FR-20, NFR-8, UX-DR10) — deliberately **not** symmetric
  * with the Skip-story predicates above.
  *
- * `admitted_signals(park_kind, row_kind)` cannot run AD-13's own `extra` predicate for this
- * kind either (`rules/signals.py::_has_epic_frame`), but that predicate's two branches are
- * both answerable client-side without a new field: the whole Run is one epic
- * (`run.template_name == "epic"`, published verbatim as `run.template`), or the parked
- * row's own path carries an `epics[n]` frame — the exact same fact `currentEpicNumber`
- * below already reads off `currentStepPath` for the confirm line's own number, reused here
- * rather than approximated by the Run's `template` name a second time (a custom-named copy
- * of an initiative-shaped Template would defeat a name check but not a path one).
- * `offersSkipStory` needed a per-current-Story id because `_has_story_frame` can genuinely
- * be false at a stop that still admits this kind's sibling — reading the path here is both
- * more precise and correct where copying that predicate would refuse the button exactly at
- * `push_rejected`, the one stop this kind adds its own confirm sentence for.
+ * `detail.admitted_signals` is the authority here, and it is enough: since the Operator
+ * decision of 2026-09-30 (no template name hardcoded in product code) the server runs
+ * AD-13's own `extra` predicate for this kind over the Run's rows
+ * (`rules/signals.py::_skippable`, `frames.py::run_is_one_epic`), so both of that
+ * predicate's branches — the whole plan is one epic, or the parked row sits in an
+ * `epics[n]` frame — are already resolved before the list reaches this screen. Copying
+ * either of them here would be a second, weaker reading: the old one tested
+ * `run.template === 'epic'`, which a custom-named copy of the same plan defeated.
+ * `offersSkipStory` still needs a per-current-Story id of its own, because it has to name
+ * the Story in its confirm line; this kind reads its number off the path instead
+ * (`currentEpicNumber` below).
  */
 export const SKIP_EPIC_STOP_KINDS: readonly string[] = [
   'blocked',
@@ -132,26 +131,20 @@ export const SKIP_EPIC_LABEL = 'Skip epic';
 //: (`currentStepPath`, read for `logTail`), so no new field is needed for this.
 const EPIC_BRACKET = /epics\[(\d+)\]/;
 
-/** Whether this stop shows *Skip epic*: one of the eight bodies AD-13 admits it on, the Run
- * admits the kind, and `_has_epic_frame`'s own two branches — the whole Run is one epic, or
- * the parked row's own path carries an `epics[n]` frame. */
+/** Whether this stop shows *Skip epic*: one of the eight bodies AD-13 admits it on, and the
+ * Run's own admitted list carries the kind — the server has already asked whether there is
+ * an epic to skip. */
 export function offersSkipEpic(
-  detail: RunDetailOut,
+  _detail: RunDetailOut,
   kind: string | null,
   admitted: readonly SignalKind[],
 ): boolean {
-  if (kind === null || !SKIP_EPIC_STOP_KINDS.includes(kind) || !admitted.includes('skip_epic')) {
-    return false;
-  }
-  if (detail.run.template === 'epic') return true;
-  const path = currentStepPath(detail);
-  return path !== null && EPIC_BRACKET.test(path);
+  return kind !== null && SKIP_EPIC_STOP_KINDS.includes(kind) && admitted.includes('skip_epic');
 }
 
 /** The 1-based epic number the confirm line names — the brief's own convention
- * (`epics[0]` is "epic 1"), matching `summary.skipped_epics`'s own numbering. `1` for an
- * `epic`-template Run (no bracket at all: it is the one epic) or when no current row path
- * is known yet. */
+ * (`epics[0]` is "epic 1"), matching `summary.skipped_epics`'s own numbering. `1` for a Run
+ * that is itself one epic (no bracket at all) or when no current row path is known yet. */
 export function currentEpicNumber(detail: RunDetailOut): number {
   const path = currentStepPath(detail);
   const match = path ? EPIC_BRACKET.exec(path) : null;

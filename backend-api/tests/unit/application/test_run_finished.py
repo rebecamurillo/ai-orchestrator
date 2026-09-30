@@ -3,6 +3,11 @@
 Reuses the exact `Git` scripting `test_clone_check_use_cases.py` gives a reachable
 repository, because `on_finished` runs the same pure check `run_clone_check` runs — this
 suite proves *when* that happens, not what a check itself decides.
+
+*When* is read off the Run's own rows, not off its Template's name (Operator decision
+2026-09-30: no template name hardcoded in product code): a Run holding a `bmad.install` row
+installed the method, so the Repository's stored method version is stale. The plans below
+are `(path, kind)` pairs this suite owns, not a shipped Template's.
 """
 
 from __future__ import annotations
@@ -20,17 +25,31 @@ from orchestrator.domain.entities.repository import (
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.git import CloneResult, RemoteRef
+from tests.unit.application.writer_fixtures import build_rows
 from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
 from tests.unit.fakes.git import FakeGit
 from tests.unit.fakes.projects import FakeProjectRepository, FakeRepositoryRepository
-from tests.unit.fakes.runs import FakeRunRepository
+from tests.unit.fakes.runs import FakeRunRepository, FakeStepRunRepository
 
 NOW = datetime(2026, 9, 6, tzinfo=UTC)
 BMAD_VERSION = "6.11.0"
 WORK_DIR = Path("/work")
 SHA = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
 MANIFEST = "installation:\n  version: 6.11.0\n  installDate: 2026-08-24\nmodules: []\n"
+
+#: A plan that installs the method — the shape this hook exists for.
+INSTALLING_PLAN: tuple[tuple[str, str], ...] = (
+    ("checkout", "git.worktree"),
+    ("install", "bmad.install"),
+    ("commit", "git.commit"),
+)
+#: A plan that does not: no `bmad.install` row anywhere in it.
+NON_INSTALLING_PLAN: tuple[tuple[str, str], ...] = (
+    ("checkout", "git.worktree"),
+    ("stories[0].build", "agent"),
+    ("stories[0].commit-guard", "git.commit"),
+)
 
 
 def reachable_git() -> FakeGit:
@@ -89,16 +108,18 @@ def a_run(project_id: object, repository_id: object, **overrides: object) -> Run
 
 
 class Harness:
-    def __init__(self, *, git: FakeGit | None) -> None:
+    def __init__(self, *, git: FakeGit | None, steps: bool = True) -> None:
         self.project = a_project()
         self.repository = a_repository(self.project.id)
         self.projects = FakeProjectRepository([self.project])
         self.repositories = FakeRepositoryRepository([self.repository])
         self.runs = FakeRunRepository()
+        self.steps = FakeStepRunRepository()
         self.uow = FakeUnitOfWork()
         self.uow.__enter__()
         self.ports = RunFinishedPorts(
             runs=self.runs,
+            steps=self.steps if steps else None,
             repositories=self.repositories,
             projects=self.projects,
             git=git,
@@ -108,12 +129,13 @@ class Harness:
             bmad_version=BMAD_VERSION,
         )
 
-    def add(self, run: Run) -> Run:
+    def add(self, run: Run, plan: tuple[tuple[str, str], ...] = INSTALLING_PLAN) -> Run:
         self.runs.add(run)
+        self.steps.add_many(build_rows(run.id, plan))
         return run
 
 
-def test_a_finished_repo_init_run_re_runs_its_repositorys_clone_check() -> None:
+def test_a_finished_installing_run_re_runs_its_repositorys_clone_check() -> None:
     harness = Harness(git=reachable_git())
     run = harness.add(a_run(harness.project.id, harness.repository.id))
 
@@ -125,9 +147,13 @@ def test_a_finished_repo_init_run_re_runs_its_repositorys_clone_check() -> None:
     assert harness.uow.committed is True
 
 
-def test_a_run_that_is_not_repo_init_is_a_no_op() -> None:
+def test_a_run_whose_plan_installs_no_method_is_a_no_op() -> None:
+    """Whatever its Template is called: no `bmad.install` row, nothing to re-check."""
     harness = Harness(git=reachable_git())
-    run = harness.add(a_run(harness.project.id, harness.repository.id, template_name="epic"))
+    run = harness.add(
+        a_run(harness.project.id, harness.repository.id, template_name="epic"),
+        plan=NON_INSTALLING_PLAN,
+    )
 
     result = on_finished(harness.ports, run.id)
 
@@ -135,7 +161,27 @@ def test_a_run_that_is_not_repo_init_is_a_no_op() -> None:
     assert harness.repository.clone_check.status == "pending"
 
 
-def test_a_repo_init_run_that_is_not_done_is_a_no_op() -> None:
+def test_a_run_of_any_other_template_that_installs_the_method_is_not_a_no_op() -> None:
+    """The point of the change: a Template of any name whose plan installs the method leaves
+    the same stale manifest reading behind, so it gets the same re-check."""
+    harness = Harness(git=reachable_git())
+    run = harness.add(a_run(harness.project.id, harness.repository.id, template_name="house-init"))
+
+    checked = on_finished(harness.ports, run.id)
+
+    assert checked is not None
+    assert checked.clone_check.bmad_version == BMAD_VERSION
+
+
+def test_a_process_with_no_step_run_adapter_wired_is_a_no_op() -> None:
+    harness = Harness(git=reachable_git(), steps=False)
+    run = a_run(harness.project.id, harness.repository.id)
+    harness.runs.add(run)
+
+    assert on_finished(harness.ports, run.id) is None
+
+
+def test_an_installing_run_that_is_not_done_is_a_no_op() -> None:
     harness = Harness(git=reachable_git())
     run = harness.add(a_run(harness.project.id, harness.repository.id, status="failed"))
 
@@ -176,6 +222,7 @@ def test_a_project_the_repository_pointed_at_that_is_gone_is_a_no_op() -> None:
     harness.repositories = FakeRepositoryRepository([orphan_repository])
     harness.ports = RunFinishedPorts(
         runs=harness.runs,
+        steps=harness.steps,
         repositories=harness.repositories,
         projects=harness.projects,
         git=harness.ports.git,

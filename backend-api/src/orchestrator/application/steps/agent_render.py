@@ -19,7 +19,7 @@ it is rendered here and the agent is handed the result.
 **Skipping is not failing.** A row whose prompt is its own (`prompt`, `prompt_file`), a
 harness that installs no skills, a worktree with no renderer, and a skill with no
 `workflow.md` of its own each return `None` and dispatch exactly as they did before: a
-target repository that never ran `repo-init` must keep working, and an operator skill
+target repository that never had the method installed must keep working, and an operator skill
 authored to `ia-agents-skills/README.md`'s own contract — `SKILL.md` alone, no renderer
 entry — is not a workflow this module has anything to render (`render_skill.py` demands a
 `workflow.md` for every skill it is pointed at; a skill that never shipped one was never

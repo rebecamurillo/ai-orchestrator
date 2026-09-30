@@ -173,15 +173,38 @@ describe('StopBody · Skip epic', () => {
     expect(html).not.toContain('remaining stories are marked skipped');
   });
 
-  it('appends nothing on a Template that can carry no epic frame', () => {
-    // `offersSkipEpic`'s template check only governs the *appending* this story does on the
-    // five stops `blockedSignals`/`checkpointSignals` do not reach: those two filters
-    // already render `skip_epic` unconditionally whenever `admitted_signals` carries it
-    // (5.10/6.2, frozen), the same pre-existing gap 6.4's own hand-back names for
-    // `skip_story` on a park outside every Story frame — not this story's to close.
+  it('appends nothing on a plan with no epic to skip, whatever its Template is called', () => {
+    // Operator decision 2026-09-30: no template name hardcoded in product code. A plan with
+    // no epic to skip is now one whose `admitted_signals` does not carry `skip_epic` — the
+    // server reads the Run's own rows for it — so the refusal is asserted the way it really
+    // arrives. This is stronger than the `template === 'repo-init'` test it replaces: the
+    // Template below is named nothing the old branch would have recognised, and the same
+    // Template *with* the kind admitted still renders the button (the case below it).
     const detail: RunDetailOut = {
       ...base(),
-      run: { ...base().run, template: 'repo-init' },
+      run: { ...base().run, template: 'house-init' },
+      alert: { token: 'BLK', reason: 'why it stopped', park_kind: 'verify_failed' },
+      gate_record: [],
+      admitted_signals: ['retry', 'cancel'],
+    } as unknown as RunDetailOut;
+    const html = renderToStaticMarkup(
+      createElement(StopBody, {
+        detail,
+        token: 'BLK' as Token,
+        onSignal: () => {},
+        onCancelClick: () => {},
+        posting: null,
+        error: null,
+      }),
+    );
+
+    expect(html).not.toContain('data-testid="wf-signal-skip_epic"');
+  });
+
+  it('appends it on any Template the server admitted the kind for', () => {
+    const detail: RunDetailOut = {
+      ...base(),
+      run: { ...base().run, template: 'house-init' },
       alert: { token: 'BLK', reason: 'why it stopped', park_kind: 'verify_failed' },
       gate_record: [],
       admitted_signals: WITH_SKIP_EPIC,
@@ -197,7 +220,7 @@ describe('StopBody · Skip epic', () => {
       }),
     );
 
-    expect(html).not.toContain('data-testid="wf-signal-skip_epic"');
+    expect(html).toContain('data-testid="wf-signal-skip_epic"');
   });
 
   it('offers nothing where the server did not admit it', () => {

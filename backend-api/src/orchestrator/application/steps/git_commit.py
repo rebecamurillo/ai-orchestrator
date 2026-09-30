@@ -3,7 +3,8 @@
 **The spec folder is staged first, and then everything else.** Two calls rather than one, and
 the order is the rule: the Run's own spec folder is what an Operator's inline edit and the
 agent's story file live in, and staging it by name first means a later `add -A` cannot be the
-only reason it was included. A Run with no spec folder — `repo-init@1` declares none — stages
+only reason it was included. A Run with no spec folder — an initialisation plan declares
+none — stages
 everything and nothing is missing. `Git.stage`'s own "everything" call excludes every gitlink
 the tree records (AD-14, ratified 2026-09-23), so this row never commits a submodule pointer
 move — a fact of the adapter, not of this module, and unconditional whether or not `workdir`

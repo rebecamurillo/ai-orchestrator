@@ -102,7 +102,8 @@ class BranchAllocator:
     def fresh(self, declared: str | None) -> str | None:
         """The name this Run creates for a declared branch; `None` for a Template with none.
 
-        `initiative@1` checks nothing out itself — its worktree is inside the epic frame —
+        A Template with an epic loop may check nothing out itself — its worktree is inside
+        the epic frame —
         so it declares no branch and gets no name, exactly as `working_branch` reports it.
         """
         if declared is None:

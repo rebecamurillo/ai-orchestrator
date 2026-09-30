@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ageText, latestRepoInitRun, type ProjectRunOut } from '../../src/lib/projects/runs';
+import { ageText, latestInitRun, type ProjectRunOut } from '../../src/lib/projects/runs';
 
 const NOW = new Date('2026-09-06T12:00:00Z');
 
@@ -12,7 +12,8 @@ function run(overrides: Partial<ProjectRunOut>): ProjectRunOut {
   return {
     id: 'run-id',
     token: 'RUN',
-    template: 'repo-init@1',
+    template: 'house-init@3',
+    is_init: true,
     branch: 'main',
     repository_id: 'repo-id',
     current_step_label: 'install',
@@ -41,29 +42,42 @@ describe('ageText', () => {
   });
 });
 
-describe('latestRepoInitRun', () => {
-  it('finds the first repo-init run for the repository, newest first', () => {
+describe('latestInitRun', () => {
+  it('finds the first init run for the repository, newest first', () => {
     const runs = [
       run({ id: 'newer', repository_id: 'repo-1' }),
       run({ id: 'older', repository_id: 'repo-1' }),
     ];
 
-    expect(latestRepoInitRun(runs, 'repo-1')?.id).toBe('newer');
+    expect(latestInitRun(runs, 'repo-1')?.id).toBe('newer');
   });
 
   it('ignores a run of another repository', () => {
     const runs = [run({ repository_id: 'repo-2' })];
 
-    expect(latestRepoInitRun(runs, 'repo-1')).toBeNull();
+    expect(latestInitRun(runs, 'repo-1')).toBeNull();
   });
 
-  it('ignores a run of a different template', () => {
-    const runs = [run({ template: 'epic@1' })];
+  /**
+   * Operator decision 2026-09-30: no template name hardcoded in product code. The template
+   * name is no longer what says "this Run initialised the Repository" — the server's own
+   * `is_init` is (`INIT_TEMPLATE`, AD-20). Both replacements are stronger than the name
+   * test they replace: a Run of another template *whose server says it is the init Run* is
+   * now found, and a Run of the configured template whose server says it is not is ignored.
+   */
+  it('ignores a run the server did not mark as the init run', () => {
+    const runs = [run({ template: 'house-init@3', is_init: false })];
 
-    expect(latestRepoInitRun(runs, 'repo-id')).toBeNull();
+    expect(latestInitRun(runs, 'repo-id')).toBeNull();
+  });
+
+  it('finds a run of any template the server marked as the init run', () => {
+    const runs = [run({ id: 'marked', template: 'anything-at-all@7', is_init: true })];
+
+    expect(latestInitRun(runs, 'repo-id')?.id).toBe('marked');
   });
 
   it('answers null when there is no run at all', () => {
-    expect(latestRepoInitRun([], 'repo-id')).toBeNull();
+    expect(latestInitRun([], 'repo-id')).toBeNull();
   });
 });

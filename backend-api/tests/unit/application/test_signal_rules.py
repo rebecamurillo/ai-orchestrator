@@ -25,7 +25,12 @@ from orchestrator.application.rules.signals import (
 from orchestrator.domain.errors import Conflict
 from orchestrator.domain.statuses import PARK_KINDS, SIGNAL_KINDS, ParkKind, SignalKind
 from orchestrator.domain.values import Signal
-from tests.unit.application.writer_fixtures import build_rows, build_run
+from tests.unit.application.writer_fixtures import (
+    EPIC_PLAN,
+    INITIATIVE_PLAN,
+    build_rows,
+    build_run,
+)
 
 #: PRD §4.6, transcribed: `park_kind -> (park row kind, the actions the stop offers)`.
 STOPS: dict[ParkKind, tuple[str, tuple[SignalKind, ...]]] = {
@@ -108,16 +113,32 @@ def test_a_budget_raise_above_the_spend_is_admitted() -> None:
     assert validate(run, a_row("agent", "blocked"), signal) is VALID["budget_raise"]
 
 
-def test_a_skip_epic_on_an_epic_run_is_admitted_without_an_epics_frame() -> None:
-    run = parked("blocked", path="stories[0].build", template_name="epic")
+def test_a_skip_epic_on_a_one_epic_run_is_admitted_without_an_epics_frame() -> None:
+    """Operator decision 2026-09-30: no template name hardcoded in product code. "The whole
+    Run is one epic" is now the *plan's* shape — a Story loop and nothing above it — so the
+    rows are handed to `validate` and the Template's name says nothing."""
+    run = parked("blocked", path="stories[0].build", template_name="house-epic")
+    rows = build_rows(run.id, EPIC_PLAN)
 
-    assert validate(run, a_row(), Signal(kind="skip_epic")) is VALID["skip_epic"]
+    assert validate(run, a_row(), Signal(kind="skip_epic"), rows) is VALID["skip_epic"]
 
 
-def test_a_skip_epic_on_an_initiative_needs_the_epics_frame() -> None:
-    run = parked("blocked", path="epics[0].stories[0].build", template_name="initiative")
+def test_a_skip_epic_outside_an_epic_frame_of_a_multi_epic_run_is_refused() -> None:
+    """The other half of the same fact, which the old name test could not state: a plan that
+    *does* group Stories into epics is not one epic, so a stop with no `epics[n]` under it has
+    nothing for this signal to skip."""
+    run = parked("blocked", path="plan", template_name="house-epic")
+    rows = build_rows(run.id, INITIATIVE_PLAN)
 
-    assert validate(run, a_row(), Signal(kind="skip_epic")) is VALID["skip_epic"]
+    with pytest.raises(Conflict):
+        validate(run, a_row(), Signal(kind="skip_epic"), rows)
+
+
+def test_a_skip_epic_inside_an_epics_frame_is_admitted() -> None:
+    run = parked("blocked", path="epics[0].stories[0].build", template_name="house-initiative")
+    rows = build_rows(run.id, INITIATIVE_PLAN)
+
+    assert validate(run, a_row(), Signal(kind="skip_epic"), rows) is VALID["skip_epic"]
 
 
 def test_a_terminal_start_is_admitted_while_no_session_is_open() -> None:

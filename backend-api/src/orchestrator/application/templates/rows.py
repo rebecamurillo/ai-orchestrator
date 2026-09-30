@@ -6,8 +6,8 @@ the traversal it happens inside.
 
 **The path.** A top-level step is its own id; a `for_each` element `i` prefixes
 `{loop_id}[{i}]`; a `template` call contributes no segment inside a loop and its own id at
-the top level — so `initiative@1` reads `epics[0].stories[3].build` where `epic@1` reads
-`stories[3].build`, the same Story named from two depths with no per-Template rule.
+the top level — so an epic-loop plan reads `epics[0].stories[3].build` where a Story-loop plan
+reads `stories[3].build`, the same Story named from two depths with no per-Template rule.
 `PlannedRow.frame` is that prefix inside a loop and `None` otherwise (`in_loop`); a call's
 own id is a path segment, not a frame — nobody skips "the `sub` frame". The label follows
 the same shape, `epic 1 · story 4-1 · build`, the step's id read as words; a checkpoint the

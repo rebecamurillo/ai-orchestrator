@@ -31,6 +31,7 @@ under *Start run* explaining what it queues behind.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -62,7 +63,6 @@ from orchestrator.domain.ports.repositories import (
 )
 from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
-from orchestrator.domain.statuses import InitiativeRole
 from orchestrator.domain.values import PlannedRow
 
 
@@ -112,13 +112,6 @@ class CreateRunRequest:
     #: A non-empty list requires `save=True`: the Run is stored but not enqueued until
     #: every predecessor is `done` (→ enqueue) or one ends `failed | cancelled` (→ park).
     after_run_ids: tuple[UUID, ...] = ()
-    #: The three initiative fields, persisted exactly as given (AD-12, 2026-09-23). Only
-    #: `dispatch_initiative` sets them; `POST /runs` never does, so a Run started on its own
-    #: carries `None` for all three. Stored, never derived — the role in particular is not
-    #: read back off `template_name`, because a dispatch's templates are request inputs.
-    initiative: str | None = None
-    initiative_role: InitiativeRole | None = None
-    initiative_epic_id: str | None = None
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -146,9 +139,9 @@ class CreateRunResult:
     #: for the first branch the Template declared, which AD-7's `BranchAllocator` made fresh
     #: (`{declared}-{n}`). `run.partition_branch` is the *declared* name, so it cannot answer
     #: this, and no other stored field does either until the `git.worktree` row has run.
-    #: Initiative dispatch needs it before then: a merge Run's `from_branch` is exactly the
-    #: branch its epic Run was allocated (AD-12, S6). `None` for a plan that declares no
-    #: branch at all — `golive@1` is the shipped example.
+    #: A caller that needs the working branch before the `git.worktree` row has run — for
+    #: example, one Run's plan referencing the branch another Run was allocated — reads it
+    #: from here. `None` for a plan that declares no branch at all.
     working_branch: str | None = None
 
 
@@ -221,9 +214,6 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         created_at=ports.clock.now(),
         partition_branch=declared_branch,
         after_run_ids=tuple(req.after_run_ids),
-        initiative=req.initiative,
-        initiative_role=req.initiative_role,
-        initiative_epic_id=req.initiative_epic_id,
     )
     step_rows = [_step_run(run_id, row) for row in plan.rows]
 
@@ -289,6 +279,23 @@ def get_run(ports: RunReadPorts, run_id: UUID) -> Run:
     return run
 
 
+def run_rows(ports: RunReadPorts, run: Run) -> list[StepRun]:
+    """Every row of this Run, or `[]` when no `StepRunRepository` was wired (4.4's own read
+    ports). A single-Run read model wants them for the one question the Run row alone cannot
+    answer: whether the whole plan is one epic, which is what admits *Skip epic* at a stop
+    with no `epics[n]` frame under it (`rules/frames.py::run_is_one_epic`, Operator decision
+    2026-09-30: no template name hardcoded in product code)."""
+    return [] if ports.steps is None else list(ports.steps.list_for_run(run.id))
+
+
+def park_row_in(run: Run, rows: Sequence[StepRun]) -> StepRun | None:
+    """The row this Run is parked on, out of rows already read — the pure half of
+    `park_row_of`, so a caller that needs both asks the repository once."""
+    if run.status != "needs_you":
+        return None
+    return row_at(rows, run.park_path)
+
+
 def park_row_of(ports: RunReadPorts, run: Run) -> StepRun | None:
     """The row this Run is parked on, for `RunSummaryOut.of`'s two row arguments (4.9, and
     the `skip_step` offer's own `park_row_status` — Operator, 2026-09-26).
@@ -297,9 +304,9 @@ def park_row_of(ports: RunReadPorts, run: Run) -> StepRun | None:
     `StepRunRepository` was wired (4.4's own read ports), or — a stored Run should never
     reach this, but a read model does not assert it — the row `park_path` names is gone.
     """
-    if run.status != "needs_you" or ports.steps is None:
+    if ports.steps is None:
         return None
-    return row_at(ports.steps.list_for_run(run.id), run.park_path)
+    return park_row_in(run, run_rows(ports, run))
 
 
 def park_row_kind_of(ports: RunReadPorts, run: Run) -> str | None:

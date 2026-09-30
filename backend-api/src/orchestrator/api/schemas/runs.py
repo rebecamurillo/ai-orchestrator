@@ -9,6 +9,7 @@ never named — and `budget_usd` gains the brief's own `> 0` rule. `RunSummaryOu
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Annotated, Any
 from uuid import UUID
@@ -21,7 +22,8 @@ from orchestrator.application.rules.signals import run_admitted_signals
 from orchestrator.application.templates.plan_model import PlanError
 from orchestrator.application.use_cases.create_run import CreateRunRequest, CreateRunResult
 from orchestrator.domain.entities.run import Run
-from orchestrator.domain.statuses import InitiativeRole, RunStatus, SignalKind
+from orchestrator.domain.entities.step_run import StepRun
+from orchestrator.domain.statuses import RunStatus, SignalKind
 
 #: Same bound as `api/schemas/preflight.py::TemplateVersion` — Postgres `integer`'s range.
 TemplateVersionField = Annotated[int, Field(gt=0, le=MAX_VERSION)]
@@ -112,18 +114,21 @@ class RunSummaryOut(BaseModel):
     #: while it runs, the parked stop's own list while it waits on one, `[]` once it is
     #: terminal — `application/rules/signals.py::run_admitted_signals`.
     admitted_signals: tuple[SignalKind, ...]
-    #: The initiative this Run is a member of, and the part it plays in it (AD-12, S6).
-    #: `null` for a Run started on its own — which is every Run `POST /runs` creates. Both
-    #: are read straight off the stored Run; the role is never inferred from `template`,
-    #: because a dispatch's templates are request inputs (AD-7). Defaulted so every existing
-    #: web-client fixture keeps compiling without them (AD-3).
-    initiative: str | None = None
-    initiative_role: InitiativeRole | None = None
 
     @classmethod
     def of(
-        cls, run: Run, *, park_row_kind: str | None = None, park_row_status: str | None = None
+        cls,
+        run: Run,
+        *,
+        park_row_kind: str | None = None,
+        park_row_status: str | None = None,
+        rows: Sequence[StepRun] = (),
     ) -> RunSummaryOut:
+        """`rows` is every row of the Run, where the caller has them: it is what says the
+        whole plan is one epic, and so whether *Skip epic* is offered at a stop with no
+        `epics[n]` frame under it (Operator decision 2026-09-30: no template name hardcoded
+        in product code). A list read hands none over and answers conservatively, exactly as
+        it already does for `park_row_kind`."""
         return cls(
             id=run.id,
             status=run.status,
@@ -137,10 +142,8 @@ class RunSummaryOut(BaseModel):
             plan_ref=run.plan_ref,
             created_at=run.created_at,
             admitted_signals=run_admitted_signals(
-                run, park_row_kind, park_row_status=park_row_status
+                run, park_row_kind, park_row_status=park_row_status, rows=rows
             ),
-            initiative=run.initiative,
-            initiative_role=run.initiative_role,
         )
 
 

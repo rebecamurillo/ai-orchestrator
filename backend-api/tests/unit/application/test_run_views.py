@@ -197,26 +197,13 @@ def test_a_checkpoint_park_reads_chk_not_blk(harness: Harness) -> None:
     assert view.columns.needs_you[0].token == "CHK"
 
 
-def test_a_card_carries_the_runs_own_initiative_membership(harness: Harness) -> None:
-    """S8: `CardOut` widens with `initiative`/`initiative_role`, the same two fields
-    `RunSummaryOut` already carries — read straight off the stored Run, never derived."""
-    harness.runs.add(a_run(initiative="q4", initiative_role="epic"))
-
-    view = board_view(harness.board_ports(), project_id=None, now=NOW)
-
-    assert view.columns.queued[0].initiative == "q4"
-    assert view.columns.queued[0].initiative_role == "epic"
-
-
-def test_a_card_off_a_run_started_on_its_own_carries_no_initiative(harness: Harness) -> None:
-    harness.runs.add(a_run())
-
-    view = board_view(harness.board_ports(), project_id=None, now=NOW)
-
-    assert view.columns.queued[0].initiative is None
-    assert view.columns.queued[0].initiative_role is None
-
-
+# `test_a_card_carries_the_runs_own_initiative_membership` and
+# `test_a_card_off_a_run_started_on_its_own_carries_no_initiative` were here: Operator
+# decision 2026-09-30 removed the fan-in Initiative feature entirely, and `Card` no longer
+# carries `initiative`/`initiative_role` (those were `RunSummaryOut`'s own two fields,
+# widened onto `Card` for S8; both are gone). The progress test below, which covers the
+# `initiative` *template*'s epic/story counting — a surviving, unrelated feature — is
+# unchanged.
 def test_progress_for_an_initiative_run_counts_epics_and_stories(harness: Harness) -> None:
     """The story spec's own AC, verbatim: two epics, eight stories, three stories done, one
     epic pushed → `progress == {epics_done:1, epics_total:2, stories_done:3, stories_total:8,
@@ -271,8 +258,11 @@ def test_progress_for_an_initiative_run_counts_epics_and_stories(harness: Harnes
     assert card.current_step_label == "commit-guard"
 
 
-def test_progress_is_none_for_a_repo_init_run(harness: Harness) -> None:
-    run = a_run(template_name="repo-init")
+def test_progress_is_none_for_a_plan_with_no_story_frame(harness: Harness) -> None:
+    """Operator decision 2026-09-30: no template name hardcoded in product code. A plan with
+    no `stories[n]` frame anywhere carries no progress, whatever its Template is called —
+    and the card names that Template instead of showing a blank segment."""
+    run = a_run(template_name="house-init")
     harness.runs.add(run)
     harness.steps.add_many(
         [
@@ -284,6 +274,22 @@ def test_progress_is_none_for_a_repo_init_run(harness: Harness) -> None:
     view = board_view(harness.board_ports(), project_id=None, now=NOW)
 
     assert view.columns.queued[0].progress is None
+    assert view.columns.queued[0].kind_label == "house-init"
+
+
+def test_a_card_with_progress_carries_no_kind_label(harness: Harness) -> None:
+    """The two are alternatives on the card, never both — which is what the old two-entry
+    lookup table said by having no row for a Template that shows progress."""
+    run = a_run(template_name="house-epic")
+    harness.runs.add(run)
+    harness.steps.add_many(
+        [a_commit_row(run, "stories[0].commit-guard", seq=1, status="done", story_id="1")]
+    )
+
+    view = board_view(harness.board_ports(), project_id=None, now=NOW)
+
+    assert view.columns.queued[0].progress is not None
+    assert view.columns.queued[0].kind_label is None
 
 
 def test_current_step_label_prefers_running_then_park_then_last_done(harness: Harness) -> None:

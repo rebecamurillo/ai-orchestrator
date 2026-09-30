@@ -96,16 +96,12 @@ describe('RunCard', () => {
     expect(markup).not.toContain('data-left-rule');
   });
 
-  it('renders the initiative badge when the card is a member (S8)', () => {
-    const markup = render({ initiative: 'q4', initiative_role: 'epic' });
-    expect(markup).toContain('run-card-initiative');
-    expect(markup).toContain('q4 · epic');
-  });
-
-  it('omits the initiative badge for a Run started on its own', () => {
-    expect(render({ initiative: null })).not.toContain('run-card-initiative');
-  });
-
+  // `renders the initiative badge when the card is a member (S8)` and `omits the
+  // initiative badge for a Run started on its own` were here: Operator decision
+  // 2026-09-30 removed the fan-in Initiative feature entirely, and `CardOut` no longer
+  // carries `initiative`/`initiative_role`, so `RunCard` renders no badge. The
+  // `template: 'initiative'` fixture value above is unrelated — it names the surviving
+  // `initiative` Template — and is left as is.
   it('colours the age amber only when the card is an aged BLK/CHK (>48h)', () => {
     const ageSpan = /<span class="run-card-age"[^>]*>/;
     const aged = render({ token: 'BLK', status: 'needs_you', age_seconds: 49 * 3600 });

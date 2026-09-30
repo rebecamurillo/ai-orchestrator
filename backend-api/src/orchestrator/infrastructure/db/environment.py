@@ -43,8 +43,8 @@ from orchestrator.infrastructure.db.repositories import (
 )
 from orchestrator.infrastructure.db.writers import SessionFactory
 
-#: The Run input every dev-loop Template binds its spec folder under (`epic@1`, `story@1`).
-#: `repo-init@1` declares none, and `None` is what `git.commit` reads as "stage everything".
+#: The Run input a dev-loop Template binds its spec folder under. An initialisation plan
+#: declares none, and `None` is what `git.commit` reads as "stage everything".
 SPEC_FOLDER_INPUT = "spec_folder"
 
 

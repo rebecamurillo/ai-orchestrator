@@ -69,91 +69,12 @@ export interface paths {
         put?: never;
         /**
          * Dispatch a readiness Run for one harness
-         * @description Dispatch an `epic@1` Run of the fixture Repository, `skip_harness_check` bypassing
+         * @description Dispatch a Run of the configured readiness Template (`READINESS_TEMPLATE`, latest
+         *     stored version) against the fixture Repository, `skip_harness_check` bypassing
          *     the disabled-harness pre-flight line (AD-10) so a harness never yet enabled can still
          *     run the Run that would enable it.
          */
         post: operations["start_readiness_api_v1_harnesses__name__readiness_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/initiatives": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Dispatch a multi-repository initiative
-         * @description Create every member Run saved, in topological order, then enqueue wave 0 (AD-12).
-         */
-        post: operations["dispatch_api_v1_initiatives_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/initiatives/preflight": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Pre-flight a multi-repository initiative
-         * @description Every line the dispatch would refuse on, the repo table, and the DAG it would build.
-         */
-        post: operations["preflight_api_v1_initiatives_preflight_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/initiatives/{slug}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Read one initiative's cross-repository DAG
-         * @description The member Runs and the repositories they work in — one object, not a list.
-         */
-        get: operations["read_api_v1_initiatives__slug__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/initiatives/{slug}/signals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Signal an initiative: cancel every non-terminal member Run
-         * @description `cancel` fanned dependents-first over the initiative's non-terminal members (AD-13).
-         */
-        post: operations["signal_api_v1_initiatives__slug__signals_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -367,8 +288,9 @@ export interface paths {
         put?: never;
         /**
          * Initialise this Repository for the method
-         * @description Start a `repo-init@1` Run on `repository.default_branch`; the optional body names
-         *     the harness its `agent` rows dispatch, else `create_run`'s own default stands.
+         * @description Start a Run of the configured initialisation Template (`INIT_TEMPLATE`, latest stored
+         *     version) on `repository.default_branch`; the optional body names the harness its `agent`
+         *     rows dispatch, else `create_run`'s own default stands.
          */
         post: operations["init_api_v1_repositories__repository_id__init_post"];
         delete?: never;
@@ -930,10 +852,6 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Initiative */
-            initiative?: string | null;
-            /** Initiative Role */
-            initiative_role?: ("epic" | "merge" | "golive") | null;
             /** Kind Label */
             kind_label: string | null;
             /** Needs You Since */
@@ -995,9 +913,8 @@ export interface components {
          * CloneCheckOut
          * @description The summary of a Repository's last clone check. `pending` until one has run.
          *
-         *     Exactly four keys, and it stays that way. The lines a finished check ran, and the hint it
-         *     derives, are published beside this object as `clone_check_lines` and `clone_check_hint`,
-         *     and together as one object on the clone-check operations.
+         *     Exactly four keys, and it stays that way: the lines a finished check ran and the hint it
+         *     derives are published beside this object, as `clone_check_lines` and `clone_check_hint`.
          */
         CloneCheckOut: {
             /** At */
@@ -1068,18 +985,6 @@ export interface components {
             waiting: string;
         };
         /**
-         * DispatchOut
-         * @description `POST /initiatives`'s 201 body: the slug, every Run created, and what started.
-         */
-        DispatchOut: {
-            /** Members */
-            members: components["schemas"]["MemberRunOut"][];
-            /** Slug */
-            slug: string;
-            /** Started */
-            started: string[];
-        };
-        /**
          * EdgeOut
          * @description One arrow, keyed `from` and `to` — the names `from_id`/`to_id` stand in for.
          */
@@ -1108,30 +1013,6 @@ export interface components {
             name: string;
             /** Value */
             value?: string | null;
-        };
-        /**
-         * EpicPreflightOut
-         * @description One would-be epic Run: where it lands, what it waits for, and its own lines.
-         */
-        EpicPreflightOut: {
-            /** Branch */
-            branch: string;
-            /** Checkpoint */
-            checkpoint: string | null;
-            /** Depends On */
-            depends_on: string[];
-            /** Epic Id */
-            epic_id: string;
-            /** Lines */
-            lines: components["schemas"]["LineOut"][];
-            /** Repository */
-            repository: string | null;
-            /** Repository Id */
-            repository_id: string | null;
-            /** Title */
-            title: string;
-            /** Working Branch */
-            working_branch: string | null;
         };
         /**
          * EvaluationLineOut
@@ -1337,173 +1218,6 @@ export interface components {
             trace_url: string | null;
         };
         /**
-         * InitiativeIn
-         * @description `POST /initiatives` and `POST /initiatives/preflight`'s one body.
-         */
-        InitiativeIn: {
-            /** Base Branch */
-            base_branch: string;
-            /** Budget Usd Per Epic */
-            budget_usd_per_epic?: (number | string) | null;
-            /**
-             * Epic Template
-             * @default epic
-             */
-            epic_template: string;
-            /**
-             * Golive Template
-             * @default golive
-             */
-            golive_template: string;
-            /** Harness */
-            harness?: string | null;
-            /** Initiative Folder */
-            initiative_folder: string;
-            /**
-             * Merge Template
-             * @default merge
-             */
-            merge_template: string;
-            /** Model */
-            model?: string | null;
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-            /**
-             * Repository Id
-             * Format: uuid
-             */
-            repository_id: string;
-        };
-        /**
-         * InitiativeMemberOut
-         * @description One member Run on the one-screen view.
-         */
-        InitiativeMemberOut: {
-            /** After Run Ids */
-            after_run_ids: string[];
-            /** Branch */
-            branch: string;
-            /** Epic Id */
-            epic_id: string | null;
-            /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict") | null;
-            /** Park Reason */
-            park_reason: string | null;
-            /**
-             * Repository Id
-             * Format: uuid
-             */
-            repository_id: string;
-            /** Role */
-            role: ("epic" | "merge" | "golive") | null;
-            /**
-             * Run Id
-             * Format: uuid
-             */
-            run_id: string;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
-            /** Template */
-            template: string;
-        };
-        /**
-         * InitiativeOut
-         * @description `GET /initiatives/{slug}`'s body: the cross-repo DAG as one object.
-         */
-        InitiativeOut: {
-            /** Members */
-            members: components["schemas"]["InitiativeMemberOut"][];
-            /** Repos */
-            repos: components["schemas"]["InitiativeRepoViewOut"][];
-            /** Slug */
-            slug: string;
-        };
-        /**
-         * InitiativePreflightOut
-         * @description `POST /initiatives/preflight`'s body: the DAG preview, the repo table, the lines.
-         */
-        InitiativePreflightOut: {
-            /** Epics */
-            epics: components["schemas"]["EpicPreflightOut"][];
-            /** Lines */
-            lines: components["schemas"]["LineOut"][];
-            /** Order */
-            order: string[];
-            /** Repos */
-            repos: components["schemas"]["InitiativeRepoOut"][];
-            /** Slug */
-            slug: string;
-            /** Start Allowed */
-            start_allowed: boolean;
-        };
-        /**
-         * InitiativeRepoOut
-         * @description One repository the initiative touches, and the branch its epics merge into.
-         */
-        InitiativeRepoOut: {
-            /** Branch */
-            branch: string;
-            /** Default Branch */
-            default_branch: string;
-            /** Remote Holds Branch */
-            remote_holds_branch: boolean;
-            /** Repository */
-            repository: string;
-            /**
-             * Repository Id
-             * Format: uuid
-             */
-            repository_id: string;
-        };
-        /**
-         * InitiativeRepoViewOut
-         * @description One repository on the one-screen view.
-         */
-        InitiativeRepoViewOut: {
-            /** Branch */
-            branch: string | null;
-            /** Default Branch */
-            default_branch: string;
-            /** Repository */
-            repository: string;
-            /**
-             * Repository Id
-             * Format: uuid
-             */
-            repository_id: string;
-            /** Url */
-            url: string;
-        };
-        /**
-         * InitiativeSignalIn
-         * @description `POST /initiatives/{slug}/signals`'s body (AD-13, S8): one signal kind, and nothing
-         *     else — `cancel` is the only one this surface admits, and carries no payload of its own.
-         *     `kind` is a plain `str` rather than `SignalKind`: any other value is well-formed at the
-         *     schema level and refused by `signal_initiative` itself with the domain `Invalid` (422)
-         *     the story asks for, the same way `signal_run.py::_check_mode` refuses an unknown `mode`.
-         */
-        InitiativeSignalIn: {
-            /** Kind */
-            kind: string;
-        };
-        /**
-         * InitiativeSignalOut
-         * @description `POST /initiatives/{slug}/signals`'s body: what was signalled, and what was already
-         *     terminal and so left alone.
-         */
-        InitiativeSignalOut: {
-            /** Signalled */
-            signalled: string[];
-            /** Skipped */
-            skipped: string[];
-        };
-        /**
          * InputDeclOut
          * @description One entry of the Template's `inputs:` map, for the screen's inputs table.
          */
@@ -1584,31 +1298,6 @@ export interface components {
             masked: string;
             /** Name */
             name: string;
-        };
-        /**
-         * MemberRunOut
-         * @description One Run a dispatch created.
-         */
-        MemberRunOut: {
-            /** After Run Ids */
-            after_run_ids: string[];
-            /** Epic Id */
-            epic_id: string | null;
-            /**
-             * Repository Id
-             * Format: uuid
-             */
-            repository_id: string;
-            /**
-             * Role
-             * @enum {string}
-             */
-            role: "epic" | "merge" | "golive";
-            /**
-             * Run Id
-             * Format: uuid
-             */
-            run_id: string;
         };
         /**
          * NodeCallOut
@@ -1933,9 +1622,8 @@ export interface components {
         };
         /**
          * ProjectRunOut
-         * @description One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the
-         *     record row's own fields, plus what a Repository row's `Initialise repository` control
-         *     reads about the Run it started.
+         * @description One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the record
+         *     row's own fields, plus what a Repository row's control reads about the Run it started.
          */
         ProjectRunOut: {
             /** Branch */
@@ -1951,6 +1639,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Init */
+            is_init: boolean;
             /** Reason */
             reason: string;
             /**
@@ -2174,10 +1864,6 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Initiative */
-            initiative?: string | null;
-            /** Initiative Role */
-            initiative_role?: ("epic" | "merge" | "golive") | null;
             /** Inputs */
             inputs: {
                 [key: string]: unknown;
@@ -2445,10 +2131,6 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Initiative */
-            initiative?: string | null;
-            /** Initiative Role */
-            initiative_role?: ("epic" | "merge" | "golive") | null;
             /** Plan Ref */
             plan_ref: string | null;
             /**
@@ -2868,232 +2550,6 @@ export interface operations {
                 };
             };
             /** @description `name` does not match the shape below. */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    dispatch_api_v1_initiatives_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["InitiativeIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DispatchOut"];
-                };
-            };
-            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-            /** @description No Project, Repository or initiative of that name. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-            /** @description A pre-flight line refuses this initiative; the detail names it. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-            /** @description The posted body does not match the shape below. */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    preflight_api_v1_initiatives_preflight_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["InitiativeIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InitiativePreflightOut"];
-                };
-            };
-            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-            /** @description No Project, Repository or initiative of that name. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-            /** @description The posted body does not match the shape below. */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    read_api_v1_initiatives__slug__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InitiativeOut"];
-                };
-            };
-            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-            /** @description No Project, Repository or initiative of that name. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-            /** @description The posted body does not match the shape below. */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-        };
-    };
-    signal_api_v1_initiatives__slug__signals_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["InitiativeSignalIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InitiativeSignalOut"];
-                };
-            };
-            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-            /** @description No Project, Repository or initiative of that name. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetail"];
-                    "application/problem+json": components["schemas"]["ProblemDetail"];
-                };
-            };
-            /** @description The signal kind is not one this surface admits. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3855,7 +3311,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description The clone check has failed, or a repo-init Run is already running on this Repository. */
+            /** @description The clone check has failed, or an initialisation Run is already running on this Repository. */
             409: {
                 headers: {
                     [name: string]: unknown;

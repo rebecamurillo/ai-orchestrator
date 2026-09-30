@@ -40,7 +40,8 @@ export const recheck = defineAction({
 });
 
 /**
- * *Initialise repository* (4.10, UX-DR12): starts a `repo-init@1` Run on the Repository's
+ * *Initialise repository* (4.10, UX-DR12): starts a Run of the instance's configured
+ * initialisation Template (`INIT_TEMPLATE`) on the Repository's
  * `default_branch`. The same no-island, no-client-JS shape as `recheck` above — the row's
  * next render reads the new Run off `GET /projects/{id}`'s own embedded list.
  */

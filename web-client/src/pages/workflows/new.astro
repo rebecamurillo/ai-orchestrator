@@ -7,13 +7,19 @@
  * the brief's own list, issued together and each best effort so a slow or failing read
  * narrows the page rather than crashing it.
  *
- * The Template list comes from `ROOT_TEMPLATES`. Each name it lists needs a `latest_version`
- * resolved here — without one *Start run* can build no `POST /runs` body — and the Template's
- * own declared `inputs`, which are what the form asks for. The list read answers neither
+ * The Template list comes from `ROOT_TEMPLATES` where an Operator set one. Left blank it
+ * names none, and the offer is then every *stored* Template a Run can start from — the ones
+ * declaring no input a caller has to bind (`catalog.ts::rootStartable`), in the order
+ * `GET /templates` returns them. No list of Template names lives in this repository's code
+ * either way (Operator decision 2026-09-30: no template name hardcoded in product code).
+ *
+ * Each offered name needs a `latest_version` resolved here — without one *Start run* can
+ * build no `POST /runs` body — and the Template's own declared `inputs`, which are what the
+ * form asks for and what the derived offer is filtered on. The list read answers neither
  * reliably (the shared e2e stub answers `GET /api/v1/templates` unconditionally empty, and a
- * real instance's list is paginated), so a missing name is resolved through
- * `GET /templates/{name}/versions` and every surviving one through
- * `GET /templates/{name}/{version}`. A name that resolves to neither is dropped.
+ * real instance's list is paginated), so a name `ROOT_TEMPLATES` asks for that the list did
+ * not carry is resolved through `GET /templates/{name}/versions`, and every surviving one
+ * through `GET /templates/{name}/{version}`. A name that resolves to neither is dropped.
  *
  * A `?project=` naming a Project the (equally forced-empty, equally paginated) list read did
  * not carry is resolved the same way, through `GET /projects/{project_id}` — the route
@@ -30,7 +36,7 @@ import EmptyState from '../../components/EmptyState.astro';
 import Shell from '../../layouts/Shell.astro';
 import { backend } from '../../api/server';
 import NewWorkflow from '../../islands/NewWorkflow';
-import { buildCatalog, parseRootTemplates } from '../../lib/newwf/catalog';
+import { buildCatalog, parseRootTemplates, rootStartable } from '../../lib/newwf/catalog';
 import { parseFormStateFromQuery } from '../../lib/newwf/query';
 import { reconcileInitial } from '../../lib/newwf/state';
 import type { components } from '../../api/schema';
@@ -42,7 +48,8 @@ type ProjectRead = components['schemas']['ProjectRead'];
 type HarnessOut = components['schemas']['HarnessOut'];
 type InputDeclOut = components['schemas']['InputDeclOut'];
 
-const rootTemplates = parseRootTemplates(ROOT_TEMPLATES);
+const namedTemplates = parseRootTemplates(ROOT_TEMPLATES);
+const namesAreConfigured = namedTemplates.length > 0;
 
 const projectParam = Astro.url.searchParams.get('project');
 
@@ -84,8 +91,8 @@ const harnesses: HarnessOut[] = harnessList.data ?? [];
  */
 const namedByLink = Astro.url.searchParams.has('template') || projectParam !== null;
 const unresolved =
-  templates.length > 0 || namedByLink
-    ? rootTemplates.filter((name) => !templates.some((template) => template.name === name))
+  namesAreConfigured && (templates.length > 0 || namedByLink)
+    ? namedTemplates.filter((name) => !templates.some((template) => template.name === name))
     : [];
 
 const resolved = await Promise.all(
@@ -106,6 +113,9 @@ const resolved = await Promise.all(
   }),
 );
 templates = [...templates, ...resolved.filter((entry) => entry !== null)];
+
+/** The names to resolve inputs for: the configured list, or every stored name. */
+const rootTemplates = namesAreConfigured ? namedTemplates : templates.map((t) => t.name);
 
 /**
  * What each offered Template asks for. `TemplateSummaryOut` carries no `inputs`, so the
@@ -132,10 +142,16 @@ const details = await Promise.all(
     return [name, data] as const;
   }),
 );
-const catalog = buildCatalog(
-  rootTemplates,
-  Object.fromEntries(details.filter((entry) => entry !== null)),
-);
+const inputsByName = Object.fromEntries(details.filter((entry) => entry !== null));
+/** Without a configured list, a Template is offered only if a Run can start from it: one
+ * declaring a required `item` input is called by another Template and has no form of its own
+ * (FR-33). With a list, the Operator named it and it is offered as named. */
+const offeredTemplates = namesAreConfigured
+  ? rootTemplates
+  : rootTemplates.filter(
+      (name) => Object.hasOwn(inputsByName, name) && rootStartable(inputsByName[name]!),
+    );
+const catalog = buildCatalog(offeredTemplates, inputsByName);
 
 if (projectParam && !projects.some((project) => project.id === projectParam)) {
   const { data } = await read<ProjectRead>(async () => {
@@ -177,7 +193,7 @@ const initial = reconcileInitial(
         testId="newwf-empty"
         headline="NO TEMPLATE TO BIND"
         lines={[
-          'No template named by ROOT_TEMPLATES is stored, so there are no inputs to bind and no plan to show.',
+          'No stored template can be started from, so there are no inputs to bind and no plan to show.',
           'Templates are listed on /templates; a run is started from one of them.',
         ]}
       />

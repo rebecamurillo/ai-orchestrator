@@ -238,3 +238,35 @@ def test_reason_is_the_fixed_sentence_for_a_cancelled_run() -> None:
     summary = summary_for(a_run(status="cancelled"), [])
 
     assert summary.reason == CANCELLED_REASON
+
+
+# ── `is_init`: the configured Template, never a name written down here ────────────────────
+# Operator decision 2026-09-30: no template name hardcoded in product code. The Projects
+# screen used to decide "this Run initialised the Repository" by testing the Template's
+# name client-side; `embedded_runs` answers it now, against `INIT_TEMPLATE` (AD-20).
+
+
+def test_a_run_of_the_configured_init_template_is_marked() -> None:
+    runs = FakeRunRepository([a_run(template_name="house-init")])
+
+    (summary,) = embedded_runs(runs, FakeStepRunRepository(), PROJECT_ID, "house-init")
+
+    assert summary.is_init is True
+
+
+def test_a_run_of_any_other_template_is_not_marked() -> None:
+    runs = FakeRunRepository([a_run(template_name="house-epic")])
+
+    (summary,) = embedded_runs(runs, FakeStepRunRepository(), PROJECT_ID, "house-init")
+
+    assert summary.is_init is False
+
+
+def test_no_run_is_marked_when_no_init_template_is_wired() -> None:
+    """`""` is the "not wired" value, and a Run whose `template_name` is also `""` must not
+    become the init Run by accident."""
+    runs = FakeRunRepository([a_run(template_name=""), a_run(template_name="house-init")])
+
+    summaries = embedded_runs(runs, FakeStepRunRepository(), PROJECT_ID)
+
+    assert [summary.is_init for summary in summaries] == [False, False]

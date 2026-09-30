@@ -48,11 +48,12 @@ function outputBlock(row: RepositoryRow): string {
 
 /**
  * *Initialise repository* (4.10, UX-DR12): one of three states, read off the row's own
- * most recent `repo-init` Run (`index.astro` finds it in the Project's `runs[]`).
+ * most recent initialisation Run (`index.astro` finds it in the Project's `runs[]`, by the
+ * server's own `is_init` flag).
  *
  * - **`linking`** — the Run is not yet terminal: `initialising · {token}`, to its own page.
  * - **`done`** — `initialised · v{version} · link` (the copy list's own words) once the
- *   method cell beside it reads a real version; `repo-init@1` pushes `_bmad/` to
+ *   method cell beside it reads a real version; an initialisation Run pushes `_bmad/` to
  *   `chore/bmad-init` only (AD-16), never to `default_branch`, so the clone check the
  *   completion hook re-runs still answers `missing`/`outdated` until the Operator merges the
  *   compare link — `initialised · link` (no version) is that honest, and no less true,

@@ -98,9 +98,6 @@ __all__ = [
     "run_graph_for",
 ]
 
-#: The kind-to-`kind_label` a Card shows (SPEC CAP-12); `readiness` is unshipped but free to name.
-_KIND_LABELS: dict[str, str] = {"repo-init": "repo-init", "readiness": "readiness"}
-
 #: `run_token`/`build_alert` live in `run_views_alert.py` now, and the epic/story arithmetic
 #: — progress, the Story cells, the summary — in `run_views_summary.py` (line count alone,
 #: 6.2's own seam; see those modules' docstrings). The private names every call site here
@@ -152,12 +149,22 @@ def _card(ports: RunReadPorts, run: Run, *, now: datetime) -> Card:
         template=run.template_name,
         version=run.template_version,
         progress=_progress(run, steps),
-        kind_label=_KIND_LABELS.get(run.template_name),
+        kind_label=_kind_label(run, steps),
         age_seconds=(now - run.created_at).total_seconds(),
         needs_you_since=_needs_you_since(ports, run) if run.status == "needs_you" else None,
-        initiative=run.initiative,
-        initiative_role=run.initiative_role,
     )
+
+
+def _kind_label(run: Run, steps: Sequence[StepRun]) -> str | None:
+    """What a Card shows where it has no epic/story progress to show (SPEC CAP-12): the
+    Run's own Template name, the same identity `graph.py::_run_node` puts on the root node.
+
+    Was a two-entry lookup table whose keys were shipped Template names, which both named
+    them in product code and left every other Template with a blank segment (Operator
+    decision 2026-09-30: no template name hardcoded in product code). `None` once there *is*
+    progress, because the two are alternatives on the card and never both.
+    """
+    return None if _progress(run, steps) is not None else run.template_name
 
 
 def _board_current_step_label(run: Run, steps: Sequence[StepRun]) -> str:
@@ -199,6 +206,7 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
         run,
         park_row.kind if park_row is not None else None,
         park_row_status=park_row.status if park_row is not None else None,
+        rows=rows,
     )
     park_attempts = attempts_by_row.get(park_row.id, ()) if park_row is not None else ()
     # Read once and shared: the detail publishes the whole gate record, and `_alert` needs

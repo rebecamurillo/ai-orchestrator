@@ -35,8 +35,9 @@ from orchestrator.domain.ports.git import Change, ChangeKind, GitError
 #: Where a base clone's origin refs live. The same word `subprocess_git.py` uses.
 ORIGIN = "origin"
 
-#: The namespace a branch lives in on a remote — `push_branch`'s refspec destination, and
-#: the same constant `subprocess_git.py` compares `ls-remote` answers against.
+#: The namespace a branch lives in on a remote — the same constant `subprocess_git.py`
+#: compares `ls-remote` answers against, and `submodules.py` imports for its own remote
+#: branch checks.
 HEADS_NAMESPACE = "refs/heads/"
 
 #: The two config values every writing command carries: see the module docstring.
@@ -132,7 +133,7 @@ class WorktreeCommands:
         detached `HEAD`, so any branch, the default one included, can be added as a worktree".
         A clone leaves `HEAD` symbolic on the default branch, and git refuses to check a
         branch out into a worktree while another worktree — the base clone itself — has it,
-        so an `epic@1` whose branch *is* the default branch would fail on its checkout row.
+        so a Run whose working branch *is* the default branch would fail on its checkout row.
         Idempotent: a `HEAD` that is already detached is written back unchanged.
         """
         head = self._attempt("-C", str(base), "rev-parse", "--verify", "--quiet", "HEAD")
@@ -336,27 +337,6 @@ class WorktreeCommands:
             return self._push_workdir(worktree, branch, set_upstream, workdir)
         upstream = ("--set-upstream",) if set_upstream else ()
         return self._run("-C", str(worktree), "push", *upstream, ORIGIN, END_OF_OPTIONS, branch)
-
-    def push_branch(self: _Runner, dest_base: Path, branch: str, at_ref: str) -> str | None:
-        """Adopt the remote's branch, or create it at `at_ref`. Runs in the base clone.
-
-        The `ls-remote` is what makes this adopt-or-create rather than a reset: a remote that
-        already holds the branch may hold epics merged into it since dispatch, and pushing
-        `at_ref` onto that would either be rejected (not a fast-forward) or, forced, would
-        throw the merges away. Absence is the only case that writes, and it writes with an
-        explicit refspec — `{at_ref}:refs/heads/{branch}` — so no local branch has to exist
-        for the remote one to be created.
-
-        `--` before the refspec for the reason every other operand in this adapter carries
-        it: `branch` came out of the Operator's `epics.yaml`.
-        """
-        held = self._attempt(
-            "-C", str(dest_base), "ls-remote", "--heads", ORIGIN, END_OF_OPTIONS, branch
-        )
-        if (held or "").strip():
-            return None
-        refspec = f"{at_ref}:{HEADS_NAMESPACE}{branch}"
-        return self._run("-C", str(dest_base), "push", ORIGIN, END_OF_OPTIONS, refspec)
 
     def head_sha(self: _Runner, path: Path) -> str | None:
         """The commit `HEAD` points at, or `None` where there is not one yet."""

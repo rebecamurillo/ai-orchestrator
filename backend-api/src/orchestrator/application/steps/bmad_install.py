@@ -41,7 +41,7 @@ from orchestrator.domain.values import Park, StepResult
 #: The kind this module implements (AD-9: named here, beside the executor, or nowhere).
 KIND = "bmad.install"
 
-#: `KIND_META["bmad.install"].timeout_default_min`; `repo-init@1` declares the same 30.
+#: `KIND_META["bmad.install"].timeout_default_min`; the shipped exemplar declares the same 30.
 DEFAULT_TIMEOUT_MIN = 30
 
 #: The command, in the shape `scripts/harness/_common.sh` already installs the skill stubs

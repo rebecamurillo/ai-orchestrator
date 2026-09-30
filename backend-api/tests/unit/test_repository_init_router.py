@@ -41,6 +41,14 @@ HTTP_NOT_FOUND = 404
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 
 REPOSITORIES = "/api/v1/repositories"
+
+#: What the committed `.env.example` sets `INIT_TEMPLATE` to — read here as the fixture
+#: repository's own exemplar name, which is also what the contract happens to name.
+SHIPPED_DEFAULT = "repo-init"
+#: The same exemplar text under a second name, for the one test that proves the *configured*
+#: name is what reaches the Run (Operator decision 2026-09-30: no template name hardcoded in
+#: product code).
+RENAMED_TEMPLATE = "house-init"
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 UNKNOWN_ID = "01a06887-79ab-759b-97a0-71c32ad939c2"
 
@@ -84,14 +92,25 @@ def repository(**overrides: object) -> Repository:
 class Api:
     """One application, one set of fakes, and a client that carries the bearer."""
 
-    def __init__(self, env: dict[str, str], *, existing: list[Run] | None = None) -> None:
-        self.settings = Settings(**{key.lower(): value for key, value in env.items()})
+    def __init__(
+        self,
+        env: dict[str, str],
+        *,
+        existing: list[Run] | None = None,
+        init_template: str | None = None,
+    ) -> None:
+        overrides = {key.lower(): value for key, value in env.items()}
+        if init_template is not None:
+            overrides["init_template"] = init_template
+        self.settings = Settings(**overrides)
         self.runs = FakeRunRepository(existing or [])
         self.repositories = FakeRepositoryRepository([repository()])
         self.projects = FakeProjectRepository([project()])
         self.templates = FakeTemplateVersionRepository(
             list(fixtures.repository_of_versions().versions.values()), runs=self.runs
         )
+        stored = self.templates.versions[(SHIPPED_DEFAULT, 1)]
+        self.templates.add(stored.model_copy(update={"name": RENAMED_TEMPLATE}))
         self.steps = FakeStepRunRepository()
         self.engine = FakeWorkflowEngine()
         self.uow = FakeUnitOfWork()
@@ -175,16 +194,29 @@ async def test_the_path_has_a_get_the_bearer_sweep_can_index(api: Api) -> None:
 # ── POST ─────────────────────────────────────────────────────────────────────────────────
 
 
-async def test_post_creates_a_repo_init_run(api: Api) -> None:
+async def test_post_creates_an_initialisation_run(api: Api) -> None:
     async with api.client() as client:
         response = await client.post(path_for())
 
     assert response.status_code == HTTP_CREATED, response.text
     body = response.json()
-    assert body["run"]["template"] == "repo-init"
-    assert body["run"]["version"] == 1
+    assert body["run"]["template"] == api.settings.init_template
+    assert body["run"]["version"] == max(api.templates.list_versions(api.settings.init_template))
     assert body["run"]["branch"] == fixtures.REPOSITORY.default_branch
     assert body["starts_now"] is True
+
+
+async def test_post_starts_the_template_init_template_names(env: dict[str, str]) -> None:
+    """Operator decision 2026-09-30: no template name hardcoded in product code. The whole
+    provider chain is real here — only the ports' *adapters* are faked — so this is what
+    proves `INIT_TEMPLATE` reaches `init_repository` rather than a constant."""
+    api = Api(env, init_template=RENAMED_TEMPLATE)
+
+    async with api.client() as client:
+        response = await client.post(path_for())
+
+    assert response.status_code == HTTP_CREATED, response.text
+    assert response.json()["run"]["template"] == RENAMED_TEMPLATE
 
 
 async def test_post_on_an_unknown_repository_is_404(api: Api) -> None:

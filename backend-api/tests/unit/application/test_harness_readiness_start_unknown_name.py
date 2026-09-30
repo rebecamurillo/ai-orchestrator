@@ -50,6 +50,11 @@ BUDGET = Decimal("5")
 #: take that a harness name never does. `"0"` is schemathesis's own finding.
 NOT_HARNESSES = ("0", "not-a-harness", "", "Claude", "claude ", "opencode", "../claude")
 
+#: The exemplar this suite configures readiness with — fixture data, not a product name
+#: (Operator decision 2026-09-30: no template name hardcoded in product code). Nothing here
+#: plans, so the store holds no version of it either.
+READINESS_TEMPLATE = "readiness-exemplar"
+
 
 def unseeded_ports() -> HarnessReadinessPorts:
     """`readiness_ports`' own wiring over an empty world.
@@ -79,6 +84,7 @@ def unseeded_ports() -> HarnessReadinessPorts:
             skip_harness_check=True,
         ),
         budget_usd=BUDGET,
+        template_name=READINESS_TEMPLATE,
     )
 
 

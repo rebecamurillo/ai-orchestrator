@@ -338,10 +338,10 @@ def enqueue_saved_run(ports: WriterPorts, engine: WorkflowEngine | None, run: Ru
     `None` engine degrades to a no-op — every call site that predates story 5-4, and
     `park_dependents`, which can never reach this branch anyway.
 
-    The partition key is AD-12's: the Run's **declared** branch, `base_branch` for a plan
-    that declares none (`golive@1`). Two callers share it rather than spelling it twice —
-    `resolve_dependent` below, and initiative dispatch's wave-0 enqueue (S6), which puts
-    exactly this Run in exactly this state: saved, `engine_ref` empty, nothing waited on.
+    The partition key is AD-12's: the Run's **declared** branch, or `base_branch` for a plan
+    that declares none. Two callers share it rather than spelling it twice —
+    `resolve_dependent` below, and any other caller that saves a Run in exactly this
+    state: saved, `engine_ref` empty, nothing waited on.
     """
     if engine is None:
         return

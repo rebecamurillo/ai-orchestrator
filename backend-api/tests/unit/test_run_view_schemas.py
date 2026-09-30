@@ -59,6 +59,9 @@ def a_run(**overrides: object) -> Run:
 
 
 def a_card(**overrides: object) -> Card:
+    # `initiative`/`initiative_role` were here and `test_a_card_projects_its_initiative_
+    # membership` asserted them below: Operator decision 2026-09-30 removed the fan-in
+    # Initiative feature entirely, so `Card` carries neither field any more.
     fields: dict[str, object] = {
         "id": RUN_ID,
         "token": "RUN",
@@ -75,8 +78,6 @@ def a_card(**overrides: object) -> Card:
         "kind_label": "repo-init",
         "age_seconds": 12.0,
         "needs_you_since": None,
-        "initiative": None,
-        "initiative_role": None,
     }
     fields.update(overrides)
     return Card(**fields)  # type: ignore[arg-type]
@@ -101,13 +102,6 @@ def test_a_card_with_no_progress_or_needs_you_since_stays_none() -> None:
     assert out.progress is None
     assert out.needs_you_since is None
     assert out.id == RUN_ID
-
-
-def test_a_card_projects_its_initiative_membership() -> None:
-    out = CardOut.of(a_card(initiative="q4", initiative_role="epic"))
-
-    assert out.initiative == "q4"
-    assert out.initiative_role == "epic"
 
 
 def test_a_board_view_projects_every_column() -> None:

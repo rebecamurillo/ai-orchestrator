@@ -26,7 +26,7 @@ from collections.abc import Iterator
 from functools import partial
 from typing import Annotated
 
-from fastapi import Query, Request
+from fastapi import Depends, Query, Request
 
 from orchestrator.api.providers_base import (
     CRYPTO,
@@ -53,6 +53,7 @@ from orchestrator.application.use_cases.open_run import OpenRunPorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.application.use_cases.queue import QueuePorts
+from orchestrator.application.use_cases.repositories import InitRepositoryPorts
 from orchestrator.application.use_cases.run_views import RunViewPorts
 from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.application.use_cases.signals import SignalEffectPorts
@@ -97,6 +98,7 @@ def project_ports(request: Request) -> Iterator[ProjectPorts]:
     crypto = from_state(request, CRYPTO)
     with SQLAlchemyUnitOfWork(session_factory) as uow:
         yield ProjectPorts(
+            init_template=from_state(request, SETTINGS).init_template,
             uow=uow,
             projects=SQLAlchemyProjectRepository(uow.session),
             repositories=SQLAlchemyRepositoryRepository(uow.session),
@@ -223,8 +225,22 @@ def readiness_ports(request: Request) -> Iterator[HarnessReadinessPorts]:
                 tracer=build_tracer(settings),
             ),
             budget_usd=settings.readiness_budget_usd,
+            template_name=settings.readiness_template,
             models=settings.readiness_models,
         )
+
+
+def init_repository_ports(
+    request: Request, ports: Annotated[CreateRunPorts, Depends(create_run_ports)]
+) -> InitRepositoryPorts:
+    """`create_run`'s own ports plus `INIT_TEMPLATE` (AD-20), for `POST /repositories/{id}/
+    init`. A sub-dependency rather than a second copy of `create_run_ports`' wiring, so the
+    action runs in exactly the transaction `POST /runs` does; the *only* thing this adds is
+    the configured Template name, read here because the composition root is the one place
+    `Settings` is read (AD-2)."""
+    return InitRepositoryPorts(
+        create_run=ports, template_name=from_state(request, SETTINGS).init_template
+    )
 
 
 def run_read_ports(request: Request) -> Iterator[RunReadPorts]:

@@ -6,7 +6,7 @@ read is one screen (`use_cases.embedded_repositories`), and a Repository row's *
 repository* state and the record row it links to are both read off this one list rather than
 a second request the Projects screen would have to make.
 
-`ProjectRunSummary` carries two pieces of context no stored column answers on its own:
+`ProjectRunSummary` carries three pieces of context no stored column answers on its own:
 
 - **`current_step_label`** — the label the Operator would point at right now: the parked
   row while one is parked, the running row while one is, the next queued row otherwise, and
@@ -21,6 +21,10 @@ a second request the Projects screen would have to make.
   reason is the one fixed sentence `signal_run` always writes for it
   (`application/rules/signals.py::VALID["cancel"].text`) rather than a read this module
   would otherwise have to make of the gate record just to recover the same six words.
+- **`is_init`** — whether this is the Repository's own *Initialise repository* Run. The
+  fact is a comparison against `INIT_TEMPLATE` (AD-20), and it is made here so the screen
+  reads a boolean instead of testing a Template's name (Operator decision 2026-09-30: no
+  template name hardcoded in product code).
 """
 
 from __future__ import annotations
@@ -64,23 +68,34 @@ class ProjectRunSummary:
     token: Token
     current_step_label: str
     reason: str
+    #: Whether this Run is the Repository's own *Initialise repository* Run — the
+    #: configured `INIT_TEMPLATE` (AD-20) is what it was planned from. Answered here, off
+    #: configuration, rather than by the screen testing the Template's name (Operator
+    #: decision 2026-09-30: no template name hardcoded in product code).
+    is_init: bool = False
 
 
 def embedded_runs(
-    runs: RunRepository | None, steps: StepRunRepository | None, project_id: UUID
+    runs: RunRepository | None,
+    steps: StepRunRepository | None,
+    project_id: UUID,
+    init_template: str = "",
 ) -> list[ProjectRunSummary]:
     """The Project's own Runs list, the way `embedded_repositories` (`use_cases/projects.py`)
     reads its Repositories: `[]` when either port is unwired, never a stale placeholder.
+
+    `init_template` is `Settings.init_template` (AD-20); `""` marks no Run as an init Run,
+    the same "not wired" tolerance the ports above take.
     """
     if runs is None or steps is None:
         return []
     stored = runs.list(project_id=project_id)[:EMBED_LIMIT]
     steps_by_run = {run.id: steps.list_for_run(run.id) for run in stored}
-    return _summaries(stored, steps_by_run)
+    return _summaries(stored, steps_by_run, init_template)
 
 
 def _summaries(
-    runs: Sequence[Run], steps_by_run: dict[UUID, list[StepRun]]
+    runs: Sequence[Run], steps_by_run: dict[UUID, list[StepRun]], init_template: str = ""
 ) -> list[ProjectRunSummary]:
     """The pure half: given the Runs and their rows, the label and the reason for each."""
     return [
@@ -89,6 +104,7 @@ def _summaries(
             token=_token(run),
             current_step_label=_current_step_label(run, steps_by_run.get(run.id, [])),
             reason=_terminal_reason(run, steps_by_run.get(run.id, [])),
+            is_init=bool(init_template) and run.template_name == init_template,
         )
         for run in runs
     ]

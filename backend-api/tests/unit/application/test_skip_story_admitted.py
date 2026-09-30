@@ -12,6 +12,11 @@ unchanged: a `verify_failed` stop still offers Skip story. `run_admitted_signals
 is what a Run detail reads, and it is the one that narrows, on `run.park_reason`. And
 `validate` narrows with neither: AD-13's table is keyed on the park kind, so posting the
 signal there stays admissible.
+
+The Run detail hands `run_admitted_signals` the Run's rows, because since the Operator
+decision of 2026-09-30 (no template name hardcoded in product code) that is what says the
+whole Run is one epic — so *Skip epic* on this stop is offered off the plan's shape, not off
+a Template's name.
 """
 
 from __future__ import annotations
@@ -50,7 +55,12 @@ def test_the_re_baseline_park_offers_retry_skip_epic_and_cancel() -> None:
     run = a_run(REBASELINE_FAILED)
 
     # story 1 (2026-09-25): skip_step admitted on every park kind.
-    assert run_admitted_signals(run, "shell") == ("retry", "skip_step", "skip_epic", "cancel")
+    assert run_admitted_signals(run, "shell", rows=build_rows(run.id)) == (
+        "retry",
+        "skip_step",
+        "skip_epic",
+        "cancel",
+    )
 
 
 def test_an_ordinary_verify_failure_still_offers_skip_story() -> None:
@@ -59,7 +69,7 @@ def test_an_ordinary_verify_failure_still_offers_skip_story() -> None:
     run = a_run("verify failed 2/2")
 
     # story 1 (2026-09-25): skip_step admitted on every park kind.
-    assert run_admitted_signals(run, "shell") == (
+    assert run_admitted_signals(run, "shell", rows=build_rows(run.id)) == (
         "retry",
         "skip_step",
         "skip_story",

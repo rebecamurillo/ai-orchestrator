@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from orchestrator.application.rules.frames import EPIC_TEMPLATE, epic_frame, story_frame
+from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
 from orchestrator.application.rules.signals_table import (
     ACCEPTED,
     ACCEPTED_SEPARATOR,
@@ -85,8 +85,18 @@ TERMINAL_SESSION_SIGNALS: tuple[SignalKind, ...] = ("cancel", "terminal_release"
 SKIP_STEP_ROW_STATUSES: frozenset[str] = VALID["skip_step"].row_statuses or frozenset()
 
 
-def validate(run: Run, park_row: StepRun | None, signal: Signal) -> Rule:
-    """The `Rule` for this signal here, or `Conflict` (409) naming why it does not apply."""
+def validate(
+    run: Run, park_row: StepRun | None, signal: Signal, rows: Sequence[StepRun] = ()
+) -> Rule:
+    """The `Rule` for this signal here, or `Conflict` (409) naming why it does not apply.
+
+    `rows` is every row of the Run, for the one column the table states over the *plan*
+    rather than over the Run: whether the whole Run is one epic (`frames.py::
+    run_is_one_epic`, Operator decision 2026-09-30 — no template name hardcoded in product
+    code). `signal_run` always has them; the two branches that validate a signal carrying no
+    frame at all (`start`, a dependency `continue`) pass none, because no predicate of
+    theirs reads one.
+    """
     rule = VALID[signal.kind]
     if run.status not in rule.run_statuses:
         raise _refuse(run, signal)
@@ -98,7 +108,7 @@ def validate(run: Run, park_row: StepRun | None, signal: Signal) -> Rule:
         park_row is None or park_row.status not in rule.row_statuses
     ):
         raise _refuse(run, signal)
-    if rule.extra is not None and not rule.extra(run, park_row, signal):
+    if rule.extra is not None and not rule.extra(run, park_row, signal, rows):
         raise _refuse_extra(run, rule, signal)
     return rule
 
@@ -126,7 +136,11 @@ def row_at(rows: Sequence[StepRun], path: str | None) -> StepRun | None:
 
 
 def run_admitted_signals(
-    run: Run, park_row_kind: str | None, *, park_row_status: str | None = None
+    run: Run,
+    park_row_kind: str | None,
+    *,
+    park_row_status: str | None = None,
+    rows: Sequence[StepRun] = (),
 ) -> tuple[SignalKind, ...]:
     """One Run's own *Signals admitted*, for the read model 4.9 adds to `RunSummaryOut`.
 
@@ -136,7 +150,12 @@ def run_admitted_signals(
     (AD-13: `cancel` applies to every non-terminal status), and nothing once it is terminal.
     `park_row_kind` is the parked row's `kind`, or `None` when the caller has not looked it
     up (`RunSummaryOut`'s list view does not, and answers conservatively without it), and
-    `park_row_status` is that row's `status` on the same terms.
+    `park_row_status` is that row's `status` on the same terms. `rows` is every row of the
+    Run, on those same terms again: it is what says whether the whole Run is one epic, so a
+    caller that passes none gets *Skip epic* offered only where `park_path` carries an
+    `epics[n]` frame (Operator decision 2026-09-30: no template name hardcoded in product
+    code — the Run detail, which is the only screen that renders these controls, has the
+    rows and passes them).
 
     **Skip step needs a row the step machine can skip** (Operator, 2026-09-26). `VALID`
     gives `skip_step` a `row_statuses` column and `validate` enforces it, but a park kind
@@ -175,11 +194,14 @@ def run_admitted_signals(
     offered = admitted_signals(run.park_kind, park_row_kind or "")
     if run.park_reason == REBASELINE_FAILED:
         offered = tuple(kind for kind in offered if kind != "skip_story")
-    return _skippable(run, offered, park_row_status)
+    return _skippable(run, offered, park_row_status, rows)
 
 
 def _skippable(
-    run: Run, offered: tuple[SignalKind, ...], park_row_status: str | None
+    run: Run,
+    offered: tuple[SignalKind, ...],
+    park_row_status: str | None,
+    rows: Sequence[StepRun],
 ) -> tuple[SignalKind, ...]:
     path = run.park_path
     dropped: set[SignalKind] = set()
@@ -187,7 +209,7 @@ def _skippable(
         dropped.add("skip_step")
     if path is None or story_frame(path) is None:
         dropped.add("skip_story")
-    if run.template_name != EPIC_TEMPLATE and (path is None or epic_frame(path) is None):
+    if not run_is_one_epic(rows) and (path is None or epic_frame(path) is None):
         dropped.add("skip_epic")
     return tuple(kind for kind in offered if kind not in dropped)
 

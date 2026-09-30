@@ -5,7 +5,8 @@ Three outcomes, and each is a different fact about the branch rather than a diff
 of failure:
 
 - **No upstream is a no-op, not an error.** A branch this Run created and has not pushed has
-  none, and `epic@1` syncs before every Story — so refusing here would park every first Story
+  none, and a Template with a Story loop syncs before every Story — so refusing here would
+  park every first Story
   of every new epic branch. AD-14 states it: `Git.sync` is a recorded no-op when
   `rev-parse --abbrev-ref @{upstream}` fails. The port answers `None`, and the row is `done`
   with the reason the Operator reads.

@@ -12,9 +12,10 @@ clone's path — `{work_dir}/{project.slug}/{repository.slug}/base` (AD-14) — 
 like `work_dir` and `bmad_version` do in `use_cases/clone_check.py`.
 
 **`plan_ref` is one rule, not three.** It is the SHA of the branch the Template works on
-when the remote holds it, and of the base branch otherwise. `repo-init@1` names
-`chore/bmad-init`, which does not exist the first time, so it plans from the base; `epic@1`
-names `{{branch}}`, which does; `initiative@1` names no branch at all — its worktree is
+when the remote holds it, and of the base branch otherwise. An initialisation plan names a
+fixed branch, which does not exist the first time, so it plans from the base; a dev-loop plan
+names `{{branch}}`, which does; a plan with an epic loop may name no branch at all — its
+worktree is
 inside the epic frame — so it plans from the base too.
 
 **The branch the Template names is not the branch this Run creates.** `BranchAllocator`

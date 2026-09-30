@@ -31,7 +31,11 @@ parked row's kind alone:
 
 What the columns cannot say is written as `Rule.extra`: a raised budget has to exceed the
 spend, a skip has to have a frame to act on, and the terminal kinds turn on
-`run.terminal_session`. Each is a named predicate, so the table stays readable.
+`run.terminal_session`. Each is a named predicate, so the table stays readable. A predicate
+is handed the Run's own rows as well as the parked one, because "is this Run one epic" is a
+question about the *plan* and not about a Template's name (Operator decision 2026-09-30) —
+see `frames.py::run_is_one_epic`. A caller with no rows to hand passes none and gets the
+narrow answer, which is what the list view already documents about itself.
 
 `raised_budget` and `accepted_files` — the two payload readers — live here rather than with
 the questions, because `_budget_raised_text` and `_accepted_text` call them: splitting them
@@ -40,12 +44,12 @@ the other way would make the two modules import each other.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from orchestrator.application.rules.frames import EPIC_TEMPLATE, epic_frame, story_frame
+from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.statuses import (
@@ -131,7 +135,8 @@ class Rule:
     #: The parked row's `status`, or `None` when any status is admitted.
     row_statuses: frozenset[StepStatus] | None = None
     #: What the table states in words rather than in columns; `None` when it states nothing.
-    extra: Callable[[Run, StepRun | None, Signal], bool] | None = None
+    #: Called with the Run, the parked row, the signal, and every row of the Run.
+    extra: Callable[[Run, StepRun | None, Signal, Sequence[StepRun]], bool] | None = None
     #: The refusal `extra` alone earns, where the table has a better sentence than `INVALID`.
     #: Formatted with the Run, so a `budget_raise` can name the spend it has to beat.
     extra_refusal: str | None = None
@@ -160,7 +165,9 @@ def _raised_budget(payload: dict[str, Any]) -> Decimal | None:
         return None
 
 
-def _raises_the_budget(run: Run, _row: StepRun | None, signal: Signal) -> bool:
+def _raises_the_budget(
+    run: Run, _row: StepRun | None, signal: Signal, _rows: Sequence[StepRun]
+) -> bool:
     """AD-13: a raised budget has to be a real number, more than the Run has spent.
 
     `is_finite` is not decoration: `Decimal("NaN") > spend` *raises* `InvalidOperation`,
@@ -171,14 +178,18 @@ def _raises_the_budget(run: Run, _row: StepRun | None, signal: Signal) -> bool:
     return budget is not None and budget.is_finite() and budget > run.spend_usd
 
 
-def _has_story_frame(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
+def _has_story_frame(
+    run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[StepRun]
+) -> bool:
     """`skip_story` needs a `…stories[n]` frame under `park_path` to skip."""
     return run.park_path is not None and story_frame(run.park_path) is not None
 
 
-def _has_epic_frame(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
-    """`skip_epic` needs an `epics[n]` frame — or a Run that is itself one epic."""
-    if run.template_name == EPIC_TEMPLATE:
+def _has_epic_frame(
+    run: Run, _row: StepRun | None, _signal: Signal, rows: Sequence[StepRun]
+) -> bool:
+    """`skip_epic` needs an `epics[n]` frame — or a Run whose whole plan is one epic."""
+    if run_is_one_epic(rows):
         return True
     return run.park_path is not None and epic_frame(run.park_path) is not None
 
@@ -206,16 +217,20 @@ def _accepted_text(payload: dict[str, Any]) -> str | None:
     return ACCEPTED.format(paths=ACCEPTED_SEPARATOR.join(files))
 
 
-def _is_saved(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
+def _is_saved(run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[StepRun]) -> bool:
     """The run has not been enqueued yet — `engine_ref` is the empty dict (AD-6, story 5-3)."""
     return not run.engine_ref
 
 
-def _no_terminal_session(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
+def _no_terminal_session(
+    run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[StepRun]
+) -> bool:
     return not run.terminal_session
 
 
-def _in_terminal_session(run: Run, _row: StepRun | None, _signal: Signal) -> bool:
+def _in_terminal_session(
+    run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[StepRun]
+) -> bool:
     return run.terminal_session
 
 

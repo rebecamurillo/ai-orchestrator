@@ -120,6 +120,18 @@ class Settings(BaseSettings):
     #: at start-up instead of at the dispatch that would have bound nothing.
     readiness_models: CommaSeparatedPairs
 
+    # ── The Templates this instance dispatches by name (AD-7, AD-15, AD-20) ──
+    #: Which stored Template the Repository row's *Initialise repository* action starts,
+    #: and which Template's Runs the Projects screen labels as that Repository's own
+    #: initialisation. A *name*: the latest stored version of it is resolved at dispatch,
+    #: never pinned here (AD-7, AD-15). Configuration rather than a constant, because which
+    #: Template initialises a repository is an instance's choice and the shipped one is an
+    #: exemplar (Operator decision 2026-09-30: no template name hardcoded in product code).
+    init_template: Annotated[str, Field(min_length=1)] = "repo-init"
+    #: Which stored Template `harness_readiness.start` plans every readiness Run from, on
+    #: the same terms as `init_template`: a name, latest version resolved at dispatch.
+    readiness_template: Annotated[str, Field(min_length=1)] = "epic"
+
     # ── Git (AD-5) — never handed to a harness process ───────────────────────
     github_token: SecretStr
 

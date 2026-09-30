@@ -179,7 +179,7 @@ def working_branch(template: ParsedTemplate, scope: Mapping[str, Any]) -> str | 
     The kind is named in the one place kinds are named (AD-9). It has to be the kind rather
     than the first step that mentions a `branch`, because `git.push` and `pr.link` name one
     too and a Template that pushed somewhere else would move the whole plan's commit. A
-    Template that checks nothing out itself — `initiative@1`, whose worktree is inside the
+    Template that checks nothing out itself — one whose worktree is inside the
     epic frame — works from the base branch instead.
     """
     checkout = _checkout_step(template)
@@ -253,7 +253,7 @@ class PlanError(Invalid):
 def _sentence(
     reason: str, template: str | None, version: int | None, line: int | None, item: str | None
 ) -> str:
-    """`epic@1 line 27: entry is missing a required field: 4-1` — as much as is known."""
+    """`my-epic@1 line 27: entry is missing a required field: 4-1` — as much as is known."""
     where = f"{template}@{version}" if template is not None else ""
     where += f" line {line}" if line is not None else ""
     what = f"{reason}: {item}" if item is not None else reason

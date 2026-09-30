@@ -17,6 +17,7 @@ from orchestrator.application.use_cases.templates import (
     TemplatePorts,
     TemplateValidationFailed,
     get_version,
+    latest_version,
     list_templates,
     list_versions,
     save_version,
@@ -385,3 +386,29 @@ def test_seed_shipped_reports_every_still_failing_file_not_only_the_first() -> N
     assert names == {"broken", "needs-ghost"}
     assert "broken" in str(raised.value)
     assert "needs-ghost" in str(raised.value)
+
+
+# ── `latest_version`: dispatching by name (AD-7, AD-15) ───────────────────────────────────
+# Operator decision 2026-09-30: no template name hardcoded in product code. The two
+# dispatchers that are configured with a Template *name* (`repositories.init_repository`,
+# `harness_readiness.start`) resolve the version here instead of pinning one.
+
+#: The highest of the three versions the store below holds — out of order on purpose.
+HIGHEST_STORED = 3
+
+
+def test_latest_version_is_the_highest_stored_number() -> None:
+    templates = FakeTemplateVersionRepository(
+        [
+            TemplateVersion(name="leaf", version=1, yaml=LEAF, hash="h1"),
+            TemplateVersion(name="leaf", version=3, yaml=LEAF, hash="h3"),
+            TemplateVersion(name="leaf", version=2, yaml=LEAF, hash="h2"),
+        ]
+    )
+
+    assert latest_version(templates, "leaf") == HIGHEST_STORED
+
+
+def test_latest_version_of_a_name_nothing_stores_is_not_found() -> None:
+    with pytest.raises(NotFound, match="no template named 'leaf'"):
+        latest_version(FakeTemplateVersionRepository(), "leaf")

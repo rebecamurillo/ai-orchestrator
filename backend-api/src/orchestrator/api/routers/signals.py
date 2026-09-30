@@ -31,7 +31,12 @@ from orchestrator.api.errors import (
 from orchestrator.api.providers import run_read_ports, signal_effect_ports
 from orchestrator.api.schemas.runs import RunSummaryOut
 from orchestrator.api.schemas.signals import SignalIn
-from orchestrator.application.use_cases.create_run import RunReadPorts, get_run, park_row_kind_of
+from orchestrator.application.use_cases.create_run import (
+    RunReadPorts,
+    get_run,
+    park_row_in,
+    run_rows,
+)
 from orchestrator.application.use_cases.signals import SignalEffectPorts, handle_signal
 
 router = APIRouter(tags=["runs"])
@@ -86,4 +91,10 @@ def post_signal(run_id: UUID, payload: SignalIn, ports: EffectPorts) -> RunSumma
 def get_signals(run_id: UUID, ports: ReadPorts) -> RunSummaryOut:
     """The same read `GET /runs/{run_id}` gives, published under this path too (4.9)."""
     run = get_run(ports, run_id)
-    return RunSummaryOut.of(run, park_row_kind=park_row_kind_of(ports, run))
+    rows = run_rows(ports, run)
+    park_row = park_row_in(run, rows)
+    return RunSummaryOut.of(
+        run,
+        park_row_kind=park_row.kind if park_row is not None else None,
+        rows=rows,
+    )

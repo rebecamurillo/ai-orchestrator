@@ -58,7 +58,6 @@ from orchestrator.api.routers import (
     harness_readiness,
     harnesses,
     history,
-    initiatives,
     ping,
     projects,
     queue,
@@ -159,7 +158,7 @@ def seed_shipped_templates(settings: Settings) -> list[SeedResult]:
     """
     files = load_shipped_templates(settings.templates_dir)
     if not files:
-        # the four shipped files are the whole point of this story; a `TEMPLATES_DIR` that
+        # the shipped files are the whole point of this story; a `TEMPLATES_DIR` that
         # resolves to none of them is almost certainly a misconfigured mount or a broken
         # image, not an instance meaning to run with zero Templates
         log.warning("no shipped templates found", templates_dir=str(settings.templates_dir))
@@ -325,9 +324,6 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         queue.router,
         history.router,
         trajectories.router,
-        # `POST /initiatives/preflight` registers before `GET /initiatives/{slug}` inside
-        # the router itself; the router as a whole has no ordering constraint (AD-12, S6)
-        initiatives.router,
     ):
         _mount(app, router)
     _mount(app, harness_readiness.router)

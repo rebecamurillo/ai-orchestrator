@@ -23,7 +23,7 @@ import pytest
 
 from orchestrator.application.rules import signals, signals_table
 from orchestrator.domain.statuses import SIGNAL_KINDS, RunStatus
-from tests.unit.application.writer_fixtures import build_run
+from tests.unit.application.writer_fixtures import EPIC_PLAN, build_rows, build_run
 
 #: Every name `signals_table.py` owns and `signals.py` re-exports, so an import that moved
 #: is a failure here rather than in whichever module happened to be loaded first.
@@ -98,12 +98,17 @@ def test_a_terminal_session_offers_cancel_and_release_and_nothing_else() -> None
 
 
 def test_the_same_stop_without_a_session_offers_its_own_actions() -> None:
-    """The control: the narrowing is the session's doing, not the park kind's."""
+    """The control: the narrowing is the session's doing, not the park kind's.
+
+    The rows are handed over because "the whole Run is one epic" is read off the plan since
+    the Operator decision of 2026-09-30 (no template name hardcoded in product code), and
+    that is what admits *Skip epic* at a stop inside a Story frame.
+    """
     run = build_run(
         "needs_you", park_kind="blocked", park_path="stories[0].build", park_reason="intent gap"
     )
 
-    offered = signals.run_admitted_signals(run, "agent")
+    offered = signals.run_admitted_signals(run, "agent", rows=build_rows(run.id, EPIC_PLAN))
 
     # story 1 (2026-09-25): skip_step admitted on every park kind.
     assert offered == ("answer", "skip_step", "skip_story", "skip_epic", "cancel")

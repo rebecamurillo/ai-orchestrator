@@ -1,22 +1,33 @@
 /**
  * Which Templates the New Workflow form offers, and what each one asks for.
  *
- * `ROOT_TEMPLATES` names them; each Template's own declared `inputs` decide its fields. The
- * catalog crosses the island boundary as a `client:load` prop, so it is plain data and every
- * question about it is a module function.
+ * `ROOT_TEMPLATES` names them, in the Operator's own order. Left blank it names none, and
+ * the page offers every stored Template a Run can *start* from — which each Template's own
+ * declared inputs answer (`rootStartable` below), never a list of names written down here
+ * (Operator decision 2026-09-30: no template name hardcoded in product code).
+ *
+ * Each Template's own declared `inputs` decide its fields. The catalog crosses the island
+ * boundary as a `client:load` prop, so it is plain data and every question about it is a
+ * module function.
  */
 import type { components } from '../../api/schema';
 
 type InputDeclOut = components['schemas']['InputDeclOut'];
 
-/** Offered when `ROOT_TEMPLATES` says nothing. `story` is absent: it is only ever called by
- * another Template (FR-33). */
-export const DEFAULT_ROOT_TEMPLATES = 'initiative,epic,repo-init,story-run';
-
 const SEPARATOR = ',';
 
+/** The input type a caller's `for_each` binds — never typed into this form, and, where it is
+ * *required*, the declaration that says this Template is only ever called by another one
+ * (FR-33). Declared optional it means "bound when called, defaulted when not", which is a
+ * Template a Run may still start from. */
+const CALLER_BOUND_TYPE = 'item';
+
 /** Bound when the Run is created, never typed into this form. */
-const RUNTIME_BOUND_TYPES: ReadonlySet<string> = new Set(['project', 'repository', 'item']);
+const RUNTIME_BOUND_TYPES: ReadonlySet<string> = new Set([
+  'project',
+  'repository',
+  CALLER_BOUND_TYPE,
+]);
 
 /** Inputs the form already has a dedicated control for. */
 const FORM_OWNED_NAMES: ReadonlySet<string> = new Set(['base_branch', 'harness', 'model']);
@@ -80,11 +91,19 @@ export interface TemplateCatalog {
 
 export const EMPTY_CATALOG: TemplateCatalog = { names: [], entries: {} };
 
-/** Trimmed, de-duplicated, order preserved. Blank reads as unset — `envField`'s own default
- * fires only for an absent variable. */
+/** Trimmed, de-duplicated, order preserved. Blank, absent, or nothing but separators all
+ * read as "name none": the page then derives the offer from what is stored, rather than from
+ * a list of Template names this module would otherwise have to hold. */
 export function parseRootTemplates(raw: string | null | undefined): string[] {
-  const names = splitNames(raw ?? '');
-  return names.length > 0 ? names : splitNames(DEFAULT_ROOT_TEMPLATES);
+  return splitNames(raw ?? '');
+}
+
+/** Whether a Run can *start* from this Template: it declares no input a caller has to bind.
+ * A required `item` is exactly that declaration — the Template says it is called by another
+ * Template's `for_each` and has no meaning on its own (FR-33) — so it is the one thing that
+ * takes a Template out of the derived offer. */
+export function rootStartable(inputs: InputDeclOut[]): boolean {
+  return !inputs.some((input) => input.type === CALLER_BOUND_TYPE && input.required);
 }
 
 function splitNames(raw: string): string[] {

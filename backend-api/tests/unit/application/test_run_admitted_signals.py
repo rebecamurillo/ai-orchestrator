@@ -53,10 +53,19 @@ def test_a_parked_run_with_no_park_kind_admits_nothing() -> None:
 
 
 def test_a_parked_run_delegates_to_admitted_signals_with_its_park_and_row_kind() -> None:
+    """Operator decision 2026-09-30: no template name hardcoded in product code — whether the
+    Run is one epic is now read off its rows, so this stop is given the rows a Run parked on
+    its own `push` really has. `EPIC_PLAN` ends on exactly that row."""
     run = build_run(status="needs_you", park_kind="push_rejected", park_path="push")
+    rows = build_rows(run.id, EPIC_PLAN)
 
     # story 1 (2026-09-25): skip_step admitted on every park kind.
-    assert run_admitted_signals(run, "git.push") == ("retry", "skip_step", "skip_epic", "cancel")
+    assert run_admitted_signals(run, "git.push", rows=rows) == (
+        "retry",
+        "skip_step",
+        "skip_epic",
+        "cancel",
+    )
 
 
 def test_a_parked_run_without_a_looked_up_row_kind_answers_conservatively() -> None:

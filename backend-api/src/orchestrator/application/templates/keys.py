@@ -287,7 +287,7 @@ def _run_sugar(node: LinedMap) -> tuple[str | None, list[ValidationError]]:
 
 #: The three dispatch forms an `agent` `with` block may carry — only one at a time.
 _DISPATCH_KEYS: frozenset[str] = frozenset({"skill", "prompt", "prompt_file"})
-#: The intent key for the intent dispatch form (task@1, IMP-002 accepted 2026-09-15).
+#: The intent key for the intent dispatch form (IMP-002 accepted 2026-09-15).
 #: NOT added to _DISPATCH_KEYS to avoid triggering INVALID_DISPATCH_FORM for skill+intent.
 _INTENT_KEYS: frozenset[str] = frozenset({"intent"})
 

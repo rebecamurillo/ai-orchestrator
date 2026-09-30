@@ -10,9 +10,13 @@ before any agent had touched the tree with `on_fail: fail`, so every readiness R
 work it exists to do — so the fixture declares no command at all, every shell row skips
 naming the field it asked for, and the walk reaches the agent row.
 
-The plan half runs against the *shipped* `templates/epic.yaml`, at the exact pin
-`harness_readiness.start` writes into the Run, because this is a claim about what
-readiness really executes. The shipped Templates evolve freely — steps are added, renamed
+The plan half runs against the *shipped* file a default instance's `READINESS_TEMPLATE`
+names, at the exact pin `harness_readiness.start` would write into the Run (the latest
+stored version of that name — `latest_version`), because this is a claim about what
+readiness really executes. The name is read off `Settings`' own field default rather than
+retyped (Operator decision 2026-09-30: no template name hardcoded in product code).
+
+The shipped Templates evolve freely — steps are added, renamed
 and re-parameterised — so nothing here names a step, counts a row or pins a reason to a
 path: every assertion is a property that must hold for *any* epic Template a readiness
 Run may plan. Row-by-row planner coverage lives with the frozen exemplars in
@@ -38,17 +42,20 @@ from orchestrator.application.use_cases.harness_readiness import (
     READINESS_REPOSITORY_SLUG,
     READINESS_SPEC_FOLDER,
     READINESS_STORY_ID,
-    READINESS_TEMPLATE_NAME,
-    READINESS_TEMPLATE_VERSION,
 )
 from orchestrator.application.use_cases.harness_readiness_seed import seed_readiness_project
 from orchestrator.application.use_cases.plan_run import resolve_tree
 from orchestrator.application.use_cases.preflight import _run_inputs
 from orchestrator.application.use_cases.projects import ProjectPorts
-from orchestrator.application.use_cases.templates import TemplatePorts, seed_shipped
+from orchestrator.application.use_cases.templates import (
+    TemplatePorts,
+    latest_version,
+    seed_shipped,
+)
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.entities.template import TemplateRef
+from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.templates_loader import load_shipped_templates
 from tests.unit.application.templates import plan_fixtures as fixtures
 from tests.unit.fakes.clock import FakeClock
@@ -114,10 +121,8 @@ def readiness_plan() -> Plan:
         TemplatePorts(uow=uow, templates=templates, clock=FakeClock(NOW)),
         load_shipped_templates(SHIPPED_DIR),
     )
-    tree = resolve_tree(
-        templates,
-        TemplateRef(name=READINESS_TEMPLATE_NAME, version=READINESS_TEMPLATE_VERSION),
-    )
+    name = str(Settings.model_fields["readiness_template"].default)
+    tree = resolve_tree(templates, TemplateRef(name=name, version=latest_version(templates, name)))
     project, stored = seeded()
     run_inputs = _run_inputs(
         PreflightRequest(

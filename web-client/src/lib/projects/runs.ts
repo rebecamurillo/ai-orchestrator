@@ -32,18 +32,14 @@ export function ageText(createdAt: string, now: Date): string {
 }
 
 /**
- * The Repository's own most recent `repo-init` Run, or `null` when it has never had one —
- * what a row's own `Initialise repository` control reads. `runs` arrives newest-first
- * already (`GET /projects/{id}`'s own contract, `RunRepository.list`, 4.1), so the first
- * match is the most recent one.
+ * The Repository's own most recent initialisation Run, or `null` when it has never had one —
+ * what a row's own `Initialise repository` control reads. Which Run that is comes from the
+ * server (`ProjectRunOut.is_init`, resolved against `INIT_TEMPLATE`), never from a Template
+ * name tested here: the shipped one is an exemplar and an instance may configure its own
+ * (Operator decision 2026-09-30: no template name hardcoded in product code). `runs` arrives
+ * newest-first already (`GET /projects/{id}`'s own contract, `RunRepository.list`, 4.1), so
+ * the first match is the most recent one.
  */
-export function latestRepoInitRun(
-  runs: ProjectRunOut[],
-  repositoryId: string,
-): ProjectRunOut | null {
-  return (
-    runs.find(
-      (run) => run.repository_id === repositoryId && run.template.startsWith('repo-init@'),
-    ) ?? null
-  );
+export function latestInitRun(runs: ProjectRunOut[], repositoryId: string): ProjectRunOut | null {
+  return runs.find((run) => run.repository_id === repositoryId && run.is_init) ?? null;
 }
