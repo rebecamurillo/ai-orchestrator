@@ -5,17 +5,20 @@
 # already gated, and nothing is gated here that CI already gates.
 #
 # The trigger is a tag, because a tag is the only name a running container can be traced
-# back to. `DEPLOY.md` is the procedure that creates it.
+# back to. `DEPLOY.md` is the procedure that creates it. The image tag itself is the content
+# of `VERSION` at the repository root (the git tag is `v<VERSION>`, checked by `verify`), so
+# `make push`, `make bundle` and this workflow all publish the same name.
 #
 # Actions are pinned to a commit, for the reason `ci.yml` gives: a tag can be moved under
 # the pipeline, a commit cannot.
 #
-# The images are multi-arch (amd64 + arm64) and intended to be public, so any consumer
-# machine can `docker compose pull` them without a registry login (`deploy/README.md` is
-# the consumer procedure). Visibility itself is a GHCR package setting flipped once in the
-# GitHub UI after the first publish — a workflow cannot set it. Pulling with a credential,
-# where one is used, stays in the docker daemon's own config, never a container's
-# environment, so AD-5 is untouched either way.
+# The images are multi-arch (amd64 + arm64) and, like the repository, private: a client
+# pulls them with a GitHub token that can read the packages, which `deploy/install.sh`
+# hands to `docker login ghcr.io` (`deploy/README.md` is the client procedure). Who may
+# pull is a GHCR package setting — each client's GitHub user is granted read on both
+# packages in the GitHub UI, or the packages are flipped public; a workflow can set neither.
+# The credential stays in the docker daemon's own config, never a container's environment,
+# so AD-5 is untouched either way.
 name: release
 
 on:
@@ -48,7 +51,28 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      # the image tag every later job uses: the content of `VERSION`, never the git ref
+      tag: ${{ steps.version.outputs.tag }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # `VERSION` at the repository root is the one place the release number lives: the
+      # image tag, the bundle name, what `make push` and `make bundle` read. A git tag is
+      # `v<VERSION>`; a tag that names a different version than the file it points at is a
+      # mislabelled commit, refused here before anything is built.
+      - name: The tag names the version in VERSION
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ github.ref_name }}" != "v${version}" ]; then
+            echo "tag ${{ github.ref_name }} but VERSION says ${version} — bump VERSION on the commit, then tag it v${version}" >&2
+            exit 1
+          fi
+          echo "tag=${version}" >> "$GITHUB_OUTPUT"
+          echo "publishing as ${version}"
+
       - name: The ci workflow succeeded for this commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -122,12 +146,12 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           push: true
           tags: |
-            ${{ env.IMAGE_NAMESPACE }}/${{ matrix.component }}:${{ github.ref_name }}-${{ matrix.arch }}
+            ${{ env.IMAGE_NAMESPACE }}/${{ matrix.component }}:${{ needs.verify.outputs.tag }}-${{ matrix.arch }}
           # `docker inspect` on the host answers "what is this" without the registry
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ needs.verify.outputs.tag }}
           cache-from: type=gha,scope=${{ matrix.component }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}-${{ matrix.arch }}
           # plain per-arch manifests: an attestation manifest is one more thing that can
@@ -142,7 +166,7 @@ jobs:
   # runs `latest` cannot answer which version it is running, which is the question every
   # rollback starts with.
   merge:
-    needs: build
+    needs: [verify, build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -163,21 +187,23 @@ jobs:
           set -euo pipefail
           image="${IMAGE_NAMESPACE}/${{ matrix.component }}"
           docker buildx imagetools create \
-            --tag "${image}:${{ github.ref_name }}" \
+            --tag "${image}:${{ needs.verify.outputs.tag }}" \
             --tag "${image}:sha-${{ github.sha }}" \
-            "${image}:${{ github.ref_name }}-amd64" \
-            "${image}:${{ github.ref_name }}-arm64"
-          docker buildx imagetools inspect "${image}:${{ github.ref_name }}"
+            "${image}:${{ needs.verify.outputs.tag }}-amd64" \
+            "${image}:${{ needs.verify.outputs.tag }}-arm64"
+          docker buildx imagetools inspect "${image}:${{ needs.verify.outputs.tag }}"
 
-  # The consumer bundle: everything a machine needs to run this release without cloning
-  # the repository — `deploy/` (compose + env contract + procedure), `host/` (the optional
-  # LiteLLM/Langfuse stack) and `plugin/` (the agent-integration skill). Attached to a GitHub
-  # Release under the same tag the images carry, so the bundle and the images can never
-  # name different commits. Tag pushes only: a `workflow_dispatch` from a branch has no
-  # release to attach to.
+  # The client bundle: everything a machine needs to run this release without cloning the
+  # repository — `deploy/` (install.sh, compose, env contract, procedure) at the root,
+  # `host/` (the optional LiteLLM/Langfuse stack), `plugin/` (the agent-integration skill)
+  # and a `VERSION` file naming the tag so `install.sh` knows which images to pull.
+  # `scripts/bundle.sh` lays it out (`make bundle TAG=…` on a workstation is the same call).
+  # Attached to a GitHub Release under the same tag the images carry, so the bundle and the
+  # images can never name different commits. Tag pushes only: a `workflow_dispatch` from a
+  # branch has no release to attach to.
   bundle:
     if: github.ref_type == 'tag'
-    needs: merge
+    needs: [verify, merge]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -191,13 +217,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          bundle="ai-orchestrator-deploy-${{ github.ref_name }}.tar.gz"
-          tar -czf "$bundle" deploy host plugin
+          scripts/bundle.sh "${{ needs.verify.outputs.tag }}" dist
+          bundle="dist/ai-orchestrator-deploy-${{ needs.verify.outputs.tag }}.tar.gz"
           if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
             gh release upload "${{ github.ref_name }}" "$bundle" --clobber
           else
             gh release create "${{ github.ref_name }}" "$bundle" \
               --verify-tag \
               --title "${{ github.ref_name }}" \
-              --notes "Images: \`${IMAGE_NAMESPACE}/{backend-api,web-client}:${{ github.ref_name }}\` (linux/amd64, linux/arm64). Consumer procedure: \`deploy/README.md\` inside the attached bundle."
+              --notes "Images: \`${IMAGE_NAMESPACE}/{backend-api,web-client}:${{ needs.verify.outputs.tag }}\` (linux/amd64, linux/arm64, private — a token with read:packages pulls them). Client install: extract the attached bundle and run \`./install.sh\`; the procedure is its \`README.md\`."
           fi

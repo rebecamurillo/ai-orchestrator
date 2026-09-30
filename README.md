@@ -257,9 +257,11 @@ The orchestrator ships as a consumer package, so a machine that never clones thi
 repository can run it from the published images and a project's own agents can drive it
 over HTTP:
 
-- **Run the stack** — each release attaches `ai-orchestrator-deploy-<tag>.tar.gz` (the
-  `deploy/` compose pulling the GHCR images, the env contract, and the optional `host/`
-  stack). The procedure is `deploy/README.md`.
+- **Run the stack** — each release attaches `ai-orchestrator-deploy-<tag>.tar.gz`
+  (`install.sh`, the compose pulling the private GHCR images, the env contract, and the
+  optional `host/` stack). A client extracts it and runs `./install.sh` with a GitHub token
+  that can read the packages; `make bundle TAG=<tag>` builds the same archive here. The
+  procedure is `deploy/README.md`.
 - **Let a project's agents use it** — install the Claude Code plugin in the consumer
   project: `/plugin marketplace add OptimAI-labs/ai-orchestrator`, then
   `/plugin install orchestrator@optimai`. The skill (`plugin/skills/orchestrator/`)

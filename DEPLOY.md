@@ -42,16 +42,23 @@ the registry as the per-platform record). `backend-api/Dockerfile` picks its Nod
 archives from `dpkg --print-architecture`, so both platforms build unchanged.
 
 The release also attaches `ai-orchestrator-deploy-<tag>.tar.gz` to the GitHub Release: the
-consumer package (`deploy/`, `host/`, `plugin/`) for machines that run a release without
-this checkout. That path is `deploy/README.md`; this file remains the operator's own
+client package — `deploy/` at its root (`install.sh`, compose, env contract, `README.md`),
+`host/`, `plugin/` and a `VERSION` file naming the tag — for machines that run a release
+without this checkout. `scripts/bundle.sh` (also `make bundle TAG=v1.2.0`) builds the same
+archive on a workstation, from the working tree via `git ls-files` so a filled `.env` can
+never travel in it. That path is `deploy/README.md`; this file remains the operator's own
 procedure for a host that has the checkout.
 
-The packages are intended to be **public** (flipped once per package in the GitHub UI
-after the first publish — a workflow cannot set visibility), so a consumer pulls with no
-registry login. While a package is still private, the host authenticates with a token held
-in its own docker config — the **docker daemon's** credential, not a container's
-environment. No container process receives it, so AD-5 is untouched: the one credential a
-*process* holds is still `ORCHESTRATOR_TOKEN`.
+The repository and both packages are **private**. A client pulls with a GitHub personal
+access token (classic, `read:packages`) that `deploy/install.sh` hands to
+`docker login ghcr.io`; the credential is then held in the **docker daemon's** own config,
+never a container's environment, so AD-5 is untouched — the one credential a *process*
+holds is still `ORCHESTRATOR_TOKEN`. Before a client can pull, their GitHub user needs
+read access on each package: GitHub → the organisation's Packages → `backend-api` and
+`web-client` → Package settings → *Manage Actions access / Manage access* → add the user
+with `Read` (a workflow cannot grant this). To read the release asset itself the token also
+needs `repo`. Making the packages public in the same settings page removes the first
+requirement; the second stays as long as the repository is private.
 
 ---
 
@@ -226,14 +233,23 @@ stack from another machine is a host decision — a tunnel — not a compose one
 
 ## 4. Cutting a release
 
-1. Merge to `main`. Let `ci.yml` finish; every gate must be green.
-2. Tag that commit and push the tag:
+1. Set the version in `VERSION` at the repository root (`1.2.0`, or `1.0.0-beta` for a
+   pre-release) and merge to `main`. Let `ci.yml` finish; every gate must be green. That
+   file is the one place the release number lives: the image tag, the bundle name, and
+   what `make push` / `make bundle` read.
+2. Tag that commit `v<VERSION>` and push the tag:
 
    ```bash
    git checkout main && git pull
-   git tag -a v1.2.0 -m 'v1.2.0'
-   git push origin v1.2.0
+   git tag -a "v$(cat VERSION)" -m "v$(cat VERSION)"
+   git push origin "v$(cat VERSION)"
    ```
+
+   A pre-release a client tests before there is a tag goes out by hand from a workstation
+   instead: `docker login ghcr.io` with a token that has `write:packages`, then
+   `make push` (both architectures, `scripts/push-images.sh`) and `make bundle` for the
+   tarball to send. The workflow's `verify` job refuses a tag that does not equal
+   `v<VERSION>`.
 
 3. `release.yml` runs. Its first job refuses to publish anything unless a `ci.yml` run
    concluded successfully **for that exact commit** — a tag is a claim that a commit is

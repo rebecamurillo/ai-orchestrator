@@ -97,4 +97,9 @@ grep -E '^(LANGFUSE_INIT_PROJECT_PUBLIC_KEY|LANGFUSE_INIT_PROJECT_SECRET_KEY)=' 
 echo "  LANGFUSE_BASE_URL=http://host.docker.internal:3000"
 echo "  LITELLM_BASE_URL=http://host.docker.internal:4000"
 echo
-echo "\`make host-env-sync\` writes all four into the root .env for you."
+# a checkout has the Makefile; a release bundle runs the script directly
+if [[ -f "${here}/../Makefile" ]]; then
+	echo "\`make host-env-sync\` writes all four into the root .env for you."
+else
+	echo "\`host/sync-env.sh ../.env\` writes all four into the orchestrator's .env for you (install.sh does this)."
+fi

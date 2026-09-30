@@ -15,7 +15,7 @@ PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
 # --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
 NODE_RUN := $(PNPM) --dir $(WEB) run
 
-.PHONY: install install-e2e doctor lint test coverage e2e e2e-api e2e-ui durability images openapi env up down logs host-up host-down host-logs host-doctor host-env-sync local local-backend local-web
+.PHONY: install install-e2e doctor lint test coverage e2e e2e-api e2e-ui durability images openapi env up down logs host-up host-down host-logs host-doctor host-env-sync local local-backend local-web bundle push
 
 ## install — a fresh checkout to a machine the gates run on (scripts/install.sh)
 ## Syncs backend-api's virtualenv from uv.lock, installs web-client from pnpm-lock.yaml at
@@ -130,6 +130,23 @@ e2e-ui:
 ## gate that proves a Dockerfile still builds, on a runner with no ports to bind
 images:
 	docker compose build
+
+## ── the release version: one file, reused everywhere ────────────────────────
+## `VERSION` at the repository root is the image tag (`ghcr.io/…/backend-api:$(TAG)`), the
+## bundle's name, and what the git tag `v$(TAG)` must equal for release.yml to publish.
+## Override on the command line for a one-off: `make push TAG=1.0.0-rc.2`.
+TAG ?= $(shell cat VERSION)
+
+## push — build both images for linux/amd64 and linux/arm64 and push them as :$(TAG)
+## needs a `docker login ghcr.io` with a token that can write the packages (scripts/push-images.sh)
+push:
+	./scripts/push-images.sh $(TAG)
+
+## bundle — the client package for one release: dist/ai-orchestrator-deploy-$(TAG).tar.gz
+## deploy/ (install.sh, compose, env contract) + host/ + plugin/ + VERSION, from the working
+## tree via `git ls-files`, so a filled .env can never travel. release.yml runs the same script.
+bundle:
+	./scripts/bundle.sh $(TAG)
 
 ## openapi — export contracts/openapi.json, then regenerate the web-client types (AD-3)
 ## the exporter writes through a temporary file: `> contracts/openapi.json` would empty the
