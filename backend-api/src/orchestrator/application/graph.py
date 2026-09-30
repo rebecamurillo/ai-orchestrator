@@ -21,14 +21,14 @@ a second id rule.
 **A call is one node.** A `uses: template` step is collapsed: it names its callee and stops
 there. Its gate is `None`, because a call has no gate of its own; the callee's own steps
 carry theirs. The consequence is deliberate and is not closed here: a gateless step inside
-`story@1` is invisible in `epic@1`'s graph, exactly as it is invisible in `epic@1`'s
+A callee is invisible in its caller's graph, exactly as it is invisible in that caller's
 `ValidationResult`. The `unvalidated` guarantee is per file, not per expanded plan; Epic 4's
 planner owns the expanded view.
 
 **Why the walker builds edges in this order.** Each top-level entry is reduced to a frame:
 its nodes, its internal edges, its entry id and its exit id. The connecting edge from the
 previous frame's exit is appended *before* the frame's own internal edges, which is what
-makes `epic@1` read `baseline->stories.story` and then `stories.story->stories.after` —
+makes a caller read `baseline->stories.story` and then `stories.story->stories.after` —
 the order a left-to-right reader expects. A loop frame's ordered members are
 `[before?] + inner steps + [after?]`, so a `pause_before_item_when` moves the incoming edge
 onto `.before` and a `pause_after_item_when` moves the outgoing edge off `.after` with no

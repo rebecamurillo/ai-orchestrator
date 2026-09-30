@@ -9,7 +9,7 @@ first time: the base clone's path, the repository's URL, the base branch, and �
 file the plan actually read (`Run.plan_refs`, `{path: sha}`) — the branch each one came
 from. A file read directly off the root frame's own ref (no branch fallback needed) records
 `None` for its branch, which means exactly the base branch: `plan_ref` itself falls back to
-it whenever the Template names none (`initiative@1`) or a declared one is not there yet.
+it whenever the Template names none or a declared one is not there yet.
 
 **A `continue` never re-reads.** AD-13 admits `continue` on a `plan_stale` park, and its own
 effect is "the recorded plan proceeds" — the Operator looked, decided the drift does not

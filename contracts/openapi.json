@@ -4838,7 +4838,7 @@
         ]
       },
       "post": {
-        "description": "Dispatch an `epic@1` Run of the fixture Repository, `skip_harness_check` bypassing\nthe disabled-harness pre-flight line (AD-10) so a harness never yet enabled can still\nrun the Run that would enable it.",
+        "description": "Dispatch a Run of the configured readiness Template (`READINESS_TEMPLATE`, latest\nstored version) against the fixture Repository, `skip_harness_check` bypassing\nthe disabled-harness pre-flight line (AD-10) so a harness never yet enabled can still\nrun the Run that would enable it.",
         "operationId": "start_readiness_api_v1_harnesses__name__readiness_post",
         "parameters": [
           {

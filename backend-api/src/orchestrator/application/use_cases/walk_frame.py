@@ -34,8 +34,9 @@ from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.git import Git
 
-#: The Run input `initiative@1` binds its epic list under (AD-17's `{initiative_folder}`).
-#: `epic@1` and `story@1` declare none, and a Run without one freezes no `epics.yaml`.
+#: The Run input a Template with an epic loop binds its epic list under (AD-17's
+#: `{initiative_folder}`). A plan below that level declares none, and a Run without one
+#: freezes no `epics.yaml`.
 INITIATIVE_FOLDER_INPUT = "initiative_folder"
 
 

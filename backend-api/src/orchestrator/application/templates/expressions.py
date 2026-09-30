@@ -79,7 +79,7 @@ DEFAULT_KEY = "default"
 
 #: The keys written bare as `<name>.<field>` rather than interpolated.
 CONDITION_KEYS = ("pause_when", "pause_before_item_when", "pause_after_item_when")
-#: The literal that makes a `pause_when` unconditional — no field required (task@1).
+#: The literal that makes a `pause_when` unconditional — no field required.
 ALWAYS_LITERAL: str = "always"
 
 

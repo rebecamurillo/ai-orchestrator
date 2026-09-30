@@ -5,7 +5,8 @@
  *
  * `template`, `project`, `repository` and `branch` are the brief's own four prefill keys
  * (the "start a new run" links' contract) — `branch` there names the *base* branch. A
- * template's own inputs (`epic`'s own `branch`, for a working branch, is one) would collide
+ * template's own inputs (a dev-loop Template's own `branch`, for a working branch, is one)
+ * would collide
  * with that key, so every template input is carried under `in_{key}` instead.
  */
 import { fieldsFor, firstTemplate, offers, type TemplateCatalog } from './catalog';

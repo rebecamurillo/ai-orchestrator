@@ -69,7 +69,8 @@ export interface paths {
         put?: never;
         /**
          * Dispatch a readiness Run for one harness
-         * @description Dispatch an `epic@1` Run of the fixture Repository, `skip_harness_check` bypassing
+         * @description Dispatch a Run of the configured readiness Template (`READINESS_TEMPLATE`, latest
+         *     stored version) against the fixture Repository, `skip_harness_check` bypassing
          *     the disabled-harness pre-flight line (AD-10) so a harness never yet enabled can still
          *     run the Run that would enable it.
          */

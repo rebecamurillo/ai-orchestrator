@@ -84,7 +84,8 @@ READ_REFUSALS = {404: NO_SUCH_HARNESS_RESPONSE, HTTP_UNPROCESSABLE_CONTENT: BAD_
     responses=START_REFUSALS,
 )
 def start_readiness(name: Name, ports: StartPorts) -> CreateRunOut:
-    """Dispatch an `epic@1` Run of the fixture Repository, `skip_harness_check` bypassing
+    """Dispatch a Run of the configured readiness Template (`READINESS_TEMPLATE`, latest
+    stored version) against the fixture Repository, `skip_harness_check` bypassing
     the disabled-harness pre-flight line (AD-10) so a harness never yet enabled can still
     run the Run that would enable it."""
     try:

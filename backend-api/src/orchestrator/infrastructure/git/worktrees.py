@@ -133,7 +133,7 @@ class WorktreeCommands:
         detached `HEAD`, so any branch, the default one included, can be added as a worktree".
         A clone leaves `HEAD` symbolic on the default branch, and git refuses to check a
         branch out into a worktree while another worktree — the base clone itself — has it,
-        so an `epic@1` whose branch *is* the default branch would fail on its checkout row.
+        so a Run whose working branch *is* the default branch would fail on its checkout row.
         Idempotent: a `HEAD` that is already detached is written back unchanged.
         """
         head = self._attempt("-C", str(base), "rev-parse", "--verify", "--quiet", "HEAD")

@@ -10,7 +10,7 @@ Two rules decide what a `{{ }}` becomes:
 - **A string that is exactly one bound variable passes its value through whole.**
   `story: "{{story}}"` binds the list-file entry itself — a mapping — to the callee's
   `story` input, because a callee handed the entry's `str()` could not read `story.id` off
-  it. That is what makes `epic@1`'s call to `story@1` work at all.
+  it. That is what makes a caller's `uses: template` call work at all.
 - **Every other string is text with holes in it**, so each hole becomes text: `""` for a
   value nobody bound, `str(...)` for everything else. Never the four characters `None`,
   which is what a Run would otherwise hand to a shell.
@@ -124,7 +124,7 @@ def paused(condition: str | None, scope: Mapping[str, Any]) -> bool:
     allowed, which `validate()` has already refused.
 
     The literal `ALWAYS_LITERAL` ("always") is unconditional: it returns `True` regardless
-    of scope. `task@1` uses this to encode a plan gate on every dispatch.
+    of scope. A one-off task Template uses this to encode a plan gate on every dispatch.
     """
     if condition is None:
         return False

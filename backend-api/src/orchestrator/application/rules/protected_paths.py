@@ -78,8 +78,8 @@ def build(
 ) -> frozenset[str]:
     """The literal paths this Run's agents may not touch (AD-17).
 
-    `spec_folders` is plural because `initiative@1` binds one per epic; an empty string is
-    the Run that declares none (`repo-init@1`) rather than a folder named `""`. The frozen
+    `spec_folders` is plural because a Template with an epic loop binds one per epic; an
+    empty string is a Run that declares none rather than a folder named `""`. The frozen
     test files arrive already resolved — they are the tree at the frame's first attempt, as
     `Git.list_files` answered it, so nothing here globs a filesystem.
     """

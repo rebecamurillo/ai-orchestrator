@@ -258,8 +258,11 @@ def test_progress_for_an_initiative_run_counts_epics_and_stories(harness: Harnes
     assert card.current_step_label == "commit-guard"
 
 
-def test_progress_is_none_for_a_repo_init_run(harness: Harness) -> None:
-    run = a_run(template_name="repo-init")
+def test_progress_is_none_for_a_plan_with_no_story_frame(harness: Harness) -> None:
+    """Operator decision 2026-09-30: no template name hardcoded in product code. A plan with
+    no `stories[n]` frame anywhere carries no progress, whatever its Template is called —
+    and the card names that Template instead of showing a blank segment."""
+    run = a_run(template_name="house-init")
     harness.runs.add(run)
     harness.steps.add_many(
         [
@@ -271,6 +274,22 @@ def test_progress_is_none_for_a_repo_init_run(harness: Harness) -> None:
     view = board_view(harness.board_ports(), project_id=None, now=NOW)
 
     assert view.columns.queued[0].progress is None
+    assert view.columns.queued[0].kind_label == "house-init"
+
+
+def test_a_card_with_progress_carries_no_kind_label(harness: Harness) -> None:
+    """The two are alternatives on the card, never both — which is what the old two-entry
+    lookup table said by having no row for a Template that shows progress."""
+    run = a_run(template_name="house-epic")
+    harness.runs.add(run)
+    harness.steps.add_many(
+        [a_commit_row(run, "stories[0].commit-guard", seq=1, status="done", story_id="1")]
+    )
+
+    view = board_view(harness.board_ports(), project_id=None, now=NOW)
+
+    assert view.columns.queued[0].progress is not None
+    assert view.columns.queued[0].kind_label is None
 
 
 def test_current_step_label_prefers_running_then_park_then_last_done(harness: Harness) -> None:

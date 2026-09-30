@@ -158,7 +158,7 @@ def seed_shipped_templates(settings: Settings) -> list[SeedResult]:
     """
     files = load_shipped_templates(settings.templates_dir)
     if not files:
-        # the four shipped files are the whole point of this story; a `TEMPLATES_DIR` that
+        # the shipped files are the whole point of this story; a `TEMPLATES_DIR` that
         # resolves to none of them is almost certainly a misconfigured mount or a broken
         # image, not an instance meaning to run with zero Templates
         log.warning("no shipped templates found", templates_dir=str(settings.templates_dir))

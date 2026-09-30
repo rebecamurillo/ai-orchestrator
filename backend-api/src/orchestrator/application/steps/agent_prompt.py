@@ -55,7 +55,7 @@ PROMPT_KEY = "prompt"
 #: The `with` key that names a file whose content is used as the prompt base.
 PROMPT_FILE_KEY = "prompt_file"
 #: The `with` key that carries a pasted intent — filled into the dispatch clause's
-#: `{intent}` token (task@1's form).
+#: `{intent}` token (the intent-dispatch form).
 INTENT_KEY = "intent"
 #: The `with` key for the skill dispatch form (kept here alongside its siblings).
 SKILL_KEY = "skill"

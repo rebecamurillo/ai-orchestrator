@@ -67,8 +67,10 @@ export function hasLeftRule(token: string): boolean {
 }
 
 /** The card's fixed-order progress segment: `n/n epics · m/m stories · k links`, the epics
- * clause omitted when `epics_total` is null (an `epic` Run has none); `kindLabel` stands in
- * whole when `progress` itself is null (`repo-init`, future `readiness`). */
+ * clause omitted when `epics_total` is null (a plan with no epic frame has none); `kindLabel`
+ * stands in
+ * whole when `progress` itself is null — a plan with no Story frame, whose Template name the
+ * server sends in its place. */
 export function progressText(progress: ProgressOut | null, kindLabel: string | null): string {
   if (progress === null) return kindLabel ?? '';
   const parts: string[] = [];

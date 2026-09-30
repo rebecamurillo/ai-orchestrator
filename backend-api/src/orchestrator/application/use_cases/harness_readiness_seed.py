@@ -125,7 +125,8 @@ def _seed_repository(
         install_command="",
         # Readiness proves the harness, not the repository, so the fixture declares no
         # quality gate at all. It used to declare `sh check.sh`, which the fixture's own
-        # story is what makes pass — so `epic@1`'s `baseline` row ran it before any agent
+        # story is what makes pass — so the readiness Template's `baseline` row ran it
+        # before any agent
         # had touched the tree, failed, and `on_fail: fail` ended the Run. No agent row was
         # ever dispatched and no harness could ever reach `enabled`. `baseline` is right to
         # fail a Run whose repository was already red: that is how the Operator learns the

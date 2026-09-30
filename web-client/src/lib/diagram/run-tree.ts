@@ -19,7 +19,7 @@
  * that owns it. The STEPS tab keeps every planned row; the diagram narrows what it *draws*.
  *
  * **Ranks collapse to what exists** *(operator amendment, 2026-09-24)*. `DiagramSection`
- * mounts for every Run, and `story@1`, `task@1` and `repo-init@1` plan bare top-level rows
+ * mounts for every Run, and a plan with no loop at all has bare top-level rows
  * with no `epics[i]`/`stories[j]` frame at all. A fixed four-rank model answered those with
  * an empty EPICS column, an agent card drawn under the `EPICS` head and every deterministic
  * row invisible. So an empty rank is dropped, the surviving columns are renumbered, and

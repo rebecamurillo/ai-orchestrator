@@ -227,7 +227,7 @@ def _last_dispatch_path(work_dir: Path, cwd: Path) -> Path:
 def counter_path(work_dir: Path, cwd: Path, story_id: str) -> Path:
     """`{WORK_DIR}/fake-harness/{digest of the worktree}/{story_id}` — never in the worktree.
 
-    An empty story id (a dispatch whose prompt names no story — `epic@1`'s spec-gate,
+    An empty story id (a dispatch whose prompt names no story — a spec-gate row,
     gen-e2e and retro rows) files under `{NO_STORY}` rather than under the bare digest:
     `digest / ""` IS the digest directory, and writing the counter there would replace the
     directory every per-story counter lives in.

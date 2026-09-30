@@ -4,7 +4,7 @@
  * Naming rule (UX-DR16): this strip prints labels (the epic head), never `path`.
  *
  * Stateless (`renderToStaticMarkup`); `''` (nothing rendered) for a Template with no Story
- * frame at all (`repo-init`) — `storiesByEpic([])` is `[]`.
+ * frame at all (an initialisation Run) — `storiesByEpic([])` is `[]`.
  */
 import { epicDoneCount, storiesByEpic, type StoryCellOut } from '../../lib/run/detail';
 

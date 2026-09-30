@@ -8,14 +8,15 @@ anything starts, so it is decided here and never at dispatch time — a `retry` 
 `{{story.id}}` would otherwise be filled in from a branch that had moved on.
 
 **The entry is never found by the name `story`.** Two shapes bind one: a `for_each` in the
-same file binds it under the loop's `as` name, and a callee — which is how `epic@1` reaches
-`story@1` — is handed it as the input it declared `item` (AD-15). Either way the Template
+same file binds it under the loop's `as` name, and a callee — which is how a Template with a
+Story loop reaches a per-Story one — is handed it as the input it declared `item` (AD-15).
+Either way the Template
 chose the name, so neither is guessed. A Template with no entry at all is not a broken row:
 an `agent` step outside every loop is a dispatch with no Story behind it, and the three keys
 that describe one read `None`.
 
 **`prompt_extra` is what the Template bound, full stop** (Operator decision, 2026-09-27).
-`story@1` binds `{{story.invoke_dev_with}}` itself; a Template that binds something else
+A per-Story Template binds `{{story.invoke_dev_with}}` itself; one that binds something else
 means it, and one that binds nothing appends nothing — the old fallback to the entry's own
 `invoke_dev_with` was method knowledge living in code rather than in the file.
 
@@ -134,7 +135,7 @@ def item(frame: Frame) -> Mapping[str, Any] | None:
     """The list entry this row works on, from whichever of the two shapes bound it.
 
     A `for_each` in the same file binds its entry under the loop's `as` name; a callee —
-    which is how `epic@1` reaches `story@1` — sees only what the call passed it, and says
+    which is how a caller reaches its callee — sees only what the call passed it, and says
     which of its inputs is the entry by declaring that input `item` (AD-15).
     """
     bound = frame.scope.get(frame.item_name) if frame.item_name else _declared(frame)

@@ -65,7 +65,8 @@ class RunViewPorts:
 
 @dataclass(frozen=True)
 class Progress:
-    """Epic/story completion (SPEC CAP-12); `epics_*` is `None` outside an `initiative` Run."""
+    """Epic/story completion (SPEC CAP-12); `epics_*` is `None` for a plan whose rows carry
+    no `epics[n]` frame."""
 
     epics_done: int | None
     epics_total: int | None

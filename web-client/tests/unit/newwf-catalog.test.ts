@@ -8,7 +8,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  DEFAULT_ROOT_TEMPLATES,
   buildCatalog,
   deriveFields,
   deriveLabel,
@@ -17,9 +16,11 @@ import {
   firstTemplate,
   offers,
   parseRootTemplates,
+  rootStartable,
   usesHarness,
 } from '../../src/lib/newwf/catalog';
 import {
+  CALLEE_ONLY_TEMPLATE,
   FIXTURE_INPUTS,
   FIXTURE_ORDER,
   OPTIONAL_INPUT_DEFAULT,
@@ -35,15 +36,22 @@ const keys = (name: string): string[] =>
   fieldsFor(fixtureCatalog(), name).map((field) => field.key);
 
 describe('parseRootTemplates — ROOT_TEMPLATES is the source of truth', () => {
-  it('falls back to the shipped default when the variable is unset', () => {
-    expect(parseRootTemplates(undefined)).toEqual(FIXTURE_ORDER);
-    expect(parseRootTemplates(null)).toEqual(FIXTURE_ORDER);
+  /**
+   * Operator decision 2026-09-30: no template name hardcoded in product code. The module no
+   * longer holds a default list of Template names; an unset or blank variable names none,
+   * and the page derives the offer from what is stored (`rootStartable`, below). These three
+   * replace the three that asserted the fallback list, and the one that asserted the
+   * constant's own contents.
+   */
+  it('names none when the variable is unset', () => {
+    expect(parseRootTemplates(undefined)).toEqual([]);
+    expect(parseRootTemplates(null)).toEqual([]);
   });
 
-  it('falls back when the variable is set but blank — envField’s own default cannot', () => {
-    expect(parseRootTemplates('')).toEqual(FIXTURE_ORDER);
-    expect(parseRootTemplates('   ')).toEqual(FIXTURE_ORDER);
-    expect(parseRootTemplates(',, ,')).toEqual(FIXTURE_ORDER);
+  it('names none when the variable is set but blank, or is only separators', () => {
+    expect(parseRootTemplates('')).toEqual([]);
+    expect(parseRootTemplates('   ')).toEqual([]);
+    expect(parseRootTemplates(',, ,')).toEqual([]);
   });
 
   it('keeps the Operator’s own order, and offers names nothing shipped', () => {
@@ -53,9 +61,23 @@ describe('parseRootTemplates — ROOT_TEMPLATES is the source of truth', () => {
   it('trims whitespace and drops duplicates, first occurrence winning', () => {
     expect(parseRootTemplates(' epic , epic-oss ,epic, ')).toEqual(['epic', 'epic-oss']);
   });
+});
 
-  it('names no Template itself: the default list is the only place one is written', () => {
-    expect(DEFAULT_ROOT_TEMPLATES.split(',')).toEqual(FIXTURE_ORDER);
+describe('rootStartable — what the derived offer keeps', () => {
+  it('keeps a Template declaring no caller-bound input at all', () => {
+    expect(rootStartable(FIXTURE_INPUTS['repo-init']!)).toBe(true);
+  });
+
+  it('keeps one whose `item` input is optional: bound when called, defaulted when not', () => {
+    expect(rootStartable(FIXTURE_INPUTS['epic']!)).toBe(true);
+  });
+
+  it('drops one whose `item` input is required: it is only ever called (FR-33)', () => {
+    expect(rootStartable(FIXTURE_INPUTS[CALLEE_ONLY_TEMPLATE]!)).toBe(false);
+  });
+
+  it('reads the declaration, never the name', () => {
+    expect(FIXTURE_ORDER.every((name) => rootStartable(FIXTURE_INPUTS[name]!))).toBe(true);
   });
 });
 

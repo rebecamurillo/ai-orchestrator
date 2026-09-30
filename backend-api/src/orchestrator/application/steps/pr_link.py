@@ -14,7 +14,7 @@ for being correctly configured, and appending a URL nobody can open would be wor
 appending none.
 
 The append is a `RunUpdates` the writer applies (AD-8). It is an append and not a set: an
-`initiative@1` Run pushes one branch per epic and ends with one link per epic. A URL the Run
+A Run with an epic loop pushes one branch per epic and ends with one link per epic. A URL it
 already recorded is not appended twice, so a `retry` on this row leaves the list as it was.
 """
 
