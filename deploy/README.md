@@ -17,26 +17,45 @@ host from a checkout, that procedure is `DEPLOY.md`.
   (`GITHUB_TOKEN` below). Every repository you register must be reachable by this one
   token — there are no per-repository credentials.
 - Optional: a LiteLLM gateway and a Langfuse server. Each is one variable in `.env`:
-  blank disables the integration, unset refuses start-up. The full stack for both ships
-  in the bundle's `host/` directory (see below). Without a gateway, each harness uses its
-  own authentication and spend tracking is provisional.
+  blank disables the integration, and so does leaving the line out — both default to
+  blank. The full stack for both ships in the bundle's `host/` directory (see below).
+  Without a gateway, each harness uses its own authentication and spend tracking is
+  provisional.
 
 ## Start
 
+`.env.example` is in two sections. **REQUIRED** is what the stack refuses to start
+without; everything under **OPTIONAL** has a code default equal to the value the file
+prints, so those lines may be deleted or left blank and the stack still comes up
+(Operator decision 2026-09-20, two-tier configuration contract; reaffirmed 2026-09-30).
+
+The minimal `.env` is seven lines:
+
+```dotenv
+IMAGE_TAG=v0.1.0
+ORCHESTRATOR_TOKEN=…            # long random; the web login and the API bearer
+ORCHESTRATOR_SESSION_SECRET=…   # 32 random bytes
+ORCHESTRATOR_SECRET_KEY=…       # a real Fernet key; the placeholder is not one, and until
+                                # you replace it every project write answers 500:
+                                # python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
+POSTGRES_PASSWORD=…
+DATABASE_URL=postgresql+psycopg://orchestrator:<that same password>@postgres:5432/orchestrator
+GITHUB_TOKEN=…                  # the git credential described above
+```
+
+Or start from the full reference and edit it, which is the easier thing to read:
+
 ```bash
 cp .env.example .env
-# fill in .env — the values that must change before anything works:
-#   IMAGE_TAG                     the release tag, e.g. v0.1.0
-#   ORCHESTRATOR_TOKEN            long random; the web login and the API bearer
-#   ORCHESTRATOR_SESSION_SECRET   32 random bytes
-#   ORCHESTRATOR_SECRET_KEY       a real Fernet key — the placeholder is not one, and
-#                                 until you replace it every project write answers 500:
-#                                 python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
-#   POSTGRES_PASSWORD             and the same password inside DATABASE_URL
-#   GITHUB_TOKEN                  the git credential described above
+# fill in the REQUIRED section; the OPTIONAL one already holds every default
 docker compose pull
 docker compose up -d --wait
 ```
+
+**A minimal `.env` only works from the release that shipped the two-tier contract.** An
+older `IMAGE_TAG` runs an image whose settings module requires every variable, so a
+seven-line file makes it refuse to start, naming the first field it misses. Pin the tag
+first, then trim the file — never the other way round.
 
 Verify:
 
@@ -127,6 +146,10 @@ docker compose pull && docker compose up -d --wait
 - **Harness CLI versions are baked into the image.** The `*_VERSION` variables in `.env`
   exist for the runtime probe check; changing one without pulling an image built with it
   makes every probe fail `cli not at pinned version`.
+- **A trimmed `.env` is not backward-compatible.** Rolling `IMAGE_TAG` back across the
+  release that shipped the two-tier contract, with a `.env` that has been cut down to the
+  REQUIRED section, makes the older image refuse to start on the first variable it no
+  longer finds. Keep the full file until the rollback window has closed.
 - `POSTGRES_DB` is fixed after first boot, and the stack supports exactly one
   `backend-api` replica.
 

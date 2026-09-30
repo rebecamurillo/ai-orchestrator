@@ -6,8 +6,8 @@ Acceptance criteria:
 - Blank LANGFUSE_BASE_URL → tracing_enabled=False, gateway_enabled=True
 - Both blank → both properties False
 - Whitespace-only LITELLM_BASE_URL → gateway_enabled=False
-- Deleted LITELLM_BASE_URL → ValidationError naming litellm_base_url
-- Deleted LANGFUSE_BASE_URL → ValidationError naming langfuse_base_url
+- Deleted LITELLM_BASE_URL → gateway off, and the app still starts
+- Deleted LANGFUSE_BASE_URL → tracing off, and the app still starts
 - Non-blank LITELLM_BASE_URL + blank LITELLM_API_KEY → ValidationError naming both, with
   disable hint ("blank")
 - Non-blank LANGFUSE_BASE_URL + blank LANGFUSE_PUBLIC_KEY → ValidationError naming both
@@ -25,7 +25,9 @@ import pytest
 from pydantic import ValidationError
 
 from orchestrator import main as composition_root
+from orchestrator.infrastructure.harness import build_harnesses
 from orchestrator.infrastructure.settings import Settings
+from tests.unit.fakes.process import FakeProcessRunner
 
 # ── both enabled (default) ────────────────────────────────────────────────────
 
@@ -78,25 +80,56 @@ def test_both_base_urls_blank_disables_both(
     assert settings.tracing_enabled is False
 
 
-# ── deleted URLs raise ValidationError ───────────────────────────────────────
+# ── a deleted URL is the service off, not a refusal ──────────────────────────
+#
+# Revised under Operator decision 2026-09-20, two-tier configuration contract; reaffirmed
+# 2026-09-30 ("environment variables can be undefined/null ... all others should not block
+# system boot"). These two cases used to assert that an *absent* base URL refused start-up
+# naming the field; under the two-tier contract an absent optional variable is its code
+# default, and the code default for both base URLs is blank — the documented off switch.
+# The replacement asserts strictly more than the old pair did: the absence is tolerated,
+# the right service is the one that went off, the other stays on, and — for the gateway —
+# the `local` harness disappears from the registry, which is the behaviour an operator
+# actually observes. Blank and whitespace-only still mean off (above), and a half-configured
+# service still refuses (below): neither was weakened.
 
 
-def test_deleted_litellm_base_url_raises_naming_field(
+def test_deleted_litellm_base_url_disables_the_gateway_and_still_starts(
     env: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("LITELLM_BASE_URL")
-    with pytest.raises(ValidationError) as excinfo:
-        Settings()
-    assert "litellm_base_url" in str(excinfo.value).lower()
+
+    settings = Settings()
+
+    assert settings.litellm_base_url == ""
+    assert settings.gateway_enabled is False
+    assert settings.tracing_enabled is True
+    assert "local" not in build_harnesses(settings, FakeProcessRunner())
 
 
-def test_deleted_langfuse_base_url_raises_naming_field(
+def test_deleted_langfuse_base_url_disables_tracing_and_still_starts(
     env: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("LANGFUSE_BASE_URL")
-    with pytest.raises(ValidationError) as excinfo:
-        Settings()
-    assert "langfuse_base_url" in str(excinfo.value).lower()
+
+    settings = Settings()
+
+    assert settings.langfuse_base_url == ""
+    assert settings.tracing_enabled is False
+    assert settings.gateway_enabled is True
+
+
+def test_a_deleted_gateway_url_is_the_same_as_a_blank_one(
+    env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The point of the revision, stated once: absent and blank are one behaviour now."""
+    monkeypatch.setenv("LITELLM_BASE_URL", "")
+    blank = Settings()
+    monkeypatch.delenv("LITELLM_BASE_URL")
+    absent = Settings()
+
+    assert absent.litellm_base_url == blank.litellm_base_url
+    assert absent.gateway_enabled == blank.gateway_enabled
 
 
 # ── half-config raises ValidationError naming both fields ─────────────────────

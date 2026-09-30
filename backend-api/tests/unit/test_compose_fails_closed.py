@@ -14,6 +14,13 @@ assertion holds on every release: this file names the variable, and no other.
 The list is read out of `docker-compose.yml` rather than written here, so a service added
 later is covered without anyone remembering to add it — which is how `test_compose.py`'s
 assertion went stale when story 1.6 added `web-client` and `backend-api` beside `postgres`.
+
+**The file is two-tier** (Operator decision 2026-09-20, two-tier configuration contract;
+reaffirmed 2026-09-30). `${VAR:?}` is now the *secret* tier's property — three names, and
+this module pins which three. Everything else is `${VAR:-default}`, whose default equals
+the committed contract's value, because a stack that refused to render over a port number
+nobody set is how the dev stack crash-looped on a stale `.env`. Nothing fails open: a bare
+`${VAR}` is still forbidden, and every reference is one form or the other.
 """
 
 from __future__ import annotations
@@ -42,6 +49,18 @@ REQUIRED = sorted(set(re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?", _DECLARATIONS)))
 #: passes it through to the container's shell — so a `$` before the `$` disqualifies a match.
 REFERENCED = sorted(set(re.findall(r"(?<!\$)\$\{([A-Z][A-Z0-9_]*)", _DECLARATIONS)))
 
+#: `${VAR:-default}` — the other tier, with the value compose falls back to.
+DEFAULTS: dict[str, str] = dict(
+    re.findall(r"(?<!\$)\$\{([A-Z][A-Z0-9_]*):-([^}]*)\}", _DECLARATIONS)
+)
+DEFAULTED = sorted(DEFAULTS)
+
+#: The whole of the secret tier. Named here, not derived: the point of the assertion is that
+#: adding a fourth `:?` — or dropping one of these three — is a visible edit to this line.
+STACK_SECRETS = frozenset(
+    {"ORCHESTRATOR_TOKEN", "ORCHESTRATOR_SESSION_SECRET", "POSTGRES_PASSWORD"}
+)
+
 
 def _contract_without(variable: str) -> str:
     """The committed contract, byte for byte, minus the one line that assigns `variable`.
@@ -69,9 +88,18 @@ def _config(env_file: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_the_file_requires_the_database_credentials() -> None:
-    """A guard on the parametrisation: an empty list would make every test below vacuous."""
-    assert {"POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"} <= set(REQUIRED)
+def test_the_required_set_is_exactly_the_stack_secrets() -> None:
+    """A guard on the parametrisation — an empty list would make every test below vacuous —
+    and, since the two-tier revision, the stronger statement the old version could not make.
+
+    It used to read `{POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB} <= REQUIRED`, which
+    named a subset and said nothing about the other seven `:?` references the file carried.
+    This names the set: `POSTGRES_USER` and `POSTGRES_DB` moved to the defaulted tier, and a
+    fourth required variable added later fails here rather than silently making a stale
+    `.env` refuse to render (Operator decision 2026-09-20, two-tier configuration contract;
+    reaffirmed 2026-09-30).
+    """
+    assert set(REQUIRED) == set(STACK_SECRETS)
 
 
 #: Interpolated bare, because absence is a defined value for it: `${VAR:?}` refuses an empty
@@ -83,14 +111,43 @@ UNGUARDED: frozenset[str] = frozenset({"ROOT_TEMPLATES"})
 def test_every_reference_is_guarded() -> None:
     """Also a guard: dropping a `:?` would quietly remove that variable from the cases below.
 
-    Read as "no variable is interpolated bare except the ones named above", so a service added
-    later cannot arrive with an unguarded reference and no test to say so.
+    Read as "every reference is one tier or the other", so a service added later cannot
+    arrive with a bare `${VAR}` — which interpolates to an empty string — and no test to say
+    so. Revised from "everything but ROOT_TEMPLATES is `:?`" under the Operator decision
+    2026-09-20, two-tier configuration contract; reaffirmed 2026-09-30, and strictly
+    stronger: the old form left the non-`:?` remainder unconstrained beyond its name, while
+    this one requires each of them to carry a default, whose value the next test pins.
     """
     assert REFERENCED, "nothing is interpolated — the parser is wrong"
-    assert set(REFERENCED) - set(REQUIRED) == set(UNGUARDED), sorted(
-        set(REFERENCED) - set(REQUIRED) - set(UNGUARDED)
+    assert set(REFERENCED) == set(REQUIRED) | set(DEFAULTED), sorted(
+        set(REFERENCED) ^ (set(REQUIRED) | set(DEFAULTED))
     )
-    assert set(REQUIRED) - set(REFERENCED) == set()
+    assert set(REQUIRED) & set(DEFAULTED) == set(), sorted(set(REQUIRED) & set(DEFAULTED))
+    assert set(UNGUARDED) <= set(DEFAULTED)
+
+
+def test_every_default_is_the_value_the_contract_declares() -> None:
+    """The drift guard the relaxed tier owes: compose's fallback and `.env.example` are two
+    spellings of one fact, and a machine with no `.env` must get what the contract says it
+    would have got with one.
+
+    `UNGUARDED` is excluded because its default is deliberately empty — `ROOT_TEMPLATES=`
+    means "offer the application's own default list" (Operator instruction 2026-09-22), and
+    the test below asserts the contract still ships a value for it.
+    """
+    contract = {
+        line.partition("=")[0].strip(): line.partition("=")[2].split("  #")[0].strip().strip("'\"")
+        for line in ENV_EXAMPLE.read_text().splitlines()
+        if "=" in line and not line.lstrip().startswith("#")
+    }
+
+    checked = {name: value for name, value in DEFAULTS.items() if name not in UNGUARDED}
+    assert checked, "nothing carries a default — the parser is wrong"
+    for name, default in sorted(checked.items()):
+        assert name in contract, f"{name} has a compose default but no contract line"
+        assert default == contract[name], (
+            f"{name}: compose {default!r}, contract {contract[name]!r}"
+        )
 
 
 #: Both contracts carry the same bare reference, so both have to state the same fallback.

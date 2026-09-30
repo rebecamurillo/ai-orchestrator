@@ -11,11 +11,13 @@
 #   docker compose pull
 #   docker compose up -d --wait
 #
-# Everything the base stack asserts still holds here: every reference uses the
-# `${VAR:?...}` fail-closed form (hard rule 7), credentials stop at the process that needs
-# them (AD-5: backend-api gets the whole contract, web-client gets four variables, the
-# browser's origin never sees the git token or the spend key), and configuration is the
-# environment (AD-20).
+# Everything the base stack asserts still holds here: the contract is two-tier (Operator
+# decision 2026-09-20, two-tier configuration contract; reaffirmed 2026-09-30) — the three
+# stack secrets and IMAGE_TAG use the `${VAR:?...}` fail-closed form and everything else a
+# `${VAR:-default}` equal to `.env.example`'s value, never a bare `${VAR}` (hard rule 7) —
+# credentials stop at the process that needs them (AD-5: backend-api gets the whole
+# contract, web-client gets four variables, the browser's origin never sees the git token
+# or the spend key), and configuration is the environment (AD-20).
 #
 # What production changes, this file carries directly (the reasons are docker-compose.prod.yml's):
 # pulled images pinned by `IMAGE_TAG`, `.env` required, postgres probed with a real query
@@ -32,9 +34,9 @@ services:
   postgres:
     image: postgres:18
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?set it in .env, copied from .env.example}
+      POSTGRES_USER: ${POSTGRES_USER:-orchestrator}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env, copied from .env.example}
-      POSTGRES_DB: ${POSTGRES_DB:?set it in .env, copied from .env.example}
+      POSTGRES_DB: ${POSTGRES_DB:-orchestrator}
     volumes:
       # postgres:18 declares its volume at /var/lib/postgresql and sets
       # PGDATA=/var/lib/postgresql/18/docker — the pre-18 /var/lib/postgresql/data would
@@ -70,12 +72,12 @@ services:
       # LiteLLM, Langfuse and the model server run on the host, not in compose (AD-11)
       - "host.docker.internal:host-gateway"
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${BACKEND_API_PORT:?set it in .env, copied from .env.example}:${BACKEND_API_PORT:?set it in .env, copied from .env.example}"
+      - "${BIND_ADDRESS:-127.0.0.1}:${BACKEND_API_PORT:-8000}:${BACKEND_API_PORT:-8000}"
     volumes:
       # base clones, worktrees and step logs
-      - work:${WORK_DIR:?set it in .env, copied from .env.example}
+      - work:${WORK_DIR:-/work}
       # ~/.claude ~/.codex ~/.config/opencode: the harness configs and the BMAD skill stubs
-      - agent-home:${AGENT_HOME:?set it in .env, copied from .env.example}
+      - agent-home:${AGENT_HOME:-/home/agent}
     # not hardened, deliberately (Operator decision, 2026-09-11): this container is the
     # sandbox real agents run in, and a harness may `sudo apt-get` what a target
     # repository's install script needs. README.md § Trust says what that implies.
@@ -101,13 +103,13 @@ services:
       # exactly five (AD-5). Never GITHUB_TOKEN, never LITELLM_SPEND_KEY, never DATABASE_URL.
       ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN:?set it in .env, copied from .env.example}
       ORCHESTRATOR_SESSION_SECRET: ${ORCHESTRATOR_SESSION_SECRET:?set it in .env, copied from .env.example}
-      BACKEND_API_URL: ${BACKEND_API_URL:?set it in .env, copied from .env.example}
-      WEB_CLIENT_PORT: ${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}
+      BACKEND_API_URL: ${BACKEND_API_URL:-http://backend-api:8000}
+      WEB_CLIENT_PORT: ${WEB_CLIENT_PORT:-4321}
       # the one bare reference here: empty is a defined value for this variable, so there is
       # no misconfiguration for `:?` to catch
       ROOT_TEMPLATES: ${ROOT_TEMPLATES:-}
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}:${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}"
+      - "${BIND_ADDRESS:-127.0.0.1}:${WEB_CLIENT_PORT:-4321}:${WEB_CLIENT_PORT:-4321}"
     cap_drop:
       - ALL
     security_opt:
