@@ -203,6 +203,9 @@ services:
     volumes:
       # the committed configuration, unchanged: this stack runs what the README documents
       - ./litellm.config.yaml:/app/config.yaml:ro
+      # Gemini's service-account key. Unset, /dev/null is mounted and only the Gemini routes
+      # fail — the proxy still starts and serves every other model.
+      - ${VERTEX_CREDENTIALS_FILE:-/dev/null}:/app/vertex-sa.json:ro
     environment:
       DATABASE_URL: postgresql://${HOST_POSTGRES_USER}:${HOST_POSTGRES_PASSWORD}@postgres:5432/litellm
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set it in host/.env — run make host-up}
@@ -215,6 +218,7 @@ services:
       LANGFUSE_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-not-set}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-not-set}
+      VERTEX_PROJECT: ${VERTEX_PROJECT:-not-set}
       # oMLX is a host process; a container reaches it through the gateway, not localhost
       OMLX_BASE_URL: ${OMLX_BASE_URL:-http://host.docker.internal:8000/v1}
       OMLX_API_KEY: ${OMLX_API_KEY:-not-set}

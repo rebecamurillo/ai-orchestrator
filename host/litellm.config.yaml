@@ -23,12 +23,46 @@ model_list:
       model: openai/gpt-5.4
       api_key: os.environ/OPENAI_API_KEY
 
+  # ── hosted, on Google Vertex AI ───────────────────────────────────────────
+  # Coding route: gemini-3.8-flash. Research and planning route: gemini-3.1-pro.
+  #
+  # `vertex_credentials` is a path INSIDE the container: `docker-compose.yml` bind-mounts it
+  # read-only from VERTEX_CREDENTIALS_FILE. Unset, /dev/null is mounted and only these two
+  # routes fail.
+  #
+  # `vertex_location: global` is not a default to tidy away: Gemini 3.x is served only on the
+  # global endpoint, and a region here answers 404.
+  - model_name: gemini-3.8-flash
+    litellm_params:
+      model: vertex_ai/gemini-3.8-flash
+      vertex_project: os.environ/VERTEX_PROJECT
+      vertex_location: global
+      vertex_credentials: /app/vertex-sa.json
+
+  # `model_name` omits `-preview` on purpose, so the upstream id going GA is a route change
+  # rather than a rename — see the compatibility alias below for what a rename costs.
+  - model_name: gemini-3.1-pro
+    litellm_params:
+      model: vertex_ai/gemini-3.1-pro-preview
+      vertex_project: os.environ/VERTEX_PROJECT
+      vertex_location: global
+      vertex_credentials: /app/vertex-sa.json
+
   # ── hosted, on the operator's own Claude subscription ─────────────────────
   # Uncomment together with `forward_client_headers_to_llm_api` below to spend a Claude Max
   # or Pro subscription instead of an API key. No `api_key` here on purpose: the credential
   # is the OAuth token Claude Code puts in `Authorization`, forwarded by that switch. Pair
   # it with CLAUDE_SUBSCRIPTION_AUTH=true in the stack's .env — see host/README.md.
   - model_name: claude-sonnet-5
+    litellm_params:
+      model: anthropic/claude-sonnet-5
+
+  # Compatibility alias for Runs planned before the model_list was renamed. A Run resolves
+  # `model` at PLAN time into every agent row's `with_resolved` (AD-7: a row is a complete
+  # instruction), so an in-flight Run keeps asking for the name it was created with and 400s
+  # if the gateway stops serving it. Points at claude-sonnet-5; retarget or delete once no
+  # in-flight Run names it.
+  - model_name: claude-subscription
     litellm_params:
       model: anthropic/claude-sonnet-5
   - model_name: claude-opus-5

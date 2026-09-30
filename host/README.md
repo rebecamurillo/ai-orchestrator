@@ -207,6 +207,61 @@ Claude Code additionally asks for **its own default model** when the Template bi
 `Invalid model name passed in model=claude-opus-5` even when the upstream key is good. Either
 add that name to `model_list` or bind a model on the Run.
 
+### Gemini on Vertex AI (`gemini-3.8-flash`, `gemini-3.1-pro`)
+
+Vertex is the one provider here that does not authenticate with an API key, so it is the one
+whose two variables are not interchangeable with the block above:
+
+| Variable | What it is |
+| --- | --- |
+| `VERTEX_PROJECT` | the GCP project the calls bill to — not a credential |
+| `VERTEX_CREDENTIALS_FILE` | the path **on this machine** to a service-account JSON key |
+
+`docker-compose.yml` bind-mounts that file read-only at `/app/vertex-sa.json`, which is the
+path `litellm.config.yaml` names as `vertex_credentials`. The key is never copied into the
+repository and never appears in a committed file. Left blank, `/dev/null` is mounted instead:
+the two Gemini routes fail at the first completion and every other model is unaffected, which
+is the same posture as a `not-set` provider key.
+
+The service account needs the **Vertex AI User** role (`roles/aiplatform.user`) on that
+project, and the project needs the Vertex AI API enabled.
+
+`/app/vertex-sa.json` is a container path, so the bare-process invocation at the top of this
+section is the one case it does not resolve: running `litellm --config …` on the host directly
+needs either that path to exist on the host or `vertex_credentials` pointed at the real one.
+Every other provider in the file is an `os.environ/NAME` and works identically both ways.
+
+Two things about the routes are not adjustable:
+
+- **`vertex_location: global`.** Gemini 3.x is served only on the global endpoint; naming a
+  region there answers 404. The resolved upstream is
+  `global-aiplatform.googleapis.com/v1/projects/<project>/locations/global/publishers/google/models/<model>`.
+- **`model_name: gemini-3.1-pro` points at `gemini-3.1-pro-preview`.** The alias is stable so a
+  Run outlives the upstream id going GA — a Run resolves `model` at plan time, so retarget the
+  route rather than renaming it (the compatibility-alias note in `litellm.config.yaml` is what
+  a rename costs).
+
+Which to name for what: `gemini-3.8-flash` is the coding route — long-horizon agentic editing,
+and the cheaper of the two; `gemini-3.1-pro` is the research and planning route — deeper
+reasoning over a large context, for analysis, planning and review steps rather than for editing
+files. LiteLLM 1.99.0 prices both natively, so spend rows carry a real cost. Do not add a
+`model_info` override: it would freeze `gemini-3.8-flash`'s introductory rate past 2026-12-31.
+
+#### Verified 2026-09-30
+
+Against a throwaway proxy on port 4001, with the service account above. Both models answered on
+all three wire formats, which is what makes them nameable by every harness rather than only by
+`local`, and tool calling returned a real `tool_calls` entry on both:
+
+| Route | Harness that speaks it | Result |
+| --- | --- | --- |
+| `/v1/chat/completions` | `local` (OpenCode) | 200, and `x-litellm-response-cost` non-zero |
+| `/v1/responses` | `codex` | 200, `status: completed` |
+| `/v1/messages` | `claude` | 200 |
+
+`use_chat_completions_api: true` is absent because the `/v1/responses` bridge works without it
+for this provider — unlike the oMLX routes, which need it.
+
 ### Or authenticate on a Claude subscription instead (`CLAUDE_SUBSCRIPTION_AUTH`)
 
 The section above needs a provider API key. If you have a Claude Max or Pro subscription and
