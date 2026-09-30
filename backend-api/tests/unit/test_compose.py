@@ -39,6 +39,18 @@ SERVICE = "postgres"
 DATA_VOLUME = "pgdata:/var/lib/postgresql"
 DATABASE_VARIABLES = ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB")
 
+#: The database credential that is a *secret*, and so still fails closed. Split out from
+#: `DATABASE_VARIABLES` under the Operator decision 2026-09-20, two-tier configuration
+#: contract; reaffirmed 2026-09-30: the user and the database *name* are not secrets, and a
+#: stack that refused to render because nobody spelled `POSTGRES_USER=orchestrator` is the
+#: crash-loop that decision removes.
+DATABASE_SECRETS = ("POSTGRES_PASSWORD",)
+
+#: The two that moved to the defaulted tier, with the fallback each must carry. Asserted with
+#: its value, not merely as "has a default": a default that disagreed with `.env.example`
+#: would create a database this stack's own contract could not connect to.
+DATABASE_DEFAULTED = (("POSTGRES_USER", "orchestrator"), ("POSTGRES_DB", "orchestrator"))
+
 
 @pytest.fixture(scope="module")
 def compose_text() -> str:
@@ -128,12 +140,29 @@ def test_the_database_settings_are_interpolated_from_the_env(
     assert f"${{{variable}" in compose_text
 
 
-@pytest.mark.parametrize("variable", DATABASE_VARIABLES)
-def test_an_unset_variable_refuses_rather_than_interpolating_to_nothing(
+@pytest.mark.parametrize("variable", DATABASE_SECRETS)
+def test_an_unset_credential_refuses_rather_than_interpolating_to_nothing(
     compose_text: str, variable: str
 ) -> None:
-    """Bare `${VAR}` is an empty string when unset, and postgres starts misconfigured."""
+    """Bare `${VAR}` is an empty string when unset, and postgres starts misconfigured.
+
+    Revised under the Operator decision 2026-09-20, two-tier configuration contract;
+    reaffirmed 2026-09-30: this used to run over all three database variables. The two that
+    left are not weaker for it — they are asserted below with the *value* of the default
+    they must now carry, which is more than "it has a `:?`" ever said, and
+    `test_compose_fails_closed.py` pins the whole `:?` set by enumeration.
+    """
     assert f"${{{variable}:?" in compose_text, f"{variable} must use the ${{VAR:?...}} form"
+
+
+@pytest.mark.parametrize(("variable", "default"), DATABASE_DEFAULTED)
+def test_a_non_secret_database_setting_defaults_to_the_contract_value(
+    compose_text: str, variable: str, default: str
+) -> None:
+    """Still never bare: `${VAR:-orchestrator}` renders the same stack a filled-in `.env`
+    would, so a machine with no `.env` gets the documented database rather than none."""
+    assert f"${{{variable}:-{default}}}" in compose_text, variable
+    assert parse_env_example(ENV_EXAMPLE)[variable] == default
 
 
 def test_every_variable_the_file_reads_is_in_the_contract(compose_text: str) -> None:

@@ -54,6 +54,19 @@ WEB_CLIENT_VARIABLES = {
 #: Given to the web-client too, but interpolated bare.
 WEB_CLIENT_OPTIONAL = {"ROOT_TEMPLATES"}
 
+#: The two of the four that are credentials, and so still fail closed. Split out under the
+#: Operator decision 2026-09-20, two-tier configuration contract; reaffirmed 2026-09-30.
+WEB_CLIENT_SECRETS = {"ORCHESTRATOR_TOKEN", "ORCHESTRATOR_SESSION_SECRET"}
+
+#: The other two: an address and a port, neither a secret, each with the contract's value as
+#: its compose fallback. Asserted with the value, which is stronger than the `:?` they used
+#: to carry — a default that disagreed with `.env.example` would point the web-client at a
+#: backend that is not there.
+WEB_CLIENT_DEFAULTED = {
+    "BACKEND_API_URL": "http://backend-api:8000",
+    "WEB_CLIENT_PORT": "4321",
+}
+
 #: Named volumes the stack declares.
 VOLUMES = ("pgdata", "work", "agent-home")
 
@@ -136,10 +149,31 @@ def test_the_web_client_receives_exactly_the_variables_it_needs() -> None:
     )
 
 
-@pytest.mark.parametrize("variable", sorted(WEB_CLIENT_VARIABLES))
-def test_each_web_client_variable_fails_closed(variable: str) -> None:
-    """Bare `${VAR}` is an empty string when unset, and the server would start unauthenticated."""
+def test_the_split_of_the_four_is_exhaustive() -> None:
+    """A guard on the two parametrisations below: between them they still cover all four."""
+    assert WEB_CLIENT_SECRETS | set(WEB_CLIENT_DEFAULTED) == WEB_CLIENT_VARIABLES
+    assert not (WEB_CLIENT_SECRETS & set(WEB_CLIENT_DEFAULTED))
+
+
+@pytest.mark.parametrize("variable", sorted(WEB_CLIENT_SECRETS))
+def test_each_web_client_credential_fails_closed(variable: str) -> None:
+    """Bare `${VAR}` is an empty string when unset, and the server would start unauthenticated.
+
+    Revised under the Operator decision 2026-09-20, two-tier configuration contract;
+    reaffirmed 2026-09-30: this ran over all four. The two that left are covered by the case
+    below, which asserts the *value* of the default they now carry — more than the `:?` form
+    said — and the guard above keeps the pair exhaustive.
+    """
     assert f"${{{variable}:?" in service("web-client"), variable
+
+
+@pytest.mark.parametrize(("variable", "default"), sorted(WEB_CLIENT_DEFAULTED.items()))
+def test_each_non_secret_web_client_variable_defaults_to_the_contract_value(
+    variable: str, default: str
+) -> None:
+    """Never bare, and never a second opinion about where the backend lives."""
+    assert f"${{{variable}:-{default}}}" in service("web-client"), variable
+    assert parse_env_example(ENV_EXAMPLE)[variable] == default
 
 
 def test_the_optional_set_is_the_one_variable_it_was_opened_for() -> None:

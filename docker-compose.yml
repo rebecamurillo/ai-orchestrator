@@ -7,9 +7,15 @@
 # Configuration is the environment (AD-20): every value below comes from `.env`, which is
 # a copy of the committed `.env.example` contract. No credential is written into this file.
 #
-# Every reference uses the `${VAR:?...}` form. Bare `${VAR}` interpolates to an empty
-# string when the variable is unset, and a service would start misconfigured rather than
-# refusing — a gate that fails open (hard rule 7).
+# The contract is two-tier (Operator decision 2026-09-20, two-tier configuration contract;
+# reaffirmed 2026-09-30). Fail-closed is the *secret* tier's property: ORCHESTRATOR_TOKEN,
+# ORCHESTRATOR_SESSION_SECRET and POSTGRES_PASSWORD use `${VAR:?...}` and the project
+# refuses to render without them. Everything else uses `${VAR:-default}`, whose fallback is
+# the value `.env.example` documents, so this stack comes up on a `.env` holding three
+# lines. Bare `${VAR}` is still forbidden either way: it interpolates to an empty string
+# when unset, and a service would start misconfigured rather than refusing (hard rule 7).
+# `backend-api/tests/unit/test_compose_fails_closed.py` pins both halves — the `:?` set by
+# enumeration, and every `:-` default against the contract's value.
 #
 # Credentials stop at the process that needs them (AD-5): `backend-api` is handed the whole
 # contract through `env_file`, and `web-client` is handed four named variables. Nothing
@@ -23,9 +29,9 @@ services:
   postgres:
     image: postgres:18
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?set it in .env, copied from .env.example}
+      POSTGRES_USER: ${POSTGRES_USER:-orchestrator}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env, copied from .env.example}
-      POSTGRES_DB: ${POSTGRES_DB:?set it in .env, copied from .env.example}
+      POSTGRES_DB: ${POSTGRES_DB:-orchestrator}
     ports:
       # loopback only: the database is reached from the compose network and from this
       # machine's own tooling, never from another host
@@ -61,12 +67,12 @@ services:
     ports:
       # loopback only: the API is reached from the compose network and from this machine's
       # own tooling (`make e2e-api`, `curl`), never from another host
-      - "127.0.0.1:${BACKEND_API_PORT:?set it in .env, copied from .env.example}:${BACKEND_API_PORT:?set it in .env, copied from .env.example}"
+      - "127.0.0.1:${BACKEND_API_PORT:-8000}:${BACKEND_API_PORT:-8000}"
     volumes:
       # base clones, worktrees and step logs
-      - work:${WORK_DIR:?set it in .env, copied from .env.example}
+      - work:${WORK_DIR:-/work}
       # ~/.claude ~/.codex ~/.config/opencode: the harness configs and the BMAD skill stubs
-      - agent-home:${AGENT_HOME:?set it in .env, copied from .env.example}
+      - agent-home:${AGENT_HOME:-/home/agent}
     # DISABLED to allow container to install apt packages in a target repository's worktree
     # cap_drop:
     #   - ALL
@@ -96,15 +102,15 @@ services:
       # exactly five (AD-5). Never GITHUB_TOKEN, never LITELLM_SPEND_KEY, never DATABASE_URL.
       ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN:?set it in .env, copied from .env.example}
       ORCHESTRATOR_SESSION_SECRET: ${ORCHESTRATOR_SESSION_SECRET:?set it in .env, copied from .env.example}
-      BACKEND_API_URL: ${BACKEND_API_URL:?set it in .env, copied from .env.example}
-      WEB_CLIENT_PORT: ${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}
+      BACKEND_API_URL: ${BACKEND_API_URL:-http://backend-api:8000}
+      WEB_CLIENT_PORT: ${WEB_CLIENT_PORT:-4321}
       # the one bare reference here: empty is a defined value for this variable, so there is
       # no misconfiguration for `:?` to catch
       ROOT_TEMPLATES: ${ROOT_TEMPLATES:-}
     ports:
       # loopback only: one operator at one machine (PRD §12); reaching it from elsewhere is
       # a host concern, the same posture NFR-4 takes for egress
-      - "127.0.0.1:${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}:${WEB_CLIENT_PORT:?set it in .env, copied from .env.example}"
+      - "127.0.0.1:${WEB_CLIENT_PORT:-4321}:${WEB_CLIENT_PORT:-4321}"
     cap_drop:
       - ALL
     security_opt:

@@ -35,7 +35,9 @@ import pytest
 from tests.unit.conftest import REPO_ROOT, parse_env_example
 from tests.unit.test_compose import _block, _names
 from tests.unit.test_compose_services import (
+    WEB_CLIENT_DEFAULTED,
     WEB_CLIENT_OPTIONAL,
+    WEB_CLIENT_SECRETS,
     WEB_CLIENT_VARIABLES,
     mapping_keys,
 )
@@ -143,6 +145,72 @@ def test_postgres_publishes_no_port() -> None:
 @pytest.mark.parametrize("name", APP_SERVICES)
 def test_the_application_port_binds_the_bind_address_defaulting_to_loopback(name: str) -> None:
     assert '- "${BIND_ADDRESS:-127.0.0.1}:' in service(name), name
+
+
+# ── the two tiers, the same split the base stack takes ───────────────────────
+#
+# Operator decision 2026-09-20, two-tier configuration contract; reaffirmed 2026-09-30:
+# `${VAR:?}` is the secret tier's property. A consumer stack that refused to render because
+# nobody spelled `WORK_DIR=/work` is the crash-loop that decision removes; a consumer stack
+# that came up with a blank `ORCHESTRATOR_TOKEN` is the one it must not create. `IMAGE_TAG`
+# is required here and nowhere else: this file is the one that pulls rather than builds.
+
+_DECLARATIONS = "\n".join(
+    line for line in DEPLOY_COMPOSE.read_text().splitlines() if not line.strip().startswith("#")
+)
+REQUIRED = sorted(set(re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?", _DECLARATIONS)))
+REFERENCED = sorted(set(re.findall(r"(?<!\$)\$\{([A-Z][A-Z0-9_]*)", _DECLARATIONS)))
+DEFAULTS: dict[str, str] = dict(
+    re.findall(r"(?<!\$)\$\{([A-Z][A-Z0-9_]*):-([^}]*)\}", _DECLARATIONS)
+)
+
+#: The base stack's three secrets, plus the release tag this file exists to pin.
+DEPLOY_REQUIRED = frozenset(
+    {"ORCHESTRATOR_TOKEN", "ORCHESTRATOR_SESSION_SECRET", "POSTGRES_PASSWORD", "IMAGE_TAG"}
+)
+
+#: `${ROOT_TEMPLATES:-}` is deliberately empty — the web-client's own default list.
+EMPTY_DEFAULT = frozenset({"ROOT_TEMPLATES"})
+
+
+def test_the_required_set_is_exactly_the_stack_secrets_and_the_image_tag() -> None:
+    assert set(REQUIRED) == set(DEPLOY_REQUIRED)
+
+
+def test_every_reference_is_one_tier_or_the_other() -> None:
+    """A bare `${VAR}` interpolates to an empty string and the stack would start misconfigured."""
+    assert REFERENCED, "nothing is interpolated — the parser is wrong"
+    assert set(REFERENCED) == set(REQUIRED) | set(DEFAULTS), sorted(
+        set(REFERENCED) ^ (set(REQUIRED) | set(DEFAULTS))
+    )
+    assert set(REQUIRED) & set(DEFAULTS) == set()
+
+
+def test_every_default_is_the_value_the_consumer_contract_declares() -> None:
+    """A consumer with a minimal `.env` must get the stack `deploy/.env.example` describes."""
+    contract = parse_env_example(DEPLOY_ENV_EXAMPLE)
+    checked = {name: value for name, value in DEFAULTS.items() if name not in EMPTY_DEFAULT}
+
+    assert checked, "nothing carries a default — the parser is wrong"
+    for name, default in sorted(checked.items()):
+        assert name in contract, f"{name} has a compose default but no contract line"
+        assert default == contract[name], (
+            f"{name}: compose {default!r}, contract {contract[name]!r}"
+        )
+
+
+@pytest.mark.parametrize("variable", sorted(WEB_CLIENT_SECRETS))
+def test_each_web_client_credential_fails_closed(variable: str) -> None:
+    assert f"${{{variable}:?" in service("web-client"), variable
+
+
+@pytest.mark.parametrize("variable", sorted(WEB_CLIENT_DEFAULTED))
+def test_each_non_secret_web_client_variable_defaults_to_the_consumer_contract_value(
+    variable: str,
+) -> None:
+    default = parse_env_example(DEPLOY_ENV_EXAMPLE)[variable]
+
+    assert f"${{{variable}:-{default}}}" in service("web-client"), variable
 
 
 # ── the production posture, carried directly ─────────────────────────────────
