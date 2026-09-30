@@ -44,6 +44,15 @@ one that would actually be reached for by accident is the database: **the produc
 keeps 5432, and this stack's own postgres is published on 5433.** They are separate servers
 with separate volumes — the orchestrator's schema is never in the same database as Langfuse's.
 
+**The compose project name is the one thing two copies of this directory share.** The file
+declares `name: ai-orchestrator-host`, so `docker compose up` from *any* copy of it — a release
+bundle extracted on this machine, a second checkout — addresses the same containers and
+volumes, and recreates them with that copy's `host/.env`. That happened on 2026-09-30 during a
+dry run of the client bundle (hard rule 9). `deploy/install.sh` therefore runs this stack as
+`<COMPOSE_PROJECT_NAME>-host` (`aio-host`) with `--project-name`; anything else that drives this
+file from outside the checkout must pass its own `-p` too, and never run `up` against a
+project it did not create.
+
 `backend-api/tests/unit/test_host_compose.py` resolves the published ports out of both compose
 files and fails if any host-side port appears in both, so adding a port to either file is
 checked against the other rather than against a list someone has to remember to update.

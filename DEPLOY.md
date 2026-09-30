@@ -261,6 +261,34 @@ different people at different times, and the host decides when.
 
 ---
 
+### 4.1 Shipping a pre-release to a client, by hand
+
+The checklist for a build a client tests before there is a tag (first done for `1.0.0-beta`,
+2026-09-30). Every step reads the version from `VERSION`; nothing is typed twice.
+
+1. `VERSION` holds the version (`1.0.0-beta`); `make lint` and `make test` are green.
+2. `printf '%s' "$TOKEN" | docker login ghcr.io -u <github-user> --password-stdin` — a
+   classic PAT with `write:packages`, held by the docker daemon only. Never paste a token
+   into a file, a commit, or a chat; one that has been pasted is revoked and re-minted.
+3. `make push` — `scripts/push-images.sh` builds `linux/amd64` + `linux/arm64` with buildx
+   (the foreign architecture under emulation; both images in ~3 min from a warm cache) and
+   pushes `:<VERSION>` and `:sha-<commit>`. It refuses early when the registry denies access.
+   The first push creates both packages under `OptimAI-labs`, private.
+4. Grant the client's GitHub user Read on both packages (§1), or they pull `denied`.
+5. `make bundle` — `dist/ai-orchestrator-deploy-<VERSION>.tar.gz`, built from `git ls-files`
+   so no filled `.env` travels. Send it, or point the client at `deploy/get.sh` once a
+   GitHub Release exists.
+6. The client: extract, `./install.sh`, a token with `read:packages` (and `repo` if it is
+   also the orchestrator's git credential). `deploy/README.md` is their side.
+
+What a future edit must keep true: the image tag is `VERSION`'s content everywhere
+(`make push`, `make bundle`, `release.yml`'s `verify` output, the bundle's own `VERSION`
+file); deploy-only variables (`IMAGE_TAG`, `COMPOSE_PROJECT_NAME`, `BIND_ADDRESS`) live in
+`deploy/.env.example` alone; `install.sh` stays bash 3.2 with no Python, because the client
+machine has neither `make` nor this checkout; and it is never run against real Docker on
+the operator's machine — `test_deploy_install.py`'s docker shim is how its control flow is
+proved (host/README.md says why).
+
 ## 5. Upgrading a running host
 
 ### 5.1 Decide whether this release needs a drain — before anything else
