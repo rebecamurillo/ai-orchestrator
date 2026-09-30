@@ -287,8 +287,9 @@ export interface paths {
         put?: never;
         /**
          * Initialise this Repository for the method
-         * @description Start a `repo-init@1` Run on `repository.default_branch`; the optional body names
-         *     the harness its `agent` rows dispatch, else `create_run`'s own default stands.
+         * @description Start a Run of the configured initialisation Template (`INIT_TEMPLATE`, latest stored
+         *     version) on `repository.default_branch`; the optional body names the harness its `agent`
+         *     rows dispatch, else `create_run`'s own default stands.
          */
         post: operations["init_api_v1_repositories__repository_id__init_post"];
         delete?: never;
@@ -911,9 +912,8 @@ export interface components {
          * CloneCheckOut
          * @description The summary of a Repository's last clone check. `pending` until one has run.
          *
-         *     Exactly four keys, and it stays that way. The lines a finished check ran, and the hint it
-         *     derives, are published beside this object as `clone_check_lines` and `clone_check_hint`,
-         *     and together as one object on the clone-check operations.
+         *     Exactly four keys, and it stays that way: the lines a finished check ran and the hint it
+         *     derives are published beside this object, as `clone_check_lines` and `clone_check_hint`.
          */
         CloneCheckOut: {
             /** At */
@@ -1621,9 +1621,8 @@ export interface components {
         };
         /**
          * ProjectRunOut
-         * @description One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the
-         *     record row's own fields, plus what a Repository row's `Initialise repository` control
-         *     reads about the Run it started.
+         * @description One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the record
+         *     row's own fields, plus what a Repository row's control reads about the Run it started.
          */
         ProjectRunOut: {
             /** Branch */
@@ -1639,6 +1638,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Is Init */
+            is_init: boolean;
             /** Reason */
             reason: string;
             /**
@@ -3309,7 +3310,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description The clone check has failed, or a repo-init Run is already running on this Repository. */
+            /** @description The clone check has failed, or an initialisation Run is already running on this Repository. */
             409: {
                 headers: {
                     [name: string]: unknown;

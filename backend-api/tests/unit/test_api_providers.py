@@ -22,7 +22,7 @@ from cryptography.fernet import Fernet
 from fastapi import Depends, FastAPI
 
 from orchestrator.api.errors import PROBLEM_MEDIA_TYPE, install_error_handlers
-from orchestrator.api.providers import CRYPTO, SESSION_FACTORY, project_ports
+from orchestrator.api.providers import CRYPTO, SESSION_FACTORY, SETTINGS, project_ports
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
@@ -64,12 +64,21 @@ class RecordingSessionFactory:
         return session
 
 
-def probe_app(*, session_factory: Any = None, crypto: Any = None) -> tuple[FastAPI, list[Any]]:
-    """A one-route application whose only job is to receive the ports and report them."""
+def probe_app(
+    *, session_factory: Any = None, crypto: Any = None, settings: Any = None
+) -> tuple[FastAPI, list[Any]]:
+    """A one-route application whose only job is to receive the ports and report them.
+
+    `settings` joined the wiring with `INIT_TEMPLATE` (Operator decision 2026-09-30: no
+    template name hardcoded in product code): `project_ports` reads which Template is a
+    Repository's own initialisation off it, so an application without it is one more
+    missing adapter — which is exactly what the "no adapters at all" tests below measure.
+    """
     app = FastAPI()
     install_error_handlers(app)
     setattr(app.state, SESSION_FACTORY, session_factory)
     setattr(app.state, CRYPTO, crypto)
+    setattr(app.state, SETTINGS, settings)
     captured: list[Any] = []
 
     @app.get("/probe")
@@ -100,15 +109,21 @@ def factory() -> RecordingSessionFactory:
     return RecordingSessionFactory()
 
 
+@pytest.fixture
+def settings(env: dict[str, str]) -> Settings:
+    """The committed contract, the way `test_api_providers_readiness.py` builds one."""
+    return Settings()
+
+
 # ── the ports a request receives ─────────────────────────────────────────────
 
 
 async def test_the_repository_sits_on_the_session_the_unit_of_work_opened(
-    factory: RecordingSessionFactory,
+    factory: RecordingSessionFactory, settings: Settings
 ) -> None:
     """A repository on any other session would write outside the caller's transaction."""
     crypto = FakeCrypto()
-    app, captured = probe_app(session_factory=factory, crypto=lambda: crypto)
+    app, captured = probe_app(session_factory=factory, crypto=lambda: crypto, settings=settings)
 
     response = await call(app, "/probe")
 
@@ -119,12 +134,16 @@ async def test_the_repository_sits_on_the_session_the_unit_of_work_opened(
 
 
 async def test_the_crypto_comes_from_the_factory_on_the_application_state(
-    factory: RecordingSessionFactory,
+    factory: RecordingSessionFactory, settings: Settings
 ) -> None:
     """The adapter is built on first use, so a placeholder key does not stop start-up."""
     crypto = FakeCrypto()
     built: list[int] = []
-    app, captured = probe_app(session_factory=factory, crypto=lambda: (built.append(1), crypto)[1])
+    app, captured = probe_app(
+        session_factory=factory,
+        crypto=lambda: (built.append(1), crypto)[1],
+        settings=settings,
+    )
 
     await call(app, "/probe")
 
@@ -132,18 +151,35 @@ async def test_the_crypto_comes_from_the_factory_on_the_application_state(
     assert built == [1]
 
 
-async def test_the_clock_is_the_wall_clock_adapter(factory: RecordingSessionFactory) -> None:
-    app, captured = probe_app(session_factory=factory, crypto=FakeCrypto)
+async def test_the_clock_is_the_wall_clock_adapter(
+    factory: RecordingSessionFactory, settings: Settings
+) -> None:
+    app, captured = probe_app(session_factory=factory, crypto=FakeCrypto, settings=settings)
 
     await call(app, "/probe")
 
     assert isinstance(captured[0].clock, SystemClock)
 
 
-async def test_a_request_that_never_commits_rolls_its_session_back(
-    factory: RecordingSessionFactory,
+async def test_the_configured_init_template_reaches_the_ports(
+    factory: RecordingSessionFactory, settings: Settings
 ) -> None:
-    app, _ = probe_app(session_factory=factory, crypto=FakeCrypto)
+    """Operator decision 2026-09-30: no template name hardcoded in product code. The
+    Projects screen reads `is_init` off the payload, and the only thing that can answer it
+    is `INIT_TEMPLATE` arriving here — the composition root is the one place `Settings` is
+    read (AD-2), so it is the one place that can prove the setting is threaded."""
+    app, captured = probe_app(session_factory=factory, crypto=FakeCrypto, settings=settings)
+
+    await call(app, "/probe")
+
+    assert captured[0].init_template == settings.init_template
+    assert captured[0].init_template != ""
+
+
+async def test_a_request_that_never_commits_rolls_its_session_back(
+    factory: RecordingSessionFactory, settings: Settings
+) -> None:
+    app, _ = probe_app(session_factory=factory, crypto=FakeCrypto, settings=settings)
 
     await call(app, "/probe")
 
@@ -151,17 +187,19 @@ async def test_a_request_that_never_commits_rolls_its_session_back(
 
 
 async def test_a_request_that_commits_keeps_its_work(
-    factory: RecordingSessionFactory,
+    factory: RecordingSessionFactory, settings: Settings
 ) -> None:
-    app, _ = probe_app(session_factory=factory, crypto=FakeCrypto)
+    app, _ = probe_app(session_factory=factory, crypto=FakeCrypto, settings=settings)
 
     await call(app, "/probe-commit")
 
     assert factory.sessions[0].calls == ["commit", "close"]
 
 
-async def test_a_failing_request_persists_nothing(factory: RecordingSessionFactory) -> None:
-    app, _ = probe_app(session_factory=factory, crypto=FakeCrypto)
+async def test_a_failing_request_persists_nothing(
+    factory: RecordingSessionFactory, settings: Settings
+) -> None:
+    app, _ = probe_app(session_factory=factory, crypto=FakeCrypto, settings=settings)
 
     response = await call(app, "/probe-raises")
 
@@ -169,8 +207,10 @@ async def test_a_failing_request_persists_nothing(factory: RecordingSessionFacto
     assert factory.sessions[0].calls == ["rollback", "close"]
 
 
-async def test_each_request_gets_its_own_session(factory: RecordingSessionFactory) -> None:
-    app, _ = probe_app(session_factory=factory, crypto=FakeCrypto)
+async def test_each_request_gets_its_own_session(
+    factory: RecordingSessionFactory, settings: Settings
+) -> None:
+    app, _ = probe_app(session_factory=factory, crypto=FakeCrypto, settings=settings)
 
     await call(app, "/probe")
     await call(app, "/probe")

@@ -32,13 +32,12 @@ from orchestrator.api.errors import (
     PROBLEM_SCHEMA_REF,
     ProblemDetail,
 )
-from orchestrator.api.providers import create_run_ports, project_ports
+from orchestrator.api.providers import init_repository_ports, project_ports
 from orchestrator.api.schemas.projects import RepositoryOut
 from orchestrator.api.schemas.runs import CreateRunOut, RepoInitIn
 from orchestrator.application.use_cases import projects as project_use_cases
-from orchestrator.application.use_cases.create_run import CreateRunPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
-from orchestrator.application.use_cases.repositories import init_repository
+from orchestrator.application.use_cases.repositories import InitRepositoryPorts, init_repository
 
 router = APIRouter(tags=["repositories"])
 
@@ -57,7 +56,7 @@ def _refusal(description: str) -> dict[str, object]:
 
 NOT_FOUND_RESPONSE = _refusal("No Repository has that id.")
 CONFLICT_RESPONSE = _refusal(
-    "The clone check has failed, or a repo-init Run is already running on this Repository."
+    "The clone check has failed, or an initialisation Run is already running on this Repository."
 )
 VALIDATION_RESPONSE = _refusal("The request broke a rule; `errors[]` names it and the reason.")
 
@@ -68,7 +67,7 @@ POST_REFUSALS = {
 }
 GET_REFUSALS = {404: NOT_FOUND_RESPONSE, HTTP_UNPROCESSABLE_CONTENT: VALIDATION_RESPONSE}
 
-CreatePorts = Annotated[CreateRunPorts, Depends(create_run_ports)]
+CreatePorts = Annotated[InitRepositoryPorts, Depends(init_repository_ports)]
 ReadPorts = Annotated[ProjectPorts, Depends(project_ports)]
 
 
@@ -80,8 +79,9 @@ ReadPorts = Annotated[ProjectPorts, Depends(project_ports)]
     responses=POST_REFUSALS,
 )
 def init(repository_id: UUID, ports: CreatePorts, body: RepoInitIn | None = None) -> CreateRunOut:
-    """Start a `repo-init@1` Run on `repository.default_branch`; the optional body names
-    the harness its `agent` rows dispatch, else `create_run`'s own default stands."""
+    """Start a Run of the configured initialisation Template (`INIT_TEMPLATE`, latest stored
+    version) on `repository.default_branch`; the optional body names the harness its `agent`
+    rows dispatch, else `create_run`'s own default stands."""
     harness = body.harness if body is not None else None
     return CreateRunOut.of(init_repository(ports, repository_id, harness))
 

@@ -67,9 +67,9 @@ PARENT_SEGMENT = ".."
 def _repo_relative(path: str) -> str:
     """A context path names a file inside the clone, and nothing above or outside it.
 
-    An absolute path escapes `/work/{slug}` entirely, `..` walks out of it a segment at a
-    time, and an empty entry names nothing at all — each is a path the agent step in Epic 4
-    could not resolve, so it is refused here where the Operator can still see the field.
+    An absolute path escapes `/work/{slug}`, `..` walks out of it a segment at a time, and an
+    empty entry names nothing — each is a path the agent step could not resolve, so it is
+    refused here where the Operator can still see the field.
     """
     stripped = path.strip()
     if not stripped:
@@ -128,9 +128,8 @@ class MaskedEnvVarOut(BaseModel):
 class CloneCheckOut(BaseModel):
     """The summary of a Repository's last clone check. `pending` until one has run.
 
-    Exactly four keys, and it stays that way. The lines a finished check ran, and the hint it
-    derives, are published beside this object as `clone_check_lines` and `clone_check_hint`,
-    and together as one object on the clone-check operations.
+    Exactly four keys, and it stays that way: the lines a finished check ran and the hint it
+    derives are published beside this object, as `clone_check_lines` and `clone_check_hint`.
     """
 
     status: CloneCheckStatus
@@ -190,15 +189,17 @@ class RepositoryOut(BaseModel):
 
 
 class ProjectRunOut(BaseModel):
-    """One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the
-    record row's own fields, plus what a Repository row's `Initialise repository` control
-    reads about the Run it started."""
+    """One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the record
+    row's own fields, plus what a Repository row's control reads about the Run it started."""
 
     id: UUID
     #: The UI status token `StatusToken.astro` renders (`QUE RUN BLK CHK DON ERR CAN`).
     token: str
-    #: `"repo-init@1"` — the Template name and the pinned version it ran.
+    #: `"{name}@{version}"` — the Template name and the pinned version it ran.
     template: str
+    #: Whether this is the Repository's own *Initialise repository* Run (`INIT_TEMPLATE`,
+    #: AD-20) — a fact, so no screen tests a Template's name for it.
+    is_init: bool
     branch: str
     repository_id: UUID
     #: The row the Operator would point at right now, or the last one this Run touched.
@@ -206,8 +207,8 @@ class ProjectRunOut(BaseModel):
     #: The sentence a `failed` or `cancelled` Run's row states beside its token; `""` for
     #: every Run whose reason a signal or an error row has not already given a home.
     reason: str
-    #: `run.compare_urls`, whole — a `repo-init` Run carries at most one, and the Repository
-    #: row's own `Initialise repository` control is what reads it (UX-DR12's `link`).
+    #: `run.compare_urls`, whole — an initialisation Run carries at most one, and the
+    #: Repository row's own control is what reads it (UX-DR12's `link`).
     compare_urls: list[str]
     created_at: UtcTimestamp
 
@@ -218,6 +219,7 @@ class ProjectRunOut(BaseModel):
             id=run.id,
             token=summary.token,
             template=f"{run.template_name}@{run.template_version}",
+            is_init=summary.is_init,
             branch=str(run.inputs.get("base_branch", "")),
             repository_id=run.repository_id,
             current_step_label=summary.current_step_label,
@@ -254,12 +256,11 @@ class ProjectRead(BaseModel):
     repositories: list[RepositoryOut]
     runs: list[ProjectRunOut]
     #: How many trajectories this Project has stored (SPEC CAP-6, UX-DR12) — the figure
-    #: *Export trajectories* shows beside itself on the Project screen. Nullable for the
-    #: same reason `builtin` is: a defaulted *non-nullable* field is still `required` in the
-    #: generated TypeScript (`openapi-typescript`'s own behaviour), and two frozen
-    #: web-client fixtures (`newwf-state.test.ts`, `newwf-fields.test.ts`) construct
-    #: `ProjectRead` object literals that predate this field. `.of()` always resolves a real
-    #: `int`; nothing this API serves is ever actually `null` here.
+    #: *Export trajectories* shows beside itself on the Project screen. Nullable for the same
+    #: reason `builtin` is: a defaulted *non-nullable* field is still `required` in the
+    #: generated TypeScript, and two frozen web-client fixtures (`newwf-state.test.ts`,
+    #: `newwf-fields.test.ts`) construct `ProjectRead` literals that predate this field.
+    #: `.of()` always resolves a real `int`; nothing this API serves is ever `null` here.
     trajectory_count: int | None = None
     #: This month's total run cost in USD, 2 d.p. (e.g. `"12.30"`).
     #: Nullable — same pattern as `trajectory_count`.
@@ -285,10 +286,8 @@ class ProjectRead(BaseModel):
         failed_recent_count: int = 0,
     ) -> ProjectRead:
         """Render the use case's masked read model plus its Repositories, Runs and metrics.
-
-        All list/count/spend parameters default to zero-valued for frozen fixture compatibility
-        (see `trajectory_count` field docstring for the pattern).
-        """
+        Every list/count/spend parameter defaults to a zero value for frozen-fixture
+        compatibility (see `trajectory_count`'s own comment for the pattern)."""
         return cls.model_validate(
             {
                 **view.model_dump(),

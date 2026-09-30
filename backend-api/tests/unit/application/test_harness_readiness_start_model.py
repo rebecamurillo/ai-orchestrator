@@ -24,7 +24,6 @@ from dataclasses import replace
 
 import pytest
 
-from orchestrator.application.use_cases import harness_readiness
 from orchestrator.application.use_cases.create_run import CreateRunResult
 from orchestrator.application.use_cases.harness_readiness import (
     DEFAULT_READINESS_MODELS,
@@ -38,14 +37,6 @@ from tests.unit.application.test_harness_readiness_start_unknown_name import uns
 
 #: What the shipped contract binds — the same three the setting suite pins.
 EXPECTED = {"claude": "claude-sonnet-4-6", "codex": "gpt-5.4", "local": "local-coder"}
-
-
-@pytest.fixture(autouse=True)
-def repo_init_shape(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Plan against `repo-init@1`, not the real `epic@1` — the sibling suite's own reason:
-    `create_run`'s planning is proven there, and this suite is about one bound input."""
-    monkeypatch.setattr(harness_readiness, "READINESS_TEMPLATE_NAME", "repo-init")
-    monkeypatch.setattr(harness_readiness, "READINESS_TEMPLATE_VERSION", 1)
 
 
 def _start(ports: HarnessReadinessPorts, world: World, name: str) -> CreateRunResult:

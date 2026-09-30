@@ -30,7 +30,7 @@ import type { Token } from '../../components/StatusToken.astro';
 import Shell from '../../layouts/Shell.astro';
 import { backend } from '../../api/server';
 import { trajectoryCountText } from '../../lib/projects/export';
-import { ageText, latestRepoInitRun } from '../../lib/projects/runs';
+import { ageText, latestInitRun } from '../../lib/projects/runs';
 
 export const prerender = false;
 
@@ -83,7 +83,7 @@ function repositoryRow(
   repository: components['schemas']['RepositoryOut'],
   runs: components['schemas']['ProjectRunOut'][],
 ): RepositoryRow {
-  const latest = latestRepoInitRun(runs, repository.id);
+  const latest = latestInitRun(runs, repository.id);
   const run: RepositoryRun | null = latest
     ? {
         id: latest.id,

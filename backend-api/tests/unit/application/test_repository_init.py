@@ -1,9 +1,15 @@
 """`init_repository` (SPEC CAP-10, FR-30): the Repository row's own action.
 
-Reuses `create_run`'s own Harness shape (`test_create_run_use_case.py`) and the
-shipped-Template fixtures the planner and pre-flight already build from, because this use
-case's whole job is composing `create_run` with two extra refusals — proving it plans and
-persists the real `repo-init@1` tree is `create_run`'s own test, not this one's.
+Reuses `create_run`'s own Harness shape (`test_create_run_use_case.py`) and the exemplar
+Template fixtures the planner and pre-flight already build from, because this use case's
+whole job is composing `create_run` with two extra refusals — proving it plans and persists
+a whole tree is `create_run`'s own test, not this one's.
+
+Which Template it starts is `InitRepositoryPorts.template_name`, the instance's
+`INIT_TEMPLATE` (AD-20) — the fixture repository's own `repo-init` exemplar here, named as
+test data and never read out of product code (Operator decision 2026-09-30: no template
+name hardcoded in product code). The version is not configured at all: `init_repository`
+resolves the *latest* stored version of that name at dispatch (AD-7, AD-15).
 """
 
 from __future__ import annotations
@@ -19,8 +25,7 @@ from orchestrator.application.use_cases.repositories import (
     ALREADY_RUNNING,
     CLONE_CHECK_FAILED,
     NO_BUDGET,
-    TEMPLATE_NAME,
-    TEMPLATE_VERSION,
+    InitRepositoryPorts,
     init_repository,
 )
 from orchestrator.domain.entities.project import Project
@@ -38,6 +43,12 @@ from tests.unit.fakes.runs import FakeRunRepository, FakeStepRunRepository
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
+
+#: The exemplar this suite configures the action with — fixture data, not a product name.
+TEMPLATE_NAME = "repo-init"
+#: The same exemplar text stored under a second name, so a test can prove the action
+#: dispatches whatever `INIT_TEMPLATE` says rather than a name written into the product.
+RENAMED_TEMPLATE = "house-init"
 
 
 def project() -> Project:
@@ -82,7 +93,7 @@ def a_run(**overrides: object) -> Run:
         "project_id": fixtures.PROJECT.id,
         "repository_id": fixtures.REPOSITORY.id,
         "template_name": TEMPLATE_NAME,
-        "template_version": TEMPLATE_VERSION,
+        "template_version": 1,
         "status": "running",
         "budget_usd": NO_BUDGET,
         "created_at": NOW,
@@ -94,11 +105,19 @@ def a_run(**overrides: object) -> Run:
 class Harness:
     """The same wiring `test_create_run_use_case.py::Harness` gives `create_run`."""
 
-    def __init__(self, *, repositories: list[Repository], existing: list[Run] | None = None):
+    def __init__(
+        self,
+        *,
+        repositories: list[Repository],
+        existing: list[Run] | None = None,
+        template_name: str = TEMPLATE_NAME,
+    ):
         self.runs = FakeRunRepository(existing or [])
         self.templates = FakeTemplateVersionRepository(
             list(fixtures.repository_of_versions().versions.values()), runs=self.runs
         )
+        stored = self.templates.versions[(TEMPLATE_NAME, 1)]
+        self.templates.add(stored.model_copy(update={"name": RENAMED_TEMPLATE}))
         self.steps = FakeStepRunRepository()
         self.engine = FakeWorkflowEngine()
         self.uow = FakeUnitOfWork()
@@ -114,12 +133,15 @@ class Harness:
             max_active_runs=2,
             work_dir=Path("/work"),
         )
-        self.ports = CreateRunPorts(
-            preflight=preflight,
-            engine=self.engine,
-            steps=self.steps,
-            uow=self.uow,
-            clock=self.clock,
+        self.ports = InitRepositoryPorts(
+            create_run=CreateRunPorts(
+                preflight=preflight,
+                engine=self.engine,
+                steps=self.steps,
+                uow=self.uow,
+                clock=self.clock,
+            ),
+            template_name=template_name,
         )
 
     def init(self, repository_id: object) -> object:
@@ -135,7 +157,8 @@ def test_a_missing_method_and_a_passing_clone_check_starts_repo_init() -> None:
     stored = harness.runs.get(result.run.id)
     assert stored is not None
     assert stored.template_name == TEMPLATE_NAME
-    assert stored.template_version == TEMPLATE_VERSION
+    # the latest stored version of the configured name, resolved at dispatch (AD-7, AD-15)
+    assert stored.template_version == max(harness.templates.list_versions(TEMPLATE_NAME))
     assert stored.budget_usd == NO_BUDGET
     assert stored.inputs["base_branch"] == fixtures.REPOSITORY.default_branch
     assert stored.inputs["harness"] is not None  # `create_run`'s own default, never asked for
@@ -195,3 +218,36 @@ def test_a_terminal_repo_init_run_does_not_block_a_second_one() -> None:
 
     assert result.run.id != done.id
     assert result.run.template_name == TEMPLATE_NAME
+
+
+# ── the Template is configuration, not a constant ─────────────────────────────────────────
+# Operator decision 2026-09-30: no template name hardcoded in product code. These three
+# replace the module constants `TEMPLATE_NAME`/`TEMPLATE_VERSION` the assertions above used
+# to import from the use case, and assert more than they did: the *configured* name is what
+# is dispatched and what the concurrency refusal is keyed on, and the version is resolved
+# off the store rather than pinned.
+
+
+def test_the_run_is_started_from_the_configured_template_whatever_it_is_called() -> None:
+    harness = Harness(repositories=[repository()], template_name=RENAMED_TEMPLATE)
+
+    result = harness.init(fixtures.REPOSITORY.id)
+
+    assert result.run.template_name == RENAMED_TEMPLATE
+
+
+def test_a_configured_template_nothing_stores_is_not_found() -> None:
+    harness = Harness(repositories=[repository()], template_name="no-such-template")
+
+    with pytest.raises(NotFound, match="no-such-template"):
+        harness.init(fixtures.REPOSITORY.id)
+
+
+def test_the_concurrency_refusal_follows_the_configured_name() -> None:
+    """A running Run of the *configured* Template refuses; one of the shipped default's
+    name, when that is not what is configured, does not."""
+    running = a_run(template_name="epic", status="running")
+    harness = Harness(repositories=[repository()], existing=[running], template_name="epic")
+
+    with pytest.raises(Conflict, match=ALREADY_RUNNING.format(run_id=running.id)):
+        harness.init(fixtures.REPOSITORY.id)

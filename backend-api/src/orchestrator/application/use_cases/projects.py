@@ -93,6 +93,10 @@ class ProjectPorts:
     #: reads these two, for the Project's **RUNS ON THIS PROJECT** list.
     runs: RunRepository | None = None
     steps: StepRunRepository | None = None
+    #: `Settings.init_template` (AD-20): which Template's Runs are a Repository's own
+    #: *Initialise repository* Run, so `embedded_runs` marks them and no screen tests a name
+    #: (Operator decision 2026-09-30). `""` outside the router path: nothing is marked.
+    init_template: str = ""
 
 
 @dataclass(frozen=True)

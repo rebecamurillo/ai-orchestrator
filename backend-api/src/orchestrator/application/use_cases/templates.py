@@ -159,10 +159,28 @@ def list_templates(ports: TemplatePorts) -> list[TemplateSummary]:
 
 def list_versions(ports: TemplatePorts, name: str) -> list[int]:
     """Every version number stored under `name`, ascending. Unknown to this store is 404."""
-    versions = ports.templates.list_versions(name)
+    return stored_versions(ports.templates, name)
+
+
+def stored_versions(templates: TemplateVersionRepository, name: str) -> list[int]:
+    """Every version stored under `name`, ascending; `NotFound` when nothing is stored."""
+    versions = templates.list_versions(name)
     if not versions:
         raise NotFound(f"no template named {name!r}")
     return versions
+
+
+def latest_version(templates: TemplateVersionRepository, name: str) -> int:
+    """The highest version stored under `name` — what dispatching *by name* resolves to.
+
+    AD-7/AD-15: a Run pins a version, but *which* version a configured name means is read
+    off the store at dispatch time rather than written into product code (Operator decision
+    2026-09-30: no template name hardcoded in product code — and no version beside it).
+    Takes the repository rather than a `TemplatePorts` so the two dispatchers that are not
+    Template use cases (`repositories.init_repository`, `harness_readiness.start`) can call
+    it with the port `create_run` already holds.
+    """
+    return max(stored_versions(templates, name))
 
 
 def get_version(ports: TemplatePorts, name: str, version: int) -> TemplateVersionDetail:
@@ -205,10 +223,7 @@ def graph_text(ports: TemplatePorts, yaml_text: str) -> Graph:
 
 def graph_latest(ports: TemplatePorts, name: str) -> Graph:
     """The latest stored version's shape. Unknown to this store is 404."""
-    versions = ports.templates.list_versions(name)
-    if not versions:
-        raise NotFound(f"no template named {name!r}")
-    return template_graph(ports, name, max(versions))
+    return template_graph(ports, name, latest_version(ports.templates, name))
 
 
 def validate_text(ports: TemplatePorts, yaml_text: str) -> ValidationResult:
@@ -218,11 +233,8 @@ def validate_text(ports: TemplatePorts, yaml_text: str) -> ValidationResult:
 
 def validate_latest(ports: TemplatePorts, name: str) -> ValidationResult:
     """The latest stored version's YAML, re-validated. Unknown to this store is 404."""
-    versions = ports.templates.list_versions(name)
-    if not versions:
-        raise NotFound(f"no template named {name!r}")
-    stored = ports.templates.get(name, max(versions))
-    assert stored is not None  # `max(versions)` came from `list_versions` on this same store
+    stored = ports.templates.get(name, latest_version(ports.templates, name))
+    assert stored is not None  # `latest_version` came from `list_versions` on this store
     return validate(stored.yaml, templates=ports.templates)
 
 

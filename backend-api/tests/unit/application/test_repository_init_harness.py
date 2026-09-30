@@ -1,5 +1,5 @@
-"""`init_repository`'s `harness` override (Operator decision, 2026-09-16): the shipped
-`repo-init` Template gained an `agent` row, and a stack that can only dispatch a seeded
+"""`init_repository`'s `harness` override (Operator decision, 2026-09-16): the exemplar
+initialisation Template gained an `agent` row, and a stack that can only dispatch a seeded
 test harness (ORCH_TEST_MODE) needs the init action to accept the name. The override is
 handed to `create_run` unchanged — including its pre-flight.
 
@@ -16,11 +16,14 @@ from pathlib import Path
 from orchestrator.application.dto import DEFAULT_HARNESS
 from orchestrator.application.use_cases.create_run import CreateRunPorts, CreateRunResult
 from orchestrator.application.use_cases.preflight import PreflightPorts
-from orchestrator.application.use_cases.repositories import init_repository
+from orchestrator.application.use_cases.repositories import (
+    InitRepositoryPorts,
+    init_repository,
+)
 from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.ports.harness import ProbeResult
 from tests.unit.application.templates import plan_fixtures as fixtures
-from tests.unit.application.test_repository_init import project, repository
+from tests.unit.application.test_repository_init import TEMPLATE_NAME, project, repository
 from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
 from tests.unit.fakes.engine import FakeWorkflowEngine
@@ -65,12 +68,15 @@ class World:
                 )
             },
         )
-        self.ports = CreateRunPorts(
-            preflight=preflight,
-            engine=FakeWorkflowEngine(),
-            steps=FakeStepRunRepository(),
-            uow=self.uow,
-            clock=FakeClock(NOW),
+        self.ports = InitRepositoryPorts(
+            create_run=CreateRunPorts(
+                preflight=preflight,
+                engine=FakeWorkflowEngine(),
+                steps=FakeStepRunRepository(),
+                uow=self.uow,
+                clock=FakeClock(NOW),
+            ),
+            template_name=TEMPLATE_NAME,
         )
 
     def init(self, harness: str | None) -> CreateRunResult:

@@ -92,3 +92,26 @@ async def test_the_budget_still_comes_from_the_same_settings_object(
 
     assert captured[0].budget_usd == settings.readiness_budget_usd
     assert isinstance(captured[0].budget_usd, Decimal)
+
+
+async def test_the_template_name_is_the_one_the_environment_names(settings: Settings) -> None:
+    """Operator decision 2026-09-30: no template name hardcoded in product code. `start` now
+    plans from `HarnessReadinessPorts.template_name`, so — exactly like `readiness_models`
+    above — the composition root is the only place that can prove `READINESS_TEMPLATE`
+    reaches it, and the probe runs on an environment naming something the shipped list does
+    not."""
+    app, captured = probe_app(Settings(readiness_template="house-epic"))
+
+    await call(app, "/probe")
+
+    assert captured[0].template_name == "house-epic"
+
+
+async def test_the_committed_template_name_reaches_start_through_the_same_wiring(
+    settings: Settings,
+) -> None:
+    app, captured = probe_app(settings)
+
+    await call(app, "/probe")
+
+    assert captured[0].template_name == settings.readiness_template

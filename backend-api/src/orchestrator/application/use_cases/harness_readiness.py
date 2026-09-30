@@ -28,6 +28,7 @@ from orchestrator.application.use_cases.create_run import (
     CreateRunResult,
     create_run,
 )
+from orchestrator.application.use_cases.templates import latest_version
 from orchestrator.domain.entities.harness import HARNESS_NAMES
 from orchestrator.domain.entities.project import READINESS_PROJECT_SLUG
 from orchestrator.domain.entities.repository import Repository
@@ -53,9 +54,6 @@ DEFAULT_READINESS_MODELS: Mapping[str, str] = MappingProxyType(
 
 #: The one Repository the readiness fixture lives in, under the `readiness` Project.
 READINESS_REPOSITORY_SLUG = "readiness-repo"
-#: The Template every readiness Run is planned from (the brief's own words: `epic@1`).
-READINESS_TEMPLATE_NAME = "epic"
-READINESS_TEMPLATE_VERSION = 1
 #: Where the fixture's kernel and its one story live, inside the readiness-repo clone.
 READINESS_SPEC_FOLDER = "specs/readiness"
 READINESS_BASE_BRANCH = "main"
@@ -80,6 +78,13 @@ class HarnessReadinessPorts:
     create_run: CreateRunPorts
     #: `Settings.readiness_budget_usd` (AD-20) — read once, by the composition root.
     budget_usd: Decimal
+    #: `Settings.readiness_template` (AD-20) — which stored Template a readiness Run is
+    #: planned from, read once by the composition root. A name, never `name@version`: the
+    #: latest stored version of it is resolved at dispatch (AD-7, AD-15). Configuration
+    #: rather than a constant, because which Template proves a harness is an instance's
+    #: choice and the shipped one is an exemplar (Operator decision 2026-09-30: no
+    #: template name hardcoded in product code).
+    template_name: str
     #: `Settings.readiness_models` (AD-20), harness name → the model that harness's
     #: readiness Run binds. Defaults to the committed contract so a port built without it
     #: still binds something real; see `DEFAULT_READINESS_MODELS`.
@@ -87,7 +92,8 @@ class HarnessReadinessPorts:
 
 
 def start(ports: HarnessReadinessPorts, name: str) -> CreateRunResult:
-    """Dispatch one `epic@1` readiness Run of `name` on the fixture Repository.
+    """Dispatch one readiness Run of `name`, on the fixture Repository, from the configured
+    Template at its latest stored version.
 
     `NotFound` (404) when `name` is not one of the three harnesses the image installs. That
     is checked first, and against `HARNESS_NAMES` rather than against the `harness` table:
@@ -129,8 +135,8 @@ def start(ports: HarnessReadinessPorts, name: str) -> CreateRunResult:
     today = ports.create_run.clock.now().date()
     branch = _free_branch(non_terminal, name, today)
     request = CreateRunRequest(
-        template_name=READINESS_TEMPLATE_NAME,
-        template_version=READINESS_TEMPLATE_VERSION,
+        template_name=ports.template_name,
+        template_version=latest_version(preflight.templates, ports.template_name),
         project_id=project.id,
         repository_id=repository.id,
         base_branch=READINESS_BASE_BRANCH,

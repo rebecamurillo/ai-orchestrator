@@ -1,9 +1,11 @@
 """`harness_readiness.start` (SPEC CAP-8): dispatch one readiness Run.
 
-The happy path monkeypatches `READINESS_TEMPLATE_NAME`/`_VERSION` to `repo-init@1` —
+The happy path configures `HarnessReadinessPorts.template_name` with the fixture
+repository's own `repo-init` exemplar (Operator decision 2026-09-30: no template name
+hardcoded in product code — the name is test data here, never read out of the product):
 `create_run`'s own planning of that Template is already thoroughly proven by
-`tests/unit/application/test_create_run_use_case.py`, and `repo-init` needs no list file
-at all (`plan_fixtures.repo_init_git`'s own docstring), so this suite can prove `start`'s
+`tests/unit/application/test_create_run_use_case.py`, and it needs no list file at all
+(`plan_fixtures.repo_init_git`'s own docstring), so this suite can prove `start`'s
 own wiring — which Project/Repository it resolves, the budget, `skip_harness_check`, the
 branch it computes, the 404/409 refusals — without re-proving `create_run`'s planning a
 second time over a heavier Template.
@@ -43,6 +45,9 @@ from tests.unit.fakes.runs import FakeRunRepository, FakeStepRunRepository
 NOW = datetime(2026, 3, 4, tzinfo=UTC)
 BUDGET = Decimal("5")
 TODAY = date(2026, 3, 4)
+
+#: The exemplar every test here configures readiness with — see the module docstring.
+TEMPLATE_NAME = "repo-init"
 
 
 def readiness_project() -> Project:
@@ -95,7 +100,11 @@ class World:
     """Fakes wired the way `api/providers.py::readiness_ports` wires them."""
 
     def __init__(
-        self, *, project: Project | None = None, existing_runs: list[Run] | None = None
+        self,
+        *,
+        project: Project | None = None,
+        existing_runs: list[Run] | None = None,
+        template_name: str = TEMPLATE_NAME,
     ) -> None:
         self.project = project if project is not None else readiness_project()
         self.repository = readiness_repository(self.project.id)
@@ -130,19 +139,12 @@ class World:
                 skip_harness_check=True,
             ),
             budget_usd=BUDGET,
+            template_name=template_name,
         )
 
     def start(self, name: str) -> object:
         with self.uow:
             return start(self.ports, name)
-
-
-@pytest.fixture(autouse=True)
-def repo_init_shape(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every test in this module plans against `repo-init@1`, not the real `epic@1` —
-    see the module docstring for why."""
-    monkeypatch.setattr(harness_readiness, "READINESS_TEMPLATE_NAME", "repo-init")
-    monkeypatch.setattr(harness_readiness, "READINESS_TEMPLATE_VERSION", 1)
 
 
 # ── the happy path ────────────────────────────────────────────────────────────────────────
@@ -302,3 +304,37 @@ def test_readiness_repository_answers_none_when_the_project_holds_no_such_slug()
     repositories = FakeRepositoryRepository([other])
 
     assert _readiness_repository(repositories, project_id) is None
+
+
+# ── the Template is configuration, not a constant ─────────────────────────────────────────
+# Operator decision 2026-09-30: no template name hardcoded in product code. These two
+# replace the `repo_init_shape` fixture that used to monkeypatch the module constants
+# `READINESS_TEMPLATE_NAME`/`_VERSION`, and assert more than it did: the *configured* name
+# is what the Run pins, and the version is resolved off the store rather than written down.
+
+
+def test_the_run_is_planned_from_the_configured_template() -> None:
+    world = World()
+
+    result = world.start("claude")
+
+    stored = world.runs.get(result.run.id)
+    assert stored is not None
+    assert stored.template_name == TEMPLATE_NAME
+
+
+def test_the_pinned_version_is_the_latest_stored_one() -> None:
+    world = World()
+
+    result = world.start("claude")
+
+    stored = world.runs.get(result.run.id)
+    assert stored is not None
+    assert stored.template_version == max(world.templates.list_versions(TEMPLATE_NAME))
+
+
+def test_a_configured_template_nothing_stores_is_not_found() -> None:
+    world = World(template_name="no-such-template")
+
+    with pytest.raises(NotFound, match="no-such-template"):
+        world.start("claude")

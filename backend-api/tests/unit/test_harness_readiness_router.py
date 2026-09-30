@@ -46,6 +46,12 @@ READINESS = "/api/v1/harnesses/claude/readiness"
 
 NOW = datetime(2026, 3, 4, tzinfo=UTC)
 
+#: The exemplar this suite configures readiness with — fixture data, not a product name
+#: (Operator decision 2026-09-30: no template name hardcoded in product code). It replaces
+#: the fixture that monkeypatched `harness_readiness.READINESS_TEMPLATE_NAME`/`_VERSION`,
+#: and asserts more: the *configured* name is what the dispatched Run carries.
+TEMPLATE_NAME = "repo-init"
+
 
 def project() -> Project:
     return Project(
@@ -125,6 +131,7 @@ class Api:
                 skip_harness_check=True,
             ),
             budget_usd=Decimal("5"),
+            template_name=TEMPLATE_NAME,
         )
         self.app: FastAPI = create_app(self.settings)
         self.app.dependency_overrides[readiness_ports] = self._ports
@@ -142,12 +149,6 @@ class Api:
         )
 
 
-@pytest.fixture(autouse=True)
-def repo_init_shape(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(harness_readiness, "READINESS_TEMPLATE_NAME", "repo-init")
-    monkeypatch.setattr(harness_readiness, "READINESS_TEMPLATE_VERSION", 1)
-
-
 @pytest.fixture
 def api(env: dict[str, str]) -> Api:
     return Api(env)
@@ -159,7 +160,11 @@ async def test_dispatches_a_run_and_answers_201_with_the_run_and_queue_note(api:
 
     assert response.status_code == HTTP_CREATED
     body = response.json()
-    assert UUID(body["run"]["id"]) in api.runs.runs
+    run_id = UUID(body["run"]["id"])
+    assert run_id in api.runs.runs
+    # the configured Template, at the latest version the store holds of it (AD-7, AD-15)
+    assert api.runs.runs[run_id].template_name == TEMPLATE_NAME
+    assert api.runs.runs[run_id].template_version == max(api.templates.list_versions(TEMPLATE_NAME))
     assert "starts_now" in body
     assert "waiting" in body
 
