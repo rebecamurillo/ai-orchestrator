@@ -193,37 +193,34 @@ jobs:
             "${image}:${{ needs.verify.outputs.tag }}-arm64"
           docker buildx imagetools inspect "${image}:${{ needs.verify.outputs.tag }}"
 
-  # The client bundle: everything a machine needs to run this release without cloning the
-  # repository — `deploy/` (install.sh, compose, env contract, procedure) at the root,
-  # `deploy/llm-platform/` (the optional LiteLLM/Langfuse stack), `deploy/kit/` (the agent-integration skill)
-  # and a `VERSION` file naming the tag so `install.sh` knows which images to pull.
-  # `scripts/bundle.sh` lays it out (`make bundle TAG=…` on a workstation is the same call).
-  # Attached to a GitHub Release under the same tag the images carry, so the bundle and the
-  # images can never name different commits. Tag pushes only: a `workflow_dispatch` from a
-  # branch has no release to attach to.
-  bundle:
+  # The release note, and no attached asset. Until 2026-09-30 this job also built
+  # `ai-orchestrator-deploy-<tag>.tar.gz` and uploaded it; the Operator retired that path
+  # (agent-delivery-kit plan §1 and §10) because the tarball is a second copy of files the
+  # image already carries, and two copies is drift a client meets as a version mismatch.
+  # The bootstrap now comes out of the image itself — `kit bootstrap | tar x` — so what a
+  # client extracts always matches what they are about to run. `scripts/bundle.sh`
+  # (`make bundle`) stays for the offline/procurement case and is sent by hand.
+  # Tag pushes only: a `workflow_dispatch` from a branch has no release to name.
+  release:
     if: github.ref_type == 'tag'
     needs: [verify, merge]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # create the release and upload its asset — nothing else from this job
+      # create the release — nothing else from this job
       contents: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Package and attach the deploy bundle
+      - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          scripts/bundle.sh "${{ needs.verify.outputs.tag }}" dist
-          bundle="dist/ai-orchestrator-deploy-${{ needs.verify.outputs.tag }}.tar.gz"
           if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
-            gh release upload "${{ github.ref_name }}" "$bundle" --clobber
-          else
-            gh release create "${{ github.ref_name }}" "$bundle" \
-              --verify-tag \
-              --title "${{ github.ref_name }}" \
-              --notes "Images: \`${IMAGE_NAMESPACE}/{backend-api,web-client}:${{ needs.verify.outputs.tag }}\` (linux/amd64, linux/arm64, private — a token with read:packages pulls them). Client install: extract the attached bundle and run \`./install.sh\`; the procedure is its \`README.md\`."
+            echo "release ${{ github.ref_name }} already exists — left alone"
+            exit 0
           fi
+          gh release create "${{ github.ref_name }}" \
+            --verify-tag \
+            --title "${{ github.ref_name }}" \
+            --notes "Images: \`${IMAGE_NAMESPACE}/{backend-api,web-client}:${{ needs.verify.outputs.tag }}\` (linux/amd64, linux/arm64, private — a token with read:packages pulls them). Server install, on a machine with docker and that token: \`docker run --rm ${IMAGE_NAMESPACE}/backend-api:${{ needs.verify.outputs.tag }} kit bootstrap | tar x\`, then \`cd ai-orchestrator && ./install.sh\`; the procedure is the extracted \`README.md\`. Plug a project repository into a running instance with \`curl -fsSL -H \"Authorization: Bearer \$ORCHESTRATOR_TOKEN\" \"\$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh\" | bash -s -- --harness claude\`."

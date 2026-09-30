@@ -10,12 +10,33 @@ Conventions: errors are RFC 9457 `application/problem+json` (`NotFound`→404,
 `Forbidden`→403, `Conflict`→409, `Invalid`→422); lists are `{items, next_cursor}`; ids
 are UUIDv7; times are ISO 8601 UTC with `Z`; money is a decimal string in USD.
 
-## Health and auth
+## Health, auth and version
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/healthz` | Liveness, no auth: `{status, version}` |
 | GET | `/api/v1/ping` | Proves the bearer token is accepted |
+| GET | `/api/v1/version` | `{app_version, kit_version, bmad_version, harness_versions{claude, codex, opencode}}` — the handshake |
+
+`app_version` is the image tag the instance runs; `kit_version` is the skills built into it
+(the two are one number per release). 404 means an instance older than the route.
+
+## The kit
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/v1/kit/install.sh` | The installer itself, `text/x-shellscript` — pipe it to `bash` |
+| GET | `/api/v1/kit/archive` | The whole kit as `.tar.gz`: `install.sh`, `manifest.json`, `skills/`, `.claude-plugin/` |
+
+Re-installing this skill into a project, from inside it:
+
+```bash
+curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \
+  "$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness claude
+```
+
+`--harness claude|codex|opencode|all` picks the directory the skills land in
+(`.claude/skills/` or `.agents/skills/`); the installer also writes `.orchestrator/kit.json`.
 
 ## Projects
 

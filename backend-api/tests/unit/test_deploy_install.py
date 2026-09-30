@@ -25,6 +25,14 @@ bash 3.2 because that is what a stock macOS ships.
 Layout revised under the Operator decision of 2026-09-30 (agent-delivery-kit plan §2): the
 client install is the one directory `deploy/`, with `llm-platform/` (was `host/`) and `kit/`
 (was `plugin/`) inside it, so the bundle is that directory and nothing is stitched.
+
+Delivery revised under the Operator decision of 2026-09-30 (agent-delivery-kit plan §1 and
+§10, "Retire get.sh and the release-asset job"): a release publishes the two images and a
+note, and no asset — a tarball is a second copy of files the image already carries, and the
+second copy is the version drift a client meets. The bootstrap comes out of the image
+(`kit bootstrap | tar x`), `deploy/get.sh` — which downloaded the retired asset — is gone,
+and `make bundle` stays for the offline case, sent by hand. What is pinned here is that
+absence, and that the release is still created.
 """
 
 from __future__ import annotations
@@ -39,13 +47,13 @@ import tarfile
 from pathlib import Path
 
 import pytest
+import yaml
 from cryptography.fernet import Fernet
 
 from tests.unit.conftest import REPO_ROOT, parse_env_example
 
 DEPLOY_DIR = REPO_ROOT / "deploy"
 INSTALL = DEPLOY_DIR / "install.sh"
-GET = DEPLOY_DIR / "get.sh"
 BUNDLE = REPO_ROOT / "scripts" / "bundle.sh"
 DEPLOY_ENV_EXAMPLE = DEPLOY_DIR / ".env.example"
 
@@ -96,7 +104,7 @@ def bundle_dir(tmp_path: Path) -> Path:
 
 
 @needs_bash
-@pytest.mark.parametrize("script", [INSTALL, GET, BUNDLE])
+@pytest.mark.parametrize("script", [INSTALL, BUNDLE])
 def test_the_script_parses_and_is_executable(script: Path) -> None:
     assert script.is_file(), f"{script} is missing"
     assert script.stat().st_mode & 0o111, f"{script.name} is not executable"
@@ -233,7 +241,6 @@ def test_the_bundle_carries_the_installer_and_no_secret(tmp_path: Path) -> None:
     root = "ai-orchestrator-deploy-v0.0.0/"
     for path in (
         "install.sh",
-        "get.sh",
         "docker-compose.yml",
         ".env.example",
         "README.md",
@@ -425,10 +432,39 @@ def test_make_reads_the_tag_from_the_version_file() -> None:
 
 
 def test_the_release_workflow_publishes_the_version_file_not_the_git_ref() -> None:
-    """Every image name and the bundle come from `verify`'s output, read off VERSION."""
+    """Every image name comes from `verify`'s output, read off VERSION."""
     text = RELEASE_WORKFLOW.read_text()
 
     assert "tr -d '[:space:]' < VERSION" in text
     assert "needs.verify.outputs.tag }}-${{ matrix.arch }}" in text
     assert "github.ref_name }}-${{ matrix.arch }}" not in text
-    assert 'scripts/bundle.sh "${{ needs.verify.outputs.tag }}"' in text
+
+
+# ── the retired tarball path ─────────────────────────────────────────────────
+#
+# Operator decision, 2026-09-30 (agent-delivery-kit plan §1 and §10): a release attaches no
+# asset and `get.sh` is gone. Both are absences, and an absence is only kept by a test that
+# names it — the previous revision of this module pinned the opposite (the `bundle` job's
+# `scripts/bundle.sh` call), which is the assertion these two replace.
+
+
+def test_the_release_workflow_creates_the_release_and_attaches_no_bundle() -> None:
+    """A note naming the images and the bootstrap; `make bundle` is sent by hand instead."""
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text())
+
+    assert "bundle" not in workflow["jobs"], sorted(workflow["jobs"])
+    release = workflow["jobs"]["release"]
+    assert release["permissions"]["contents"] == "write"
+    assert release["if"] == "github.ref_type == 'tag'"
+    script = "\n".join(step.get("run", "") for step in release["steps"])
+    assert "bundle.sh" not in script
+    assert "gh release upload" not in script
+    assert "gh release create" in script
+    assert "kit bootstrap | tar x" in script
+    assert "/api/v1/kit/install.sh" in script
+
+
+def test_the_release_asset_downloader_is_gone() -> None:
+    """`get.sh` read the asset with a `repo`-scoped token; nothing needs that scope now."""
+    assert not (DEPLOY_DIR / "get.sh").exists()
+    assert "get.sh" not in (DEPLOY_DIR / "README.md").read_text()

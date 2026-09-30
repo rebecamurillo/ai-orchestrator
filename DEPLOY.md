@@ -41,12 +41,25 @@ and merged into one manifest per tag (per-arch tags `<tag>-amd64` / `<tag>-arm64
 the registry as the per-platform record). `backend-api/Dockerfile` picks its Node and `gh`
 archives from `dpkg --print-architecture`, so both platforms build unchanged.
 
-The release also attaches `ai-orchestrator-deploy-<tag>.tar.gz` to the GitHub Release: the
-client package — `deploy/` at its root (`install.sh`, compose, env contract, `README.md`),
-`deploy/llm-platform/`, `deploy/kit/` and a `VERSION` file naming the tag — for machines that run a release
-without this checkout. `scripts/bundle.sh` (also `make bundle TAG=v1.2.0`) builds the same
-archive on a workstation, from the working tree via `git ls-files` so a filled `.env` can
-never travel in it. That path is `deploy/README.md`; this file remains the operator's own
+The release itself carries **no asset** — a note naming the images and the bootstrap, and
+nothing to download. The client package comes out of the backend image instead:
+
+```bash
+docker run --rm ghcr.io/optimai-labs/ai-orchestrator/backend-api:<tag> kit bootstrap | tar x
+cd ai-orchestrator && ./install.sh
+```
+
+`kit bootstrap` streams `deploy/` as a tar — `install.sh`, compose, the env contract,
+`README.md`, `llm-platform/`, `kit/`, and a `VERSION` naming the tag. One versioned unit means
+a client's scripts cannot name a different release than the image they run, which is what a
+second copy in a release asset kept doing (the asset and `deploy/get.sh` were retired on
+2026-09-30). A running instance serves the project-side half the same way:
+`GET /api/v1/kit/install.sh` and `GET /api/v1/kit/archive`.
+
+`scripts/bundle.sh` (also `make bundle TAG=v1.2.0`) still builds `ai-orchestrator-deploy-<tag>.tar.gz`
+on a workstation, from the working tree via `git ls-files` so a filled `.env` can never travel
+in it. That is the offline and procurement path, sent by hand, not the documented one. The
+client's side of all of it is `deploy/README.md`; this file remains the operator's own
 procedure for a host that has the checkout.
 
 The repository and both packages are **private**. A client pulls with a GitHub personal
@@ -56,9 +69,10 @@ never a container's environment, so AD-5 is untouched — the one credential a *
 holds is still `ORCHESTRATOR_TOKEN`. Before a client can pull, their GitHub user needs
 read access on each package: GitHub → the organisation's Packages → `backend-api` and
 `web-client` → Package settings → *Manage Actions access / Manage access* → add the user
-with `Read` (a workflow cannot grant this). To read the release asset itself the token also
-needs `repo`. Making the packages public in the same settings page removes the first
-requirement; the second stays as long as the repository is private.
+with `Read` (a workflow cannot grant this), or the packages are flipped public in the same
+settings page. `read:packages` is now the whole requirement: nothing in the client path reads
+the repository, so no `repo` scope is needed for the install itself — only for the
+repositories the orchestrator will clone.
 
 ---
 
@@ -275,11 +289,16 @@ The checklist for a build a client tests before there is a tag (first done for `
    pushes `:<VERSION>` and `:sha-<commit>`. It refuses early when the registry denies access.
    The first push creates both packages under `OptimAI-labs`, private.
 4. Grant the client's GitHub user Read on both packages (§1), or they pull `denied`.
-5. `make bundle` — `dist/ai-orchestrator-deploy-<VERSION>.tar.gz`, built from `git ls-files`
-   so no filled `.env` travels. Send it, or point the client at `deploy/get.sh` once a
-   GitHub Release exists.
-6. The client: extract, `./install.sh`, a token with `read:packages` (and `repo` if it is
-   also the orchestrator's git credential). `deploy/README.md` is their side.
+5. Nothing to send. The client bootstraps out of the image they just got read access to:
+   `docker run --rm <backend-api image>:<VERSION> kit bootstrap | tar x`. `make bundle`
+   (`dist/ai-orchestrator-deploy-<VERSION>.tar.gz`, built from `git ls-files` so no filled
+   `.env` travels) is for a client who is offline or needs a file to sign for — send that
+   instead, by hand.
+6. The client: bootstrap or extract, `./install.sh`, a token with `read:packages` (and `repo`
+   if it is also the orchestrator's git credential). Then, in each project repository they
+   want to drive from an agent, the one-line kit install
+   (`GET /api/v1/kit/install.sh | bash -s -- --harness claude`). `deploy/README.md` is their
+   side of both.
 
 What a future edit must keep true: the image tag is `VERSION`'s content everywhere
 (`make push`, `make bundle`, `release.yml`'s `verify` output, the bundle's own `VERSION`

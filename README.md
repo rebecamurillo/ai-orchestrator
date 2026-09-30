@@ -257,17 +257,25 @@ The orchestrator ships as a consumer package, so a machine that never clones thi
 repository can run it from the published images and a project's own agents can drive it
 over HTTP:
 
-- **Run the stack** — each release attaches `ai-orchestrator-deploy-<tag>.tar.gz`
-  (`install.sh`, the compose pulling the private GHCR images, the env contract, and the
-  optional `deploy/llm-platform/` stack). A client extracts it and runs `./install.sh` with a GitHub token
-  that can read the packages; `make bundle TAG=<tag>` builds the same archive here. The
+- **Run the stack** — the client package comes out of the backend image, so it always matches
+  the release about to run:
+  `docker run --rm ghcr.io/optimai-labs/ai-orchestrator/backend-api:<tag> kit bootstrap | tar x`,
+  then `cd ai-orchestrator && ./install.sh` with a GitHub token that can read the packages.
+  What it extracts is `deploy/`: `install.sh`, the compose pulling the private GHCR images,
+  the env contract, the optional `deploy/llm-platform/` stack, and `deploy/kit/`.
+  `make bundle TAG=<tag>` packs the same directory as a tarball for an offline client. The
   procedure is `deploy/README.md`.
-- **Let a project's agents use it** — install the Claude Code plugin in the consumer
-  project: `/plugin marketplace add OptimAI-labs/ai-orchestrator`, then
-  `/plugin install orchestrator@optimai`. The skill (`deploy/kit/skills/orchestrator/`)
-  teaches the full API protocol: project and repository setup, template discovery,
-  preflight, run creation, polling, and signals. The project needs
-  `ORCHESTRATOR_BASE_URL` and `ORCHESTRATOR_TOKEN` in its environment.
+- **Let a project's agents use it** — from inside the consumer repository, against a running
+  instance: `curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN"
+  "$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness claude`. The instance
+  serves its own kit, so the skills cannot be a different version than the API they call;
+  `--harness claude|codex|opencode|all` picks `.claude/skills/`, `.agents/skills/` or both, and
+  `.orchestrator/kit.json` records what was installed. The skill
+  (`deploy/kit/skills/orchestrator/`) teaches the full API protocol: the version handshake,
+  project and repository setup, template discovery, preflight, run creation, polling, and
+  signals. The project needs `ORCHESTRATOR_BASE_URL` and `ORCHESTRATOR_TOKEN` in its
+  environment. `/plugin marketplace add OptimAI-labs/ai-orchestrator` remains for a Claude
+  Code user who prefers the plugin route.
 
 ## Troubleshooting
 
@@ -366,8 +374,8 @@ a diff. Team overrides: `_bmad/custom/config.toml` (committed); personal:
 ## More
 
 - **Production deploys** (GHCR images, upgrades, rollback, drain): `DEPLOY.md`
-- **Consumer package** (run a release without a checkout; agent-integration plugin):
-  `deploy/README.md`, `deploy/kit/`
+- **Consumer package** (run a release without a checkout; the per-harness agent kit the
+  instance serves): `deploy/README.md`, `deploy/kit/`
 - **Host stack in depth** (LiteLLM keys, Langfuse, oMLX, egress, backups): `deploy/llm-platform/README.md`
 - **Project brain template** (the planning-hub template repo for client products):
   [OptimAI-labs/project-brain-template](https://github.com/OptimAI-labs/project-brain-template),

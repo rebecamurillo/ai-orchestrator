@@ -30,15 +30,28 @@ procedure is `DEPLOY.md`.
 
 ## Install
 
+These files come out of the image you are about to run, so they can never describe a
+different version than it. Log Docker in first (`docker login ghcr.io -u <your-github-user>`,
+the token as the password), then:
+
 ```bash
-tar -xzf ai-orchestrator-deploy-1.0.0-beta.tar.gz
-cd ai-orchestrator-deploy-1.0.0-beta
+docker run --rm ghcr.io/optimai-labs/ai-orchestrator/backend-api:1.0.0-beta kit bootstrap | tar x
+cd ai-orchestrator
 ./install.sh
 ```
 
+`kit bootstrap` writes this whole directory — `install.sh`, the compose file, the `.env`
+contract, this README, `llm-platform/`, `kit/`, and a `VERSION` naming the tag — to stdout as
+a tar stream. Upgrading is the same two commands with a newer tag, then
+`./install.sh upgrade --tag <newer>`.
+
+Offline, or where procurement needs a file to sign for: ask the person who sent you here for
+`make bundle`'s tarball (`ai-orchestrator-deploy-<tag>.tar.gz`), extract it, and run
+`./install.sh` from inside. `docker save` / `docker load` moves the two images the same way.
+
 The script asks for the token, then asks whether to install the optional llm-platform stack (see
 below), and does the rest: it logs Docker in to the registry, writes `.env` with generated
-secrets, pulls the images pinned by the bundle's `VERSION`, starts the stack, proves the API
+secrets, pulls the images pinned by `VERSION`, starts the stack, proves the API
 answers and the token works, and prints:
 
 ```
@@ -57,15 +70,6 @@ Unattended, from a shell or a provisioning script:
 ```bash
 GHCR_TOKEN=ghp_… ./install.sh --yes                    # orchestrator only
 GHCR_TOKEN=ghp_… ANTHROPIC_API_KEY=sk-ant-… ./install.sh --yes --with-platform
-```
-
-Without the tarball in hand, `get.sh` fetches it from the GitHub Release with the same
-token (the repository is private too):
-
-```bash
-curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
-  https://raw.githubusercontent.com/OptimAI-labs/ai-orchestrator/main/deploy/get.sh \
-  | GITHUB_TOKEN=$GITHUB_TOKEN bash -s -- v1.0.0-beta
 ```
 
 ### What the script wrote
@@ -138,17 +142,35 @@ backend-api refuses to start.
 
 ## Agents in your projects
 
-The package carries a Claude Code skill that teaches a project's agents to drive this API —
-create projects, launch runs, poll progress, answer checkpoints:
+The instance serves the skills that teach a project's agents to drive this API — create
+projects, launch runs, poll progress, answer checkpoints. Run this **from inside the project
+repository**, with the two connection values exported:
 
 ```bash
-kit/install.sh /path/to/your/project
+curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \
+  "$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness claude
 ```
 
-copies it into the project's `.claude/skills/`, adds `ORCHESTRATOR_BASE_URL` (default
-`http://127.0.0.1:8000`) and `ORCHESTRATOR_TOKEN` to its `.env`, and pings the API to prove
-the pair works. The skill's `references/spec-folder.md` documents the `epics.yaml` /
-`stories.yaml` / `SPEC.md` format the templates read.
+The kit comes out of the instance that answered, so the skills cannot be a different version
+than the API they call. `--harness` picks where they land, because the three agent CLIs read
+different directories:
+
+| `--harness` | writes into | read by |
+| --- | --- | --- |
+| `claude` | `.claude/skills/` | Claude Code |
+| `codex`, `opencode` | `.agents/skills/` | Codex, OpenCode |
+| `all` (the default) | both | any of them |
+
+It also adds `ORCHESTRATOR_BASE_URL` (default `http://127.0.0.1:8000`) and
+`ORCHESTRATOR_TOKEN` to the project's `.env` without ever overwriting a value you already
+have, writes `.orchestrator/kit.json` — the version marker the skill checks on every session,
+which holds no credential and is meant to be committed — and calls `GET /api/v1/version` to
+prove the pair. Re-run it whenever it tells you the kit is stale. `--base-url`, `--token` and
+`--project` override the environment; from a checkout or an extracted bundle, `kit/install.sh`
+uses the skills beside it and downloads nothing.
+
+The skill's `references/spec-folder.md` documents the `epics.yaml` / `stories.yaml` /
+`SPEC.md` format the templates read.
 
 ## Exposure
 

@@ -26,12 +26,9 @@ Two values, from the project's environment (`.env` or exported):
 - `ORCHESTRATOR_BASE_URL` — default `http://127.0.0.1:8000`
 - `ORCHESTRATOR_TOKEN` — the single bearer credential
 
-Every call: `Authorization: Bearer $ORCHESTRATOR_TOKEN`. Prove the pair works before
-anything else:
-
-```bash
-curl -fsS -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" "$ORCHESTRATOR_BASE_URL/api/v1/ping"
-```
+Every call: `Authorization: Bearer $ORCHESTRATOR_TOKEN`. The handshake below is what proves
+the pair; `GET /api/v1/ping` proves the token alone and is the fallback for an instance
+older than `/api/v1/version`.
 
 `GET /healthz` needs no token (liveness only). Errors are RFC 9457
 `application/problem+json`: `{type, title, status, detail, errors[]}` — read `detail` and
@@ -40,6 +37,30 @@ money is a decimal string in USD.
 
 The web UI lives on the same host (default port 4321). The deep link for one Run is
 `/workflows/{run_id}` — hand it to the user whenever you name a Run.
+
+## Handshake
+
+**Do this before anything else, every session.** This skill was copied out of one
+instance; against a different version it describes an API that is not there.
+
+1. Read `.orchestrator/kit.json` at the project root if it exists — `{kit_version,
+   base_url, installed_at, harness}`. It is the version of this copy.
+2. `GET /api/v1/version` → `{app_version, kit_version, bmad_version, harness_versions{}}`.
+   A 404 means an instance older than the route: fall back to `GET /api/v1/ping`, say so,
+   and treat the version as unknown.
+3. If `app_version` differs from `kit.json`'s `kit_version`, the kit is stale. Tell the
+   user exactly that, print the one line that replaces it, and **stop** — do not call
+   anything else against a mismatched instance:
+
+   ```bash
+   curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \
+     "$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness <harness>
+   ```
+
+   `<harness>` is `kit.json`'s `harness` (`claude`, `codex`, `opencode` or `all`).
+
+`bmad_version` is the BMAD release the instance authors for (AD-16) — a target repository
+whose `_bmad/_config/manifest.yaml` names a different one is not ready to dispatch.
 
 ## One-time setup: project and repository
 
@@ -143,6 +164,7 @@ and the alert's `reason`; the web UI is built for exactly that review.
 
 ## Rules
 
+- Handshake first; a mismatched version stops you.
 - Always preflight before creating a Run; resolve every `fail` line first.
 - Discover template inputs from the API each time; templates evolve.
 - One budget decision per Run, made by a human or from an explicit instruction — never
