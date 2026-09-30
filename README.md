@@ -211,11 +211,11 @@ also the API under `/api/v1` with `Authorization: Bearer $ORCHESTRATOR_TOKEN`.
    | `initiative` | every epic of one initiative, in order |
    | `epic` | all stories of one epic on one branch, verified, pushed |
    | `story-run` | one story to a verified commit |
-   | `task` | an issue-sized change through a plan gate |
    | `repo-init` | bootstrap the BMAD method into a repo, as a PR |
 
-   Those five are what `/workflows/new` offers by default; `ROOT_TEMPLATES` in `.env`
-   changes the offering, and `templates/` ships two more (`story`, `epic-local-ai`).
+   Those four are what `/workflows/new` offers by default; `ROOT_TEMPLATES` in `.env`
+   changes the offering (add `initiative-hub` for a multi-repository initiative driven from
+   a hub repository), and `templates/` ships `story` for `epic` and `story-run` to call.
 
    The harness page section shows each harness's live probe; the deeper readiness
    diagnostic (`POST /harnesses/{name}/readiness`) runs a trivial story end to end and

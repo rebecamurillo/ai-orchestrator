@@ -90,10 +90,11 @@ describe('deriveFields — a Template asks for what it declares', () => {
   });
 
   it('reproduces each shipped Template’s field list from its declarations alone', () => {
+    // `task` left the shipped set and the default list (Operator decision, 2026-09-30);
+    // the fixture keeps its declarations for the tests that need a fifth name.
     expect(keys('initiative')).toEqual(['initiative_folder']);
     expect(keys('epic')).toEqual(['branch', 'spec_folder']);
     expect(keys('story-run')).toEqual(['branch', 'spec_folder', 'story_id']);
-    expect(keys('task')).toEqual(['branch', 'task_id', 'title', 'intent', 'artifacts_dir']);
   });
 
   it('derives the label from the input name, and every field states a tooltip', () => {

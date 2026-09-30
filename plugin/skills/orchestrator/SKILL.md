@@ -67,8 +67,8 @@ Never guess a template's inputs and never skip preflight.
 1. **Discover templates** — `GET /api/v1/templates`, then
    `GET /api/v1/templates/{name}/{version}`: the response's `inputs` is the authoritative
    list of what this template takes. Shipped templates (`story`, `story-run`, `epic`,
-   `epic-local-ai`, `initiative`, `initiative-hub` and its callees, `merge`, `golive`,
-   `task`, `repo-init`) evolve; read them, don't memorize them.
+   `initiative`, `initiative-hub` and its callees, `repo-init`) evolve; read them, don't
+   memorize them.
    - **Multi-repo initiative, hub style (the current default)**: template
      `initiative-hub` with repository = the hub repo whose `repos/*` submodules are the
      members; inputs include `branch` (the one initiative branch shared by hub and

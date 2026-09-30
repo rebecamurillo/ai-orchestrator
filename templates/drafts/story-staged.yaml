@@ -13,8 +13,8 @@ description: one story in four sessions — plan, implement, verify, sized revie
 #   brings the operator in, instead of the revert→re-implement→re-review loop that turns a
 #   small story into an hour.
 #
-# Every agent row reports through its own marker under `{spec_folder}/stories/.auto/`, exactly
-# as epic-local-ai does, because an agent row is routed on a file saying `done` or `blocked`
+# Every agent row reports through its own marker under `{spec_folder}/stories/.auto/`,
+# because an agent row is routed on a file saying `done` or `blocked`
 # (FR-16); a spec at `ready-for-dev` or `in-review` would park the Run. The `verify` row
 # redispatches `implement`, whose marker then carries the orchestrator's `## Verify Failure`
 # section (FR-10) — so the implementer fixes its own breakage before any review happens.
