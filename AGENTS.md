@@ -77,6 +77,13 @@ TDD is hard rule 6; these are the enforced numbers behind it. `orchestrator.doma
 - Ids are UUIDv7; times are ISO 8601 UTC with `Z`; money is a decimal string in USD.
 - Errors are RFC 9457 `application/problem+json`; lists are `{items, next_cursor}`.
 - Status tokens are exactly: Run `queued running needs_you done failed cancelled`; Step `planned queued running done blocked checkpoint error skipped`; UI `QUE RUN BLK CHK DON ERR CAN SKP`. `skipped` and `unvalidated` are words on screen, never green.
+- **Comments earn their place** (Operator rule, 2026-09-30). A comment says what the code
+  cannot: a hazard, a non-obvious constraint, an exception, a warning, a known bug, a temporary
+  fix and what retires it, or a dated ruling. It never narrates the change that introduced it
+  ("added X", "verified on <date>", "this used to be Y"), never restates the line below it, and
+  never repeats a rule already written in an `AGENTS.md`. Not every change needs one, and most
+  do not — the diff, the commit message and the test name carry that. Verification narrative
+  belongs in the hand-back or in `host/README.md`-style prose, not beside the code.
 - Conventional commits; the orchestrator's own commits read `story {id}: {title} (orchestrator)`.
 - Product copy states facts and mechanisms; it never congratulates or apologises (PRD NFR-8).
 
