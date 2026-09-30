@@ -28,9 +28,15 @@ model_list:
   # or Pro subscription instead of an API key. No `api_key` here on purpose: the credential
   # is the OAuth token Claude Code puts in `Authorization`, forwarded by that switch. Pair
   # it with CLAUDE_SUBSCRIPTION_AUTH=true in the stack's .env — see host/README.md.
-  # - model_name: claude-subscription
-  #   litellm_params:
-  #     model: anthropic/claude-sonnet-4-6
+  - model_name: claude-sonnet-5
+    litellm_params:
+      model: anthropic/claude-sonnet-5
+  - model_name: claude-opus-5
+    litellm_params:
+      model: anthropic/claude-opus-5
+  - model_name: claude-haiku-4-5-20251001
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
 
   # ── local, served by oMLX ─────────────────────────────────────────────────
   # `openai/<alias>` with `use_chat_completions_api: true`: oMLX speaks chat completions,
@@ -76,7 +82,7 @@ general_settings:
   # upstream, which is how Claude Code's subscription OAuth token reaches Anthropic. It
   # applies to EVERY route on this proxy, not only the Claude one — acceptable here because
   # this proxy is single-tenant and reachable only from the orchestrator (see Egress).
-  # forward_client_headers_to_llm_api: true
+  forward_client_headers_to_llm_api: true
   # the orchestrator reads GET /spend/logs/v2 with LITELLM_SPEND_KEY; harnesses hold a
   # key_type: llm_api virtual key instead, which cannot reach this route (AD-5)
   store_model_in_db: false
