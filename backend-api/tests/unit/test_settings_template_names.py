@@ -32,14 +32,30 @@ def test_an_instance_may_point_both_at_its_own_templates(
     assert settings.readiness_template == "house-epic"
 
 
-@pytest.mark.parametrize("name", ["INIT_TEMPLATE", "READINESS_TEMPLATE"])
-def test_a_blank_name_refuses_rather_than_dispatching_nothing(
-    env: dict[str, str], monkeypatch: pytest.MonkeyPatch, name: str
+@pytest.mark.parametrize(
+    ("name", "field", "default"),
+    [
+        ("INIT_TEMPLATE", "init_template", "repo-init"),
+        ("READINESS_TEMPLATE", "readiness_template", "epic"),
+    ],
+)
+def test_a_blank_name_in_the_environment_means_the_default(
+    env: dict[str, str], monkeypatch: pytest.MonkeyPatch, name: str, field: str, default: str
 ) -> None:
+    """Revised at the merge of the two-tier contract (Operator decision 2026-09-20, reaffirmed
+    2026-09-30: a blank environment value is the same as an absent one): `INIT_TEMPLATE=`
+    no longer refuses start-up, it dispatches the shipped exemplar like an unset line does."""
     monkeypatch.setenv(name, "")
 
+    assert getattr(Settings(), field) == default  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("field", ["init_template", "readiness_template"])
+def test_an_explicit_blank_name_still_refuses(env: dict[str, str], field: str) -> None:
+    """The blank-means-unset rule is the environment source's; a value handed to the model
+    directly keeps `min_length=1`, so nothing can dispatch a Template with no name."""
     with pytest.raises(ValueError):
-        Settings()  # type: ignore[call-arg]
+        Settings(**{field: ""})  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("name", ["INIT_TEMPLATE", "READINESS_TEMPLATE"])
