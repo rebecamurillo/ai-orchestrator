@@ -18,7 +18,7 @@ procedure is `DEPLOY.md`.
 
 - **Docker** with Compose v2 — Docker Desktop (macOS, Windows with WSL 2) or Docker Engine
   plus the compose plugin (Linux). 8 GB of RAM for the orchestrator alone; 16 GB with the
-  optional host stack.
+  optional llm-platform stack.
 - **A GitHub personal access token** (classic) with:
   - `read:packages` — pulls the two images. Your GitHub user must have been granted read
     access to the packages, or be a member of the organisation that owns them; ask the
@@ -36,7 +36,7 @@ cd ai-orchestrator-deploy-1.0.0-beta
 ./install.sh
 ```
 
-The script asks for the token, then asks whether to install the optional host stack (see
+The script asks for the token, then asks whether to install the optional llm-platform stack (see
 below), and does the rest: it logs Docker in to the registry, writes `.env` with generated
 secrets, pulls the images pinned by the bundle's `VERSION`, starts the stack, proves the API
 answers and the token works, and prints:
@@ -56,7 +56,7 @@ Unattended, from a shell or a provisioning script:
 
 ```bash
 GHCR_TOKEN=ghp_… ./install.sh --yes                    # orchestrator only
-GHCR_TOKEN=ghp_… ANTHROPIC_API_KEY=sk-ant-… ./install.sh --yes --with-host
+GHCR_TOKEN=ghp_… ANTHROPIC_API_KEY=sk-ant-… ./install.sh --yes --with-platform
 ```
 
 Without the tarball in hand, `get.sh` fetches it from the GitHub Release with the same
@@ -76,9 +76,9 @@ Fernet key and database password, and `GITHUB_TOKEN` set to the token you gave (
 by exporting a different `GITHUB_TOKEN` before running). Everything under **OPTIONAL**
 keeps its default; the file explains each line. `LITELLM_BASE_URL` and
 `LANGFUSE_BASE_URL` are blanked, which is the off switch for the gateway and for tracing,
-until the host stack is installed.
+until the llm-platform stack is installed.
 
-The script never overwrites an existing `.env` or `host/.env`: re-running it after a
+The script never overwrites an existing `.env` or `llm-platform/.env`: re-running it after a
 failure picks up where it stopped without rotating the token you already use. Delete a
 file deliberately to start over.
 
@@ -92,46 +92,46 @@ config, never by a container: the one credential a *process* in this stack holds
 ./install.sh status              # docker compose ps, for both stacks
 ./install.sh logs                # follow the orchestrator's output
 ./install.sh stop                # stop, keeping every volume
-./install.sh start               # start again (and the host stack, if it was installed)
-./install.sh start --with-host   # add the host stack to an existing install
+./install.sh start               # start again (and the llm-platform stack, if it was installed)
+./install.sh start --with-platform   # add the llm-platform stack to an existing install
 ./install.sh upgrade --tag 1.0.0
 ./install.sh uninstall           # stop and DELETE the volumes, after typing `delete`
 ```
 
 `upgrade` reads the release notes for you only in the sense of printing the two cautions
 below; then it takes a `pg_dump` into `backups/`, rewrites `IMAGE_TAG`, pulls, and
-restarts. `uninstall` keeps `.env` and `host/.env`, so the token and the Langfuse keys
+restarts. `uninstall` keeps `.env` and `llm-platform/.env`, so the token and the Langfuse keys
 survive a reinstall; remove them yourself when you mean it.
 
 Ports: everything publishes on `127.0.0.1` — 4321 (web), 8000 (API), and for the host
 stack 3000 (Langfuse), 4000 (LiteLLM), 5433, 9000, 9091 (its stores). If one is already
 taken on your machine the script stops before starting anything and names the variable
 that moves this stack off it (`WEB_CLIENT_PORT`, `BACKEND_API_PORT` in `.env`;
-`LANGFUSE_PORT`, `LITELLM_PORT`, … in `host/.env`). It never stops what is listening there.
+`LANGFUSE_PORT`, `LITELLM_PORT`, … in `llm-platform/.env`). It never stops what is listening there.
 
-## The optional host stack (LiteLLM + Langfuse)
+## The optional llm-platform stack (LiteLLM + Langfuse)
 
-`host/` is the model gateway and the tracing server: LiteLLM (routes every model call,
+`llm-platform/` is the model gateway and the tracing server: LiteLLM (routes every model call,
 mints per-harness keys, records spend so a Run's budget is real) and Langfuse (traces), with
 their stores (PostgreSQL, ClickHouse, Redis, MinIO) — seven more containers, as their own
 compose project so they survive this stack's restarts. Without it each coding agent
 authenticates on its own, cost figures are provisional, trace links are absent, and the
 `local` harness is unavailable.
 
-`./install.sh` offers it; `--with-host` / `--no-host` decide it unattended. The script
-generates `host/.env` with random credentials (`host/generate-env.sh`), writes the provider
+`./install.sh` offers it; `--with-platform` / `--no-platform` decide it unattended. The script
+generates `llm-platform/.env` with random credentials (`llm-platform/generate-env.sh`), writes the provider
 keys you give it (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY` — prompted,
 or from the environment; at least one is needed before a model answers anything), starts
 the stack, waits for it (the first start runs migrations — a few minutes), mints the
 harness's virtual key and writes the six connection values into `.env`
-(`host/sync-env.sh`), then starts the orchestrator against it. It prints the Langfuse
-login at the end; it is also in `host/.env`.
+(`llm-platform/sync-env.sh`), then starts the orchestrator against it. It prints the Langfuse
+login at the end; it is also in `llm-platform/.env`.
 
-`host/README.md` documents the key separation (`LITELLM_API_KEY` is a model-routes-only
+`llm-platform/README.md` documents the key separation (`LITELLM_API_KEY` is a model-routes-only
 virtual key; `LITELLM_SPEND_KEY` reads spend and never reaches a harness), the model routes
-in `host/litellm.config.yaml`, and `CLAUDE_SUBSCRIPTION_AUTH`. Pointing at your own
+in `llm-platform/litellm.config.yaml`, and `CLAUDE_SUBSCRIPTION_AUTH`. Pointing at your own
 existing LiteLLM/Langfuse instead works the same way: set the `*_BASE_URL` and key
-variables in `.env` by hand and skip the host stack.
+variables in `.env` by hand and skip the llm-platform stack.
 
 Every model named in `READINESS_MODELS` must exist in the gateway's `model_list`, or
 backend-api refuses to start.
@@ -142,7 +142,7 @@ The package carries a Claude Code skill that teaches a project's agents to drive
 create projects, launch runs, poll progress, answer checkpoints:
 
 ```bash
-plugin/install.sh /path/to/your/project
+kit/install.sh /path/to/your/project
 ```
 
 copies it into the project's `.claude/skills/`, adds `ORCHESTRATOR_BASE_URL` (default

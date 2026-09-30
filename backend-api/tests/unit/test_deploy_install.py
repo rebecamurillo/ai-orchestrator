@@ -17,10 +17,14 @@ both are proved here, without it:
 - **It never overwrites.** A second run leaves the file byte for byte, so re-running
   `install.sh` after a failed pull cannot rotate the token a client already uses.
 - **The bundle is complete and carries no secret.** `install.sh` at the root beside
-  `VERSION`, `host/` and `plugin/` inside; never a `.env`, whatever the working tree holds.
+  `VERSION`, `llm-platform/` and `kit/` inside; never a `.env`, whatever the working tree holds.
 
 Shell is exercised through `bash`, skipped where there is none; the scripts are written for
 bash 3.2 because that is what a stock macOS ships.
+
+Layout revised under the Operator decision of 2026-09-30 (agent-delivery-kit plan §2): the
+client install is the one directory `deploy/`, with `llm-platform/` (was `host/`) and `kit/`
+(was `plugin/`) inside it, so the bundle is that directory and nothing is stitched.
 """
 
 from __future__ import annotations
@@ -233,17 +237,17 @@ def test_the_bundle_carries_the_installer_and_no_secret(tmp_path: Path) -> None:
         "docker-compose.yml",
         ".env.example",
         "README.md",
-        "host/docker-compose.yml",
-        "host/generate-env.sh",
-        "host/sync-env.sh",
-        "host/.env.example",
-        "host/litellm.config.yaml",
-        "plugin/install.sh",
-        "plugin/skills/orchestrator/SKILL.md",
+        "llm-platform/docker-compose.yml",
+        "llm-platform/generate-env.sh",
+        "llm-platform/sync-env.sh",
+        "llm-platform/.env.example",
+        "llm-platform/litellm.config.yaml",
+        "kit/install.sh",
+        "kit/skills/orchestrator/SKILL.md",
     ):
         assert root + path in members, path
         assert members[root + path].mode & 0o111 if path.endswith(".sh") else True, path
-    for path in (".env", "host/.env", "host/backups/latest.dump"):
+    for path in (".env", "llm-platform/.env", "llm-platform/backups/latest.dump"):
         assert root + path not in members, f"{path} travelled in the bundle"
 
 
@@ -260,11 +264,12 @@ def test_the_bundle_refuses_a_tag_that_is_not_a_release(tmp_path: Path) -> None:
 # A `docker` shim on PATH records every invocation and answers success, so the script runs
 # its real control flow up to the first thing only a live stack can answer (the health
 # probe). Two things are pinned this way, both learned on 2026-09-30 when a dry run of the
-# bundle recreated the operator's running dev host stack: `--no-host` must win over an
-# installed `host/.env`, and the host stack must run under its own project name, never the
+# bundle recreated the operator's running dev llm-platform stack: `--no-platform` must win over an
+# installed `llm-platform/.env`, and the llm-platform stack must run under its own project
+# name, never the
 # host file's `name:` (`ai-orchestrator-host`), which a repository checkout already uses.
 
-HOST_ENV_EXAMPLE = REPO_ROOT / "host" / ".env.example"
+HOST_ENV_EXAMPLE = REPO_ROOT / "deploy" / "llm-platform" / ".env.example"
 
 
 def _free_port() -> int:
@@ -285,10 +290,10 @@ def _rewrite(path: Path, **values: str) -> None:
 def shimmed(bundle_dir: Path) -> tuple[Path, Path, dict[str, str]]:
     """A bundle with a docker shim, an installed `.env` on free ports, and a compose file."""
     shutil.copy(DEPLOY_DIR / "docker-compose.yml", bundle_dir / "docker-compose.yml")
-    host = bundle_dir / "host"
+    host = bundle_dir / "llm-platform"
     host.mkdir()
     for name in ("docker-compose.yml", "generate-env.sh", "sync-env.sh", ".env.example"):
-        shutil.copy(REPO_ROOT / "host" / name, host / name)
+        shutil.copy(REPO_ROOT / "deploy" / "llm-platform" / name, host / name)
     log = bundle_dir / "docker.log"
     shim = bundle_dir / "bin"
     shim.mkdir()
@@ -314,13 +319,13 @@ def test_no_host_wins_over_an_installed_host_env(
     shimmed: tuple[Path, Path, dict[str, str]],
 ) -> None:
     bundle_dir, log, env = shimmed
-    shutil.copy(HOST_ENV_EXAMPLE, bundle_dir / "host" / ".env")
+    shutil.copy(HOST_ENV_EXAMPLE, bundle_dir / "llm-platform" / ".env")
 
-    _run(bundle_dir / "install.sh", "start", "--no-host", cwd=bundle_dir, env=env)
+    _run(bundle_dir / "install.sh", "start", "--no-platform", cwd=bundle_dir, env=env)
 
     calls = log.read_text()
     assert "pull" in calls, calls  # the orchestrator stack was driven …
-    assert "host/docker-compose.yml" not in calls, calls  # … and the host stack was not touched
+    assert "llm-platform/docker-compose.yml" not in calls, calls  # … the platform was not touched
 
 
 @needs_bash
@@ -329,9 +334,9 @@ def test_the_host_stack_runs_under_its_own_project_name(
 ) -> None:
     """Never the host file's `name:` — that is the checkout's dev stack (hard rule 9)."""
     bundle_dir, log, env = shimmed
-    shutil.copy(HOST_ENV_EXAMPLE, bundle_dir / "host" / ".env")
+    shutil.copy(HOST_ENV_EXAMPLE, bundle_dir / "llm-platform" / ".env")
     _rewrite(
-        bundle_dir / "host" / ".env",
+        bundle_dir / "llm-platform" / ".env",
         LANGFUSE_PORT=str(_free_port()),
         LITELLM_PORT=str(_free_port()),
         HOST_POSTGRES_PORT=str(_free_port()),
@@ -342,7 +347,7 @@ def test_the_host_stack_runs_under_its_own_project_name(
     _run(bundle_dir / "install.sh", "start", cwd=bundle_dir, env=env)
 
     host_calls = [
-        line for line in log.read_text().splitlines() if "host/docker-compose.yml" in line
+        line for line in log.read_text().splitlines() if "llm-platform/docker-compose.yml" in line
     ]
     assert host_calls, log.read_text()
     for call in host_calls:
@@ -356,12 +361,12 @@ def test_a_taken_host_port_stops_the_script_before_any_docker_call(
 ) -> None:
     """Something else is listening there; the script names the variable and never takes it over."""
     bundle_dir, log, env = shimmed
-    shutil.copy(HOST_ENV_EXAMPLE, bundle_dir / "host" / ".env")
+    shutil.copy(HOST_ENV_EXAMPLE, bundle_dir / "llm-platform" / ".env")
     with socket.socket() as holder:
         holder.bind(("127.0.0.1", 0))
         holder.listen()
         taken = int(holder.getsockname()[1])
-        _rewrite(bundle_dir / "host" / ".env", LANGFUSE_PORT=str(taken))
+        _rewrite(bundle_dir / "llm-platform" / ".env", LANGFUSE_PORT=str(taken))
         log.write_text("")
 
         result = _run(bundle_dir / "install.sh", "start", cwd=bundle_dir, env=env)

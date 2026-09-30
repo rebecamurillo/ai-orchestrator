@@ -2,7 +2,7 @@
 #
 # The whole MVP: `web-client`, `backend-api` and `postgres`, with the Gateway (LiteLLM),
 # the tracing server (Langfuse) and the model server running on the host outside compose
-# and documented in `host/README.md` (AD-20, NFR-7).
+# and documented in `deploy/llm-platform/README.md` (AD-20, NFR-7).
 #
 # Configuration is the environment (AD-20): every value below comes from `.env`, which is
 # a copy of the committed `.env.example` contract. No credential is written into this file.

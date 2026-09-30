@@ -10,7 +10,8 @@ here in three directions:
 - it covers exactly `HARNESS_NAMES`, refused at start-up rather than at dispatch — a
   harness with no entry must never reach `start` (`test_harness_readiness_start_model.py`
   covers what `start` does if one ever does);
-- every model it names is a `model_name` the committed `host/litellm.config.yaml` serves,
+- every model it names is a `model_name` the committed `deploy/llm-platform/litellm.config.yaml`
+  serves,
   which is the actual failure being fixed: a model no `model_list` route answers.
 
 One value per harness rather than one global model, because a single value cannot be right:
@@ -36,7 +37,7 @@ from tests.unit.conftest import ENV_EXAMPLE, REPO_ROOT, parse_env_example
 #: agree with any later edit instead of holding it to the decision.
 COMMITTED = {"claude": "claude-sonnet-4-6", "codex": "gpt-5.4", "local": "local-coder"}
 
-GATEWAY_CONFIG = REPO_ROOT / "host" / "litellm.config.yaml"
+GATEWAY_CONFIG = REPO_ROOT / "deploy" / "llm-platform" / "litellm.config.yaml"
 
 
 def _served_model_names(path: Path) -> set[str]:

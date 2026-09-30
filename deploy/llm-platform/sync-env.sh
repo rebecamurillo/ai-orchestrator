@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# host/sync-env.sh — point the repository-root `.env` at the running host stack.
+# deploy/llm-platform/sync-env.sh — point the repository-root `.env` at the running llm-platform stack.
 #
 # Six values in the orchestrator's contract describe where the Gateway and Langfuse are and
-# how to authenticate to them. Five come straight out of `host/.env`; the sixth,
+# how to authenticate to them. Five come straight out of `deploy/llm-platform/.env`; the sixth,
 # `LITELLM_API_KEY`, has to be minted from the running proxy, because a `key_type: llm_api`
 # virtual key is what AD-5 gives a harness — a key that reaches the model routes and cannot
 # read another Run's spend.
@@ -16,11 +16,12 @@
 # which carries the same contract lines this script rewrites.
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-host_env="${root}/host/.env"
-root_env="${1:-${root}/.env}"
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+host_env="${here}/.env"
+# the repository-root .env, two levels up from deploy/llm-platform/; install.sh passes its own
+root_env="${1:-${here}/../../.env}"
 
-[[ -f "$host_env" ]] || { echo "host/.env is missing — run 'make host-up' first" >&2; exit 1; }
+[[ -f "$host_env" ]] || { echo "deploy/llm-platform/.env is missing — run 'make platform-up' first" >&2; exit 1; }
 [[ -f "$root_env" ]] || { echo "${root_env} is missing — cp .env.example .env first" >&2; exit 1; }
 
 set -a
@@ -30,13 +31,13 @@ set +a
 
 litellm="http://127.0.0.1:${LITELLM_PORT:-4000}"
 
-# `key_type: llm_api` restricts the key to the model routes (AD-5, host/README.md).
+# `key_type: llm_api` restricts the key to the model routes (AD-5, deploy/llm-platform/README.md).
 echo "minting a harness key from ${litellm}/key/generate"
 response="$(curl -fsS -X POST "${litellm}/key/generate" \
 	-H "Authorization: Bearer ${LITELLM_MASTER_KEY}" \
 	-H 'Content-Type: application/json' \
 	-d '{"key_type": "llm_api", "key_alias": "orchestrator-harnesses"}')" || {
-	echo "the proxy did not answer — is 'make host-up' finished?" >&2
+	echo "the proxy did not answer — is 'make platform-up' finished?" >&2
 	exit 1
 }
 
@@ -51,7 +52,7 @@ import sys
 
 path = sys.argv[1]
 
-# the spend key is the master key here: a single-operator machine, and host/README.md records
+# the spend key is the master key here: a single-operator machine, and deploy/llm-platform/README.md records
 # that as an accepted exposure rather than the intended production split
 values = {
     "LITELLM_BASE_URL": "http://host.docker.internal:${LITELLM_PORT:-4000}",
@@ -85,5 +86,5 @@ PY
 
 echo "backup: ${backup#"$root"/}"
 echo
-echo "Langfuse  http://localhost:${LANGFUSE_PORT:-3000}  (${LANGFUSE_INIT_USER_EMAIL} / see LANGFUSE_INIT_USER_PASSWORD in host/.env)"
+echo "Langfuse  http://localhost:${LANGFUSE_PORT:-3000}  (${LANGFUSE_INIT_USER_EMAIL} / see LANGFUSE_INIT_USER_PASSWORD in deploy/llm-platform/.env)"
 echo "LiteLLM   ${litellm}"

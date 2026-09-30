@@ -83,7 +83,7 @@ TDD is hard rule 6; these are the enforced numbers behind it. `orchestrator.doma
   ("added X", "verified on <date>", "this used to be Y"), never restates the line below it, and
   never repeats a rule already written in an `AGENTS.md`. Not every change needs one, and most
   do not — the diff, the commit message and the test name carry that. Verification narrative
-  belongs in the hand-back or in `host/README.md`-style prose, not beside the code.
+  belongs in the hand-back or in `deploy/llm-platform/README.md`-style prose, not beside the code.
 - Conventional commits; the orchestrator's own commits read `story {id}: {title} (orchestrator)`.
 - Product copy states facts and mechanisms; it never congratulates or apologises (PRD NFR-8).
 
@@ -93,4 +93,4 @@ Every Story that reaches `done` with a green or skipped verify step writes one a
 
 ## Operator setup and diagnostics
 
-Setup, boot, demo, and troubleshooting live in `README.md` — when asked, walk the operator through it in its order rather than improvising (deployment: `DEPLOY.md`; host services: `host/README.md`). Fix setup by naming the exact command, not by editing code, and never relax an anchor or a gate to get a machine green.
+Setup, boot, demo, and troubleshooting live in `README.md` — when asked, walk the operator through it in its order rather than improvising (deployment: `DEPLOY.md`; host services: `deploy/llm-platform/README.md`). Fix setup by naming the exact command, not by editing code, and never relax an anchor or a gate to get a machine green.

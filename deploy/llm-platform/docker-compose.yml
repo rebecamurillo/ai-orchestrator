@@ -1,5 +1,5 @@
-# The host stack — LiteLLM and Langfuse, the two services the orchestrator talks to but does
-# not own. `host/README.md` describes what they are for; this file is how they run on one
+# The llm-platform stack — LiteLLM and Langfuse, the two services the orchestrator talks to but does
+# not own. `deploy/llm-platform/README.md` describes what they are for; this file is how they run on one
 # machine.
 #
 # Deliberately a separate compose project from the repository root's. The root file is the
@@ -9,12 +9,12 @@
 # exactly as it would reach a LiteLLM running anywhere else, so nothing here is a special case
 # the production path does not have.
 #
-#   make host-up        generate host/.env if absent, start everything, wait for health
-#   make host-down      stop, keeping the volumes
-#   make host-doctor    run all three harness doctors against it
+#   make platform-up        generate deploy/llm-platform/.env if absent, start everything, wait for health
+#   make platform-down      stop, keeping the volumes
+#   make platform-doctor    run all three harness doctors against it
 #
-# Every port is published on 127.0.0.1. Every credential comes from `host/.env`, which
-# `host/generate-env.sh` writes and git ignores; none is spelled in this file (hard rule 5).
+# Every port is published on 127.0.0.1. Every credential comes from `deploy/llm-platform/.env`, which
+# `deploy/llm-platform/generate-env.sh` writes and git ignores; none is spelled in this file (hard rule 5).
 
 name: ai-orchestrator-host
 
@@ -24,8 +24,8 @@ services:
     image: postgres:18
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${HOST_POSTGRES_USER:?set it in host/.env — run make host-up}
-      POSTGRES_PASSWORD: ${HOST_POSTGRES_PASSWORD:?set it in host/.env — run make host-up}
+      POSTGRES_USER: ${HOST_POSTGRES_USER:?set it in deploy/llm-platform/.env — run make platform-up}
+      POSTGRES_PASSWORD: ${HOST_POSTGRES_PASSWORD:?set it in deploy/llm-platform/.env — run make platform-up}
       POSTGRES_DB: langfuse
     # `10-create-databases.sh` adds the `litellm` database beside `langfuse`; one server, two
     # databases, because LiteLLM's virtual keys and spend logs need their own schema
@@ -50,8 +50,8 @@ services:
     image: clickhouse/clickhouse-server:25.12
     restart: unless-stopped
     environment:
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set it in host/.env — run make host-up}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set it in host/.env — run make host-up}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set it in deploy/llm-platform/.env — run make platform-up}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set it in deploy/llm-platform/.env — run make platform-up}
       CLICKHOUSE_DB: default
     ulimits:
       nofile: { soft: 262144, hard: 262144 }
@@ -81,8 +81,8 @@ services:
     restart: unless-stopped
     command: ['server', '/data', '--console-address', ':9001']
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set it in host/.env — run make host-up}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set it in host/.env — run make host-up}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set it in deploy/llm-platform/.env — run make platform-up}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set it in deploy/llm-platform/.env — run make platform-up}
     volumes:
       - host-minio:/data
     ports:
@@ -126,9 +126,9 @@ services:
       minio-init: { condition: service_completed_successfully }
     environment: &langfuse-env
       DATABASE_URL: postgresql://${HOST_POSTGRES_USER}:${HOST_POSTGRES_PASSWORD}@postgres:5432/langfuse
-      SALT: ${LANGFUSE_SALT:?set it in host/.env — run make host-up}
-      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?set it in host/.env — run make host-up}
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set it in host/.env — run make host-up}
+      SALT: ${LANGFUSE_SALT:?set it in deploy/llm-platform/.env — run make platform-up}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?set it in deploy/llm-platform/.env — run make platform-up}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set it in deploy/llm-platform/.env — run make platform-up}
       NEXTAUTH_URL: http://localhost:${LANGFUSE_PORT:-3000}
       TELEMETRY_ENABLED: 'false'
       LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: 'false'
@@ -175,11 +175,11 @@ services:
       LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME:-OptimAI}
       LANGFUSE_INIT_PROJECT_ID: ai-orchestrator
       LANGFUSE_INIT_PROJECT_NAME: ${LANGFUSE_INIT_PROJECT_NAME:-ai-orchestrator}
-      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:?set it in host/.env — run make host-up}
-      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:?set it in host/.env — run make host-up}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:?set it in deploy/llm-platform/.env — run make platform-up}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:?set it in deploy/llm-platform/.env — run make platform-up}
       LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-operator@example.com}
       LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-Operator}
-      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:?set it in host/.env — run make host-up}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:?set it in deploy/llm-platform/.env — run make platform-up}
     ports:
       - '127.0.0.1:${LANGFUSE_PORT:-3000}:3000'
     healthcheck:
@@ -208,7 +208,7 @@ services:
       - ${VERTEX_CREDENTIALS_FILE:-/dev/null}:/app/vertex-sa.json:ro
     environment:
       DATABASE_URL: postgresql://${HOST_POSTGRES_USER}:${HOST_POSTGRES_PASSWORD}@postgres:5432/litellm
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set it in host/.env — run make host-up}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set it in deploy/llm-platform/.env — run make platform-up}
       STORE_MODEL_IN_DB: 'False'
       # required by the langfuse_otel callback: the v1 exporter drops the langfuse_* and
       # x-litellm-* headers the adapters attribute spend and traces with (AD-11)

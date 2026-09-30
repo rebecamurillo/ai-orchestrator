@@ -12,7 +12,7 @@ the operator only at declared checkpoints or when an agent is blocked.
 | `README.md` (this file) | humans | boot a machine, start the stack, run an orchestration, keep the gates green |
 | `AGENTS.md` | AI agents | the hard rules, the architecture, the gates |
 | `DEPLOY.md` | the operator of the production machine | GHCR images, upgrades, rollback, the drain rule, running without the host services |
-| `host/README.md` | whoever sets up LiteLLM / Langfuse / the model server | the optional host stack, its keys, its pitfalls |
+| `deploy/llm-platform/README.md` | whoever sets up LiteLLM / Langfuse / the model server | the optional llm-platform stack, its keys, its pitfalls |
 | `_bmad-output/` | agents and the operator | BMAD output: the binding architecture spine (`AD-n`), the design baseline, pending specs — `_bmad-output/README.md` is the index |
 
 ## The system at a glance
@@ -130,20 +130,20 @@ and writes all of them for you.
 ### 5. (Gateway / full mode only) start the host services
 
 ```bash
-make host-up          # generate host/.env, start LiteLLM + Langfuse, wait for health
-make host-env-sync    # mint the harness key and write the six values into the root .env
+make platform-up          # generate deploy/llm-platform/.env, start LiteLLM + Langfuse, wait for health
+make platform-env-sync    # mint the harness key and write the six values into the root .env
 ```
 
-Two things `host-up` cannot do for you, both in `host/.env`:
+Two things `platform-up` cannot do for you, both in `deploy/llm-platform/.env`:
 
 - **A real provider key** (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or a running oMLX). The
   proxy starts and answers `/health` without one, but every completion fails 401 — enough
   to bring the stack up, not enough to run a harness.
 - Or use a **Claude subscription instead of an API key**: set
-  `CLAUDE_SUBSCRIPTION_AUTH=true` in `.env` and follow `host/README.md` →
+  `CLAUDE_SUBSCRIPTION_AUTH=true` in `.env` and follow `deploy/llm-platform/README.md` →
   "authenticate on a Claude subscription".
 
-Details, key separation, and verification commands: `host/README.md`.
+Details, key separation, and verification commands: `deploy/llm-platform/README.md`.
 
 ### 6. Start the app — pick a mode
 
@@ -259,12 +259,12 @@ over HTTP:
 
 - **Run the stack** — each release attaches `ai-orchestrator-deploy-<tag>.tar.gz`
   (`install.sh`, the compose pulling the private GHCR images, the env contract, and the
-  optional `host/` stack). A client extracts it and runs `./install.sh` with a GitHub token
+  optional `deploy/llm-platform/` stack). A client extracts it and runs `./install.sh` with a GitHub token
   that can read the packages; `make bundle TAG=<tag>` builds the same archive here. The
   procedure is `deploy/README.md`.
 - **Let a project's agents use it** — install the Claude Code plugin in the consumer
   project: `/plugin marketplace add OptimAI-labs/ai-orchestrator`, then
-  `/plugin install orchestrator@optimai`. The skill (`plugin/skills/orchestrator/`)
+  `/plugin install orchestrator@optimai`. The skill (`deploy/kit/skills/orchestrator/`)
   teaches the full API protocol: project and repository setup, template discovery,
   preflight, run creation, polling, and signals. The project needs
   `ORCHESTRATOR_BASE_URL` and `ORCHESTRATOR_TOKEN` in its environment.
@@ -276,8 +276,8 @@ over HTTP:
 | Every `POST /api/v1/projects` answers 500 | `ORCHESTRATOR_SECRET_KEY` is still the placeholder — mint a real Fernet key (step 4), restart |
 | A gate is red on a fresh machine | Run `make doctor` first: missing uv/Node/pnpm reads as a test failure |
 | `/login` or `/healthz` unreachable on `localhost` | Use `127.0.0.1` — nothing listens on `::1` |
-| Harness readiness fails 401 on every model | The Gateway has no real upstream provider key in `host/.env` — see `host/README.md` |
-| Claude Code fails with `Invalid model name … claude-opus-5` | Its own default model is not in the Gateway's `model_list`: bind a model on the Run, or add the name in `host/litellm.config.yaml` |
+| Harness readiness fails 401 on every model | The Gateway has no real upstream provider key in `deploy/llm-platform/.env` — see `deploy/llm-platform/README.md` |
+| Claude Code fails with `Invalid model name … claude-opus-5` | Its own default model is not in the Gateway's `model_list`: bind a model on the Run, or add the name in `deploy/llm-platform/litellm.config.yaml` |
 | `make e2e-ui` refuses: `127.0.0.1:4321 is already used` | It binds the same port `make up` publishes — `make down` first, or change `WEB_CLIENT_PORT` |
 | Cost shows "provisional" | Gateway is disabled (`LITELLM_BASE_URL=` blank) — expected in bare mode |
 | No trace link on Runs | Tracing is disabled (`LANGFUSE_BASE_URL=` blank) — expected outside full mode |
@@ -367,8 +367,8 @@ a diff. Team overrides: `_bmad/custom/config.toml` (committed); personal:
 
 - **Production deploys** (GHCR images, upgrades, rollback, drain): `DEPLOY.md`
 - **Consumer package** (run a release without a checkout; agent-integration plugin):
-  `deploy/README.md`, `plugin/`
-- **Host stack in depth** (LiteLLM keys, Langfuse, oMLX, egress, backups): `host/README.md`
+  `deploy/README.md`, `deploy/kit/`
+- **Host stack in depth** (LiteLLM keys, Langfuse, oMLX, egress, backups): `deploy/llm-platform/README.md`
 - **Project brain template** (the planning-hub template repo for client products):
   [OptimAI-labs/project-brain-template](https://github.com/OptimAI-labs/project-brain-template),
   source under `templates/project-brain/`

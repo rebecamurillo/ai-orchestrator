@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "orchestrator",
-      "source": "./plugin",
+      "source": "./deploy/kit",
       "description": "Drive an ai-orchestrator instance over HTTP: create projects, register repositories, launch BMAD workflow runs, monitor progress, and respond to checkpoints."
     }
   ]

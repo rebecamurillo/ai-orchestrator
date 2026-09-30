@@ -5,7 +5,7 @@
 # this file carries names and never values (hard rule 5).
 #
 #   export LITELLM_OTEL_V2=true          # required by the langfuse_otel callback below
-#   litellm --config host/litellm.config.yaml --port 4000
+#   litellm --config deploy/llm-platform/litellm.config.yaml --port 4000
 #
 # `model_list` is the whole of what a harness can ask for. Adding a model here and adding
 # its alias to LOCAL_MODELS in `.env` are the two halves of offering it to the `local`
@@ -52,7 +52,7 @@ model_list:
   # Uncomment together with `forward_client_headers_to_llm_api` below to spend a Claude Max
   # or Pro subscription instead of an API key. No `api_key` here on purpose: the credential
   # is the OAuth token Claude Code puts in `Authorization`, forwarded by that switch. Pair
-  # it with CLAUDE_SUBSCRIPTION_AUTH=true in the stack's .env — see host/README.md.
+  # it with CLAUDE_SUBSCRIPTION_AUTH=true in the stack's .env — see deploy/llm-platform/README.md.
   - model_name: claude-sonnet-5
     litellm_params:
       model: anthropic/claude-sonnet-5
@@ -112,7 +112,7 @@ litellm_settings:
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
-  # Subscription mode only (host/README.md). Forwards the client's own Authorization header
+  # Subscription mode only (deploy/llm-platform/README.md). Forwards the client's own Authorization header
   # upstream, which is how Claude Code's subscription OAuth token reaches Anthropic. It
   # applies to EVERY route on this proxy, not only the Claude one — acceptable here because
   # this proxy is single-tenant and reachable only from the orchestrator (see Egress).

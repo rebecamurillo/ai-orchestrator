@@ -15,7 +15,7 @@ PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
 # --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
 NODE_RUN := $(PNPM) --dir $(WEB) run
 
-.PHONY: install install-e2e doctor lint test coverage e2e e2e-api e2e-ui durability images openapi env up down logs host-up host-down host-logs host-doctor host-env-sync local local-backend local-web bundle push
+.PHONY: install install-e2e doctor lint test coverage e2e e2e-api e2e-ui durability images openapi env up down logs platform-up platform-down platform-logs platform-doctor platform-env-sync local local-backend local-web bundle push
 
 ## install — a fresh checkout to a machine the gates run on (scripts/install.sh)
 ## Syncs backend-api's virtualenv from uv.lock, installs web-client from pnpm-lock.yaml at
@@ -143,7 +143,7 @@ push:
 	./scripts/push-images.sh $(TAG)
 
 ## bundle — the client package for one release: dist/ai-orchestrator-deploy-$(TAG).tar.gz
-## deploy/ (install.sh, compose, env contract) + host/ + plugin/ + VERSION, from the working
+## deploy/ (install.sh, compose, env contract) with llm-platform/ and kit/ inside, plus VERSION, from the working
 ## tree via `git ls-files`, so a filled .env can never travel. release.yml runs the same script.
 bundle:
 	./scripts/bundle.sh $(TAG)
@@ -191,32 +191,32 @@ local-backend:
 local-web:
 	./scripts/local.sh web
 
-## ── the host stack: LiteLLM and Langfuse (host/docker-compose.yml) ──────────
+## ── the llm-platform stack: LiteLLM and Langfuse (deploy/llm-platform/docker-compose.yml) ──────────
 ## Separate from the product stack on purpose: different lifecycle, its own data, and it
-## stays up across a `make down`. See host/README.md.
-HOST_COMPOSE := docker compose -f host/docker-compose.yml --env-file host/.env
+## stays up across a `make down`. See deploy/llm-platform/README.md.
+PLATFORM_COMPOSE := docker compose -f deploy/llm-platform/docker-compose.yml --env-file deploy/llm-platform/.env
 
-## host-up — generate host/.env if absent, then start LiteLLM and Langfuse and wait
-host-up:
-	./host/generate-env.sh
-	$(HOST_COMPOSE) up -d --wait
+## platform-up — generate deploy/llm-platform/.env if absent, then start LiteLLM and Langfuse and wait
+platform-up:
+	./deploy/llm-platform/generate-env.sh
+	$(PLATFORM_COMPOSE) up -d --wait
 
-## host-down — stop the host stack, keeping its volumes
-## `$(HOST_COMPOSE) down -v` would drop Langfuse's traces and re-run the database init
-host-down:
-	$(HOST_COMPOSE) down
+## platform-down — stop the llm-platform stack, keeping its volumes
+## `$(PLATFORM_COMPOSE) down -v` would drop Langfuse's traces and re-run the database init
+platform-down:
+	$(PLATFORM_COMPOSE) down
 
-## host-logs — follow the host stack's output
-host-logs:
-	$(HOST_COMPOSE) logs -f
+## platform-logs — follow the llm-platform stack's output
+platform-logs:
+	$(PLATFORM_COMPOSE) logs -f
 
-## host-env-sync — point the root .env at the running host stack (mints the harness key)
-host-env-sync:
-	./host/sync-env.sh
+## platform-env-sync — point the root .env at the running llm-platform stack (mints the harness key)
+platform-env-sync:
+	./deploy/llm-platform/sync-env.sh
 
-## host-doctor — every harness checks its gateway and its skills, inside the backend image
+## platform-doctor — every harness checks its gateway and its skills, inside the backend image
 ## this is the half of the doctor contract that needs a reachable gateway to prove
-host-doctor:
+platform-doctor:
 	docker compose exec -T backend-api scripts/harness/claude.sh doctor
 	docker compose exec -T backend-api scripts/harness/codex.sh doctor
 	docker compose exec -T backend-api scripts/harness/opencode.sh doctor

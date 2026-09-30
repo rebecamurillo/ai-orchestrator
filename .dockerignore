@@ -39,7 +39,7 @@ playwright-report
 
 # not part of either image
 web-client
-host
+deploy
 contracts
 Makefile
 README.md

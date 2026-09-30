@@ -2,7 +2,8 @@
 
 LiteLLM, Langfuse and the model server run on the Mac mini itself — Docker on macOS has no
 GPU, and the Gateway holds keys the containers never see. They are therefore documented
-rather than orchestrated, and `host/` is that documentation. Prose is not usually testable,
+rather than orchestrated, and `deploy/llm-platform/` is that documentation. Prose is not
+usually testable,
 but each item below is a decision some later story depends on being written down:
 
 - the Gateway's two keys (PRD §8 item 5) and which one a harness may receive (AD-5),
@@ -11,7 +12,7 @@ but each item below is a decision some later story depends on being written down
 - local models as `openai/<alias>` with `use_chat_completions_api: true`, which is what
   lets Codex's `/v1/responses` calls bridge to the model server (addendum §A),
 - the egress allowlist, which NFR-4 makes a host firewall rule rather than a container one,
-- the nightly `pg_dump` into `host/backups/`, 14 days kept (spine Operations).
+- the nightly `pg_dump` into `deploy/llm-platform/backups/`, 14 days kept (spine Operations).
 
 A missing line here is a decision that has to be rediscovered. The file also has to stay
 free of key material, which is the other half of what is asserted.
@@ -26,12 +27,13 @@ import pytest
 
 from tests.unit.conftest import ENV_EXAMPLE, REPO_ROOT, parse_env_example
 
-HOST = REPO_ROOT / "host"
+HOST = REPO_ROOT / "deploy" / "llm-platform"
 README = HOST / "README.md"
 LITELLM_CONFIG = HOST / "litellm.config.yaml"
 BACKUPS_KEEP = HOST / "backups" / ".gitkeep"
 
-#: Every decision the brief requires `host/README.md` to carry, as it must appear in it.
+#: Every decision the brief requires `deploy/llm-platform/README.md` to carry, as it must
+#: appear in it.
 DOCUMENTED = (
     "1.99.0",  # LiteLLM, pinned
     "model_list",
@@ -45,7 +47,7 @@ DOCUMENTED = (
     "4.27.0",  # Langfuse, pinned
     "oMLX",
     "pg_dump",
-    "host/backups/",
+    "deploy/llm-platform/backups/",
     "14 days",
 )
 
@@ -158,5 +160,5 @@ def test_a_dump_is_ignored_but_the_directory_is_not() -> None:
         )
         return result.returncode == 0
 
-    assert ignored("host/backups/orchestrator-2026-09-04.sql")
-    assert not ignored("host/backups/.gitkeep")
+    assert ignored("deploy/llm-platform/backups/orchestrator-2026-09-04.sql")
+    assert not ignored("deploy/llm-platform/backups/.gitkeep")

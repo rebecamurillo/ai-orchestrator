@@ -195,7 +195,7 @@ jobs:
 
   # The client bundle: everything a machine needs to run this release without cloning the
   # repository — `deploy/` (install.sh, compose, env contract, procedure) at the root,
-  # `host/` (the optional LiteLLM/Langfuse stack), `plugin/` (the agent-integration skill)
+  # `deploy/llm-platform/` (the optional LiteLLM/Langfuse stack), `deploy/kit/` (the agent-integration skill)
   # and a `VERSION` file naming the tag so `install.sh` knows which images to pull.
   # `scripts/bundle.sh` lays it out (`make bundle TAG=…` on a workstation is the same call).
   # Attached to a GitHub Release under the same tag the images carry, so the bundle and the

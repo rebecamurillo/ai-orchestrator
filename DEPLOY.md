@@ -8,7 +8,7 @@ release that changes the walker.
 
 Production here is what PRD §12 and NFR-7 say it is: **one operator, one machine** — an
 Apple Silicon Mac mini running the compose stack, with LiteLLM, Langfuse and the model
-server beside it on the host (`host/README.md`). There is no cluster, no second replica and
+server beside it on the host (`deploy/llm-platform/README.md`). There is no cluster, no second replica and
 no load balancer, and several decisions below are only correct because of that. Where one of
 them stops being correct at two replicas, it says so.
 
@@ -43,7 +43,7 @@ archives from `dpkg --print-architecture`, so both platforms build unchanged.
 
 The release also attaches `ai-orchestrator-deploy-<tag>.tar.gz` to the GitHub Release: the
 client package — `deploy/` at its root (`install.sh`, compose, env contract, `README.md`),
-`host/`, `plugin/` and a `VERSION` file naming the tag — for machines that run a release
+`deploy/llm-platform/`, `deploy/kit/` and a `VERSION` file naming the tag — for machines that run a release
 without this checkout. `scripts/bundle.sh` (also `make bundle TAG=v1.2.0`) builds the same
 archive on a workstation, from the working tree via `git ls-files` so a filled `.env` can
 never travel in it. That path is `deploy/README.md`; this file remains the operator's own
@@ -92,8 +92,8 @@ two projects sharing a name share their data.
 ### 3.1 Prerequisites on the host
 
 - Docker Desktop, started at login.
-- The host stack — LiteLLM, Langfuse, the model server — up and reachable, per
-  `host/README.md`. `make host-up` and `make host-doctor` are the same on this machine as
+- The llm-platform stack — LiteLLM, Langfuse, the model server — up and reachable, per
+  `deploy/llm-platform/README.md`. `make platform-up` and `make platform-doctor` are the same on this machine as
   on any other.
 - A GitHub token with `read:packages`, for pulling the images:
 
@@ -103,7 +103,7 @@ two projects sharing a name share their data.
 
 ### 3.2 The checkout
 
-The host needs a checkout, because the compose files, `host/` and the backup script live in
+The host needs a checkout, because the compose files, `deploy/llm-platform/` and the backup script live in
 it. Check out **the same tag the images were built from**:
 
 ```bash
@@ -138,7 +138,7 @@ Then set every value that must not stay a placeholder:
 | `ORCHESTRATOR_SESSION_SECRET` | `openssl rand -hex 32` | Session cookies are forgeable |
 | `POSTGRES_PASSWORD` | `openssl rand -hex 24` | — set `DATABASE_URL` to the same password in the same edit; they are two spellings of one fact |
 | `GITHUB_TOKEN` | a PAT with repo access | Clones and pushes fail |
-| `LITELLM_API_KEY` | a virtual key, `key_type: llm_api` (`host/README.md`) | No harness can reach a model |
+| `LITELLM_API_KEY` | a virtual key, `key_type: llm_api` (`deploy/llm-platform/README.md`) | No harness can reach a model |
 | `LITELLM_SPEND_KEY` | master or `proxy_admin_viewer` key | No budget or cost readings |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | from the Langfuse project | No traces |
 
@@ -287,7 +287,7 @@ file); deploy-only variables (`IMAGE_TAG`, `COMPOSE_PROJECT_NAME`, `BIND_ADDRESS
 `deploy/.env.example` alone; `install.sh` stays bash 3.2 with no Python, because the client
 machine has neither `make` nor this checkout; and it is never run against real Docker on
 the operator's machine — `test_deploy_install.py`'s docker shim is how its control flow is
-proved (host/README.md says why).
+proved (deploy/llm-platform/README.md says why).
 
 ## 5. Upgrading a running host
 
@@ -333,10 +333,10 @@ thing standing between a bad one and data loss is a dump taken immediately befor
 
 ```bash
 docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  > "host/backups/pre-v1.2.0-$(date -u +%Y%m%dT%H%M%SZ).sql"
+  > "deploy/llm-platform/backups/pre-v1.2.0-$(date -u +%Y%m%dT%H%M%SZ).sql"
 ```
 
-`host/README.md` describes the nightly cron. On a production host that script must export the
+`deploy/llm-platform/README.md` describes the nightly cron. On a production host that script must export the
 three `COMPOSE_*` variables of §2 before it runs — without them it targets whatever compose
 defaults to, which is not this stack.
 
@@ -398,7 +398,7 @@ docker compose down
 docker volume rm aio-prod_pgdata          # deliberate and irreversible
 docker compose up -d --no-build --wait postgres
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  < host/backups/pre-v1.2.0-….sql
+  < deploy/llm-platform/backups/pre-v1.2.0-….sql
 sed -i '' 's/^IMAGE_TAG=.*/IMAGE_TAG=v1.1.0/' .env.prod
 git checkout v1.1.0
 docker compose up -d --no-build --wait

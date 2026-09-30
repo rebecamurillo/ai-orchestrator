@@ -39,7 +39,7 @@ about this is a path production does not have.
 
 ### Both stacks run side by side
 
-Every published port is distinct, so `make up` and `make host-up` can be running at once. The
+Every published port is distinct, so `make up` and `make platform-up` can be running at once. The
 one that would actually be reached for by accident is the database: **the product's postgres
 keeps 5432, and this stack's own postgres is published on 5433.** They are separate servers
 with separate volumes — the orchestrator's schema is never in the same database as Langfuse's.
@@ -47,7 +47,7 @@ with separate volumes — the orchestrator's schema is never in the same databas
 **The compose project name is the one thing two copies of this directory share.** The file
 declares `name: ai-orchestrator-host`, so `docker compose up` from *any* copy of it — a release
 bundle extracted on this machine, a second checkout — addresses the same containers and
-volumes, and recreates them with that copy's `host/.env`. That happened on 2026-09-30 during a
+volumes, and recreates them with that copy's `deploy/llm-platform/.env`. That happened on 2026-09-30 during a
 dry run of the client bundle (hard rule 9). `deploy/install.sh` therefore runs this stack as
 `<COMPOSE_PROJECT_NAME>-host` (`aio-host`) with `--project-name`; anything else that drives this
 file from outside the checkout must pass its own `-p` too, and never run `up` against a
@@ -58,18 +58,18 @@ files and fails if any host-side port appears in both, so adding a port to eithe
 checked against the other rather than against a list someone has to remember to update.
 
 ```bash
-make host-up          # generate host/.env, start everything, wait for health
-make host-env-sync    # mint the harness key and point the root .env at the stack
+make platform-up          # generate deploy/llm-platform/.env, start everything, wait for health
+make platform-env-sync    # mint the harness key and point the root .env at the stack
 make up               # the product stack
-make host-doctor      # every harness checks its gateway and its skills
+make platform-doctor      # every harness checks its gateway and its skills
 ```
 
-`make host-up` calls `host/generate-env.sh`, which writes `host/.env` (mode 600, git-ignored)
+`make platform-up` calls `deploy/llm-platform/generate-env.sh`, which writes `deploy/llm-platform/.env` (mode 600, git-ignored)
 with freshly generated secrets. It never overwrites an existing one: regenerating would
 invalidate the Langfuse project keys already written into the root `.env` and silently detach
 the orchestrator from its own traces. Delete the file deliberately to start over.
 
-`make host-env-sync` is the only thing that writes to the root `.env`. It rewrites exactly six
+`make platform-env-sync` is the only thing that writes to the root `.env`. It rewrites exactly six
 assignments — the two base URLs, the two Langfuse project keys, and the two Gateway keys — in
 place, keeps every other line, and takes a timestamped backup first. `LITELLM_API_KEY` is
 minted from the running proxy with `key_type: llm_api`, which is the restriction described
@@ -97,12 +97,12 @@ Three things are worth knowing before changing the file:
   every later start fails with `Dirty database version N`. The web waits on the worker's
   health for that reason, and recovering from a dirty state means removing the ClickHouse
   volume, not restarting.
-- **`make host-down` keeps the volumes.** Only `docker compose -f host/docker-compose.yml
+- **`make platform-down` keeps the volumes.** Only `docker compose -f deploy/llm-platform/docker-compose.yml
   down -v` drops Langfuse's traces and re-runs the database init.
 
 The proxy runs the committed `litellm.config.yaml` unchanged, mounted read-only, so what runs
 here is what this document describes. Real inference still needs a real provider key in
-`host/.env`; without one the proxy starts, answers `/health` and lists `/v1/models`, which is
+`deploy/llm-platform/.env`; without one the proxy starts, answers `/health` and lists `/v1/models`, which is
 everything the harness `doctor` check asserts.
 
 ## LiteLLM
@@ -114,7 +114,7 @@ export LITELLM_MASTER_KEY=…            # generated once, kept in the host keyc
 export LITELLM_OTEL_V2=true            # required: the v1 exporter drops the langfuse_* headers
 export LANGFUSE_PUBLIC_KEY=…  LANGFUSE_SECRET_KEY=…  LANGFUSE_HOST=http://localhost:3000
 export OMLX_BASE_URL=http://localhost:8000/v1
-litellm --config host/litellm.config.yaml --port 4000
+litellm --config deploy/llm-platform/litellm.config.yaml --port 4000
 ```
 
 `model_list` is where a model becomes available to a harness. Hosted models are their provider
@@ -183,7 +183,7 @@ in practice:
 
 ### Upstream provider keys are not optional for a readiness run
 
-`host/.env` ships `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `OMLX_API_KEY` as `not-set`, and
+`deploy/llm-platform/.env` ships `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `OMLX_API_KEY` as `not-set`, and
 its own comment says the proxy still starts, answers `/health` and lists `/v1/models` without
 them — which is all `scripts/harness/<name>.sh doctor` checks. That is enough to bring the
 stack up and **not** enough to run a harness: every entry in `model_list` fails at the first
@@ -276,11 +276,11 @@ credential holds `Authorization`:
 | --- | --- | --- |
 | `Authorization` carries | the Gateway virtual key, via `ANTHROPIC_AUTH_TOKEN` | Claude Code's subscription OAuth token |
 | the virtual key travels in | `Authorization` | `x-litellm-api-key` — because `Authorization` is taken |
-| LiteLLM reaches Anthropic with | `ANTHROPIC_API_KEY` from `host/.env` | the forwarded OAuth token |
+| LiteLLM reaches Anthropic with | `ANTHROPIC_API_KEY` from `deploy/llm-platform/.env` | the forwarded OAuth token |
 
 Four steps, and the first two are on this host:
 
-1. In `host/litellm.config.yaml`, uncomment `forward_client_headers_to_llm_api: true` under
+1. In `deploy/llm-platform/litellm.config.yaml`, uncomment `forward_client_headers_to_llm_api: true` under
    `general_settings` and the `claude-subscription` entry in `model_list`. Restart the proxy.
 2. Note what that switch does: it forwards client headers upstream for **every** route on
    this proxy, not only the Claude one. This proxy is single-tenant and reachable only from
@@ -377,22 +377,22 @@ the stack fails if it is absent.
 ## Backups
 
 The whole database — schemas `public` and `dbos` together, because a Run's rows and its engine
-state have to be restored as one — dumped nightly into `host/backups/`, 14 days kept. The
+state have to be restored as one — dumped nightly into `deploy/llm-platform/backups/`, 14 days kept. The
 directory is tracked; its contents are ignored (`.gitignore`).
 
 ```cron
 # m h  dom mon dow
-  0 3  *   *   *   cd /path/to/ai-orchestrator && ./host/backup.sh
+  0 3  *   *   *   cd /path/to/ai-orchestrator && ./deploy/llm-platform/backup.sh
 ```
 
 ```bash
 #!/usr/bin/env bash
-# host/backup.sh — write it once, on the host; it is not committed, because it names paths
+# deploy/llm-platform/backup.sh — write it once, on the host; it is not committed, because it names paths
 set -euo pipefail
 set -a; . ./.env; set +a
-out="host/backups/orchestrator-$(date -u +%Y-%m-%d).sql"
+out="deploy/llm-platform/backups/orchestrator-$(date -u +%Y-%m-%d).sql"
 docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" > "$out"
-find host/backups -name 'orchestrator-*.sql' -mtime +14 -delete
+find deploy/llm-platform/backups -name 'orchestrator-*.sql' -mtime +14 -delete
 ```
 
 `agent-home` is not backed up: it holds harness sessions and the BMAD skill stubs, both of which

@@ -290,7 +290,7 @@ class Settings(BaseSettings):
     #: Claude subscription, so `Authorization` carries that OAuth token, the virtual key
     #: moves to `x-litellm-api-key`, and `ANTHROPIC_AUTH_TOKEN` must be absent or it would
     #: override the login. It needs `forward_client_headers_to_llm_api: true` on the
-    #: Gateway, which is host-side and documented in `host/README.md`.
+    #: Gateway, which is host-side and documented in `deploy/llm-platform/README.md`.
     claude_subscription_auth: bool = False
     work_dir: Path = Path("/work")
     agent_home: Path = Path("/home/agent")

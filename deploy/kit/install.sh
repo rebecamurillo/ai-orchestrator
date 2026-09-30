@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plugin/install.sh — wire a consumer project up to an ai-orchestrator instance.
+# kit/install.sh — wire a consumer project up to an ai-orchestrator instance.
 #
 # Copies the `orchestrator` skill (SKILL.md + references/) into the project's
 # `.claude/skills/` so its agents know the API protocol, and makes sure the two

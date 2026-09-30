@@ -2,9 +2,9 @@
 # install.sh — ai-orchestrator, from an empty machine to http://127.0.0.1:4321 in one command.
 #
 #   ./install.sh                                  # interactive: asks for the GitHub token,
-#                                                 #   offers the optional host stack
+#                                                 #   offers the optional llm-platform stack
 #   GHCR_TOKEN=ghp_… ./install.sh --yes           # unattended, orchestrator only
-#   GHCR_TOKEN=ghp_… ANTHROPIC_API_KEY=sk-ant-… ./install.sh --yes --with-host
+#   GHCR_TOKEN=ghp_… ANTHROPIC_API_KEY=sk-ant-… ./install.sh --yes --with-platform
 #
 #   ./install.sh start | stop | status | logs     # day-2 operations on this stack
 #   ./install.sh upgrade --tag v0.2.0             # backup, retag, pull, restart
@@ -15,7 +15,7 @@
 #   1. checks docker, docker compose v2, curl and openssl are here, and the daemon answers
 #   2. logs the docker daemon in to ghcr.io with the token — the images are private
 #   3. writes `.env` from `.env.example` with generated secrets, once; never overwrites it
-#   4. optionally brings up host/ (LiteLLM + Langfuse) and points `.env` at it
+#   4. optionally brings up llm-platform/ (LiteLLM + Langfuse) and points `.env` at it
 #   5. pulls the two images pinned by IMAGE_TAG and starts the stack
 #   6. proves /healthz and the login token, then prints where to go
 #
@@ -25,7 +25,7 @@
 #                       defaults to the token above, which is usually the same PAT
 #   GITHUB_USER         registry login name; resolved from the token when unset
 #   IMAGE_TAG           the release to run; `--tag` wins, then the VERSION file beside this script
-#   ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY   provider keys for the host stack
+#   ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY   provider keys for the llm-platform stack
 #
 # Portable bash 3.2 (a stock macOS): no associative arrays, no `sed -i`, no `mapfile`.
 # Nothing here stops a service it did not start, and nothing rebinds a port that is taken:
@@ -36,12 +36,12 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 env_file="${here}/.env"
 example_file="${here}/.env.example"
 compose_file="${here}/docker-compose.yml"
-# the bundle carries host/ beside this script; a repository checkout has it one level up
-if [[ -f "${here}/host/docker-compose.yml" ]]; then host_dir="${here}/host"; else host_dir="${here}/../host"; fi
-host_env="${host_dir}/.env"
+# llm-platform/ sits beside this script in the bundle and in the checkout alike (deploy/ is the client install, entire)
+platform_dir="${here}/llm-platform"
+platform_env="${platform_dir}/.env"
 
 yes=0
-with_host=""     # "" ask, 1 yes, 0 no
+with_platform=""     # "" ask, 1 yes, 0 no
 tag_arg=""
 command=""
 
@@ -62,8 +62,8 @@ while [[ $# -gt 0 ]]; do
 		--tag) [[ $# -ge 2 ]] || die "--tag needs a value"; tag_arg="$2"; shift ;;
 		--tag=*) tag_arg="${1#--tag=}" ;;
 		--yes|-y) yes=1 ;;
-		--with-host) with_host=1 ;;
-		--no-host) with_host=0 ;;
+		--with-platform) with_platform=1 ;;
+		--no-platform) with_platform=0 ;;
 		-h|--help) usage; exit 0 ;;
 		*) die "unknown argument: $1 (try --help)" ;;
 	esac
@@ -77,7 +77,7 @@ need_cmd() { command -v "$1" >/dev/null 2>&1 || die "$1 is not installed — $2"
 # NAME=value from a dotenv file, minus a trailing `  # comment` and surrounding quotes
 get_var() {
 	local file="$1" name="$2" line value
-	# an absent host/.env answers from its contract, so the port check can run before it exists
+	# an absent llm-platform/.env answers from its contract, so the port check can run before it exists
 	[[ -f "$file" ]] || file="${file}.example"
 	line="$(grep "^${name}=" "$file" 2>/dev/null | head -1 || true)"
 	value="${line#*=}"
@@ -137,15 +137,15 @@ confirm() {   # confirm "question" → 0 on yes; --yes answers yes
 }
 
 compose()      { docker compose --project-directory "$here" -f "$compose_file" "$@"; }
-# The host stack runs as its own compose project, named after this stack's
+# The llm-platform stack runs as its own compose project, named after this stack's
 # COMPOSE_PROJECT_NAME (`aio` → `aio-host`), never as the host file's own `name:`: a
-# repository checkout's dev host stack is `ai-orchestrator-host`, and sharing that name would
+# repository checkout's dev llm-platform stack is `ai-orchestrator-host`, and sharing that name would
 # make `up` here recreate a stack this script did not start (hard rule 9 — learned the hard
 # way on 2026-09-30).
-host_project() { printf '%s-host' "$( [[ -f "$env_file" ]] && get_var "$env_file" COMPOSE_PROJECT_NAME || true )"; }
-host_compose() {
-	local project; project="$(host_project)"; [[ "$project" != "-host" ]] || project="aio-host"
-	docker compose --project-name "$project" --project-directory "$host_dir" -f "${host_dir}/docker-compose.yml" --env-file "$host_env" "$@"
+platform_project() { printf '%s-host' "$( [[ -f "$env_file" ]] && get_var "$env_file" COMPOSE_PROJECT_NAME || true )"; }
+platform_compose() {
+	local project; project="$(platform_project)"; [[ "$project" != "-host" ]] || project="aio-host"
+	docker compose --project-name "$project" --project-directory "$platform_dir" -f "${platform_dir}/docker-compose.yml" --env-file "$platform_env" "$@"
 }
 
 # ── 1. prerequisites ─────────────────────────────────────────────────────────
@@ -221,56 +221,56 @@ render_env() {
 	else
 		warn "GITHUB_TOKEN left as a placeholder in .env — fill it in before registering a repository"
 	fi
-	# the gateway and tracing are off until the host stack is chosen; a non-blank base URL
+	# the gateway and tracing are off until the llm-platform stack is chosen; a non-blank base URL
 	# with a placeholder key is refused at start-up, and blank is the documented off switch
 	set_var "$env_file" LITELLM_BASE_URL ""
 	set_var "$env_file" LANGFUSE_BASE_URL ""
 	say "wrote .env (mode 600): generated ORCHESTRATOR_TOKEN, session secret, Fernet key, database password; IMAGE_TAG=${tag}"
 }
 
-# ── 4. the optional host stack ───────────────────────────────────────────────
-want_host() {
-	if [[ -n "$with_host" ]]; then [[ "$with_host" -eq 1 ]]; return; fi
-	if [[ -f "$host_env" ]]; then return 0; fi          # already set up on this machine
+# ── 4. the optional llm-platform stack ───────────────────────────────────────────────
+want_platform() {
+	if [[ -n "$with_platform" ]]; then [[ "$with_platform" -eq 1 ]]; return; fi
+	if [[ -f "$platform_env" ]]; then return 0; fi          # already set up on this machine
 	[[ "$yes" -eq 0 ]] || return 1
 	say
-	say "Optional: the host stack — LiteLLM (model gateway, spend tracking) and Langfuse (traces),"
+	say "Optional: the llm-platform stack — LiteLLM (model gateway, spend tracking) and Langfuse (traces),"
 	say "seven more containers on ports 3000, 4000, 5433, 9000 and 9091. Without it each coding"
 	say "agent authenticates on its own and cost figures are provisional. It can be added later"
-	say "with: ./install.sh start --with-host"
-	confirm "Install the host stack now?"
+	say "with: ./install.sh start --with-platform"
+	confirm "Install the llm-platform stack now?"
 }
 
-host_up() {
-	[[ -f "${host_dir}/docker-compose.yml" ]] || die "host/ is missing beside this script — the bundle is incomplete"
-	step "host stack (LiteLLM + Langfuse)"
+platform_up() {
+	[[ -f "${platform_dir}/docker-compose.yml" ]] || die "llm-platform/ is missing beside this script — the bundle is incomplete"
+	step "llm-platform stack (LiteLLM + Langfuse)"
 	# a port check whenever *this* host project is not already running — whatever is listening
 	# on 3000 or 4000 then belongs to something else, and this script never takes it over
-	if [[ ! -f "$host_env" ]] || ! host_compose ps --status running --services 2>/dev/null | grep -q .; then
-		ensure_ports_free "$(get_var "$host_env" LANGFUSE_PORT || true) LANGFUSE_PORT host/.env" \
-			"$(get_var "$host_env" LITELLM_PORT || true) LITELLM_PORT host/.env" \
-			"$(get_var "$host_env" HOST_POSTGRES_PORT || true) HOST_POSTGRES_PORT host/.env" \
-			"$(get_var "$host_env" MINIO_API_PORT || true) MINIO_API_PORT host/.env" \
-			"$(get_var "$host_env" MINIO_CONSOLE_PORT || true) MINIO_CONSOLE_PORT host/.env"
+	if [[ ! -f "$platform_env" ]] || ! platform_compose ps --status running --services 2>/dev/null | grep -q .; then
+		ensure_ports_free "$(get_var "$platform_env" LANGFUSE_PORT || true) LANGFUSE_PORT llm-platform/.env" \
+			"$(get_var "$platform_env" LITELLM_PORT || true) LITELLM_PORT llm-platform/.env" \
+			"$(get_var "$platform_env" HOST_POSTGRES_PORT || true) HOST_POSTGRES_PORT llm-platform/.env" \
+			"$(get_var "$platform_env" MINIO_API_PORT || true) MINIO_API_PORT llm-platform/.env" \
+			"$(get_var "$platform_env" MINIO_CONSOLE_PORT || true) MINIO_CONSOLE_PORT llm-platform/.env"
 	fi
-	if [[ ! -f "$host_env" ]]; then
-		"${host_dir}/generate-env.sh"
+	if [[ ! -f "$platform_env" ]]; then
+		"${platform_dir}/generate-env.sh"
 		local name value
 		for name in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY; do
 			eval "value=\${${name}:-}"
 			if [[ -z "$value" && "$yes" -eq 0 ]]; then
 				prompt value "${name} for the gateway (enter to skip): " secret
 			fi
-			if [[ -n "$value" ]]; then set_var "$host_env" "$name" "$value"; say "host/.env: ${name} set"; fi
+			if [[ -n "$value" ]]; then set_var "$platform_env" "$name" "$value"; say "llm-platform/.env: ${name} set"; fi
 		done
-		if [[ "$(get_var "$host_env" ANTHROPIC_API_KEY)" == "not-set" && "$(get_var "$host_env" OPENAI_API_KEY)" == "not-set" ]]; then
-			warn "no provider key in host/.env — the gateway starts, but every model call answers 401 until one is set"
+		if [[ "$(get_var "$platform_env" ANTHROPIC_API_KEY)" == "not-set" && "$(get_var "$platform_env" OPENAI_API_KEY)" == "not-set" ]]; then
+			warn "no provider key in llm-platform/.env — the gateway starts, but every model call answers 401 until one is set"
 		fi
 	fi
-	say "starting the host stack (the first start runs migrations; a few minutes)…"
-	host_compose up -d --wait --wait-timeout 900
+	say "starting the llm-platform stack (the first start runs migrations; a few minutes)…"
+	platform_compose up -d --wait --wait-timeout 900
 	if [[ -z "$(get_var "$env_file" LITELLM_BASE_URL)" ]]; then
-		"${host_dir}/sync-env.sh" "$env_file"
+		"${platform_dir}/sync-env.sh" "$env_file"
 	else
 		say ".env already points at a gateway — not re-minting the harness key"
 	fi
@@ -306,9 +306,9 @@ print_access() {
 	say "  API        ${api}   (Authorization: Bearer <token>)"
 	say "  Login      $(get_var "$env_file" ORCHESTRATOR_TOKEN)"
 	say "             (ORCHESTRATOR_TOKEN in ${env_file})"
-	if [[ -f "$host_env" ]]; then
-		say "  Langfuse   http://127.0.0.1:$(get_var "$host_env" LANGFUSE_PORT)   $(get_var "$host_env" LANGFUSE_INIT_USER_EMAIL) / $(get_var "$host_env" LANGFUSE_INIT_USER_PASSWORD)"
-		say "  LiteLLM    http://127.0.0.1:$(get_var "$host_env" LITELLM_PORT)"
+	if [[ -f "$platform_env" ]]; then
+		say "  Langfuse   http://127.0.0.1:$(get_var "$platform_env" LANGFUSE_PORT)   $(get_var "$platform_env" LANGFUSE_INIT_USER_EMAIL) / $(get_var "$platform_env" LANGFUSE_INIT_USER_PASSWORD)"
+		say "  LiteLLM    http://127.0.0.1:$(get_var "$platform_env" LITELLM_PORT)"
 	fi
 	say "──────────────────────────────────────────────────────────────"
 	say "  ./install.sh status | logs | stop | start | upgrade --tag vX.Y.Z"
@@ -336,7 +336,7 @@ cmd_install() {
 	step "environment"
 	render_env "$tag"
 
-	if want_host; then host_up; fi
+	if want_platform; then platform_up; fi
 
 	stack_up
 	step "verifying"
@@ -347,8 +347,8 @@ cmd_install() {
 cmd_start() {
 	check_tools
 	[[ -f "$env_file" ]] || die ".env is missing — run ./install.sh first"
-	# --no-host always wins; otherwise an installed host stack (host/.env exists) comes up too
-	if [[ "$with_host" != "0" && ( -f "$host_env" || "$with_host" == "1" ) ]]; then host_up; fi
+	# --no-platform always wins; otherwise an installed llm-platform stack (llm-platform/.env exists) comes up too
+	if [[ "$with_platform" != "0" && ( -f "$platform_env" || "$with_platform" == "1" ) ]]; then platform_up; fi
 	stack_up
 	verify
 	print_access
@@ -358,14 +358,14 @@ cmd_stop() {
 	[[ -f "$env_file" ]] || die ".env is missing — nothing was installed here"
 	step "stopping ai-orchestrator (data kept)"
 	compose stop
-	if [[ -f "$host_env" ]] && confirm "Also stop the host stack (LiteLLM + Langfuse)?"; then host_compose stop; fi
+	if [[ -f "$platform_env" ]] && confirm "Also stop the llm-platform stack (LiteLLM + Langfuse)?"; then platform_compose stop; fi
 }
 
 cmd_status() {
 	[[ -f "$env_file" ]] || die ".env is missing — nothing was installed here"
 	say "ai-orchestrator ($(get_var "$env_file" IMAGE_TAG)):"
 	compose ps
-	if [[ -f "$host_env" ]]; then say; say "host stack:"; host_compose ps; fi
+	if [[ -f "$platform_env" ]]; then say; say "llm-platform stack:"; platform_compose ps; fi
 }
 
 cmd_logs() {
@@ -412,10 +412,10 @@ cmd_uninstall() {
 		[[ "$answer" == "delete" ]] || die "uninstall cancelled"
 	fi
 	compose down -v --remove-orphans
-	if [[ -f "$host_env" ]] && confirm "Also remove the host stack and its data (traces, spend logs)?"; then
-		host_compose down -v --remove-orphans
+	if [[ -f "$platform_env" ]] && confirm "Also remove the llm-platform stack and its data (traces, spend logs)?"; then
+		platform_compose down -v --remove-orphans
 	fi
-	say "removed. ${env_file} and ${host_env} were kept."
+	say "removed. ${env_file} and ${platform_env} were kept."
 }
 
 case "$command" in

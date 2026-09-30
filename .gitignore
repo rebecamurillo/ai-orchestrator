@@ -31,8 +31,8 @@ htmlcov/
 
 # ── Host side (AD-20, Operations) ───────────────────────────────
 # the nightly pg_dump lands here; the directory is tracked, its contents never are
-host/backups/*
-!host/backups/.gitkeep
+deploy/llm-platform/backups/*
+!deploy/llm-platform/backups/.gitkeep
 
 # ── Node (web-client) ───────────────────────────────────────────
 node_modules/

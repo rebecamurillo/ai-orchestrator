@@ -1,7 +1,8 @@
-"""The host stack — LiteLLM and Langfuse — as a document.
+"""The llm-platform stack — LiteLLM and Langfuse — as a document.
 
-`host/README.md` says these two run beside the product rather than inside it, reached through
-`host.docker.internal`. `host/docker-compose.yml` is one way to run them on a single machine.
+`deploy/llm-platform/README.md` says these two run beside the product rather than inside it,
+reached through `host.docker.internal`. `deploy/llm-platform/docker-compose.yml` is one way to
+run them on a single machine.
 It is deliberately a second compose project: the root file is the product, asserted by
 `test_compose.py`, and mixing the two would put a `langfuse/langfuse` image into a file whose
 every `image:` must be `postgres:<n>`.
@@ -13,7 +14,8 @@ What is worth asserting mechanically is the part that would fail silently:
 - **Nothing is published beyond the loopback,** and nothing collides with a port the product
   stack or oMLX already holds.
 - **No credential is written into the file**, and every one it reads fails closed.
-- **The ports agree with what `host/README.md` documents**, because the orchestrator's own
+- **The ports agree with what `deploy/llm-platform/README.md` documents**, because the
+  orchestrator's own
   contract points at those numbers and nothing else checks that they match.
 
 The file is read as YAML rather than as text: substring assertions cannot tell a published
@@ -31,13 +33,14 @@ import yaml
 
 from tests.unit.conftest import REPO_ROOT
 
-HOST_DIR = REPO_ROOT / "host"
+HOST_DIR = REPO_ROOT / "deploy" / "llm-platform"
 HOST_COMPOSE = HOST_DIR / "docker-compose.yml"
 HOST_ENV_EXAMPLE = HOST_DIR / ".env.example"
 README = HOST_DIR / "README.md"
 ROOT_COMPOSE = REPO_ROOT / "docker-compose.yml"
 
-#: what host/README.md's table promises, and what the orchestrator's contract points at
+#: what deploy/llm-platform/README.md's table promises, and what the orchestrator's contract
+#: points at
 DOCUMENTED_PORTS = {"langfuse-web": 3000, "litellm": 4000}
 
 #: ports the product stack and oMLX already hold on this machine
@@ -152,7 +155,7 @@ def test_the_two_stacks_can_run_at_the_same_time() -> None:
     host = _host_side_ports(HOST_COMPOSE, _contract(HOST_ENV_EXAMPLE))
 
     assert product, "the product stack publishes nothing — the parser is wrong"
-    assert host, "the host stack publishes nothing — the parser is wrong"
+    assert host, "the llm-platform stack publishes nothing — the parser is wrong"
     assert not (product & host), sorted(product & host)
 
 
@@ -192,7 +195,7 @@ CREDENTIAL_SHAPED = ("PASSWORD", "SECRET", "KEY", "SALT", "MASTER")
 
 
 def test_no_credential_is_written_into_the_file(services: dict) -> None:
-    """Every secret is interpolated from host/.env, which is generated and git-ignored.
+    """Every secret is interpolated from llm-platform/.env, which is generated and git-ignored.
 
     Read from the parsed environment rather than the file's text: a literal password is a
     *value*, and a substring search cannot tell one from the word appearing in a comment.

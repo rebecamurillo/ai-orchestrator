@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# host/generate-env.sh — write `host/.env` with freshly generated secrets.
+# deploy/llm-platform/generate-env.sh — write `deploy/llm-platform/.env` with freshly generated secrets.
 #
 # Why this exists rather than "copy the example and fill it in": Langfuse's ENCRYPTION_KEY has
 # to be exactly 64 hex characters or the container exits, and four other values are secrets
 # that should never have a committed default. Generating them removes both the placeholder
 # that does not work and the temptation to commit one that does (hard rule 5).
 #
-# Idempotent by refusal: an existing `host/.env` is never overwritten, because doing so would
+# Idempotent by refusal: an existing `deploy/llm-platform/.env` is never overwritten, because doing so would
 # invalidate the Langfuse project keys already written into the repository-root `.env` and
 # silently detach the orchestrator from its own traces. Delete it deliberately to start over.
 #
-#   ./host/generate-env.sh            write host/.env if it does not exist
-#   ./host/generate-env.sh --print    print the four values the root .env needs
+#   ./deploy/llm-platform/generate-env.sh            write deploy/llm-platform/.env if it does not exist
+#   ./deploy/llm-platform/generate-env.sh --print    print the four values the root .env needs
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,14 +23,14 @@ b64()    { openssl rand -base64 32 | tr -d '\n'; }
 lfkey()  { printf '%s-lf-%s' "$1" "$(uuidgen | tr '[:upper:]' '[:lower:]')"; }
 
 if [[ "${1:-}" == "--print" ]]; then
-	[[ -f "$target" ]] || { echo "host/.env does not exist — run ./host/generate-env.sh first" >&2; exit 1; }
+	[[ -f "$target" ]] || { echo "deploy/llm-platform/.env does not exist — run ./deploy/llm-platform/generate-env.sh first" >&2; exit 1; }
 	# the four the orchestrator's own .env needs, and nothing else
 	grep -E '^(LANGFUSE_INIT_PROJECT_PUBLIC_KEY|LANGFUSE_INIT_PROJECT_SECRET_KEY|LANGFUSE_PORT|LITELLM_PORT)=' "$target"
 	exit 0
 fi
 
 if [[ -f "$target" ]]; then
-	echo "host/.env already exists — leaving it alone" >&2
+	echo "deploy/llm-platform/.env already exists — leaving it alone" >&2
 	exit 0
 fi
 
@@ -81,7 +81,7 @@ for line in open(example).read().splitlines():
 
 missing = set(generated) - seen
 if missing:
-    raise SystemExit(f"host/.env.example no longer declares: {sorted(missing)}")
+    raise SystemExit(f"deploy/llm-platform/.env.example no longer declares: {sorted(missing)}")
 
 with open(target, "w") as handle:
     handle.write("\n".join(out) + "\n")
@@ -99,7 +99,7 @@ echo "  LITELLM_BASE_URL=http://host.docker.internal:4000"
 echo
 # a checkout has the Makefile; a release bundle runs the script directly
 if [[ -f "${here}/../Makefile" ]]; then
-	echo "\`make host-env-sync\` writes all four into the root .env for you."
+	echo "\`make platform-env-sync\` writes all four into the root .env for you."
 else
-	echo "\`host/sync-env.sh ../.env\` writes all four into the orchestrator's .env for you (install.sh does this)."
+	echo "\`deploy/llm-platform/sync-env.sh ../.env\` writes all four into the orchestrator's .env for you (install.sh does this)."
 fi
