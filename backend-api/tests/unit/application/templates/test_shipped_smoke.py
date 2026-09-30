@@ -9,10 +9,16 @@ that coverage runs against the frozen copies under `fixtures/exemplars/`
 
 What must hold for *any* text the shipped directory carries, and is asserted here:
 every file seeds through the same `seed_shipped` start-up runs (so it validates, its
-callees resolve, and the call chain stays within depth); the names the product pins by
-hand still exist (`repositories.py` starts `repo-init`, `harness_readiness.py` starts
-`epic`); every stored version builds a graph whose edges and groups name its own nodes,
-with no indexed id and nothing `unvalidated`; and the tree of every root resolves.
+callees resolve, and the call chain stays within depth); the two Template names a
+default-configured instance dispatches on its own — `Settings.init_template` for
+`repositories.py`'s init Run and `Settings.readiness_template` for `harness_readiness.py`'s
+readiness Run — resolve among the shipped files; every stored version builds a graph whose
+edges and groups name its own nodes, with no indexed id and nothing `unvalidated`; and the
+tree of every root resolves.
+
+The product itself pins no Template name (Operator decision 2026-09-30: the orchestrator
+hardcodes no template name and no template step id); the two defaults are configuration,
+and this module checks only that the configuration as shipped points at something shipped.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from orchestrator.application.templates.validate import validate
 from orchestrator.application.use_cases.plan_run import resolve_tree
 from orchestrator.application.use_cases.templates import TemplatePorts, seed_shipped
 from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
+from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.templates_loader import load_shipped_templates
 from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
@@ -34,9 +41,6 @@ from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
 #: `tests/unit/application/templates/test_shipped_smoke.py` -> the repository root.
 SHIPPED_DIR = Path(__file__).resolve().parents[5] / "templates"
-
-#: The roots the product starts by name (AD-16, CAP-8) — a shipped file may not drop these.
-PRODUCT_PINNED_NAMES = ("epic", "initiative", "repo-init", "story")
 
 AT = datetime(2026, 9, 10, tzinfo=UTC)
 
@@ -78,10 +82,19 @@ def test_every_shipped_file_seeds_clean(templates: FakeTemplateVersionRepository
     assert stored_names(templates) == [path.stem for path in sorted(SHIPPED_DIR.glob("*.yaml"))]
 
 
-def test_the_names_the_product_starts_by_hand_still_ship(
-    templates: FakeTemplateVersionRepository,
+@pytest.mark.parametrize("setting", ["init_template", "readiness_template"])
+def test_the_settings_defaults_resolve_among_the_shipped_files(
+    templates: FakeTemplateVersionRepository, setting: str
 ) -> None:
-    assert set(PRODUCT_PINNED_NAMES) <= set(stored_names(templates))
+    """Replaces `test_the_names_the_product_starts_by_hand_still_ship` (Operator decision
+    2026-09-30: no template name is hardcoded). The invariant it protected — a
+    default-configured instance can dispatch its init and readiness Runs — now lives in the
+    two Settings defaults, read off the model's field defaults so no environment is needed.
+    """
+    default = Settings.model_fields[setting].default
+
+    assert isinstance(default, str) and default
+    assert default in stored_names(templates), (setting, default)
 
 
 def test_every_stored_version_validates_with_nothing_unvalidated(

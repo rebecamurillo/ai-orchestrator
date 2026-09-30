@@ -103,14 +103,18 @@ def a_run(*, project_id: UUID, repository_id: UUID, status: str = "done") -> Run
     )
 
 
-def a_row(run_id: UUID, *, path: str, seq: int = 1, status: str = "done") -> StepRun:
+def a_row(
+    run_id: UUID, *, path: str, seq: int = 1, status: str = "done", kind: str = "agent"
+) -> StepRun:
+    """Fixture fix (Operator decision 2026-09-30): rows are selected by `kind`, so the
+    verify row must be declared `shell` the way the planner writes it, not `agent`."""
     return StepRun(
         id=new_id(),
         run_id=run_id,
         seq=seq,
         path=path,
         label=path,
-        kind="agent",
+        kind=kind,
         gate="liveness",  # type: ignore[arg-type]
         status=status,  # type: ignore[arg-type]
     )
@@ -143,7 +147,7 @@ class World:
         self.repository = a_repository(self.project.id)
         self.run = a_run(project_id=self.project.id, repository_id=self.repository.id)
         self.build_row = a_row(self.run.id, path="stories.1.story.build", seq=1)
-        self.verify_row = a_row(self.run.id, path="stories.1.story.verify", seq=2)
+        self.verify_row = a_row(self.run.id, path="stories.1.story.verify", seq=2, kind="shell")
         self.attempt = an_attempt(self.run.id, self.build_row.id)
         self.harness = Harness(name="claude", version_pin="2.1.258")
 

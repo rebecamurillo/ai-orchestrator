@@ -1,16 +1,27 @@
 """`evaluate`: read one finished readiness Run back, and write what it proved (SPEC CAP-8).
 
 Six lines, checked in the brief's own order, over the readiness Run's one story ("1",
-`harness_readiness.READINESS_STORY_ID`) and its `build` row's latest attempt: `story file
+`harness_readiness.READINESS_STORY_ID`) and the latest attempt of its build row: `story file
 done`, `session id recorded`, `trace observed`, `spend attributable`, `verify exit 0`,
-`run done`. All six `ok` writes `enabled=True, failing_check=None`; otherwise `enabled=False`
-and `failing_check` is the first failing line's own `"{check}: {text}"` — the exact form
+`run done`.
+
+The rows are found by **kind**, never by step id (Operator decision 2026-09-30: the
+orchestrator hardcodes no template name and no template step id; it follows the workflow and
+triggers actions). "The build row" is the last `agent` row, in `seq` order, that ended `done`
+— with several agent rows per story (plan, implement, review, …) the final one's `end_sha` is
+where the story file's `status: done` is observable — falling back to the last agent row of
+any status so the `build row is not done` text still applies. "The verify row" is the last
+`shell` row in `seq` order. `Settings.readiness_template` names whichever Template the Run
+was planned from; nothing here reads its step names, mirroring `record_trajectory`.
+
+All six `ok` writes `enabled=True, failing_check=None`; otherwise `enabled=False` and
+`failing_check` is the first failing line's own `"{check}: {text}"` — the exact form
 `tests/e2e/test_harnesses.py`'s authorised assertion checks the values of.
 `last_readiness_at`/`last_readiness_run_id` are written every time, pass or fail: a readiness
 Run that could not even start still has to leave `GET /harnesses` telling the Operator so.
 
 The fifth line is the one that reads two ways. The readiness fixture declares no
-`quality_gate_command` (`harness_readiness_seed.py` says why), so its `verify` row is
+`quality_gate_command` (`harness_readiness_seed.py` says why), so its shell (verify) row is
 planned away as `skipped · no quality_gate_command` and no gate ever runs. That is not a
 failure, and the line is `ok` — but it is named `no quality gate to run`, not `verify exit
 0`, because nothing exited 0. `enabled` therefore means "this harness works": it starts,
@@ -30,6 +41,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
 
+from orchestrator.application.steps import AGENT_KIND, SHELL_KIND
 from orchestrator.application.templates.lists import _states_done
 from orchestrator.application.templates.plan_model import names_a_field
 from orchestrator.application.templates.rows import SKIPPED
@@ -132,8 +144,8 @@ def evaluate(ports: HarnessEvaluatePorts, run_id: UUID) -> Harness | None:
 
 def _lines(ports: HarnessEvaluatePorts, run: Run, project_slug: str) -> list[EvaluationLine]:
     rows = ports.steps.list_for_run(run.id)
-    build_row = _row(rows, ".build")
-    verify_row = _row(rows, ".verify")
+    build_row = _build_row(rows)
+    verify_row = _last_of_kind(rows, SHELL_KIND)
     build_attempt = ports.attempts.get_latest(build_row.id) if build_row is not None else None
     repository = ports.repositories.get(run.repository_id)
     return [
@@ -146,8 +158,27 @@ def _lines(ports: HarnessEvaluatePorts, run: Run, project_slug: str) -> list[Eva
     ]
 
 
-def _row(rows: list[StepRun], suffix: str) -> StepRun | None:
-    return next((row for row in rows if row.path.endswith(suffix)), None)
+def _build_row(rows: list[StepRun]) -> StepRun | None:
+    """The last `agent` row that ended `done`, else the last `agent` row, else `None`.
+
+    Selected by kind, not by step id (Operator decision 2026-09-30): the readiness Template
+    may split a story over any number of agent rows under any names. The last `done` one is
+    the attempt whose `end_sha` holds the story file as the story left it; when none is
+    `done` the last agent row stands in so `_story_file_line` says so, rather than `None`
+    reading as "no row at all".
+    """
+    agents = [row for row in rows if row.kind == AGENT_KIND]
+    done = [row for row in agents if row.status == DONE]
+    return _last(done) or _last(agents)
+
+
+def _last_of_kind(rows: list[StepRun], kind: str) -> StepRun | None:
+    """The last row of `kind` in `seq` order, or `None` when the plan has none."""
+    return _last([row for row in rows if row.kind == kind])
+
+
+def _last(rows: list[StepRun]) -> StepRun | None:
+    return max(rows, key=lambda row: row.seq, default=None)
 
 
 def _story_file_line(
@@ -237,7 +268,7 @@ def _spend_line(
 
 
 def _verify_line(verify_row: StepRun | None) -> EvaluationLine:
-    """What the frame's `verify` row proved — or that there was nothing for it to prove.
+    """What the frame's shell (verify) row proved — or that there was nothing to prove.
 
     Three outcomes, not two. A `done` row ran the gate and it exited 0. A row the planner
     skipped because the Repository declares no command for it ran nothing, and says so
