@@ -1,13 +1,20 @@
 """Pure prompt builder for the `agent` kind (AD-9, FR-14).
 
 **Every sentence comes from the Template** (Operator decision, 2026-09-27): the row's
-`prompts` clauses — `dispatch`, `rendered`, `answer`, `halt` — are the Template's own
-prose, `{{ }}`-resolved by the planner, and this module only selects the clauses the
-dispatch owes, fills their runtime placeholders, and joins the present parts with single
-spaces. It writes no words of its own: a template that declares no clause sends none, and
-an undeclared `answer` clause degrades to the Operator's raw answer text — their words,
-not this module's. A separator is not prose: the one thing composed in code is the `" "`
-between parts (and the retry join in `steps/agent.py::_planned`), which carries no words.
+`prompts` clauses — `dispatch`, `rendered`, `answer`, `halt`, `redispatch` — are the
+Template's own prose, `{{ }}`-resolved by the planner, and this module only selects the
+clauses the dispatch owes, fills their runtime placeholders, and joins the present parts
+with single spaces. It writes no words of its own: a template that declares no clause sends
+none, and an undeclared `answer` clause degrades to the Operator's raw answer text — their
+words, not this module's. A separator is not prose: the one thing composed in code is the
+`" "` between parts (and the retry join in `steps/agent.py::_planned`), which carries no
+words.
+
+**The fifth clause, `redispatch`, is a fresh dispatch's own** (FR-10, story "a redispatch
+prompt clause"): what `steps/agent.py::_planned` prepends when a `verify` row has just sent
+the Story back, filled with the `command`, `code` and `tail` `context.VerifyFailure` carries
+— `redispatch_clause` below is the pure function that fills it; nothing prepends it here,
+the same way the retry join lives in `agent.py` and not in this module.
 
 **Two substitution passes, by design.** `{{ }}` is the planner's (AD-7) and is gone before
 a row ever reaches here. The single-brace tokens below are runtime facts the planner cannot
@@ -32,7 +39,8 @@ from orchestrator.application.steps.agent_answer import (
     ANSWER_KEY,
     CONDITION_KEY,
 )
-from orchestrator.application.steps.context import resolved_text
+from orchestrator.application.steps.context import VerifyFailure, resolved_text
+from orchestrator.application.story_file import NO_EXIT_CODE
 from orchestrator.application.templates.agent_row import (
     PROMPT_EXTRA_KEY,
     PROMPTS_KEY,
@@ -57,11 +65,16 @@ DISPATCH_CLAUSE = "dispatch"
 RENDERED_CLAUSE = "rendered"
 ANSWER_CLAUSE = "answer"
 HALT_CLAUSE = "halt"
+REDISPATCH_CLAUSE = "redispatch"
 
 #: Every runtime token a clause may name. One pattern rather than one per clause: which
 #: tokens actually fill is decided by the values each call passes, and an unfilled one
-#: stays literal — never an error inside a durable step.
-PLACEHOLDER = re.compile(r"\{(skill|spec_folder|story_id|intent|path|condition|answer)\}")
+#: stays literal — never an error inside a durable step. `command`, `code` and `tail` are
+#: `redispatch_clause`'s own; no other clause's call site passes them, so a `{tail}` written
+#: into `dispatch` or any other clause is left exactly where `_fill` finds it.
+PLACEHOLDER = re.compile(
+    r"\{(skill|spec_folder|story_id|intent|path|condition|answer|command|code|tail)\}"
+)
 
 
 def compose_prompt(
@@ -117,6 +130,22 @@ def answer_clause(with_resolved: Mapping[str, Any], resume_signal: GateRecord) -
     words and nothing else.
     """
     return _answer(_clauses(with_resolved), resume_signal)
+
+
+def redispatch_clause(with_resolved: Mapping[str, Any], failure: VerifyFailure) -> str:
+    """What a fresh dispatch is told when a `verify` row has just sent the Story back
+    (FR-10): the row's own `redispatch` clause, with `{command}`, `{code}` and `{tail}`
+    filled from `failure` — `steps/agent.py::_planned` is the one caller, and only for a
+    fresh dispatch that followed a redispatch. An undeclared clause is `""`, the same as
+    every other clause a row does not carry."""
+    declared = _clauses(with_resolved).get(REDISPATCH_CLAUSE)
+    if declared is None:
+        return ""
+    stated = NO_EXIT_CODE if failure.exit_code is None else str(failure.exit_code)
+    return _fill(
+        str(declared),
+        {"command": failure.command, "code": stated, "tail": "\n".join(failure.log_tail)},
+    )
 
 
 def _clauses(with_resolved: Mapping[str, Any]) -> Mapping[str, Any]:

@@ -231,6 +231,7 @@ def _agent(node: LinedMap) -> AgentExtras:
         prompt_rendered=_text(prompts.get("rendered")),
         prompt_answer=_text(prompts.get("answer")),
         prompt_halt=_text(prompts.get("halt")),
+        prompt_redispatch=_text(prompts.get("redispatch")),
     )
 
 

@@ -487,3 +487,76 @@ def test_a_row_that_was_never_sent_back_appends_nothing() -> None:
     run(ctx)
 
     assert world.workspace.read(STORY_PATH) == a_story()
+
+
+# ── the `redispatch` prompt clause (FR-10, story "a redispatch prompt clause") ───────────
+
+REDISPATCH_PROMPT_CLAUSE = "Verify failed: {command} (exit {code}).\n{tail}"
+REDISPATCH_CLAUSE_FILLED = "Verify failed: make test (exit 1).\nFAILED tests/a.py\n1 failed"
+
+
+def with_redispatch_clause(**over: object) -> dict[str, object]:
+    row = contracted(**over)
+    row["prompts"] = {**row["prompts"], "redispatch": REDISPATCH_PROMPT_CLAUSE}
+    return row
+
+
+def test_a_redispatched_fresh_dispatch_leads_with_the_filled_clause() -> None:
+    """`previous.status == "done"` already makes `retrying(ctx)` false, so the row's own
+    `retry:` contract (carried by `contracted()`) changes nothing here — only the clause
+    fires, once, in front of the row's own prompt."""
+    world = a_tail_world(previous=a_previous("done"), with_resolved=with_redispatch_clause())
+
+    run(failing_verify(world))
+
+    assert world.harness.called("start")[0]["prompt"] == f"{REDISPATCH_CLAUSE_FILLED} {DISPATCH}"
+
+
+def test_a_redispatched_row_with_no_clause_declared_sends_the_plain_prompt() -> None:
+    world = a_tail_world(previous=a_previous("done"))
+
+    run(failing_verify(world))
+
+    assert world.harness.called("start")[0]["prompt"] == DISPATCH
+
+
+def test_a_redispatched_row_whose_verify_failure_is_none_sends_the_plain_prompt() -> None:
+    world = a_tail_world(previous=a_previous("done"), with_resolved=with_redispatch_clause())
+
+    run(failing_verify(world, failure=None))
+
+    assert world.harness.called("start")[0]["prompt"] == DISPATCH
+
+
+def test_a_row_that_was_not_redispatched_but_declares_a_clause_sends_the_plain_prompt() -> None:
+    """The clause is declared, but this row's own `redispatch_count` never moved: the same
+    shape `test_a_row_that_was_never_sent_back_appends_nothing` reads for the story file."""
+    world = a_tail_world(previous=a_previous("done"), with_resolved=with_redispatch_clause())
+    environment = world.ctx.ports.run_env
+    assert environment is not None
+    ctx = replace(
+        world.ctx,
+        ports=replace(world.ctx.ports, run_env=replace(environment, verify_failure=VERIFY_FAILURE)),
+    )
+
+    run(ctx)
+
+    assert world.harness.called("start")[0]["prompt"] == DISPATCH
+
+
+def test_a_retry_that_follows_a_redispatch_does_not_repeat_the_clause() -> None:
+    """The prompt's own mirror of `test_a_retry_is_not_a_redispatch_and_appends_nothing`:
+    this attempt's predecessor is `error`, not `done`, so `redispatched(ctx)` reads `False`
+    even though the row's `redispatch_count` is still above zero and `verify_failure` is
+    still resolved — the clause was already said once, on the attempt that came back `done`
+    and does not repeat on this one (context.py's `redispatched`: "nothing is appended
+    twice"). The harness cannot resume, so the Template's own retry text still leads."""
+    world = a_tail_world(
+        previous=a_previous(),
+        with_resolved=with_redispatch_clause(),
+        harness=FakeHarness(capabilities=CANNOT_RESUME),
+    )
+
+    run(failing_verify(world))
+
+    assert world.harness.called("start")[0]["prompt"] == f"{RETRY_PROMPT} {DISPATCH}"

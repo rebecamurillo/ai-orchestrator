@@ -166,10 +166,13 @@ class AgentExtras(BaseModel):
     writes: tuple[str, ...] = ()
     #: The `prompts` clauses — the prose the dispatch is composed from (Operator decision,
     #: 2026-09-27: agent-bound prose lives in the Template, never in orchestrator code).
+    #: `redispatch` is the fifth (FR-10, story "a redispatch prompt clause"): what a fresh
+    #: dispatch is told when a `verify` row has just sent the Story back.
     prompt_dispatch: str | None = None
     prompt_rendered: str | None = None
     prompt_answer: str | None = None
     prompt_halt: str | None = None
+    prompt_redispatch: str | None = None
 
 
 class TemplateCall(BaseModel):

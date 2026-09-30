@@ -46,7 +46,8 @@ SPEC_FOLDER_KEY = "spec_folder"
 PROMPT_EXTRA_KEY = "prompt_extra"
 #: The Template's own prose for the dispatch, one clause per moment (Operator decision,
 #: 2026-09-27): `{{ }}` resolved here at plan time (AD-7), single-brace runtime tokens —
-#: `{skill}`, `{path}`, `{condition}`, `{answer}` … — left for `compose_prompt` to fill.
+#: `{skill}`, `{path}`, `{condition}`, `{answer}`, `{command}`, `{code}`, `{tail}` … — left
+#: for `compose_prompt` (or `redispatch_clause`, FR-10) to fill.
 PROMPTS_KEY = "prompts"
 #: `pause_when`, resolved: whether this Story stops for a spec review after planning.
 SPEC_CHECKPOINT_KEY = "spec_checkpoint"
@@ -101,6 +102,7 @@ def _prompt_clauses(agent: AgentExtras, frame: Frame) -> dict[str, str]:
         ("rendered", agent.prompt_rendered),
         ("answer", agent.prompt_answer),
         ("halt", agent.prompt_halt),
+        ("redispatch", agent.prompt_redispatch),
     )
     return {name: resolve(text, frame.scope) for name, text in declared if text is not None}
 
