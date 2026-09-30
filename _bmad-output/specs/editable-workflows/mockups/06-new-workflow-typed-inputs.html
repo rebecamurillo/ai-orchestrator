@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>06 · New workflow — typed harness and model inputs</title>
+<style>
+:root{
+  --color-bg:#0b0d0e; --color-surface:#111416; --color-surface-raised:#171b1d;
+  --color-surface-rail:#0e1113; --color-surface-inset:#08090a;
+  --color-line:#21272a; --color-line-strong:#2c3438;
+  --color-text:#dde3e5; --color-text-secondary:#8b979b; --color-text-tertiary:#5c686c;
+  --color-signal-run:#4fb477; --color-signal-needs-you:#e4b33c; --color-signal-failed:#e05252;
+  --color-signal-criterion:#6c8cd5; --color-accent:#7fd4c1;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --type-detail-title:19px; --type-detail-title-line:1.3; --type-detail-title-tracking:-0.01em;
+  --type-question:14px; --type-question-line:1.7;
+  --type-command:13px; --type-command-line:1.7;
+  --type-body:13px; --type-body-line:1.45;
+  --type-surface-title:13px; --type-surface-title-tracking:0.18em;
+  --type-row-title:12.5px; --type-row-title-line:1.4;
+  --type-row-body:12.5px; --type-row-body-line:1.55;
+  --type-meta:11.5px; --type-meta-line:1.45;
+  --type-micro:11px; --type-micro-line:1.6;
+  --type-status-token:11px; --type-status-token-tracking:0.1em;
+  --type-control:11px; --type-control-tracking:0.12em;
+  --type-eyebrow:10.5px; --type-eyebrow-tracking:0.16em;
+  --type-column-head:10px; --type-column-head-tracking:0.18em;
+  --type-section-head:10px; --type-section-head-tracking:0.22em;
+  --space-1:2px; --space-2:4px; --space-3:6px; --space-4:8px; --space-5:10px; --space-6:12px;
+  --space-7:14px; --space-8:16px; --space-9:18px; --space-10:20px; --space-11:22px;
+  --space-12:24px; --space-13:26px; --space-14:28px; --space-15:30px; --space-16:32px;
+  --rail-width:172px; --page-max:1180px; --detail-max:940px; --section-gap:34px;
+  --record-grid:52px 128px 210px 1fr 74px;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-weight:400}
+body{background:var(--color-bg);color:var(--color-text);font-family:var(--font-mono);font-size:var(--type-body);line-height:var(--type-body-line)}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:1px solid var(--color-accent);outline-offset:1px}
+.mockstrip{border-bottom:1px solid var(--color-line-strong);background:var(--color-surface-inset);padding:var(--space-5) var(--space-8);color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line)}
+.mockstrip b{color:var(--color-text-secondary)}
+.statelabel{padding:var(--space-6) var(--space-8) var(--space-3);color:var(--color-text-tertiary);font-size:var(--type-eyebrow);letter-spacing:var(--type-eyebrow-tracking);text-transform:uppercase;border-top:1px solid var(--color-line-strong);margin-top:var(--section-gap)}
+.shell{display:flex;min-height:100vh}
+.rail{display:flex;flex-direction:column;gap:var(--space-4);width:var(--rail-width);min-width:var(--rail-width);padding:var(--space-8) 0;background:var(--color-surface-rail);border-right:1px solid var(--color-line)}
+.brand{display:flex;flex-direction:column;gap:var(--space-2);padding:0 var(--space-6) var(--space-6)}
+.brand .name{font-size:var(--type-row-title)}
+.brand .sub{color:var(--color-text-tertiary);font-size:var(--type-micro)}
+.rail .glabel{padding:var(--space-6) var(--space-6) var(--space-2);color:var(--color-text-tertiary);font-size:var(--type-column-head);letter-spacing:var(--type-column-head-tracking);text-transform:uppercase}
+.rail .item{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);padding:var(--space-3) var(--space-6);color:var(--color-text-secondary)}
+.rail .item[aria-current]{background:var(--color-surface-raised);color:var(--color-text);box-shadow:inset 2px 0 0 var(--color-accent)}
+.rail .count{color:var(--color-text-tertiary);font-size:var(--type-meta)}
+.surface{display:flex;flex-direction:column;flex:1;min-width:0}
+.bar{display:flex;align-items:baseline;gap:var(--space-6);padding:var(--space-7) var(--space-8);border-bottom:1px solid var(--color-line)}
+.bar h1{font-size:var(--type-surface-title);letter-spacing:var(--type-surface-title-tracking);text-transform:uppercase}
+.bar .count{color:var(--color-text-tertiary);font-size:var(--type-meta)}
+.body{flex:1;width:100%;max-width:var(--page-max);padding:var(--space-10) var(--space-8) var(--space-16)}
+.foot{padding:var(--space-4) var(--space-8);border-top:1px solid var(--color-line);color:var(--color-text-tertiary);font-size:var(--type-meta)}
+button,.btn{display:inline-block;padding:var(--space-3) var(--space-6);border:1px solid var(--color-line-strong);background:none;color:var(--color-text-secondary);font-family:var(--font-mono);font-size:var(--type-control);letter-spacing:var(--type-control-tracking);text-transform:uppercase;cursor:pointer}
+.btn:hover,button:hover{color:var(--color-text)}
+.btn.primary,button.primary{border-color:var(--color-accent);color:var(--color-accent)}
+button[disabled]{border-color:var(--color-line);color:var(--color-text-tertiary);cursor:not-allowed}
+.linkact{color:var(--color-accent);font-size:var(--type-micro);letter-spacing:var(--type-control-tracking);text-transform:uppercase}
+/* layout, as new-workflow.css */
+.cols{display:grid;grid-template-columns:190px 1fr 1fr;gap:var(--space-8);align-items:start}
+.form{grid-column:1 / span 2;display:flex;flex-direction:column;gap:var(--space-8);max-width:var(--detail-max)}
+.side{grid-column:3;display:flex;flex-direction:column;gap:var(--space-10)}
+.field{display:flex;align-items:baseline;gap:var(--space-6)}
+.field .lab{flex:0 0 190px;color:var(--color-text-secondary);font-size:var(--type-eyebrow);letter-spacing:var(--type-eyebrow-tracking);text-transform:uppercase}
+.field .ctl{flex:1;min-width:0}
+.field select,.field input[type='text']{width:100%;padding:var(--space-3) var(--space-4);border:1px solid var(--color-line-strong);background:var(--color-surface);color:var(--color-text);font-family:var(--font-mono);font-size:var(--type-body)}
+.field .note{display:block;color:var(--color-text-tertiary);font-size:var(--type-meta);line-height:var(--type-meta-line);margin-top:var(--space-3)}
+.field .note[data-signal='failed']{color:var(--color-signal-failed)}
+.divider{border-top:1px solid var(--color-line);padding-top:var(--space-6);color:var(--color-text-tertiary);font-size:var(--type-section-head);letter-spacing:var(--type-section-head-tracking);text-transform:uppercase}
+.sect-head{padding-bottom:var(--space-3);border-bottom:1px solid var(--color-line);color:var(--color-text-tertiary);font-size:var(--type-section-head);letter-spacing:var(--type-section-head-tracking);text-transform:uppercase}
+.tree{color:var(--color-text-secondary);font-size:var(--type-row-body);line-height:1.9;padding-top:var(--space-5)}
+.tree code{color:var(--color-accent)}
+.tree .sub{display:block;color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line);padding-top:var(--space-3)}
+.pf{display:flex;flex-direction:column;gap:var(--space-3);padding-top:var(--space-5)}
+.pfline{display:grid;grid-template-columns:1fr auto;gap:var(--space-5);align-items:baseline;color:var(--color-text-secondary);font-size:var(--type-row-body);line-height:var(--type-row-body-line)}
+.pfword{color:var(--color-text-secondary);font-size:var(--type-meta)}
+.pfword[data-signal='failed']{color:var(--color-signal-failed)}
+.pfgroup{color:var(--color-text-tertiary);font-size:var(--type-eyebrow);letter-spacing:var(--type-eyebrow-tracking);text-transform:uppercase;padding-top:var(--space-6)}
+.pffix{color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line);padding-top:var(--space-4);border-top:1px solid var(--color-line);margin-top:var(--space-5)}
+.refusal{border-left:2px solid var(--color-signal-failed);background:var(--color-surface-raised);padding:var(--space-6) var(--space-7);margin-top:var(--space-8)}
+.refusal .eb{color:var(--color-signal-failed);font-size:var(--type-eyebrow);letter-spacing:var(--type-eyebrow-tracking);text-transform:uppercase}
+.refusal p{color:var(--color-text);font-size:var(--type-row-body);line-height:1.7;margin-top:var(--space-4)}
+.refusal .what{display:block;color:var(--color-text-tertiary);font-size:var(--type-meta);line-height:var(--type-meta-line);margin-top:var(--space-4)}
+.formacts{display:flex;gap:var(--space-5);align-items:center;padding-top:var(--space-8);border-top:1px solid var(--color-line)}
+.formacts .note{margin-left:auto;color:var(--color-text-tertiary);font-size:var(--type-micro)}
+</style>
+</head>
+<body>
+
+<div class="mockstrip">
+  <b>06 · NEW WORKFLOW · TYPED HARNESS AND MODEL INPUTS</b> — route <b>/workflows/new</b>, template <code>initiative-hub</code> v3, which declares one <code>harness</code> input and three <code>model</code> inputs. Each is rendered by its declared type, not by its name.
+  Three states: (a) ready to start; (b) the chosen harness publishes no model list; (c) refused before start — one agent pair is unknown to its harness. AC: E1, E2, D-4 (typed inputs, every pair probed).
+</div>
+
+<p class="statelabel">(a) Ready — harness claude, every agent pair probed clean</p>
+<div class="shell">
+  <nav class="rail" aria-label="Surfaces">
+    <div class="brand"><span class="name">ai-orchestrator</span><span class="sub">MVP · single operator</span></div>
+    <a class="item" href="#" aria-current="page"><span>Workflows</span><span class="count">7</span></a>
+    <a class="item" href="#"><span>Runs</span><span class="count">41</span></a>
+    <p class="glabel">CONFIGURE</p>
+    <a class="item" href="#"><span>Projects</span></a>
+    <a class="item" href="#"><span>Templates</span></a>
+  </nav>
+  <div class="surface">
+    <header class="bar"><h1>New workflow</h1><span class="count">initiative-hub v3 · 9 inputs</span></header>
+    <main class="body">
+      <div class="cols">
+
+        <div class="form">
+          <label class="field"><span class="lab">Template *</span><span class="ctl"><select><option>initiative-hub</option><option>repo-init</option></select><span class="note">v3 · operator · the run pins this version and everything it resolves to</span></span></label>
+          <label class="field"><span class="lab">Project *</span><span class="ctl"><select><option>martine-mag</option><option>optimai</option></select></span></label>
+          <label class="field"><span class="lab">Repository *</span><span class="ctl"><select><option>martine-mag/hub</option></select></span></label>
+          <label class="field"><span class="lab">Base branch *</span><span class="ctl"><input type="text" value="develop"></span></label>
+          <label class="field"><span class="lab">Branch *</span><span class="ctl"><input type="text" value="feat/mag-v2.1"></span></label>
+          <label class="field"><span class="lab">Initiative folder *</span><span class="ctl"><input type="text" value="_bmad-output/initiatives/mag-v2.1"></span></label>
+
+          <p class="divider">Harness and models — declared by the template</p>
+
+          <label class="field">
+            <span class="lab">Harness (default claude)</span>
+            <span class="ctl">
+              <select>
+                <option selected>claude — enabled · probe ok 09:41:02 · v2.4.1</option>
+                <option>codex — enabled · probe ok 09:41:03 · v0.44.0</option>
+                <option>opencode — enabled · probe ok 09:41:03 · v0.9.2</option>
+                <option disabled>local — not enabled · LITELLM_BASE_URL is blank</option>
+              </select>
+              <span class="note">Input <code>harness</code>, type harness. The list is every harness this instance has an adapter for; readiness is stated beside each. A harness that is not enabled cannot be chosen.</span>
+            </span>
+          </label>
+
+          <label class="field">
+            <span class="lab">Plan model (optional)</span>
+            <span class="ctl">
+              <select><option selected>claude-opus-5</option><option>claude-sonnet-5</option><option>claude-haiku-4.5</option><option>claude-subscription</option><option>—  (harness default)</option></select>
+              <span class="note">Input <code>plan_model</code>, type model. Filled by claude's own probe, taken 09:41:02. Reaches the <code>spec-gate</code> and <code>plan</code> agent rows.</span>
+            </span>
+          </label>
+
+          <label class="field">
+            <span class="lab">Build model (optional)</span>
+            <span class="ctl">
+              <select><option>claude-opus-5</option><option selected>claude-sonnet-5</option><option>claude-haiku-4.5</option><option>claude-subscription</option><option>—  (harness default)</option></select>
+              <span class="note">Input <code>build_model</code>, type model. Reaches every <code>build</code> and <code>gen-e2e</code> agent row.</span>
+            </span>
+          </label>
+
+          <label class="field">
+            <span class="lab">Review model (optional)</span>
+            <span class="ctl">
+              <select><option>claude-opus-5</option><option selected>claude-sonnet-5</option><option>claude-haiku-4.5</option><option>claude-subscription</option><option>—  (harness default)</option></select>
+              <span class="note">Input <code>review_model</code>, type model. Reaches every <code>review</code> and <code>retro</code> agent row.</span>
+            </span>
+          </label>
+
+          <p class="divider">Run settings</p>
+          <label class="field"><span class="lab">Budget (USD) (optional)</span><span class="ctl"><input type="text" value="180.00"><span class="note">The run enters needs_you at this figure. Blank runs without a cap; spend is still tracked.</span></span></label>
+          <label class="field"><span class="lab">Manual estimate (h) (optional)</span><span class="ctl"><input type="text" value="26"></span></label>
+
+          <div class="formacts">
+            <button type="button" class="primary">Start run</button>
+            <button type="button">Save without starting</button>
+            <span class="note">POST /runs · the tree is pinned at this moment, not at start</span>
+          </div>
+        </div>
+
+        <div class="side">
+          <section>
+            <p class="sect-head">Will plan from</p>
+            <p class="tree">
+              <code>initiative-hub@3</code> → <code>initiative-hub-epic@5</code> → <code>initiative-hub-story@4</code>
+              <span class="sub">Both calls are unpinned, so each resolved to its callee's latest stored version just now. This run records the tree it resolved; a template saved afterwards does not reach it.</span>
+            </p>
+          </section>
+
+          <section>
+            <p class="sect-head">Pre-flight</p>
+            <div class="pf">
+              <span class="pfline"><span>repository martine-mag/hub reachable · develop exists</span><span class="pfword">ok</span></span>
+              <span class="pfline"><span>_bmad-output/initiatives/mag-v2.1/epics.yaml · 7 entries</span><span class="pfword">ok</span></span>
+              <span class="pfline"><span>repos/* submodules declared · 4</span><span class="pfword">ok</span></span>
+              <span class="pfline"><span>skills manifest read · bmad-build-auto present</span><span class="pfword">ok</span></span>
+              <span class="pfline"><span>budget 180.00 USD · spend tracking on</span><span class="pfword">ok</span></span>
+
+              <p class="pfgroup">Agent pairs · every distinct (harness, model) the plan resolves</p>
+              <span class="pfline"><span>claude · claude-opus-5</span><span class="pfword">ok</span></span>
+              <span class="pfline"><span>claude · claude-sonnet-5</span><span class="pfword">ok</span></span>
+              <p class="pffix">2 distinct pairs over 118 agent rows. Each harness was probed once. A pair that is unknown here is refused now rather than parking the run at dispatch.</p>
+            </div>
+          </section>
+
+          <section>
+            <p class="sect-head">Plan</p>
+            <div class="pf">
+              <span class="pfline"><span>steps planned</span><span class="pfword">431</span></span>
+              <span class="pfline"><span>epics · stories</span><span class="pfword">7 · 34</span></span>
+              <span class="pfline"><span>checkpoints</span><span class="pfword">3</span></span>
+              <span class="pfline"><span>skipped · no command</span><span class="pfword">12</span></span>
+            </div>
+          </section>
+        </div>
+
+      </div>
+    </main>
+    <footer class="foot">2 running · 1 queued / 2 need you / updated 09:41:22</footer>
+  </div>
+</div>
+
+<p class="statelabel">(b) The chosen harness publishes no model list — the three model inputs fall back to free text</p>
+<div class="shell">
+  <nav class="rail" aria-label="Surfaces">
+    <div class="brand"><span class="name">ai-orchestrator</span><span class="sub">MVP · single operator</span></div>
+    <a class="item" href="#" aria-current="page"><span>Workflows</span><span class="count">7</span></a>
+    <a class="item" href="#"><span>Runs</span><span class="count">41</span></a>
+    <p class="glabel">CONFIGURE</p>
+    <a class="item" href="#"><span>Projects</span></a>
+    <a class="item" href="#"><span>Templates</span></a>
+  </nav>
+  <div class="surface">
+    <header class="bar"><h1>New workflow</h1><span class="count">initiative-hub v3 · 9 inputs</span></header>
+    <main class="body">
+      <div class="cols">
+        <div class="form">
+          <label class="field">
+            <span class="lab">Harness (default claude)</span>
+            <span class="ctl">
+              <select><option>claude — enabled · probe ok · v2.4.1</option><option>codex — enabled · probe ok · v0.44.0</option><option selected>opencode — enabled · probe ok · v0.9.2</option><option disabled>local — not enabled · LITELLM_BASE_URL is blank</option></select>
+            </span>
+          </label>
+          <label class="field">
+            <span class="lab">Plan model (optional)</span>
+            <span class="ctl">
+              <input type="text" value="anthropic/claude-opus-5" placeholder="harness default">
+              <span class="note">Free text: opencode's probe returned no model list, so this instance holds no list to choose from. The name is passed to the harness as typed and cannot be checked before the run starts.</span>
+            </span>
+          </label>
+          <label class="field">
+            <span class="lab">Build model (optional)</span>
+            <span class="ctl">
+              <input type="text" value="anthropic/claude-sonnet-5" placeholder="harness default">
+              <span class="note">Free text · opencode publishes no model list.</span>
+            </span>
+          </label>
+          <label class="field">
+            <span class="lab">Review model (optional)</span>
+            <span class="ctl">
+              <input type="text" value="" placeholder="harness default">
+              <span class="note">Free text · opencode publishes no model list. Left blank, the harness default is used and the row records it.</span>
+            </span>
+          </label>
+          <div class="formacts">
+            <button type="button" class="primary">Start run</button>
+            <button type="button">Save without starting</button>
+            <span class="note">POST /runs</span>
+          </div>
+        </div>
+        <div class="side">
+          <section>
+            <p class="sect-head">Will plan from</p>
+            <p class="tree"><code>initiative-hub@3</code> → <code>initiative-hub-epic@5</code> → <code>initiative-hub-story@4</code></p>
+          </section>
+          <section>
+            <p class="sect-head">Pre-flight</p>
+            <div class="pf">
+              <p class="pfgroup">Agent pairs</p>
+              <span class="pfline"><span>opencode · anthropic/claude-opus-5</span><span class="pfword">not checked · no probed list</span></span>
+              <span class="pfline"><span>opencode · anthropic/claude-sonnet-5</span><span class="pfword">not checked · no probed list</span></span>
+              <span class="pfline"><span>opencode · harness default</span><span class="pfword">not checked · no probed list</span></span>
+              <p class="pffix">opencode's probe answered with no models, so a model name cannot be checked here. A name the provider does not serve fails at the first model call and parks the row.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+    <footer class="foot">2 running · 1 queued / 2 need you / updated 09:41:22</footer>
+  </div>
+</div>
+
+<p class="statelabel">(c) Refused before start — one agent pair is unknown to its harness</p>
+<div class="shell">
+  <nav class="rail" aria-label="Surfaces">
+    <div class="brand"><span class="name">ai-orchestrator</span><span class="sub">MVP · single operator</span></div>
+    <a class="item" href="#" aria-current="page"><span>Workflows</span><span class="count">7</span></a>
+    <a class="item" href="#"><span>Runs</span><span class="count">41</span></a>
+    <p class="glabel">CONFIGURE</p>
+    <a class="item" href="#"><span>Projects</span></a>
+    <a class="item" href="#"><span>Templates</span></a>
+  </nav>
+  <div class="surface">
+    <header class="bar"><h1>New workflow</h1><span class="count">initiative-hub v3 · 9 inputs</span></header>
+    <main class="body">
+      <div class="cols">
+        <div class="form">
+          <label class="field">
+            <span class="lab">Harness (default claude)</span>
+            <span class="ctl">
+              <select><option>claude — enabled · probe ok · v2.4.1</option><option selected>codex — enabled · probe ok 09:41:03 · v0.44.0</option><option>opencode — enabled · probe ok · v0.9.2</option><option disabled>local — not enabled · LITELLM_BASE_URL is blank</option></select>
+            </span>
+          </label>
+          <label class="field">
+            <span class="lab">Plan model (optional)</span>
+            <span class="ctl">
+              <select><option selected>o5</option><option>o5-codex</option><option>—  (harness default)</option></select>
+              <span class="note">Filled by codex's probe, taken 09:41:03.</span>
+            </span>
+          </label>
+          <label class="field">
+            <span class="lab">Build model (optional)</span>
+            <span class="ctl">
+              <select><option selected>o5-mini — not in codex's probed list</option><option>o5</option><option>o5-codex</option><option>—  (harness default)</option></select>
+              <span class="note" data-signal="failed">o5-mini came from the link that opened this form. codex publishes o5 · o5-codex. Choose one of those, or choose a harness that serves o5-mini.</span>
+            </span>
+          </label>
+          <label class="field">
+            <span class="lab">Review model (optional)</span>
+            <span class="ctl">
+              <select><option selected>o5</option><option>o5-codex</option><option>—  (harness default)</option></select>
+            </span>
+          </label>
+
+          <div class="refusal">
+            <p class="eb">Refused before start</p>
+            <p>This run is refused before any row runs: 1 of the 3 distinct agent pairs the plan resolves is unknown to its harness.</p>
+            <span class="what">
+              Row path <code>epics.epic.stories.story.build</code> and 33 further rows resolve <code>codex · o5-mini</code>. codex's probe published <code>o5 · o5-codex</code>.<br>
+              Nothing is written: no run, no step rows, no worktree. Change the build model, then start.
+            </span>
+          </div>
+
+          <div class="formacts">
+            <button type="button" class="primary" disabled>Start run</button>
+            <button type="button" disabled>Save without starting</button>
+            <span class="note">422 · the plan is refused while a pair is unknown</span>
+          </div>
+        </div>
+
+        <div class="side">
+          <section>
+            <p class="sect-head">Will plan from</p>
+            <p class="tree">
+              <code>initiative-hub@3</code> → <code>initiative-hub-epic@5</code> → <code>initiative-hub-story@4</code>
+              <span class="sub">The tree resolves; it is the harness and model bindings inside it that are refused.</span>
+            </p>
+          </section>
+          <section>
+            <p class="sect-head">Pre-flight</p>
+            <div class="pf">
+              <span class="pfline"><span>repository martine-mag/hub reachable · develop exists</span><span class="pfword">ok</span></span>
+              <span class="pfline"><span>_bmad-output/initiatives/mag-v2.1/epics.yaml · 7 entries</span><span class="pfword">ok</span></span>
+              <span class="pfline"><span>skills manifest read · bmad-build-auto present</span><span class="pfword">ok</span></span>
+
+              <p class="pfgroup">Agent pairs · every distinct (harness, model) the plan resolves</p>
+              <span class="pfline"><span>codex · o5</span><span class="pfword">ok</span></span>
+              <span class="pfline"><span>codex · o5-mini</span><span class="pfword" data-signal="failed">not in probed list</span></span>
+              <span class="pfline"><span>claude · claude-opus-5</span><span class="pfword">ok</span></span>
+              <p class="pffix">3 distinct pairs over 118 agent rows. One pair fails, so the run is refused — start stays disabled until every pair reads ok or the harness publishes no list to check against.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+    <footer class="foot">2 running · 1 queued / 2 need you / updated 09:41:22</footer>
+  </div>
+</div>
+
+</body>
+</html>

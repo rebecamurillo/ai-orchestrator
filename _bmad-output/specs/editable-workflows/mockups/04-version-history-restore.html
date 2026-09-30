@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>04 · Version history, diff and restore</title>
+<style>
+:root{
+  --color-bg:#0b0d0e; --color-surface:#111416; --color-surface-raised:#171b1d;
+  --color-surface-rail:#0e1113; --color-surface-inset:#08090a;
+  --color-line:#21272a; --color-line-strong:#2c3438;
+  --color-text:#dde3e5; --color-text-secondary:#8b979b; --color-text-tertiary:#5c686c;
+  --color-signal-run:#4fb477; --color-signal-needs-you:#e4b33c; --color-signal-failed:#e05252;
+  --color-signal-criterion:#6c8cd5; --color-accent:#7fd4c1;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --type-detail-title:19px; --type-detail-title-line:1.3; --type-detail-title-tracking:-0.01em;
+  --type-question:14px; --type-question-line:1.7;
+  --type-command:13px; --type-command-line:1.7;
+  --type-body:13px; --type-body-line:1.45;
+  --type-surface-title:13px; --type-surface-title-tracking:0.18em;
+  --type-row-title:12.5px; --type-row-title-line:1.4;
+  --type-row-body:12.5px; --type-row-body-line:1.55;
+  --type-meta:11.5px; --type-meta-line:1.45;
+  --type-micro:11px; --type-micro-line:1.6;
+  --type-status-token:11px; --type-status-token-tracking:0.1em;
+  --type-control:11px; --type-control-tracking:0.12em;
+  --type-eyebrow:10.5px; --type-eyebrow-tracking:0.16em;
+  --type-column-head:10px; --type-column-head-tracking:0.18em;
+  --type-section-head:10px; --type-section-head-tracking:0.22em;
+  --space-1:2px; --space-2:4px; --space-3:6px; --space-4:8px; --space-5:10px; --space-6:12px;
+  --space-7:14px; --space-8:16px; --space-9:18px; --space-10:20px; --space-11:22px;
+  --space-12:24px; --space-13:26px; --space-14:28px; --space-15:30px; --space-16:32px;
+  --rail-width:172px; --page-max:1180px; --detail-max:940px; --section-gap:34px;
+  --record-grid:52px 128px 210px 1fr 74px;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-weight:400}
+body{background:var(--color-bg);color:var(--color-text);font-family:var(--font-mono);font-size:var(--type-body);line-height:var(--type-body-line)}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:1px solid var(--color-accent);outline-offset:1px}
+.mockstrip{border-bottom:1px solid var(--color-line-strong);background:var(--color-surface-inset);padding:var(--space-5) var(--space-8);color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line)}
+.mockstrip b{color:var(--color-text-secondary)}
+.statelabel{padding:var(--space-6) var(--space-8) var(--space-3);color:var(--color-text-tertiary);font-size:var(--type-eyebrow);letter-spacing:var(--type-eyebrow-tracking);text-transform:uppercase;border-top:1px solid var(--color-line-strong);margin-top:var(--section-gap)}
+.shell{display:flex;min-height:100vh}
+.rail{display:flex;flex-direction:column;gap:var(--space-4);width:var(--rail-width);min-width:var(--rail-width);padding:var(--space-8) 0;background:var(--color-surface-rail);border-right:1px solid var(--color-line)}
+.brand{display:flex;flex-direction:column;gap:var(--space-2);padding:0 var(--space-6) var(--space-6)}
+.brand .name{font-size:var(--type-row-title)}
+.brand .sub{color:var(--color-text-tertiary);font-size:var(--type-micro)}
+.rail .glabel{padding:var(--space-6) var(--space-6) var(--space-2);color:var(--color-text-tertiary);font-size:var(--type-column-head);letter-spacing:var(--type-column-head-tracking);text-transform:uppercase}
+.rail .item{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);padding:var(--space-3) var(--space-6);color:var(--color-text-secondary)}
+.rail .item[aria-current]{background:var(--color-surface-raised);color:var(--color-text);box-shadow:inset 2px 0 0 var(--color-accent)}
+.rail .count{color:var(--color-text-tertiary);font-size:var(--type-meta)}
+.surface{display:flex;flex-direction:column;flex:1;min-width:0}
+.bar{display:flex;align-items:baseline;gap:var(--space-6);padding:var(--space-7) var(--space-8);border-bottom:1px solid var(--color-line)}
+.bar h1{font-size:var(--type-surface-title);letter-spacing:var(--type-surface-title-tracking);text-transform:uppercase}
+.bar .count{color:var(--color-text-tertiary);font-size:var(--type-meta)}
+.bar .right{display:flex;gap:var(--space-4);margin-left:auto}
+.body{flex:1;width:100%;padding:var(--space-10) var(--space-8) var(--space-16)}
+.foot{padding:var(--space-4) var(--space-8);border-top:1px solid var(--color-line);color:var(--color-text-tertiary);font-size:var(--type-meta)}
+button,.btn{display:inline-block;padding:var(--space-3) var(--space-6);border:1px solid var(--color-line-strong);background:none;color:var(--color-text-secondary);font-family:var(--font-mono);font-size:var(--type-control);letter-spacing:var(--type-control-tracking);text-transform:uppercase;cursor:pointer}
+.btn:hover,button:hover{color:var(--color-text)}
+.btn.primary,button.primary{border-color:var(--color-accent);color:var(--color-accent)}
+button[disabled]{border-color:var(--color-line);color:var(--color-text-tertiary);cursor:not-allowed}
+.linkact{color:var(--color-accent);font-size:var(--type-micro);letter-spacing:var(--type-control-tracking);text-transform:uppercase}
+.sect-head{display:flex;align-items:baseline;gap:var(--space-6);padding-bottom:var(--space-3);border-bottom:1px solid var(--color-line);color:var(--color-text-secondary);font-size:var(--type-section-head);letter-spacing:var(--type-section-head-tracking);text-transform:uppercase}
+.sect-head .n{margin-left:auto;color:var(--color-text-tertiary);letter-spacing:0;text-transform:none;font-size:var(--type-micro)}
+.hint{padding:var(--space-4) 0;color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line)}
+.cols{display:grid;grid-template-columns:400px minmax(0,1fr);gap:var(--space-8);align-items:start}
+/* history rows */
+.hrow{display:grid;grid-template-columns:24px 40px 1fr 88px;gap:var(--space-5);align-items:baseline;padding:var(--space-5) var(--space-4);border-bottom:1px solid var(--color-line)}
+.hrow:hover{background:var(--color-surface-raised)}
+.hrow[data-selected]{background:var(--color-surface-raised)}
+.hrow .pick{color:var(--color-text-tertiary);font-size:var(--type-micro)}
+.hrow .pick[data-on]{color:var(--color-accent)}
+.hrow .v{color:var(--color-text);font-size:var(--type-row-title)}
+.hrow .m{color:var(--color-text-tertiary);font-size:var(--type-meta);line-height:var(--type-meta-line)}
+.hrow .m b{color:var(--color-text-secondary);font-weight:400}
+.hrow .act{text-align:right}
+.colhead{display:grid;grid-template-columns:24px 40px 1fr 88px;gap:var(--space-5);padding:var(--space-3) var(--space-4);background:var(--color-surface-rail);border-bottom:1px solid var(--color-line);color:var(--color-text-tertiary);font-size:var(--type-column-head);letter-spacing:var(--type-column-head-tracking);text-transform:uppercase}
+/* diff */
+.diffhead{display:flex;align-items:baseline;gap:var(--space-6);padding:var(--space-5) var(--space-6);border:1px solid var(--color-line);border-bottom:none;background:var(--color-surface-rail);color:var(--color-text-secondary);font-size:var(--type-meta)}
+.diffhead .n{margin-left:auto;color:var(--color-text-tertiary)}
+.diff{border:1px solid var(--color-line);background:var(--color-surface-inset);overflow:auto;max-height:560px}
+.diff pre{font-family:var(--font-mono);font-size:var(--type-command);line-height:1.6;padding:var(--space-5) 0;white-space:pre}
+.diff .hunk{color:var(--color-text-tertiary);display:block;padding:var(--space-4) 0 var(--space-2) var(--space-6);border-top:1px solid var(--color-line);margin-top:var(--space-4)}
+.diff .l{display:block;padding-left:var(--space-6);color:var(--color-text-secondary)}
+.diff .add{color:var(--color-text);border-left:2px solid var(--color-line-strong);padding-left:calc(var(--space-6) - 2px)}
+.diff .del{color:var(--color-text-tertiary);border-left:2px solid transparent;padding-left:calc(var(--space-6) - 2px)}
+.diff .g{display:inline-block;width:14px;color:var(--color-text-tertiary)}
+/* restore panel */
+.panel{border:1px solid var(--color-line-strong);background:var(--color-surface);max-width:var(--detail-max);margin-top:var(--section-gap)}
+.panel .head{padding:var(--space-6) var(--space-8);border-bottom:1px solid var(--color-line);background:var(--color-surface-rail)}
+.panel .eb{color:var(--color-text-tertiary);font-size:var(--type-eyebrow);letter-spacing:var(--type-eyebrow-tracking);text-transform:uppercase}
+.panel h2{margin-top:var(--space-4);font-size:var(--type-detail-title);line-height:var(--type-detail-title-line);letter-spacing:var(--type-detail-title-tracking)}
+.block{padding:var(--space-8);border-bottom:1px solid var(--color-line)}
+.blabel{color:var(--color-text-tertiary);font-size:var(--type-section-head);letter-spacing:var(--type-section-head-tracking);text-transform:uppercase;padding-bottom:var(--space-5)}
+.line{color:var(--color-text-secondary);font-size:var(--type-row-body);line-height:1.8}
+.line b{color:var(--color-text);font-weight:400}
+.readout{color:var(--color-text-secondary);font-size:var(--type-row-body)}
+.readout[data-signal="failed"]{color:var(--color-signal-failed)}
+.err{display:grid;grid-template-columns:76px 1fr;gap:var(--space-5);align-items:baseline;padding-top:var(--space-5);color:var(--color-text-secondary);font-size:var(--type-row-body)}
+.err .at{color:var(--color-signal-failed);font-size:var(--type-meta)}
+.err .why{color:var(--color-text)}
+.err .sub{display:block;color:var(--color-text-tertiary);font-size:var(--type-meta);line-height:var(--type-meta-line);margin-top:var(--space-2)}
+.actions{display:flex;gap:var(--space-5);align-items:center;padding:var(--space-8)}
+.actions .note{margin-left:auto;color:var(--color-text-tertiary);font-size:var(--type-micro)}
+</style>
+</head>
+<body>
+
+<div class="mockstrip">
+  <b>04 · VERSION HISTORY, DIFF AND RESTORE</b> — the VERSIONS column of 02 opened as a full history view, at <b>/templates/initiative-hub-epic/5</b>. Two versions are picked for a unified diff; RESTORE shows the old text's validation result before it can land. Two restore variants follow: one that validates, one that does not. AC: B4 (diff and restore), D-3 (restore = a new version, full validation).
+</div>
+
+<div class="shell">
+  <nav class="rail" aria-label="Surfaces">
+    <div class="brand"><span class="name">ai-orchestrator</span><span class="sub">MVP · single operator</span></div>
+    <a class="item" href="#"><span>Workflows</span><span class="count">7</span></a>
+    <a class="item" href="#"><span>Runs</span><span class="count">41</span></a>
+    <p class="glabel">CONFIGURE</p>
+    <a class="item" href="#"><span>Projects</span></a>
+    <a class="item" href="#" aria-current="page"><span>Templates</span></a>
+  </nav>
+  <div class="surface">
+    <header class="bar">
+      <h1>Templates</h1>
+      <span class="count">initiative-hub-epic · 5 versions · history</span>
+      <div class="right"><a class="btn" href="#">Back to editor</a></div>
+    </header>
+
+    <main class="body">
+      <div class="cols">
+
+        <div>
+          <div class="sect-head">History <span class="n">newest first · pick two to diff</span></div>
+          <p class="hint">A saved version never changes and is never deleted. A version a run pinned is frozen with that run.</p>
+
+          <div class="colhead"><span>Pick</span><span>Ver</span><span>Origin · date · provenance</span><span class="act">Action</span></div>
+
+          <div class="hrow" data-selected>
+            <span class="pick" data-on>B</span>
+            <span class="v">v5</span>
+            <span class="m"><b>operator</b> · 2026-09-29 · saved from the editor<br>pinned by 4 runs · calls initiative-hub-story unpinned</span>
+            <span class="act"><a class="linkact" href="#">Open</a></span>
+          </div>
+          <div class="hrow">
+            <span class="pick">·</span>
+            <span class="v">v4</span>
+            <span class="m"><b>operator</b> · 2026-09-28 · restored from v1<br>pinned by 0 runs</span>
+            <span class="act"><a class="linkact" href="#">Restore</a></span>
+          </div>
+          <div class="hrow">
+            <span class="pick">·</span>
+            <span class="v">v3</span>
+            <span class="m"><b>operator</b> · 2026-09-27 · saved from the editor<br>pinned by 6 runs</span>
+            <span class="act"><a class="linkact" href="#">Restore</a></span>
+          </div>
+          <div class="hrow" data-selected>
+            <span class="pick" data-on>A</span>
+            <span class="v">v2</span>
+            <span class="m"><b>operator</b> · 2026-09-26 · saved from the editor<br>pinned by 2 runs</span>
+            <span class="act"><a class="linkact" href="#">Restore</a></span>
+          </div>
+          <div class="hrow">
+            <span class="pick">·</span>
+            <span class="v">v1</span>
+            <span class="m"><b>shipped</b> · 2026-09-24 · seeded from templates/initiative-hub-epic.yaml<br>pinned by 0 runs</span>
+            <span class="act"><a class="linkact" href="#">Restore</a></span>
+          </div>
+
+          <p class="hint">
+            Restore is not a pointer move and not a delete: restoring v2 stores a new version whose text equals v2's, recorded as <code>restored from v2</code>.
+            The old version stays where it is.
+          </p>
+        </div>
+
+        <div>
+          <div class="diffhead">
+            <span>A <b style="color:var(--color-text);font-weight:400">v2</b> → B <b style="color:var(--color-text);font-weight:400">v5</b></span>
+            <span>unified</span>
+            <span class="n">14 lines added · 6 removed · 3 hunks</span>
+          </div>
+          <div class="diff">
+<pre><span class="hunk">@@ inputs, lines 18-27 @@</span><span class="l"><span class="g"> </span>  workdir:      { type: string,     required: true }</span>
+<span class="l del"><span class="g">-</span>  harness:      { type: enum, values: [claude, codex, local], default: claude }</span>
+<span class="l del"><span class="g">-</span>  model:        { type: string,     required: false }</span>
+<span class="l add"><span class="g">+</span>  harness:      { type: harness,    default: claude }</span>
+<span class="l add"><span class="g">+</span>  plan_model:   { type: model,      required: false }</span>
+<span class="l add"><span class="g">+</span>  build_model:  { type: model,      required: false }</span>
+<span class="l add"><span class="g">+</span>  review_model: { type: model,      required: false }</span>
+<span class="l"><span class="g"> </span>steps:</span>
+<span class="hunk">@@ the spec-gate agent step, lines 44-58 @@</span><span class="l"><span class="g"> </span>  - id: spec-gate</span>
+<span class="l"><span class="g"> </span>    uses: agent</span>
+<span class="l"><span class="g"> </span>    with:</span>
+<span class="l"><span class="g"> </span>      harness: "{{harness}}"</span>
+<span class="l del"><span class="g">-</span>      model: "{{model}}"</span>
+<span class="l add"><span class="g">+</span>      model: "{{plan_model}}"</span>
+<span class="l"><span class="g"> </span>      skill: bmad-create-epics-and-stories</span>
+<span class="l"><span class="g"> </span>    gate: liveness</span>
+<span class="l add"><span class="g">+</span>    prompts:</span>
+<span class="l add"><span class="g">+</span>      dispatch: "Read {spec_folder}/SPEC.md and write stories.yaml beside it."</span>
+<span class="l add"><span class="g">+</span>      halt: "Stop and report blocked; do not write code."</span>
+<span class="hunk">@@ the stories loop, lines 80-99 @@</span><span class="l"><span class="g"> </span>      - id: story</span>
+<span class="l"><span class="g"> </span>        uses: template</span>
+<span class="l"><span class="g"> </span>        with:</span>
+<span class="l"><span class="g"> </span>          name: initiative-hub-story</span>
+<span class="l del"><span class="g">-</span>          version: 1</span>
+<span class="l add"><span class="g">+</span>          # no `version:` — this call follows initiative-hub-story's latest</span>
+<span class="l"><span class="g"> </span>          inputs:</span>
+<span class="l"><span class="g"> </span>            project: "{{project}}"</span>
+<span class="l"><span class="g"> </span>            workdir: "{{workdir}}"</span>
+<span class="l del"><span class="g">-</span>            model: "{{model}}"</span>
+<span class="l add"><span class="g">+</span>            build_model: "{{build_model}}"</span>
+</pre>
+          </div>
+          <p class="hint">
+            A line the newer version adds is set in full-strength text with a rule at its left; a line it removes is set in tertiary grey with none.
+            The <code>+</code> and <code>-</code> glyphs carry the meaning; no colour is used, and copying the block copies the diff text.
+          </p>
+        </div>
+
+      </div>
+
+      <p class="statelabel">Restore variant A — v2 still validates</p>
+      <div class="panel">
+        <div class="head">
+          <p class="eb">Restore · initiative-hub-epic v2</p>
+          <h2>Restoring v2 creates v6 from v2.</h2>
+        </div>
+        <div class="block">
+          <p class="blabel">Validation of v2's text, run first</p>
+          <p class="readout">valid · 0 errors · 0 unvalidated steps · checked 14:22:08 against this instance's validator and store</p>
+          <p class="line" style="margin-top:12px">
+            v2's text is stored unchanged except its <code>version:</code> line, rewritten to 6. The new row records <b>origin operator</b> and <b>restored from v2</b>. v2 itself is untouched.
+          </p>
+        </div>
+        <div class="block">
+          <p class="blabel">What follows v6</p>
+          <p class="line">
+            <b>initiative-hub</b> (latest v3) calls initiative-hub-epic unpinned and will plan from v6 on its next run.
+            No caller is pinned to an older version. Runs planned, queued or running are unchanged.<br>
+            v2 pins <code>initiative-hub-story@1</code> explicitly, so v6 will too — a restore brings the old pins back with the old text.
+          </p>
+        </div>
+        <div class="actions">
+          <button type="button" class="primary">Restore as v6</button>
+          <button type="button">Open v2 in editor</button>
+          <button type="button">Cancel</button>
+          <span class="note">POST /templates/initiative-hub-epic/2/restore</span>
+        </div>
+      </div>
+
+      <p class="statelabel">Restore variant B — v2 no longer validates</p>
+      <div class="panel">
+        <div class="head">
+          <p class="eb">Restore · initiative-hub-epic v2</p>
+          <h2>v2 cannot be stored as it stands.</h2>
+        </div>
+        <div class="block">
+          <p class="blabel">Validation of v2's text, run first</p>
+          <p class="readout" data-signal="failed">1 error · checked 14:24:51 — restore disabled</p>
+          <div class="err">
+            <span class="at">line 23</span>
+            <span>
+              <span class="why">v2 no longer validates: line 23 · agent step needs prompts.dispatch</span>
+              <span class="sub">
+                The validator began requiring a <code>prompts.dispatch</code> clause on every agent step on 2026-09-27; v2 was saved on 2026-09-26, before that.
+                v2 stays readable and the two runs that pinned it are unaffected — a version is validated again only when it is stored again.
+              </span>
+            </span>
+          </div>
+        </div>
+        <div class="block">
+          <p class="blabel">Next action</p>
+          <p class="line">
+            Open v2 in the editor, add the clause at line 23, and save. What you save becomes <b>v6</b>, recorded as <b>restored from v2</b> once its text still matches v2 elsewhere.
+          </p>
+        </div>
+        <div class="actions">
+          <button type="button" class="primary" disabled>Restore as v6</button>
+          <button type="button">Open v2 in editor</button>
+          <button type="button">Cancel</button>
+          <span class="note">422 · nothing was written · the version list is unchanged</span>
+        </div>
+      </div>
+
+    </main>
+    <footer class="foot">2 running · 1 queued / 2 need you / updated 09:41:22</footer>
+  </div>
+</div>
+
+</body>
+</html>

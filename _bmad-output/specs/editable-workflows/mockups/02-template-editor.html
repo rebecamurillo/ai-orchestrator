@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>02 · Template editor — /templates/{name}/{v}</title>
+<style>
+:root{
+  --color-bg:#0b0d0e; --color-surface:#111416; --color-surface-raised:#171b1d;
+  --color-surface-rail:#0e1113; --color-surface-inset:#08090a;
+  --color-line:#21272a; --color-line-strong:#2c3438;
+  --color-text:#dde3e5; --color-text-secondary:#8b979b; --color-text-tertiary:#5c686c;
+  --color-signal-run:#4fb477; --color-signal-needs-you:#e4b33c; --color-signal-failed:#e05252;
+  --color-signal-criterion:#6c8cd5; --color-accent:#7fd4c1;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --type-detail-title:19px; --type-detail-title-line:1.3; --type-detail-title-tracking:-0.01em;
+  --type-question:14px; --type-question-line:1.7;
+  --type-command:13px; --type-command-line:1.7;
+  --type-body:13px; --type-body-line:1.45;
+  --type-surface-title:13px; --type-surface-title-tracking:0.18em;
+  --type-row-title:12.5px; --type-row-title-line:1.4;
+  --type-row-body:12.5px; --type-row-body-line:1.55;
+  --type-meta:11.5px; --type-meta-line:1.45;
+  --type-micro:11px; --type-micro-line:1.6;
+  --type-status-token:11px; --type-status-token-tracking:0.1em;
+  --type-control:11px; --type-control-tracking:0.12em;
+  --type-eyebrow:10.5px; --type-eyebrow-tracking:0.16em;
+  --type-column-head:10px; --type-column-head-tracking:0.18em;
+  --type-section-head:10px; --type-section-head-tracking:0.22em;
+  --space-1:2px; --space-2:4px; --space-3:6px; --space-4:8px; --space-5:10px; --space-6:12px;
+  --space-7:14px; --space-8:16px; --space-9:18px; --space-10:20px; --space-11:22px;
+  --space-12:24px; --space-13:26px; --space-14:28px; --space-15:30px; --space-16:32px;
+  --rail-width:172px; --page-max:1180px; --detail-max:940px; --section-gap:34px;
+  --record-grid:52px 128px 210px 1fr 74px;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-weight:400}
+body{background:var(--color-bg);color:var(--color-text);font-family:var(--font-mono);font-size:var(--type-body);line-height:var(--type-body-line)}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:1px solid var(--color-accent);outline-offset:1px}
+.mockstrip{border-bottom:1px solid var(--color-line-strong);background:var(--color-surface-inset);padding:var(--space-5) var(--space-8);color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line)}
+.mockstrip b{color:var(--color-text-secondary)}
+.statelabel{padding:var(--space-6) var(--space-8) var(--space-3);color:var(--color-text-tertiary);font-size:var(--type-eyebrow);letter-spacing:var(--type-eyebrow-tracking);text-transform:uppercase;border-top:1px solid var(--color-line-strong);margin-top:var(--section-gap)}
+.shell{display:flex;min-height:100vh}
+.rail{display:flex;flex-direction:column;gap:var(--space-4);width:var(--rail-width);min-width:var(--rail-width);padding:var(--space-8) 0;background:var(--color-surface-rail);border-right:1px solid var(--color-line)}
+.brand{display:flex;flex-direction:column;gap:var(--space-2);padding:0 var(--space-6) var(--space-6)}
+.brand .name{font-size:var(--type-row-title)}
+.brand .sub{color:var(--color-text-tertiary);font-size:var(--type-micro)}
+.rail .glabel{padding:var(--space-6) var(--space-6) var(--space-2);color:var(--color-text-tertiary);font-size:var(--type-column-head);letter-spacing:var(--type-column-head-tracking);text-transform:uppercase}
+.rail .item{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);padding:var(--space-3) var(--space-6);color:var(--color-text-secondary)}
+.rail .item[aria-current]{background:var(--color-surface-raised);color:var(--color-text);box-shadow:inset 2px 0 0 var(--color-accent)}
+.rail .count{color:var(--color-text-tertiary);font-size:var(--type-meta)}
+.surface{display:flex;flex-direction:column;flex:1;min-width:0}
+.bar{display:flex;align-items:baseline;gap:var(--space-6);padding:var(--space-7) var(--space-8);border-bottom:1px solid var(--color-line)}
+.bar h1{font-size:var(--type-surface-title);letter-spacing:var(--type-surface-title-tracking);text-transform:uppercase}
+.bar .count{color:var(--color-text-tertiary);font-size:var(--type-meta)}
+.bar .right{display:flex;gap:var(--space-4);margin-left:auto}
+.body{flex:1;width:100%;padding:var(--space-8)}
+.foot{padding:var(--space-4) var(--space-8);border-top:1px solid var(--color-line);color:var(--color-text-tertiary);font-size:var(--type-meta)}
+button,.btn{display:inline-block;padding:var(--space-3) var(--space-6);border:1px solid var(--color-line-strong);background:none;color:var(--color-text-secondary);font-family:var(--font-mono);font-size:var(--type-control);letter-spacing:var(--type-control-tracking);text-transform:uppercase;cursor:pointer}
+.btn:hover,button:hover{color:var(--color-text)}
+.btn.primary,button.primary{border-color:var(--color-accent);color:var(--color-accent)}
+button[disabled]{border-color:var(--color-line);color:var(--color-text-tertiary);cursor:not-allowed}
+.linkact{color:var(--color-accent);font-size:var(--type-micro);letter-spacing:var(--type-control-tracking);text-transform:uppercase}
+.sect-head{display:flex;align-items:baseline;gap:var(--space-6);padding-bottom:var(--space-3);border-bottom:1px solid var(--color-line);color:var(--color-text-secondary);font-size:var(--type-section-head);letter-spacing:var(--type-section-head-tracking);text-transform:uppercase}
+.sect-head .n{margin-left:auto;color:var(--color-text-tertiary);letter-spacing:0;text-transform:none;font-size:var(--type-micro)}
+.hint{padding:var(--space-4) 0;color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line)}
+/* three columns */
+.columns{display:grid;grid-template-columns:288px minmax(0,1fr) 300px;gap:var(--space-8);align-items:start}
+.col{min-width:0}
+/* versions */
+.vrow{display:block;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-line)}
+.vrow:hover{background:var(--color-surface-raised)}
+.vrow[data-selected]{background:var(--color-surface-raised)}
+.vrow .vt{display:flex;align-items:baseline;gap:var(--space-4);color:var(--color-text);font-size:var(--type-row-title)}
+.vrow .vt .restore{margin-left:auto}
+.vrow .vm{display:block;color:var(--color-text-tertiary);font-size:var(--type-meta);line-height:var(--type-meta-line);margin-top:var(--space-2)}
+/* helpers */
+.tabs{display:flex;flex-wrap:wrap;gap:0;border-bottom:1px solid var(--color-line);margin-top:var(--space-4)}
+.tab{padding:var(--space-4) var(--space-5);color:var(--color-text-tertiary);font-size:var(--type-column-head);letter-spacing:var(--type-column-head-tracking);text-transform:uppercase;border:1px solid transparent;border-bottom:none;cursor:pointer;background:none;font-family:var(--font-mono)}
+.tab[aria-selected="true"]{color:var(--color-text);background:var(--color-surface);border-color:var(--color-line)}
+.tabpanel{display:none;border:1px solid var(--color-line);border-top:none;background:var(--color-surface);max-height:360px;overflow:auto}
+.tabpanel[data-open]{display:block}
+.hrow{display:flex;align-items:baseline;gap:var(--space-4);padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-line)}
+.hrow:hover{background:var(--color-surface-raised)}
+.hrow .hn{color:var(--color-text);font-size:var(--type-row-body)}
+.hrow .hk{display:block;color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line);margin-top:var(--space-1)}
+.hrow .ins{margin-left:auto;flex:none}
+.hfoot{padding:var(--space-4) var(--space-5);color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line)}
+/* editor */
+.banner{color:var(--color-text-tertiary);font-size:var(--type-meta);line-height:var(--type-meta-line);padding-bottom:var(--space-4)}
+.banner em{font-style:normal;color:var(--color-text-secondary)}
+.toolbar{display:flex;align-items:center;gap:var(--space-6);padding:var(--space-4) 0}
+.readout{color:var(--color-text-secondary);font-size:var(--type-meta)}
+.readout[data-signal="failed"]{color:var(--color-signal-failed)}
+.toolacts{display:flex;gap:var(--space-4);margin-left:auto}
+.yaml{border:1px solid var(--color-line);background:var(--color-surface-inset);overflow:auto;max-height:520px}
+.yaml pre{font-family:var(--font-mono);font-size:var(--type-command);line-height:1.6;padding:var(--space-5) 0;white-space:pre}
+.yaml .ln{display:inline-block;width:42px;padding-right:var(--space-5);text-align:right;color:var(--color-text-tertiary);user-select:none}
+.yaml .k{color:var(--color-text-secondary)}
+.yaml .v{color:var(--color-text)}
+.yaml .c{color:var(--color-text-tertiary)}
+.yaml .x{color:var(--color-accent)}
+.yaml .bad{border-left:2px solid var(--color-signal-failed);margin-left:-2px;padding-left:2px}
+.yaml .cursor{border-left:1px solid var(--color-accent);margin-left:-1px}
+.errs{padding:var(--space-5) 0;display:flex;flex-direction:column;gap:var(--space-3)}
+.err{display:grid;grid-template-columns:76px 1fr;gap:var(--space-5);align-items:baseline;color:var(--color-text-secondary);font-size:var(--type-row-body);line-height:var(--type-row-body-line)}
+.err .at{color:var(--color-signal-failed);font-size:var(--type-meta)}
+.err .why{color:var(--color-text)}
+.err .sub{display:block;color:var(--color-text-tertiary);font-size:var(--type-meta);line-height:var(--type-meta-line);margin-top:var(--space-2)}
+.ok{color:var(--color-text-secondary);font-size:var(--type-row-body)}
+.kbd{color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line);padding-top:var(--space-4);border-top:1px solid var(--color-line);margin-top:var(--space-5)}
+/* diagram */
+.diag{border:1px solid var(--color-line);background:var(--color-surface);padding:var(--space-5)}
+.node{border:1px solid var(--color-line);background:var(--color-surface-raised);padding:var(--space-4) var(--space-5)}
+.node .eb{color:var(--color-text-tertiary);font-size:var(--type-eyebrow);letter-spacing:var(--type-eyebrow-tracking);text-transform:uppercase}
+.node .lb{color:var(--color-text);font-size:var(--type-row-title);line-height:var(--type-row-title-line);margin-top:var(--space-2)}
+.node .mt{color:var(--color-text-tertiary);font-size:var(--type-micro);margin-top:var(--space-2)}
+.conn{width:1px;height:12px;background:var(--color-line-strong);margin:0 auto}
+.callnode{border-color:var(--color-line-strong)}
+.callnode .lb{color:var(--color-accent)}
+.mark{display:inline-block;margin-left:var(--space-4);padding:1px var(--space-3);border:1px solid var(--color-line-strong);color:var(--color-text-tertiary);font-size:var(--type-micro);letter-spacing:.08em;text-transform:uppercase}
+.mark[data-kind="unpinned"]{border-color:var(--color-accent);color:var(--color-accent)}
+.nest{margin-left:var(--space-8);border-left:1px solid var(--color-line);padding-left:var(--space-6)}
+.legend{color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:1.8;padding-top:var(--space-5);margin-top:var(--space-5);border-top:1px solid var(--color-line)}
+/* inputs table */
+table.inputs{width:100%;border-collapse:collapse;margin-top:var(--space-4)}
+table.inputs th{padding:var(--space-3) var(--space-4);background:var(--color-surface-rail);border-bottom:1px solid var(--color-line);color:var(--color-text-tertiary);font-size:var(--type-column-head);letter-spacing:var(--type-column-head-tracking);text-transform:uppercase;text-align:left}
+table.inputs td{padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-line);color:var(--color-text-secondary);font-size:var(--type-meta)}
+table.inputs td.n{color:var(--color-text)}
+</style>
+</head>
+<body>
+
+<div class="mockstrip">
+  <b>02 · TEMPLATE EDITOR</b> — route <b>/templates/{name}/{version}</b>. Existing three-column layout (VERSIONS | YAML | DIAGRAM + INPUTS) extended with a HELPERS panel fed by <b>GET /capabilities</b>, origin/restored-from and RESTORE on every version row, and a validation readout that gates SAVE.
+  Two states in this file: <b>(a)</b> valid, ready to save — <code>initiative-hub v3</code>; <b>(b)</b> two validation errors, save disabled — <code>initiative-hub-story v3</code>. AC: B3, B4, C1–C3, D-1 (unpinned calls), D-5 (capabilities).
+</div>
+
+<p class="statelabel">(a) Valid, ready to save — /templates/initiative-hub/3 · editing as v4</p>
+<div class="shell">
+  <nav class="rail" aria-label="Surfaces">
+    <div class="brand"><span class="name">ai-orchestrator</span><span class="sub">MVP · single operator</span></div>
+    <a class="item" href="#"><span>Workflows</span><span class="count">7</span></a>
+    <a class="item" href="#"><span>Runs</span><span class="count">41</span></a>
+    <p class="glabel">CONFIGURE</p>
+    <a class="item" href="#"><span>Projects</span></a>
+    <a class="item" href="#" aria-current="page"><span>Templates</span></a>
+  </nav>
+  <div class="surface">
+    <header class="bar">
+      <h1>Templates</h1>
+      <span class="count">initiative-hub · 3 versions</span>
+      <div class="right"><a class="btn" href="#">Back to library</a><a class="btn" href="#">New template</a></div>
+    </header>
+
+    <main class="body">
+      <div class="columns">
+
+        <!-- LEFT: versions + helpers -->
+        <div class="col">
+          <div class="sect-head">Versions <span class="n">newest first</span></div>
+          <p class="hint">A saved version never changes. Restore stores a new version equal to the old text; it does not move a pointer.</p>
+
+          <a class="vrow" href="#" data-selected>
+            <span class="vt">v3 <span class="restore linkact">Open</span></span>
+            <span class="vm">operator · 2026-09-29 · pinned by 4 runs</span>
+          </a>
+          <a class="vrow" href="#">
+            <span class="vt">v2 <span class="restore linkact">Restore</span></span>
+            <span class="vm">operator · 2026-09-27 · restored from v1 · pinned by 1 run</span>
+          </a>
+          <a class="vrow" href="#">
+            <span class="vt">v1 <span class="restore linkact">Restore</span></span>
+            <span class="vm">shipped · 2026-09-24 · pinned by 0 runs</span>
+          </a>
+
+          <div class="sect-head" style="margin-top:20px">Helpers <span class="n">GET /capabilities</span></div>
+          <div class="tabs" role="tablist">
+            <button class="tab" role="tab" aria-selected="true" data-tab="a-steps">Steps</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="a-inputs">Inputs</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="a-harness">Harnesses &amp; models</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="a-skills">Skills</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="a-expr">Expressions</button>
+          </div>
+
+          <div class="tabpanel" id="a-steps" data-open>
+            <div class="hrow"><span><span class="hn">agent</span><span class="hk">with: harness · model · skill · args · prompt_extra · workdir<br>also: expect · retry · escalate_when · pause_when · writes · prompts<br>gate default: liveness · stall 30 min</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">shell</span><span class="hk">with: command — or the sugar <code>run: &lt;command&gt;</code><br>gate default: deterministic · timeout 30 min</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">checkpoint</span><span class="hk">with: when — a falsy value plans the row skipped<br>gate default: human</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">template</span><span class="hk">with: name · version · inputs — omit version to follow the callee's latest<br>no gate, no timing keys: the callee's own steps carry them</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">git.worktree</span><span class="hk">with: base · branch · mode</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">git.submodule</span><span class="hk">with: update — or workdir · branch · base</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">git.sync</span><span class="hk">no with keys</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">git.commit</span><span class="hk">with: message · workdir</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">git.push</span><span class="hk">with: branch · workdir</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">git.merge</span><span class="hk">with: from</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">pr.link</span><span class="hk">with: branch · gate default: liveness</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">bmad.install</span><span class="hk">no with keys · gate default: deterministic</span></span><span class="ins linkact">Insert</span></div>
+            <p class="hfoot">12 kinds. <code>plan.check</code> is the planner's own first row and is not writable here. This list is the executor registry read through /capabilities; the web-client holds no copy of it.</p>
+          </div>
+
+          <div class="tabpanel" id="a-inputs">
+            <div class="hrow"><span><span class="hn">string</span><span class="hk">free text · takes a default</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">path</span><span class="hk">repository-relative path · takes a default</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">number</span><span class="hk">integer or decimal</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">enum</span><span class="hk">requires values: [...]</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">project</span><span class="hk">bound at run time · fields: name</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">repository</span><span class="hk">bound at run time · fields: url · default_branch · install_command · unit_test_command · quality_gate_command</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">item</span><span class="hk">bound by a caller's for_each · fields come from the list file</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">harness</span><span class="hk">new · the run form renders a select over the enabled harnesses; a default must name one</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">model</span><span class="hk">new · the run form renders a select filled by the probe of the harness input beside it</span></span><span class="ins linkact">Insert</span></div>
+            <p class="hfoot">9 types. A step key set, a gate list and the status tokens are on the other tabs; nothing here is a second list.</p>
+          </div>
+
+          <div class="tabpanel" id="a-harness">
+            <div class="hrow"><span><span class="hn">claude</span><span class="hk">enabled · probe ok 09:41:02 · v2.4.1<br>claude-opus-5 · claude-sonnet-5 · claude-haiku-4.5 · claude-subscription</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">codex</span><span class="hk">enabled · probe ok 09:41:03 · v0.44.0<br>o5 · o5-codex</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">opencode</span><span class="hk">enabled · probe ok 09:41:03 · v0.9.2<br>probe returned no model list — a model input falls back to free text</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">local</span><span class="hk">not enabled · failing check: LITELLM_BASE_URL is blank, so the gateway is off<br>readiness is informational; the probe is the gate</span></span><span class="ins linkact">Insert</span></div>
+            <p class="hfoot">Readiness comes from GET /harnesses; the model list comes from each harness's own probe. A blank list is stated, never hidden.</p>
+          </div>
+
+          <div class="tabpanel" id="a-skills">
+            <div class="hrow"><span><span class="hn">bmad-build-auto</span><span class="hk">one iteration of an unattended development loop</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">bmad-build</span><span class="hk">implement an intent, requirement, story or fix</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">bmad-spec</span><span class="hk">distil an intent into the SPEC kernel</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">bmad-create-epics-and-stories</span><span class="hk">break requirements into epics and stories</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">bmad-code-review</span><span class="hk">adversarial review with structured triage</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">bmad-retrospective</span><span class="hk">evidence-based epic retrospective</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">bmad-qa-generate-e2e-tests</span><span class="hk">generate end-to-end tests for existing features</span></span><span class="ins linkact">Insert</span></div>
+            <p class="hfoot">Read from the installed-skills manifest the harness install writes. When the manifest cannot be read the panel says so — it never shows an empty list as "no skills".</p>
+          </div>
+
+          <div class="tabpanel" id="a-expr">
+            <div class="hrow"><span><span class="hn">{{name}}</span><span class="hk">an input, or a for_each item bound by <code>as:</code></span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">{{name.field}}</span><span class="hk">one field of an entity or item input</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">repository.install_command</span><span class="hk">bare field form · also url · default_branch · unit_test_command · quality_gate_command</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">project.name</span><span class="hk">the only field a project input exposes</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">escalate_when: output.status == blocked</span><span class="hk">tokens: draft · ready-for-dev · in-progress · in-review · blocked · done</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">pause_after_item_when: epic.done_checkpoint</span><span class="hk">condition form &lt;name&gt;.&lt;field&gt; · also pause_before_item_when · only</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">gates</span><span class="hk">liveness · deterministic · human — a step with no gate is reported unvalidated, never green</span></span><span class="ins linkact">Insert</span></div>
+            <p class="hfoot">Call depth is capped at 3. A cycle and an over-deep call are both refused at save.</p>
+          </div>
+        </div>
+
+        <!-- MIDDLE: yaml -->
+        <div class="col">
+          <p class="banner">
+            <em>initiative-hub v3</em> · operator · saved 2026-09-29T14:02Z · pinned by 4 runs — the stored text is shown unchanged; <em>Save writes v4</em> with the <code>version:</code> line rewritten to 4.
+          </p>
+          <div class="toolbar">
+            <span class="readout">valid · 0 errors · 14:07:31 — save enabled</span>
+            <span class="toolacts">
+              <button type="button">Validate</button>
+              <button type="button" class="primary">Save as v4</button>
+            </span>
+          </div>
+
+          <div class="yaml">
+<pre><span class="ln">55</span><span class="c">  # The bare form: init + update every `repos/*` submodule this hub declares.</span>
+<span class="ln">56</span>  - <span class="k">id</span>: <span class="v">submodules</span>
+<span class="ln">57</span>    <span class="k">uses</span>: <span class="v">git.submodule</span>
+<span class="ln">58</span>    <span class="k">with</span>: { <span class="k">update</span>: <span class="v">true</span> }
+<span class="ln">59</span>    <span class="k">gate</span>: <span class="v">deterministic</span>
+<span class="ln">60</span>
+<span class="ln">61</span>  - <span class="k">id</span>: <span class="v">epics</span>
+<span class="ln">62</span>    <span class="k">for_each</span>: <span class="v">"{{initiative_folder}}/epics.yaml"</span>
+<span class="ln">63</span>    <span class="k">as</span>: <span class="v">epic</span>
+<span class="ln">64</span>    <span class="k">pause_after_item_when</span>: <span class="v">epic.done_checkpoint</span>
+<span class="ln">65</span>    <span class="k">steps</span>:
+<span class="ln">66</span>      - <span class="k">id</span>: <span class="v">epic</span>
+<span class="ln">67</span>        <span class="k">uses</span>: <span class="v">template</span>
+<span class="ln">68</span>        <span class="k">with</span>:
+<span class="ln">69</span>          <span class="k">name</span>: <span class="x">initiative-hub-epic</span>
+<span class="ln">70</span>          <span class="c"># no `version:` — this call follows initiative-hub-epic's latest</span>
+<span class="ln">71</span>          <span class="k">inputs</span>:
+<span class="ln">72</span>            <span class="k">project</span>: <span class="v">"{{project}}"</span>
+<span class="ln">73</span>            <span class="k">repository</span>: <span class="v">"{{repository}}"</span>
+<span class="ln">74</span>            <span class="k">base_branch</span>: <span class="v">"{{base_branch}}"</span>
+<span class="ln">75</span>            <span class="k">branch</span>: <span class="v">"{{branch}}"</span>
+<span class="ln">76</span>            <span class="k">spec_folder</span>: <span class="v">"{{initiative_folder}}/{{epic.spec_folder}}"</span>
+<span class="ln">77</span>            <span class="k">workdir</span>: <span class="v">"{{epic.workdir}}"</span>
+<span class="ln">78</span>            <span class="k">epic</span>: <span class="v">"{{epic}}"</span>
+<span class="ln">79</span>            <span class="k">install</span>: <span class="v">"{{epic.install}}"</span>
+<span class="ln">80</span>            <span class="k">test</span>: <span class="v">"{{epic.test}}"</span>
+<span class="ln">81</span>            <span class="k">quality_gate</span>: <span class="v">"{{epic.quality_gate}}"</span>
+<span class="ln">82</span>            <span class="k">harness</span>: <span class="v">"{{harness}}"</span>
+<span class="ln">83</span>            <span class="k">plan_model</span>: <span class="v">"{{plan_model}}"</span>
+<span class="ln">84</span>            <span class="k">build_model</span>: <span class="v">"{{build_model}}"</span><span class="cursor"> </span>
+<span class="ln">85</span>            <span class="k">review_model</span>: <span class="v">"{{review_model}}"</span>
+</pre>
+          </div>
+
+          <div class="errs">
+            <p class="ok">0 errors · 0 unvalidated steps — every step declares a gate.</p>
+          </div>
+          <p class="kbd">
+            Ctrl/Cmd+S validates, then saves. Validation also runs 800 ms after the last keystroke. Save stays disabled while the readout names an error.
+            An Insert from the Helpers panel drops the snippet at the cursor and leaves focus in the editor.
+          </p>
+        </div>
+
+        <!-- RIGHT: diagram + inputs -->
+        <div class="col">
+          <div class="sect-head">Diagram <span class="n">v4 candidate</span></div>
+          <div class="diag">
+            <div class="node"><div class="eb">Step</div><div class="lb">checkout</div><div class="mt">git.worktree · deterministic</div></div>
+            <div class="conn"></div>
+            <div class="node"><div class="eb">Step</div><div class="lb">setup</div><div class="mt">shell · deterministic · 20 min</div></div>
+            <div class="conn"></div>
+            <div class="node"><div class="eb">Step</div><div class="lb">submodules</div><div class="mt">git.submodule · deterministic</div></div>
+            <div class="conn"></div>
+            <div class="node"><div class="eb">For each · epics.yaml</div><div class="lb">epics</div><div class="mt">as epic · checkpoint after an item whose done_checkpoint is set</div></div>
+            <div class="nest" style="margin-top:8px">
+              <div class="node callnode">
+                <div class="eb">Calls</div>
+                <div class="lb">initiative-hub-epic@5 <span class="mark" data-kind="unpinned">unpinned</span></div>
+                <div class="mt">resolves to the latest stored version when this template is validated and again when a run is planned</div>
+              </div>
+              <div class="conn"></div>
+              <div class="nest">
+                <div class="node callnode">
+                  <div class="eb">Calls</div>
+                  <div class="lb">initiative-hub-story@4 <span class="mark" data-kind="unpinned">unpinned</span></div>
+                  <div class="mt">depth 2 of 3</div>
+                </div>
+              </div>
+            </div>
+            <p class="legend">
+              <span class="mark" data-kind="unpinned">unpinned</span> the call writes no <code>version:</code>; the number shown is what it resolves to now.<br>
+              <span class="mark">pinned</span> the call writes an integer <code>version:</code> and never moves — the shipped readiness fixture reads <code>story@1 pinned</code>.<br>
+              A run records the tree it resolved; this picture is the candidate text, not a run.
+            </p>
+          </div>
+
+          <div class="sect-head" style="margin-top:20px">Inputs bound at start</div>
+          <table class="inputs">
+            <thead><tr><th>Input</th><th>Type</th><th>Req</th><th>Default</th></tr></thead>
+            <tbody>
+              <tr><td class="n">project</td><td>project</td><td>yes</td><td>—</td></tr>
+              <tr><td class="n">repository</td><td>repository</td><td>yes</td><td>—</td></tr>
+              <tr><td class="n">base_branch</td><td>string</td><td>yes</td><td>—</td></tr>
+              <tr><td class="n">branch</td><td>string</td><td>yes</td><td>—</td></tr>
+              <tr><td class="n">initiative_folder</td><td>path</td><td>yes</td><td>—</td></tr>
+              <tr><td class="n">harness</td><td>harness</td><td>no</td><td>claude</td></tr>
+              <tr><td class="n">plan_model</td><td>model</td><td>no</td><td>—</td></tr>
+              <tr><td class="n">build_model</td><td>model</td><td>no</td><td>—</td></tr>
+              <tr><td class="n">review_model</td><td>model</td><td>no</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </main>
+    <footer class="foot">2 running · 1 queued / 2 need you / updated 09:41:22</footer>
+  </div>
+</div>
+
+<p class="statelabel">(b) Two validation errors — save disabled — /templates/initiative-hub-story/3 · editing as v4</p>
+<div class="shell">
+  <nav class="rail" aria-label="Surfaces">
+    <div class="brand"><span class="name">ai-orchestrator</span><span class="sub">MVP · single operator</span></div>
+    <a class="item" href="#"><span>Workflows</span><span class="count">7</span></a>
+    <a class="item" href="#"><span>Runs</span><span class="count">41</span></a>
+    <p class="glabel">CONFIGURE</p>
+    <a class="item" href="#"><span>Projects</span></a>
+    <a class="item" href="#" aria-current="page"><span>Templates</span></a>
+  </nav>
+  <div class="surface">
+    <header class="bar">
+      <h1>Templates</h1>
+      <span class="count">initiative-hub-story · 3 versions</span>
+      <div class="right"><a class="btn" href="#">Back to library</a><a class="btn" href="#">New template</a></div>
+    </header>
+
+    <main class="body">
+      <div class="columns">
+
+        <div class="col">
+          <div class="sect-head">Versions <span class="n">newest first</span></div>
+          <p class="hint">A saved version never changes. Restore stores a new version equal to the old text; it does not move a pointer.</p>
+          <a class="vrow" href="#" data-selected><span class="vt">v3 <span class="restore linkact">Open</span></span><span class="vm">operator · 2026-09-29 · pinned by 4 runs</span></a>
+          <a class="vrow" href="#"><span class="vt">v2 <span class="restore linkact">Restore</span></span><span class="vm">operator · 2026-09-27 · pinned by 2 runs</span></a>
+          <a class="vrow" href="#"><span class="vt">v1 <span class="restore linkact">Restore</span></span><span class="vm">shipped · 2026-09-24 · pinned by 0 runs</span></a>
+
+          <div class="sect-head" style="margin-top:20px">Helpers <span class="n">GET /capabilities</span></div>
+          <div class="tabs" role="tablist">
+            <button class="tab" role="tab" aria-selected="false" data-tab="b-steps">Steps</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="b-inputs">Inputs</button>
+            <button class="tab" role="tab" aria-selected="true" data-tab="b-harness">Harnesses &amp; models</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="b-skills">Skills</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="b-expr">Expressions</button>
+          </div>
+          <div class="tabpanel" id="b-steps">
+            <div class="hrow"><span><span class="hn">agent</span><span class="hk">with: harness · model · skill · args · prompt_extra · workdir</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">template</span><span class="hk">with: name · version · inputs — omit version to follow the callee's latest</span></span><span class="ins linkact">Insert</span></div>
+            <p class="hfoot">12 kinds, read from the executor registry through /capabilities.</p>
+          </div>
+          <div class="tabpanel" id="b-inputs">
+            <div class="hrow"><span><span class="hn">harness</span><span class="hk">the run form renders a select over the enabled harnesses</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">model</span><span class="hk">the run form renders a select filled by the probe of the harness input beside it</span></span><span class="ins linkact">Insert</span></div>
+            <p class="hfoot">9 types.</p>
+          </div>
+          <div class="tabpanel" id="b-harness" data-open>
+            <div class="hrow"><span><span class="hn">claude</span><span class="hk">enabled · probe ok 09:41:02 · v2.4.1<br>claude-opus-5 · claude-sonnet-5 · claude-haiku-4.5 · claude-subscription</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">codex</span><span class="hk">enabled · probe ok 09:41:03 · v0.44.0<br>o5 · o5-codex</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">opencode</span><span class="hk">enabled · probe ok 09:41:03 · v0.9.2<br>probe returned no model list — a model input falls back to free text</span></span><span class="ins linkact">Insert</span></div>
+            <div class="hrow"><span><span class="hn">local</span><span class="hk">not enabled · failing check: LITELLM_BASE_URL is blank, so the gateway is off</span></span><span class="ins linkact">Insert</span></div>
+            <p class="hfoot">Readiness comes from GET /harnesses; the model list comes from each harness's own probe.</p>
+          </div>
+          <div class="tabpanel" id="b-skills">
+            <div class="hrow"><span><span class="hn">bmad-build-auto</span><span class="hk">one iteration of an unattended development loop</span></span><span class="ins linkact">Insert</span></div>
+            <p class="hfoot">Read from the installed-skills manifest the harness install writes.</p>
+          </div>
+          <div class="tabpanel" id="b-expr">
+            <div class="hrow"><span><span class="hn">{{name}}</span><span class="hk">an input, or a for_each item bound by <code>as:</code></span></span><span class="ins linkact">Insert</span></div>
+            <p class="hfoot">Call depth is capped at 3.</p>
+          </div>
+        </div>
+
+        <div class="col">
+          <p class="banner">
+            <em>initiative-hub-story v3</em> · operator · saved 2026-09-29T14:02Z · pinned by 4 runs — <em>Save writes v4</em>.
+          </p>
+          <div class="toolbar">
+            <span class="readout" data-signal="failed">2 errors · 14:09:06 — save disabled until both are cleared</span>
+            <span class="toolacts">
+              <button type="button">Validate</button>
+              <button type="button" class="primary" disabled>Save as v4</button>
+            </span>
+          </div>
+
+          <div class="yaml">
+<pre><span class="ln">14</span>  <span class="k">test</span>:        { <span class="k">type</span>: <span class="v">string</span>,     <span class="k">required</span>: <span class="v">false</span> }
+<span class="ln">15</span>  <span class="k">harness</span>:     { <span class="k">type</span>: <span class="v">harness</span>,    <span class="k">default</span>: <span class="v">claude</span> }
+<span class="ln">16</span>  <span class="k">build_model</span>: { <span class="k">type</span>: <span class="v">model</span>,      <span class="k">required</span>: <span class="v">false</span> }
+<span class="ln">17</span><span class="c">  # `workdir` was removed here — it is no longer read by any step below.</span>
+<span class="ln">18</span><span class="k">steps</span>:
+<span class="ln">19</span>  - <span class="k">id</span>: <span class="v">sync</span>
+<span class="ln">20</span>    <span class="k">uses</span>: <span class="v">git.sync</span>
+<span class="ln">21</span>    <span class="k">gate</span>: <span class="v">deterministic</span>
+<span class="ln">22</span>
+<span class="ln">23</span>  - <span class="k">id</span>: <span class="v">build</span>
+<span class="ln">24</span>    <span class="k">uses</span>: <span class="v">agent</span>
+<span class="ln">25</span>    <span class="k">with</span>:
+<span class="ln">26</span>      <span class="k">harness</span>: <span class="v">"{{harness}}"</span>
+<span class="ln">27</span>      <span class="k">model</span>: <span class="v">"{{build_model}}"</span>
+<span class="ln">28</span>      <span class="k">skill</span>: <span class="v">bmad-build-auto</span>
+<span class="ln">29</span>    <span class="k">gate</span>: <span class="v">liveness</span>
+<span class="ln">30</span>    <span class="k">expect</span>:
+<span class="ln">31</span>      <span class="k">files</span>: [<span class="v">"{{spec_folder}}/stories/.auto/{{story.id}}.md"</span>]
+<span class="ln">32</span>      <span class="k">status_in</span>: [<span class="v">done</span>, <span class="v">blocked</span>]
+<span class="ln">33</span>    <span class="k">prompts</span>:
+<span class="ln">34</span>      <span class="k">dispatch</span>: <span class="v">"Run the skill {skill} in folder+id dispatch mode: spec</span>
+<span class="ln">35</span>        <span class="v">folder {spec_folder}, story id {story_id}."</span>
+<span class="bad"><span class="ln">36</span>      <span class="k">redispatched</span>: <span class="v">"The verify step sent this story back. Read the</span></span>
+<span class="ln">37</span><span class="bad">        <span class="v">## Verify Failure section and fix your own breakage first."</span></span>
+<span class="ln">38</span>
+<span class="ln">39</span>  - <span class="k">id</span>: <span class="v">verify</span>
+<span class="ln">40</span>    <span class="k">run</span>: <span class="v">"{{test}}"</span>
+<span class="ln">41</span>    <span class="k">on_fail</span>: { <span class="k">redispatch</span>: <span class="v">build</span>, <span class="k">max</span>: <span class="v">1</span> }
+<span class="ln">42</span>    <span class="k">gate</span>: <span class="v">deterministic</span>
+</pre>
+          </div>
+
+          <div class="errs">
+            <div class="err">
+              <span class="at">line 36</span>
+              <span>
+                <span class="why">unknown key · <code>prompts.redispatched</code></span>
+                <span class="sub">A prompts block accepts dispatch · rendered · answer · halt · redispatch. Nothing is stored while an error stands.</span>
+              </span>
+            </div>
+            <div class="err">
+              <span class="at">caller</span>
+              <span>
+                <span class="why">saving initiative-hub-story v4 would strand initiative-hub-epic v5: callee input mismatch <code>workdir</code> (line 41)</span>
+                <span class="sub">
+                  initiative-hub-epic v5 calls this template unpinned, so it would resolve to v4 on its next run and bind an input v4 no longer declares.
+                  Either keep the <code>workdir</code> input, or pin that call to <code>version: 3</code>, save v4, then re-save the caller unpinned.
+                  <a class="linkact" href="#">Open initiative-hub-epic v5 at line 41</a>
+                </span>
+              </span>
+            </div>
+          </div>
+          <p class="kbd">
+            Ctrl/Cmd+S validates, then saves. Validation also runs 800 ms after the last keystroke. Save stays disabled while the readout names an error.
+            Nothing is written until Save lands: this template's version list is unchanged.
+          </p>
+        </div>
+
+        <div class="col">
+          <div class="sect-head">Diagram <span class="n">last valid text · 2026-09-29</span></div>
+          <div class="diag">
+            <div class="node"><div class="eb">Step</div><div class="lb">sync</div><div class="mt">git.sync · deterministic</div></div>
+            <div class="conn"></div>
+            <div class="node"><div class="eb">Agent</div><div class="lb">build</div><div class="mt">claude · {{build_model}} · bmad-build-auto · liveness</div></div>
+            <div class="conn"></div>
+            <div class="node"><div class="eb">Step</div><div class="lb">verify</div><div class="mt">shell · deterministic · redispatch build, max 1</div></div>
+            <div class="conn"></div>
+            <div class="node"><div class="eb">Step</div><div class="lb">commit-guard</div><div class="mt">git.commit · deterministic</div></div>
+            <p class="legend">
+              The candidate text does not validate, so this picture is the last text that did. It is not the shape Save would store.<br>
+              Called by <code>initiative-hub-epic@5</code> <span class="mark" data-kind="unpinned">unpinned</span> and, through it, <code>initiative-hub@3</code>.
+            </p>
+          </div>
+
+          <div class="sect-head" style="margin-top:20px">Inputs bound at start</div>
+          <table class="inputs">
+            <thead><tr><th>Input</th><th>Type</th><th>Req</th><th>Default</th></tr></thead>
+            <tbody>
+              <tr><td class="n">project</td><td>project</td><td>yes</td><td>—</td></tr>
+              <tr><td class="n">repository</td><td>repository</td><td>yes</td><td>—</td></tr>
+              <tr><td class="n">branch</td><td>string</td><td>yes</td><td>—</td></tr>
+              <tr><td class="n">spec_folder</td><td>path</td><td>yes</td><td>—</td></tr>
+              <tr><td class="n">story</td><td>item</td><td>yes</td><td>—</td></tr>
+              <tr><td class="n">test</td><td>string</td><td>no</td><td>—</td></tr>
+              <tr><td class="n">harness</td><td>harness</td><td>no</td><td>claude</td></tr>
+              <tr><td class="n">build_model</td><td>model</td><td>no</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </main>
+    <footer class="foot">2 running · 1 queued / 2 need you / updated 09:41:22</footer>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.tab').forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    var bar = tab.parentElement;
+    bar.querySelectorAll('.tab').forEach(function (other) {
+      other.setAttribute('aria-selected', String(other === tab));
+      var panel = document.getElementById(other.dataset.tab);
+      if (panel) { if (other === tab) { panel.setAttribute('data-open', ''); } else { panel.removeAttribute('data-open'); } }
+    });
+  });
+});
+</script>
+</body>
+</html>

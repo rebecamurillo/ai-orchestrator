@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>03 · Save impact preview</title>
+<style>
+:root{
+  --color-bg:#0b0d0e; --color-surface:#111416; --color-surface-raised:#171b1d;
+  --color-surface-rail:#0e1113; --color-surface-inset:#08090a;
+  --color-line:#21272a; --color-line-strong:#2c3438;
+  --color-text:#dde3e5; --color-text-secondary:#8b979b; --color-text-tertiary:#5c686c;
+  --color-signal-run:#4fb477; --color-signal-needs-you:#e4b33c; --color-signal-failed:#e05252;
+  --color-signal-criterion:#6c8cd5; --color-accent:#7fd4c1;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --type-detail-title:19px; --type-detail-title-line:1.3; --type-detail-title-tracking:-0.01em;
+  --type-question:14px; --type-question-line:1.7;
+  --type-command:13px; --type-command-line:1.7;
+  --type-body:13px; --type-body-line:1.45;
+  --type-surface-title:13px; --type-surface-title-tracking:0.18em;
+  --type-row-title:12.5px; --type-row-title-line:1.4;
+  --type-row-body:12.5px; --type-row-body-line:1.55;
+  --type-meta:11.5px; --type-meta-line:1.45;
+  --type-micro:11px; --type-micro-line:1.6;
+  --type-status-token:11px; --type-status-token-tracking:0.1em;
+  --type-control:11px; --type-control-tracking:0.12em;
+  --type-eyebrow:10.5px; --type-eyebrow-tracking:0.16em;
+  --type-column-head:10px; --type-column-head-tracking:0.18em;
+  --type-section-head:10px; --type-section-head-tracking:0.22em;
+  --space-1:2px; --space-2:4px; --space-3:6px; --space-4:8px; --space-5:10px; --space-6:12px;
+  --space-7:14px; --space-8:16px; --space-9:18px; --space-10:20px; --space-11:22px;
+  --space-12:24px; --space-13:26px; --space-14:28px; --space-15:30px; --space-16:32px;
+  --rail-width:172px; --page-max:1180px; --detail-max:940px; --section-gap:34px;
+  --record-grid:52px 128px 210px 1fr 74px;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-weight:400}
+body{background:var(--color-bg);color:var(--color-text);font-family:var(--font-mono);font-size:var(--type-body);line-height:var(--type-body-line)}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:1px solid var(--color-accent);outline-offset:1px}
+.mockstrip{border-bottom:1px solid var(--color-line-strong);background:var(--color-surface-inset);padding:var(--space-5) var(--space-8);color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line)}
+.mockstrip b{color:var(--color-text-secondary)}
+.statelabel{padding:var(--space-6) var(--space-8) var(--space-3);color:var(--color-text-tertiary);font-size:var(--type-eyebrow);letter-spacing:var(--type-eyebrow-tracking);text-transform:uppercase;border-top:1px solid var(--color-line-strong);margin-top:var(--section-gap)}
+.shell{display:flex;min-height:100vh}
+.rail{display:flex;flex-direction:column;gap:var(--space-4);width:var(--rail-width);min-width:var(--rail-width);padding:var(--space-8) 0;background:var(--color-surface-rail);border-right:1px solid var(--color-line)}
+.brand{display:flex;flex-direction:column;gap:var(--space-2);padding:0 var(--space-6) var(--space-6)}
+.brand .name{font-size:var(--type-row-title)}
+.brand .sub{color:var(--color-text-tertiary);font-size:var(--type-micro)}
+.rail .glabel{padding:var(--space-6) var(--space-6) var(--space-2);color:var(--color-text-tertiary);font-size:var(--type-column-head);letter-spacing:var(--type-column-head-tracking);text-transform:uppercase}
+.rail .item{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-4);padding:var(--space-3) var(--space-6);color:var(--color-text-secondary)}
+.rail .item[aria-current]{background:var(--color-surface-raised);color:var(--color-text);box-shadow:inset 2px 0 0 var(--color-accent)}
+.rail .count{color:var(--color-text-tertiary);font-size:var(--type-meta)}
+.surface{display:flex;flex-direction:column;flex:1;min-width:0}
+.bar{display:flex;align-items:baseline;gap:var(--space-6);padding:var(--space-7) var(--space-8);border-bottom:1px solid var(--color-line)}
+.bar h1{font-size:var(--type-surface-title);letter-spacing:var(--type-surface-title-tracking);text-transform:uppercase}
+.bar .count{color:var(--color-text-tertiary);font-size:var(--type-meta)}
+.body{flex:1;width:100%;max-width:var(--page-max);padding:var(--space-10) var(--space-8) var(--space-16)}
+.foot{padding:var(--space-4) var(--space-8);border-top:1px solid var(--color-line);color:var(--color-text-tertiary);font-size:var(--type-meta)}
+button,.btn{display:inline-block;padding:var(--space-3) var(--space-6);border:1px solid var(--color-line-strong);background:none;color:var(--color-text-secondary);font-family:var(--font-mono);font-size:var(--type-control);letter-spacing:var(--type-control-tracking);text-transform:uppercase;cursor:pointer}
+.btn:hover,button:hover{color:var(--color-text)}
+.btn.primary,button.primary{border-color:var(--color-accent);color:var(--color-accent)}
+.linkact{color:var(--color-accent);font-size:var(--type-micro);letter-spacing:var(--type-control-tracking);text-transform:uppercase}
+/* full-plane confirm panel */
+.panel{border:1px solid var(--color-line-strong);background:var(--color-surface);max-width:var(--detail-max)}
+.panel .head{padding:var(--space-6) var(--space-8);border-bottom:1px solid var(--color-line);background:var(--color-surface-rail)}
+.panel .eb{color:var(--color-text-tertiary);font-size:var(--type-eyebrow);letter-spacing:var(--type-eyebrow-tracking);text-transform:uppercase}
+.panel h2{margin-top:var(--space-4);font-size:var(--type-detail-title);line-height:var(--type-detail-title-line);letter-spacing:var(--type-detail-title-tracking)}
+.panel .sub{margin-top:var(--space-4);color:var(--color-text-secondary);font-size:var(--type-meta);line-height:var(--type-meta-line)}
+.block{padding:var(--space-8);border-bottom:1px solid var(--color-line)}
+.block:last-of-type{border-bottom:none}
+.blabel{color:var(--color-text-tertiary);font-size:var(--type-section-head);letter-spacing:var(--type-section-head-tracking);text-transform:uppercase;padding-bottom:var(--space-5)}
+.line{color:var(--color-text-secondary);font-size:var(--type-row-body);line-height:1.8}
+.line b{color:var(--color-text);font-weight:400}
+.callers{display:grid;grid-template-columns:1fr;gap:var(--space-2)}
+.caller{display:grid;grid-template-columns:210px 92px 1fr;gap:var(--space-6);align-items:baseline;padding:var(--space-4) 0;border-bottom:1px solid var(--color-line)}
+.caller:last-child{border-bottom:none}
+.caller .cn{color:var(--color-text);font-size:var(--type-row-title)}
+.caller .cv{color:var(--color-text-secondary);font-size:var(--type-meta)}
+.caller .cw{color:var(--color-text-tertiary);font-size:var(--type-meta);line-height:var(--type-meta-line)}
+.none{color:var(--color-text-secondary);font-size:var(--type-row-body)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:var(--space-4) var(--space-8)}
+.kv dt{color:var(--color-text-tertiary);font-size:var(--type-meta);padding:var(--space-3) 0;border-bottom:1px solid var(--color-line)}
+.kv dd{color:var(--color-text);font-size:var(--type-meta);padding:var(--space-3) 0;border-bottom:1px solid var(--color-line);text-align:right}
+.actions{display:flex;gap:var(--space-5);align-items:center;padding:var(--space-8);border-top:1px solid var(--color-line)}
+.actions .note{margin-left:auto;color:var(--color-text-tertiary);font-size:var(--type-micro)}
+.tree{color:var(--color-text-secondary);font-size:var(--type-row-body);line-height:1.9}
+.tree .ind{padding-left:var(--space-8)}
+.tree code{color:var(--color-accent)}
+.deferred{margin-top:var(--space-8);padding:var(--space-5) var(--space-6);border:1px solid var(--color-line);color:var(--color-text-tertiary);font-size:var(--type-micro);line-height:var(--type-micro-line)}
+</style>
+</head>
+<body>
+
+<div class="mockstrip">
+  <b>03 · SAVE IMPACT PREVIEW</b> — the confirm step between <b>Save as v4</b> and the write. Opened from 02 (b) once its two errors are cleared. Reached only after the candidate text validates and the reverse check passes, so nothing here can be refused. AC: D1 (impact preview), B5 (a save cannot touch a live run), D-1 (unpinned calls).
+</div>
+
+<p class="statelabel">(a) Confirm — the preview, before anything is written</p>
+<div class="shell">
+  <nav class="rail" aria-label="Surfaces">
+    <div class="brand"><span class="name">ai-orchestrator</span><span class="sub">MVP · single operator</span></div>
+    <a class="item" href="#"><span>Workflows</span><span class="count">7</span></a>
+    <a class="item" href="#"><span>Runs</span><span class="count">41</span></a>
+    <p class="glabel">CONFIGURE</p>
+    <a class="item" href="#"><span>Projects</span></a>
+    <a class="item" href="#" aria-current="page"><span>Templates</span></a>
+  </nav>
+  <div class="surface">
+    <header class="bar"><h1>Templates</h1><span class="count">initiative-hub-story · save</span></header>
+    <main class="body">
+
+      <div class="panel">
+        <div class="head">
+          <p class="eb">Save · initiative-hub-story</p>
+          <h2>This saves initiative-hub-story v4.</h2>
+          <p class="sub">
+            The text validated at 14:11:40 with 0 errors and 0 unvalidated steps. v3 and every earlier version stay exactly as they are; a saved version is never rewritten.
+          </p>
+        </div>
+
+        <div class="block">
+          <p class="blabel">Callers that resolve it unpinned and will plan from v4 on their next run</p>
+          <div class="callers">
+            <div class="caller">
+              <span class="cn">initiative-hub-epic</span>
+              <span class="cv">latest v5</span>
+              <span class="cw">calls it directly, line 88, no <code>version:</code> written</span>
+            </div>
+            <div class="caller">
+              <span class="cn">initiative-hub</span>
+              <span class="cv">latest v3</span>
+              <span class="cw">reaches it through initiative-hub-epic, which it also calls unpinned</span>
+            </div>
+          </div>
+          <p class="line" style="margin-top:12px">
+            After this save those callers resolve <code>initiative-hub@3 → initiative-hub-epic@5 → initiative-hub-story@4</code>.
+          </p>
+        </div>
+
+        <div class="block">
+          <p class="blabel">Callers pinned to an older version</p>
+          <p class="none">None. No stored template writes <code>version:</code> on a call to initiative-hub-story.</p>
+        </div>
+
+        <div class="block">
+          <p class="blabel">Runs</p>
+          <p class="line">
+            Runs planned, queued or running are unchanged. Each one pinned its whole tree when it was planned and nothing re-reads a template afterwards.
+          </p>
+          <dl class="kv" style="margin-top:12px">
+            <dt>runs pinning initiative-hub-story v3 — unchanged</dt><dd>4</dd>
+            <dt>of those, running now</dt><dd>2</dd>
+            <dt>of those, saved but not yet started — planned at save time, so they keep v3</dt><dd>1</dd>
+            <dt>runs that would plan from v4</dt><dd>every run planned after this save</dd>
+          </dl>
+        </div>
+
+        <div class="block">
+          <p class="blabel">What is written</p>
+          <p class="line">
+            One row: <b>initiative-hub-story v4</b>, origin <b>operator</b>, <code>version:</code> line rewritten to 4. 3 lines added, 1 removed against v3.
+            No other template gains a version — a caller follows this one because its call is unpinned, not because anything is republished for it.
+          </p>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="primary">Save v4</button>
+          <button type="button">Back to editor</button>
+          <span class="note">POST /templates/initiative-hub-story/versions · Esc returns to the editor with the text intact</span>
+        </div>
+      </div>
+
+      <p class="deferred">v2 — a caller pinned to an older version would be listed here with the version it keeps, and with an offer to re-point it. Not in v1: a pin is edited in the caller's own text.</p>
+
+    </main>
+    <footer class="foot">2 running · 1 queued / 2 need you / updated 09:41:22</footer>
+  </div>
+</div>
+
+<p class="statelabel">(b) Post-save readout — the editor has reopened at /templates/initiative-hub-story/4</p>
+<div class="shell">
+  <nav class="rail" aria-label="Surfaces">
+    <div class="brand"><span class="name">ai-orchestrator</span><span class="sub">MVP · single operator</span></div>
+    <a class="item" href="#"><span>Workflows</span><span class="count">7</span></a>
+    <a class="item" href="#"><span>Runs</span><span class="count">41</span></a>
+    <p class="glabel">CONFIGURE</p>
+    <a class="item" href="#"><span>Projects</span></a>
+    <a class="item" href="#" aria-current="page"><span>Templates</span></a>
+  </nav>
+  <div class="surface">
+    <header class="bar"><h1>Templates</h1><span class="count">initiative-hub-story · 4 versions</span></header>
+    <main class="body">
+      <div class="panel">
+        <div class="head">
+          <p class="eb">Saved · 2026-09-30T09:31:12Z</p>
+          <h2>initiative-hub-story v4 is stored.</h2>
+          <p class="sub">origin operator · validated 0 errors · pinned by 0 runs · v3 unchanged and still pinned by 4 runs</p>
+        </div>
+        <div class="block">
+          <p class="blabel">What now resolves</p>
+          <p class="tree">
+            <code>initiative-hub@3</code><br>
+            <span class="ind">→ <code>initiative-hub-epic@5</code> · unpinned</span><br>
+            <span class="ind" style="padding-left:32px">→ <code>initiative-hub-story@4</code> · unpinned</span>
+          </p>
+          <p class="line" style="margin-top:12px">Every run planned from now on pins this tree. The 4 runs that pinned v3 keep it.</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="primary">Start a run from initiative-hub</button>
+          <button type="button">Open v4</button>
+          <button type="button">Diff v3 → v4</button>
+          <span class="note">GET /templates/initiative-hub-story/4</span>
+        </div>
+      </div>
+    </main>
+    <footer class="foot">2 running · 1 queued / 2 need you / updated 09:41:22</footer>
+  </div>
+</div>
+
+</body>
+</html>
