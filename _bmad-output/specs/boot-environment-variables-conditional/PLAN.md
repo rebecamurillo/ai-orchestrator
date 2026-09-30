@@ -1,6 +1,137 @@
 # Two-tier configuration contract: boot on MUST-HAVE secrets only, default everything else
 
-## Context
+## Revision 2026-09-30 — what changed since 2026-09-20, and the decisions taken
+
+The plan below is unchanged in intent and is still the instruction; this section records
+the diff against the code as it stands on `main` at `ba79213`, and the decisions taken
+without asking (the Operator's instruction was: decide, state it, proceed). The Operator
+reaffirmed the 2026-09-20 ruling on 2026-09-30 — "make the system bootable with strictly
+minimal environment variables; environment variables can be undefined/null" — and that
+declaration, cited as **"Operator decision 2026-09-20, two-tier configuration contract;
+reaffirmed 2026-09-30"**, is the hard-rule-1(b) basis for every test revision here.
+
+**What moved in the code since the plan was written**
+
+1. `CLAUDE_SUBSCRIPTION_AUTH` is a new `Settings` field (AD-5 subscription mode). The plan
+   already anticipated it by name; it is OPTIONAL, default `False`.
+2. `ROOT_TEMPLATES` exists in the contract but is **not** a `Settings` field — it is on
+   `check_env_contract.COMPOSE_ONLY_VARIABLES` and is read by the web-client. It is
+   already interpolated `${ROOT_TEMPLATES:-}` in both compose files and needs no change.
+3. `host/docker-compose.yml` gained `OPENROUTER_API_BASE` / `OPENROUTER_API_KEY`, which
+   `host/.env.example` never declared. `test_host_compose.py::test_every_variable_the_file
+   _reads_is_declared_in_its_own_example` fails on `main` because of it. Fixing
+   `host/.env.example` is in scope: same contract, same class of defect.
+4. `deploy/.env.example`'s `CLAUDE_ALLOWED_TOOLS` has drifted from the root contract's
+   (the root gained `Bash(rm *)`, `Bash(npx *)`, `Bash(yarn *)`, `Glob`, `Grep`). Left
+   as-is: the restructure changes order and comments only, the name-based checker is
+   unaffected, and the Settings drift guard is against the **root** contract. Reported.
+5. Nothing else was added. `READINESS_BUDGET_USD`, `READINESS_MODELS`,
+   `LITELLM_SPEND_MATCH`, `HARNESS_SCRIPTS_DIR`, `WORKTREE_RETENTION_DAYS` and the three
+   crons are all already covered by the plan's §1 list.
+
+**Decisions taken**
+
+- **The "off by default" exception list is seven names, not two.** The plan's §1 already
+  defaults `litellm_api_key`, `litellm_spend_key`, `langfuse_public_key`,
+  `langfuse_secret_key` and `langfuse_project_id` to blank, but its drift-guard exception
+  list named only the two base URLs. Those five contract lines carry placeholder
+  credentials (`sk-change-me`, `pk-lf-change-me`, …), and a code default equal to a
+  placeholder secret would put a credential-shaped literal in the source (hard rule 5) and
+  would make a blank-URL instance *look* configured. The exception set is therefore
+  `{LITELLM_BASE_URL, LITELLM_API_KEY, LITELLM_SPEND_KEY, LANGFUSE_BASE_URL,
+  LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_PROJECT_ID}` — the whole
+  gateway/tracing group, whose code default is "off" and whose `.env.example` line is the
+  documented "on" example.
+- **An empty environment value means "not set" for any field that has a default.** The
+  Operator's 2026-09-30 wording is "environment variables can be undefined/null". A stale
+  `.env` carrying `MAX_ACTIVE_RUNS=` or `WORK_DIR=` is the same intent as leaving the line
+  out, and `int("")` / `Path("")` would refuse it at start-up — the exact crash-loop this
+  change exists to remove. A custom env source (`_BlankMeansUnset`) drops blank values for
+  defaulted fields before validation. Excluded: the seven gateway/tracing names above,
+  where blank is the documented off switch, and every MUST-HAVE field, whose behaviour is
+  left exactly as it is today.
+- **`scripts/check_env_contract.py` stays untouched.** It compares *names* in both
+  directions and knows nothing about requiredness; nothing in this change moves a name.
+- **`docker-compose.prod.yml` stays untouched.** It is an overlay on the root file and
+  interpolates only `IMAGE_TAG:?`, which remains required.
+- **`.env.example` values stay byte-identical.** `test_env_example_is_sourceable.py::
+  test_every_variable_survives_the_round_trip` requires every declared variable to be
+  non-empty, and the Settings drift guard compares against those values. The restructure
+  is section headers and order only.
+
+**The full current classification**
+
+MUST-HAVE — no code default; `Settings()` raises `ValidationError` naming the field.
+
+| Variable | Tier | Why |
+| --- | --- | --- |
+| `ORCHESTRATOR_TOKEN` | MUST-HAVE | the one credential (AD-4) |
+| `ORCHESTRATOR_SECRET_KEY` | MUST-HAVE | Fernet key for Project env vars (AD-5) |
+| `DATABASE_URL` | MUST-HAVE | no sane default; carries `POSTGRES_PASSWORD` |
+| `GITHUB_TOKEN` | MUST-HAVE | clone/push credential (AD-5) |
+
+Stack-level MUST-HAVE (compose `:?`, not Settings fields): `ORCHESTRATOR_SESSION_SECRET`,
+`POSTGRES_PASSWORD`, plus `IMAGE_TAG` in `deploy/docker-compose.yml`.
+
+CONDITIONALLY REQUIRED — defaulted blank; `_validate_service_config` refuses a non-blank
+base URL paired with a blank key (unchanged).
+
+| Variable | Required when |
+| --- | --- |
+| `LITELLM_API_KEY` | `LITELLM_BASE_URL` is non-blank |
+| `LANGFUSE_PUBLIC_KEY` | `LANGFUSE_BASE_URL` is non-blank |
+| `LANGFUSE_SECRET_KEY` | `LANGFUSE_BASE_URL` is non-blank |
+| `LANGFUSE_PROJECT_ID` | `LANGFUSE_BASE_URL` is non-blank |
+
+OPTIONAL — code default. Marked `off` where the default is deliberately not the
+`.env.example` value (the drift-guard exception list above).
+
+| Variable | Code default | `.env.example` |
+| --- | --- | --- |
+| `DBOS_APPLICATION_VERSION` | `1` | same |
+| `MAX_ACTIVE_RUNS` | `2` | same |
+| `HUMAN_WAIT_SECONDS` | `2592000` | same |
+| `WORKTREE_RETENTION_DAYS` | `7` | same |
+| `CLONE_CHECK_CRON` | `0 3 * * *` | same |
+| `WORKTREE_GC_CRON` | `30 3 * * *` | same |
+| `TERMINAL_POLL_CRON` | `*/30 * * * * *` | same |
+| `READINESS_BUDGET_USD` | `Decimal("5")` | `5` |
+| `READINESS_MODELS` | `claude=claude-sonnet-4-6,codex=gpt-5.4,local=local-coder` | same |
+| `LITELLM_BASE_URL` | `""` (**off**) | `http://host.docker.internal:4000` |
+| `LITELLM_API_KEY` | `SecretStr("")` (**off**) | `sk-change-me` |
+| `LITELLM_SPEND_KEY` | `SecretStr("")` (**off**) | `sk-change-me-admin` |
+| `LOCAL_MODELS` | `["local-coder", "local-general"]` | same |
+| `LITELLM_SPEND_MATCH` | `"session"` (already defaulted) | same |
+| `LANGFUSE_BASE_URL` | `""` (**off**) | `http://host.docker.internal:3000` |
+| `LANGFUSE_PUBLIC_KEY` | `""` (**off**) | `pk-lf-change-me` |
+| `LANGFUSE_SECRET_KEY` | `SecretStr("")` (**off**) | `sk-lf-change-me` |
+| `LANGFUSE_ENVIRONMENT` | `"mvp"` | same |
+| `LANGFUSE_PROJECT_ID` | `""` (**off**) | `change-me-langfuse-project-id` |
+| `BMAD_VERSION` | `"6.11.0"` | same |
+| `CLAUDE_CODE_VERSION` | `"2.1.258"` | same |
+| `CODEX_VERSION` | `"0.152.1"` | same |
+| `OPENCODE_VERSION` | `"1.18.26"` | same |
+| `LANGFUSE_OPENCODE_PLUGIN_VERSION` | `"0.3.0"` | same |
+| `CLAUDE_ALLOWED_TOOLS` | the contract's 16-entry list | same |
+| `CLAUDE_SUBSCRIPTION_AUTH` | `False` | `false` |
+| `WORK_DIR` | `/work` | same |
+| `AGENT_HOME` | `/home/agent` | same |
+| `HARNESS_SCRIPTS_DIR` | `/app/scripts/harness` | same |
+| `TEMPLATES_DIR` | `/app/templates` | same |
+| `LOG_LEVEL` | `"info"` | same |
+| `LOG_PROMPT_CONTENT_DEFAULT` | `False` | `false` |
+| `BACKEND_API_PORT` | `8000` | same |
+| `ORCH_TEST_MODE` | `False` (already defaulted) | `0` |
+
+Compose-only OPTIONAL (`:-` defaults, no Settings field): `POSTGRES_USER:-orchestrator`,
+`POSTGRES_DB:-orchestrator`, `BACKEND_API_URL:-http://backend-api:8000`,
+`WEB_CLIENT_PORT:-4321`, `BACKEND_API_PORT:-8000`, `WORK_DIR:-/work`,
+`AGENT_HOME:-/home/agent`, `ROOT_TEMPLATES:-` (deliberately empty: the web-client's own
+default list), and in deploy `BIND_ADDRESS:-127.0.0.1`.
+
+---
+
+## Context (2026-09-20, as written)
 
 Today `Settings` (backend-api/src/orchestrator/infrastructure/settings.py) makes ~35 env
 fields required and the compose files fail-close (`${VAR:?}`) on every reference. That
