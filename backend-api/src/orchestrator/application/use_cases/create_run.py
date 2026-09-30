@@ -62,7 +62,6 @@ from orchestrator.domain.ports.repositories import (
 )
 from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
-from orchestrator.domain.statuses import InitiativeRole
 from orchestrator.domain.values import PlannedRow
 
 
@@ -112,13 +111,6 @@ class CreateRunRequest:
     #: A non-empty list requires `save=True`: the Run is stored but not enqueued until
     #: every predecessor is `done` (→ enqueue) or one ends `failed | cancelled` (→ park).
     after_run_ids: tuple[UUID, ...] = ()
-    #: The three initiative fields, persisted exactly as given (AD-12, 2026-09-23). Only
-    #: `dispatch_initiative` sets them; `POST /runs` never does, so a Run started on its own
-    #: carries `None` for all three. Stored, never derived — the role in particular is not
-    #: read back off `template_name`, because a dispatch's templates are request inputs.
-    initiative: str | None = None
-    initiative_role: InitiativeRole | None = None
-    initiative_epic_id: str | None = None
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -146,9 +138,9 @@ class CreateRunResult:
     #: for the first branch the Template declared, which AD-7's `BranchAllocator` made fresh
     #: (`{declared}-{n}`). `run.partition_branch` is the *declared* name, so it cannot answer
     #: this, and no other stored field does either until the `git.worktree` row has run.
-    #: Initiative dispatch needs it before then: a merge Run's `from_branch` is exactly the
-    #: branch its epic Run was allocated (AD-12, S6). `None` for a plan that declares no
-    #: branch at all — `golive@1` is the shipped example.
+    #: A caller that needs the working branch before the `git.worktree` row has run — for
+    #: example, one Run's plan referencing the branch another Run was allocated — reads it
+    #: from here. `None` for a plan that declares no branch at all.
     working_branch: str | None = None
 
 
@@ -221,9 +213,6 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         created_at=ports.clock.now(),
         partition_branch=declared_branch,
         after_run_ids=tuple(req.after_run_ids),
-        initiative=req.initiative,
-        initiative_role=req.initiative_role,
-        initiative_epic_id=req.initiative_epic_id,
     )
     step_rows = [_step_run(run_id, row) for row in plan.rows]
 

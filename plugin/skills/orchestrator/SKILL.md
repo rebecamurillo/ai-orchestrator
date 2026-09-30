@@ -14,7 +14,7 @@ web UI.
 `references/api.md` in this skill is the endpoint reference — read it when you need exact
 request fields. `references/spec-folder.md` is the format of the files epic and
 initiative Runs read from the target repository (`epics.yaml`, `stories.yaml`,
-`SPEC.md`) — **read it before authoring or reviewing those files: there are three
+`SPEC.md`) — **read it before authoring or reviewing those files: there are two
 initiative flavors and each reads different `epics.yaml` fields.** This file is the
 protocol — the order things happen in and the rules that keep you from fighting the
 machine.
@@ -75,10 +75,6 @@ Never guess a template's inputs and never skip preflight.
      submodules) and `initiative_folder`. The `epics.yaml` it reads needs per-epic
      `workdir` + full `install`/`test`/`quality_gate` commands — see
      `references/spec-folder.md`.
-   - **Multi-repo initiative, fan-in style**: not a `POST /runs` at all —
-     `POST /api/v1/initiatives` (preflight first at `/initiatives/preflight`) creates one
-     Run per epic plus merge and go-live Runs, ordered by `depends_on`. Its `epics.yaml`
-     needs `repo` per entry — see `references/spec-folder.md` and `references/api.md`.
 2. **Preflight** — `POST /api/v1/runs/preflight` with everything you plan to send
    (`template_name`, `template_version`, `project_id`, `repository_id`, `base_branch`,
    `inputs`, `harness`, `model`, `budget_usd`). Every field is optional there — missing

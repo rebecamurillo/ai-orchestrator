@@ -21,7 +21,7 @@ from orchestrator.application.rules.signals import run_admitted_signals
 from orchestrator.application.templates.plan_model import PlanError
 from orchestrator.application.use_cases.create_run import CreateRunRequest, CreateRunResult
 from orchestrator.domain.entities.run import Run
-from orchestrator.domain.statuses import InitiativeRole, RunStatus, SignalKind
+from orchestrator.domain.statuses import RunStatus, SignalKind
 
 #: Same bound as `api/schemas/preflight.py::TemplateVersion` — Postgres `integer`'s range.
 TemplateVersionField = Annotated[int, Field(gt=0, le=MAX_VERSION)]
@@ -112,13 +112,6 @@ class RunSummaryOut(BaseModel):
     #: while it runs, the parked stop's own list while it waits on one, `[]` once it is
     #: terminal — `application/rules/signals.py::run_admitted_signals`.
     admitted_signals: tuple[SignalKind, ...]
-    #: The initiative this Run is a member of, and the part it plays in it (AD-12, S6).
-    #: `null` for a Run started on its own — which is every Run `POST /runs` creates. Both
-    #: are read straight off the stored Run; the role is never inferred from `template`,
-    #: because a dispatch's templates are request inputs (AD-7). Defaulted so every existing
-    #: web-client fixture keeps compiling without them (AD-3).
-    initiative: str | None = None
-    initiative_role: InitiativeRole | None = None
 
     @classmethod
     def of(
@@ -139,8 +132,6 @@ class RunSummaryOut(BaseModel):
             admitted_signals=run_admitted_signals(
                 run, park_row_kind, park_row_status=park_row_status
             ),
-            initiative=run.initiative,
-            initiative_role=run.initiative_role,
         )
 
 

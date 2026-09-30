@@ -109,16 +109,6 @@ class RunRepository(Protocol):
         """
         ...
 
-    def list_by_initiative(self, initiative: str) -> list[Run]:
-        """Every member Run of one initiative, newest first (AD-12, 2026-09-23).
-
-        The one read `GET /initiatives/{slug}` is built from: the cross-repo DAG is drawn
-        from the stored Runs themselves — their `initiative_role`, their `initiative_epic_id`
-        and the `after_run_ids` edges nothing ever clears — so there is no initiative table
-        and no second place the graph could be recorded and go stale.
-        """
-        ...
-
     # Declared last on purpose: the name `list` shadows the builtin for the rest of this
     # class body, so every `list[Run]` annotation above has to be read before it is bound.
     def list(self, *, project_id: UUID | None = None) -> list[Run]:

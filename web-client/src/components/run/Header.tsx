@@ -14,7 +14,6 @@
 import type { RunDetailOut, Token } from '../../lib/run/detail';
 import { crumbText, metaLine, stateAgeSeconds } from '../../lib/run/detail';
 import { ageText, tokenSignal } from '../../lib/board/format';
-import { initiativeBadgeText, initiativeHref } from '../../lib/initiative/badge';
 
 interface Props {
   detail: RunDetailOut;
@@ -24,7 +23,6 @@ interface Props {
 
 export default function Header({ detail, token, now }: Props) {
   const signal = tokenSignal(token);
-  const badge = initiativeBadgeText(detail.run);
   return (
     <header className="wf-header" data-testid="wf-header">
       <p className="wf-crumb">{crumbText(detail)}</p>
@@ -35,15 +33,6 @@ export default function Header({ detail, token, now }: Props) {
         </span>
         <span className="wf-branch">{detail.run.branch}</span>
         <span className="wf-age">{ageText(stateAgeSeconds(detail, now))}</span>
-        {badge ? (
-          <a
-            className="wf-initiative"
-            data-testid="wf-initiative"
-            href={initiativeHref(detail.run.initiative ?? '')}
-          >
-            {badge}
-          </a>
-        ) : null}
       </p>
       <p className="wf-meta" data-testid="wf-meta">
         {metaLine(detail)}

@@ -2,7 +2,7 @@
 
 The orchestrator does not invent requirements: initiative and epic Runs walk files that
 live in a **target repository**. This is their contract, extracted from the orchestrator's
-own planner rules (`application/templates/lists.py`, `application/initiatives/epics.py`)
+own planner rules (`application/templates/lists.py`, `application/preflight/lists.py`)
 and the `spec-gate` step that reviews a folder before any story runs. The BMAD skills that
 `repo-init` installs into a target repository (`bmad-spec`,
 `bmad-create-epics-and-stories`) generate these files in this shape — prefer generating
@@ -10,18 +10,16 @@ over hand-writing.
 
 ## Pick the flavor first
 
-There are three ways to run an initiative, and **they read different `epics.yaml`
+There are two ways to run an initiative, and **they read different `epics.yaml`
 fields**. Decide which one you are authoring for before writing the file:
 
 | Flavor | Launched via | Repos | Extra `epics.yaml` fields |
 | --- | --- | --- | --- |
 | **Hub run** (`initiative-hub@1`) — the current multi-repo path | `POST /runs` | one hub repo whose `repos/*` submodules are the members | `workdir`, `install`, `test`, `quality_gate` |
 | Single-repo (`initiative@1`) | `POST /runs` | one repo | none |
-| Fan-in dispatch | `POST /initiatives` | many registered repos, one Run per epic | `repo`, `depends_on`, `checkpoint`, `baseline_sha` |
 
 A file written for one flavor does not run under another: a hub `epics.yaml` without
-`workdir` plans, but every epic's setup/verify rows come out `skipped · no command`; a
-fan-in `epics.yaml` without `repo` is refused outright.
+`workdir` plans, but every epic's setup/verify rows come out `skipped · no command`.
 
 ## Layout
 
@@ -40,8 +38,7 @@ templates take the folder holding `epics.yaml` and join each epic's `spec_folder
 (`{initiative_folder}/{spec_folder}`) — so **`spec_folder` is a bare folder name relative
 to the initiative folder, never a repeated full path**. In a hub run the whole tree above
 lives at the hub; the members' code lives in the `repos/*` submodules and specs are never
-committed into them. In the fan-in flavor only, each epic's `spec_folder` is a
-repo-root-relative path inside that epic's own member repository.
+committed into them.
 
 `epics.yaml` may sit on the base branch while an epic's `stories.yaml` exists only on
 that epic's own branch — the planner reads each frame at one consistent commit.
@@ -49,8 +46,7 @@ that epic's own branch — the planner reads each frame at one consistent commit
 ## `epics.yaml`
 
 A YAML **list** (the file's top level is `- …`, not a mapping). List order **is**
-execution order in the template flavors; the fan-in flavor orders by `depends_on`
-instead, file order breaking ties.
+execution order.
 
 Core fields, required in **every** flavor:
 
@@ -58,11 +54,11 @@ Core fields, required in **every** flavor:
 | --- | --- |
 | `id` | string; unique; **prefix-free** against every other id (see `stories.yaml`) |
 | `title` | one line |
-| `branch` | template flavors: the branch the epic runs on (hub runs ignore it — every epic works on the Run's one `branch` input — but the list contract still requires it). Fan-in: the repo's integration branch, never its default branch |
-| `spec_folder` | bare folder name (relative to the list file) holding `SPEC.md` + `stories.yaml`; fan-in only: a path inside the member repo |
+| `branch` | the branch the epic runs on (hub runs ignore it — every epic works on the Run's one `branch` input — but the list contract still requires it) |
+| `spec_folder` | bare folder name (relative to the list file) holding `SPEC.md` + `stories.yaml` |
 
 Optional in every flavor: `done_checkpoint: true` — park the Run for the operator after
-the epic finishes (fan-in reads it as shorthand for `checkpoint: block_merge`).
+the epic finishes.
 
 ### Hub-run fields (`initiative-hub@1`)
 
@@ -117,23 +113,6 @@ Just the core fields; each epic runs and pushes on its own `branch`:
   branch: feat/v2-probe-form
   spec_folder: epic-02-probe-form
 ```
-
-### Fan-in dispatch (`POST /initiatives`)
-
-One saved Run per epic (plus a merge Run per epic and one go-live Run), ordered by
-`depends_on`. Extra fields:
-
-| field | meaning |
-| --- | --- |
-| `repo` | which registered Repository of the Project this epic works in — the repository's slug, or a URL/name that resolves to it. Required |
-| `depends_on` | list of epic ids this one waits for; omitted = wave 0. A bare scalar is read as the one id it names |
-| `checkpoint` | `block_merge` (stop before this epic's merge Run) or `go_live` (hold the initiative's single go-live stop for this epic). Optional; explicit `checkpoint` wins over `done_checkpoint` |
-| `baseline_sha` | where the integration branch is cut from when the remote does not hold it yet. Optional |
-
-Graph rules the preflight refuses on: unknown `depends_on` ids, cycles (reported, never
-broken), and **one integration branch per repository** across the whole initiative — two
-epics of one repo naming two branches is a refusal. The integration branch must not be
-the repository's default branch.
 
 ## `stories.yaml`
 
@@ -201,9 +180,7 @@ companions: []
 
 - Planner-level (before the Run starts): a 422 on `POST /runs` (or a `plan_error` in
   preflight) naming the template, line, and the entry at fault — e.g. a missing required
-  field, a duplicate id, a non-prefix-free id, a file that is not a list. The fan-in
-  preflight (`POST /initiatives/preflight`) instead answers with `lines[]` carrying every
-  problem at once — resolve every `fail` before dispatching.
+  field, a duplicate id, a non-prefix-free id, a file that is not a list.
 - Gate-level (after the Run starts): the Run parks `needs_you` with `park_kind:
   "blocked"` and the gate's questions in the alert; fix the files (optionally through
   `PUT /runs/{id}/files`) and send `continue`.

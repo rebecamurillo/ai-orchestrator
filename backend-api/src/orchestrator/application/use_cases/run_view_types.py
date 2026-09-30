@@ -30,7 +30,7 @@ from orchestrator.domain.ports.repositories import (
     StepRunRepository,
 )
 from orchestrator.domain.ports.tracer import Tracer
-from orchestrator.domain.statuses import InitiativeRole, ParkKind, RunStatus, SignalKind
+from orchestrator.domain.statuses import ParkKind, RunStatus, SignalKind
 
 
 @dataclass(frozen=True)
@@ -96,11 +96,6 @@ class Card:
     kind_label: str | None
     age_seconds: float
     needs_you_since: datetime | None
-    #: The initiative this Run is a member of, and the part it plays in it (AD-12, S8) —
-    #: read straight off the stored Run, the same two fields `RunSummaryOut` already carries
-    #: (`api/schemas/runs.py`). `None`/`None` for a Run started on its own.
-    initiative: str | None = None
-    initiative_role: InitiativeRole | None = None
 
 
 @dataclass(frozen=True)

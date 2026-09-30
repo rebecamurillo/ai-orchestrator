@@ -359,16 +359,10 @@ NULLABLE = {
         # array `after_run_ids` (default '{}'), so it leaves this set. An empty list is
         # what "no predecessor" is now — there is no third state to spell with NULL.
         #
-        # Revised again for initiative membership (multi-repo initiative S6, spine AD-12
-        # amendment, 2026-09-23: "Each Run stores `initiative` and `initiative_role`").
-        # These three are genuinely absent rather than empty: a Run started on its own
-        # belongs to no initiative, plays no part in one, and came from no `epics.yaml`
-        # entry — and `initiative_epic_id` is absent on the go-live Run too, which belongs
-        # to the initiative but to no single epic. An empty string would be a fourth
-        # spelling of "none" that `list_by_initiative` would then have to exclude.
-        "initiative",
-        "initiative_role",
-        "initiative_epic_id",
+        # `initiative`, `initiative_role`, `initiative_epic_id` were here (multi-repo
+        # initiative S6, spine AD-12 amendment, 2026-09-23) and are gone: operator decision
+        # 2026-09-30 removed the fan-in Initiative feature entirely, and migration
+        # `0020_drop_run_initiative` dropped the three columns along with it.
     },
     "step_run": {"reason", "frame", "story_id"},
     "attempt": {
@@ -421,17 +415,14 @@ def test_the_run_table_indexes_the_columns_the_board_and_the_queue_filter_on() -
     # than this test pinned about any of the other three.
     indexes = {index.name: index for index in RUN_TABLE.indexes}
 
-    # Revised again for initiative membership (multi-repo initiative S6, spine AD-12
-    # amendment, 2026-09-23): `GET /initiatives/{slug}` reads every member Run by slug
-    # (`list_by_initiative`), so `initiative` joins the indexed set — a plain b-tree, since
-    # the question is equality on one text column. Asserted below with its column list, the
-    # same depth this test now holds `ix_run_after_run_ids` to.
+    # `ix_run_initiative` was here (multi-repo initiative S6, spine AD-12 amendment,
+    # 2026-09-23) and is gone: operator decision 2026-09-30 removed the fan-in Initiative
+    # feature entirely, and migration `0020_drop_run_initiative` dropped the index with it.
     assert set(indexes) == {
         "ix_run_project_id",
         "ix_run_status",
         "ix_run_repository_id_status",
         "ix_run_after_run_ids",
-        "ix_run_initiative",
     }
     for index in indexes.values():
         assert index.unique is False, index.name
@@ -442,7 +433,6 @@ def test_the_run_table_indexes_the_columns_the_board_and_the_queue_filter_on() -
     after_run_ids = indexes["ix_run_after_run_ids"]
     assert [c.name for c in after_run_ids.columns] == ["after_run_ids"]
     assert after_run_ids.dialect_options["postgresql"]["using"] == "gin"
-    assert [c.name for c in indexes["ix_run_initiative"].columns] == ["initiative"]
 
 
 def test_the_step_run_table_is_unique_on_seq_and_on_path_within_one_run() -> None:

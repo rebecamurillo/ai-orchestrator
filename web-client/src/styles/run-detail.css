@@ -67,12 +67,6 @@
   font-size: var(--type-meta);
 }
 
-.wf-initiative {
-  color: var(--color-text-tertiary);
-  font-size: var(--type-meta);
-  text-decoration: underline;
-}
-
 .wf-meta {
   color: var(--color-text-secondary);
   font-size: var(--type-row-body);

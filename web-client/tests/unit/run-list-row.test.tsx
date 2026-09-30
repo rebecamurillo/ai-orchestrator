@@ -79,13 +79,8 @@ describe('RunListRow', () => {
     expect(ageSpan?.[0]).not.toContain('data-signal');
   });
 
-  it('renders the initiative badge when the row is a member (S8)', () => {
-    const markup = render({ initiative: 'q4', initiative_role: 'merge' });
-    expect(markup).toContain('board-list-initiative');
-    expect(markup).toContain('q4 · merge');
-  });
-
-  it('omits the initiative badge for a Run started on its own', () => {
-    expect(render({ initiative: null })).not.toContain('board-list-initiative');
-  });
+  // `renders the initiative badge when the row is a member (S8)` and `omits the
+  // initiative badge for a Run started on its own` were here: Operator decision
+  // 2026-09-30 removed the fan-in Initiative feature entirely, and `CardOut` no longer
+  // carries `initiative`/`initiative_role`, so `RunListRow` renders no badge.
 });
