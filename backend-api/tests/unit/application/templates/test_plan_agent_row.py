@@ -230,6 +230,24 @@ def test_a_step_that_declares_only_a_halt_carries_only_that_clause() -> None:
     assert row[PROMPTS_KEY] == {"halt": "Halt after planning."}
 
 
+def test_a_declared_redispatch_clause_is_resolved_onto_the_row_too() -> None:
+    """The fifth clause (FR-10, story "a redispatch prompt clause"): `{{ }}` resolves at
+    plan time exactly like the other four; its own single-brace tokens (`{command}`,
+    `{code}`, `{tail}`) are the executor's and travel untouched."""
+    text = IN_LOOP.replace(
+        'prompts: { halt: "Halt after planning." }',
+        'prompts: { halt: "Halt after planning.", '
+        'redispatch: "Verify failed: {command} in {{spec_folder}}." }',
+    )
+
+    row = resolved(planned(text), "things[0].work")
+
+    assert row[PROMPTS_KEY] == {
+        "halt": "Halt after planning.",
+        "redispatch": f"Verify failed: {{command}} in {FOLDER}.",
+    }
+
+
 def test_a_step_that_declares_no_prompts_carries_no_prompts_key() -> None:
     row = resolved(planned(ALONE), "work")
 

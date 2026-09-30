@@ -28,9 +28,11 @@ STEP_KEYS = frozenset({"id", "uses", "run", "with", "gate", "timeout_min", "stal
 WRITES_KEY = "writes"
 
 #: The `prompts` block: the prose a dispatch is composed from, one clause per moment
-#: (Operator decision, 2026-09-27 — prompt prose lives in the Template).
+#: (Operator decision, 2026-09-27 — prompt prose lives in the Template). `redispatch` is
+#: the fifth: what a fresh dispatch is told when a `verify` row has just sent it back
+#: (FR-10, story "a redispatch prompt clause").
 PROMPTS_KEY = "prompts"
-PROMPTS_KEYS = frozenset({"dispatch", "rendered", "answer", "halt"})
+PROMPTS_KEYS = frozenset({"dispatch", "rendered", "answer", "halt", "redispatch"})
 
 AGENT_KEYS = frozenset({"expect", "retry", "escalate_when", "pause_when", WRITES_KEY, PROMPTS_KEY})
 FOR_EACH_KEYS = frozenset(

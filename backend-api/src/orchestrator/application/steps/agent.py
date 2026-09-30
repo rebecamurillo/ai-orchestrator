@@ -33,7 +33,10 @@ handles it before any new commits are placed in front of the range it reads.
 **Three re-dispatches reach this module and are not the same dispatch** (AD-9, AD-13): the
 Template's own `retry`; a person's *Retry* from a stop; and a `verify` redispatch that
 hands the agent its file back at `in-progress` with a `## Verify Failure` section (FR-10).
-`context.retrying`, `context.operator_retry` and `context.redispatched` tell them apart.
+`context.retrying`, `context.operator_retry` and `context.redispatched` tell them apart. A
+verify redispatch's own *fresh* dispatch also leads with the row's `redispatch` prompt
+clause, filled from the same failure the file section quotes (`agent_prompt.redispatch_clause`)
+— once, on the attempt `context.redispatched` names, never on a retry that follows it.
 
 **`with {workdir}` moves the dispatch, not the worktree** (AD-9, AD-17 — ratified
 2026-09-23, hub-Run initiative workflow). The harness runs in that submodule's checkout and
@@ -66,6 +69,7 @@ from orchestrator.application.steps.context import (
     committed,
     log_path,
     operator_retry,
+    redispatched,
     require_env,
     require_harness_env,
     require_harnesses,
@@ -275,13 +279,21 @@ def _planned(
     if agent_prompt.PROMPT_FILE_KEY in ctx.with_resolved:
         filename = str(ctx.with_resolved[agent_prompt.PROMPT_FILE_KEY])
         prompt_file_content = require_workspace(ctx, ctx.cwd).read(filename) or ""
+    scope = agent_workdir.prompt_scope(ctx)
     prompt = agent_prompt.compose_prompt(
-        agent_workdir.prompt_scope(ctx),
+        scope,
         agent_answer.resolved_signal(ctx),
         previous,
         prompt_file_content=prompt_file_content,
         workflow_path=workflow,
     )
+    if redispatched(ctx) and (failure := require_env(ctx).verify_failure) is not None:
+        # what a fresh dispatch is told when a `verify` row has just sent the Story back
+        # (FR-10): once, on this attempt alone — a retry of it reads `redispatched(ctx)` as
+        # `False` (context.py's own "nothing is appended twice") and never repeats it.
+        clause = agent_prompt.redispatch_clause(scope, failure)
+        if clause:
+            prompt = f"{clause} {prompt}"
     if retry is not None or (operator_retry(ctx) and operator_mode == "restart"):
         op = str(ctx.resume_signal.payload.get("text", "")) if ctx.resume_signal else ""
         hint = retry.prompt if retry else getattr(agent_tail.retry_of(ctx), "prompt", "")

@@ -14,6 +14,9 @@ from __future__ import annotations
 from typing import Any
 
 from orchestrator.application.steps.agent import compose_prompt
+from orchestrator.application.steps.agent_prompt import redispatch_clause
+from orchestrator.application.steps.context import VerifyFailure
+from orchestrator.application.story_file import NO_EXIT_CODE
 from tests.unit.application.steps.agent_fixtures import (
     a_gate_record,
     an_agent_row,
@@ -131,3 +134,53 @@ def test_a_filled_value_is_never_rescanned_for_tokens_of_its_own() -> None:
     tricky = resolved(spec_folder="{answer}", prompt_extra="")
 
     assert "spec folder {answer}," in prompt(tricky)
+
+
+# ── the `redispatch` clause (a fifth clause, FR-10, story "a redispatch prompt clause") ──
+
+
+def test_redispatch_clause_fills_the_command_the_code_and_the_tail() -> None:
+    with_resolved = resolved(
+        prompts={"redispatch": "Verify failed: {command} (exit {code}).\n{tail}"}
+    )
+    failure = VerifyFailure(
+        command="make test", exit_code=1, log_tail=("FAILED tests/a.py", "1 failed")
+    )
+
+    assert redispatch_clause(with_resolved, failure) == (
+        "Verify failed: make test (exit 1).\nFAILED tests/a.py\n1 failed"
+    )
+
+
+def test_redispatch_clause_states_no_exit_code_was_recorded() -> None:
+    with_resolved = resolved(prompts={"redispatch": "Exit code: {code}."})
+    failure = VerifyFailure(command="make test", exit_code=None, log_tail=())
+
+    assert redispatch_clause(with_resolved, failure) == f"Exit code: {NO_EXIT_CODE}."
+
+
+def test_redispatch_clause_leaves_a_tail_containing_tokens_of_its_own_as_literal_prose() -> None:
+    with_resolved = resolved(prompts={"redispatch": "{tail}"})
+    failure = VerifyFailure(
+        command="make test", exit_code=1, log_tail=("saw {command} and {skill} in the log",)
+    )
+
+    assert redispatch_clause(with_resolved, failure) == "saw {command} and {skill} in the log"
+
+
+def test_an_undeclared_redispatch_clause_is_empty() -> None:
+    with_resolved = resolved(prompts={})
+    failure = VerifyFailure(command="make test", exit_code=1, log_tail=())
+
+    assert redispatch_clause(with_resolved, failure) == ""
+
+
+def test_a_dispatch_clause_never_starts_filling_the_redispatch_tokens() -> None:
+    """`{tail}` written in a `dispatch` clause is not one of `_base`'s tokens: it stays
+    literal prose, the same way an unknown token does."""
+    with_resolved = resolved(
+        prompts={"dispatch": "Mind the {tail} left by the last run.", "rendered": ""},
+        prompt_extra="",
+    )
+
+    assert prompt(with_resolved) == "Mind the {tail} left by the last run."

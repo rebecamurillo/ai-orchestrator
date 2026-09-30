@@ -407,6 +407,16 @@ def test_a_prompt_clause_that_is_not_text_is_an_invalid_value() -> None:
     assert check(HEAD + AGENT + "    prompts:\n      dispatch: [a]\n")[0] == [INVALID_VALUE]
 
 
+def test_a_prompts_block_with_a_redispatch_clause_is_accepted() -> None:
+    text = HEAD + AGENT + "    prompts:\n      redispatch: 'Verify failed: {command}.'\n"
+
+    assert check(text)[0] == []
+
+
+def test_a_redispatch_clause_that_is_not_text_is_an_invalid_value() -> None:
+    assert check(HEAD + AGENT + "    prompts:\n      redispatch: [a]\n")[0] == [INVALID_VALUE]
+
+
 def test_prompts_on_a_step_of_any_other_kind_is_unknown() -> None:
     assert check(HEAD + GATED + "    prompts:\n      dispatch: go\n")[0] == [UNKNOWN_KEY]
 
