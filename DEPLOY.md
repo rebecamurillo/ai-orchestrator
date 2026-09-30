@@ -111,8 +111,11 @@ would report it.
 
 ### 3.3 The environment
 
-`.env.example` is the one contract (AD-20). Production copies it like every other environment
-and fills it in:
+`.env.example` is the one contract (AD-20), in two sections: **REQUIRED**, which the stack
+refuses to start without, and **OPTIONAL**, where every line's value is also the code
+default (Operator decision 2026-09-20, two-tier configuration contract; reaffirmed
+2026-09-30). Production copies the whole file — the full reference is what you want in
+front of you at 3 a.m. — and fills it in:
 
 ```bash
 cp .env.example .env.prod
@@ -172,7 +175,16 @@ comm -13 <(grep -oE '^[A-Z_]+=' .env.prod   | tr -d '=' | sort) \
          <(grep -oE '^[A-Z_]+=' .env.example | tr -d '=' | sort)
 ```
 
-Anything printed is a contract variable missing from production. Empty output is the pass.
+**This check is advisory, not a gate.** Under the two-tier contract a name in
+`.env.example` but not in `.env.prod` means *that setting takes its code default* — the
+value the contract prints — and the stack starts. What must exist is the REQUIRED section:
+`ORCHESTRATOR_TOKEN`, `ORCHESTRATOR_SESSION_SECRET`, `ORCHESTRATOR_SECRET_KEY`,
+`POSTGRES_PASSWORD`, `DATABASE_URL`, `GITHUB_TOKEN`, plus `IMAGE_TAG` and
+`COMPOSE_PROJECT_NAME` for the docker CLI. Anything else the command prints is worth
+reading — a release may have added a setting whose default is not what this host wants —
+but it is a decision to make, not a refusal to clear. `./scripts/install.sh --check`
+(`make doctor`) makes the same split on a checkout: the REQUIRED names are problems, the
+rest is a note.
 
 `scripts/check_env_contract.py` is deliberately **not** used here: it compares the contract
 against the typed `Settings` fields, and would report `COMPOSE_PROJECT_NAME` and `IMAGE_TAG`

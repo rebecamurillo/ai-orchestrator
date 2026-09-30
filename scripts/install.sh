@@ -97,6 +97,28 @@ if [ "$mode" = check ]; then
 	[ -d backend-api/.venv ] && note "backend  .venv present" || problem "backend-api/.venv is missing — run 'make install'"
 	[ -d web-client/node_modules ] && note "web      node_modules present" || problem "web-client/node_modules is missing — run 'make install'"
 	[ -f .env ] && note "env      .env present" || problem ".env is missing — run 'make install' (or ./scripts/generate-env.sh dev)"
+	if [ -f .env ]; then
+		# The contract is two-tier (Operator decision 2026-09-20, two-tier configuration
+		# contract; reaffirmed 2026-09-30): a name in .env.example but not in .env is a
+		# default, not a failure — unless it is one of the six the stack refuses to start
+		# without. So the report says which, and only the second kind is a problem. The
+		# comparison is DEPLOY.md § 3.3's `comm -13`, inline.
+		absent="$(comm -13 <(grep -oE '^[A-Z_]+=' .env | tr -d '=' | sort) \
+			<(grep -oE '^[A-Z_]+=' .env.example | tr -d '=' | sort))"
+		optional=""
+		for name in $absent; do
+			case "$name" in
+			ORCHESTRATOR_TOKEN | ORCHESTRATOR_SESSION_SECRET | ORCHESTRATOR_SECRET_KEY | POSTGRES_PASSWORD | DATABASE_URL | GITHUB_TOKEN)
+				problem "$name is required and missing from .env — copy its line from .env.example, or write a fresh one with './scripts/generate-env.sh dev'"
+				;;
+			*) optional="$optional $name" ;;
+			esac
+		done
+		if [ -n "${optional// /}" ]; then
+			note "env      $(echo $optional | wc -w | tr -d ' ') optional names are absent from .env; each uses its code default"
+			echo "$optional" | fold -s -w 84 | sed 's/^ */           /'
+		fi
+	fi
 	if [ "$want_browsers" = 1 ]; then
 		if have node && [ -d web-client/node_modules ] &&
 			pnpm --dir web-client exec playwright install --dry-run chromium >/dev/null 2>&1; then

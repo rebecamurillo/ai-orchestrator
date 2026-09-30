@@ -14,6 +14,11 @@
 #   WORK_DIR            /work                 → .local/work under the checkout
 #   AGENT_HOME          /home/agent           → $HOME — your own harness logins apply
 #   TEMPLATES_DIR       /app/templates        → templates/ in the checkout
+#   HARNESS_SCRIPTS_DIR /app/scripts/harness  → scripts/harness/ in the checkout
+#
+# `.env` need not be complete: under the two-tier contract (Operator decision 2026-09-20;
+# reaffirmed 2026-09-30) every optional line may be absent, so the values this script reads
+# before exporting them take the contract's own default when the file does not say.
 #
 # Dispatching a Run in this mode uses the harness CLIs on YOUR PATH (claude, codex,
 # opencode) — the container mode ships them in the image; here they are the machine's.
@@ -48,6 +53,16 @@ set -a
 . ./.env
 set +a
 
+# ── the values this script rewrites, defaulted so an incomplete .env still runs ──
+# `set -u` is on, and an absent optional line is now legal, so each of these is bound to the
+# contract's own default before it is read. The pattern is the harness scripts' `:=`.
+: "${BACKEND_API_PORT:=8000}"
+: "${WEB_CLIENT_PORT:=4321}"
+: "${DATABASE_URL:=}"
+: "${LITELLM_BASE_URL:=}"
+: "${LANGFUSE_BASE_URL:=}"
+export BACKEND_API_PORT WEB_CLIENT_PORT
+
 # ── the local overrides ──────────────────────────────────────────────────────
 export DATABASE_URL="${DATABASE_URL/@postgres:/@127.0.0.1:}"
 export LITELLM_BASE_URL="${LITELLM_BASE_URL/host.docker.internal/127.0.0.1}"
@@ -56,6 +71,9 @@ export BACKEND_API_URL="http://127.0.0.1:${BACKEND_API_PORT}"
 export WORK_DIR="${LOCAL_WORK_DIR:-$root/.local/work}"
 export AGENT_HOME="${LOCAL_AGENT_HOME:-$HOME}"
 export TEMPLATES_DIR="$root/templates"
+# the probe adapters shell `<HARNESS_SCRIPTS_DIR>/<name>.sh probe`; without this they would
+# point at the image's `/app/scripts/harness`, which a host process does not have
+export HARNESS_SCRIPTS_DIR="$root/scripts/harness"
 mkdir -p "$WORK_DIR"
 
 refuse_if_bound() {

@@ -72,7 +72,7 @@ Run `make doctor` before blaming anything on the code: `uv: command not found` a
 ### 3. Choose your environment mode
 
 Decide up front which services this machine runs. Both switches live in `.env`; **blank
-disables** the service, deleting the line refuses start-up.
+disables** the service, and so does deleting the line — both base URLs default to blank.
 
 | Mode | `LITELLM_BASE_URL` | `LANGFUSE_BASE_URL` | You get |
 | --- | --- | --- | --- |
@@ -89,7 +89,24 @@ services".
 make env         # writes .env (a copy of .env.example) and .env.e2e; never overwrites
 ```
 
-`.env.example` is the contract: every setting of both components lives there, commented.
+`.env.example` is the contract: every setting of both components lives there, commented,
+in two sections. **REQUIRED** is what the stack refuses to start without — six lines, and
+a `.env` holding only those six boots:
+
+```dotenv
+ORCHESTRATOR_TOKEN=…            # a long random string
+ORCHESTRATOR_SESSION_SECRET=…   # 32 random bytes
+ORCHESTRATOR_SECRET_KEY=…       # a real Fernet key (mint it below)
+POSTGRES_PASSWORD=…             # a random string
+DATABASE_URL=postgresql+psycopg://orchestrator:<that same password>@postgres:5432/orchestrator
+GITHUB_TOKEN=…                  # clones and pushes the target repositories
+```
+
+Everything under **OPTIONAL** has a code default equal to the value `.env.example` prints,
+so those lines may be edited, left alone, deleted, or left blank — the app boots either
+way (Operator decision 2026-09-20, two-tier configuration contract; reaffirmed
+2026-09-30). `make env` still writes the whole file, which is the easier thing to read.
+
 Open `.env` and set these — the rest can keep their defaults:
 
 | Variable | Set it to |
@@ -97,9 +114,9 @@ Open `.env` and set these — the rest can keep their defaults:
 | `ORCHESTRATOR_TOKEN` | a long random string — the one login for the web UI and the API |
 | `ORCHESTRATOR_SESSION_SECRET` | 32 random bytes — signs the browser session cookie |
 | `ORCHESTRATOR_SECRET_KEY` | a **real Fernet key** — mint it with the command below. The committed placeholder is not one, and with it every write to `/api/v1/projects` answers 500 |
-| `POSTGRES_PASSWORD` | a random string |
+| `POSTGRES_PASSWORD` | a random string — and the same password inside `DATABASE_URL` |
 | `GITHUB_TOKEN` | a token that can clone the client's target repositories (read by git only; a harness never receives it) |
-| `LITELLM_BASE_URL`, `LANGFUSE_BASE_URL` | per your mode from step 3 — blank to disable |
+| `LITELLM_BASE_URL`, `LANGFUSE_BASE_URL` | per your mode from step 3 — blank or absent disables |
 | `ROOT_TEMPLATES` | optional — the workflow templates `/workflows/new` offers, comma-separated, in the order you write them. Blank or unset offers the five shipped ones. Name a template you authored in `templates/` here to make it startable; a name nothing stores is ignored. Read at start-up, so a change needs a restart |
 
 ```bash
