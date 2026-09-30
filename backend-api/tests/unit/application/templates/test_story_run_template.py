@@ -1,68 +1,81 @@
-"""Tests verifying story-run@1 seeds clean and plans one story frame.
+"""A root whose `only:`-filtered loop wraps a template call plans exactly one story frame.
 
-story 4-8 (2026-09-17): story-run@1 template — ships for_each with only: bound to story_id;
-template name and only: key are architectural anchors
+story 4-8 (2026-09-17) landed this over the shipped `story-run@1`. Revised 2026-09-30
+(Operator decision: the mono-repo `initiative` and `story-run` workflows are retired to
+`templates/drafts/`, kept but not seeded) — the root is now `STORY_RUN`, a text this module
+owns in the shape the retired file had, and its callee is the frozen exemplar `story@1` from
+`plan_fixtures`, so no shipped file is pinned (hard rule 6). What is asserted is unchanged:
+the root validates clean against its callee, and with `story_id="2"` the plan carries the
+frames of story `2` and of no other entry in the list.
+
+`test_only_selector.py` covers the `only:` filter over a leaf step; this module covers it
+over a collapsed template call, which is the shape a one-story Run has.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from pathlib import Path
-
 from orchestrator.application.templates.plan import plan_run
 from orchestrator.application.templates.plan_model import ResolvedTree
 from orchestrator.application.templates.validate import validate
-from orchestrator.application.use_cases.templates import TemplatePorts, seed_shipped
-from orchestrator.infrastructure.templates_loader import load_shipped_templates
 from tests.unit.application.templates import plan_fixtures as fixtures
-from tests.unit.fakes.clock import FakeClock
-from tests.unit.fakes.db import FakeUnitOfWork
-from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
-#: Identical to `test_e2e_generation_gate.py`.
-SHIPPED_DIR = Path(__file__).resolve().parents[5] / "templates"
-
-AT = datetime(2026, 9, 17, tzinfo=UTC)
-
-
-def seeded() -> FakeTemplateVersionRepository:
-    """Every shipped file, through the exact seeding `main.py` runs at start-up."""
-    templates = FakeTemplateVersionRepository()
-    uow = FakeUnitOfWork()
-    uow.__enter__()
-    ports = TemplatePorts(uow=uow, templates=templates, clock=FakeClock(AT))
-    seed_shipped(ports, load_shipped_templates(SHIPPED_DIR))
-    return templates
+#: One story on its own branch: checkout, an `only:`-filtered loop calling `story@1`, push.
+STORY_RUN = """
+name: story-run-owned
+version: 1
+inputs:
+  project:     { type: project,    required: true }
+  repository:  { type: repository, required: true }
+  base_branch: { type: string,     required: true }
+  branch:      { type: string,     required: true }
+  spec_folder: { type: path,       required: true }
+  story_id:    { type: string,     required: true }
+  harness:     { type: enum, values: [claude, codex, local], default: claude }
+  model:       { type: string,     required: false }
+steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "{{branch}}" }
+    gate: deterministic
+  - id: stories
+    for_each: "{{spec_folder}}/stories.yaml"
+    as: story
+    only: "{{story_id}}"
+    steps:
+      - id: story
+        uses: template
+        with:
+          name: story
+          version: 1
+          inputs:
+            project: "{{project}}"
+            repository: "{{repository}}"
+            branch: "{{branch}}"
+            spec_folder: "{{spec_folder}}"
+            story: "{{story}}"
+            harness: "{{harness}}"
+            model: "{{model}}"
+  - id: push
+    uses: git.push
+    with: { branch: "{{branch}}" }
+    gate: deterministic
+"""
 
 
 def test_story_run_validates_clean() -> None:
-    """story 4-8 (2026-09-17): story-run@1 template validates without errors."""
-    templates = seeded()
+    """The owned root validates without errors against the frozen `story@1` callee."""
+    result = validate(STORY_RUN, templates=fixtures.repository_of_versions())
 
-    # Hard TDD gate: raises ValueError before the template exists
-    latest_version = max(templates.list_versions("story-run"))
-
-    stored = templates.versions[("story-run", latest_version)]
-    result = validate(stored.yaml, templates=templates)
     assert result.template is not None, result.errors
     assert list(result.errors) == []
+    assert list(result.unvalidated) == []
 
 
 def test_story_run_plans_one_story_frame() -> None:
-    """story 4-8 (2026-09-17): story-run@1 with story_id='2' plans exactly story '2'."""
-    templates = seeded()
-
-    latest_version = max(templates.list_versions("story-run"))
-    stored_root = templates.versions[("story-run", latest_version)]
-    result_root = validate(stored_root.yaml, templates=templates)
+    """With `story_id="2"` the plan carries story `2` and no other entry of the list."""
+    result_root = validate(STORY_RUN, templates=fixtures.repository_of_versions())
     assert result_root.template is not None, result_root.errors
-
-    story_version = max(templates.list_versions("story"))
-    stored_story = templates.versions[("story", story_version)]
-    result_story = validate(stored_story.yaml, templates=templates)
-    assert result_story.template is not None, result_story.errors
-
-    tree = ResolvedTree(root=result_root.template, callees=(result_story.template,))
+    tree = ResolvedTree(root=result_root.template, callees=(fixtures.parsed("story"),))
 
     run_inputs = fixtures.inputs(
         values={
@@ -78,5 +91,7 @@ def test_story_run_plans_one_story_frame() -> None:
         base_dir=fixtures.BASE,
         bmad_version=fixtures.BMAD_VERSION,
     )
-    story_ids = {r.story_id for r in plan.rows if r.story_id is not None}
+
+    story_ids = {row.story_id for row in plan.rows if row.story_id is not None}
     assert story_ids == {"2"}
+    assert any(row.story_id == "2" for row in plan.rows)

@@ -135,7 +135,7 @@ Then set every value that must not stay a placeholder:
 | `LITELLM_SPEND_KEY` | master or `proxy_admin_viewer` key | No budget or cost readings |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | from the Langfuse project | No traces |
 
-One more is optional rather than a placeholder to replace: `ROOT_TEMPLATES` is the comma-separated list of workflow templates `/workflows/new` offers, in the order you write them. Left blank or unset it offers the five shipped ones, so a stack that never touches it is correct; set it to make a template you authored startable, or to narrow the list. It is read at start-up, so a change takes effect on the next `docker compose up`.
+One more is optional rather than a placeholder to replace: `ROOT_TEMPLATES` is the comma-separated list of workflow templates `/workflows/new` offers, in the order you write them. The bundled `.env.example` names the two shipped roots, `initiative-hub,repo-init`; left blank or unset it offers every stored template a Run can start from, so a stack that never touches it is still correct; set it to make a template you authored startable, or to narrow the list. It is read at start-up, so a change takes effect on the next `docker compose up`.
 
 Set `LANGFUSE_ENVIRONMENT=production`, so production traces are not read as a developer's on
 the shared tracing server.

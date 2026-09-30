@@ -117,7 +117,7 @@ Open `.env` and set these — the rest can keep their defaults:
 | `POSTGRES_PASSWORD` | a random string — and the same password inside `DATABASE_URL` |
 | `GITHUB_TOKEN` | a token that can clone the client's target repositories (read by git only; a harness never receives it) |
 | `LITELLM_BASE_URL`, `LANGFUSE_BASE_URL` | per your mode from step 3 — blank or absent disables |
-| `ROOT_TEMPLATES` | optional — the workflow templates `/workflows/new` offers, comma-separated, in the order you write them. Blank or unset offers the five shipped ones. Name a template you authored in `templates/` here to make it startable; a name nothing stores is ignored. Read at start-up, so a change needs a restart |
+| `ROOT_TEMPLATES` | optional — the workflow templates `/workflows/new` offers, comma-separated, in the order you write them. `.env.example` sets the two shipped roots, `initiative-hub,repo-init`; blank or unset offers every stored template a Run can start from (everything but the ones only another template calls). Name a template you authored in `templates/` here to make it startable; a name nothing stores is ignored. Read at start-up, so a change needs a restart |
 
 ```bash
 python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
@@ -225,14 +225,15 @@ also the API under `/api/v1` with `Authorization: Bearer $ORCHESTRATOR_TOKEN`.
 
    | Template | Runs |
    | --- | --- |
-   | `initiative` | every epic of one initiative, in order |
-   | `epic` | all stories of one epic on one branch, verified, pushed |
-   | `story-run` | one story to a verified commit |
+   | `initiative-hub` | every epic of one initiative, in one Run, from a hub repository whose `repos/*` submodules are the member repositories |
    | `repo-init` | bootstrap the BMAD method into a repo, as a PR |
 
-   Those four are what `/workflows/new` offers by default; `ROOT_TEMPLATES` in `.env`
-   changes the offering (add `initiative-hub` for a multi-repository initiative driven from
-   a hub repository), and `templates/` ships `story` for `epic` and `story-run` to call.
+   Those two are what `/workflows/new` offers (`ROOT_TEMPLATES` in `.env`; blank offers
+   every stored template a Run can start from). `templates/` also ships the hub flow's
+   callees, `initiative-hub-epic` and `initiative-hub-story`, and the single-repository
+   `epic` and `story`, which only the harness readiness diagnostic dispatches — none of
+   those is on the menu. The mono-repo `initiative` and `story-run` workflows are retired
+   to `templates/drafts/` (kept, not seeded — Operator decision 2026-09-30).
 
    The harness page section shows each harness's live probe; the deeper readiness
    diagnostic (`POST /harnesses/{name}/readiness`) runs a trivial story end to end and

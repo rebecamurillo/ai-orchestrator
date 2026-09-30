@@ -33,8 +33,8 @@ A file written for one flavor does not run under another: a hub `epics.yaml` wit
       <id>-<slug>.md
 ```
 
-An `epic` Run takes `spec_folder` directly; the `initiative` and `initiative-hub`
-templates take the folder holding `epics.yaml` and join each epic's `spec_folder` onto it
+An `epic` Run takes `spec_folder` directly; the `initiative-hub` template takes the
+folder holding `epics.yaml` and joins each epic's `spec_folder` onto it
 (`{initiative_folder}/{spec_folder}`) — so **`spec_folder` is a bare folder name relative
 to the initiative folder, never a repeated full path**. In a hub run the whole tree above
 lives at the hub; the members' code lives in the `repos/*` submodules and specs are never

@@ -146,18 +146,28 @@ def test_the_tree_of_every_shipped_root_resolves(
 # --- a shipped file whose content moved (S5, multi-repo initiative, 2026-09-23) -------------
 
 
-def test_initiatives_pinned_epic_call_resolves_against_the_freshly_seeded_files(
+def test_every_pinned_call_of_every_shipped_version_is_found_by_the_resolver(
     templates: FakeTemplateVersionRepository,
 ) -> None:
-    """`initiative.yaml`'s own `uses: template, name: epic, version: 1` is unedited by S5
-    (epic.yaml's `done_checkpoint`/`when` addition is a content change only, not a bump of
-    epic's own literal `version:` field — see the story report for why); this is the
-    concrete regression check that the callee `ResolvedTree.callee()` actually finds still
-    matches after that edit, in exactly the fresh-seed shape every environment this system
-    runs in today has (no accumulated template history yet)."""
-    tree = resolve_tree(templates, TemplateRef(name="initiative", version=1))
+    """Revised 2026-09-30 (Operator decision: the mono-repo `initiative` and `story-run`
+    workflows are retired to `templates/drafts/`, so `initiative` is no longer a seeded
+    name). This replaces `test_initiatives_pinned_epic_call_resolves_against_the_freshly_
+    seeded_files`, which read `initiative@1` and checked its one `epic@1` call. The
+    invariant it protected — after a callee's content edit lands as a new version, a caller
+    pinned to the old number still finds exactly the version it pinned via
+    `ResolvedTree.callee()` — now holds for every call every shipped file records, in the
+    fresh-seed shape every environment this system runs in today has."""
+    pinned = [
+        (name, version, ref)
+        for (name, version), stored in templates.versions.items()
+        for ref in stored.calls
+    ]
+    assert pinned, "no shipped file calls another — the check would be vacuous"
 
-    assert tree.callee("epic", 1) is not None
+    for name, version, ref in pinned:
+        tree = resolve_tree(templates, TemplateRef(name=name, version=version))
+
+        assert tree.callee(ref.name, ref.version) is not None, (name, version, ref)
 
 
 def test_a_shipped_files_content_change_lands_as_a_new_version_and_old_callers_still_resolve() -> (
@@ -165,13 +175,24 @@ def test_a_shipped_files_content_change_lands_as_a_new_version_and_old_callers_s
 ):
     """The seeding loader handles a file whose version moved: a name that already has a
     stored version gets its changed content seeded as the *next* version, never overwriting
-    the old one (AD-15) — and a caller pinned to the old number, such as `initiative.yaml`'s
-    own unedited `epic@1` call, still resolves it. `prior_epic` stands in for "whatever
-    epic.yaml held before this story" — a synthetic, differently-hashed file, never the real
-    shipped text (hard rule 6): the point under test is the seeding/resolution mechanism,
-    not any shipped template's content."""
+    the old one (AD-15) — and a caller pinned to the old number still resolves it.
+    `prior_epic` stands in for "whatever epic.yaml held before this story" — a synthetic,
+    differently-hashed file, never the real shipped text (hard rule 6): the point under test
+    is the seeding/resolution mechanism, not any shipped template's content.
+
+    Revised 2026-09-30 (Operator decision: mono-repo `initiative` retired to
+    `templates/drafts/`): the caller pinned to `epic@1` used to be the shipped
+    `initiative.yaml`; it is now `PRIOR_CALLER`, a stored stand-in of this test's own, so the
+    check pins no shipped file at all."""
     prior_epic = TemplateVersion(name="epic", version=1, yaml=PRIOR_EPIC, hash="prior-epic-sha")
-    templates = FakeTemplateVersionRepository([prior_epic])
+    prior_caller = TemplateVersion(
+        name="prior-caller",
+        version=1,
+        yaml=PRIOR_CALLER,
+        hash="prior-caller-sha",
+        calls=(TemplateRef(name="epic", version=1),),
+    )
+    templates = FakeTemplateVersionRepository([prior_epic, prior_caller])
     uow = FakeUnitOfWork()
     uow.__enter__()
     ports = TemplatePorts(uow=uow, templates=templates, clock=FakeClock(AT))
@@ -183,7 +204,7 @@ def test_a_shipped_files_content_change_lands_as_a_new_version_and_old_callers_s
     assert templates.list_versions("epic") == [1, NEXT_VERSION]
     assert templates.get("epic", 1) is prior_epic
 
-    tree = resolve_tree(templates, TemplateRef(name="initiative", version=1))
+    tree = resolve_tree(templates, TemplateRef(name="prior-caller", version=1))
     callee = tree.callee("epic", 1)
 
     assert callee is not None
@@ -199,10 +220,9 @@ PRIOR_EPIC = (
     "name: epic\n"
     "version: 1\n"
     "inputs:\n"
-    # `initiative.yaml`'s unedited call binds this exact key set — a stand-in occupying
-    # `epic@1` must accept it or validating `initiative` at seed time refuses with a
-    # callee input mismatch, which is a fact about the caller/callee contract, not about
-    # what the real `epic.yaml` says.
+    # `PRIOR_CALLER`'s call binds this exact key set — a stand-in occupying `epic@1` must
+    # accept it or resolving the caller refuses with a callee input mismatch, which is a
+    # fact about the caller/callee contract, not about what the real `epic.yaml` says.
     "  project:     { type: project,    required: true }\n"
     "  repository:  { type: repository, required: true }\n"
     "  base_branch: { type: string,     required: true }\n"
@@ -215,4 +235,38 @@ PRIOR_EPIC = (
     "  - id: sync\n"
     "    uses: git.sync\n"
     "    gate: deterministic\n"
+)
+
+#: A minimal caller pinned to `epic@1`, stored before seeding — the stand-in for "a Template
+#: whose pinned callee's file has since changed" (until 2026-09-30 the shipped mono-repo
+#: `initiative.yaml` played this part). Its bindings match `PRIOR_EPIC`'s declared inputs.
+PRIOR_CALLER = (
+    "name: prior-caller\n"
+    "version: 1\n"
+    "inputs:\n"
+    "  project:      { type: project,    required: true }\n"
+    "  repository:   { type: repository, required: true }\n"
+    "  base_branch:  { type: string,     required: true }\n"
+    "  epics_folder: { type: path,       required: true }\n"
+    "  harness:      { type: enum, values: [claude, codex, local], default: claude }\n"
+    "  model:        { type: string,     required: false }\n"
+    "steps:\n"
+    "  - id: epics\n"
+    '    for_each: "{{epics_folder}}/epics.yaml"\n'
+    "    as: epic\n"
+    "    steps:\n"
+    "      - id: epic\n"
+    "        uses: template\n"
+    "        with:\n"
+    "          name: epic\n"
+    "          version: 1\n"
+    "          inputs:\n"
+    '            project: "{{project}}"\n'
+    '            repository: "{{repository}}"\n'
+    '            base_branch: "{{base_branch}}"\n'
+    '            branch: "{{epic.branch}}"\n'
+    '            spec_folder: "{{epics_folder}}/{{epic.spec_folder}}"\n'
+    '            epic: "{{epic}}"\n'
+    '            harness: "{{harness}}"\n'
+    '            model: "{{model}}"\n'
 )
