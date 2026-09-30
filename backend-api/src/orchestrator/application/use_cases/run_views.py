@@ -197,6 +197,7 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
         run,
         park_row.kind if park_row is not None else None,
         park_row_status=park_row.status if park_row is not None else None,
+        rows=rows,
     )
     park_attempts = attempts_by_row.get(park_row.id, ()) if park_row is not None else ()
     # Read once and shared: the detail publishes the whole gate record, and `_alert` needs

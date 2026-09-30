@@ -56,10 +56,11 @@ describe('offersSkipEpic', () => {
       'misconfigured',
       'internal',
     ]);
+    // Operator decision 2026-09-30: no template name hardcoded in product code. The server
+    // ran `_has_epic_frame` over the Run's rows before it sent `admitted_signals`, so both
+    // of its branches are already decided; the Template's name says nothing on either side.
     for (const kind of SKIP_EPIC_STOP_KINDS) {
-      // the whole-Run-is-one-epic branch: no bracket needed, `template === 'epic'` alone
-      expect(offersSkipEpic(parkedAt('push', kind, 'epic'), kind, ADMITTED)).toBe(true);
-      // the frame branch: an `epics[n]` bracket on the parked row's own path, any Template
+      expect(offersSkipEpic(parkedAt('push', kind, 'house-epic'), kind, ADMITTED)).toBe(true);
       expect(offersSkipEpic(parkedAt('epics[0].push', kind, 'renamed-copy'), kind, ADMITTED)).toBe(
         true,
       );
@@ -79,11 +80,13 @@ describe('offersSkipEpic', () => {
     expect(offersSkipEpic(epic('blocked'), null, ADMITTED)).toBe(false);
   });
 
-  it('never offers it when neither branch of _has_epic_frame is satisfied', () => {
-    // not the `epic` Template, and the parked row's own path carries no `epics[n]` bracket
-    // either — the client-side twin of the server's own two-branch refusal
-    const d = parkedAt('stories[0].build', 'blocked', 'initiative');
-    expect(offersSkipEpic(d, 'blocked', ADMITTED)).toBe(false);
+  it('never offers it when the server left the kind out, whatever the path looks like', () => {
+    // The refusal `_has_epic_frame` makes now arrives as an absent `skip_epic`: the server
+    // reads the Run's own rows for it (Operator decision 2026-09-30), and this side does not
+    // guess a second time off the Template's name or the parked path.
+    const d = parkedAt('stories[0].build', 'blocked', 'house-initiative');
+    expect(offersSkipEpic(d, 'blocked', ['retry', 'cancel'])).toBe(false);
+    expect(offersSkipEpic(d, 'blocked', ADMITTED)).toBe(true);
   });
 });
 
@@ -96,8 +99,8 @@ describe('currentEpicNumber', () => {
     expect(currentEpicNumber(second)).toBe(3);
   });
 
-  it('is 1 for a plain epic-template Run: no bracket at all, and it is the one epic', () => {
-    const d = parkedAt('push', 'push_rejected', 'epic');
+  it('is 1 for a Run that is itself one epic: no bracket at all', () => {
+    const d = parkedAt('push', 'push_rejected', 'house-epic');
     expect(currentEpicNumber(d)).toBe(1);
   });
 

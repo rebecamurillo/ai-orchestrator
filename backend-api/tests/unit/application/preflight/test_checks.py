@@ -99,6 +99,11 @@ def row(**overrides: object) -> PlannedRow:
     return PlannedRow(**fields)  # type: ignore[arg-type]
 
 
+def replace_tree_root_name(tree: ResolvedTree, name: str) -> ResolvedTree:
+    """The same resolved tree with its root renamed — nothing else changed."""
+    return ResolvedTree(root=tree.root.model_copy(update={"name": name}), callees=tree.callees)
+
+
 def ctx(**overrides: object) -> Context:
     fields: dict[str, object] = {
         "git": FakeGit(),
@@ -785,16 +790,28 @@ def test_list_error_target_epics_yaml_for_an_initiative_tree() -> None:
     )
 
 
-# --- Context.is_initiative ---------------------------------------------------------------------
+# --- Context.reads_epics_list ------------------------------------------------------------------
+# Operator decision 2026-09-30: no template name hardcoded in product code. `is_initiative`
+# (`tree.root.name == "initiative"`) is gone; the fact is the *loop* the plan declares. These
+# four replace the three name tests and assert more: the same three shapes, plus a Template
+# under any other name whose loop reads the epics list, which the name test answered wrong.
 
 
-def test_is_initiative_false_without_a_tree() -> None:
-    assert ctx().is_initiative is False
+def test_reads_epics_list_is_false_without_a_tree() -> None:
+    assert ctx().reads_epics_list is False
 
 
-def test_is_initiative_false_for_epic() -> None:
-    assert ctx(tree=fixtures.tree("epic")).is_initiative is False
+def test_reads_epics_list_is_false_for_a_tree_that_only_loops_over_stories() -> None:
+    assert ctx(tree=fixtures.tree("epic")).reads_epics_list is False
 
 
-def test_is_initiative_true_for_initiative() -> None:
-    assert ctx(tree=fixtures.tree("initiative")).is_initiative is True
+def test_reads_epics_list_is_true_for_a_tree_that_loops_over_an_epics_list() -> None:
+    assert ctx(tree=fixtures.tree("initiative")).reads_epics_list is True
+
+
+def test_reads_epics_list_follows_the_loop_and_not_the_root_templates_name() -> None:
+    """The same exemplar tree under another name still reads an epics list."""
+    tree = fixtures.tree("initiative")
+    renamed = replace_tree_root_name(tree, "house-initiative")
+
+    assert ctx(tree=renamed).reads_epics_list is True

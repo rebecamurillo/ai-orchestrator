@@ -141,7 +141,7 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
         run = require_run(writers, run_id)
         rows = writers.steps.list_for_run(run_id)
         park_row = _park_row(rows, run.park_path)
-        rule = validate(run, park_row, signal)
+        rule = validate(run, park_row, signal, rows)
         _check_mode(ports, run, signal)
         record(
             writers,

@@ -26,6 +26,7 @@ from orchestrator.application.preflight.model import (
     PreflightRequest,
 )
 from orchestrator.application.steps import AGENT_KIND, CHECKPOINT_KIND, WORKTREE_KIND
+from orchestrator.application.templates.lists import EPICS_KIND, list_kind
 from orchestrator.application.templates.model import ForEach
 from orchestrator.application.templates.plan_model import (
     AFTER_LABEL,
@@ -65,6 +66,9 @@ LIST_FILE_REASONS = frozenset(
 #: What a Run this harness/repository check has no readiness run to report says.
 NO_READINESS_RUN = "no readiness run"
 
+#: The one fix every failing method-version line names, verbatim.
+METHOD_VERSION_FIX = "run Initialise repository and merge its branch"
+
 #: The one kind (`application/steps/__init__.py::KIND_META`) line 9 is `skip` for — the
 #: plan installs the method itself, so there is nothing yet to compare a version against.
 BMAD_INSTALL_KIND = "bmad.install"
@@ -94,8 +98,23 @@ class Context:
     skill_catalog: SkillCatalog | None = None
 
     @property
-    def is_initiative(self) -> bool:
-        return self.tree is not None and self.tree.root.name == "initiative"
+    def reads_epics_list(self) -> bool:
+        """Whether this plan loops over an epics list — what makes line 4 apply, and what
+        puts a list-file `PlanError` on that line rather than on line 5. Read off the
+        resolved tree's own `for_each` sources, never off the root Template's name (Operator
+        decision 2026-09-30: no template name hardcoded in product code), and off the *tree*
+        rather than off `plan.plan_refs` because the case this most has to answer — a list
+        file that could not be read — is the case with no plan to ask. Any Template with that
+        loop now gets line 4 and the per-epic `SPEC.md` checks, the intended widening.
+        """
+        if self.tree is None:
+            return False
+        return any(
+            list_kind(loop.source) == EPICS_KIND
+            for parsed in (self.tree.root, *self.tree.callees)
+            for loop in parsed.steps
+            if isinstance(loop, ForEach)
+        )
 
 
 def failure_text(error: Exception) -> str:
@@ -343,28 +362,13 @@ def method_version_line(ctx: Context) -> Line:
     if any(row.kind == BMAD_INSTALL_KIND for row in ctx.plan.rows):
         return Line(CHECK_METHOD_VERSION, "skip", "plan installs the method")
     manifest = ctx.git.read_file(ctx.base_dir, ctx.plan.plan_ref, MANIFEST_PATH)
-    if manifest is None:
-        return Line(
-            CHECK_METHOD_VERSION,
-            "fail",
-            "missing",
-            fix="run Initialise repository and merge its branch",
-        )
-    stated = installed_version(manifest)
+    # an unreadable manifest and a manifest that states no version are one line, not two:
+    # both mean "this clone does not say which method version it holds"
+    stated = installed_version(manifest) if manifest is not None else None
     if stated is None:
-        return Line(
-            CHECK_METHOD_VERSION,
-            "fail",
-            "missing",
-            fix="run Initialise repository and merge its branch",
-        )
+        return Line(CHECK_METHOD_VERSION, "fail", "missing", fix=METHOD_VERSION_FIX)
     if stated != ctx.bmad_version:
-        return Line(
-            CHECK_METHOD_VERSION,
-            "fail",
-            f"outdated: {stated}",
-            fix="run Initialise repository and merge its branch",
-        )
+        return Line(CHECK_METHOD_VERSION, "fail", f"outdated: {stated}", fix=METHOD_VERSION_FIX)
     return Line(CHECK_METHOD_VERSION, "ok", stated)
 
 
@@ -393,4 +397,4 @@ def list_error_target(ctx: Context) -> str | None:
     """Which list-file check line a `PlanError` about a list file belongs to, if any."""
     if ctx.plan_error is None or ctx.plan_error.reason not in LIST_FILE_REASONS:
         return None
-    return CHECK_EPICS_YAML if ctx.is_initiative else CHECK_STORIES_YAML
+    return CHECK_EPICS_YAML if ctx.reads_epics_list else CHECK_STORIES_YAML

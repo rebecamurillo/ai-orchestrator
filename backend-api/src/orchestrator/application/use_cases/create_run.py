@@ -31,6 +31,7 @@ under *Start run* explaining what it queues behind.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -278,6 +279,23 @@ def get_run(ports: RunReadPorts, run_id: UUID) -> Run:
     return run
 
 
+def run_rows(ports: RunReadPorts, run: Run) -> list[StepRun]:
+    """Every row of this Run, or `[]` when no `StepRunRepository` was wired (4.4's own read
+    ports). A single-Run read model wants them for the one question the Run row alone cannot
+    answer: whether the whole plan is one epic, which is what admits *Skip epic* at a stop
+    with no `epics[n]` frame under it (`rules/frames.py::run_is_one_epic`, Operator decision
+    2026-09-30: no template name hardcoded in product code)."""
+    return [] if ports.steps is None else list(ports.steps.list_for_run(run.id))
+
+
+def park_row_in(run: Run, rows: Sequence[StepRun]) -> StepRun | None:
+    """The row this Run is parked on, out of rows already read — the pure half of
+    `park_row_of`, so a caller that needs both asks the repository once."""
+    if run.status != "needs_you":
+        return None
+    return row_at(rows, run.park_path)
+
+
 def park_row_of(ports: RunReadPorts, run: Run) -> StepRun | None:
     """The row this Run is parked on, for `RunSummaryOut.of`'s two row arguments (4.9, and
     the `skip_step` offer's own `park_row_status` — Operator, 2026-09-26).
@@ -286,9 +304,9 @@ def park_row_of(ports: RunReadPorts, run: Run) -> StepRun | None:
     `StepRunRepository` was wired (4.4's own read ports), or — a stored Run should never
     reach this, but a read model does not assert it — the row `park_path` names is gone.
     """
-    if run.status != "needs_you" or ports.steps is None:
+    if ports.steps is None:
         return None
-    return row_at(ports.steps.list_for_run(run.id), run.park_path)
+    return park_row_in(run, run_rows(ports, run))
 
 
 def park_row_kind_of(ports: RunReadPorts, run: Run) -> str | None:

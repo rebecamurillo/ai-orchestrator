@@ -18,10 +18,12 @@ import pytest
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import DEFAULT_TEST_GLOBS, CloneCheck, Repository
 from orchestrator.domain.entities.run import Run
+from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.git import CloneResult, RemoteRef
 from orchestrator.infrastructure.db import run_finished as module
 from orchestrator.infrastructure.db.run_finished import run_finished_hook
+from tests.unit.application.writer_fixtures import build_rows
 from tests.unit.fakes.git import FakeGit
 
 NOW = datetime(2026, 9, 6, tzinfo=UTC)
@@ -29,6 +31,13 @@ BMAD_VERSION = "6.11.0"
 WORK_DIR = Path("/work")
 SHA = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
 MANIFEST = "installation:\n  version: 6.11.0\n  installDate: 2026-08-24\nmodules: []\n"
+
+#: A plan that installs the method, so the hook has something to do (`(path, kind)` pairs
+#: this suite owns, never a shipped Template's rows).
+INSTALLING_PLAN: tuple[tuple[str, str], ...] = (
+    ("checkout", "git.worktree"),
+    ("install", "bmad.install"),
+)
 
 
 class RecordingSession:
@@ -58,6 +67,18 @@ class _Answering:
 
     def update(self, value: object) -> None:
         self.updated.append(value)
+
+
+class _Rows:
+    """The step-run repository, answering one canned row list (Operator decision
+    2026-09-30: `on_finished` reads the rows to learn whether the Run installed the
+    method, so the wiring now has one more adapter to prove)."""
+
+    def __init__(self, rows: list[StepRun]) -> None:
+        self.rows = rows
+
+    def list_for_run(self, _run_id: UUID) -> list[StepRun]:
+        return self.rows
 
 
 def a_project() -> Project:
@@ -122,6 +143,8 @@ def wire(
     project: Project | None,
     repository: Repository | None,
 ) -> _Answering:
+    rows = [] if run is None else build_rows(run.id, INSTALLING_PLAN)
+    monkeypatch.setattr(module, "SQLAlchemyStepRunRepository", lambda _s: _Rows(rows))
     monkeypatch.setattr(module, "SQLAlchemyRunRepository", lambda _s: _Answering(run))
     monkeypatch.setattr(module, "SQLAlchemyProjectRepository", lambda _s: _Answering(project))
     repositories = _Answering(repository)
@@ -129,7 +152,7 @@ def wire(
     return repositories
 
 
-def test_a_finished_repo_init_run_writes_back_through_the_wired_session(
+def test_a_finished_installing_run_writes_back_through_the_wired_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = a_project()

@@ -43,10 +43,6 @@ from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 
-#: The two Templates whose Runs carry epic/story progress (SPEC CAP-12). Every other
-#: Template — `repo-init` today — has no `epics[i]`/`stories[j]` frame in any of its rows.
-PROGRESS_TEMPLATES = ("epic", "initiative")
-
 #: The statuses that finish a frame's own row, one way or the other (AD-9's own pair).
 SETTLED: tuple[str, ...] = ("done", "skipped")
 
@@ -54,16 +50,31 @@ BRACKET_INDEX = re.compile(r"\[(\d+)\]$")
 
 
 def progress(run: Run, rows: Sequence[StepRun]) -> Progress | None:
-    """`None` for a Run whose Template has no epic/story frame at all (e.g. `repo-init`)."""
-    if run.template_name not in PROGRESS_TEMPLATES:
+    """The Run's own epic/story arithmetic, or `None` when its plan counts neither.
+
+    Both questions are asked of the *plan*, never of a Template's name (Operator decision
+    2026-09-30: no template name hardcoded in product code). A Run carries story progress
+    when some row sits in a `stories[n]` frame, and epic progress when some `git.push` row
+    sits in an `epics[n]` one — the same read `skipped_epics` below already makes, so the
+    card's count and the summary's skipped list cannot disagree about what an epic is.
+
+    `None` therefore covers a plan with no Story loop at all (an initialisation Run), and
+    `epics_total=None` covers a plan whose Stories are not grouped into epics — a single
+    epic's Run, whose own `push` row carries no `epics[n]` frame. Any Template of any name
+    with those shapes gets those answers, which is the intended widening: a hub initiative
+    now shows progress where the old two-name list gave it none.
+    """
+    if not any(story_frame(row.path) is not None for row in rows):
         return None
     story_commits = [row for row in rows if row.kind == COMMIT_KIND]
     stories_total = len(story_commits)
     stories_done = sum(1 for row in story_commits if row.status in SETTLED)
     epics_total: int | None = None
     epics_done: int | None = None
-    if run.template_name == "initiative":
-        epic_pushes = [row for row in rows if row.kind == PUSH_KIND]
+    epic_pushes = [
+        row for row in rows if row.kind == PUSH_KIND and epic_frame(row.path) is not None
+    ]
+    if epic_pushes:
         epics_total = len(epic_pushes)
         epics_done = sum(1 for row in epic_pushes if row.status in SETTLED)
     return Progress(

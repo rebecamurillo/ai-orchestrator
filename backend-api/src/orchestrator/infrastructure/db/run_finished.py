@@ -18,6 +18,7 @@ from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
     SQLAlchemyRunRepository,
+    SQLAlchemyStepRunRepository,
 )
 from orchestrator.infrastructure.db.writers import SessionFactory, SessionUnitOfWork
 
@@ -35,6 +36,7 @@ def run_finished_hook(
         on_finished(
             RunFinishedPorts(
                 runs=SQLAlchemyRunRepository(session),
+                steps=SQLAlchemyStepRunRepository(session),
                 repositories=SQLAlchemyRepositoryRepository(session),
                 projects=SQLAlchemyProjectRepository(session),
                 git=git,

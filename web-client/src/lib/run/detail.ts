@@ -219,20 +219,31 @@ export function epicDoneCount(cells: StoryCellOut[]): string {
   return `${done}/${cells.length}`;
 }
 
+/** Whether this Run's own plan groups its Stories into epics — the `epics[n]` frame the
+ * planner writes on a row, read off the step paths that are already on the wire. The Run's
+ * Template name says nothing about it (Operator decision 2026-09-30: no template name
+ * hardcoded in product code); it is the same fact the server reads for `progress`'s own
+ * `epics_total` (`run_views_summary.py::progress`). */
+export function hasEpicFrames(detail: RunDetailOut): boolean {
+  return detail.steps.some((step) => EPIC_FRAME.test(step.path));
+}
+
+const EPIC_FRAME = /epics\[\d+\]/;
+
 /** The Alert banner's own "right-aligned progress" (binding rule), reconstructed from
  * `stories[]` rather than read off a `progress` field — `RunDetailOut` carries one only
  * inside `summary`, which is `null` until the Run is `done` (`application/use_cases/
  * run_views.py::_summary`). `stories[]` is present at every status, so counting its own
  * cells' `state` answers the same question `_progress` does server-side, without a wider
  * endpoint: `stories_total`/`stories_done` from every cell, `epics_total`/`epics_done` from
- * `storiesByEpic`'s own groups, but only for `initiative` — an `epic` Run's Template has no
- * epic frame of its own, the same distinction `_progress` draws on `run.template_name`. `''`
- * for a Run with no Story frame at all (`repo-init`). */
+ * `storiesByEpic`'s own groups — but only where the plan really has epic frames, the same
+ * distinction `_progress` now draws off the rows rather than off a Template's name. `''`
+ * for a Run with no Story cell at all (an initialisation Run). */
 export function storiesProgressText(detail: RunDetailOut): string {
   const stories = detail.stories;
   if (stories.length === 0) return '';
   const storiesDone = stories.filter((cell) => cell.state === 'done').length;
-  if (detail.run.template !== 'initiative') {
+  if (!hasEpicFrames(detail)) {
     return `${storiesDone}/${stories.length} stories`;
   }
   const groups = storiesByEpic(stories);

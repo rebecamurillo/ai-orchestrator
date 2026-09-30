@@ -131,7 +131,7 @@ def _refuse_early(ports: SignalPorts, run_id: UUID, signal: Signal) -> None:
     run = require_run(writers, run_id)
     rows = writers.steps.list_for_run(run_id)
     park_row = row_at(rows, run.park_path)
-    validate(run, park_row, signal)
+    validate(run, park_row, signal, rows)
     _refuse_during_terminal_session(run, signal)
     _refuse_unmatched_accept(ports, run, signal)
 

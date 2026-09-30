@@ -9,16 +9,21 @@ from __future__ import annotations
 import pytest
 
 from orchestrator.application.rules.frames import (
-    EPIC_TEMPLATE,
     epic_frame,
     in_frame,
     rows_after,
     rows_in_frame,
+    run_is_one_epic,
     story_frame,
     story_frames_after,
 )
 from orchestrator.domain.ids import new_id
-from tests.unit.application.writer_fixtures import EPIC_PLAN, INITIATIVE_PLAN, build_rows
+from tests.unit.application.writer_fixtures import (
+    EPIC_PLAN,
+    INITIATIVE_PLAN,
+    PAIR_PLAN,
+    build_rows,
+)
 
 
 @pytest.mark.parametrize(
@@ -117,6 +122,26 @@ def test_an_earlier_story_frame_of_the_same_epic_is_not_after_it() -> None:
     assert story_frames_after(rows, "epics[0].stories[1]") == []
 
 
-def test_the_epic_template_is_named_once_for_the_skip_epic_rule() -> None:
-    """AD-13 admits `skip_epic` on "an `epic` Run", which has no `epics[i]` frame at all."""
-    assert EPIC_TEMPLATE == "epic"
+# ── `run_is_one_epic`: the plan says it, not the Template's name ───────────────────────────
+# Operator decision 2026-09-30: no template name hardcoded in product code. AD-13 admits
+# `skip_epic` on a Run that is itself one epic, which has no `epics[i]` frame at all — this
+# replaces the `EPIC_TEMPLATE == "epic"` assertion, and asserts the *shape* the rule is
+# really about across all three plan shapes instead of one name.
+
+
+def test_a_plan_that_loops_over_stories_and_nothing_above_them_is_one_epic() -> None:
+    assert run_is_one_epic(build_rows(new_id(), EPIC_PLAN)) is True
+
+
+def test_a_plan_with_an_epic_loop_is_not_one_epic() -> None:
+    """Several epics: `skip_epic` has the parked row's own `epics[n]` frame to act on."""
+    assert run_is_one_epic(build_rows(new_id(), INITIATIVE_PLAN)) is False
+
+
+def test_a_plan_with_no_loop_at_all_is_not_one_epic() -> None:
+    """An initialisation Run is no epic, so there is nothing for `skip_epic` to skip."""
+    assert run_is_one_epic(build_rows(new_id(), PAIR_PLAN)) is False
+
+
+def test_no_rows_at_all_is_not_one_epic() -> None:
+    assert run_is_one_epic([]) is False

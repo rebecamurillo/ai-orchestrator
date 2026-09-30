@@ -18,6 +18,7 @@ import {
   detailRequestPath,
   epicDoneCount,
   hasEffect,
+  hasEpicFrames,
   logTail,
   metaLine,
   moneyRatio,
@@ -299,9 +300,17 @@ describe('storiesByEpic / epicDoneCount / storiesProgressText', () => {
     expect(epicDoneCount([story({ state: 'done' }), story({ state: 'future' })])).toBe('1/2');
   });
 
-  it('reads epics and stories for an initiative Run', () => {
+  /**
+   * Operator decision 2026-09-30: no template name hardcoded in product code. Epic progress
+   * is read off the `epics[n]` frames the planner wrote on the step paths, not off
+   * `run.template === 'initiative'`. Both replacements are stronger than the name tests they
+   * replace: the Template is named something the old branch would have got wrong, and the
+   * step paths are what decide.
+   */
+  it('reads epics and stories for a plan whose rows carry epic frames', () => {
     const d = detail({
-      run: { ...detail().run, template: 'initiative' },
+      run: { ...detail().run, template: 'house-initiative' },
+      steps: [step({ path: 'epics[0].stories[0].build' }), step({ path: 'epics[1].push' })],
       stories: [
         story({ epic_index: 1, story_id: '4-1', state: 'done' }),
         story({ epic_index: 1, story_id: '4-2', state: 'done' }),
@@ -312,13 +321,19 @@ describe('storiesByEpic / epicDoneCount / storiesProgressText', () => {
     expect(storiesProgressText(d)).toBe('1/2 epics · 2/3 stories');
   });
 
-  it('reads only stories for an epic Run (no epic frame of its own)', () => {
+  it('reads only stories for a plan whose rows carry no epic frame', () => {
     const d = detail({
-      run: { ...detail().run, template: 'epic' },
+      run: { ...detail().run, template: 'house-epic' },
+      steps: [step({ path: 'stories[0].build' })],
       stories: [story({ state: 'done' })],
     });
 
     expect(storiesProgressText(d)).toBe('1/1 stories');
+  });
+
+  it('answers hasEpicFrames off the step paths alone', () => {
+    expect(hasEpicFrames(detail({ steps: [step({ path: 'epics[0].push' })] }))).toBe(true);
+    expect(hasEpicFrames(detail({ steps: [step({ path: 'stories[0].build' })] }))).toBe(false);
   });
 
   it('is empty with no Story frame at all (repo-init)', () => {
