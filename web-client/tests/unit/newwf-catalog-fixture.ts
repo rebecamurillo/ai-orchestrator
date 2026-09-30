@@ -78,8 +78,9 @@ export const FIXTURE_INPUTS: Record<string, InputDeclOut[]> = {
   ],
 };
 
-/** The order the default `ROOT_TEMPLATES` asks for. */
-export const FIXTURE_ORDER = ['initiative', 'epic', 'repo-init', 'story-run', 'task'];
+/** The order the default `ROOT_TEMPLATES` asks for (`task` left the shipped set — Operator
+ * decision, 2026-09-30). `task` stays a fixture-owned name below. */
+export const FIXTURE_ORDER = ['initiative', 'epic', 'repo-init', 'story-run'];
 
 /** `FIXTURE_ORDER` plus the optional-input Template, for the tests that need that shape. */
 export function catalogWithDefaulted(): TemplateCatalog {

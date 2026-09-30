@@ -11,7 +11,7 @@ type InputDeclOut = components['schemas']['InputDeclOut'];
 
 /** Offered when `ROOT_TEMPLATES` says nothing. `story` is absent: it is only ever called by
  * another Template (FR-33). */
-export const DEFAULT_ROOT_TEMPLATES = 'initiative,epic,repo-init,story-run,task';
+export const DEFAULT_ROOT_TEMPLATES = 'initiative,epic,repo-init,story-run';
 
 const SEPARATOR = ',';
 
