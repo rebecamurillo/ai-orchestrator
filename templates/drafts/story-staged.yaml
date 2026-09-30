@@ -1,0 +1,390 @@
+name: story-staged
+version: 1
+description: one story in four sessions — plan, implement, verify, sized review — each on its own model
+# DRAFT (2026-09-30). Lives under templates/drafts/ so the loader does not seed it; move it up
+# one level (and add it to the shipped list in AGENTS.md) to ship it.
+#
+# Why four sessions instead of one bmad-build-auto dispatch:
+# - each step names its own model, so planning can run on a stronger model than coding;
+# - the review is sized: the planner writes `size: S|M|L` into the spec, the reviewer checks
+#   that claim against the real diff and spends accordingly — no reviewer panel and no
+#   "find at least ten issues" on a two-file change;
+# - the review never re-derives the code on its own: a spec-level defect blocks the Run and
+#   brings the operator in, instead of the revert→re-implement→re-review loop that turns a
+#   small story into an hour.
+#
+# Every agent row reports through its own marker under `{spec_folder}/stories/.auto/`, exactly
+# as epic-local-ai does, because an agent row is routed on a file saying `done` or `blocked`
+# (FR-16); a spec at `ready-for-dev` or `in-review` would park the Run. The `verify` row
+# redispatches `implement`, whose marker then carries the orchestrator's `## Verify Failure`
+# section (FR-10) — so the implementer fixes its own breakage before any review happens.
+inputs:
+  project:      { type: project,    required: true }
+  repository:   { type: repository, required: true }
+  branch:       { type: string,     required: true }
+  spec_folder:  { type: path,       required: true }   # holds SPEC.md, stories.yaml, stories/
+  story:        { type: item,       required: true }   # bound by the caller's for_each
+  harness:      { type: enum, values: [claude, codex, local], default: claude }
+  plan_model:   { type: string,     required: false }  # the strongest one you pay for
+  build_model:  { type: string,     required: false }  # the cheap coder
+  review_model: { type: string,     required: false }  # same as build_model for S/M; stronger for L epics
+  # Where the harness install left the build-auto step files; only the review reads them (L tier).
+  skill_dir:
+    type: path
+    required: false
+    default: /home/agent/.claude/skills/bmad-build-auto
+
+steps:
+  - id: sync
+    uses: git.sync
+    gate: deterministic
+
+  # --- 1. plan ---------------------------------------------------------------------------------
+  - id: plan
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{plan_model}}"
+      prompt: |
+        You are the planner for exactly one story. Working directory: the repository root.
+        You write a spec. You do not write code. You do not ask questions.
+
+        FACTS
+          spec folder: {{spec_folder}}
+          story id:    {{story.id}}
+          story title: {{story.title}}
+
+        1. RESOLVE THE STORY
+           - Read {{spec_folder}}/stories.yaml and take the entry whose id is {{story.id}}:
+             its title, description, and `size` if the operator set one. Ignore every other
+             entry and every checkpoint field.
+           - Read {{spec_folder}}/SPEC.md and the files its `companions:` frontmatter lists.
+           - Read every existing {{spec_folder}}/stories/*.md; carry forward only what bears
+             on this story (Code Map entries, Design Notes, deferred items).
+           - Read the repository's AGENTS.md (root and the component you will touch) and any
+             project-context.md. Their rules bind the implementer; the spec must obey them.
+           - Look for {{spec_folder}}/stories/{{story.id}}-*.md. None: this is the first
+             dispatch. Exactly one: resume it. More than one: BLOCKED, `ambiguous story
+             file match`.
+           - Run `git status --porcelain`. A dirty tree is BLOCKED, `dirty working tree`.
+
+        2. INVESTIGATE, NARROWLY
+           Read the code the story touches: the files, the symbols, the tests that pin the
+           current behaviour, the existing test doubles you must reuse. Stop when you can
+           name every file the implementer will create or edit. Do not survey the codebase.
+
+        3. WRITE THE SPEC at {{spec_folder}}/stories/{{story.id}}-<kebab-slug-from-title>.md
+           Use this shape, no other sections:
+
+             ---
+             status: ready-for-dev
+             size: S | M | L
+             story: {{story.id}}
+             date: <today, ISO>
+             context: [<every file the implementer must read first, repo-relative>]
+             ---
+             # {{story.title}}
+
+             <intent-contract>
+             ## Intent
+             <the story's title and description, verbatim, then at most five sentences of
+              what "done" observably means. Nothing here may be changed later.>
+             ## Acceptance criteria
+             - AC1: Given … When … Then …   (observable at the outermost surface the story names)
+             - AC2: …
+             </intent-contract>
+
+             ## Code Map
+             - `path/to/file.py:120` — what is there now, what changes, why
+             - `tests/unit/x/test_y.py` — reuse fake `Z` from tests/unit/fakes/; add cases …
+             (one line per file; every line names a file and an action)
+
+             ## Tasks
+             1. <file> — <action>  (ordered by dependency; tests before the code they pin)
+             2. …
+
+             ## Verification
+             - `<exact command>` — must pass
+             (the repository's own unit-test command at least; anything the story adds)
+
+             ## Review focus
+             - <the two or three places a reviewer must look, and why>
+
+             ## Do not touch
+             - <files the story must leave alone; existing tests unless the story declares a
+                behaviour change — if it does, name the test and the assertion here>
+
+           SIZE RULE — choose the first that matches, and write one line under `## Review
+           focus` justifying it:
+             L  if the change touches any of: a migration, an API contract or schema, a status
+                machine, auth or secrets, concurrency or durability, more than 8 files, or
+                the story holds more than one independently shippable goal;
+             S  if it touches at most 3 non-test files, roughly 80 changed lines or fewer,
+                adds no public surface (route, schema field, env var, status token, CLI flag),
+                and every acceptance criterion is observable by an existing test command;
+             M  otherwise.
+           If stories.yaml carried a `size`, keep it unless your rule says L — L always wins.
+
+        4. CHECK, ONCE
+           Every task names a file. Every AC is Given/When/Then. No "TBD", no open question.
+           If two readings of the intent lead to different code and nothing in SPEC.md or the
+           story chooses between them, do not choose: BLOCKED, `intent gap: <the question>`.
+
+        5. WRITE THE MARKER LAST, overwriting whatever is there:
+             {{spec_folder}}/stories/.auto/{{story.id}}-01-plan.md
+           ---
+           status: done
+           ---
+           # Step 1 — plan
+           ## Auto Run Result
+           Status: done
+           Spec file: <path>
+           Size: <S|M|L>
+
+           BLOCKED means: the same marker with `status: blocked` and one line
+           `Blocking condition: <text>` under `## Auto Run Result`. Blocked is a correct
+           outcome. Never write `done` for a spec you did not finish.
+
+           If the dispatch text told you to stop for a spec review, write `status:
+           ready-for-dev` in the marker instead of `done`. When you are resumed with the
+           operator's answer, apply it to the spec, then rewrite the marker with `done`.
+
+        Do not modify SPEC.md, stories.yaml, epics.yaml, any AGENTS.md, or any test file.
+        Do not run the test suite. Do not commit.
+    prompts:
+      halt: "Stop for a spec review after planning: write the marker with status ready-for-dev."
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    expect:
+      files: ["{{spec_folder}}/stories/.auto/{{story.id}}-01-plan.md"]
+      success: [done]
+      blocked: [blocked]
+      checkpoint: [ready-for-dev]
+    retry:
+      max: 1
+      prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-01-plan.md. Finish the spec and write that marker last, with status done or status blocked."
+      resume_session: true
+    pause_when: "story.spec_checkpoint"
+    timeout_min: 30
+    gate: liveness
+
+  # --- 2. implement ----------------------------------------------------------------------------
+  - id: implement
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{build_model}}"
+      prompt: |
+        You are the implementer for exactly one story. Working directory: the repository root.
+        The spec is your only source of truth. You do not redesign it. You do not ask questions.
+
+        FACTS
+          spec folder: {{spec_folder}}
+          story id:    {{story.id}}
+
+        1. READ
+           - The spec: the single file matching {{spec_folder}}/stories/{{story.id}}-*.md.
+             None or several: BLOCKED (step 5), `spec file missing or ambiguous`.
+           - Every file in its frontmatter `context:` list, fully.
+           - The repository's AGENTS.md rules that apply to the files you will touch.
+
+        2. BASELINE
+           Write the current commit into the spec's frontmatter as `baseline_revision: <full
+           git rev-parse HEAD>` and set `status: in-progress`. Do this before any other edit.
+
+        3. IMPLEMENT — in the spec's `## Tasks` order
+           - Tests first: write or extend the tests the tasks name, run them, see them fail.
+           - Then the code, until they pass.
+           - Reuse what the Code Map points at. Do not create a new test double for a port
+             that already has a fake. Do not refactor beyond the tasks.
+           - Files under `## Do not touch` stay untouched. An existing test may change only
+             if the spec's `## Do not touch` names it and the behaviour change behind it.
+           - If a task cannot be done as written because the spec is wrong about the code,
+             stop and go to step 5 BLOCKED, `spec contradicts code: <file, one sentence>`.
+             Do not improvise a different design.
+
+        4. VERIFY
+           Run every command under the spec's `## Verification`. All must pass. If one fails
+           and you cannot fix it inside the spec, BLOCKED, `verification failed: <command>`.
+           Then in the spec: tick the done tasks, append under `## Auto Run Result` the list
+           of files you changed (one line each) and the verification commands with their
+           outcome, and set `status: in-review`.
+
+        5. WRITE THE MARKER LAST, overwriting whatever is there:
+             {{spec_folder}}/stories/.auto/{{story.id}}-02-implement.md
+           ---
+           status: done
+           ---
+           # Step 2 — implement
+           ## Auto Run Result
+           Status: done
+           Spec file: <path>
+           Files changed: <count>
+           Verification: <each command → passed>
+
+           BLOCKED means the same marker with `status: blocked` and one line
+           `Blocking condition: <text>`. Never write `done` with a failing verification.
+
+        Do not modify SPEC.md, stories.yaml, epics.yaml, or any AGENTS.md. Do not commit.
+        Do not review your own work: the next session does that.
+    # Sent in front of the prompt above, only when the `verify` row below sent this row back
+    # (`prompts.redispatch`, FR-10). The orchestrator fills {command}, {code} and {tail} from
+    # the failed row; it also appends the same facts to this row's marker under
+    # `## Verify Failure` and sets the marker to `in-progress`.
+    prompts:
+      redispatch: |
+        YOU ARE BACK IN THIS STEP BECAUSE VERIFICATION FAILED. A previous session of this
+        step implemented the story and reported done; the orchestrator then ran the
+        repository's unit-test command and it failed:
+          Command:   {command}
+          Exit code: {code}
+          Output tail:
+        {tail}
+        You have no memory of that session. The working tree holds its uncommitted changes,
+        and the spec's `## Auto Run Result` lists what it changed and why. Your job now is
+        that failure, nothing else: run the exact command above and read the full output;
+        classify every failing test before touching anything (a regression this story's
+        change caused → fix the code; a test that pins behaviour the spec's `## Do not touch`
+        explicitly declares changed → revise exactly those assertions and assert the new
+        behaviour at least as thoroughly; anything else → report blocked with the test's
+        name); re-run until it exits zero; then continue with the instructions below from
+        step 4, and write `Verification: {command} → passed after fix: <one line per fix>`
+        in the marker. Never delete, skip or weaken a test to make the command green. The
+        orchestrator sends this row back at most twice; if the same failure returns, be
+        explicit in the marker about what you tried.
+    expect:
+      files: ["{{spec_folder}}/stories/.auto/{{story.id}}-02-implement.md"]
+      success: [done]
+      blocked: [blocked]
+    retry:
+      max: 1
+      prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-02-implement.md. Finish the implementation, run the spec's Verification commands, and write that marker last, with status done or status blocked."
+      resume_session: true
+    timeout_min: 90
+    gate: liveness
+
+  # --- 3. verify (deterministic; a failure sends the implementer back to its own breakage) ----
+  - id: verify
+    run: "{{repository.unit_test_command}}"
+    on_fail: { redispatch: implement, max: 2 }
+    timeout_min: 30
+    gate: deterministic
+
+  # --- 4. sized review -------------------------------------------------------------------------
+  - id: review
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{review_model}}"
+      prompt: |
+        You are the reviewer for exactly one story. Working directory: the repository root.
+        The tree is green: the unit gate ran and passed before you were started. Your job is
+        to find what the tests did not, at a cost proportional to the change. You do not ask
+        questions.
+
+        FACTS
+          spec folder: {{spec_folder}}
+          story id:    {{story.id}}
+          step files:  {{skill_dir}}   (only the L tier reads them)
+
+        1. SIZE THE DIFF BEFORE YOU READ IT
+           - Read the spec (the single file matching {{spec_folder}}/stories/{{story.id}}-*.md):
+             its `size`, `baseline_revision`, the `<intent-contract>`, and `## Review focus`.
+           - Run `git diff --stat <baseline_revision>` and `git status --porcelain` for
+             untracked files. Count non-test files and changed lines.
+           - Apply the same rule the planner used: L if a migration, API contract or schema,
+             status machine, auth or secrets, concurrency, or more than 8 files is touched;
+             S if at most 3 non-test files, roughly 80 lines or fewer, no new public surface;
+             M otherwise. If your tier is higher than the spec's `size`, use yours and say so
+             in the triage log. Never go lower than the spec's.
+           - Set the spec's `status: in-review`.
+
+        2. REVIEW AT THAT TIER — and no deeper
+           Do not pad. Zero findings after a real check is a valid result. Report only what
+           you would fix or block on; do not list style preferences.
+
+           S — one pass, you alone, roughly the time it takes to read the diff twice:
+             a. For each acceptance criterion, name the test that observes it and confirm it
+                ran and passed in the implementer's verification output. No test → finding.
+             b. Read the full diff once for correctness against the intent-contract.
+             c. Check `## Do not touch` was honoured.
+
+           M — three passes, you alone, in this order, collecting findings before triage:
+             a. correctness: does the diff do what the ACs say, and does it break anything
+                the touched code's callers rely on (grep the callers);
+             b. edge cases on every new or changed path: empty, missing, duplicate, boundary,
+                concurrent — only where the code can actually receive them;
+             c. verification gaps: an AC or matrix row with no test, a test that asserts a
+                proxy instead of the surface, a test that did not run.
+
+           L — the full method. Read {{skill_dir}}/step-04-review.md and run its Review and
+             Classify sections. Where it launches reviewer subagents, launch them if this
+             harness has subagents; otherwise run the lenses yourself from
+             {{skill_dir}}/review-prompts/. Ignore its "at least ten issues" instruction;
+             the number of findings is whatever the diff holds.
+
+        3. TRIAGE — every finding into exactly one of
+             patch     — caused by this change, fixable in place without a design decision
+             bad_spec  — caused by this change; the spec should have prevented it
+             intent_gap— the intent-contract itself is ambiguous or incomplete
+             defer     — pre-existing, real, not this story's
+             reject    — noise
+           Severity by consequence for the software's user: low / medium / high.
+
+        4. ACT
+           - patch: fix it. Then re-run every command under the spec's `## Verification`; if
+             one fails and you cannot fix it, BLOCKED, `patch verification failed`.
+           - bad_spec, S or M tier: do NOT revert or re-implement. BLOCKED, `bad_spec: <one
+             sentence naming the spec section and the defect>`. The operator decides whether
+             to re-derive.
+           - bad_spec, L tier, first time only: follow step-04's bad_spec branch (amend the
+             spec outside the intent-contract, log it, re-implement, re-review at M tier).
+             A second bad_spec is BLOCKED as above.
+           - intent_gap: BLOCKED, `intent gap: <the question>`. Leave the code in place.
+           - defer: append to the spec frontmatter `deferred:` list (summary, evidence,
+             location, severity). reject: drop.
+
+        5. RECORD in the spec
+           Append under `## Review Triage Log`:
+             ### <date> — Review pass (tier <S|M|L>, spec said <size>)
+             - patch: N (high a, medium b, low c)   - bad_spec: N   - intent_gap: N
+             - defer: N   - reject: N
+             - addressed_findings:
+               - `[sev]` `[patch]` <what and where>   (or `- none`)
+           Under `## Auto Run Result` add: files patched, verification commands re-run with
+           outcomes, residual risks. Set `followup_review_recommended: true` if any patched
+           finding was high, or 3×medium + low ≥ 5; else false. Set `status: done`.
+
+        6. WRITE THE MARKER LAST, overwriting whatever is there:
+             {{spec_folder}}/stories/.auto/{{story.id}}-03-review.md
+           ---
+           status: done
+           ---
+           # Step 3 — review
+           ## Auto Run Result
+           Status: done
+           Tier: <S|M|L>
+           Findings: patch N · defer N · reject N
+           Verification: <each command → passed>
+
+           BLOCKED means the same marker with `status: blocked` and one line
+           `Blocking condition: <text>`. Never write `done` with an unpatched high finding
+           or a failing verification command.
+
+        Existing test files are protected: change one only when the spec's `## Do not touch`
+        declares the behaviour change that requires it. Do not modify SPEC.md, stories.yaml,
+        epics.yaml, or any AGENTS.md. Do not commit; the orchestrator commits after you.
+    expect:
+      files: ["{{spec_folder}}/stories/.auto/{{story.id}}-03-review.md"]
+      success: [done]
+      blocked: [blocked]
+    retry:
+      max: 1
+      prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-03-review.md. Finish the review at the tier you sized, re-run the spec's Verification commands, and write that marker last, with status done or status blocked."
+      resume_session: true
+    timeout_min: 60
+    gate: liveness
+
+  - id: commit-guard
+    uses: git.commit
+    with: { message: "story {{story.id}}: {{story.title}} (orchestrator)" }
+    gate: deterministic
