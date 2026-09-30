@@ -74,6 +74,7 @@ export TEMPLATES_DIR="$root/templates"
 # the probe adapters shell `<HARNESS_SCRIPTS_DIR>/<name>.sh probe`; without this they would
 # point at the image's `/app/scripts/harness`, which a host process does not have
 export HARNESS_SCRIPTS_DIR="$root/scripts/harness"
+export KIT_DIR="$root/deploy/kit"
 mkdir -p "$WORK_DIR"
 
 refuse_if_bound() {

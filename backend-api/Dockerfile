@@ -138,6 +138,16 @@ COPY --chown=agent:agent fixtures /app/fixtures
 # in _common.sh. Repository-root, like `templates` and `fixtures` above.
 COPY --chown=agent:agent ia-agents-skills /app/ia-agents-skills
 
+# The client install, entire (agent-delivery-kit plan §1): `docker run --rm <image> kit
+# bootstrap | tar x` hands a machine `install.sh`, the compose file, the env contract,
+# llm-platform/ and kit/ straight out of the image it will run, and `GET /api/v1/kit/*`
+# serves kit/ to project repositories (`KIT_DIR=/app/deploy/kit`). `.dockerignore` keeps
+# every filled `.env` and `llm-platform/backups/` out of the context (hard rule 5). `VERSION`
+# sits at /app as it sits at the repository root: `/api/v1/version` reads it there, and the
+# bootstrap archive carries it so install.sh knows which tag it came from.
+COPY --chown=agent:agent deploy /app/deploy
+COPY --chown=agent:agent VERSION /app/VERSION
+
 WORKDIR /app
 
 # Each harness installs its CLI at its pinned version and copies the BMAD skill stubs into

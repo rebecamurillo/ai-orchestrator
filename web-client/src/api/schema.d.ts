@@ -81,6 +81,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kit/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The kit as a tar.gz — what the installer fetches when it was piped */
+        get: operations["read_archive_api_v1_kit_archive_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kit/install.sh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The kit installer, to pipe into bash from a project repository */
+        get: operations["read_install_script_api_v1_kit_install_sh_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ping": {
         parameters: {
             query?: never;
@@ -689,6 +723,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What this instance is */
+        get: operations["read_version_api_v1_version_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -1110,6 +1161,18 @@ export interface components {
             name: string;
             /** Version Pin */
             version_pin: string;
+        };
+        /**
+         * HarnessVersions
+         * @description The CLI versions baked into this image, one per harness.
+         */
+        HarnessVersions: {
+            /** Claude */
+            claude: string;
+            /** Codex */
+            codex: string;
+            /** Opencode */
+            opencode: string;
         };
         /** HeaderMetaOut */
         HeaderMetaOut: {
@@ -2345,6 +2408,22 @@ export interface components {
             /** Unvalidated */
             unvalidated: string[];
         };
+        /**
+         * VersionOut
+         * @description The `/api/v1/version` payload (AD-3).
+         *
+         *     `kit_version` is what `GET /kit/archive` would hand out — `null` when this instance
+         *     ships no kit, which only a source-tree run does.
+         */
+        VersionOut: {
+            /** App Version */
+            app_version: string;
+            /** Bmad Version */
+            bmad_version: string;
+            harness_versions: components["schemas"]["HarnessVersions"];
+            /** Kit Version */
+            kit_version: string | null;
+        };
         /** WorktreeOut */
         WorktreeOut: {
             /** Branch */
@@ -2557,6 +2636,87 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProblemDetail"];
                     "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_archive_api_v1_kit_archive_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/gzip": string;
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description This instance ships no client kit (KIT_DIR holds no install.sh). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_install_script_api_v1_kit_install_sh_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                    "text/x-shellscript": string;
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                    "text/plain": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description This instance ships no client kit (KIT_DIR holds no install.sh). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                    "text/plain": components["schemas"]["ProblemDetail"];
                 };
             };
         };
@@ -4595,6 +4755,36 @@ export interface operations {
             };
             /** @description The stored Template no longer validates; `detail` names the first line and reason. */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_version_api_v1_version_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,6 +1,6 @@
 [project]
 name = "orchestrator"
-version = "0.1.0"
+version = "1.0.0-beta"
 description = "ai-orchestrator backend-api — plans, executes, and parks BMAD dev-loop Runs"
 requires-python = "==3.14.*"
 dependencies = [

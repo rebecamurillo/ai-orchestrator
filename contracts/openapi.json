@@ -1257,6 +1257,30 @@
         "title": "HarnessOut",
         "type": "object"
       },
+      "HarnessVersions": {
+        "description": "The CLI versions baked into this image, one per harness.",
+        "properties": {
+          "claude": {
+            "title": "Claude",
+            "type": "string"
+          },
+          "codex": {
+            "title": "Codex",
+            "type": "string"
+          },
+          "opencode": {
+            "title": "Opencode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claude",
+          "codex",
+          "opencode"
+        ],
+        "title": "HarnessVersions",
+        "type": "object"
+      },
       "HeaderMetaOut": {
         "properties": {
           "base_branch": {
@@ -4586,6 +4610,41 @@
         "title": "ValidateOut",
         "type": "object"
       },
+      "VersionOut": {
+        "description": "The `/api/v1/version` payload (AD-3).\n\n`kit_version` is what `GET /kit/archive` would hand out \u2014 `null` when this instance\nships no kit, which only a source-tree run does.",
+        "properties": {
+          "app_version": {
+            "title": "App Version",
+            "type": "string"
+          },
+          "bmad_version": {
+            "title": "Bmad Version",
+            "type": "string"
+          },
+          "harness_versions": {
+            "$ref": "#/components/schemas/HarnessVersions"
+          },
+          "kit_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kit Version"
+          }
+        },
+        "required": [
+          "app_version",
+          "kit_version",
+          "bmad_version",
+          "harness_versions"
+        ],
+        "title": "VersionOut",
+        "type": "object"
+      },
       "WorktreeOut": {
         "properties": {
           "branch": {
@@ -4625,7 +4684,7 @@
   },
   "info": {
     "title": "ai-orchestrator backend-api",
-    "version": "0.1.0"
+    "version": "1.0.0-beta"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -4932,6 +4991,124 @@
         "summary": "Dispatch a readiness Run for one harness",
         "tags": [
           "harnesses"
+        ]
+      }
+    },
+    "/api/v1/kit/archive": {
+      "get": {
+        "operationId": "read_archive_api_v1_kit_archive_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/gzip": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "This instance ships no client kit (KIT_DIR holds no install.sh)."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The kit as a tar.gz \u2014 what the installer fetches when it was piped",
+        "tags": [
+          "kit"
+        ]
+      }
+    },
+    "/api/v1/kit/install.sh": {
+      "get": {
+        "operationId": "read_install_script_api_v1_kit_install_sh_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/x-shellscript": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "This instance ships no client kit (KIT_DIR holds no install.sh)."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The kit installer, to pipe into bash from a project repository",
+        "tags": [
+          "kit"
         ]
       }
     },
@@ -8377,6 +8554,47 @@
         "summary": "Read one Template Version's graph",
         "tags": [
           "templates"
+        ]
+      }
+    },
+    "/api/v1/version": {
+      "get": {
+        "operationId": "read_version_api_v1_version_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "What this instance is",
+        "tags": [
+          "version"
         ]
       }
     },

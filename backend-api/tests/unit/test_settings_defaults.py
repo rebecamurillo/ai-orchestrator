@@ -72,6 +72,7 @@ AMBIGUOUS_WHEN_BLANK = (
     ("AGENT_HOME", "agent_home"),
     ("TEMPLATES_DIR", "templates_dir"),
     ("HARNESS_SCRIPTS_DIR", "harness_scripts_dir"),
+    ("KIT_DIR", "kit_dir"),
     ("LOG_LEVEL", "log_level"),
     ("LOG_PROMPT_CONTENT_DEFAULT", "log_prompt_content_default"),
     ("CLAUDE_SUBSCRIPTION_AUTH", "claude_subscription_auth"),
@@ -150,6 +151,7 @@ def test_the_container_paths_are_what_the_image_ships(minimal_env: dict[str, str
     assert settings.agent_home == Path("/home/agent")
     assert settings.templates_dir == Path("/app/templates")
     assert settings.harness_scripts_dir == Path("/app/scripts/harness")
+    assert settings.kit_dir == Path("/app/deploy/kit")
 
 
 # ── the MUST-HAVE tier still refuses ─────────────────────────────────────────

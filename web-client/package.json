@@ -1,6 +1,6 @@
 {
   "name": "web-client",
-  "version": "0.1.0",
+  "version": "1.0.0-beta",
   "private": true,
   "type": "module",
   "description": "ai-orchestrator web-client — the only origin the Operator's browser talks to (AD-1)",

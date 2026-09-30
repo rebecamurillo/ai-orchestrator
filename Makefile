@@ -36,7 +36,7 @@ doctor:
 	./scripts/install.sh --check
 
 ## lint — ruff · mypy (strict on domain/ and application/) · import-linter · env-contract check
-##        · test pairs · contract drift · eslint · prettier --check · tsc --noEmit · astro check
+##        · test pairs · version manifests · contract drift · eslint · prettier --check · tsc --noEmit · astro check
 ## the web-client half of the test-pair check runs inside `pnpm lint`
 lint:
 	$(PYTHON_RUN) ruff check . ../scripts
@@ -45,6 +45,7 @@ lint:
 	$(PYTHON_RUN) lint-imports
 	$(PYTHON_RUN) python ../scripts/check_env_contract.py
 	$(PYTHON) scripts/check_test_pairs.py
+	$(PYTHON) scripts/check_version.py
 	$(NODE_RUN) gen:api -- --check
 	$(NODE_RUN) lint
 

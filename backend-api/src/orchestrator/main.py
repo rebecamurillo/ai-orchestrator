@@ -40,7 +40,6 @@ import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from functools import cache
-from importlib.metadata import PackageNotFoundError, version
 
 import structlog
 import uvicorn
@@ -58,6 +57,7 @@ from orchestrator.api.routers import (
     harness_readiness,
     harnesses,
     history,
+    kit,
     ping,
     projects,
     queue,
@@ -73,7 +73,9 @@ from orchestrator.api.routers import (
     step_detail,
     templates,
     trajectories,
+    version,
 )
+from orchestrator.api.routers.version import app_version
 from orchestrator.application.use_cases.templates import SeedResult, TemplatePorts, seed_shipped
 from orchestrator.domain.ports.crypto import Crypto
 from orchestrator.domain.ports.engine import WorkflowEngine
@@ -121,7 +123,6 @@ log = structlog.get_logger(__name__)
 API_PREFIX = "/api/v1"
 HTTP_UNAUTHORIZED = 401
 
-PACKAGE = "orchestrator"
 
 #: What FastAPI accepts as `lifespan`: a callable taking the app and yielding once.
 Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
@@ -129,14 +130,6 @@ Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 #: How a request reaches a database session, and how it reaches the instance key.
 SessionFactory = Callable[[], Session]
 CryptoFactory = Callable[[], Crypto]
-
-
-def package_version() -> str:
-    """The distribution version, or a marker when running from an uninstalled source tree."""
-    try:
-        return version(PACKAGE)
-    except PackageNotFoundError:  # pragma: no cover — an installed package is the norm
-        return "0.0.0+source"
 
 
 class Health(BaseModel):
@@ -267,7 +260,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
     """
     app = FastAPI(
         title="ai-orchestrator backend-api",
-        version=package_version(),
+        version=app_version(),
         lifespan=lifespan,
     )
     # the settings object dependencies read; nothing else re-reads the environment (AD-20)
@@ -281,11 +274,18 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
 
     @app.get("/healthz", tags=["health"], response_model=Health)
     def healthz() -> Health:
-        return Health(status="ok", version=package_version())
+        return Health(status="ok", version=app_version())
 
     # one dependency for the whole versioned surface: a feature router added later
     # inherits the bearer check — and its declared 401 — instead of having to remember them
-    for router in (ping.router, projects.router, repositories.router, clone_check.router):
+    for router in (
+        ping.router,
+        version.router,
+        kit.router,
+        projects.router,
+        repositories.router,
+        clone_check.router,
+    ):
         _mount(app, router)
     _mount(app, repository_init.router)
     # before `templates.router`, and that is load-bearing: Starlette matches in registration

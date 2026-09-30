@@ -1,7 +1,7 @@
 {
   "name": "orchestrator",
   "description": "Drive an ai-orchestrator instance over HTTP: create projects, register repositories, launch BMAD workflow runs, monitor progress, and respond to checkpoints.",
-  "version": "0.1.0",
+  "version": "1.0.0-beta",
   "author": {
     "name": "OptimAI Labs"
   }

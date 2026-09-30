@@ -8,6 +8,12 @@
 .env
 .env.*
 !.env.example
+# the same, at any depth: `deploy/` is copied into the image and holds a filled `.env`
+# on an operator machine, as does `deploy/llm-platform/`
+**/.env
+**/.env.*
+!**/.env.example
+deploy/llm-platform/backups
 
 # version control and the method's own trees
 .git
@@ -39,7 +45,6 @@ playwright-report
 
 # not part of either image
 web-client
-deploy
 contracts
 Makefile
 README.md

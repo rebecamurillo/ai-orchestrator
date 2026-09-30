@@ -304,6 +304,8 @@ class Settings(BaseSettings):
     #: `../templates` in development, `/app/templates` in the image; never validated
     #: absolute like `work_dir`/`agent_home` because the development value is relative.
     templates_dir: Path = Path("/app/templates")
+    #: The client kit `GET /api/v1/kit/*` serves (`../deploy/kit` in development); same rule.
+    kit_dir: Path = Path("/app/deploy/kit")
 
     # ── This process ─────────────────────────────────────────────────────────
     log_prompt_content_default: bool = False
