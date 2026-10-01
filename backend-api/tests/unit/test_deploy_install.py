@@ -120,7 +120,19 @@ def test_help_names_every_command() -> None:
     result = _run(INSTALL, "--help", cwd=DEPLOY_DIR)
 
     assert result.returncode == 0, result.stderr
-    for command in ("start", "stop", "status", "logs", "upgrade", "uninstall", "env"):
+    # `doctor`, `diagnose` and `harness` are additions (agent-delivery-kit plan §5, 2026-10-01)
+    for command in (
+        "start",
+        "stop",
+        "status",
+        "logs",
+        "upgrade",
+        "uninstall",
+        "env",
+        "doctor",
+        "diagnose",
+        "harness",
+    ):
         assert command in result.stdout, command
 
 

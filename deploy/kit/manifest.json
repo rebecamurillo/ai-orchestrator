@@ -1,4 +1,9 @@
 {
   "kit_version": "1.0.0-beta",
-  "skills": ["orchestrator"]
+  "skills": [
+    "orchestrator",
+    "orchestrator-admin",
+    "initiative-spec",
+    "initiative-run"
+  ]
 }

@@ -7,7 +7,11 @@
 #   GHCR_TOKEN=ghp_… ANTHROPIC_API_KEY=sk-ant-… ./install.sh --yes --with-platform
 #
 #   ./install.sh start | stop | status | logs     # day-2 operations on this stack
-#   ./install.sh upgrade --tag v0.2.0             # backup, retag, pull, restart
+#   ./install.sh doctor                           # read-only checks; non-zero on any `fail`
+#   ./install.sh diagnose                         # a redacted report to attach to a bug report
+#   ./install.sh harness claude --subscription    # Claude Max/Pro auth instead of an API key
+#   ./install.sh harness claude --api-key         # back to the gateway's own API key
+#   ./install.sh upgrade --tag v0.2.0             # pre-flight, backup, retag, pull, restart
 #   ./install.sh uninstall                        # stop and DELETE the data, after confirmation
 #   ./install.sh env --tag v0.1.0                 # only write .env (what `install` does first)
 #
@@ -44,6 +48,10 @@ yes=0
 with_platform=""     # "" ask, 1 yes, 0 no
 tag_arg=""
 command=""
+harness_arg=""       # the harness `harness` acts on
+subscription=""      # "" neither flag, 1 --subscription, 0 --api-key
+scratch=""           # where an API answer is parked while it is read; removed on exit
+trap '[[ -z "$scratch" ]] || rm -rf "$scratch"' EXIT
 
 # ── output ───────────────────────────────────────────────────────────────────
 say()  { printf '%s\n' "$*"; }
@@ -52,20 +60,25 @@ warn() { printf 'warning: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
-	sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+	sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 # ── arguments ────────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		install|start|stop|status|logs|upgrade|uninstall|env) command="$1" ;;
+		doctor|diagnose|harness) command="$1" ;;
 		--tag) [[ $# -ge 2 ]] || die "--tag needs a value"; tag_arg="$2"; shift ;;
 		--tag=*) tag_arg="${1#--tag=}" ;;
 		--yes|-y) yes=1 ;;
 		--with-platform) with_platform=1 ;;
 		--no-platform) with_platform=0 ;;
+		--subscription) subscription=1 ;;
+		--api-key) subscription=0 ;;
 		-h|--help) usage; exit 0 ;;
-		*) die "unknown argument: $1 (try --help)" ;;
+		# `harness` takes the harness name as a bare word; nothing else here does
+		*) [[ "$command" == "harness" && -z "$harness_arg" ]] || die "unknown argument: $1 (try --help)"
+		   harness_arg="$1" ;;
 	esac
 	shift
 done
@@ -147,6 +160,48 @@ platform_compose() {
 	local project; project="$(platform_project)"; [[ "$project" != "-host" ]] || project="aio-host"
 	docker compose --project-name "$project" --project-directory "$platform_dir" -f "${platform_dir}/docker-compose.yml" --env-file "$platform_env" "$@"
 }
+
+# ── reading the API, and reading JSON without jq ─────────────────────────────
+# A client machine has curl and nothing else; every answer below is parsed with sed over a
+# flattened copy of the body. Nothing here prints the bearer: `api_get` passes it to curl and
+# the value never reaches stdout, a log line or a report.
+
+api_base() { printf 'http://127.0.0.1:%s' "$(get_var "$env_file" BACKEND_API_PORT)"; }
+
+api_get() {   # api_get PATH OUTFILE → the status code, `000` when nothing answered
+	local code bearer
+	bearer="$(get_var "$env_file" ORCHESTRATOR_TOKEN)"
+	code="$(curl -sS -m 10 -H "Authorization: Bearer ${bearer}" -o "$2" -w '%{http_code}' \
+		"$(api_base)$1" 2>/dev/null || true)"
+	printf '%s' "${code:-000}"
+}
+
+# Newlines and tabs go; spaces stay, because a `failing_check` is a sentence a human reads.
+# Every pattern below therefore tolerates the whitespace a pretty-printing server would add.
+json_flat() { tr -d '\n\t' < "$1"; }
+
+# the string value of a top-level key, quotes stripped; empty for a `null` or an absent key
+json_string() {
+	json_flat "$1" | tr ',' '\n' |
+		sed -n 's/^{* *"'"$2"'" *: *"\([^"]*\)".*/\1/p' | head -1
+}
+
+# `{"harness_versions":{…}}` rendered `claude:1.2.3 codex:…` — one nested object, read whole
+json_object() {
+	json_flat "$1" | sed -n 's/.*"'"$2"'" *: *{\([^}]*\)}.*/\1/p' | tr -d '" ' | tr ',' ' '
+}
+
+# One item of `{"items":[{…},{…}]}` per line. Split on each item's first key rather than on
+# `},{`: the rows carry nested objects of their own (`lines[]`), and `},{` is inside them too.
+json_items() {   # json_items FILE FIRSTKEY
+	json_flat "$1" | awk -v key="$2" '{ gsub("\\{ *\"" key "\" *: *\"", "\n&"); print }' |
+		grep "^{ *\"$2\""
+}
+
+# One field out of one such line: item_string "$row" enabled. The keys read below are
+# single-valued within a row, so the greedy match cannot reach past the row it was given.
+item_string() { printf '%s' "$1" | sed -n 's/.*"'"$2"'" *: *"\([^"]*\)".*/\1/p' | head -1; }
+item_word()   { printf '%s' "$1" | sed -n 's/.*"'"$2"'" *: *\([A-Za-z0-9.]*\).*/\1/p' | head -1; }
 
 # ── 1. prerequisites ─────────────────────────────────────────────────────────
 check_tools() {
@@ -315,6 +370,282 @@ print_access() {
 	say "  Next: log in, create a Project, register a Repository (README.md)."
 }
 
+# ── doctor: questions only ───────────────────────────────────────────────────
+# Nothing here starts, stops, pulls or edits anything (hard rule 9) — every check is a read.
+# Each `fail`/`warn` line ends with the command or the variable that fixes it, and no check
+# ever prints a value `.env` keeps secret.
+
+doctor_fails=0
+doctor_warns=0
+
+report() {   # report ok|warn|fail NAME TEXT
+	case "$1" in
+		fail) doctor_fails=$((doctor_fails + 1)) ;;
+		warn) doctor_warns=$((doctor_warns + 1)) ;;
+	esac
+	printf '%-4s  %-9s  %s\n' "$1" "$2" "$3"
+}
+
+file_mode() {   # GNU `stat -c` first; BSD rejects it and answers `-f %Lp` instead
+	stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null || printf '?'
+}
+
+doctor_docker() {
+	if ! command -v docker >/dev/null 2>&1; then
+		report fail docker "not installed — https://docs.docker.com/get-docker/"
+		return 1
+	fi
+	if ! docker compose version >/dev/null 2>&1; then
+		report fail docker "compose v2 is missing — install the docker-compose-plugin package"
+		return 1
+	fi
+	if ! docker info >/dev/null 2>&1; then
+		report fail docker "the daemon is not answering — start Docker, then ./install.sh doctor"
+		return 1
+	fi
+	report ok docker "$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo '?'), compose $(docker compose version --short)"
+}
+
+doctor_env() {
+	local mode missing="" name
+	if [[ ! -f "$env_file" ]]; then
+		report fail env ".env is missing beside this script — run ./install.sh"
+		return 1
+	fi
+	mode="$(file_mode "$env_file")"
+	if [[ "$mode" == "600" ]]; then
+		report ok env ".env present, mode 600"
+	else
+		report warn env ".env is mode ${mode}; it holds every secret of this stack — chmod 600 ${env_file}"
+	fi
+	for name in IMAGE_TAG ORCHESTRATOR_TOKEN ORCHESTRATOR_SESSION_SECRET \
+		ORCHESTRATOR_SECRET_KEY POSTGRES_PASSWORD DATABASE_URL GITHUB_TOKEN; do
+		if is_placeholder "$(get_var "$env_file" "$name")"; then missing="${missing}${name} "; fi
+	done
+	if [[ -n "$missing" ]]; then
+		report fail env "still blank or change-me: ${missing}— set each in ${env_file}"
+	else
+		report ok env "every REQUIRED variable is set"
+	fi
+}
+
+doctor_images() {
+	local tag image missing="" config
+	tag="$(get_var "$env_file" IMAGE_TAG)"
+	if is_placeholder "$tag"; then
+		report fail image "IMAGE_TAG is not set — put the release tag you mean to run in ${env_file}"
+	else
+		for image in backend-api web-client; do
+			if ! docker image inspect "ghcr.io/optimai-labs/ai-orchestrator/${image}:${tag}" \
+				>/dev/null 2>&1; then missing="${missing}${image} "; fi
+		done
+		if [[ -n "$missing" ]]; then
+			report warn image "${tag} not pulled yet (${missing}) — ./install.sh start"
+		else
+			report ok image "both images present locally at ${tag}"
+		fi
+	fi
+	# `docker login` cannot be probed without a pull, so this reports only whether an entry
+	# exists. The file holds the credential: it is grepped, never read out or copied.
+	config="${DOCKER_CONFIG:-${HOME}/.docker}/config.json"
+	if [[ -f "$config" ]] && grep -q 'ghcr.io' "$config" 2>/dev/null; then
+		report ok registry "ghcr.io has an entry in ${config} (only a pull proves it still works)"
+	else
+		report warn registry "no ghcr.io entry in ${config} — docker login ghcr.io -u <your-github-user>"
+	fi
+}
+
+doctor_ports() {
+	local running var port
+	running="$(compose ps --status running --services 2>/dev/null || true)"
+	for var in WEB_CLIENT_PORT BACKEND_API_PORT; do
+		port="$(get_var "$env_file" "$var")"
+		if [[ -z "$port" ]]; then
+			report fail port "${var} is blank in .env — compose publishes no port without it; copy the line from .env.example"
+		elif [[ -n "$running" ]]; then
+			report ok port "${port} (${var}) is this stack's own"
+		elif port_in_use "$port"; then
+			report fail port "${port} (${var}) is taken by something else and this stack is not running — move this stack with ${var} in .env; do not stop what is listening"
+		else
+			report ok port "${port} (${var}) free"
+		fi
+	done
+}
+
+doctor_api() {
+	local code body
+	body="${scratch}/ping.json"
+	code="$(curl -sS -m 10 -o /dev/null -w '%{http_code}' "$(api_base)/healthz" 2>/dev/null || true)"
+	if [[ "${code:-000}" != "200" ]]; then
+		report fail api "$(api_base)/healthz answered ${code:-000} — ./install.sh start, then ./install.sh logs"
+		return 1
+	fi
+	report ok api "$(api_base)/healthz answers"
+	code="$(api_get /api/v1/ping "$body")"
+	case "$code" in
+		200) report ok token "/api/v1/ping accepts the ORCHESTRATOR_TOKEN in .env" ;;
+		401|403) report fail token "/api/v1/ping refused the token in .env (${code}) — the running containers hold an older one; ./install.sh start re-reads .env" ;;
+		*) report fail token "/api/v1/ping answered ${code} — ./install.sh logs" ;;
+	esac
+}
+
+doctor_version() {
+	local body code app tag shipped
+	body="${scratch}/version.json"
+	code="$(api_get /api/v1/version "$body")"
+	if [[ "$code" != "200" ]]; then
+		report warn version "/api/v1/version answered ${code} — an instance older than the route; ./install.sh upgrade --tag <newer>"
+		return 0
+	fi
+	app="$(json_string "$body" app_version)"
+	tag="$(get_var "$env_file" IMAGE_TAG)"
+	shipped="absent"
+	if [[ -f "${here}/VERSION" ]]; then shipped="$(tr -d '[:space:]' < "${here}/VERSION")"; fi
+	report ok version "running ${app:-unnamed}; IMAGE_TAG ${tag}; VERSION ${shipped}"
+	if [[ -n "$app" && "$app" != "$tag" ]]; then
+		report warn version "the instance runs ${app} but IMAGE_TAG says ${tag} — ./install.sh upgrade --tag ${tag}"
+	fi
+	if [[ "$shipped" != "absent" && -n "$app" && "$shipped" != "$app" ]]; then
+		report warn version "these files are ${shipped} and the instance is ${app} — ./install.sh upgrade --tag ${shipped}, or re-extract the bundle for ${app}"
+	fi
+	report ok pinned "bmad $(json_string "$body" bmad_version); harness CLIs $(json_object "$body" harness_versions)"
+}
+
+doctor_harnesses() {
+	local body code row name enabled failing any=""
+	body="${scratch}/harnesses.json"
+	code="$(api_get /api/v1/harnesses "$body")"
+	if [[ "$code" != "200" ]]; then
+		report warn harness "/api/v1/harnesses answered ${code} — ./install.sh logs"
+		return 0
+	fi
+	while IFS= read -r row; do
+		[[ -n "$row" ]] || continue
+		any=1
+		name="$(item_string "$row" name)"
+		enabled="$(item_word "$row" enabled)"
+		failing="$(item_string "$row" failing_check)"
+		if [[ "$enabled" == "true" ]]; then
+			report ok harness "${name}: enabled"
+		else
+			report warn harness "${name}: disabled — ${failing:-no readiness run yet}; re-run readiness from the web UI's Fleet page, or POST /api/v1/harnesses/${name}/readiness"
+		fi
+	done <<EOF
+$(json_items "$body" name)
+EOF
+	[[ -n "$any" ]] || report warn harness "/api/v1/harnesses returned no rows — ./install.sh logs"
+}
+
+doctor_platform() {
+	local running gateway
+	if [[ ! -f "$platform_env" ]]; then
+		report ok platform "not configured — each agent authenticates on its own, cost figures are provisional, and the local harness is unavailable; ./install.sh start --with-platform adds it"
+		return 0
+	fi
+	running="$(platform_compose ps --status running --services 2>/dev/null || true)"
+	if [[ -n "$running" ]]; then
+		report ok platform "configured and running: $(printf '%s' "$running" | tr '\n' ' ')"
+	else
+		report warn platform "configured but not running — ./install.sh start --with-platform"
+	fi
+	gateway="$(get_var "$env_file" LITELLM_BASE_URL)"
+	if [[ -n "$gateway" ]]; then
+		report ok gateway ".env points at ${gateway}"
+	else
+		report warn gateway "llm-platform/ is installed but LITELLM_BASE_URL is blank, which is the gateway's off switch — llm-platform/sync-env.sh ${env_file} fills it in"
+	fi
+}
+
+doctor_disk() {
+	local summary root used avail
+	summary="$(docker system df --format '{{.Type}} {{.Size}} reclaimable {{.Reclaimable}}' 2>/dev/null | tr '\n' ';' | sed 's/;$//' || true)"
+	root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
+	if [[ -n "$root" && -d "$root" ]]; then
+		used="$(df -P "$root" 2>/dev/null | awk 'NR==2 {print $5}' | tr -d '%')"
+		avail="$(df -h "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
+		if [[ -n "$used" && "$used" -ge 90 ]]; then
+			report warn disk "${root} is ${used}% full, ${avail} free — the work volume grows unbounded; docker image prune on superseded tags, and check WORKTREE_RETENTION_DAYS"
+		else
+			report ok disk "${root}: ${avail} free; ${summary}"
+		fi
+	else
+		report ok disk "the daemon's data root (${root:-unknown}) is inside its own VM, not a path on this machine; ${summary}"
+	fi
+}
+
+doctor_gc() {
+	local missing="" name
+	for name in WORKTREE_RETENTION_DAYS WORKTREE_GC_CRON CLONE_CHECK_CRON TERMINAL_POLL_CRON; do
+		if [[ -z "$(get_var "$env_file" "$name")" ]]; then missing="${missing}${name} "; fi
+	done
+	if [[ -n "$missing" ]]; then
+		report fail gc "blank in .env: ${missing}— backend-api refuses to start without them; copy each line from .env.example"
+	else
+		report ok gc "retention $(get_var "$env_file" WORKTREE_RETENTION_DAYS) days; worktree_gc $(get_var "$env_file" WORKTREE_GC_CRON); clone_check $(get_var "$env_file" CLONE_CHECK_CRON); terminal_poll $(get_var "$env_file" TERMINAL_POLL_CRON)"
+	fi
+}
+
+# ── diagnose: the report a bug report attaches ───────────────────────────────
+# Secrets are masked by default: a value is printed only when its NAME is one of the
+# non-secret kinds below, so a credential added to the contract later is masked without this
+# script changing. The logs go through a sed program built from this machine's own `.env`,
+# plus the shapes a provider token has wherever it came from.
+
+env_name_is_secret() {
+	case "$1" in
+		*TOKEN*|*KEY*|*SECRET*|*PASSWORD*|DATABASE_URL) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+env_name_is_public() {
+	case "$1" in
+		*PORT|*CRON|*VERSION|*_DAYS|*_SECONDS|*_DIR|*MODELS|*TEMPLATE|*TEMPLATES) return 0 ;;
+		IMAGE_TAG|COMPOSE_PROJECT_NAME|BIND_ADDRESS|BACKEND_API_URL|LOG_LEVEL) return 0 ;;
+		POSTGRES_USER|POSTGRES_DB|MAX_ACTIVE_RUNS|ORCH_TEST_MODE|AGENT_HOME) return 0 ;;
+		LITELLM_BASE_URL|LANGFUSE_BASE_URL|LANGFUSE_ENVIRONMENT|LITELLM_SPEND_MATCH) return 0 ;;
+		READINESS_BUDGET_USD|LOG_PROMPT_CONTENT_DEFAULT|CLAUDE_SUBSCRIPTION_AUTH) return 0 ;;
+		CLAUDE_ALLOWED_TOOLS) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+masked_env() {
+	local line name value
+	while IFS= read -r line; do
+		case "$line" in *=*) name="${line%%=*}" ;; *) continue ;; esac
+		case "$name" in '#'*|*' '*) continue ;; esac
+		value="$(get_var "$env_file" "$name")"
+		if env_name_is_secret "$name"; then
+			if [[ -n "$value" ]]; then printf '%s=<redacted>\n' "$name"
+			else printf '%s=<empty>\n' "$name"; fi
+		elif env_name_is_public "$name"; then
+			printf '%s=%s\n' "$name" "$value"
+		elif [[ -n "$value" ]]; then printf '%s=<masked>\n' "$name"
+		else printf '%s=<empty>\n' "$name"; fi
+	done < "$env_file"
+}
+
+redaction_script() {
+	local line name value
+	printf '%s\n' 's|ghp_[A-Za-z0-9_]\{8,\}|<redacted>|g' \
+		's|github_pat_[A-Za-z0-9_]\{8,\}|<redacted>|g' \
+		's|sk-[A-Za-z0-9_.-]\{8,\}|<redacted>|g' \
+		's|pk-lf-[A-Za-z0-9_.-]\{8,\}|<redacted>|g' \
+		's|://[^:/@ ]\{1,\}:[^@ ]\{1,\}@|://<redacted>@|g'
+	[[ -f "$env_file" ]] || return 0
+	while IFS= read -r line; do
+		case "$line" in *=*) name="${line%%=*}" ;; *) continue ;; esac
+		case "$name" in '#'*|*' '*) continue ;; esac
+		env_name_is_secret "$name" || continue
+		value="$(get_var "$env_file" "$name")"
+		[[ "${#value}" -ge 8 ]] || continue
+		# a value carrying the delimiter or a sed escape would break the program, not redact
+		case "$value" in *'|'*|*'&'*|*'\'*|*change-me*) continue ;; esac
+		printf 's|%s|<redacted>|g\n' "$value"
+	done < "$env_file"
+}
+
 # ── commands ─────────────────────────────────────────────────────────────────
 cmd_env() {
 	local tag; tag="$(resolve_tag)"
@@ -374,12 +705,25 @@ cmd_logs() {
 }
 
 cmd_upgrade() {
-	local old new backup
+	local old new backup running code
 	check_tools
 	[[ -f "$env_file" ]] || die ".env is missing — run ./install.sh first"
 	[[ -n "$tag_arg" ]] || die "upgrade needs --tag vX.Y.Z"
 	old="$(get_var "$env_file" IMAGE_TAG)"; new="$tag_arg"
 	step "upgrade ${old} → ${new}"
+	# What the instance answers is the version actually running; IMAGE_TAG is only what it was
+	# last told to run, and the two disagree whenever a retag never reached a restart.
+	running="$old"
+	scratch="$(mktemp -d)"
+	code="$(api_get /api/v1/version "${scratch}/version.json")"
+	if [[ "$code" == "200" ]]; then
+		running="$(json_string "${scratch}/version.json" app_version)"
+		say "running ${running} → target ${new}"
+	else
+		say "running ${running} (from IMAGE_TAG; /api/v1/version answered ${code}) → target ${new}"
+	fi
+	[[ "$new" != "$running" ]] ||
+		die "${new} is already what is running — nothing to upgrade; pass the newer tag"
 	say "Read the release notes first. A release that bumps DBOS_APPLICATION_VERSION makes"
 	say "every in-flight Run unrecoverable — drain or cancel Runs before such an upgrade."
 	say "Migrations run forward only; the backup below is what a rollback restores from."
@@ -399,6 +743,155 @@ cmd_upgrade() {
 	stack_up
 	verify
 	print_access
+}
+
+cmd_doctor() {
+	local docker_ok=0 env_ok=0
+	scratch="$(mktemp -d)"
+	step "doctor"
+	if doctor_docker; then docker_ok=1; fi
+	if doctor_env; then env_ok=1; fi
+	if [[ "$env_ok" -eq 1 && "$docker_ok" -eq 1 ]]; then
+		doctor_images
+		doctor_ports
+	fi
+	if [[ "$env_ok" -eq 1 ]]; then
+		if doctor_api; then
+			doctor_version
+			doctor_harnesses
+		fi
+		if [[ "$docker_ok" -eq 1 ]]; then doctor_platform; fi
+		doctor_gc
+	fi
+	if [[ "$docker_ok" -eq 1 ]]; then doctor_disk; fi
+	say
+	say "${doctor_fails} fail, ${doctor_warns} warn"
+	[[ "$doctor_fails" -eq 0 ]] || die "fix each fail line above — every one ends with the command to run or the variable to set"
+}
+
+cmd_diagnose() {
+	local dir out stamp redact code
+	[[ -f "$env_file" ]] || die ".env is missing — nothing was installed here"
+	scratch="$(mktemp -d)"
+	redact="${scratch}/redact.sed"
+	redaction_script > "$redact"
+	dir="${here}/diagnostics"
+	mkdir -p "$dir"
+	stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+	out="${dir}/${stamp}.md"
+	code="$(api_get /api/v1/version "${scratch}/version.json")"
+	{
+		printf '# ai-orchestrator diagnostics %s\n\n' "$stamp"
+		printf '## Versions\n\n```\n'
+		printf 'IMAGE_TAG  %s\n' "$(get_var "$env_file" IMAGE_TAG)"
+		printf 'VERSION    %s\n' \
+			"$( [[ -f "${here}/VERSION" ]] && tr -d '[:space:]' < "${here}/VERSION" || printf absent )"
+		if [[ "$code" == "200" ]]; then
+			printf '/version   app %s · kit %s · bmad %s\n' \
+				"$(json_string "${scratch}/version.json" app_version)" \
+				"$(json_string "${scratch}/version.json" kit_version)" \
+				"$(json_string "${scratch}/version.json" bmad_version)"
+			printf 'harnesses  %s\n' "$(json_object "${scratch}/version.json" harness_versions)"
+		else
+			printf '/version   answered %s — the stack is down, or older than the route\n' "$code"
+		fi
+		printf '```\n\n## docker compose ps\n\n```\n'
+		compose ps 2>&1 || true
+		printf '```\n\n## docker compose logs, last 200 lines, redacted\n\n```\n'
+		compose logs --tail 200 --no-color 2>&1 | sed -f "$redact" || true
+		printf '```\n\n## .env, values masked\n\n```\n'
+		masked_env | sed -f "$redact"
+		printf '```\n'
+	} > "$out"
+	chmod 600 "$out"
+	say "wrote ${out}"
+	say
+	say "Every value in it is masked unless it is a port, a cron, a version, a directory or a"
+	say "flag, and the logs are filtered for token-shaped strings. Read it before you send it:"
+	say "a log line can carry anything a target repository printed."
+}
+
+# ── harness: which credential the claude harness authenticates with ──────────
+cmd_harness() {
+	local body code row
+	[[ -f "$env_file" ]] || die ".env is missing — run ./install.sh first"
+	[[ -n "$harness_arg" ]] ||
+		die "harness needs a name: ./install.sh harness claude --subscription (or --api-key)"
+	[[ "$harness_arg" == "claude" ]] ||
+		die "only claude has a subscription login; ${harness_arg} authenticates with an API key alone — set it in llm-platform/.env and restart the gateway"
+	[[ -n "$subscription" ]] || die "harness claude needs --subscription or --api-key"
+	scratch="$(mktemp -d)"
+
+	if [[ "$subscription" -eq 1 ]]; then
+		set_var "$env_file" CLAUDE_SUBSCRIPTION_AUTH true
+		step "claude → Claude Max/Pro subscription"
+		say "CLAUDE_SUBSCRIPTION_AUTH is true in .env now. The adapter stops exporting"
+		say "ANTHROPIC_AUTH_TOKEN — set, it would override the login — and moves the gateway's"
+		say "virtual key into the x-litellm-api-key header instead."
+		say
+		say "One edit stays yours, because this script does not rewrite YAML. In"
+		say "${platform_dir}/litellm.config.yaml uncomment both:"
+		say
+		say "  general_settings:"
+		say "    forward_client_headers_to_llm_api: true   # EVERY route on this proxy, not"
+		say "                                             # only the Claude one"
+		say "  model_list:"
+		say "    - model_name: claude-subscription        # the entry and its litellm_params"
+		say
+		say "Then restart the gateway (./install.sh start --with-platform) and bind the Run to"
+		say "the model name claude-subscription: Claude Code's own default model is not in"
+		say "model_list, and a Run on it answers 400."
+	else
+		set_var "$env_file" CLAUDE_SUBSCRIPTION_AUTH false
+		step "claude → the gateway's own API key"
+		say "CLAUDE_SUBSCRIPTION_AUTH is false in .env now: the virtual key reaches the harness"
+		say "as ANTHROPIC_AUTH_TOKEN again."
+		say "Comment forward_client_headers_to_llm_api back out in"
+		say "${platform_dir}/litellm.config.yaml, make sure ANTHROPIC_API_KEY is set in"
+		say "${platform_env}, and restart the gateway."
+	fi
+
+	if compose ps --status running --services 2>/dev/null | grep -q '^backend-api$'; then
+		if [[ "$subscription" -eq 1 ]]; then
+			step "logging Claude Code in, inside the container"
+			say "It prints a URL. Open it, finish the login there, then come back here. The"
+			say "credentials land under AGENT_HOME, a named volume that survives a restart."
+			compose exec backend-api claude login ||
+				warn "claude login did not finish — re-run ./install.sh harness claude --subscription"
+		fi
+		if confirm "Restart backend-api so it re-reads .env?"; then
+			compose restart backend-api
+			step "verifying"
+			body="${scratch}/harnesses.json"
+			code="$(api_get /api/v1/harnesses "$body")"
+			if [[ "$code" != "200" ]]; then
+				say "/api/v1/harnesses answered ${code} — ./install.sh logs"
+			else
+				row="$(json_items "$body" name | grep -E '"name" *: *"claude"' | head -1 || true)"
+				if [[ -z "$row" ]]; then
+					say "claude is not in /api/v1/harnesses — ./install.sh logs"
+				elif [[ "$(item_word "$row" enabled)" == "true" ]]; then
+					say "claude: enabled"
+				else
+					say "claude: disabled — $(item_string "$row" failing_check)"
+					say "In this mode the probe runs 'claude auth status' and refuses there first,"
+					say "so an expired login shows up as that line."
+				fi
+			fi
+		else
+			say "Not restarted: backend-api keeps the old setting until ./install.sh start."
+		fi
+	else
+		say
+		say "backend-api is not running, so the login cannot happen yet. Start the stack"
+		say "(./install.sh start) and re-run this command to log in and verify."
+	fi
+	say
+	say "What is proven, and what is not: the container half is unit-tested; the gateway half"
+	say "above is written from LiteLLM's own guide and has never been run against a live"
+	say "subscription (deploy/llm-platform/README.md). A subscription is not metered per"
+	say "request, so the dollar figures a Run shows come from LiteLLM's price table rather"
+	say "than from anything you are billed — the budget still stops the Run."
 }
 
 cmd_uninstall() {
@@ -427,4 +920,7 @@ case "$command" in
 	upgrade)   cmd_upgrade ;;
 	uninstall) cmd_uninstall ;;
 	env)       cmd_env ;;
+	doctor)    cmd_doctor ;;
+	diagnose)  cmd_diagnose ;;
+	harness)   cmd_harness ;;
 esac

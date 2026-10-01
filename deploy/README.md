@@ -95,6 +95,9 @@ config, never by a container: the one credential a *process* in this stack holds
 ```bash
 ./install.sh status              # docker compose ps, for both stacks
 ./install.sh logs                # follow the orchestrator's output
+./install.sh doctor              # read-only health checks; non-zero on any `fail`
+./install.sh diagnose            # a redacted report to attach to a bug report
+./install.sh harness claude --subscription   # Claude Max/Pro login instead of an API key
 ./install.sh stop                # stop, keeping every volume
 ./install.sh start               # start again (and the llm-platform stack, if it was installed)
 ./install.sh start --with-platform   # add the llm-platform stack to an existing install
@@ -102,10 +105,41 @@ config, never by a container: the one credential a *process* in this stack holds
 ./install.sh uninstall           # stop and DELETE the volumes, after typing `delete`
 ```
 
-`upgrade` reads the release notes for you only in the sense of printing the two cautions
-below; then it takes a `pg_dump` into `backups/`, rewrites `IMAGE_TAG`, pulls, and
-restarts. `uninstall` keeps `.env` and `llm-platform/.env`, so the token and the Langfuse keys
-survive a reinstall; remove them yourself when you mean it.
+`doctor` changes nothing. It prints one `ok` / `warn` / `fail` line per check — docker and the
+daemon, `.env` and its mode, `IMAGE_TAG` against the images actually pulled and against the
+version the instance reports, the two ports, `/healthz` and the token, each harness's
+readiness, the llm-platform stack, free disk, the retention and cron settings — and every
+`fail` and `warn` line ends with the command to run or the variable to set. No secret is
+printed, so its output is safe to paste.
+
+`diagnose` writes `diagnostics/<timestamp>.md`: versions, `compose ps`, the last 200 lines of
+the logs, and `.env` with every value masked except ports, crons, versions, directories and
+flags. That file is what a bug report attaches. Read it before you send it — a log line
+carries whatever a target repository printed.
+
+`harness claude --subscription` sets `CLAUDE_SUBSCRIPTION_AUTH`, prints the two lines to
+uncomment in `llm-platform/litellm.config.yaml`, runs `claude login` inside the container, and
+reads `GET /api/v1/harnesses` back after the restart. `--api-key` goes the other way.
+`llm-platform/README.md` has the whole picture, including what a subscription does to the cost
+figures on screen and which half of that path has never been run live.
+
+`upgrade` prints `running <version> → target <tag>` and refuses a target equal to what is
+already running; then it takes a `pg_dump` into `backups/`, rewrites `IMAGE_TAG`, pulls, and
+restarts. It reads the release notes for you only in the sense of printing the two cautions at
+the end of this file. `uninstall` keeps `.env` and `llm-platform/.env`, so the token and the
+Langfuse keys survive a reinstall; remove them yourself when you mean it.
+
+### If something is wrong
+
+Start with `./install.sh doctor`. It is the whole checklist, it is useful even when the
+instance does not answer at all, and the line that fails names its own fix. If that is not
+enough, `./install.sh diagnose` collects everything a maintainer will ask for, already
+redacted.
+
+The `orchestrator-admin` skill in `kit/` is the same ground for an agent: install it into this
+directory and Claude Code, Codex or OpenCode will walk install, upgrade, backup, rollback,
+harness and subscription setup, secret rotation, garbage collection and filing the bug report
+— running these commands and reading their output rather than improvising around them.
 
 Ports: everything publishes on `127.0.0.1` — 4321 (web), 8000 (API), and for the host
 stack 3000 (Langfuse), 4000 (LiteLLM), 5433, 9000, 9091 (its stores). If one is already
