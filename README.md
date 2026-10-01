@@ -277,6 +277,33 @@ over HTTP:
   environment. `/plugin marketplace add OptimAI-labs/ai-orchestrator` remains for a Claude
   Code user who prefers the plugin route.
 
+### Build the images yourself
+
+Everything above pulls the images a release published. From a checkout you can build the
+same two images on this machine — to test a change before it is tagged, to publish a
+pre-release by hand, or to run the client package without registry access.
+
+```bash
+make images                              # both images, native arch, compose's dev tags; starts nothing
+PUSH=0 scripts/push-images.sh            # both images, native arch, tagged ghcr.io/…:<VERSION> — no registry
+GHCR_TOKEN=ghp_… make push               # linux/amd64 + linux/arm64, pushed to GHCR as :<VERSION> and :sha-<commit>
+GHCR_TOKEN=ghp_… make push TAG=1.0.0-rc.2   # one-off tag instead of VERSION's
+```
+
+`make push` needs a classic GitHub token with `write:packages` (`GITHUB_TOKEN` is the
+fallback; `GITHUB_USER` names the login, otherwise it is resolved from the token). With no
+token in the environment it expects a prior `docker login ghcr.io`. The token is read from
+the environment only, never from an argument: argv is visible in `ps` and lands in shell
+history. It reaches the docker daemon's credential store and nothing else — never a build
+argument, never an image layer (hard rule 5). The foreign architecture builds under
+emulation, which is slow for backend-api (three npm CLIs and Chromium's system libraries)
+but finishes; `release.yml` is the same build with one native runner per architecture.
+
+To run the client package from images built here instead of pulled:
+`PUSH=0 scripts/push-images.sh`, then `docker run --rm ghcr.io/optimai-labs/ai-orchestrator/backend-api:$(cat VERSION) kit bootstrap | tar x`
+and `cd ai-orchestrator && ./install.sh --no-pull` — no GitHub token is asked for and nothing
+is pulled.
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |

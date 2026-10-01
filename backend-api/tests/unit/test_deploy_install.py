@@ -348,6 +348,26 @@ def test_no_host_wins_over_an_installed_host_env(
 
 
 @needs_bash
+def test_no_pull_skips_the_registry_and_the_pull(
+    shimmed: tuple[Path, Path, dict[str, str]],
+) -> None:
+    """Images built from a checkout: no token is asked for and nothing is pulled (2026-10-01)."""
+    bundle_dir, log, env = shimmed
+    log.write_text("")
+    env = {k: v for k, v in env.items() if k != "GHCR_TOKEN"}
+
+    result = _run(
+        bundle_dir / "install.sh", "install", "--no-pull", "--yes", cwd=bundle_dir, env=env
+    )
+
+    calls = log.read_text().splitlines()
+    assert not any(call.startswith("login") for call in calls), calls
+    assert not any(" pull" in call for call in calls), calls
+    assert any(" up " in call for call in calls), calls
+    assert "GitHub token" not in result.stderr
+
+
+@needs_bash
 def test_the_host_stack_runs_under_its_own_project_name(
     shimmed: tuple[Path, Path, dict[str, str]],
 ) -> None:

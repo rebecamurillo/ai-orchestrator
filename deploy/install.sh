@@ -14,6 +14,7 @@
 #   ./install.sh upgrade --tag v0.2.0             # pre-flight, backup, retag, pull, restart
 #   ./install.sh uninstall                        # stop and DELETE the data, after confirmation
 #   ./install.sh env --tag v0.1.0                 # only write .env (what `install` does first)
+#   ./install.sh --no-pull                        # images built on this machine: no registry login, no pull
 #
 # What `install` does, in order:
 #   1. checks docker, docker compose v2, curl and openssl are here, and the daemon answers
@@ -46,6 +47,7 @@ platform_env="${platform_dir}/.env"
 
 yes=0
 with_platform=""     # "" ask, 1 yes, 0 no
+pull=1               # 0: the images are already on this machine (built from a checkout)
 tag_arg=""
 command=""
 harness_arg=""       # the harness `harness` acts on
@@ -60,7 +62,7 @@ warn() { printf 'warning: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
-	sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+	sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 # ── arguments ────────────────────────────────────────────────────────────────
@@ -71,6 +73,7 @@ while [[ $# -gt 0 ]]; do
 		--tag) [[ $# -ge 2 ]] || die "--tag needs a value"; tag_arg="$2"; shift ;;
 		--tag=*) tag_arg="${1#--tag=}" ;;
 		--yes|-y) yes=1 ;;
+		--no-pull) pull=0 ;;
 		--with-platform) with_platform=1 ;;
 		--no-platform) with_platform=0 ;;
 		--subscription) subscription=1 ;;
@@ -338,7 +341,7 @@ stack_up() {
 		ensure_ports_free "$(get_var "$env_file" WEB_CLIENT_PORT) WEB_CLIENT_PORT .env" \
 			"$(get_var "$env_file" BACKEND_API_PORT) BACKEND_API_PORT .env"
 	fi
-	compose pull
+	if [[ "$pull" -eq 1 ]]; then compose pull; else say "--no-pull: using the images already on this machine"; fi
 	compose up -d --wait --wait-timeout 300
 }
 
@@ -660,9 +663,11 @@ cmd_install() {
 	tag="$(resolve_tag)"
 	say "docker $(docker version --format '{{.Server.Version}}' 2>/dev/null || echo '?'), compose $(docker compose version --short), release ${tag}"
 
-	step "registry login"
-	resolve_token
-	ghcr_login
+	if [[ "$pull" -eq 1 ]]; then
+		step "registry login"
+		resolve_token
+		ghcr_login
+	fi
 
 	step "environment"
 	render_env "$tag"
