@@ -11,6 +11,12 @@ dependencies = [
     # Fernet, for the Project env vars encrypted at rest with ORCHESTRATOR_SECRET_KEY (AD-5)
     "cryptography==50.0.1",
     "fastapi==0.141.1",
+    # The in-process client the `/mcp` tools call this API's own REST operations through, so a
+    # tool reimplements no use case. Also a dev dependency, where it is the e2e suite's client.
+    "httpx==0.28.1",
+    # AD-4: the Model Context Protocol server behind `GET/POST /mcp`. Imported only under
+    # `infrastructure/mcp/facade.py`, which the forbidden contract below makes checkable.
+    "mcp==2.2.0",
     # AD-11: tracing. Imported only under `infrastructure/tracing/`, per the forbidden
     # contract below.
     "langfuse==4.15.1",
@@ -155,6 +161,17 @@ source_modules = ["orchestrator"]
 forbidden_modules = ["dbos"]
 allow_indirect_imports = true
 ignore_imports = ["orchestrator.infrastructure.dbos.facade -> dbos"]
+
+[[tool.importlinter.contracts]]
+# AD-4: `/mcp` is a route on this application, and the SDK behind it is named once — the same
+# rule the DBOS contract above states, for the same reason. `api/mcp_mount.py` mounts the
+# handler and `infrastructure/mcp/tools.py` writes the tools, neither importing the library.
+name = "AD-4 forbidden: only infrastructure/mcp/facade.py imports mcp"
+type = "forbidden"
+source_modules = ["orchestrator"]
+forbidden_modules = ["mcp"]
+allow_indirect_imports = true
+ignore_imports = ["orchestrator.infrastructure.mcp.facade -> mcp"]
 
 # ── pytest ───────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]

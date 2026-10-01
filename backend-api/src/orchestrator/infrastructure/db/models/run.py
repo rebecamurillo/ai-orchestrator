@@ -26,7 +26,18 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, Text, Uuid, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    Text,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -108,6 +119,13 @@ class RunRow(Base):
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    #: The database's own change token, not the application's: `server_default` and
+    #: `onupdate` are `now()`, so any write to this row advances it and no use case has to
+    #: remember to. `repositories/runs.py` keeps it out of `MUTABLE_COLUMNS` for that reason
+    #: — an explicit value in the `SET` clause would win over `onupdate` and freeze it.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     worktrees_removed: Mapped[bool] = mapped_column(Boolean())

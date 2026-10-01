@@ -89,6 +89,7 @@ instance's `GITHUB_TOKEN` must reach `url`.
 | GET | `/api/v1/runs` | Paged list; `?project_id=` filter; `?view=board` for the kanban shape |
 | GET | `/api/v1/runs/{id}` | Summary: status, spend, `admitted_signals` — the cheap poll |
 | GET | `/api/v1/runs/{id}/detail` | Everything: steps + log tails, stories, cost, `alert`, `gate_record` |
+| GET | `/api/v1/runs/{id}/events` | Change signal; `?wait=0..30` holds the connection, `?since=` carries the last `updated_at` |
 | GET | `/api/v1/runs/{id}/graph` | The Run's step graph |
 | GET | `/api/v1/runs/{id}/steps/{step_path}` | One step with all attempts |
 | GET | `/api/v1/runs/{id}/attempts/{attempt_id}/log` | Raw attempt log |
@@ -107,6 +108,35 @@ Signal kinds: `answer` (`{text}`), `continue` (`{files[]}` for protected-path ac
 `cancel`, `start` (a saved Run), `terminal_start` / `terminal_release` /
 `terminal_resume` (human-in-terminal flow). Admission depends on status and `park_kind`
 — always read `admitted_signals` first; a non-admitted kind answers 409.
+
+### Waiting instead of polling
+
+`GET /api/v1/runs/{id}/events` answers
+`{run_id, status, updated_at, changed, admitted_signals, spend_usd, budget_usd, park_kind,
+park_path}` — a change signal, not a payload.
+
+- No `wait` (or `wait=0`): the current state, `changed: false`.
+- `wait=1..30`: the connection is held that many seconds and answers the moment `status` or
+  `updated_at` moves, with `changed: true`. The wait running out is `changed: false`, and the
+  next call simply waits again. `wait` above 30 is 422.
+- `since=<the previous answer's updated_at>`: the baseline is that timestamp instead of the
+  state this request read, so a change made between two calls is answered immediately rather
+  than missed. Always pass it when looping.
+- Unknown id: 404, immediately — the wait never starts.
+
+One held connection replaces a request every five seconds. Read
+`GET /api/v1/runs/{id}/detail` once it says `changed: true`; the park's own payload is there.
+An instance older than this route answers 404 for every id, including a Run that exists —
+fall back to the 5 s / 30 s poll on `GET /api/v1/runs/{id}`.
+
+### MCP
+
+The same operations are also exposed as MCP tools at `$ORCHESTRATOR_BASE_URL/mcp`
+(streamable HTTP, the same bearer, no `/api/v1` prefix): `version`, `list_templates`,
+`get_template`, `preflight_run`, `create_run`, `get_run`, `get_run_detail`,
+`wait_run_events`, `send_signal`, `list_queue`, `list_projects`. Each tool is one call to the
+route above it, so the rules in `SKILL.md` apply unchanged. Per-harness configuration
+snippets ship in the kit under `mcp/`; they are not installed automatically.
 
 ## Fleet and harnesses
 

@@ -469,6 +469,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one Run's state, optionally waiting up to 30 s for it to change
+         * @description Answers at once without `wait`; otherwise holds the connection until the Run moves.
+         */
+        get: operations["events_api_v1_runs__run_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/files": {
         parameters: {
             query?: never;
@@ -1965,6 +1985,36 @@ export interface components {
             worktree_path: string | null;
             /** Worktrees */
             worktrees: components["schemas"]["WorktreeOut"][];
+        };
+        /**
+         * RunEventsOut
+         * @description One Run's current state, and whether it moved while this request was held open.
+         */
+        RunEventsOut: {
+            /** Admitted Signals */
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start")[];
+            /** Budget Usd */
+            budget_usd: string | null;
+            /** Changed */
+            changed: boolean;
+            /** Park Kind */
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict") | null;
+            /** Park Path */
+            park_path: string | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Spend Usd */
+            spend_usd: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
+            /** Updated At */
+            updated_at: string | null;
         };
         /**
          * RunFileDiffOut
@@ -3882,6 +3932,61 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    events_api_v1_runs__run_id__events_get: {
+        parameters: {
+            query?: {
+                wait?: number;
+                since?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunEventsOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `run_id` is not a UUID, `wait` is outside 0..30, or `since` is not a UTC timestamp. */
             422: {
                 headers: {
                     [name: string]: unknown;

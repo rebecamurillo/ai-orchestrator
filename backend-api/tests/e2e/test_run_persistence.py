@@ -16,6 +16,10 @@ The three unique indexes are read from `pg_index` the way
 `tests/e2e/test_repositories.py::repository_indexes` reads the Repository's, for the same
 reason: the unit suite asserts them against `Base.metadata`, which the model populates,
 never against what the migration actually built.
+
+`updated_at` is the database's, not the writer's (migration 0021, agent-delivery-kit plan §7,
+2026-10-01): a Run is written with `None` and read back with the stamp Postgres set, so the
+equality below is taken over every other field, and the stamp itself is asserted present.
 """
 
 from __future__ import annotations
@@ -245,12 +249,19 @@ def reader(sessions: Any) -> Iterator[Session]:
         session.close()
 
 
+def _as_written(stored: Run) -> Run:
+    """The stored Run with its database-owned stamp removed, for comparison with the writer's."""
+    assert stored.updated_at is not None
+    assert stored.updated_at.tzinfo is not None
+    return stored.model_copy(update={"updated_at": None})
+
+
 def test_the_run_reads_back_equal_to_what_was_written(
     written: tuple[Run, list[StepRun], Attempt, GateRecord], reader: Session
 ) -> None:
     run, _, _, _ = written
 
-    assert SQLAlchemyRunRepository(reader).get(run.id) == run
+    assert _as_written(SQLAlchemyRunRepository(reader).get(run.id)) == run
 
 
 def test_the_planned_rows_read_back_in_seq_order(
@@ -314,8 +325,8 @@ def test_the_run_is_listed_under_its_project_and_not_under_another(
     run, _, _, _ = written
     runs = SQLAlchemyRunRepository(reader)
 
-    assert run in runs.list(project_id=run.project_id)
-    assert run not in runs.list(project_id=new_id())
+    assert run in [_as_written(stored) for stored in runs.list(project_id=run.project_id)]
+    assert run not in [_as_written(stored) for stored in runs.list(project_id=new_id())]
 
 
 def test_a_parked_run_is_listed_as_non_terminal_against_its_repository(
@@ -323,7 +334,9 @@ def test_a_parked_run_is_listed_as_non_terminal_against_its_repository(
 ) -> None:
     run, _, _, _ = written
 
-    assert run in SQLAlchemyRunRepository(reader).list_by_repository_non_terminal(run.repository_id)
+    stored = SQLAlchemyRunRepository(reader).list_by_repository_non_terminal(run.repository_id)
+
+    assert run in [_as_written(each) for each in stored]
 
 
 def test_the_run_is_listed_by_its_status(
@@ -331,7 +344,9 @@ def test_the_run_is_listed_by_its_status(
 ) -> None:
     run, _, _, _ = written
 
-    assert run in SQLAlchemyRunRepository(reader).list_by_status("needs_you")
+    stored = SQLAlchemyRunRepository(reader).list_by_status("needs_you")
+
+    assert run in [_as_written(each) for each in stored]
 
 
 def test_an_update_through_the_adapter_lands_in_the_database(
@@ -351,7 +366,7 @@ def test_an_update_through_the_adapter_lands_in_the_database(
     finally:
         writer.close()
 
-    assert SQLAlchemyRunRepository(reader).get(run.id) == raised
+    assert _as_written(SQLAlchemyRunRepository(reader).get(run.id)) == raised
 
 
 # ── the schema the migration was written to create ───────────────────────────

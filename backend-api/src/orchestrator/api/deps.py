@@ -59,15 +59,24 @@ def get_settings(request: Request) -> Settings:
     return settings
 
 
+def token_matches(presented: str, expected: str) -> bool:
+    """The one comparison, for the one credential. Reasons: this module's docstring.
+
+    Reused by the `/mcp` guard (`api/mcp_mount.py`), which cannot carry this dependency
+    because an ASGI mount bypasses router dependencies — so it borrows the check rather than
+    writing a second one.
+    """
+    if not expected:
+        # fail closed: comparing two empty byte strings succeeds, which would open the API
+        return False
+    return hmac.compare_digest(presented.encode(), expected.encode())
+
+
 def require_bearer(
     settings: Annotated[Settings, Depends(get_settings)],
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
 ) -> None:
     """Refuse the request unless it carries the instance token, in constant time."""
-    expected = settings.orchestrator_token.get_secret_value()
-    if not expected:
-        # fail closed: comparing two empty byte strings succeeds, which would open the API
-        raise _unauthorized()
     presented = credentials.credentials if credentials else ""
-    if not hmac.compare_digest(presented.encode(), expected.encode()):
+    if not token_matches(presented, settings.orchestrator_token.get_secret_value()):
         raise _unauthorized()

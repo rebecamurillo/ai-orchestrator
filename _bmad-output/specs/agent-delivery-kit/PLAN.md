@@ -320,20 +320,24 @@ Skills are written against a *capability* — fan out where supported, sequentia
 | **1** | `/api/v1/version`; manifests held to `VERSION` by `scripts/check_version.py` in `make lint`; `kit.json` + handshake rule in the skill | **landed 2026-09-30** (`feat/agent-delivery-kit`) |
 | **2** | Layout: `host/`→`deploy/llm-platform/`, `plugin/`→`deploy/kit/`; `bundle.sh` → `deploy/` alone; dual path removed; `make platform-*`; `AGENTS.md` lines | **landed 2026-09-30** |
 | **3** | `kit bootstrap` from the image; `GET /api/v1/kit/{install.sh,archive}`; `kit/install.sh --harness`; `get.sh` + release-asset job retired | **landed 2026-09-30** |
-| **4** | `orchestrator-admin`: doctor → upgrade pre-flight → harness setup incl. Claude subscription → guided env → bug report; rest by demand | next |
-| **5** | `initiative-spec`: chain, `INITIATIVE.md`, projection step, preflight gate | after 4 |
-| **6** | `initiative-run` + `orchestrator-watch`; autonomy table | after 5 |
-| **7** | `/mcp` route + harness config projections; long-poll events | last |
+| **4** | `orchestrator-admin`: `install.sh doctor | diagnose | harness claude --subscription`, upgrade pre-flight; skill + runbooks (backup/restore, rollback, rotation, models, spend, GC, template refresh) | **landed 2026-10-01** |
+| **5** | `initiative-spec`: chain 0–7, `INITIATIVE.md`, projection rule (no unexecuted command), preflight gate; generic skill-integrity test | **landed 2026-10-01** |
+| **6** | `initiative-run` + `bin/orchestrator-watch` (exit 2 on a park → invoke the agent); autonomy table | **landed 2026-10-01** |
+| **7** | `GET /runs/{id}/events?wait=` (database-owned `updated_at`, migration 0021); `/mcp` behind the bearer via the `mcp` SDK, 11 tools over the REST contract; `deploy/kit/mcp/` config snippets (manual merge, not installed) | **landed 2026-10-01** |
 
 Every phase: `make lint`, `make test`; `make openapi` on any API change (AD-3); a
 `.env.example` entry for any new setting (hard rule 8); a test module per source module.
 
-Learned landing 1–3: PEP 440 normalises `1.0.0-beta` to `1.0.0b0`, so `app_version()` reads
+Learned landing 1–7: PEP 440 normalises `1.0.0-beta` to `1.0.0b0`, so `app_version()` reads
 the `VERSION` file (at `/app/VERSION` in the image, the repository root in a checkout), never
 distribution metadata — or the handshake could never match on a pre-release. `settings.py`
 sits at exactly 400 lines; the next setting splits it. The image is private, so a client runs
 `docker login ghcr.io` once by hand before `kit bootstrap` — `install.sh` does that login
-for the pulls, but cannot for the bootstrap that produces it.
+for the pulls, but cannot for the bootstrap that produces it. `main.py` is also at 400 lines.
+`orchestrator-watch` still polls at 5 s / 30 s; switching it to `?wait=30` is a one-line
+follow-up. Backup/restore/rollback are runbooks over `compose exec`, not `install.sh`
+subcommands. MCP's DNS-rebinding host allow-list is off (the bearer is the control); the kit's
+MCP configs are shipped but not projected by `kit/install.sh` — a follow-up.
 
 ## 10. Decisions
 

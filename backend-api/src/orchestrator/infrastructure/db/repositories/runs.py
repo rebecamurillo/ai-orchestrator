@@ -88,6 +88,8 @@ def to_entity(row: RunRow) -> Run:
         last_opened_at=row.last_opened_at,
         last_opened_before=row.last_opened_before,
         created_at=row.created_at,
+        # `None` until the row has been flushed: the column's value is the database's
+        updated_at=row.updated_at,
         started_at=row.started_at,
         ended_at=row.ended_at,
         worktrees_removed=row.worktrees_removed,
@@ -150,10 +152,15 @@ def row_values(run: Run) -> dict[str, Any]:
     }
 
 
-#: What `update` writes back: every column but the primary key, read off the table so a
-#: column added to the model cannot be left out of an update by hand.
+#: Columns `update` never writes: the primary key, and the one the database maintains. Naming
+#: `updated_at` in the `SET` clause would win over the column's `onupdate`, so the change token
+#: the events route polls would stop advancing.
+DATABASE_OWNED_COLUMNS = ("id", "updated_at")
+
+#: What `update` writes back: every other column, read off the table so a column added to the
+#: model cannot be left out of an update by hand.
 MUTABLE_COLUMNS: tuple[str, ...] = tuple(
-    column.name for column in RunRow.__table__.columns if column.name != "id"
+    column.name for column in RunRow.__table__.columns if column.name not in DATABASE_OWNED_COLUMNS
 )
 
 

@@ -119,6 +119,11 @@ Never guess a template's inputs and never skip preflight.
 There is no push channel — poll, at the UI's own cadence: **5 s while the Run is
 `queued`/`running`, 30 s otherwise**. Never tighter.
 
+Where the instance has it, `GET /api/v1/runs/{id}/events?wait=30&since=<last updated_at>`
+replaces that loop with one held connection that answers as soon as the Run moves (see
+`references/api.md`); a 404 for a Run you know exists means an older instance, so fall back to
+the cadence above.
+
 - `GET /api/v1/runs/{id}` — status, spend, and `admitted_signals` (cheap; poll this).
 - `GET /api/v1/runs/{id}/detail` — everything: steps with log tails, per-story states,
   cost (`spent_usd` vs `budget_usd`, tokens, trace link), the `alert` when parked, and

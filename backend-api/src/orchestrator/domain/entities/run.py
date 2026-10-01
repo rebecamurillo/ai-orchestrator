@@ -115,5 +115,9 @@ class Run(BaseModel):
     last_opened_at: datetime | None = None
     last_opened_before: datetime | None = None
     created_at: datetime
+    #: When this row was last written, maintained by the database rather than by any use
+    #: case (AD-8): `None` on a Run that has not been stored yet, which is what a planner
+    #: holds and what every in-memory fake hands back.
+    updated_at: datetime | None = None
     started_at: datetime | None = None
     ended_at: datetime | None = None

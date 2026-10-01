@@ -49,6 +49,7 @@ from sqlalchemy.orm import Session
 
 from orchestrator.api.deps import require_bearer
 from orchestrator.api.errors import UNAUTHORIZED_RESPONSE, install_error_handlers
+from orchestrator.api.mcp_mount import install_mcp
 from orchestrator.api.routers import (
     clone_check,
     graph,
@@ -67,6 +68,7 @@ from orchestrator.api.routers import (
     run_activity,
     run_attempts,
     run_detail,
+    run_events,
     run_files,
     runs,
     signals,
@@ -315,6 +317,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
     for router in (
         run.router,
         run_detail.router,
+        run_events.router,
         run_activity.router,
         run_attempts.router,
         step_detail.router,
@@ -328,6 +331,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         _mount(app, router)
     _mount(app, harness_readiness.router)
     _mount(app, harness_probe.router)
+    install_mcp(app)
 
     return app
 
