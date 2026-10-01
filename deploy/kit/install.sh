@@ -20,10 +20,11 @@
 # nothing is downloaded.
 #
 # What it writes, all of it idempotent: each skill under the per-harness directory (an
-# existing copy is replaced), ORCHESTRATOR_BASE_URL and ORCHESTRATOR_TOKEN in
-# <project>/.env (an existing value is left alone), and <project>/.orchestrator/kit.json —
-# the version marker the skill's handshake reads. kit.json carries no credential and is
-# meant to be committed.
+# existing copy is replaced), the kit's commands in <project>/.orchestrator/bin/ (executable;
+# the PATH line is printed), ORCHESTRATOR_BASE_URL and ORCHESTRATOR_TOKEN in <project>/.env
+# (an existing value is left alone), and <project>/.orchestrator/kit.json — the version
+# marker the skill's handshake reads. kit.json carries no credential and is meant to be
+# committed.
 #
 # Portable bash 3.2 (a stock macOS): no associative arrays, no `sed -i`, no `mapfile`.
 # The token is never printed, never logged, and never written outside .env.
@@ -58,9 +59,9 @@ install.sh [--harness claude|codex|opencode|all] [--base-url URL] [--token TOKEN
                skipped and the script says how to set it
   --project    where to install; default the current directory. A bare path argument works too
 
-Writes the skills into the per-harness directory, ORCHESTRATOR_BASE_URL and
-ORCHESTRATOR_TOKEN into <project>/.env (never overwriting a value), and
-<project>/.orchestrator/kit.json.
+Writes the skills into the per-harness directory, the kit's commands into
+<project>/.orchestrator/bin/, ORCHESTRATOR_BASE_URL and ORCHESTRATOR_TOKEN into
+<project>/.env (never overwriting a value), and <project>/.orchestrator/kit.json.
 TEXT
 }
 
@@ -163,6 +164,27 @@ install_skills() {
 	done
 }
 
+# ── the commands ─────────────────────────────────────────────────────────────
+bin_target=""
+install_bin() {
+	local src name count
+	[[ -d "${kit_dir}/bin" ]] || return 0
+	bin_target="${project}/.orchestrator/bin"
+	mkdir -p "$bin_target"
+	count=0
+	for src in "${kit_dir}"/bin/*; do
+		[[ -f "$src" ]] || continue
+		name="${src##*/}"
+		cp "$src" "${bin_target}/${name}"
+		# the archive's mode survives tar, a checkout's does not survive every filesystem
+		chmod +x "${bin_target}/${name}"
+		count=$((count + 1))
+	done
+	if [[ "$count" -eq 0 ]]; then bin_target=""; return 0; fi
+	say "bin      ${bin_target} (${count})"
+	say "         on PATH: export PATH=\"${bin_target}:\$PATH\""
+}
+
 # ── the connection values ────────────────────────────────────────────────────
 env_file=""
 
@@ -249,6 +271,7 @@ probe() {
 step "ai-orchestrator kit → ${project} (harness: ${harness})"
 resolve_kit
 install_skills
+install_bin
 install_env
 base_url="$(read_env ORCHESTRATOR_BASE_URL)"
 base_url="${base_url%/}"
@@ -259,6 +282,7 @@ probe
 say
 say "Written:"
 printf '%s' "$written" | sed 's/^/  /'
+[[ -z "$bin_target" ]] || say "  ${bin_target}"
 say "  ${env_file}"
 say "  ${marker}"
 say

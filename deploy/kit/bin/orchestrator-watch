@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+# orchestrator-watch — poll one Run, print every status change, exit on what needs a human.
+#
+#   orchestrator-watch <run_id> [--base-url URL] [--interval-active 5] [--interval-idle 30]
+#                               [--once] [--notify]
+#
+#   --base-url         the instance; default $ORCHESTRATOR_BASE_URL, else ./.env, else
+#                      http://127.0.0.1:8000
+#   --interval-active  seconds between polls while the Run is queued or running; minimum 5
+#   --interval-idle    seconds between polls in any other state; minimum 30
+#   --once             one poll, then exit with the code below
+#   --notify           also raise a desktop notification on each change (osascript on macOS,
+#                      notify-send on Linux); skipped in silence where neither exists
+#
+# Exit codes, so a caller can branch without parsing anything:
+#   0  done, or --once on a Run still queued or running
+#   2  needs_you — the park payload is in .orchestrator/runs/<run_id>.json, and an agent can
+#      be invoked on that file
+#   3  failed or cancelled
+#   1  an HTTP or usage error, named with the URL and the status code
+#
+# The deep link printed for a human is <web base>/workflows/<run_id>. The web base is
+# $ORCHESTRATOR_WEB_URL when set, otherwise the API base with port 8000 read as 4321 —
+# the compose default pair. Any other port is used unchanged.
+#
+# Portable bash 3.2 (a stock macOS), curl only: no python, no jq.
+# The token is read at call time and never printed, logged, or written to the payload file.
+set -euo pipefail
+
+#: The UI's own cadence. A tighter poll is refused, not honoured: the instance is shared and
+#: every client's loop lands on the same engine.
+MIN_ACTIVE=5
+MIN_IDLE=30
+
+run_id=""
+base_url_arg=""
+interval_active=$MIN_ACTIVE
+interval_idle=$MIN_IDLE
+once=0
+notify=0
+
+say()  { printf '%s\n' "$*"; }
+warn() { printf 'warning: %s\n' "$*" >&2; }
+die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+	cat <<'TEXT'
+orchestrator-watch <run_id> [--base-url URL] [--interval-active 5] [--interval-idle 30]
+                            [--once] [--notify]
+
+  --base-url         the instance; default $ORCHESTRATOR_BASE_URL, else ./.env, else
+                     http://127.0.0.1:8000
+  --interval-active  seconds between polls while the Run is queued or running; minimum 5,
+                     a smaller value is raised to it
+  --interval-idle    seconds between polls in any other state; minimum 30, a smaller value
+                     is raised to it
+  --once             one poll, then exit
+  --notify           also raise a desktop notification on each change (osascript on macOS,
+                     notify-send on Linux); skipped in silence where neither exists
+
+Prints one line per status change: <UTC ts>  <status>  <spend_usd>/<budget_usd>. On
+needs_you it prints the alert (park_kind, reason), the admitted signals and the deep link,
+and writes the same payload — no token in it — to .orchestrator/runs/<run_id>.json.
+
+The deep link is $ORCHESTRATOR_WEB_URL/workflows/<run_id> when that is set, otherwise the
+API base with port 8000 read as 4321; any other port is used unchanged.
+
+Exit codes: 0 done (or --once while queued/running), 2 needs_you, 3 failed/cancelled,
+1 an HTTP or usage error naming the URL and the code.
+TEXT
+}
+
+# ── arguments ────────────────────────────────────────────────────────────────
+positive_int() {
+	case "$1" in
+		'' | *[!0-9]*) die "$2 takes whole seconds (got '$1')" ;;
+	esac
+	[[ "$1" -gt 0 ]] || die "$2 takes a positive number of seconds (got '$1')"
+}
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--base-url) [[ $# -ge 2 ]] || die "--base-url needs a value"; base_url_arg="$2"; shift ;;
+		--base-url=*) base_url_arg="${1#--base-url=}" ;;
+		--interval-active)
+			[[ $# -ge 2 ]] || die "--interval-active needs a value"; interval_active="$2"; shift ;;
+		--interval-active=*) interval_active="${1#--interval-active=}" ;;
+		--interval-idle)
+			[[ $# -ge 2 ]] || die "--interval-idle needs a value"; interval_idle="$2"; shift ;;
+		--interval-idle=*) interval_idle="${1#--interval-idle=}" ;;
+		--once) once=1 ;;
+		--notify) notify=1 ;;
+		-h|--help) usage; exit 0 ;;
+		-*) die "unknown argument: $1 (try --help)" ;;
+		*) [[ -z "$run_id" ]] || die "one run id at a time (got '$run_id' and '$1')"; run_id="$1" ;;
+	esac
+	shift
+done
+
+[[ -n "$run_id" ]] || { usage >&2; exit 1; }
+
+positive_int "$interval_active" --interval-active
+positive_int "$interval_idle" --interval-idle
+if [[ "$interval_active" -lt "$MIN_ACTIVE" ]]; then
+	warn "--interval-active ${interval_active} is below the ${MIN_ACTIVE}s minimum — using ${MIN_ACTIVE}"
+	interval_active=$MIN_ACTIVE
+fi
+if [[ "$interval_idle" -lt "$MIN_IDLE" ]]; then
+	warn "--interval-idle ${interval_idle} is below the ${MIN_IDLE}s minimum — using ${MIN_IDLE}"
+	interval_idle=$MIN_IDLE
+fi
+
+# ── connection ───────────────────────────────────────────────────────────────
+# NAME=value from a dotenv file, minus a trailing `  # comment` and surrounding quotes
+get_var() {
+	local file="$1" name="$2" line value
+	[[ -f "$file" ]] || return 0
+	line="$(grep "^${name}=" "$file" 2>/dev/null | head -1 || true)"
+	[[ -n "$line" ]] || return 0
+	value="${line#*=}"
+	value="${value%%  #*}"
+	value="${value%"${value##*[! ]}"}"
+	value="${value#\'}"; value="${value%\'}"
+	value="${value#\"}"; value="${value%\"}"
+	printf '%s' "$value"
+}
+
+env_file="${PWD}/.env"
+base_url="${base_url_arg:-${ORCHESTRATOR_BASE_URL:-$(get_var "$env_file" ORCHESTRATOR_BASE_URL)}}"
+base_url="${base_url:-http://127.0.0.1:8000}"
+base_url="${base_url%/}"
+token="${ORCHESTRATOR_TOKEN:-$(get_var "$env_file" ORCHESTRATOR_TOKEN)}"
+[[ -n "$token" ]] ||
+	die "no ORCHESTRATOR_TOKEN — export it or put it in ${env_file}"
+
+command -v curl >/dev/null 2>&1 || die "curl is not installed — it is how this talks to ${base_url}"
+
+web_base="${ORCHESTRATOR_WEB_URL:-}"
+if [[ -n "$web_base" ]]; then
+	web_base="${web_base%/}"
+else
+	case "$base_url" in
+		*:8000) web_base="${base_url%:8000}:4321" ;;
+		*) web_base="$base_url" ;;
+	esac
+fi
+deep_link="${web_base}/workflows/${run_id}"
+
+scratch="$(mktemp -d)"
+trap 'rm -rf "$scratch"' EXIT
+summary="${scratch}/summary.json"
+detail="${scratch}/detail.json"
+alert="${scratch}/alert.json"
+
+# ── reading JSON without jq ──────────────────────────────────────────────────
+# The first `"key": "value"` in the document. A `\"` inside the value truncates what is read
+# here — a park reason reads short rather than wrong, and the deep link is the full text.
+json_str() {
+	local raw
+	raw="$(tr -d '\n' < "$1" | grep -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 ||
+		true)"
+	raw="${raw#*:}"
+	raw="${raw#"${raw%%[![:space:]]*}"}"
+	raw="${raw#\"}"; raw="${raw%\"}"
+	printf '%s' "${raw%\\}"
+}
+
+# The quoted members of the first `"key": [ ... ]`, space separated
+json_words() {
+	tr -d '\n' < "$1" | grep -o "\"$2\"[[:space:]]*:[[:space:]]*\[[^]]*\]" | head -1 |
+		sed 's/^[^[]*\[//' | grep -o '"[^"]*"' | tr -d '"' | tr '\n' ' ' || true
+}
+
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+http_get() {   # http_get URL OUTFILE → the status code, `000` when nothing answered
+	local code
+	code="$(curl -sS -H "Authorization: Bearer ${token}" -o "$2" -w '%{http_code}' "$1" \
+		2>/dev/null || true)"
+	printf '%s' "${code:-000}"
+}
+
+fetch() {      # fetch URL OUTFILE — any answer but 200 is the end of the watch
+	local code
+	code="$(http_get "$1" "$2")"
+	[[ "$code" == "200" ]] ||
+		die "$1 answered ${code} — is the instance up, and is ORCHESTRATOR_TOKEN its own?"
+}
+
+# ── notifications ────────────────────────────────────────────────────────────
+notify_desktop() {
+	[[ "$notify" == 1 ]] || return 0
+	local text="$1"
+	text="$(printf '%s' "$text" | tr -d '"\\')"
+	if command -v osascript >/dev/null 2>&1; then
+		osascript -e "display notification \"${text}\" with title \"ai-orchestrator\"" \
+			>/dev/null 2>&1 || true
+	elif command -v notify-send >/dev/null 2>&1; then
+		notify-send "ai-orchestrator" "$text" >/dev/null 2>&1 || true
+	fi
+}
+
+# ── the park payload ─────────────────────────────────────────────────────────
+write_payload() {
+	local dir="${PWD}/.orchestrator/runs" file kind json=""
+	mkdir -p "$dir"
+	file="${dir}/${run_id}.json"
+	for kind in $admitted; do
+		[[ -z "$json" ]] && json="\"${kind}\"" || json="${json}, \"${kind}\""
+	done
+	printf '{\n  "run_id": "%s",\n  "status": "%s",\n  "park_kind": "%s",\n  "reason": "%s",\n' \
+		"$run_id" "$status" "$park_kind" "$reason" > "$file"
+	printf '  "admitted_signals": [%s],\n  "spend_usd": "%s",\n  "budget_usd": "%s",\n' \
+		"$json" "$spend" "$budget" >> "$file"
+	printf '  "url": "%s",\n  "base_url": "%s",\n  "observed_at": "%s"\n}\n' \
+		"$deep_link" "$base_url" "$(now)" >> "$file"
+	say "payload  ${file}"
+}
+
+# ── one poll ─────────────────────────────────────────────────────────────────
+status=""
+spend=""
+budget=""
+admitted=""
+park_kind=""
+reason=""
+
+poll() {
+	fetch "${base_url}/api/v1/runs/${run_id}" "$summary"
+	status="$(json_str "$summary" status)"
+	[[ -n "$status" ]] || die "${base_url}/api/v1/runs/${run_id} answered without a status"
+	spend="$(json_str "$summary" spend_usd)"
+	budget="$(json_str "$summary" budget_usd)"
+	admitted="$(json_words "$summary" admitted_signals)"
+	admitted="${admitted% }"
+}
+
+report_change() {
+	say "$(now)  ${status}  ${spend:--}/${budget:--}"
+	notify_desktop "Run ${run_id} is ${status}"
+}
+
+report_park() {
+	fetch "${base_url}/api/v1/runs/${run_id}/detail" "$detail"
+	park_kind=""
+	reason=""
+	# A step row carries `reason` too and prints before the alert: read from the alert on.
+	if grep -q '"alert"' "$detail"; then
+		tr -d '\n' < "$detail" | sed 's/.*"alert"[[:space:]]*:[[:space:]]*{/{/' > "$alert"
+		park_kind="$(json_str "$alert" park_kind)"
+		reason="$(json_str "$alert" reason)"
+	fi
+	say "park     ${park_kind:-unnamed}: ${reason:-no reason given}"
+	say "signals  ${admitted:-none admitted}"
+	say "review   ${deep_link}"
+	write_payload
+}
+
+interval_for() {
+	case "$1" in
+		queued|running) printf '%s' "$interval_active" ;;
+		*) printf '%s' "$interval_idle" ;;
+	esac
+}
+
+# ── the loop ─────────────────────────────────────────────────────────────────
+last=""
+while :; do
+	poll
+	if [[ "$status" != "$last" ]]; then
+		report_change
+		last="$status"
+	fi
+	case "$status" in
+		done) exit 0 ;;
+		failed|cancelled) exit 3 ;;
+		needs_you) report_park; exit 2 ;;
+	esac
+	if [[ "$once" == 1 ]]; then exit 0; fi
+	sleep "$(interval_for "$status")"
+done

@@ -549,3 +549,54 @@ def test_an_unreachable_archive_is_reported_with_its_url(
     assert result.returncode != 0
     assert "/api/v1/kit/archive" in result.stderr
     assert TOKEN not in result.stderr
+
+
+# ── the kit's commands ───────────────────────────────────────────────────────
+# Added with `orchestrator-watch` (agent-delivery-kit plan phase 6, 2026-10-01).
+
+WATCHER = ".orchestrator/bin/orchestrator-watch"
+
+
+@needs_bash
+def test_the_watcher_lands_executable_with_its_path_line(project: Path) -> None:
+    """A watcher that is not executable, or that the client cannot find, supervises nothing."""
+    result = _run(INSTALL, "--harness", "claude", "--project", str(project), cwd=project)
+
+    watcher = project / WATCHER
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert watcher.is_file()
+    assert watcher.stat().st_mode & 0o111, "orchestrator-watch is not executable"
+    assert str(project / ".orchestrator" / "bin") in result.stdout
+    assert "export PATH=" in result.stdout
+
+
+@needs_bash
+def test_remote_mode_installs_the_watcher_from_the_served_archive(
+    project: Path, tmp_path: Path, shim: tuple[Path, Path, dict[str, str]]
+) -> None:
+    _, _, env = shim
+    piped = tmp_path / "piped"
+    piped.mkdir()
+    shutil.copy(INSTALL, piped / "install.sh")
+    env = {
+        **env,
+        "SHIM_ARCHIVE": _archive(tmp_path),
+        "SHIM_VERSION_FILE": _version_body(tmp_path, _kit_version()),
+    }
+
+    result = _run(
+        piped / "install.sh",
+        "--harness",
+        "claude",
+        "--token",
+        TOKEN,
+        "--project",
+        str(project),
+        cwd=project,
+        env=env,
+    )
+
+    watcher = project / WATCHER
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert watcher.is_file()
+    assert watcher.stat().st_mode & 0o111, "orchestrator-watch is not executable"
