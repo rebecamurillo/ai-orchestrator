@@ -162,7 +162,10 @@ async def test_get_version_reports_its_caller(api: Harness) -> None:
     async with api.client() as client:
         response = await client.get(f"{TEMPLATES}/leaf/1")
 
-    assert response.json()["called_by"] == [{"name": "root-caller", "version": 1}]
+    # `pinned` added by the Operator decision 2026-10-02, editable workflows: a `uses:
+    # template` call may omit `version`; it resolves to the callee's latest at validate and
+    # plan time; no cascade.
+    assert response.json()["called_by"] == [{"name": "root-caller", "version": 1, "pinned": True}]
 
 
 # ── list versions ────────────────────────────────────────────────────────────

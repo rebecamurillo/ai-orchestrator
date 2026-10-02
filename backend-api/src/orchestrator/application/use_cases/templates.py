@@ -53,6 +53,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from orchestrator.application.graph import Graph, build_template_graph
+from orchestrator.application.templates.calls import check_callers
 from orchestrator.application.templates.model import (
     ForEach,
     InputDecl,
@@ -62,7 +63,14 @@ from orchestrator.application.templates.model import (
     ValidationResult,
 )
 from orchestrator.application.templates.validate import validate
-from orchestrator.domain.entities.template import TemplateRef, TemplateSummary, TemplateVersion
+from orchestrator.domain.entities.template import (
+    TemplateCaller,
+    TemplateCallRef,
+    TemplateRef,
+    TemplateSummary,
+    TemplateVersion,
+    call_ref,
+)
 from orchestrator.domain.errors import Invalid, NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
@@ -93,7 +101,7 @@ class TemplateVersionDetail:
     """
 
     template: TemplateVersion
-    called_by: tuple[TemplateRef, ...]
+    called_by: tuple[TemplateCaller, ...]
     inputs: tuple[InputDecl, ...]
     pinned_by: int = 0
 
@@ -250,6 +258,9 @@ def save_version(ports: TemplatePorts, name: str, yaml_text: str) -> TemplateVer
     next_version = _next_version(ports.templates, name)
     if parsed.version != next_version:
         raise Invalid(f"version must be {next_version}")
+    stranded = check_callers(name, yaml_text, _following_callers(ports.templates, name))
+    if stranded:
+        raise TemplateValidationFailed(tuple(stranded))
     stored = TemplateVersion(
         id=new_id(),
         name=name,
@@ -333,13 +344,28 @@ def _hash(yaml_text: str) -> str:
     return hashlib.sha256(yaml_text.encode()).hexdigest()
 
 
-def _calls_of(parsed: ParsedTemplate) -> tuple[TemplateRef, ...]:
+def _following_callers(
+    templates: TemplateVersionRepository, name: str
+) -> list[tuple[TemplateRef, str]]:
+    """Every stored version that calls `name` unpinned, with its text — the callers a new
+    version of `name` must still satisfy. Asked at a version nothing holds yet, so a pinned
+    caller cannot match and only the followers come back."""
+    unheld = _next_version(templates, name)
+    found: list[tuple[TemplateRef, str]] = []
+    for caller in templates.callers_of(name, unheld):
+        stored = templates.get(caller.name, caller.version)
+        assert stored is not None  # callers_of answers only stored versions
+        found.append((TemplateRef(name=caller.name, version=caller.version), stored.yaml))
+    return found
+
+
+def _calls_of(parsed: ParsedTemplate) -> tuple[TemplateCallRef, ...]:
     """Every `uses: template` step's callee, in file order — root and one `for_each` deep.
 
     Walks the tree `validate()` already built, never the raw YAML: this is what keeps a
     saved `calls` list unable to disagree with what the file declares (AD-15).
     """
-    refs: list[TemplateRef] = []
+    refs: list[TemplateCallRef] = []
     for entry in parsed.steps:
         if isinstance(entry, ForEach):
             refs.extend(ref for ref in (_call_ref(step) for step in entry.steps) if ref)
@@ -350,7 +376,7 @@ def _calls_of(parsed: ParsedTemplate) -> tuple[TemplateRef, ...]:
     return tuple(refs)
 
 
-def _call_ref(step: Step) -> TemplateRef | None:
+def _call_ref(step: Step) -> TemplateCallRef | None:
     if step.call is None:
         return None
-    return TemplateRef(name=step.call.name, version=step.call.version)
+    return call_ref(step.call.name, step.call.version)

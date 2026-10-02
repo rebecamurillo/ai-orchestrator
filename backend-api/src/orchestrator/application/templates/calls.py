@@ -5,6 +5,12 @@ things that go wrong with it are checked here and nowhere else:
 
 - **The callee must exist.** It is fetched through `TemplateVersionRepository`; this module
   performs no I/O of its own (AD-2). A version that is not stored is `callee not found`.
+- **A call with no `version` is unpinned.** It resolves to the callee's highest stored
+  version here, and again when a Run is planned; a name with no stored version at all is
+  `callee not found`. An integer `version` is a pin and is never followed.
+- **A callee's new version must not strand its unpinned callers.** `check_callers` is the
+  save-time reverse check: every caller that follows the callee is re-bound against the new
+  text, and a mismatch names the caller (`save_version` refuses the save on it).
 - **Depth counts templates, root inclusive.** The root is 1, so `a -> b -> c -> d` reaches
   4 and is `call depth over 3`, while `initiative -> epic -> story` is 3 and passes.
 - **A cycle is measured along the current call path**, pushed and popped around each
@@ -23,6 +29,7 @@ re-validated here.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from orchestrator.application.steps import TEMPLATE_CALL_KIND
@@ -43,6 +50,7 @@ from orchestrator.application.templates.model import (
     ValidationError,
 )
 from orchestrator.application.templates.table import is_count, problem
+from orchestrator.domain.entities.template import TemplateRef
 from orchestrator.domain.ports.templates import TemplateVersionRepository
 
 #: The deepest chain of Templates a Run may be planned from, root inclusive (AD-15).
@@ -54,10 +62,23 @@ FIRST_CALLEE_DEPTH = 2
 #: A `(name, version)` pair, the key a cycle is measured on.
 Ref = tuple[str, int]
 
+#: A call as a file wrote it: the callee's name, and its version or `None` when unpinned.
+Call = tuple[str, int | None]
+
 #: The callee input types a bare literal can bind. `project`, `repository` and `item` accept
 #: only a variable of exactly that type.
 TEXT_BINDABLE = frozenset({"string", "path", "enum"})
 NUMBER_BINDABLE = "number"
+
+
+def resolve_callee(
+    templates: TemplateVersionRepository, name: str, version: int | None
+) -> int | None:
+    """The version a call means: its pin, or the latest stored under `name`; `None` if none."""
+    if version is not None:
+        return version
+    stored = templates.list_versions(name)
+    return max(stored) if stored else None
 
 
 def check_calls(root: LinedMap, templates: TemplateVersionRepository) -> list[ValidationError]:
@@ -87,11 +108,12 @@ def _check_call(
     params = as_map(node.get("with"))
     if params is None:
         return []
-    name, version = params.get("name"), params.get("version")
-    if not isinstance(name, str) or not isinstance(version, int) or not is_count(version):
+    name, written = params.get("name"), params.get("version")
+    if not isinstance(name, str) or (written is not None and not is_count(written)):
         return []
-    callee = templates.get(name, version)
-    if callee is None:
+    version = resolve_callee(templates, name, written)
+    callee = templates.get(name, version) if version is not None else None
+    if callee is None or version is None:
         return [problem(node.line, CALLEE_NOT_FOUND)]
     errors = _check_bindings(params, callee.yaml, root, item, node.line)
     path = _root_ref(root)
@@ -99,29 +121,68 @@ def _check_call(
         return [*errors, problem(node.line, CALL_CYCLE)]
     path = (*path, (name, version))
     for call in callee.calls:
-        ref = (call.name, call.version)
-        errors += _descend(ref, FIRST_CALLEE_DEPTH + 1, path, templates, node.line)
+        errors += _descend(
+            (call.name, call.version), FIRST_CALLEE_DEPTH + 1, path, templates, node.line
+        )
     return errors
 
 
 def _descend(
-    ref: Ref,
+    call: Call,
     depth: int,
     path: tuple[Ref, ...],
     templates: TemplateVersionRepository,
     line: int,
 ) -> list[ValidationError]:
-    """Walk one callee's pinned calls, reporting at the root call site that reached it."""
+    """Walk one callee's recorded calls, reporting at the root call site that reached it."""
+    name, written = call
+    number = resolve_callee(templates, name, written)
+    if number is None:
+        return [problem(line, CALLEE_NOT_FOUND)]
+    ref: Ref = (name, number)
     if ref in path:
         return [problem(line, CALL_CYCLE)]
     if depth > MAX_DEPTH:
         return [problem(line, CALL_DEPTH)]
-    version = templates.get(ref[0], ref[1])
+    version = templates.get(name, number)
     if version is None:
         return [problem(line, CALLEE_NOT_FOUND)]
     errors: list[ValidationError] = []
-    for call in version.calls:
-        errors += _descend((call.name, call.version), depth + 1, (*path, ref), templates, line)
+    for next_call in version.calls:
+        errors += _descend(
+            (next_call.name, next_call.version), depth + 1, (*path, ref), templates, line
+        )
+    return errors
+
+
+# --- the reverse check: a new callee version against the callers that follow it --------------
+
+
+def check_callers(
+    name: str, callee_yaml: str, callers: Sequence[tuple[TemplateRef, str]]
+) -> list[ValidationError]:
+    """Every binding offence an unpinned call to `name` would have against `callee_yaml`.
+
+    Each error is stamped with the caller's own `(name, version)` and line, since the text
+    at fault is the caller's and the save being refused is the callee's. A caller whose text
+    no longer parses is skipped: it was stored valid, and it is not this save's to fix.
+    """
+    errors: list[ValidationError] = []
+    for ref, text in callers:
+        loaded = load_with_lines(text)
+        if loaded.root is None:
+            continue
+        for node, item in iter_steps(loaded.root):
+            params = as_map(node.get("with"))
+            if node.get("uses") != TEMPLATE_CALL_KIND or params is None:
+                continue
+            if params.get("name") != name or params.get("version") is not None:
+                continue
+            found = _check_bindings(params, callee_yaml, loaded.root, item, node.line)
+            errors += [
+                error.model_copy(update={"template": ref.name, "version": ref.version})
+                for error in found
+            ]
     return errors
 
 

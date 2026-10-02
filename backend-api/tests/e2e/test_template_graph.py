@@ -94,8 +94,10 @@ def test_epic_1_collapses_its_call_to_story(authenticated: httpx.Client) -> None
 
     call = next(node for node in body["nodes"] if node["id"] == "stories.story")
     assert call["kind"] == "template"
-    assert call["call"] == {"name": "story", "version": 1}
-    assert call["label"] == "story@1"
+    # Operator decision 2026-10-02 (editable workflows, unpinned callees): the shipped `epic`
+    # file no longer pins `story`, so the call resolves at plan time and reads `version: None`
+    assert call["call"] == {"name": "story", "version": None}
+    assert call["label"] == "story@latest"
     assert call["gate"] is None
 
 

@@ -134,7 +134,8 @@ def test_epic_1s_nodes_carry_the_kind_label_and_gate_the_file_declares(
         ("shell", "setup", "deterministic"),
         ("shell", "baseline", "deterministic"),
         ("agent", "spec-gate", "liveness"),
-        ("template", "story@1", None),
+        # Operator decision 2026-10-02 (editable workflows, unpinned callees): unpinned call
+        ("template", "story@latest", None),
         ("checkpoint", "after", "human"),
         ("agent", "gen-e2e", "liveness"),
         ("git.commit", "commit-e2e", "deterministic"),
@@ -174,14 +175,15 @@ def test_the_path_name_is_where_the_screen_is_open_not_what_is_graphed(
 def test_a_posted_call_is_resolved_against_the_real_repository(
     authenticated: httpx.Client,
 ) -> None:
-    """`epic@1` names `story@1`; nothing but the stack's own store can answer that."""
+    """`epic@1` names `story` unpinned (Operator decision 2026-10-02); nothing but the stack's
+    own store can answer that the name exists."""
     text = stored_yaml(authenticated, "epic", 1)
 
     body = authenticated.post(f"{TEMPLATES}/epic/graph", json={"yaml": text}).json()
 
     call = next(node for node in body["nodes"] if node["id"] == "stories.story")
-    assert call["call"] == {"name": "story", "version": 1}
-    assert call["label"] == "story@1"
+    assert call["call"] == {"name": "story", "version": None}
+    assert call["label"] == "story@latest"
     assert call["gate"] is None
 
 

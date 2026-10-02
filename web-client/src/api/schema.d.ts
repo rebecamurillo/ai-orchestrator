@@ -1389,8 +1389,11 @@ export interface components {
         NodeCallOut: {
             /** Name */
             name: string;
-            /** Version */
-            version: number;
+            /**
+             * Version
+             * @description `null` for an unpinned call (`name@latest`).
+             */
+            version: number | null;
         };
         /**
          * NodeOut
@@ -2370,12 +2373,30 @@ export interface components {
             skipped_epics?: number[];
         };
         /**
-         * TemplateRefOut
-         * @description One `(name, version)` reference, as `calls` and `called_by` each list them.
+         * TemplateCallOut
+         * @description One `calls` entry: the callee as the file named it — `version` null when unpinned.
          */
-        TemplateRefOut: {
+        TemplateCallOut: {
             /** Name */
             name: string;
+            /**
+             * Version
+             * @description The pinned version, or `null` for an unpinned call (latest).
+             */
+            version: number | null;
+        };
+        /**
+         * TemplateCallerOut
+         * @description One `called_by` entry; `pinned` false means the caller follows this name's latest.
+         */
+        TemplateCallerOut: {
+            /** Name */
+            name: string;
+            /**
+             * Pinned
+             * @description True when the caller names this exact version; false when it omits `version` and so follows whatever is latest.
+             */
+            pinned: boolean;
             /** Version */
             version: number;
         };
@@ -2399,9 +2420,9 @@ export interface components {
          */
         TemplateVersionOut: {
             /** Called By */
-            called_by: components["schemas"]["TemplateRefOut"][];
+            called_by: components["schemas"]["TemplateCallerOut"][];
             /** Calls */
-            calls: components["schemas"]["TemplateRefOut"][];
+            calls: components["schemas"]["TemplateCallOut"][];
             /** Created At */
             created_at: string | null;
             /**

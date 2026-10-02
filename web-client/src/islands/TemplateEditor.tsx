@@ -33,6 +33,8 @@ import type { components } from '../api/schema';
 import { api } from '../api/client';
 import { buildYamlExtensions, rewriteVersionLine } from '../lib/editor/yamlEditor';
 import { publishValidation } from '../stores/template-validation';
+import { saveImpactLines } from '../lib/templates/save-impact';
+import type { CalledByRef } from '../components/templates/version-row';
 import '../styles/template-editor.css';
 
 type ProblemError = components['schemas']['ProblemError'];
@@ -56,6 +58,8 @@ interface Props {
    * same data independently, from the page's own fetch. Not an oversight. */
   inputs: InputDecl[];
   errorsInitial: ValidateResult;
+  /** The loaded version's `called_by`: which callers follow a save and which are pinned. */
+  calledBy: CalledByRef[];
 }
 
 const DEBOUNCE_MS = 800;
@@ -96,7 +100,7 @@ function genericFailureResult(): ValidateResult {
   };
 }
 
-export default function TemplateEditor({ name, version, yaml, errorsInitial }: Props) {
+export default function TemplateEditor({ name, version, yaml, errorsInitial, calledBy }: Props) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const textRef = useRef(yaml);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -210,6 +214,13 @@ export default function TemplateEditor({ name, version, yaml, errorsInitial }: P
           rewritten in place — see `save()` above) while this line states what Save will
           actually post, verbatim (NFR-8) */}
       <p className="template-editor-banner">editing as v{version + 1}</p>
+      <div className="template-editor-impact" data-testid="templates-save-impact">
+        {saveImpactLines(calledBy, version).map((line) => (
+          <p key={line} className="template-editor-banner">
+            {line}
+          </p>
+        ))}
+      </div>
 
       <div className="template-editor-toolbar">
         <span

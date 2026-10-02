@@ -44,12 +44,15 @@ FOR_EACH: Literal["for_each"] = "for_each"
 
 
 class NodeCall(BaseModel):
-    """The callee a collapsed `uses: template` node names. Never expanded here."""
+    """The callee a collapsed `uses: template` node names. Never expanded here.
+
+    `version` is `None` for an unpinned call: the node is labelled `name@latest`.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     name: str
-    version: int
+    version: int | None
 
 
 class Node(BaseModel):

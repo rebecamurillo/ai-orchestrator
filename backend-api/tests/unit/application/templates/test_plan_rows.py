@@ -663,3 +663,31 @@ def test_the_refusal_names_the_template_that_declared_the_route() -> None:
 
     assert (raised.value.template, raised.value.version) == ("cross-frame", 1)
     assert raised.value.line is not None
+
+
+def test_an_unpinned_call_whose_callee_the_tree_never_resolved_is_a_plan_error() -> None:
+    """Operator decision 2026-10-02, editable workflows: a `uses: template` call may omit
+    `version`; it resolves to the callee's latest at validate and plan time; no cascade.
+    """
+    unpinned = CALLER.replace("      version: 1\n", "")
+
+    with pytest.raises(PlanError) as raised:
+        planned(unpinned)
+
+    assert raised.value.reason == CALLEE_NOT_RESOLVED
+    assert raised.value.item == "leaf@latest"
+
+
+def test_an_unpinned_call_expands_the_callee_the_tree_resolved_as_latest() -> None:
+    unpinned = CALLER.replace("      version: 1\n", "")
+    leaf = parsed(LEAF)
+    tree = ResolvedTree(root=parsed(unpinned, leaf_version()), callees=(leaf,), latest={"leaf": 1})
+    plan = plan_run(
+        tree,
+        fixtures.inputs(values={"spec_folder": FOLDER}),
+        git=FakeGit(refs={"main": REF}, files={}, listings={}),
+        base_dir=fixtures.BASE,
+        bmad_version=fixtures.BMAD_VERSION,
+    )
+
+    assert paths(plan) == ["plan", "sub.sync"]

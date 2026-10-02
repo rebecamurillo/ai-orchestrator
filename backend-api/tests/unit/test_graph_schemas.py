@@ -129,3 +129,9 @@ def test_the_wire_models_are_the_lists_the_browser_reads() -> None:
     assert isinstance(out.groups, list)
     assert isinstance(out.nodes[0], NodeOut)
     assert isinstance(out.groups[0], GroupOut)
+
+
+def test_a_call_node_of_an_unpinned_call_carries_a_null_version() -> None:
+    out = NodeCallOut.of(NodeCall(name="story", version=None))
+
+    assert out.model_dump() == {"name": "story", "version": None}

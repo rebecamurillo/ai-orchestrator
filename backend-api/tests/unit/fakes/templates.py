@@ -14,7 +14,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from orchestrator.domain.entities.template import TemplateRef, TemplateSummary, TemplateVersion
+from orchestrator.domain.entities.template import (
+    TemplateCaller,
+    TemplateRef,
+    TemplateSummary,
+    TemplateVersion,
+)
 
 if TYPE_CHECKING:  # pragma: no cover — typing only
     from tests.unit.fakes.runs import FakeRunRepository
@@ -71,17 +76,30 @@ class FakeTemplateVersionRepository:
     def list_versions(self, name: str) -> list[int]:
         return sorted(v for (n, v) in self.versions if n == name)
 
-    def callers_of(self, name: str, version: int) -> list[TemplateRef]:
-        target = TemplateRef(name=name, version=version)
+    def callers_of(self, name: str, version: int) -> list[TemplateCaller]:
         callers = [
-            TemplateRef(name=n, version=v)
+            TemplateCaller(name=n, version=v, pinned=pinned)
             for (n, v), stored in self.versions.items()
-            if target in stored.calls
+            if (pinned := _calls(stored, name, version)) is not None
         ]
-        return sorted(callers, key=lambda ref: (ref.name, ref.version))
+        return sorted(callers, key=lambda caller: (caller.name, caller.version))
 
     def pinned_by(self, name: str, version: int) -> int:
         if self._runs is None:
             return 0
         target = TemplateRef(name=name, version=version)
         return sum(1 for run in self._runs.runs.values() if target in run.pinned_versions)
+
+
+def _calls(stored: TemplateVersion, name: str, version: int) -> bool | None:
+    """Whether `stored` pins `(name, version)` (`True`), follows `name` unpinned (`False`),
+    or calls neither (`None`). A pin wins when a file does both."""
+    found: bool | None = None
+    for call in stored.calls:
+        if call.name != name:
+            continue
+        if call.version == version:
+            return True
+        if call.version is None:
+            found = False
+    return found

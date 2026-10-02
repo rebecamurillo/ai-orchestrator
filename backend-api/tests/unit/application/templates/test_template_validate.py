@@ -413,3 +413,22 @@ def test_a_gateless_step_is_still_reported_when_the_file_also_has_an_error(
     assert [(record.reason, record.line) for record in result.errors] == [(UNKNOWN_KEY, 3)]
     assert result.unvalidated == ("verify",)
     assert result.template is None
+
+
+def test_an_unpinned_call_is_parsed_with_no_version(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    """Operator decision 2026-10-02, editable workflows: a `uses: template` call may omit
+    `version`; it resolves to the callee's latest at validate and plan time; no cascade.
+    """
+    text = (
+        "name: caller\nversion: 1\nsteps:\n  - id: story\n    uses: template\n"
+        "    with:\n      name: strict\n      inputs:\n        spec_folder: docs\n"
+    )
+    result = validate(text, templates=templates)
+
+    assert result.errors == ()
+    assert result.template is not None
+    call = result.template.steps[0].call
+    assert call is not None
+    assert (call.name, call.version) == ("strict", None)

@@ -179,7 +179,7 @@ def _node(step: Step, node_id: str) -> Node:
     return Node(
         id=node_id,
         kind=step.uses,
-        label=f"{call.name}@{call.version}" if call is not None else step.id,
+        label=_call_label(call) if call is not None else step.id,
         gate=_gate_of(step),
         agent=step.uses == AGENT_KIND,
         human=_is_human(step),
@@ -200,6 +200,10 @@ def _item_checkpoint(loop_id: str, position: str) -> Node:
         gate=KIND_META[CHECKPOINT_KIND].gate_default,
         human=True,
     )
+
+
+def _call_label(call: NodeCall) -> str:
+    return f"{call.name}@{'latest' if call.version is None else call.version}"
 
 
 def _call_of(step: Step) -> NodeCall | None:

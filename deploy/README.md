@@ -147,6 +147,26 @@ taken on your machine the script stops before starting anything and names the va
 that moves this stack off it (`WEB_CLIENT_PORT`, `BACKEND_API_PORT` in `.env`;
 `LANGFUSE_PORT`, `LITELLM_PORT`, … in `llm-platform/.env`). It never stops what is listening there.
 
+## Editing the workflow templates
+
+The shipped templates are a starting point, not a fixed part of the product. Open
+`/templates`, pick a template and a version, edit the YAML in place, **Validate**, and
+**Save as v{n+1}**. A saved version never changes; the save is a new version beside it, and
+the versions column keeps every earlier one.
+
+A template that calls another (`initiative-hub` → `initiative-hub-epic` →
+`initiative-hub-story`) names the callee by `name` and omits `version`, so it resolves to the
+callee's latest saved version each time a Run is planned. Editing the story template is
+therefore one save: the next hub Run picks it up through the unchanged hub and epic files.
+The editor says so above the Save button — which callers *follow* this save and which are
+*pinned* to an integer version and will not — and every save `applies to Runs planned after
+this save`: a Run that is already planned, queued or running keeps the tree it was planned
+from. A save that would break a follower (an input renamed or removed) is refused and names
+that caller.
+
+An upgrade that ships a changed template adds a new version of it on first boot and never
+overwrites or removes the versions you saved.
+
 ## The optional llm-platform stack (LiteLLM + Langfuse)
 
 `llm-platform/` is the model gateway and the tracing server: LiteLLM (routes every model call,

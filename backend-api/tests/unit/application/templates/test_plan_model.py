@@ -36,6 +36,7 @@ from orchestrator.application.templates.plan_model import (
     Plan,
     PlanError,
     Redispatched,
+    ResolvedTree,
 )
 from orchestrator.domain.errors import Invalid
 from orchestrator.domain.values import Redispatch
@@ -184,3 +185,15 @@ def test_a_found_redispatch_is_frozen() -> None:
 def test_the_resolved_keys_are_the_field_names_the_executor_constructs_from() -> None:
     """4.7 builds `Redispatch(**with_resolved["on_fail"])`, so the keys are its fields."""
     assert {REDISPATCH_TARGET_SEQ, REDISPATCH_MAX} == set(Redispatch.model_fields)
+
+
+def test_a_resolved_tree_answers_an_unpinned_call_through_what_it_resolved_as_latest() -> None:
+    """Operator decision 2026-10-02, editable workflows: a `uses: template` call may omit
+    `version`; it resolves to the callee's latest at validate and plan time; no cascade.
+    """
+    base = fixtures.tree("epic")
+    tree = ResolvedTree(root=base.root, callees=base.callees, latest={"story": 1})
+
+    assert tree.callee("story", None) is base.callees[0]
+    assert base.callee("story", None) is None  # nothing resolved: not held
+    assert ResolvedTree(root=base.root, latest={"story": 1}).callee("story", None) is None

@@ -34,7 +34,9 @@ class NodeCallOut(BaseModel):
     """The callee a collapsed `uses: template` node names."""
 
     name: str
-    version: int
+    version: Annotated[
+        int | None, Field(description="`null` for an unpinned call (`name@latest`).")
+    ]
 
     @classmethod
     def of(cls, call: NodeCall) -> NodeCallOut:

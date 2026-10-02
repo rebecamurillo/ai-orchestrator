@@ -9,7 +9,7 @@ YAML bodies.
 
 from __future__ import annotations
 
-from orchestrator.application.templates.calls import check_calls
+from orchestrator.application.templates.calls import check_callers, check_calls, resolve_callee
 from orchestrator.application.templates.model import (
     CALL_CYCLE,
     CALL_DEPTH,
@@ -17,7 +17,7 @@ from orchestrator.application.templates.model import (
     CALLEE_NOT_FOUND,
 )
 from orchestrator.application.templates.validate import validate
-from orchestrator.domain.entities.template import TemplateRef
+from orchestrator.domain.entities.template import TemplateCallRef, TemplateRef
 from tests.unit.application.templates import fixture, parsed, reasons
 from tests.unit.application.templates.conftest import TRIVIAL, version
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
@@ -28,9 +28,11 @@ HEAD = "name: caller\nversion: 1\n"
 CALL_LINE = 4
 
 
-def call(name: str = "story", number: int = 1, bindings: str = "") -> str:
+def call(name: str = "story", number: int | None = 1, bindings: str = "") -> str:
+    """`number=None` writes no `version:` at all — an unpinned call."""
     body = f"steps:\n  - id: story\n    uses: template\n    with:\n      name: {name}\n"
-    return body + f"      version: {number}\n" + bindings
+    pin = "" if number is None else f"      version: {number}\n"
+    return body + pin + bindings
 
 
 def check(text: str, templates: FakeTemplateVersionRepository) -> list[str]:
@@ -311,3 +313,156 @@ def test_one_missing_callee_pinned_twice_is_reported_once(
     assert [(record.reason, record.line) for record in result.errors] == [
         (CALLEE_NOT_FOUND, CALL_LINE)
     ]
+
+
+# --- unpinned calls ------------------------------------------------------------------------
+# Operator decision 2026-10-02, editable workflows: a `uses: template` call may omit `version`; it
+# resolves to the callee's latest at validate and plan time; no cascade.
+
+#: `story@2` (the latest stored `story`) requires `repository`, `spec_folder` and `story`;
+#: `story@1` requires nothing. Which one an unpinned call binds against is therefore visible.
+BINDS_LATEST = (
+    "      inputs:\n"
+    "        repository: '{{repository}}'\n"
+    "        spec_folder: docs\n"
+    "        story: '{{story}}'\n"
+)
+CALLER_HEAD = (
+    "name: caller\nversion: 1\ninputs:\n  repository: {type: repository}\n  story: {type: item}\n"
+)
+STORY_LATEST = 2
+THREE_REQUIRED = 3
+
+
+def test_resolve_callee_answers_the_pin_itself_and_the_latest_for_no_pin(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    assert resolve_callee(templates, "story", 1) == 1
+    assert resolve_callee(templates, "story", None) == STORY_LATEST
+    assert resolve_callee(templates, "nothing", None) is None
+
+
+def test_an_unpinned_call_binds_against_the_latest_stored_version(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    assert check(CALLER_HEAD + call(number=None, bindings=BINDS_LATEST), templates) == []
+    # the same bindings satisfy only story@2: against story@1 they are mismatches
+    assert check(CALLER_HEAD + call(number=1, bindings=BINDS_LATEST), templates) != []
+
+
+def test_an_unpinned_call_owes_the_latest_version_its_required_inputs(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    """Bare `name: story` was fine against story@1 and is three mismatches against story@2."""
+    assert check(HEAD + call(number=None), templates) == [CALLEE_INPUT_MISMATCH] * THREE_REQUIRED
+
+
+def test_an_explicit_pin_still_resolves_exactly_that_version(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    assert check(HEAD + call(number=1), templates) == []
+
+
+def test_an_unpinned_call_to_a_name_with_no_stored_version_is_not_found(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    assert check(HEAD + call(name="nothing", number=None), templates) == [CALLEE_NOT_FOUND]
+
+
+def test_an_unpinned_call_recorded_by_a_callee_is_followed_to_the_latest(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    """`epic-unpinned` recorded `story` without a pin: the walk reaches story@2, depth 3."""
+    templates.add(version("epic-unpinned", 1, TRIVIAL, TemplateCallRef(name="story", version=None)))
+
+    assert check(HEAD + call(name="epic-unpinned"), templates) == []
+
+
+def test_an_unpinned_call_recorded_by_a_callee_to_nothing_stored_is_not_found(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    templates.add(version("dangling-u", 1, TRIVIAL, TemplateCallRef(name="gone", version=None)))
+
+    assert check(HEAD + call(name="dangling-u"), templates) == [CALLEE_NOT_FOUND]
+
+
+def test_a_cycle_through_an_unpinned_call_is_still_a_cycle(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    templates.add(version("back", 1, TRIVIAL, TemplateCallRef(name="a", version=None)))
+    templates.add(version("a", 1, TRIVIAL))
+
+    found = check("name: a\nversion: 1\n" + call(name="back", number=None), templates)
+
+    assert found == [CALL_CYCLE]
+
+
+def test_a_root_pinning_and_unpinning_the_same_callee_is_a_diamond_not_a_cycle(
+    templates: FakeTemplateVersionRepository,
+) -> None:
+    text = (
+        CALLER_HEAD
+        + call(number=1)
+        + ("  - id: latest\n    uses: template\n    with:\n      name: story\n" + BINDS_LATEST)
+    )
+
+    assert check(text, templates) == []
+
+
+# --- check_callers: a callee save must not strand its unpinned callers -----------------------
+
+LEAF_V2 = "name: leaf\nversion: 2\ninputs:\n  folder:\n    type: path\n    required: true\n"
+LEAF_V2_RENAMED = LEAF_V2.replace("  folder:", "  spec:")
+UNPINNED_CALLER = (
+    "name: up\nversion: 1\nsteps:\n  - id: leaf\n    uses: template\n"
+    "    with:\n      name: leaf\n      inputs:\n        folder: docs\n"
+)
+PINNED_CALLER = UNPINNED_CALLER.replace("      inputs:", "      version: 1\n      inputs:")
+OTHER_CALLER = UNPINNED_CALLER.replace("name: leaf\n      inputs", "name: other\n      inputs")
+UP = TemplateRef(name="up", version=1)
+#: Where `UNPINNED_CALLER` binds `folder`.
+BINDING_LINE = 9
+
+
+def test_check_callers_passes_a_caller_whose_bindings_the_new_callee_still_declares() -> None:
+    assert check_callers("leaf", LEAF_V2, [(UP, UNPINNED_CALLER)]) == []
+
+
+def test_check_callers_names_the_caller_a_renamed_input_would_strand() -> None:
+    errors = check_callers("leaf", LEAF_V2_RENAMED, [(UP, UNPINNED_CALLER)])
+
+    assert [(e.template, e.version, e.reason) for e in errors] == [
+        ("up", 1, CALLEE_INPUT_MISMATCH),  # `folder` is no longer declared
+        ("up", 1, CALLEE_INPUT_MISMATCH),  # `spec` is required and never bound
+    ]
+    # the undeclared binding is reported at its own line, the unbound requirement at the call
+    assert [e.line for e in errors] == [BINDING_LINE, CALL_LINE]
+
+
+def test_check_callers_leaves_a_pinned_caller_alone() -> None:
+    """A pinned caller keeps the version it names; a new version cannot strand it."""
+    assert check_callers("leaf", LEAF_V2_RENAMED, [(UP, PINNED_CALLER)]) == []
+
+
+def test_check_callers_ignores_calls_to_other_names_and_steps_that_call_nothing() -> None:
+    assert check_callers("leaf", LEAF_V2_RENAMED, [(UP, OTHER_CALLER)]) == []
+    assert check_callers("leaf", LEAF_V2_RENAMED, [(UP, TRIVIAL)]) == []
+    bare = "name: up\nversion: 1\nsteps:\n  - id: leaf\n    uses: template\n"
+    assert check_callers("leaf", LEAF_V2_RENAMED, [(UP, bare)]) == []
+
+
+def test_check_callers_checks_a_call_inside_a_loop_with_its_item_bound() -> None:
+    looped = (
+        "name: up\nversion: 1\ninputs:\n  spec_folder: {type: path}\nsteps:\n"
+        "  - id: items\n    for_each: '{{spec_folder}}/items.yaml'\n    as: item\n    steps:\n"
+        "      - id: leaf\n        uses: template\n        with:\n          name: leaf\n"
+        "          inputs:\n            folder: '{{item}}'\n"
+    )
+    item_leaf = "name: leaf\nversion: 2\ninputs:\n  folder:\n    type: item\n"
+
+    assert check_callers("leaf", item_leaf, [(UP, looped)]) == []
+    assert check_callers("leaf", LEAF_V2, [(UP, looped)]) != []
+
+
+def test_check_callers_skips_a_caller_whose_text_no_longer_parses() -> None:
+    assert check_callers("leaf", LEAF_V2_RENAMED, [(UP, "not: [valid\n")]) == []

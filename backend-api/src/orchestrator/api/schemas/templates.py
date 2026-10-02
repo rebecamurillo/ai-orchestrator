@@ -21,7 +21,12 @@ from orchestrator.api.schemas.common import UtcTimestamp
 from orchestrator.application.templates.model import InputDecl, Scalar, ValidationError
 from orchestrator.application.templates.model import ValidationResult as AppValidationResult
 from orchestrator.application.use_cases.templates import TemplateVersionDetail
-from orchestrator.domain.entities.template import TemplateRef, TemplateSummary
+from orchestrator.domain.entities.template import (
+    TemplateCaller,
+    TemplateCallRef,
+    TemplateRef,
+    TemplateSummary,
+)
 
 #: A coarse cap on posted YAML text — the largest shipped Template is a few KB, and this
 #: guard is what closes (partially: it bounds text length, not `yaml.SafeLoader` alias
@@ -55,6 +60,40 @@ class TemplateRefOut(BaseModel):
     @classmethod
     def of(cls, ref: TemplateRef) -> TemplateRefOut:
         return cls(name=ref.name, version=ref.version)
+
+
+class TemplateCallOut(BaseModel):
+    """One `calls` entry: the callee as the file named it — `version` null when unpinned."""
+
+    name: str
+    version: Annotated[
+        int | None,
+        Field(description="The pinned version, or `null` for an unpinned call (latest)."),
+    ]
+
+    @classmethod
+    def of(cls, ref: TemplateCallRef) -> TemplateCallOut:
+        return cls(name=ref.name, version=ref.version)
+
+
+class TemplateCallerOut(BaseModel):
+    """One `called_by` entry; `pinned` false means the caller follows this name's latest."""
+
+    name: str
+    version: int
+    pinned: Annotated[
+        bool,
+        Field(
+            description=(
+                "True when the caller names this exact version; false when it omits "
+                "`version` and so follows whatever is latest."
+            )
+        ),
+    ]
+
+    @classmethod
+    def of(cls, caller: TemplateCaller) -> TemplateCallerOut:
+        return cls(name=caller.name, version=caller.version, pinned=caller.pinned)
 
 
 class TemplateSummaryOut(BaseModel):
@@ -102,8 +141,8 @@ class TemplateVersionOut(BaseModel):
     version: int
     yaml: str
     hash: Annotated[str, Field(description="sha256 hex digest of `yaml`, byte for byte.")]
-    calls: list[TemplateRefOut]
-    called_by: list[TemplateRefOut]
+    calls: list[TemplateCallOut]
+    called_by: list[TemplateCallerOut]
     pinned_by: Annotated[
         int,
         Field(
@@ -123,8 +162,8 @@ class TemplateVersionOut(BaseModel):
             version=detail.template.version,
             yaml=detail.template.yaml,
             hash=detail.template.hash,
-            calls=[TemplateRefOut.of(ref) for ref in detail.template.calls],
-            called_by=[TemplateRefOut.of(ref) for ref in detail.called_by],
+            calls=[TemplateCallOut.of(ref) for ref in detail.template.calls],
+            called_by=[TemplateCallerOut.of(caller) for caller in detail.called_by],
             pinned_by=detail.pinned_by,
             created_at=detail.template.created_at,
             inputs=[InputDeclOut.of(decl) for decl in detail.inputs],

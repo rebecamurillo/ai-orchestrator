@@ -19,7 +19,12 @@ import pytest
 from sqlalchemy import DateTime, Integer, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 
-from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
+from orchestrator.domain.entities.template import (
+    TemplateCaller,
+    TemplateCallRef,
+    TemplateRef,
+    TemplateVersion,
+)
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.templates import TemplateVersionRepository
 from orchestrator.infrastructure.db import Base, SQLAlchemyTemplateVersionRepository
@@ -194,6 +199,14 @@ def test_calls_json_is_the_jsonb_shape_the_column_holds() -> None:
     assert calls_json(version) == [{"name": "epic", "version": 2}]
 
 
+def test_an_unpinned_call_round_trips_as_a_json_null() -> None:
+    version = a_version(calls=(TemplateCallRef(name="epic", version=None),))
+
+    assert calls_json(version) == [{"name": "epic", "version": None}]
+    assert to_entity(a_row(version)).calls == (TemplateCallRef(name="epic", version=None),)
+    assert to_entity(a_row(version)).calls[0].version is None
+
+
 def test_calls_json_is_empty_for_no_calls() -> None:
     assert calls_json(a_version()) == []
 
@@ -303,7 +316,26 @@ def test_callers_of_filters_in_python_over_every_stored_row() -> None:
     ]
     session = RecordingSession(scalars_queue=[rows])
 
-    assert repository(session).callers_of("story", 1) == [TemplateRef(name="epic", version=1)]
+    # revised to `TemplateCaller` by the Operator decision 2026-10-02, editable workflows: a
+    # `uses: template` call may omit `version`; it resolves to the callee's latest at validate
+    # and plan time; no cascade.
+    assert repository(session).callers_of("story", 1) == [
+        TemplateCaller(name="epic", version=1, pinned=True)
+    ]
+
+
+def test_callers_of_matches_a_null_version_against_any_version_and_flags_it() -> None:
+    rows = [
+        a_row(
+            a_version(name="epic", version=1, calls=(TemplateCallRef(name="story", version=None),))
+        ),
+        a_row(a_version(name="old", version=1, calls=(TemplateRef(name="story", version=1),))),
+    ]
+    session = RecordingSession(scalars_queue=[rows])
+
+    assert repository(session).callers_of("story", 7) == [
+        TemplateCaller(name="epic", version=1, pinned=False)
+    ]
 
 
 def test_callers_of_is_empty_when_nothing_calls_it() -> None:

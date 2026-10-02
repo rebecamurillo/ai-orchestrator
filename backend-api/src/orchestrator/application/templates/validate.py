@@ -240,6 +240,6 @@ def _call(params: LinedMap) -> TemplateCall:
     return TemplateCall(
         line=params.line,
         name=params["name"],
-        version=params["version"],
+        version=params.get("version"),
         inputs=tuple((str(key), value) for key, value in bindings.items()),
     )

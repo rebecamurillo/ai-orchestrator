@@ -281,3 +281,14 @@ def test_a_call_that_declares_the_human_gate_is_not_drawn_as_a_human_stop(
     graph = graph_of(GATED_CALL, templates)
 
     assert node(graph, "items.call").human is False
+
+
+def test_an_unpinned_call_is_labelled_latest(templates: FakeTemplateVersionRepository) -> None:
+    """Operator decision 2026-10-02, editable workflows: a `uses: template` call may omit
+    `version`; it resolves to the callee's latest at validate and plan time; no cascade.
+    """
+    graph = graph_of(loop().replace("          version: 1\n", ""), templates)
+    call = node(graph, "items.call")
+
+    assert call.call == NodeCall(name="leaf", version=None)
+    assert call.label == "leaf@latest"

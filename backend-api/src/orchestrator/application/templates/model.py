@@ -176,13 +176,17 @@ class AgentExtras(BaseModel):
 
 
 class TemplateCall(BaseModel):
-    """A `uses: template` step's `with`: which version, bound to what."""
+    """A `uses: template` step's `with`: which callee, bound to what.
+
+    `version` is `None` for an unpinned call — the file named the callee and no version, so
+    it resolves to the callee's latest stored version at validate and plan time.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     line: int
     name: str
-    version: int
+    version: int | None
     inputs: tuple[tuple[str, Scalar], ...] = ()
 
 

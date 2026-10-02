@@ -11,6 +11,11 @@ plan is expanded from is the tree the *files* declare; `calls` is the pin the sa
 and 3.x's own tests already hold it to that. A callee reached by two callers is resolved
 once, so `ResolvedTree.pinned_versions()` is a set of pins in walk order rather than a bag.
 
+An unpinned call (no `version`) is resolved here to the callee's latest stored version —
+once per name, recorded in `ResolvedTree.latest` — so the plan, the rows and the Run's
+`pinned_versions` all name one concrete integer and a save made after this point never
+reaches this Run (AD-15).
+
 A version the store does not hold and a stored version that no longer validates are the
 same outcome to the Operator — this Run cannot be planned — so both are one `PlanError`
 naming the version at fault, and `Invalid` already answers 422 (`api/errors.py`).
@@ -22,6 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from orchestrator.application.dto import RunInputs
+from orchestrator.application.templates.calls import resolve_callee
 from orchestrator.application.templates.model import ForEach, ParsedTemplate
 from orchestrator.application.templates.plan import plan_run
 from orchestrator.application.templates.plan_model import (
@@ -46,19 +52,23 @@ class PlanPorts:
 
 def resolve_tree(templates: TemplateVersionRepository, ref: TemplateRef) -> ResolvedTree:
     """The root Template and every callee it reaches, each parsed once, in walk order."""
-    root = _parsed(templates, ref)
+    root = _parsed(templates, ref.name, ref.version)
     callees: list[ParsedTemplate] = []
+    latest: dict[str, int] = {}
     seen = {(ref.name, ref.version)}
     pending = _calls(root)
     while pending:
-        call = pending.pop(0)
-        if (call.name, call.version) in seen:
+        name, written = pending.pop(0)
+        number = resolve_callee(templates, name, written)
+        if (name, number) in seen:
             continue
-        seen.add((call.name, call.version))
-        parsed = _parsed(templates, call)
+        parsed = _parsed(templates, name, number)
+        seen.add((name, parsed.version))
+        if written is None:
+            latest[name] = parsed.version
         callees.append(parsed)
         pending += _calls(parsed)
-    return ResolvedTree(root=root, callees=tuple(callees))
+    return ResolvedTree(root=root, callees=tuple(callees), latest=latest)
 
 
 def plan_for(
@@ -74,35 +84,36 @@ def plan_for(
     return plan_run(tree, inputs, git=ports.git, base_dir=base_dir, bmad_version=bmad_version)
 
 
-def _parsed(templates: TemplateVersionRepository, ref: TemplateRef) -> ParsedTemplate:
-    """One stored version through the one parser, or the refusal that it is not usable."""
-    stored = templates.get(ref.name, ref.version)
+def _parsed(templates: TemplateVersionRepository, name: str, version: int | None) -> ParsedTemplate:
+    """One stored version through the one parser, or the refusal that it is not usable.
+
+    `version=None` is an unpinned call whose name holds no version at all; `validate()` has
+    already refused such a caller, so this is the same refusal spelled `name@latest`.
+    """
+    stored = None if version is None else templates.get(name, version)
     if stored is None:
-        raise _unresolved(ref)
+        raise _unresolved(name, version)
     result = validate(stored.yaml, templates=templates)
     if result.template is None:
-        raise _unresolved(ref, result.errors[0].line)
+        raise _unresolved(name, version, result.errors[0].line)
     return result.template
 
 
-def _unresolved(ref: TemplateRef, line: int | None = None) -> PlanError:
+def _unresolved(name: str, version: int | None, line: int | None = None) -> PlanError:
     return PlanError(
         reason=CALLEE_NOT_RESOLVED,
-        template=ref.name,
-        version=ref.version,
+        template=name,
+        version=version,
         line=line,
-        item=f"{ref.name}@{ref.version}",
+        item=f"{name}@{'latest' if version is None else version}",
     )
 
 
-def _calls(template: ParsedTemplate) -> list[TemplateRef]:
-    """Every `uses: template` step of one file, top level and inside its loop, in order."""
-    found: list[TemplateRef] = []
+def _calls(template: ParsedTemplate) -> list[tuple[str, int | None]]:
+    """Every `uses: template` step of one file, top level and inside its loop, in order, as
+    `(name, version)` with `None` where the file pinned nothing."""
+    found: list[tuple[str, int | None]] = []
     for entry in template.steps:
         steps = entry.steps if isinstance(entry, ForEach) else (entry,)
-        found += [
-            TemplateRef(name=step.call.name, version=step.call.version)
-            for step in steps
-            if step.call is not None
-        ]
+        found += [(step.call.name, step.call.version) for step in steps if step.call is not None]
     return found

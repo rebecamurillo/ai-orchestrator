@@ -7,7 +7,12 @@ from __future__ import annotations
 
 import pytest
 
-from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
+from orchestrator.domain.entities.template import (
+    TemplateCaller,
+    TemplateCallRef,
+    TemplateRef,
+    TemplateVersion,
+)
 from orchestrator.domain.ports.templates import TemplateVersionRepository
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
@@ -91,8 +96,35 @@ def test_callers_of_finds_every_version_whose_calls_names_the_target() -> None:
         ]
     )
 
-    assert templates.callers_of("story", 1) == [TemplateRef(name="epic", version=1)]
-    assert templates.callers_of("epic", 1) == [TemplateRef(name="initiative", version=1)]
+    # revised to `TemplateCaller` by the Operator decision 2026-10-02, editable workflows: a
+    # `uses: template` call may omit `version`; it resolves to the callee's latest at validate
+    # and plan time; no cascade.
+    assert templates.callers_of("story", 1) == [TemplateCaller(name="epic", version=1, pinned=True)]
+    assert templates.callers_of("epic", 1) == [
+        TemplateCaller(name="initiative", version=1, pinned=True)
+    ]
+
+
+def test_callers_of_counts_an_unpinned_caller_against_every_version_of_the_callee() -> None:
+    templates = FakeTemplateVersionRepository(
+        [
+            a_version(name="story", number=1),
+            a_version(name="story", number=2),
+            a_version(name="epic", number=1, calls=(TemplateCallRef(name="story", version=None),)),
+            a_version(name="old", number=1, calls=(TemplateRef(name="story", version=1),)),
+        ]
+    )
+
+    assert templates.callers_of("story", 1) == [
+        TemplateCaller(name="epic", version=1, pinned=False),
+        TemplateCaller(name="old", version=1, pinned=True),
+    ]
+    assert templates.callers_of("story", 2) == [
+        TemplateCaller(name="epic", version=1, pinned=False)
+    ]
+    assert templates.callers_of("story", 3) == [
+        TemplateCaller(name="epic", version=1, pinned=False)
+    ]
 
 
 def test_callers_of_is_empty_for_a_version_nothing_calls() -> None:

@@ -10,14 +10,14 @@ import type { components } from '../../api/schema';
 import type { CalledByRef, VersionRow } from '../../components/templates/version-row';
 
 type TemplateSummary = components['schemas']['TemplateSummaryOut'];
-type TemplateRef = components['schemas']['TemplateRefOut'];
+type TemplateCaller = components['schemas']['TemplateCallerOut'];
 
 export interface BuildVersionRowsArgs {
   name: string;
   versionNumber: number;
   summaryItems: TemplateSummary[];
   ownVersions: number[];
-  calledByLoaded: TemplateRef[];
+  calledByLoaded: TemplateCaller[];
 }
 
 /**

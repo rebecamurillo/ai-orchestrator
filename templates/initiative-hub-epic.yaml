@@ -85,7 +85,6 @@ steps:
         uses: template
         with:
           name: initiative-hub-story
-          version: 1
           inputs:
             project: "{{project}}"
             repository: "{{repository}}"

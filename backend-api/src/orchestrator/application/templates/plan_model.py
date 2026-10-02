@@ -270,9 +270,17 @@ class ResolvedTree:
 
     root: ParsedTemplate
     callees: tuple[ParsedTemplate, ...] = ()
+    #: `{name: version}` — what each unpinned call of this tree resolved to when the tree
+    #: was built, so the rows expand the one version the Run pins.
+    latest: Mapping[str, int] = field(default_factory=dict)
 
-    def callee(self, name: str, version: int) -> ParsedTemplate | None:
-        """The callee a `uses: template` step names, or `None` when the tree lacks it."""
+    def callee(self, name: str, version: int | None) -> ParsedTemplate | None:
+        """The callee a `uses: template` step names, or `None` when the tree lacks it.
+
+        `version=None` is an unpinned call: it is answered through `latest`.
+        """
+        if version is None:
+            version = self.latest.get(name)
         for parsed in self.callees:
             if (parsed.name, parsed.version) == (name, version):
                 return parsed

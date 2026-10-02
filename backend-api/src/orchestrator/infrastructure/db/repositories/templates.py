@@ -30,7 +30,12 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
 
-from orchestrator.domain.entities.template import TemplateRef, TemplateSummary, TemplateVersion
+from orchestrator.domain.entities.template import (
+    TemplateCaller,
+    TemplateSummary,
+    TemplateVersion,
+    call_ref,
+)
 from orchestrator.infrastructure.db.models.run import RunRow
 from orchestrator.infrastructure.db.models.template import TemplateRow, TemplateVersionRow
 
@@ -50,16 +55,13 @@ def to_entity(row: TemplateVersionRow) -> TemplateVersion:
         version=row.version,
         yaml=row.yaml,
         hash=row.hash,
-        calls=tuple(
-            TemplateRef(name=call[CALL_NAME_KEY], version=call[CALL_VERSION_KEY])
-            for call in row.calls
-        ),
+        calls=tuple(call_ref(call[CALL_NAME_KEY], call[CALL_VERSION_KEY]) for call in row.calls),
         created_at=row.created_at,
     )
 
 
 def calls_json(version: TemplateVersion) -> list[dict[str, object]]:
-    """`calls` as the `jsonb` column holds it, in the order the version pins them."""
+    """`calls` as the `jsonb` column holds it, in file order; an unpinned call is `null`."""
     return [{CALL_NAME_KEY: ref.name, CALL_VERSION_KEY: ref.version} for ref in version.calls]
 
 
@@ -140,13 +142,16 @@ class SQLAlchemyTemplateVersionRepository:
         ).all()
         return sorted(rows)
 
-    def callers_of(self, name: str, version: int) -> list[TemplateRef]:
-        target = {CALL_NAME_KEY: name, CALL_VERSION_KEY: version}
+    def callers_of(self, name: str, version: int) -> list[TemplateCaller]:
+        pinned = {CALL_NAME_KEY: name, CALL_VERSION_KEY: version}
+        unpinned = {CALL_NAME_KEY: name, CALL_VERSION_KEY: None}
         rows = self._session.scalars(select(TemplateVersionRow)).all()
         callers = [
-            TemplateRef(name=row.name, version=row.version) for row in rows if target in row.calls
+            TemplateCaller(name=row.name, version=row.version, pinned=pinned in row.calls)
+            for row in rows
+            if pinned in row.calls or unpinned in row.calls
         ]
-        callers.sort(key=lambda ref: (ref.name, ref.version))
+        callers.sort(key=lambda caller: (caller.name, caller.version))
         return callers
 
     def pinned_by(self, name: str, version: int) -> int:

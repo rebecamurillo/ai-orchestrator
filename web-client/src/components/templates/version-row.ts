@@ -11,6 +11,9 @@
 export interface CalledByRef {
   name: string;
   version: number;
+  /** `false` when the caller's `uses: template` step omits `version`: that caller follows
+   * every new save of this Template at plan time (AD-15, 2026-10-02). */
+  pinned: boolean;
 }
 
 export interface VersionRow {

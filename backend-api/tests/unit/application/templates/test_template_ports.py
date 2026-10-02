@@ -11,7 +11,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
+from orchestrator.domain.entities.template import (
+    TemplateCaller,
+    TemplateCallRef,
+    TemplateRef,
+    TemplateVersion,
+    call_ref,
+)
 from orchestrator.domain.ports.templates import TemplateVersionRepository
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
@@ -66,3 +72,53 @@ def test_a_version_names_itself_as_a_reference() -> None:
 
 def test_two_references_to_the_same_version_are_equal() -> None:
     assert TemplateRef(name="story", version=1) == TemplateRef(name="story", version=1)
+
+
+# --- unpinned calls (Operator decision 2026-10-02, editable workflows: a `uses: template` call
+# may omit `version`; it resolves to the callee's latest at validate and plan time; no cascade.)
+# ---
+
+
+def test_an_unpinned_call_ref_has_no_version() -> None:
+    ref = TemplateCallRef(name="story", version=None)
+
+    assert ref.version is None
+    assert ref.pinned is False
+
+
+def test_a_pinned_reference_is_a_call_ref_whose_version_is_known() -> None:
+    ref = TemplateRef(name="story", version=1)
+
+    assert isinstance(ref, TemplateCallRef)
+    assert ref.pinned is True
+
+
+def test_a_pinned_call_ref_and_a_reference_to_the_same_version_are_equal() -> None:
+    """One `(name, version)` is one callee, whichever class names it — the repositories compare
+    stored `calls` entries against both."""
+    assert TemplateCallRef(name="story", version=1) == TemplateRef(name="story", version=1)
+    assert hash(TemplateCallRef(name="story", version=1)) == hash(
+        TemplateRef(name="story", version=1)
+    )
+    assert TemplateCallRef(name="story", version=None) != TemplateRef(name="story", version=1)
+    assert TemplateCallRef(name="story", version=1) != "story@1"
+
+
+def test_call_ref_builds_a_reference_for_a_known_version_and_a_call_ref_otherwise() -> None:
+    assert type(call_ref("story", 1)) is TemplateRef
+    assert type(call_ref("story", None)) is TemplateCallRef
+    assert call_ref("story", None).version is None
+
+
+def test_a_version_may_record_an_unpinned_call() -> None:
+    version = a_version(calls=(TemplateCallRef(name="epic", version=None),))
+
+    assert version.calls[0].version is None
+
+
+def test_a_caller_says_whether_its_call_was_pinned() -> None:
+    caller = TemplateCaller(name="epic", version=1, pinned=False)
+
+    assert (caller.name, caller.version, caller.pinned) == ("epic", 1, False)
+    with pytest.raises(PydanticValidationError):
+        caller.pinned = True  # type: ignore[misc]

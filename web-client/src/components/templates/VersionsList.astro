@@ -4,7 +4,9 @@
  * first, then two facts that never change what colour the screen paints — every version is
  * `pinned by 0 runs` (`TemplateVersionOut.pinned_by` is always 0 this release, so the row
  * states the fact outright rather than reading a field that can only ever hold it) and, when
- * any Template calls this exact version, `called by {name}@{version}, …`.
+ * any Template calls this exact version, `called by {name}@{version} (pinned | follows), …` —
+ * `follows` marks a caller whose call omits `version` and so resolves to the latest save at
+ * plan time (AD-15, 2026-10-02).
  *
  * `[name]/[version].astro` assembles `rows` from three sources: `GET /api/v1/templates`
  * (every Template, best effort — forced empty by the shared e2e stub, per the story's Design
@@ -27,7 +29,9 @@ const { rows } = Astro.props;
 
 function calledByText(calledBy: CalledByRef[]): string | null {
   if (calledBy.length === 0) return null;
-  return `called by ${calledBy.map((ref) => `${ref.name}@${ref.version}`).join(', ')}`;
+  const label = (ref: CalledByRef) =>
+    `${ref.name}@${ref.version} (${ref.pinned ? 'pinned' : 'follows'})`;
+  return `called by ${calledBy.map(label).join(', ')}`;
 }
 ---
 

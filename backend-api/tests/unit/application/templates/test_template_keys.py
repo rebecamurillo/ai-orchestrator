@@ -716,10 +716,14 @@ def test_a_call_with_no_name_is_missing_a_key() -> None:
     assert check(text)[0] == [MISSING_KEY]
 
 
-def test_a_call_with_no_version_is_missing_a_key() -> None:
+def test_a_call_with_no_version_is_unpinned_and_accepted() -> None:
+    """Revised: a missing `version` was `MISSING_KEY` until the Operator decision 2026-10-02,
+    editable workflows: a `uses: template` call may omit `version`; it resolves to the
+    callee's latest at validate and plan time; no cascade.
+    """
     text = HEAD + "steps:\n  - id: story\n    uses: template\n    with:\n      name: story\n"
 
-    assert check(text)[0] == [MISSING_KEY]
+    assert check(text) == ([], [])
 
 
 def test_a_call_whose_version_is_not_a_literal_is_refused() -> None:

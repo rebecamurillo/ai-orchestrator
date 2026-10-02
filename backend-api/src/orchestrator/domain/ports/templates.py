@@ -14,15 +14,17 @@ is a rule, and rules live in `application/`. The four writes and reads below are
 - **`list`** answers `GET /templates`: one `TemplateSummary` per stored name.
 - **`list_versions`** answers the version numbers stored under one name, ascending — both
   `GET /templates/{name}/versions` and `save_version`'s "next version" arithmetic read it.
-- **`callers_of`** answers `called_by`: every `(name, version)` whose stored `calls` names
-  this one, found by a repository query rather than by re-validating anything.
+- **`callers_of`** answers `called_by`: every stored version whose `calls` pins this exact
+  `(name, version)` (`pinned=True`) or names this `name` with no version at all
+  (`pinned=False` — it follows whatever is latest, so it is a caller of every version),
+  found by a repository query rather than by re-validating anything.
 """
 
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from orchestrator.domain.entities.template import TemplateRef, TemplateSummary, TemplateVersion
+from orchestrator.domain.entities.template import TemplateCaller, TemplateSummary, TemplateVersion
 
 
 @runtime_checkable
@@ -41,8 +43,8 @@ class TemplateVersionRepository(Protocol):
         """Every version number stored under this name, ascending. `[]` if none is stored."""
         ...
 
-    def callers_of(self, name: str, version: int) -> list[TemplateRef]:
-        """Every stored version whose `calls` names this `(name, version)`."""
+    def callers_of(self, name: str, version: int) -> list[TemplateCaller]:
+        """Every stored version whose `calls` pins this `(name, version)` or follows `name`."""
         ...
 
     def pinned_by(self, name: str, version: int) -> int:

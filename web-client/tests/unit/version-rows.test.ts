@@ -22,12 +22,12 @@ describe('buildVersionRows', () => {
         { name: 'helper', description: null, latest_version: 1, versions: [1] },
       ],
       ownVersions: [1],
-      calledByLoaded: [{ name: 'helper', version: 1 }],
+      calledByLoaded: [{ name: 'helper', version: 1, pinned: true }],
     });
 
     const demoRow = rows.find((row) => row.name === 'demo' && row.version === 1)!;
     expect(demoRow.active).toBe(true);
-    expect(demoRow.calledBy).toEqual([{ name: 'helper', version: 1 }]);
+    expect(demoRow.calledBy).toEqual([{ name: 'helper', version: 1, pinned: true }]);
 
     // the summary's own row for a Template this page never fetched detail for is untouched
     const helperRow = rows.find((row) => row.name === 'helper' && row.version === 1)!;

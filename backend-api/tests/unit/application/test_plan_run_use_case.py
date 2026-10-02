@@ -16,7 +16,7 @@ import pytest
 
 from orchestrator.application.templates.plan_model import CALLEE_NOT_RESOLVED, PlanError
 from orchestrator.application.use_cases.plan_run import PlanPorts, plan_for, resolve_tree
-from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
+from orchestrator.domain.entities.template import TemplateCallRef, TemplateRef, TemplateVersion
 from tests.unit.application.templates import plan_fixtures as fixtures
 from tests.unit.fakes.git import FakeGit
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
@@ -164,3 +164,88 @@ steps:
         spec_folder: "{{spec_folder}}"
         story: "{{story}}"
 """
+
+
+# --- unpinned calls --------------------------------------------------------------------------
+# Operator decision 2026-10-02, editable workflows: a `uses: template` call may omit `version`; it
+# resolves to the callee's latest at validate and plan time; no cascade.
+
+STORY_V2 = fixtures.TEXTS["story"].replace("version: 1", "version: 2", 1)
+STORY_LATEST = 2
+
+#: `twice`, with its second call left unpinned: one pin at story@1, one that follows.
+MIXED = TWICE.replace("      name: story\n      version: 1\n", "      name: story\n", 1)
+
+
+def _stored_with_two_stories() -> FakeTemplateVersionRepository:
+    versions = stored()
+    versions.add(TemplateVersion(name="story", version=STORY_LATEST, yaml=STORY_V2, hash="sha2"))
+    return versions
+
+
+def test_an_unpinned_call_resolves_to_the_latest_stored_version() -> None:
+    versions = _stored_with_two_stories()
+    versions.add(
+        TemplateVersion(
+            name="follower",
+            version=1,
+            yaml=TWICE.replace("name: twice", "name: follower").replace("      version: 1\n", ""),
+            hash="sha",
+            calls=(TemplateCallRef(name="story", version=None),),
+        )
+    )
+
+    tree = resolve_tree(versions, TemplateRef(name="follower", version=1))
+
+    assert [(c.name, c.version) for c in tree.callees] == [("story", STORY_LATEST)]
+    assert [(r.name, r.version) for r in tree.pinned_versions()] == [
+        ("follower", 1),
+        ("story", STORY_LATEST),
+    ]
+    assert tree.latest == {"story": STORY_LATEST}
+
+
+def test_a_pin_and_an_unpinned_call_to_one_name_resolve_to_their_own_versions() -> None:
+    versions = _stored_with_two_stories()
+    versions.add(
+        TemplateVersion(
+            name="mixed",
+            version=1,
+            yaml=MIXED,
+            hash="sha",
+            calls=(
+                TemplateRef(name="story", version=1),
+                TemplateCallRef(name="story", version=None),
+            ),
+        )
+    )
+
+    tree = resolve_tree(versions, TemplateRef(name="mixed", version=1))
+
+    # `MIXED` leaves the *first* call unpinned, so the walk meets story@2 before story@1
+    assert [(c.name, c.version) for c in tree.callees] == [("story", STORY_LATEST), ("story", 1)]
+    assert tree.callee("story", None) is tree.callees[0]
+    assert tree.callee("story", 1) is tree.callees[1]
+
+
+def test_an_unpinned_call_to_a_name_with_no_versions_is_a_plan_error_naming_latest() -> None:
+    """The store lost every version of the callee after the caller was saved: `validate()`
+    refuses the caller, and the error names the caller as `_parsed` always does."""
+    versions = FakeTemplateVersionRepository(
+        [
+            TemplateVersion(
+                name="follower",
+                version=1,
+                yaml=TWICE.replace("name: twice", "name: follower").replace(
+                    "      version: 1\n", ""
+                ),
+                hash="sha",
+                calls=(TemplateCallRef(name="story", version=None),),
+            )
+        ]
+    )
+
+    with pytest.raises(PlanError) as raised:
+        resolve_tree(versions, TemplateRef(name="follower", version=1))
+
+    assert (raised.value.reason, raised.value.item) == (CALLEE_NOT_RESOLVED, "follower@1")

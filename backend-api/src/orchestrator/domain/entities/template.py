@@ -6,9 +6,13 @@ copy that drifts:
 - **A version is identified by `(name, version)`.** Saving a Template creates version n+1;
   a version pinned by any Run, directly or as a callee, is frozen (AD-15). Nothing here
   mutates: the model is frozen, and a new version is a new object.
-- **`calls` is the pinned callee list, recorded when the version was saved.** The validator
-  walks it to find cycles and to measure call depth without re-reading — and without
-  re-validating — a callee's body, which was validated when it was saved.
+- **`calls` is the callee list as the file wrote it, recorded when the version was saved.**
+  A call that named an integer `version` is a pin (`TemplateRef`); one that omitted it is
+  unpinned (`TemplateCallRef` with `version=None`) and resolves to the callee's latest
+  stored version whenever the caller is validated or planned — so a Run planned later
+  follows a newer callee, and a Run already planned never does (its own pins are the
+  resolved integers). The validator walks `calls` to find cycles and to measure call depth
+  without re-reading — and without re-validating — a callee's body.
 
 `hash` is the digest of `yaml`; computing it needs no rule, so it is carried rather than
 derived here. `yaml` is the exact text the Operator saved, newlines and comments included:
@@ -33,13 +37,52 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 
-class TemplateRef(BaseModel):
+class TemplateCallRef(BaseModel):
+    """A callee as a `uses: template` step named it: by name, pinned to a version or not.
+
+    Equality is by `(name, version)` whichever subclass carries them, because a stored
+    `calls` entry and a Run's pin name the same callee when those two agree.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    version: int | None
+
+    @property
+    def pinned(self) -> bool:
+        return self.version is not None
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TemplateCallRef):
+            return NotImplemented
+        return (self.name, self.version) == (other.name, other.version)
+
+    def __hash__(self) -> int:
+        return hash((self.name, self.version))
+
+
+class TemplateRef(TemplateCallRef):
     """One `(name, version)` pair: a Template Version named, not loaded."""
+
+    version: int
+
+
+def call_ref(name: str, version: int | None) -> TemplateCallRef:
+    """A `TemplateRef` when the version is known, else an unpinned `TemplateCallRef`."""
+    if version is None:
+        return TemplateCallRef(name=name, version=None)
+    return TemplateRef(name=name, version=version)
+
+
+class TemplateCaller(BaseModel):
+    """One `called_by` entry: the caller's version, and whether its call pinned this one."""
 
     model_config = ConfigDict(frozen=True)
 
     name: str
     version: int
+    pinned: bool
 
 
 class TemplateVersion(BaseModel):
@@ -54,7 +97,7 @@ class TemplateVersion(BaseModel):
     version: int
     yaml: str
     hash: str
-    calls: tuple[TemplateRef, ...] = ()
+    calls: tuple[TemplateCallRef, ...] = ()
     #: `None` only in a fixture; a real save always sets it (see the module docstring).
     created_at: datetime | None = None
 

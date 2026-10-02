@@ -25,7 +25,12 @@ from orchestrator.application.use_cases.templates import (
     validate_latest,
     validate_text,
 )
-from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
+from orchestrator.domain.entities.template import (
+    TemplateCaller,
+    TemplateCallRef,
+    TemplateRef,
+    TemplateVersion,
+)
 from orchestrator.domain.errors import Invalid, NotFound
 from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
@@ -163,7 +168,10 @@ def test_get_version_reports_who_calls_it() -> None:
 
     detail = get_version(ports(templates), "leaf", 1)
 
-    assert detail.called_by == (TemplateRef(name="root-caller", version=1),)
+    # revised to `TemplateCaller` by the Operator decision 2026-10-02, editable workflows: a
+    # `uses: template` call may omit `version`; it resolves to the callee's latest at validate
+    # and plan time; no cascade.
+    assert detail.called_by == (TemplateCaller(name="root-caller", version=1, pinned=True),)
 
 
 # --- validate_text / validate_latest -------------------------------------------------------
@@ -412,3 +420,114 @@ def test_latest_version_is_the_highest_stored_number() -> None:
 def test_latest_version_of_a_name_nothing_stores_is_not_found() -> None:
     with pytest.raises(NotFound, match="no template named 'leaf'"):
         latest_version(FakeTemplateVersionRepository(), "leaf")
+
+
+# --- unpinned calls --------------------------------------------------------------------------
+# Operator decision 2026-10-02, editable workflows: a `uses: template` call may omit `version`; it
+# resolves to the callee's latest at validate and plan time; no cascade.
+
+#: `leaf` with one optional input, and the same at version 2 with that input renamed.
+LEAF_WITH_FOLDER = (
+    "name: leaf\nversion: {n}\ninputs:\n  folder:\n    type: path\nsteps:\n"
+    "  - id: sync\n    uses: git.sync\n    gate: deterministic\n"
+)
+LEAF_RENAMED = LEAF_WITH_FOLDER.replace("  folder:", "  spec:")
+
+#: Calls `leaf` with no `version:` — follows whatever is latest — binding `folder`.
+UNPINNED_CALLER = ROOT_CALLER.replace(
+    "      version: 1\n      inputs: {}\n", "      inputs:\n        folder: docs\n"
+)
+
+
+def test_save_version_records_an_unpinned_call_with_no_version() -> None:
+    templates = FakeTemplateVersionRepository([a_stored()])
+
+    saved = save_version(
+        ports(templates), "root-caller", UNPINNED_CALLER.replace("        folder: docs\n", "")
+    )
+
+    assert saved.calls == (TemplateCallRef(name="leaf", version=None),)
+    assert saved.calls[0].version is None
+
+
+def test_get_version_tells_a_pinned_caller_from_one_that_follows() -> None:
+    templates = FakeTemplateVersionRepository(
+        [
+            a_stored(),
+            a_stored(name="pinned", yaml=ROOT_CALLER, calls=(TemplateRef(name="leaf", version=1),)),
+            a_stored(
+                name="follows",
+                yaml=UNPINNED_CALLER,
+                calls=(TemplateCallRef(name="leaf", version=None),),
+            ),
+        ]
+    )
+
+    detail = get_version(ports(templates), "leaf", 1)
+
+    assert detail.called_by == (
+        TemplateCaller(name="follows", version=1, pinned=False),
+        TemplateCaller(name="pinned", version=1, pinned=True),
+    )
+
+
+def _stored_leaf_and_unpinned_caller() -> FakeTemplateVersionRepository:
+    return FakeTemplateVersionRepository(
+        [
+            a_stored(yaml=LEAF_WITH_FOLDER.format(n=1)),
+            a_stored(
+                name="root-caller",
+                yaml=UNPINNED_CALLER,
+                calls=(TemplateCallRef(name="leaf", version=None),),
+            ),
+        ]
+    )
+
+
+def test_save_version_refuses_a_callee_that_would_strand_an_unpinned_caller() -> None:
+    """`root-caller` binds `folder` with no pin; leaf@2 renames it, so the save is refused
+    naming the caller — the Operator fixes the caller first, or pins it."""
+    templates = _stored_leaf_and_unpinned_caller()
+    fresh = ports(templates)
+
+    with pytest.raises(TemplateValidationFailed) as raised:
+        save_version(fresh, "leaf", LEAF_RENAMED.format(n=2))
+
+    assert [(e.template, e.version) for e in raised.value.errors] == [("root-caller", 1)]
+    assert templates.list_versions("leaf") == [1]
+    assert fresh.uow.committed is False  # type: ignore[attr-defined]
+
+
+def test_save_version_accepts_a_callee_its_unpinned_callers_still_bind_to() -> None:
+    templates = _stored_leaf_and_unpinned_caller()
+    described = LEAF_WITH_FOLDER.format(n=2).replace("steps:", "description: wider\nsteps:")
+
+    saved = save_version(ports(templates), "leaf", described)
+
+    assert saved.version == 2  # noqa: PLR2004 — the next number after the stored leaf@1
+    assert templates.list_versions("leaf") == [1, 2]
+
+
+def test_save_version_does_not_consult_a_pinned_caller() -> None:
+    templates = FakeTemplateVersionRepository(
+        [
+            a_stored(yaml=LEAF_WITH_FOLDER.format(n=1)),
+            a_stored(
+                name="root-caller", yaml=ROOT_CALLER, calls=(TemplateRef(name="leaf", version=1),)
+            ),
+        ]
+    )
+
+    saved = save_version(ports(templates), "leaf", LEAF_RENAMED.format(n=2))
+
+    assert saved.version == 2  # noqa: PLR2004
+
+
+def test_seed_shipped_lands_an_unpinned_caller_after_the_callee_it_follows() -> None:
+    """Listed first, the caller fails `callee not found` in round one and lands in round two."""
+    results = seed_shipped(
+        ports(),
+        [("root-caller", UNPINNED_CALLER.replace("        folder: docs\n", "")), ("leaf", LEAF)],
+    )
+
+    assert [(r.name, r.inserted_as) for r in results] == [("leaf", 1), ("root-caller", 1)]

@@ -76,12 +76,12 @@ describe('VersionsList', () => {
   it('names the caller of a callee, and omits the fragment when there is none', async () => {
     const html = await render(VersionsList, {
       rows: [
-        row({ name: 'story', version: 1, calledBy: [{ name: 'epic', version: 1 }] }),
+        row({ name: 'story', version: 1, calledBy: [{ name: 'epic', version: 1, pinned: true }] }),
         row({ name: 'epic', version: 1, href: '/templates/epic/1', calledBy: [] }),
       ],
     });
 
-    expect(html).toContain('called by epic@1');
+    expect(html).toContain('called by epic@1 (pinned)');
     const epicRow = html.slice(html.indexOf('templates-version-epic-1'));
     expect(epicRow).not.toContain('called by');
   });
@@ -91,14 +91,16 @@ describe('VersionsList', () => {
       rows: [
         row({
           calledBy: [
-            { name: 'epic', version: 1 },
-            { name: 'initiative', version: 2 },
+            { name: 'epic', version: 1, pinned: true },
+            { name: 'initiative', version: 2, pinned: false },
           ],
         }),
       ],
     });
 
-    expect(html).toContain('called by epic@1, initiative@2');
+    // Operator decision 2026-10-02 (editable workflows, unpinned callees): each caller is
+    // labelled pinned or follows; the previous bare `epic@1, initiative@2` form is retired
+    expect(html).toContain('called by epic@1 (pinned), initiative@2 (follows)');
   });
 
   it('marks the active row, and only the active row', async () => {

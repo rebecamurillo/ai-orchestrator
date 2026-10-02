@@ -1862,8 +1862,16 @@
             "type": "string"
           },
           "version": {
-            "title": "Version",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`null` for an unpinned call (`name@latest`).",
+            "title": "Version"
           }
         },
         "required": [
@@ -4531,12 +4539,44 @@
         "title": "SummaryOut",
         "type": "object"
       },
-      "TemplateRefOut": {
-        "description": "One `(name, version)` reference, as `calls` and `called_by` each list them.",
+      "TemplateCallOut": {
+        "description": "One `calls` entry: the callee as the file named it \u2014 `version` null when unpinned.",
         "properties": {
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The pinned version, or `null` for an unpinned call (latest).",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "TemplateCallOut",
+        "type": "object"
+      },
+      "TemplateCallerOut": {
+        "description": "One `called_by` entry; `pinned` false means the caller follows this name's latest.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pinned": {
+            "description": "True when the caller names this exact version; false when it omits `version` and so follows whatever is latest.",
+            "title": "Pinned",
+            "type": "boolean"
           },
           "version": {
             "title": "Version",
@@ -4545,9 +4585,10 @@
         },
         "required": [
           "name",
-          "version"
+          "version",
+          "pinned"
         ],
-        "title": "TemplateRefOut",
+        "title": "TemplateCallerOut",
         "type": "object"
       },
       "TemplateSummaryOut": {
@@ -4594,14 +4635,14 @@
         "properties": {
           "called_by": {
             "items": {
-              "$ref": "#/components/schemas/TemplateRefOut"
+              "$ref": "#/components/schemas/TemplateCallerOut"
             },
             "title": "Called By",
             "type": "array"
           },
           "calls": {
             "items": {
-              "$ref": "#/components/schemas/TemplateRefOut"
+              "$ref": "#/components/schemas/TemplateCallOut"
             },
             "title": "Calls",
             "type": "array"

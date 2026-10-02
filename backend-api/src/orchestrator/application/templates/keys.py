@@ -337,13 +337,14 @@ def _check_with(node: LinedMap, kind: str) -> list[ValidationError]:
 
 
 def _check_call_with(params: LinedMap) -> list[ValidationError]:
-    """A call names its callee with a literal name and a literal version."""
+    """A call names its callee with a literal name; a `version`, when written, is a literal.
+
+    No `version` is an unpinned call, resolved to the callee's latest by `calls.py`.
+    """
     errors: list[ValidationError] = []
     if not isinstance(params.get("name"), str):
         errors.append(problem(key_line(params, "name", params.line), MISSING_KEY))
-    if "version" not in params:
-        errors.append(problem(params.line, MISSING_KEY))
-    elif not is_count(params["version"]):
+    if "version" in params and not is_count(params["version"]):
         errors.append(problem(key_line(params, "version", params.line), NON_LITERAL_VERSION))
     return errors
 

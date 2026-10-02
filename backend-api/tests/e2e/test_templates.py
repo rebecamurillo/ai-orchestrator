@@ -98,7 +98,16 @@ def test_epic_1_shows_its_call_and_its_inputs(authenticated: httpx.Client) -> No
 
     assert response.status_code == HTTP_OK
     body = response.json()
-    assert body["calls"] == [{"name": "story", "version": 1}]
+    # Revised (Operator decision 2026-10-02, editable workflows: a `uses: template` call may
+    # omit `version`; it resolves to the callee's latest at validate and plan time; no
+    # cascade.): the shipped `epic` no
+    # longer pins `story`, and an exact `calls` value pinned shipped content anyway (the
+    # exemplar-freeze ruling, 2026-09-10). Structural in its place.
+    assert body["calls"], body["calls"]
+    for call in body["calls"]:
+        assert call.keys() == {"name", "version"}, call
+        assert isinstance(call["name"], str) and call["name"]
+        assert call["version"] is None or isinstance(call["version"], int)
     assert isinstance(body["called_by"], list)
     assert body["pinned_by"] == 0
     # Revised: an exact input count pinned shipped template content, which the
@@ -135,7 +144,10 @@ def test_a_saved_caller_is_its_leafs_called_by_and_the_leaf_is_its_call(
     assert caller_body["calls"] == [{"name": leaf_name, "version": 1}]
     assert caller_body["called_by"] == []
     assert leaf_body["calls"] == []
-    assert leaf_body["called_by"] == [{"name": caller_name, "version": 1}]
+    # `pinned` added by the Operator decision 2026-10-02, editable workflows: a `uses:
+    # template` call may omit `version`; it resolves to the callee's latest at validate and
+    # plan time; no cascade.
+    assert leaf_body["called_by"] == [{"name": caller_name, "version": 1, "pinned": True}]
     # `pinned_by` counts Runs that pin the version (AD-15), not callers: none was started.
     assert leaf_body["pinned_by"] == 0
 

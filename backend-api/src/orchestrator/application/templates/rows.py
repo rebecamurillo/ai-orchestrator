@@ -212,7 +212,7 @@ def expand_call(step: Step, call: TemplateCall, frame: Frame, ctx: Context) -> l
             template=frame.template.name,
             version=frame.template.version,
             line=call.line,
-            item=f"{call.name}@{call.version}",
+            item=f"{call.name}@{'latest' if call.version is None else call.version}",
         )
     scope = {name: resolve(value, frame.scope) for name, value in call.inputs}
     declared = working_branch(callee, scope)
