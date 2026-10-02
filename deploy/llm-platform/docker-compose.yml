@@ -224,6 +224,9 @@ services:
       OMLX_API_KEY: ${OMLX_API_KEY:-not-set}
       OPENROUTER_API_BASE: ${OPENROUTER_API_BASE:-https://openrouter.ai/api/v1}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-not-set}
+      # TypeSafe Jev, reached only through the /typesafe/* pass-through (README, "TypeSafe Jev")
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-not-set}
+      TYPESAFE_API_BASE: ${TYPESAFE_API_BASE:-https://api.typesafe.ai}
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     ports:

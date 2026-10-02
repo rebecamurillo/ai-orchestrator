@@ -1,17 +1,53 @@
 name: story-staged
-version: 1
-description: one story in four sessions — plan, implement, verify, sized review — each on its own model
-# DRAFT (2026-09-30). Lives under templates/drafts/ so the loader does not seed it; move it up
-# one level (and add it to the shipped list in AGENTS.md) to ship it.
+version: 2
+description: one story in four sessions — plan, implement, verify, sized review — with two Jev decisions between them
+# DRAFT (2026-09-30; Jev decisions added 2026-10-02). Lives under templates/drafts/ so the loader
+# does not seed it; move it up one level (and add it to the shipped list in AGENTS.md) to ship it.
 #
 # Why four sessions instead of one bmad-build-auto dispatch:
 # - each step names its own model, so planning can run on a stronger model than coding;
-# - the review is sized: the planner writes `size: S|M|L` into the spec, the reviewer checks
-#   that claim against the real diff and spends accordingly — no reviewer panel and no
-#   "find at least ten issues" on a two-file change;
+# - the review is sized: a decision step reads the real diff and picks S | M | L, the light
+#   reviewer runs on the cheap coder for S and M, the deep reviewer on the strong model for L —
+#   no reviewer panel and no "find at least ten issues" on a two-file change;
 # - the review never re-derives the code on its own: a spec-level defect blocks the Run and
 #   brings the operator in, instead of the revert→re-implement→re-review loop that turns a
 #   small story into an hour.
+#
+# Where Jev sits (TypeSafe's System One model, through the Gateway's `/typesafe/v1/systemone`
+# pass-through — deploy/llm-platform/README.md, "TypeSafe Jev"). It never writes code or prose:
+# a `decide` row hands it a block of state and typed questions and gets typed answers with a
+# calibrated probability back, in well under a second, for input tokens only. Two rows use it:
+#   spec-gate  after `plan`:     four yes/no questions on the spec. One below threshold sends the
+#                                planner back once (the same `on_fail: {redispatch}` `verify`
+#                                already uses) instead of spending a 90-minute implement session
+#                                on a spec with a hole in it.
+#   size       after `verify`:   one choice, S | M | L, over the spec and the real diff. The
+#                                answer is written to a file the two review rows read through
+#                                `when:` — so the strong model is paid for only on L.
+# Every question is decomposed to one factor, every Choice carries an answer for "unsure", and a
+# confidence below `threshold` always resolves to the more expensive path (`fallback: L`, or the
+# redispatch) — TypeSafe's own guidance, and the finding that a low-confidence hand-off to
+# another model fixed fewer mistakes than it introduced.
+#
+# PRIMITIVES THIS DRAFT NEEDS (none exist on main yet; nothing here is a shipped kind):
+# 1. `uses: decide` — a deterministic-gate kind. `with`: `model` (a Gateway model_name),
+#    `state` (an ordered list of `{file: glob}` | `{run: command, limit_kb?}` | `{text: …}`
+#    sources, concatenated under their own headers), `questions` (TypeSafe's own wire shape,
+#    posted verbatim), `select` (which question routes), `threshold`, `fallback` (the answer
+#    taken when the selected question's confidence is below threshold), `require` (the yes/no
+#    questions that must all clear threshold, else the row fails and `on_fail` decides). The
+#    executor writes every answer to the one file under `writes:`, records one Attempt with
+#    model = the versioned name TypeSafe reports, so AD-11 spend and the budget rule need no
+#    change. Gateway off (blank LITELLM_BASE_URL) parks the row `misconfigured`, never skips it.
+# 2. `when:` on a row — `{file, field, in}`. The executor reads the file in the worktree before
+#    running; a value outside `in` returns `skipped · when: <field>=<value>`, which is a status
+#    `apply_step_result` already writes. A missing file is `misconfigured`, not a skip. Reading
+#    the worktree file rather than the decide row's recorded answer is deliberate: the light
+#    reviewer (and the operator) can raise the tier by editing the file, and the next row obeys.
+# 3. `prompts.redispatch` on `plan` receives the decide row's rendered answers in `{tail}`;
+#    `{command}` and `{code}` are empty — a decision has neither.
+# The wire name of the yes/no question type (`noul`) is taken from public descriptions of the
+# API, not from TypeSafe's reference; confirm it before the executor is written.
 #
 # Every agent row reports through its own marker under `{spec_folder}/stories/.auto/`,
 # because an agent row is routed on a file saying `done` or `blocked`
@@ -26,9 +62,13 @@ inputs:
   story:        { type: item,       required: true }   # bound by the caller's for_each
   harness:      { type: enum, values: [claude, codex, local], default: claude }
   plan_model:   { type: string,     required: false }  # the strongest one you pay for
-  build_model:  { type: string,     required: false }  # the cheap coder
-  review_model: { type: string,     required: false }  # same as build_model for S/M; stronger for L epics
-  # Where the harness install left the build-auto step files; only the review reads them (L tier).
+  build_model:  { type: string,     required: false }  # the cheap coder; also reviews S and M
+  review_model: { type: string,     required: false }  # the strong one; paid for on L only
+  decide_model: { type: string,     required: false, default: jev-latest }  # a Gateway model_name served by the TypeSafe pass-through
+  # Below this, a decision is "unsure" and the expensive path is taken. 0.8 is a starting point
+  # for calibration against this repository's own parks, not a measured value.
+  decide_threshold: { type: number, required: false, default: 0.8 }
+  # Where the harness install left the build-auto step files; only the deep review reads them.
   skill_dir:
     type: path
     required: false
@@ -115,7 +155,8 @@ steps:
                 behaviour change — if it does, name the test and the assertion here>
 
            SIZE RULE — choose the first that matches, and write one line under `## Review
-           focus` justifying it:
+           focus` justifying it. A decision step re-sizes the real diff later and may raise
+           this but never lowers it:
              L  if the change touches any of: a migration, an API contract or schema, a status
                 machine, auth or secrets, concurrency or durability, more than 8 files, or
                 the story holds more than one independently shippable goal;
@@ -154,6 +195,22 @@ steps:
     prompts:
       halt: "Stop for a spec review after planning: write the marker with status ready-for-dev."
       answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+      # Sent in front of the prompt above only when `spec-gate` below sent this row back.
+      # `{tail}` carries the gate's answers, one line per question: `name: yes|no (p=0.xx)`.
+      redispatch: |
+        YOU ARE BACK IN THIS STEP BECAUSE THE SPEC GATE FAILED. A previous session of this
+        step wrote the spec and reported done; a decision step then checked it and one or
+        more of these came back `no`, or too uncertain to count as `yes`:
+        {tail}
+        You have no memory of that session. The spec it wrote is at
+        {{spec_folder}}/stories/{{story.id}}-*.md. Your job now is the questions that
+        failed, nothing else: open the spec, fix exactly the sections those questions name
+        (a task without a file, an AC that is not Given/When/Then, an open question, an
+        intent that paraphrases the story instead of quoting it), and leave every other
+        section as it is. Then continue with the instructions below from step 4. The gate
+        runs once more; if it fails again the Run stops for the operator, so if the story
+        itself is what makes a question unanswerable, say so in the marker as BLOCKED,
+        `intent gap: <the question>`, rather than guessing.
     expect:
       files: ["{{spec_folder}}/stories/.auto/{{story.id}}-01-plan.md"]
       success: [done]
@@ -166,6 +223,54 @@ steps:
     pause_when: "story.spec_checkpoint"
     timeout_min: 30
     gate: liveness
+
+  # --- 1b. spec gate (decision; a `no` sends the planner back to its own spec, once) ----------
+  # Four one-factor questions rather than one "is this spec complete": a question that weighs
+  # several factors is the shape Jev is worst at, and a single `no` is a sentence the planner
+  # can act on. Cost: the spec plus the story entry, a few thousand input tokens, well under a
+  # cent; latency under a second. The alternative it replaces is a 90-minute implement session
+  # that ends BLOCKED `spec contradicts code`.
+  - id: spec-gate
+    uses: decide
+    with:
+      model: "{{decide_model}}"
+      state:
+        - text: |
+            Story as the operator wrote it:
+              id:          {{story.id}}
+              title:       {{story.title}}
+              description: {{story.description}}
+        - file: "{{spec_folder}}/stories/{{story.id}}-*.md"
+      questions:
+        tasks_name_files:
+          type: noul
+          instructions: >
+            Does every numbered entry under `## Tasks` name one repository file path and one
+            action on it? An entry that names only a concept, a module "area", or "TBD" is a no.
+        acs_given_when_then:
+          type: noul
+          instructions: >
+            Is every bullet under `## Acceptance criteria` written as Given … When … Then …,
+            and does each name something observable at a surface (a command's output, an HTTP
+            response, a file, a UI state) rather than an internal variable?
+        no_open_questions:
+          type: noul
+          instructions: >
+            Is the spec free of open questions? Any of "TBD", "to be decided", "unclear",
+            "?" as a placeholder, "either … or …" left unresolved, or a task that says
+            "decide whether", is a no.
+        intent_verbatim:
+          type: noul
+          instructions: >
+            Does the `## Intent` section begin with the story's title and description exactly
+            as the operator wrote them (quoted above), before any added sentences? A paraphrase
+            or a summary in place of the quote is a no.
+      require: [tasks_name_files, acs_given_when_then, no_open_questions, intent_verbatim]
+      threshold: "{{decide_threshold}}"
+    writes: ["{{spec_folder}}/stories/.auto/{{story.id}}-01-plan.decide.json"]
+    on_fail: { redispatch: plan, max: 1 }
+    timeout_min: 2
+    gate: deterministic
 
   # --- 2. implement ----------------------------------------------------------------------------
   - id: implement
@@ -269,12 +374,63 @@ steps:
     timeout_min: 30
     gate: deterministic
 
-  # --- 4. sized review -------------------------------------------------------------------------
+  # --- 3b. size the review (decision over the real, green diff) --------------------------------
+  # Runs after `verify` on purpose: a redispatched implement changes the diff, and the tier
+  # must be read off the tree the reviewer will see. The tree is uncommitted until
+  # `commit-guard`, so `HEAD` is the baseline. The full diff is included because cost follows
+  # input size and a 200 KB diff is still under a cent; `limit_kb` is the ceiling, not a target.
+  # `public_surface` is recorded for the reviewer's triage log, not routed on.
+  - id: size
+    uses: decide
+    with:
+      model: "{{decide_model}}"
+      state:
+        - file: "{{spec_folder}}/stories/{{story.id}}-*.md"
+        - run: "git diff --stat HEAD; git status --porcelain"
+        - run: "git diff HEAD"
+          limit_kb: 256
+      questions:
+        tier:
+          type: choice
+          instructions: >
+            Which review tier does this change need? The spec's frontmatter `size` is a floor:
+            never answer lower than it. Count only non-test files toward the file limits.
+            When the evidence does not settle it, answer `unsure`.
+          criteria:
+            S: >
+              At most 3 non-test files, roughly 80 changed lines or fewer, no new public
+              surface (no new route, schema field, env var, status token or CLI flag), and
+              every acceptance criterion is observable by a test command the spec lists.
+            M: >
+              More than S but none of L's triggers: more files or lines, a new public surface,
+              or an acceptance criterion with no listed test.
+            L: >
+              Any of: a database migration, an API contract or schema change, a status
+              machine, auth or secrets, concurrency or durability code, more than 8 non-test
+              files, or the diff delivers more than one independently shippable goal.
+            unsure: >
+              The spec and the diff disagree about what changed, the diff is truncated, or the
+              change cannot be placed in S, M or L from what is shown.
+        public_surface:
+          type: noul
+          instructions: >
+            Does the diff add or change a public surface: an HTTP route, a request or response
+            schema field, an environment variable, a status token, a CLI flag, or an exported
+            function another package imports?
+      select: tier
+      threshold: "{{decide_threshold}}"
+      fallback: L
+    writes: ["{{spec_folder}}/stories/.auto/{{story.id}}-size.json"]
+    timeout_min: 2
+    gate: deterministic
+
+  # --- 4a. light review: S and M, on the cheap coder -------------------------------------------
   - id: review
     uses: agent
+    when: { file: "{{spec_folder}}/stories/.auto/{{story.id}}-size.json", field: tier, in: [S, M] }
     with:
       harness: "{{harness}}"
-      model: "{{review_model}}"
+      model: "{{build_model}}"
       prompt: |
         You are the reviewer for exactly one story. Working directory: the repository root.
         The tree is green: the unit gate ran and passed before you were started. Your job is
@@ -284,18 +440,22 @@ steps:
         FACTS
           spec folder: {{spec_folder}}
           story id:    {{story.id}}
-          step files:  {{skill_dir}}   (only the L tier reads them)
+          tier file:   {{spec_folder}}/stories/.auto/{{story.id}}-size.json
 
-        1. SIZE THE DIFF BEFORE YOU READ IT
+        1. TAKE THE TIER
+           - Read the tier file. `tier` is S or M (a decision step sized the diff before you
+             were started; its `probabilities` and `public_surface` answer are in the same
+             file — copy them into the triage log in step 5). Missing or unreadable file:
+             BLOCKED, `size decision missing`.
            - Read the spec (the single file matching {{spec_folder}}/stories/{{story.id}}-*.md):
              its `size`, `baseline_revision`, the `<intent-contract>`, and `## Review focus`.
-           - Run `git diff --stat <baseline_revision>` and `git status --porcelain` for
-             untracked files. Count non-test files and changed lines.
-           - Apply the same rule the planner used: L if a migration, API contract or schema,
-             status machine, auth or secrets, concurrency, or more than 8 files is touched;
-             S if at most 3 non-test files, roughly 80 lines or fewer, no new public surface;
-             M otherwise. If your tier is higher than the spec's `size`, use yours and say so
-             in the triage log. Never go lower than the spec's.
+           - Run `git diff --stat <baseline_revision>` and `git status --porcelain`. If the
+             diff touches a migration, an API contract or schema, a status machine, auth or
+             secrets, concurrency, or more than 8 non-test files, the tier is wrong: in the
+             tier file set `tier: L` and add `escalated_by: review` with one line of reason,
+             write the marker (step 6) with `status: done` and `Status: escalated to L`, and
+             stop. The deep review row runs next. You may raise S to M yourself and say so;
+             never go lower than the file says.
            - Set the spec's `status: in-review`.
 
         2. REVIEW AT THAT TIER — and no deeper
@@ -316,12 +476,6 @@ steps:
              c. verification gaps: an AC or matrix row with no test, a test that asserts a
                 proxy instead of the surface, a test that did not run.
 
-           L — the full method. Read {{skill_dir}}/step-04-review.md and run its Review and
-             Classify sections. Where it launches reviewer subagents, launch them if this
-             harness has subagents; otherwise run the lenses yourself from
-             {{skill_dir}}/review-prompts/. Ignore its "at least ten issues" instruction;
-             the number of findings is whatever the diff holds.
-
         3. TRIAGE — every finding into exactly one of
              patch     — caused by this change, fixable in place without a design decision
              bad_spec  — caused by this change; the spec should have prevented it
@@ -333,19 +487,16 @@ steps:
         4. ACT
            - patch: fix it. Then re-run every command under the spec's `## Verification`; if
              one fails and you cannot fix it, BLOCKED, `patch verification failed`.
-           - bad_spec, S or M tier: do NOT revert or re-implement. BLOCKED, `bad_spec: <one
-             sentence naming the spec section and the defect>`. The operator decides whether
-             to re-derive.
-           - bad_spec, L tier, first time only: follow step-04's bad_spec branch (amend the
-             spec outside the intent-contract, log it, re-implement, re-review at M tier).
-             A second bad_spec is BLOCKED as above.
+           - bad_spec: do NOT revert or re-implement. BLOCKED, `bad_spec: <one sentence
+             naming the spec section and the defect>`. The operator decides whether to
+             re-derive.
            - intent_gap: BLOCKED, `intent gap: <the question>`. Leave the code in place.
            - defer: append to the spec frontmatter `deferred:` list (summary, evidence,
              location, severity). reject: drop.
 
         5. RECORD in the spec
            Append under `## Review Triage Log`:
-             ### <date> — Review pass (tier <S|M|L>, spec said <size>)
+             ### <date> — Review pass (tier <S|M>, spec said <size>, decision said <tier p=…>, public_surface <yes|no p=…>)
              - patch: N (high a, medium b, low c)   - bad_spec: N   - intent_gap: N
              - defer: N   - reject: N
              - addressed_findings:
@@ -362,7 +513,7 @@ steps:
            # Step 3 — review
            ## Auto Run Result
            Status: done
-           Tier: <S|M|L>
+           Tier: <S|M>
            Findings: patch N · defer N · reject N
            Verification: <each command → passed>
 
@@ -379,7 +530,104 @@ steps:
       blocked: [blocked]
     retry:
       max: 1
-      prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-03-review.md. Finish the review at the tier you sized, re-run the spec's Verification commands, and write that marker last, with status done or status blocked."
+      prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-03-review.md. Finish the review at the tier the size file names, re-run the spec's Verification commands, and write that marker last, with status done or status blocked."
+      resume_session: true
+    timeout_min: 40
+    gate: liveness
+
+  # --- 4b. deep review: L, on the strong model -------------------------------------------------
+  # Also runs when the light reviewer escalated: it rewrote the tier file, and `when:` reads the
+  # file, not the decision row. Both review rows write the same marker; the second overwrites.
+  - id: review-deep
+    uses: agent
+    when: { file: "{{spec_folder}}/stories/.auto/{{story.id}}-size.json", field: tier, in: [L] }
+    with:
+      harness: "{{harness}}"
+      model: "{{review_model}}"
+      prompt: |
+        You are the reviewer for exactly one story, at the full tier. Working directory: the
+        repository root. The tree is green: the unit gate ran and passed before you were
+        started. A decision step (or the light reviewer before you) sized this change L: it
+        touches a migration, a contract, a status machine, auth, concurrency, many files, or
+        more than one goal. You do not ask questions.
+
+        FACTS
+          spec folder: {{spec_folder}}
+          story id:    {{story.id}}
+          tier file:   {{spec_folder}}/stories/.auto/{{story.id}}-size.json
+          step files:  {{skill_dir}}
+
+        1. READ
+           - The tier file: `tier`, its `probabilities`, `public_surface`, and `escalated_by`
+             if the light reviewer raised it — copy them into the triage log in step 5.
+           - The spec (the single file matching {{spec_folder}}/stories/{{story.id}}-*.md):
+             its `size`, `baseline_revision`, the `<intent-contract>`, and `## Review focus`.
+           - `git diff --stat <baseline_revision>` and `git status --porcelain`.
+           - Set the spec's `status: in-review`.
+
+        2. REVIEW — the full method
+           Read {{skill_dir}}/step-04-review.md and run its Review and Classify sections.
+           Where it launches reviewer subagents, launch them if this harness has subagents;
+           otherwise run the lenses yourself from {{skill_dir}}/review-prompts/. Ignore its
+           "at least ten issues" instruction; the number of findings is whatever the diff
+           holds. Zero findings after a real check is a valid result.
+
+        3. TRIAGE — every finding into exactly one of
+             patch     — caused by this change, fixable in place without a design decision
+             bad_spec  — caused by this change; the spec should have prevented it
+             intent_gap— the intent-contract itself is ambiguous or incomplete
+             defer     — pre-existing, real, not this story's
+             reject    — noise
+           Severity by consequence for the software's user: low / medium / high.
+
+        4. ACT
+           - patch: fix it. Then re-run every command under the spec's `## Verification`; if
+             one fails and you cannot fix it, BLOCKED, `patch verification failed`.
+           - bad_spec, first time only: follow step-04's bad_spec branch (amend the spec
+             outside the intent-contract, log it, re-implement, re-review at M tier). A
+             second bad_spec is BLOCKED, `bad_spec: <one sentence naming the spec section
+             and the defect>`.
+           - intent_gap: BLOCKED, `intent gap: <the question>`. Leave the code in place.
+           - defer: append to the spec frontmatter `deferred:` list (summary, evidence,
+             location, severity). reject: drop.
+
+        5. RECORD in the spec
+           Append under `## Review Triage Log`:
+             ### <date> — Review pass (tier L, spec said <size>, decision said <tier p=…>, escalated_by <none|review>)
+             - patch: N (high a, medium b, low c)   - bad_spec: N   - intent_gap: N
+             - defer: N   - reject: N
+             - addressed_findings:
+               - `[sev]` `[patch]` <what and where>   (or `- none`)
+           Under `## Auto Run Result` add: files patched, verification commands re-run with
+           outcomes, residual risks. Set `followup_review_recommended: true` if any patched
+           finding was high, or 3×medium + low ≥ 5; else false. Set `status: done`.
+
+        6. WRITE THE MARKER LAST, overwriting whatever is there:
+             {{spec_folder}}/stories/.auto/{{story.id}}-03-review.md
+           ---
+           status: done
+           ---
+           # Step 3 — review
+           ## Auto Run Result
+           Status: done
+           Tier: L
+           Findings: patch N · defer N · reject N
+           Verification: <each command → passed>
+
+           BLOCKED means the same marker with `status: blocked` and one line
+           `Blocking condition: <text>`. Never write `done` with an unpatched high finding
+           or a failing verification command.
+
+        Existing test files are protected: change one only when the spec's `## Do not touch`
+        declares the behaviour change that requires it. Do not modify SPEC.md, stories.yaml,
+        epics.yaml, or any AGENTS.md. Do not commit; the orchestrator commits after you.
+    expect:
+      files: ["{{spec_folder}}/stories/.auto/{{story.id}}-03-review.md"]
+      success: [done]
+      blocked: [blocked]
+    retry:
+      max: 1
+      prompt: "The previous session left no readable marker at {{spec_folder}}/stories/.auto/{{story.id}}-03-review.md. Finish the full-tier review, re-run the spec's Verification commands, and write that marker last, with status done or status blocked."
       resume_session: true
     timeout_min: 60
     gate: liveness

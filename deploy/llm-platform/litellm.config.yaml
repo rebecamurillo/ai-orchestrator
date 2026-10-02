@@ -103,6 +103,23 @@ model_list:
       api_key: os.environ/OPENROUTER_API_KEY
       use_chat_completions_api: true
 
+  # ── decisions, TypeSafe Jev through the pass-through route (DRAFT 2026-10-02) ──
+  # Not a chat model and never offered to a harness: the backend's `decide` kind (see
+  # templates/drafts/story-staged.yaml) posts to `{LITELLM_BASE_URL}/typesafe/v1/systemone`,
+  # and the proxy adds TYPESAFE_API_KEY from its own environment. Routing is the pass-through,
+  # not this list — the entry below is only so `/model/info` lists and prices the model when
+  # the proxy's price table predates it ($0.042 / 1M input tokens, output free). Needs LiteLLM
+  # >= 1.103.0; this stack pins 1.99.0 (docker-compose.yml), so the image tag moves first and
+  # `/spend/logs/v2` is re-verified after it (infrastructure/gateway/litellm_spend.py was
+  # checked against 1.99.1's source). Uncomment together with TYPESAFE_API_KEY in .env.
+  # - model_name: jev-latest
+  #   litellm_params:
+  #     model: typesafe/jev-latest
+  #     api_key: os.environ/TYPESAFE_API_KEY
+  #   model_info:
+  #     input_cost_per_token: 0.000000042
+  #     output_cost_per_token: 0
+
 litellm_settings:
   # the Gateway's own spans, on the same Langfuse trace as the harness's (AD-11).
   # Needs LITELLM_OTEL_V2=true in the proxy's environment: the v1 exporter drops the

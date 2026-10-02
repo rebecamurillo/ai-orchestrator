@@ -312,6 +312,105 @@ refuses immediately — `failing_reason: "not logged in (claude auth status)"` �
 letting a dispatched Run discover it slowly. Recover with step 4 above: re-run
 `docker compose exec backend-api claude login`.
 
+### TypeSafe Jev — the decision route (`/typesafe/v1/systemone`) — DRAFT 2026-10-02
+
+Jev is TypeSafe AI's System One model: it answers typed questions (a choice, a score, a yes/no
+probability) over a block of state, with a calibrated probability, in under a second, and is
+billed on input tokens only ($0.042 per million; output is free). It writes no code and no
+prose. The orchestrator's `decide` step kind (drafted in `templates/drafts/story-staged.yaml`;
+not a shipped kind yet) uses it for the small routing decisions between agent sessions — is the
+spec complete, which review tier does this diff need — so a strong model is paid for only where
+the decision says so.
+
+It reaches Jev through this proxy's pass-through, not through `model_list`: any path under
+`/typesafe/` is forwarded to `https://api.typesafe.ai` with `TYPESAFE_API_KEY` added by the
+proxy, so a client needs only a LiteLLM virtual key. Spend is logged under the versioned model
+TypeSafe reports (`typesafe/jev-1.13.0`), whatever alias was asked for.
+
+**Prerequisite: LiteLLM ≥ 1.103.0.** The pass-through landed in `v1.103.0-rc`; this stack pins
+`ghcr.io/berriai/litellm-database:v1.99.0` and the tag has not been moved here. Moving it is a
+platform upgrade, not a config edit: `infrastructure/gateway/litellm_spend.py` was verified
+against 1.99.1's source, so after the bump re-run the four key checks under *The two keys* and
+one real attempt's `/spend/logs/v2` lookup before trusting a cost figure again. Only a stable
+tag at or above 1.103.0 goes in `docker-compose.yml`; the `-rc` the blog names does not.
+
+Three steps once the version is in place:
+
+1. Put the key in `deploy/llm-platform/.env`: `TYPESAFE_API_KEY=…` (early access from TypeSafe,
+   or a DigitalOcean serverless-inference key if that is where the account is; then also set
+   `TYPESAFE_API_BASE` to that provider's base). Restart the proxy. The entry in
+   `litellm.config.yaml` stays commented unless `/model/info` shows no price for `jev-latest`.
+2. Smoke the route through the proxy, with the **harness** key, from this host:
+
+   ```bash
+   curl -sX POST http://localhost:4000/typesafe/v1/systemone \
+     -H "x-litellm-api-key: $LITELLM_API_KEY" \
+     -H 'Content-Type: application/json' \
+     -d '{
+       "model": "jev-latest",
+       "state": "diff --stat: 2 files changed, 14 insertions(+), 3 deletions(-)\n src/orchestrator/application/rules/budget.py\n tests/unit/rules/test_budget.py",
+       "questions": {
+         "tier": {
+           "type": "choice",
+           "instructions": "Which review tier does this change need? Count only non-test files.",
+           "criteria": {
+             "S": "at most 3 non-test files, about 80 lines, no new public surface",
+             "M": "more than S but none of L",
+             "L": "a migration, an API schema, a status machine, auth, concurrency, or more than 8 files",
+             "unsure": "cannot be placed from what is shown"
+           }
+         }
+       }
+     }'
+   ```
+
+   Expected: `200` and a body of the shape
+
+   ```json
+   {"model":"jev-1.13.0","answers":{"tier":{"type":"choice","choice":"S","probabilities":{"S":0.9,"M":0.08,"L":0.01,"unsure":0.01},"confidence":0.88}},"usage":{"input_tokens":…,"output_tokens":…}}
+   ```
+
+   Record the HTTP code the harness key gets. `key_type: llm_api` is documented as "model
+   routes only"; whether LiteLLM counts a pass-through among them is not stated and decides
+   which key the `decide` adapter must carry. A `403` here means the adapter needs a second
+   `llm_api`-type key with the `/typesafe` route allowed — never `LITELLM_SPEND_KEY`, which
+   reads every Run's spend and stays in backend-api (AD-5).
+3. Prove the spend row exists and names the versioned model:
+
+   ```bash
+   curl -s -H "Authorization: Bearer $LITELLM_SPEND_KEY" \
+     "http://localhost:4000/spend/logs/v2?start_date=$(date -u +%F)&end_date=$(date -u -v+1d +%F)" \
+     | python3 -c 'import json,sys; [print(r["model"], r["spend"], r.get("session_id")) for r in json.load(sys.stdin)["data"] if "jev" in r["model"]]'
+   ```
+
+   The adapter will send `x-litellm-session-id` and `x-litellm-tags` exactly as
+   `infrastructure/harness/env.py` does for a harness. Whether a pass-through row keeps the
+   session header is the same question story 7.2's runbook asks of Codex's `/v1/responses`
+   path, and the same `LITELLM_SPEND_MATCH=attempt_tag` fallback applies if it does not.
+
+**The header the virtual key travels in.** `forward_client_headers_to_llm_api: true` (the
+subscription mode above) forwards the client's `Authorization` upstream on every route. A
+`decide` call that carried the virtual key in `Authorization` would hand it to TypeSafe, which
+would then answer `401` with the proxy's own key never used. The adapter therefore always sends
+the virtual key in `x-litellm-api-key`, as the subscription mode already does, so nothing
+forwards upstream but the proxy's `TYPESAFE_API_KEY`. The smoke test above uses the same header
+for that reason.
+
+**What to expect from the answers.** Public measurements (TypeSafe's, DataCamp's, Towards Data
+Science's) put Jev level with or above a mid-size LLM on bounded routing questions at roughly
+one hundredth of the cost, with two documented failure modes: it is sensitive to the names of
+the options, and with no "unsure"/"other" option it answers wrong with 0.99 confidence. Every
+question the templates declare therefore carries an `unsure` answer, and a confidence under
+the template's threshold always takes the more expensive path. Calibrate the threshold on
+this repository's own parks before trusting it: a few hundred labelled decisions is the
+vendor's own minimum.
+
+**Unverified end to end.** This section is written from LiteLLM's blog and pass-through
+reference and from public descriptions of the TypeSafe API; nothing here has been run against a
+live key or a ≥ 1.103 proxy on this host. The wire name of the yes/no question type (`noul` in
+the template draft) is taken from public descriptions and needs confirming against TypeSafe's
+reference.
+
 ## Langfuse
 
 Langfuse 4.27.0, self-hosted with its own compose file, on port 3000. The stack sends traces to
