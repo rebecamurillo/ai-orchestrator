@@ -3,7 +3,7 @@
 The invocation is written once, here, and nowhere else:
 
     claude -p --session-id {uuid} --permission-mode dontAsk
-           --allowedTools {CLAUDE_ALLOWED_TOOLS} --disallowedTools "mcp__*"
+           --allowedTools {CLAUDE_ALLOWED_TOOLS} --disallowedTools "mcp__*,Bash(git push*)"
            --output-format json --max-budget-usd {remaining} [--model {model}] "{prompt}"
 
 `--bare` is not used and cannot be: at 2.1.x it exposes exactly `Bash, Edit, Read` — no
@@ -67,8 +67,11 @@ __all__ = [
 EXECUTABLE = "claude"
 #: The permission mode the container's own isolation makes safe (AD-10).
 PERMISSION_MODE = "dontAsk"
-#: Denied explicitly: a container holds no personal MCP connectors.
-DISALLOWED_TOOLS = "mcp__*"
+#: Denied explicitly, and a deny beats the allowlist's `Bash(git *)`: a container holds no
+#: personal MCP connectors, and an agent never pushes — the `git.push` step does, with the
+#: credential the harness is never handed (AD-5). Without the deny a push from the agent
+#: reaches a credential prompt it cannot answer (Operator decision 2026-10-09).
+DISALLOWED_TOOLS = "mcp__*,Bash(git push*)"
 #: One JSON result object per run, on stdout, which is what `usage` is read from.
 OUTPUT_FORMAT = "json"
 

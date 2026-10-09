@@ -70,7 +70,9 @@ ENTRY
   else
     log "gateway disabled"
   fi
-  entries+=('  "permission": { "edit": "allow", "bash": "allow", "webfetch": "deny" }')
+  # `git push*` denied for the same reason the claude adapter denies it: an agent never pushes,
+  # the `git.push` step does, with a credential the harness is never handed (AD-5).
+  entries+=('  "permission": { "edit": "allow", "bash": { "git push*": "deny", "*": "allow" }, "webfetch": "deny" }')
   # Join entries: open brace, first entry bare, subsequent entries with leading ",\n", close brace.
   local json="{" i
   for i in "${!entries[@]}"; do
