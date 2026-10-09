@@ -1,6 +1,6 @@
 ---
 name: orchestrator
-description: Drive an ai-orchestrator instance over its HTTP API — create projects, register repositories, launch BMAD workflow runs (story, epic, initiative, repo-init), monitor progress, and respond to checkpoints and blocked runs. Use when the user asks to run a workflow, dispatch a story or epic to the orchestrator, check on a run, or wire this project into the orchestrator.
+description: Drive an ai-orchestrator instance over its HTTP API — create projects, register repositories, run the first-run demo that proves the pipeline on one trivial story, launch BMAD workflow runs (story, epic, initiative, repo-init), monitor progress, and respond to checkpoints and blocked runs, and customize the workflow templates to the project's needs. Use when the user asks to run a workflow, dispatch a story or epic to the orchestrator, test or demo the orchestrator on this project, run a smoke test or a first run, check on a run, wire this project into the orchestrator, or change, add or adapt a workflow or one of its steps.
 ---
 
 # ai-orchestrator client
@@ -15,9 +15,14 @@ web UI.
 request fields. `references/spec-folder.md` is the format of the files epic and
 initiative Runs read from the target repository (`epics.yaml`, `stories.yaml`,
 `SPEC.md`) — **read it before authoring or reviewing those files: there are two
-initiative flavors and each reads different `epics.yaml` fields.** This file is the
-protocol — the order things happen in and the rules that keep you from fighting the
-machine.
+initiative flavors and each reads different `epics.yaml` fields.**
+`references/workflows.md` is how to customize a workflow template — read it before
+editing or authoring one. `references/project-fields.md` is what every Project and
+Repository field does and what to confirm with the user before saving one.
+`references/first-run.md` is the demo: one trivial story that
+proves the whole pipeline on a freshly wired project — run it before the first real Run.
+This file is the protocol — the order things happen in and the rules that keep you from
+fighting the machine.
 
 ## Connection
 
@@ -64,6 +69,12 @@ whose `_bmad/_config/manifest.yaml` names a different one is not ready to dispat
 
 ## One-time setup: project and repository
 
+**Confirm the fields with the user before the first save.** These settings decide what an
+unattended Run may do and what stops it. Walk `references/project-fields.md` with the user
+field by field, and before saving say back in one sentence what their `test_globs` choice
+means for stops and what a story Run does on its own with these commands. The same walk
+applies to a later `PUT`: a change reaches only Runs planned after it.
+
 1. **Project** — `POST /api/v1/projects` with `{name, context_text, context_paths,
    env_vars}`. `context_text`/`context_paths` are what dispatched agents get told about
    the project; `env_vars` are encrypted and injected into harness runs.
@@ -71,6 +82,8 @@ whose `_bmad/_config/manifest.yaml` names a different one is not ready to dispat
    default_branch, install_command, quality_gate_command, unit_test_command, test_globs,
    package_manager}`. There are no per-repository credentials: the orchestrator clones
    with its own instance-wide `GITHUB_TOKEN`, so the URL must be reachable by that token.
+   `test_globs` is exactly the list sent — empty freezes no file for the agent; the four
+   anchors (`SPEC.md`, `stories.yaml`, `epics.yaml`, `AGENTS.md`) are frozen regardless.
 3. **Clone check** — `POST /api/v1/repositories/{id}/clone-check` proves the URL and
    token resolve and creates the base clone. Do not proceed past a failing clone check;
    its `clone_check_lines` and `clone_check_hint` say what to fix.
@@ -80,6 +93,24 @@ whose `_bmad/_config/manifest.yaml` names a different one is not ready to dispat
 
 Projects and repositories are reused across Runs — look before creating:
 `GET /api/v1/projects` and `GET /api/v1/projects/{id}` (repositories embedded).
+
+## First run: the demo
+
+Once the setup above is green, prove the pipeline before spending a real budget on it.
+`references/first-run.md` is the procedure: a disposable spec folder with one capability
+and one story — create `ORCHESTRATOR-DEMO.md` containing `hello` — committed on its own
+branch, launched on the `epic` template (plain repository) or `initiative-hub` (hub with
+submodules), and watched to `done`. It exercises the clone, the dispatch into the harness,
+the agent's commit, the protected-path check, the registered verify commands, the push and
+the compare link, with no product change in the way.
+
+- Run it when the user says to test, demo or smoke-test the orchestrator on this project,
+  and offer it when a project is wired for the first time.
+- It is a normal Run: preflight first, the human sets harness, model and budget, and every
+  park is handled by the rules below. A park on the demo is a finding about the setup, not
+  about the demo — report what it names.
+- The instance's own `POST /api/v1/harnesses/{name}/readiness` is a different check: it
+  proves a harness on a fixture the instance ships, not this project.
 
 ## Launching a Run
 
@@ -167,11 +198,30 @@ authorized, checkpoint approval of a spec or a finished epic, or any `blocked` q
 you cannot answer from the project's own context. Give them the `/workflows/{id}` link
 and the alert's `reason`; the web UI is built for exactly that review.
 
+## Customizing a workflow
+
+The workflows are templates stored in the instance, and they are meant to be adapted to the
+project: add or move a verify command, add a checkpoint, give a step its own model, change
+a timeout, reword what agents are told. `references/workflows.md` is the guide — the file
+format, the step kinds, and the loop:
+
+1. Read the latest version from the instance (`GET /api/v1/templates/{name}/{version}`).
+2. Edit the YAML; set its `version:` to `max + 1`.
+3. `POST /api/v1/templates/{name}/validate` until `errors` is empty.
+4. Show the human the diff and which callers follow it; save only on their go-ahead
+   (`POST /api/v1/templates/{name}/versions`, or **Save as v{n+1}** at `/templates`).
+5. Preflight a Run on the new version and read `rows[]` before starting anything.
+
+A save reaches only Runs planned afterwards; a parked Run keeps the template it was planned
+from. Prefer changing data the template already reads (the repository's commands,
+`epics.yaml` fields) over editing the template when that is enough.
+
 ## Rules
 
 - Handshake first; a mismatched version stops you.
 - Always preflight before creating a Run; resolve every `fail` line first.
 - Discover template inputs from the API each time; templates evolve.
+- A template save is the human's decision: validate, show the diff, wait for the go-ahead.
 - One budget decision per Run, made by a human or from an explicit instruction — never
   invent or silently raise `budget_usd`.
 - Poll at 5 s / 30 s; back off, never tighten.
