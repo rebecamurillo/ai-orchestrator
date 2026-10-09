@@ -23,6 +23,7 @@ import {
   initialEnvVarRows,
   initialRepositoryRows,
   repositoryFieldName,
+  SUGGESTED_TEST_GLOBS,
   startReplacingEnvVar,
   type EnvVarRowState,
   type FieldError,
@@ -44,6 +45,9 @@ const LOG_PROMPT_CONTENT_ON =
   'on: prompt and tool content, including source code, is sent to Langfuse for this project';
 
 const NO_CREDENTIAL_FIELD_LINE = 'credentials are instance settings (.env)';
+
+const TEST_GLOBS_LINE =
+  'files matching these globs that exist when a story starts are frozen for the agent; a change to one parks the Run protected_path. Empty freezes none. One glob per line.';
 
 export default function ProjectForm({ initial, errors, mode }: Props) {
   const [envVars, setEnvVars] = useState<EnvVarRowState[]>(() => initialEnvVarRows(initial));
@@ -257,8 +261,12 @@ export default function ProjectForm({ initial, errors, mode }: Props) {
               <textarea
                 name={repositoryFieldName(index, 'test_globs')}
                 defaultValue={row.testGlobs}
+                placeholder={SUGGESTED_TEST_GLOBS}
                 data-testid={`repo-form-${index}-test-globs`}
               />
+              <p className="secondary-line" data-testid={`repo-form-${index}-test-globs-line`}>
+                {TEST_GLOBS_LINE}
+              </p>
               {reasonFor(repositoryFieldName(index, 'test_globs')) ? (
                 <p className="field-error" data-testid={`repo-form-${index}-test-globs-error`}>
                   {reasonFor(repositoryFieldName(index, 'test_globs'))}

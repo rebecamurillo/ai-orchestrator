@@ -18,10 +18,10 @@ from orchestrator.api.schemas.clone_check import CloneCheckLineOut, CloneCheckRe
 from orchestrator.api.schemas.projects import RepositoryOut
 from orchestrator.domain.entities.repository import (
     DEFAULT_PACKAGE_MANAGER,
-    DEFAULT_TEST_GLOBS,
     LINE_CLONE,
     LINE_LS_REMOTE,
     NOT_FOUND_HINT,
+    SUGGESTED_TEST_GLOBS,
     CloneCheck,
     CloneCheckLine,
     Repository,
@@ -65,7 +65,7 @@ def a_repository(clone_check: CloneCheck, project_id: UUID | None = None) -> Rep
         install_command="",
         quality_gate_command="",
         unit_test_command="",
-        test_globs=DEFAULT_TEST_GLOBS,
+        test_globs=SUGGESTED_TEST_GLOBS,
         package_manager=DEFAULT_PACKAGE_MANAGER,
         clone_check=clone_check,
         created_at=AT,

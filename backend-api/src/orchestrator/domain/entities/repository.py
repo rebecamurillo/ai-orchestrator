@@ -8,11 +8,13 @@ drifts:
   `[a-z0-9-]`). It identifies the Repository to an Operator reading a list; a `PUT` that
   changed the URL must not silently rename what they already recognise, so nothing here
   ever recomputes it after creation.
-- **`test_globs` always protects the three defaults.** An agent step in Epic 4 refuses to
-  touch a path one of these globs names; an Operator narrowing the set by omission — rather
-  than only ever broadening it — would be a protection that silently disappeared.
-  `merge_test_globs` is why a `POST`/`PUT` payload can only add to the set, never replace
-  it.
+- **`test_globs` is exactly what the Operator lists** (Operator decision 2026-10-06,
+  replacing the always-merged defaults that parked every bug-fix story touching an existing
+  test). The `agent` step freezes the files these globs name at the story's first attempt
+  (AD-17); an empty list freezes none. `dedupe_test_globs` keeps the list order-preserving
+  and duplicate-free, nothing more. `SUGGESTED_TEST_GLOBS` is what the form shows as
+  placeholder text and what the readiness fixture applies to itself — never merged into a
+  save.
 
 `clone_check` starts `pending` and stays that way until `run_clone_check` writes a result;
 nothing in this module executes a clone. A finished check carries one `CloneCheckLine` per
@@ -79,8 +81,9 @@ NOT_FOUND_PATTERNS = (
 #: twice; a branch line that failed for any other reason is not a missing branch.
 MISSING_BRANCH_PATTERN = "does not exist on origin"
 
-#: Every Repository protects at least these, whatever the Operator asked for.
-DEFAULT_TEST_GLOBS: tuple[str, ...] = ("tests/**", "**/*.test.*", "**/*.spec.*")
+#: A suggestion, never a default: placeholder text in the form, and what the readiness
+#: fixture protects in itself. No write path merges these into a Repository.
+SUGGESTED_TEST_GLOBS: tuple[str, ...] = ("tests/**", "**/*.test.*", "**/*.spec.*")
 
 #: The suffix a git URL's last path segment carries, and never keeps as part of the slug.
 GIT_SUFFIX = ".git"
@@ -175,14 +178,10 @@ def repo_slug(url: str) -> str:
     return slugify(last_segment)
 
 
-def merge_test_globs(requested: Iterable[str]) -> tuple[str, ...]:
-    """The defaults, then whatever the Operator asked for that is not already among them.
-
-    Order-preserving and de-duplicated: a requested glob already in the defaults is not
-    repeated, and two equal requested globs collapse to the one that appeared first.
-    """
-    merged = list(DEFAULT_TEST_GLOBS)
+def dedupe_test_globs(requested: Iterable[str]) -> tuple[str, ...]:
+    """Exactly the globs listed, order preserved, each kept once at its first position."""
+    kept: list[str] = []
     for glob in requested:
-        if glob not in merged:
-            merged.append(glob)
-    return tuple(merged)
+        if glob not in kept:
+            kept.append(glob)
+    return tuple(kept)

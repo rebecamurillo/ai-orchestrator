@@ -18,7 +18,7 @@ from pathlib import Path
 from orchestrator.application.use_cases.run_finished import RunFinishedPorts, on_finished
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import (
-    DEFAULT_TEST_GLOBS,
+    SUGGESTED_TEST_GLOBS,
     CloneCheck,
     Repository,
 )
@@ -84,7 +84,7 @@ def a_repository(project_id: object) -> Repository:
         install_command="",
         quality_gate_command="",
         unit_test_command="",
-        test_globs=DEFAULT_TEST_GLOBS,
+        test_globs=SUGGESTED_TEST_GLOBS,
         package_manager="uv",
         clone_check=CloneCheck.pending(),
         created_at=NOW,

@@ -21,8 +21,12 @@ export function findError(errors: FieldError[] | undefined, path: string): Field
   return errors?.find((error) => error.path === path);
 }
 
-/** The three globs `test_globs` starts with (the backend merges these in regardless). */
-export const DEFAULT_TEST_GLOBS = 'tests/**\n**/*.test.*\n**/*.spec.*';
+/**
+ * Placeholder text for the TEST GLOBS field, never its content: the stored list is exactly
+ * what the Operator types, and the backend merges nothing into it (Operator decision
+ * 2026-10-06). An empty field freezes no file.
+ */
+export const SUGGESTED_TEST_GLOBS = 'tests/**\n**/*.test.*\n**/*.spec.*';
 
 export const DEFAULT_PACKAGE_MANAGER = 'other';
 
@@ -54,13 +58,13 @@ export function emptyEnvVarRow(): EnvVarRowState {
   return { name: '', value: '', replacing: true };
 }
 
-/** A freshly added repository row, pre-filled with the three protected globs. */
+/** A freshly added repository row: every field blank but the package manager. */
 export function emptyRepositoryRow(): RepositoryRowState {
   return {
     url: '',
     defaultBranch: '',
     packageManager: DEFAULT_PACKAGE_MANAGER,
-    testGlobs: DEFAULT_TEST_GLOBS,
+    testGlobs: '',
     installCommand: '',
     qualityGateCommand: '',
     unitTestCommand: '',

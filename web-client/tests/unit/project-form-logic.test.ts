@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_PACKAGE_MANAGER,
-  DEFAULT_TEST_GLOBS,
+  SUGGESTED_TEST_GLOBS,
   addRow,
   emptyEnvVarRow,
   emptyRepositoryRow,
@@ -37,10 +37,13 @@ describe('emptyEnvVarRow', () => {
 });
 
 describe('emptyRepositoryRow', () => {
-  it('pre-fills the three protected globs and the default package manager', () => {
+  // Operator decision 2026-10-06: test_globs are exactly what the operator lists; no default
+  // merge. The three former defaults survive only as the field's placeholder.
+  it('starts with no globs and the default package manager', () => {
     const row = emptyRepositoryRow();
 
-    expect(row.testGlobs).toBe(DEFAULT_TEST_GLOBS);
+    expect(row.testGlobs).toBe('');
+    expect(SUGGESTED_TEST_GLOBS).toBe('tests/**\n**/*.test.*\n**/*.spec.*');
     expect(row.packageManager).toBe(DEFAULT_PACKAGE_MANAGER);
     expect(row.url).toBe('');
     expect(row.defaultBranch).toBe('');
@@ -150,7 +153,7 @@ describe('initialRepositoryRows', () => {
           url: 'https://github.com/example/repo.git',
           defaultBranch: 'main',
           packageManager: 'pnpm',
-          testGlobs: DEFAULT_TEST_GLOBS,
+          testGlobs: 'tests/**',
           installCommand: 'pnpm install',
           qualityGateCommand: 'pnpm lint',
           unitTestCommand: 'pnpm test',

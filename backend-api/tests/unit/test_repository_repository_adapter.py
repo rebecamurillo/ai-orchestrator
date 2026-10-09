@@ -17,7 +17,7 @@ import pytest
 from sqlalchemy import DateTime, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 
-from orchestrator.domain.entities.repository import DEFAULT_TEST_GLOBS, CloneCheck, Repository
+from orchestrator.domain.entities.repository import SUGGESTED_TEST_GLOBS, CloneCheck, Repository
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.repositories import RepositoryRepository
 from orchestrator.infrastructure.db import Base, RepositoryRow, SQLAlchemyRepositoryRepository
@@ -39,7 +39,7 @@ def a_repository(**overrides: object) -> Repository:
         "install_command": "npm ci",
         "quality_gate_command": "make lint test",
         "unit_test_command": "npm test",
-        "test_globs": DEFAULT_TEST_GLOBS,
+        "test_globs": SUGGESTED_TEST_GLOBS,
         "package_manager": "npm",
         "clone_check": CloneCheck.pending(),
         "created_at": AT,
@@ -227,7 +227,7 @@ def test_add_maps_every_field_of_the_entity_onto_a_row() -> None:
     assert row.install_command == "npm ci"
     assert row.quality_gate_command == "make lint test"
     assert row.unit_test_command == "npm test"
-    assert row.test_globs == list(DEFAULT_TEST_GLOBS)
+    assert row.test_globs == list(SUGGESTED_TEST_GLOBS)
     assert row.package_manager == "npm"
     assert row.clone_check == {
         "status": "pending",
@@ -287,7 +287,7 @@ def test_update_writes_the_editable_fields_back_onto_the_stored_row() -> None:
             "quality_gate_command": "pnpm lint",
             "unit_test_command": "pnpm test",
             "package_manager": "pnpm",
-            "test_globs": (*DEFAULT_TEST_GLOBS, "e2e/**"),
+            "test_globs": (*SUGGESTED_TEST_GLOBS, "e2e/**"),
             "clone_check": CloneCheck(status="ok", at=LATER, output="ok", bmad_version="6.1.0"),
             "updated_at": LATER,
         }
@@ -301,7 +301,7 @@ def test_update_writes_the_editable_fields_back_onto_the_stored_row() -> None:
     assert row.quality_gate_command == "pnpm lint"
     assert row.unit_test_command == "pnpm test"
     assert row.package_manager == "pnpm"
-    assert row.test_globs == [*DEFAULT_TEST_GLOBS, "e2e/**"]
+    assert row.test_globs == [*SUGGESTED_TEST_GLOBS, "e2e/**"]
     assert row.clone_check == {
         "status": "ok",
         "at": LATER.isoformat(),
@@ -338,7 +338,7 @@ def test_update_rebuilds_the_json_columns_rather_than_mutating_them() -> None:
     session = RecordingSession([row])
 
     repository_adapter(session).update(
-        repository.model_copy(update={"test_globs": (*DEFAULT_TEST_GLOBS, "x/**")})
+        repository.model_copy(update={"test_globs": (*SUGGESTED_TEST_GLOBS, "x/**")})
     )
 
     assert row.test_globs is not before_globs

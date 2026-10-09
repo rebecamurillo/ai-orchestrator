@@ -16,7 +16,7 @@ from uuid import UUID
 import pytest
 
 from orchestrator.domain.entities.project import Project
-from orchestrator.domain.entities.repository import DEFAULT_TEST_GLOBS, CloneCheck, Repository
+from orchestrator.domain.entities.repository import SUGGESTED_TEST_GLOBS, CloneCheck, Repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ids import new_id
@@ -105,7 +105,7 @@ def a_repository(project_id: UUID) -> Repository:
         install_command="",
         quality_gate_command="",
         unit_test_command="",
-        test_globs=DEFAULT_TEST_GLOBS,
+        test_globs=SUGGESTED_TEST_GLOBS,
         package_manager="uv",
         clone_check=CloneCheck.pending(),
         created_at=NOW,

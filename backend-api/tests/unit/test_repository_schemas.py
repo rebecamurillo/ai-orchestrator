@@ -14,7 +14,7 @@ import pytest
 from pydantic import ValidationError
 
 from orchestrator.api.schemas.projects import RepositoryCreate, RepositoryOut, RepositoryUpdate
-from orchestrator.domain.entities.repository import DEFAULT_TEST_GLOBS, CloneCheck, Repository
+from orchestrator.domain.entities.repository import SUGGESTED_TEST_GLOBS, CloneCheck, Repository
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.rules.globs import GLOB_REASON
 
@@ -199,7 +199,7 @@ def a_repository(**overrides: object) -> Repository:
         "install_command": "",
         "quality_gate_command": "",
         "unit_test_command": "",
-        "test_globs": DEFAULT_TEST_GLOBS,
+        "test_globs": SUGGESTED_TEST_GLOBS,
         "package_manager": "other",
         "clone_check": CloneCheck.pending(),
         "created_at": AT,
@@ -248,6 +248,6 @@ def test_the_timestamps_leave_as_the_z_form() -> None:
 
 
 def test_the_test_globs_leave_as_a_plain_list() -> None:
-    out = RepositoryOut.of(a_repository(test_globs=(*DEFAULT_TEST_GLOBS, "e2e/**")))
+    out = RepositoryOut.of(a_repository(test_globs=(*SUGGESTED_TEST_GLOBS, "e2e/**")))
 
-    assert out.test_globs == [*DEFAULT_TEST_GLOBS, "e2e/**"]
+    assert out.test_globs == [*SUGGESTED_TEST_GLOBS, "e2e/**"]

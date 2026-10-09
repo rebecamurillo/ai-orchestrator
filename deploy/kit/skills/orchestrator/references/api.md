@@ -65,7 +65,8 @@ log_prompt_content}`. `env_vars` are encrypted at rest and returned masked.
 
 Register body: `{url, default_branch, install_command, quality_gate_command,
 unit_test_command, test_globs[], package_manager}`. No per-repo credentials — the
-instance's `GITHUB_TOKEN` must reach `url`.
+instance's `GITHUB_TOKEN` must reach `url`. `test_globs[]` is stored exactly as sent:
+empty freezes no file for the agent (Operator decision 2026-10-06).
 
 ## Templates
 

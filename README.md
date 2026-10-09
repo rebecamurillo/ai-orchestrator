@@ -235,6 +235,11 @@ also the API under `/api/v1` with `Authorization: Bearer $ORCHESTRATOR_TOKEN`.
    those is on the menu. The mono-repo `initiative` and `story-run` workflows are retired
    to `templates/drafts/` (kept, not seeded — Operator decision 2026-09-30).
 
+   Every template is editable at `/templates` (edit, Validate, Save as v{n+1}) and meant to
+   be adapted to the project. The format and the edit loop are in
+   [`deploy/kit/skills/orchestrator/references/workflows.md`](deploy/kit/skills/orchestrator/references/workflows.md),
+   which the kit installs into client projects.
+
    The harness page section shows each harness's live probe; the deeper readiness
    diagnostic (`POST /harnesses/{name}/readiness`) runs a trivial story end to end and
    proves the plumbing before you spend a real budget on it.
@@ -242,7 +247,8 @@ also the API under `/api/v1` with `Authorization: Bearer $ORCHESTRATOR_TOKEN`.
    history; `/workflows/{id}` is the step-level detail, `?view=diagram` for the graph.
 8. **Answer when it stops.** A Run parks as `needs_you` at a declared checkpoint, when an
    agent is blocked, when verify fails, when the budget or a timeout is hit, or when a
-   protected path (SPEC, stories, AGENTS.md, existing tests) was touched. The Run detail
+   protected path (SPEC, stories, AGENTS.md, files the repository's `test_globs` freeze)
+   was touched. The Run detail
    names the reason and offers exactly the signals that apply: `answer`, `continue`,
    `retry`, `skip_story`, `skip_epic`, `budget_raise`, `cancel`, and the terminal signals.
    Nothing proceeds past a park without you.

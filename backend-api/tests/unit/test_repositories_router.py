@@ -117,7 +117,9 @@ async def add(api: Harness, project_id: UUID, **overrides: Any) -> httpx.Respons
 # ── create ───────────────────────────────────────────────────────────────────
 
 
-async def test_a_create_answers_201_with_the_defaults(api: Harness) -> None:
+# Operator decision 2026-10-06: `test_globs` is stored exactly as sent; the two tests below
+# replace the ones that pinned the always-merged defaults.
+async def test_a_create_answers_201_with_no_protected_globs(api: Harness) -> None:
     project_id = api.project()
 
     response = await add(api, project_id)
@@ -125,7 +127,7 @@ async def test_a_create_answers_201_with_the_defaults(api: Harness) -> None:
     assert response.status_code == HTTP_CREATED
     body = response.json()
     assert body["project_id"] == str(project_id)
-    assert body["test_globs"] == ["tests/**", "**/*.test.*", "**/*.spec.*"]
+    assert body["test_globs"] == []
     assert body["verify_skipped"] is True
     assert body["clone_check"] == {
         "status": "pending",
@@ -144,17 +146,12 @@ async def test_a_quality_gate_command_turns_off_verify_skipped(api: Harness) -> 
     assert response.json()["verify_skipped"] is False
 
 
-async def test_test_globs_are_merged_with_the_defaults(api: Harness) -> None:
+async def test_test_globs_are_stored_exactly_as_sent(api: Harness) -> None:
     project_id = api.project()
 
     response = await add(api, project_id, test_globs=["e2e/**"])
 
-    assert response.json()["test_globs"] == [
-        "tests/**",
-        "**/*.test.*",
-        "**/*.spec.*",
-        "e2e/**",
-    ]
+    assert response.json()["test_globs"] == ["e2e/**"]
 
 
 async def test_creating_under_an_unknown_project_is_a_404(api: Harness) -> None:

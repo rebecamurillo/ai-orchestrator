@@ -46,7 +46,7 @@ from orchestrator.domain.entities.repository import (
     CloneCheck,
     PackageManager,
     Repository,
-    merge_test_globs,
+    dedupe_test_globs,
     repo_slug,
 )
 from orchestrator.domain.errors import Conflict, Invalid, NotFound
@@ -254,9 +254,9 @@ def _masked(project: Project, crypto: Crypto) -> ProjectView:
 
 # ── repository ───────────────────────────────────────────────────────────────
 #
-# Register the git repositories a Run works in. `POST` and `PUT` share one rule each: the
-# `test_globs` merge always applies, `clone_check` is never written here, and the slug is
-# derived once and never recomputed. A duplicate `url` is a `Conflict` scoped to the
+# Register the git repositories a Run works in. `POST` and `PUT` share one rule each:
+# `test_globs` is stored exactly as listed, `clone_check` is never written here, and the slug
+# is derived once and never recomputed. A duplicate `url` is a `Conflict` scoped to the
 # Project it was posted under — the same `url` under another Project is unremarkable.
 
 
@@ -269,7 +269,7 @@ class RepositoryDraft:
     install_command: str = ""
     quality_gate_command: str = ""
     unit_test_command: str = ""
-    #: Globs the Operator asked to add, on top of `DEFAULT_TEST_GLOBS`.
+    #: The globs AD-17 freezes for this Repository, exactly as the Operator listed them.
     test_globs: tuple[str, ...] = ()
     package_manager: PackageManager = DEFAULT_PACKAGE_MANAGER
 
@@ -290,7 +290,7 @@ def add_repository(ports: ProjectPorts, project_id: UUID, draft: RepositoryDraft
         install_command=draft.install_command,
         quality_gate_command=draft.quality_gate_command,
         unit_test_command=draft.unit_test_command,
-        test_globs=merge_test_globs(draft.test_globs),
+        test_globs=dedupe_test_globs(draft.test_globs),
         package_manager=draft.package_manager,
         clone_check=CloneCheck.pending(),
         created_at=now,
@@ -342,7 +342,7 @@ def update_repository(
             "install_command": draft.install_command,
             "quality_gate_command": draft.quality_gate_command,
             "unit_test_command": draft.unit_test_command,
-            "test_globs": merge_test_globs(draft.test_globs),
+            "test_globs": dedupe_test_globs(draft.test_globs),
             "package_manager": draft.package_manager,
             "updated_at": ports.clock.now(),
         }

@@ -22,7 +22,6 @@ from orchestrator.application.use_cases.projects import (
     update_repository,
 )
 from orchestrator.domain.entities.project import Project, slugify
-from orchestrator.domain.entities.repository import DEFAULT_TEST_GLOBS
 from orchestrator.domain.errors import Conflict, NotFound
 from orchestrator.domain.ids import new_id
 from tests.unit.fakes.clock import FakeClock
@@ -86,12 +85,14 @@ def a_draft(**overrides: object) -> RepositoryDraft:
 # ── create ───────────────────────────────────────────────────────────────────
 
 
-def test_a_minimal_create_stores_the_defaults(ports: Ports) -> None:
+# Operator decision 2026-10-06: `test_globs` is stored exactly as listed; the three tests
+# below replace the ones that pinned the always-merged defaults.
+def test_a_minimal_create_stores_no_protected_globs(ports: Ports) -> None:
     project_id = ports.project()
 
     repository = add_repository(ports.ports, project_id, a_draft())
 
-    assert repository.test_globs == DEFAULT_TEST_GLOBS
+    assert repository.test_globs == ()
     assert repository.verify_skipped is True
     assert repository.clone_check.status == "pending"
     assert repository.clone_check.at is None
@@ -99,12 +100,12 @@ def test_a_minimal_create_stores_the_defaults(ports: Ports) -> None:
     assert repository.project_id == project_id
 
 
-def test_operator_globs_are_appended_after_the_defaults(ports: Ports) -> None:
+def test_operator_globs_are_stored_exactly_as_listed(ports: Ports) -> None:
     project_id = ports.project()
 
     repository = add_repository(ports.ports, project_id, a_draft(test_globs=("e2e/**",)))
 
-    assert repository.test_globs == (*DEFAULT_TEST_GLOBS, "e2e/**")
+    assert repository.test_globs == ("e2e/**",)
 
 
 def test_a_quality_gate_command_turns_off_verify_skipped(ports: Ports) -> None:
@@ -283,13 +284,13 @@ def test_updating_never_changes_the_slug(ports: Ports) -> None:
     assert updated.url == "https://x/org/renamed.git"
 
 
-def test_updating_reapplies_the_test_globs_merge(ports: Ports) -> None:
+def test_updating_replaces_the_test_globs(ports: Ports) -> None:
     project_id = ports.project()
     created = add_repository(ports.ports, project_id, a_draft(test_globs=("e2e/**",)))
 
     updated = update_repository(ports.ports, created.id, a_draft(test_globs=("spec/**",)))
 
-    assert updated.test_globs == (*DEFAULT_TEST_GLOBS, "spec/**")
+    assert updated.test_globs == ("spec/**",)
 
 
 def test_updating_an_unknown_id_is_a_not_found(ports: Ports) -> None:

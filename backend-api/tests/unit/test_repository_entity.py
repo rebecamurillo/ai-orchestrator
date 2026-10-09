@@ -14,10 +14,10 @@ import pytest
 
 from orchestrator.domain.entities.repository import (
     DEFAULT_PACKAGE_MANAGER,
-    DEFAULT_TEST_GLOBS,
+    SUGGESTED_TEST_GLOBS,
     CloneCheck,
     Repository,
-    merge_test_globs,
+    dedupe_test_globs,
     repo_slug,
 )
 from orchestrator.domain.ids import new_id
@@ -35,7 +35,7 @@ def a_repository(**overrides: object) -> Repository:
         "install_command": "",
         "quality_gate_command": "",
         "unit_test_command": "",
-        "test_globs": DEFAULT_TEST_GLOBS,
+        "test_globs": SUGGESTED_TEST_GLOBS,
         "package_manager": DEFAULT_PACKAGE_MANAGER,
         "clone_check": CloneCheck.pending(),
         "created_at": AT,
@@ -61,31 +61,30 @@ def test_the_slug_is_derived_from_the_urls_last_segment(url: str, expected: str)
     assert repo_slug(url) == expected
 
 
-# ── the default test globs ────────────────────────────────────────────────────
+# ── the protected globs ───────────────────────────────────────────────────────
+# Operator decision 2026-10-06: `test_globs` is exactly what the Operator lists. The five
+# tests this block replaces pinned `merge_test_globs`, which re-added the three defaults on
+# every write and parked every bug-fix story that touched an existing test.
 
 
-def test_the_defaults_are_exactly_the_three_the_brief_states() -> None:
-    assert DEFAULT_TEST_GLOBS == ("tests/**", "**/*.test.*", "**/*.spec.*")
+def test_the_suggested_globs_are_the_three_former_defaults() -> None:
+    assert SUGGESTED_TEST_GLOBS == ("tests/**", "**/*.test.*", "**/*.spec.*")
 
 
-def test_merging_nothing_still_protects_the_defaults() -> None:
-    assert merge_test_globs(()) == DEFAULT_TEST_GLOBS
+def test_nothing_listed_protects_nothing() -> None:
+    assert dedupe_test_globs(()) == ()
 
 
-def test_an_operator_glob_is_appended_after_the_defaults() -> None:
-    assert merge_test_globs(["e2e/**"]) == (*DEFAULT_TEST_GLOBS, "e2e/**")
+def test_the_suggested_globs_are_not_added_to_what_the_operator_lists() -> None:
+    assert dedupe_test_globs(["e2e/**"]) == ("e2e/**",)
 
 
-def test_a_duplicate_of_a_default_is_not_repeated() -> None:
-    assert merge_test_globs(["tests/**", "e2e/**"]) == (*DEFAULT_TEST_GLOBS, "e2e/**")
+def test_a_suggested_glob_is_stored_only_when_listed() -> None:
+    assert dedupe_test_globs(["tests/**", "e2e/**"]) == ("tests/**", "e2e/**")
 
 
-def test_order_is_preserved_and_duplicates_among_operator_globs_collapse() -> None:
-    assert merge_test_globs(["e2e/**", "e2e/**", "spec/**"]) == (
-        *DEFAULT_TEST_GLOBS,
-        "e2e/**",
-        "spec/**",
-    )
+def test_order_is_preserved_and_duplicates_collapse_to_the_first() -> None:
+    assert dedupe_test_globs(["e2e/**", "e2e/**", "spec/**"]) == ("e2e/**", "spec/**")
 
 
 # ── clone_check ────────────────────────────────────────────────────────────────

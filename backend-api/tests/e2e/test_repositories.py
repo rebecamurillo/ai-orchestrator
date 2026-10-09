@@ -68,7 +68,8 @@ def test_a_repository_round_trips_through_the_database(
     identifier = body["id"]
 
     assert body["project_id"] == project_id
-    assert body["test_globs"] == ["tests/**", "**/*.test.*", "**/*.spec.*"]
+    # Operator decision 2026-10-06: `test_globs` is stored exactly as sent, nothing merged in.
+    assert body["test_globs"] == []
     assert body["verify_skipped"] is False
     assert body["clone_check"]["status"] == "pending"
     assert body["clone_check"]["at"] is None
@@ -95,20 +96,24 @@ def test_a_repository_round_trips_through_the_database(
     assert after["default_branch"] == "develop"
     assert after["slug"] == body["slug"]
     assert after["clone_check"] == body["clone_check"]
+    assert after["test_globs"] == []
 
 
-def test_test_globs_merge_with_the_defaults(
+def test_test_globs_are_stored_exactly_as_sent_and_replaced_on_update(
     authenticated: httpx.Client, project_id: str, unique_url: str
 ) -> None:
+    # Operator decision 2026-10-06: replaces the test that pinned the always-merged defaults.
     response = create_repository(authenticated, project_id, unique_url, test_globs=["e2e/**"])
 
     assert response.status_code == HTTP_CREATED, response.text
-    assert response.json()["test_globs"] == [
-        "tests/**",
-        "**/*.test.*",
-        "**/*.spec.*",
-        "e2e/**",
-    ]
+    assert response.json()["test_globs"] == ["e2e/**"]
+
+    updated = authenticated.put(
+        f"{REPOSITORIES}/{response.json()['id']}",
+        json={"url": unique_url, "default_branch": "main", "test_globs": ["spec/**"]},
+    )
+    assert updated.status_code == HTTP_OK, updated.text
+    assert updated.json()["test_globs"] == ["spec/**"]
 
 
 def test_a_duplicate_url_in_the_same_project_is_refused(

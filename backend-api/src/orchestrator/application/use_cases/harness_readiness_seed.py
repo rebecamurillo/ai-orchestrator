@@ -32,7 +32,7 @@ from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.entities.project import READINESS_PROJECT_SLUG, Project
 from orchestrator.domain.entities.repository import (
     DEFAULT_PACKAGE_MANAGER,
-    DEFAULT_TEST_GLOBS,
+    SUGGESTED_TEST_GLOBS,
     CloneCheck,
     Repository,
 )
@@ -139,7 +139,7 @@ def _seed_repository(
         # `gates-repo` fixture and `tests/unit/test_gates_fixture_uj3.py`.
         quality_gate_command="",
         unit_test_command="",
-        test_globs=DEFAULT_TEST_GLOBS,
+        test_globs=SUGGESTED_TEST_GLOBS,
         package_manager=DEFAULT_PACKAGE_MANAGER,
         clone_check=CloneCheck.pending(),
         created_at=now,

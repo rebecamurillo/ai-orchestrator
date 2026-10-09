@@ -365,8 +365,8 @@ TestGlob = Annotated[StorableText, AfterValidator(_valid_glob)]
 class RepositoryWrite(BaseModel):
     """What both `POST` and `PUT` require of a Repository.
 
-    `test_globs` here is only what the Operator asked to *add*: `merge_test_globs` in the
-    use case is what always keeps `DEFAULT_TEST_GLOBS` in the stored set, on both writes.
+    `test_globs` is the whole stored list on both writes — an empty list stores empty and
+    freezes nothing (Operator decision 2026-10-06); `dedupe_test_globs` only drops repeats.
     Neither `clone_check` nor the slug is a field here — nothing this story ships writes
     the first, and the second never changes once derived.
     """
