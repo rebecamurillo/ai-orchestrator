@@ -67,10 +67,8 @@ __all__ = [
 EXECUTABLE = "claude"
 #: The permission mode the container's own isolation makes safe (AD-10).
 PERMISSION_MODE = "dontAsk"
-#: Denied explicitly, and a deny beats the allowlist's `Bash(git *)`: a container holds no
-#: personal MCP connectors, and an agent never pushes — the `git.push` step does, with the
-#: credential the harness is never handed (AD-5). Without the deny a push from the agent
-#: reaches a credential prompt it cannot answer (Operator decision 2026-10-09).
+#: A deny beats the allowlist's `Bash(git *)`: no personal MCP connectors in a container, and
+#: an agent never pushes — `git.push` does, with a credential the harness is never handed.
 DISALLOWED_TOOLS = "mcp__*,Bash(git push*)"
 #: One JSON result object per run, on stdout, which is what `usage` is read from.
 OUTPUT_FORMAT = "json"
