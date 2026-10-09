@@ -185,9 +185,12 @@ def start_hub_run(
     """A fresh hub-Run fixture and a Run of `initiative-hub@1`'s latest stored version."""
     project_id = create_project(api)
     repos = hub.make_hub(poison_alpha=poison_alpha)
+    # `tests/**` is listed, not assumed: since the Operator decision of 2026-10-06 a
+    # Repository freezes exactly the globs it was registered with, and the poisoned Story 1
+    # below has to find `members/alpha/tests/smoke.test.sh` frozen to park `protected_path`.
     created = api.post(
         f"{PROJECTS}/{project_id}/repositories",
-        json={"url": repos.hub, "default_branch": BASE_BRANCH},
+        json={"url": repos.hub, "default_branch": BASE_BRANCH, "test_globs": ["tests/**"]},
     )
     assert created.status_code == HTTP_CREATED, created.text
     repository_id = str(created.json()["id"])
