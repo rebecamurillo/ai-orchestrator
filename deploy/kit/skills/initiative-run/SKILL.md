@@ -94,6 +94,12 @@ level:
 - The signal kind comes from the Run's own `admitted_signals`, never from assumption.
 - `budget` and `checkpoint` never resolve without the human.
 
+A park that will recur on every story is not answered one story at a time. Name the cause
+and where it is fixed: a tool the agent was denied is the instance's harness allowlist
+(`orchestrator-admin`); a step the project needs added, moved, re-timed or re-worded is a
+template edit, proposed to the human with `../orchestrator/references/workflows.md` — and
+it reaches only Runs planned after the save, never this one.
+
 When a park goes to the human, give them the deep link and the alert's `reason` verbatim —
 not a paraphrase of a question an agent asked about their code.
 

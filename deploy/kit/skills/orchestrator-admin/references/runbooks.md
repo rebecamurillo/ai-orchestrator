@@ -124,6 +124,19 @@ The `work` volume grows without bound: base clones, a worktree per Run, logs.
 - `./install.sh doctor` reports free space on the docker data root and warns above 90 %.
 - Never `docker compose down -v`. That deletes the database.
 
+## Harness tool allowlist
+
+The claude harness runs with `--permission-mode dontAsk` and the list in `CLAUDE_ALLOWED_TOOLS`
+(instance `.env`): a shell command outside it is denied outright, and the agent parks
+`blocked` saying so. The symptom is every story parking at the same command — typically the
+target repository's package manager or test runner.
+
+The list must cover the toolchain of every repository the instance builds: one
+`Bash(<tool> *)` entry per command family (`Bash(yarn *)`, `Bash(npx *)`, `Bash(make *)`, …).
+Add the missing entry to the quoted value in `.env`, then `./install.sh start`. It is read at
+start-up, so the restart is required — say what is running and let the user choose the moment.
+A template cannot widen this list, and answering the park does not either.
+
 ## Template refresh
 
 Shipped templates are seeded at boot (`seed_shipped`): every shipped file is validated and
@@ -138,3 +151,9 @@ the instance, not the file on disk: `GET /api/v1/templates`, then
 `GET /api/v1/templates/{name}/{version}`, and compare the version number against what the new
 release ships. If they disagree, the instance is not running the image you think it is —
 `./install.sh doctor`'s version line is where that shows up.
+
+An upgrade also stores each changed shipped template as a new version above any the user
+saved, so their customization is no longer the latest. After an upgrade, list the versions of
+every template they edited and, where a shipped one landed on top, re-apply the edit as the
+next version. Editing itself — the format, the validate-and-save loop, what a save reaches —
+is `../../orchestrator/references/workflows.md`.

@@ -236,8 +236,12 @@ anything the user has not read.
 ## The rest — `references/runbooks.md`
 
 Rollback, backup and restore, secret rotation, models and defaults, spend reporting, garbage
-collection and template refresh are each a short runbook in `references/runbooks.md`. Read the
-one the question is about; they carry the commands and the consequences.
+collection, the harness tool allowlist and template refresh are each a short runbook in
+`references/runbooks.md`. Read the one the question is about; they carry the commands and the
+consequences.
+
+Customizing a workflow template to the project — adding a step, a checkpoint, a model per
+step — is not an instance operation: `../orchestrator/references/workflows.md`.
 
 ## Connect a project
 

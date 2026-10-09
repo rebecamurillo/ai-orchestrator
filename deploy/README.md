@@ -165,7 +165,20 @@ from. A save that would break a follower (an input renamed or removed) is refuse
 that caller.
 
 An upgrade that ships a changed template adds a new version of it on first boot and never
-overwrites or removes the versions you saved.
+overwrites or removes the versions you saved. The shipped version lands above yours, so it
+becomes the latest: after an upgrade, re-apply your edit as the next version of each template
+you customized.
+
+What you can change — step kinds, inputs, loops, checkpoints, a model or a timeout per step,
+the prompts agents are sent — and the same edit loop over the API are in
+`kit/skills/orchestrator/references/workflows.md`. That guide is installed into every project
+with the kit, so the project's coding agent can propose and validate a template change for
+you; it saves only on your go-ahead.
+
+A template does not decide which shell commands an agent may run. That is
+`CLAUDE_ALLOWED_TOOLS` in `.env`: it must list the package manager and test runner of every
+repository you build (`Bash(yarn *)`, `Bash(npx *)`, …), and a change needs
+`./install.sh start`.
 
 ## The optional llm-platform stack (LiteLLM + Langfuse)
 
