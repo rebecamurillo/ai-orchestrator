@@ -24,6 +24,7 @@ touching the filesystem itself.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
 
@@ -44,6 +45,20 @@ class Change:
 
     path: str
     kind: ChangeKind
+
+
+class NoUpstream(Enum):
+    """What `Git.merge` answers when the origin does not hold the branch at all.
+
+    Distinct from `None` ("already contained"): both mean nothing was merged, but only the
+    first says the origin has never seen the branch, and the step reports them differently.
+    """
+
+    ABSENT = "absent"
+
+
+#: The one value of `NoUpstream`, so a caller compares with `is`.
+NO_UPSTREAM = NoUpstream.ABSENT
 
 
 @dataclass(frozen=True)
@@ -146,12 +161,12 @@ class Git(Protocol):
         """
         ...
 
-    def merge(self, worktree: Path, branch: str) -> str | None:
+    def merge(self, worktree: Path, branch: str) -> str | NoUpstream | None:
         """Merge `origin/{branch}` into the branch this worktree is on; `None` when that ref
-        is already contained.
+        is already contained, `NO_UPSTREAM` when the origin does not hold the branch.
 
         AD-14's own words (ratified 2026-09-23): "merge a ref into the current worktree's
-        branch, aborting any merge in progress first". Three answers, and each is a fact
+        branch, aborting any merge in progress first". Four answers, and each is a fact
         about the two branches rather than a degree of success:
 
         - **A merge made is its commit.** `--no-ff`, so there is always a new commit and the
@@ -163,6 +178,9 @@ class Git(Protocol):
           `done · already merged` (AD-13). A sha-only return could not tell this case from
           the one above without the caller asking `head_sha` twice to re-derive a fact the
           adapter already had.
+        - **A branch the origin does not hold is `NO_UPSTREAM`**, asked the way `sync` asks
+          (`ls-remote --heads`): a fresh initiative branch has nothing on the origin until its
+          first push, so there is nothing to merge and nothing to fail.
         - **A conflict is a `GitError`** whose `output` carries git's own message *and* the
           conflicted-file listing, and the conflicted merge is deliberately **left in the
           worktree**: it is what the Operator opens at the `merge_conflict` park. The next

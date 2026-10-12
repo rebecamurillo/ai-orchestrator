@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-from orchestrator.domain.ports.git import Git, GitError
+from orchestrator.domain.ports.git import NO_UPSTREAM, Git, GitError
 from tests.unit.fakes.git import FakeGit
 
 WORKTREE = Path("/work/acme/widgets/wt/develop")
@@ -76,3 +76,12 @@ def test_every_merge_is_recorded_with_the_worktree_and_the_branch() -> None:
 def test_the_fake_merges_nothing_by_default() -> None:
     """The default answer is the harmless one: a fake nobody scripted has nothing to merge."""
     assert FakeGit().merge(WORKTREE, FROM_BRANCH) is None
+
+
+def test_a_branch_the_origin_does_not_hold_answers_the_no_upstream_value() -> None:
+    git = FakeGit(merge=[NO_UPSTREAM])
+
+    answer = git.merge(WORKTREE, FROM_BRANCH)
+
+    assert answer is NO_UPSTREAM
+    assert answer is not None

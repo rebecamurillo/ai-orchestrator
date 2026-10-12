@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pytest
 
-from orchestrator.domain.ports.git import GitError
+from orchestrator.domain.ports.git import NO_UPSTREAM, GitError
 from orchestrator.infrastructure.git.subprocess_git import SubprocessGit
 
 TOKEN = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
@@ -185,6 +185,15 @@ def test_a_second_merge_of_the_same_branch_answers_none(git: SubprocessGit, work
     before = git.head_sha(worktree)
 
     assert git.merge(worktree, FROM_BRANCH) is None
+    assert git.head_sha(worktree) == before
+
+
+def test_a_branch_the_origin_does_not_hold_answers_no_upstream_and_changes_nothing(
+    git: SubprocessGit, worktree: Path
+) -> None:
+    before = git.head_sha(worktree)
+
+    assert git.merge(worktree, "feat/never-pushed") is NO_UPSTREAM
     assert git.head_sha(worktree) == before
 
 

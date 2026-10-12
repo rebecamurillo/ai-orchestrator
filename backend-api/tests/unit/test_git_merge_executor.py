@@ -24,9 +24,10 @@ from orchestrator.application.steps.git_merge import (
     UNKNOWN_WORKTREE,
     GitMergeExecutor,
 )
+from orchestrator.application.steps.git_sync import NO_UPSTREAM as SYNC_NO_UPSTREAM
 from orchestrator.application.steps.registry import executor_for
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.ports.git import GitError
+from orchestrator.domain.ports.git import NO_UPSTREAM, GitError
 from tests.unit.fakes.git import FakeGit
 from tests.unit.step_fixtures import (
     BRANCH,
@@ -68,6 +69,17 @@ def test_a_clean_merge_is_done_with_the_commit_it_made() -> None:
 
     assert result.status == "done"
     assert result.output_ref == MERGE_SHA
+    assert result.park is None
+
+
+def test_a_branch_the_origin_does_not_hold_is_done_with_the_syncs_no_upstream_words() -> None:
+    git = FakeGit(merge=[NO_UPSTREAM])
+
+    result = GitMergeExecutor().execute(a_context(a_merge_row(), git=git, env=an_env()))
+
+    assert result.status == "done"
+    assert result.reason == SYNC_NO_UPSTREAM == "no upstream · no-op"
+    assert result.output_ref is None
     assert result.park is None
 
 

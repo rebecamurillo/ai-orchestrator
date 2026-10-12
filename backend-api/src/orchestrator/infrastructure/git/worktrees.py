@@ -30,7 +30,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
-from orchestrator.domain.ports.git import Change, ChangeKind, GitError
+from orchestrator.domain.ports.git import NO_UPSTREAM, Change, ChangeKind, GitError, NoUpstream
 
 #: Where a base clone's origin refs live. The same word `subprocess_git.py` uses.
 ORIGIN = "origin"
@@ -94,6 +94,12 @@ CONFLICTED_HEADING = "conflicted paths:"
 #: `SubprocessGit._attempt`, as `_with_conflicts` below needs to see it: a command whose
 #: non-zero exit means "nothing there" rather than "broken".
 _Attempt = Callable[..., "str | None"]
+
+
+def _origin_holds(attempt: _Attempt, worktree: Path, branch: str) -> bool:
+    """Whether the origin has a head named `branch`."""
+    held = attempt("-C", str(worktree), "ls-remote", "--heads", ORIGIN, END_OF_OPTIONS, branch)
+    return bool((held or "").strip())
 
 
 class _Runner(Protocol):
@@ -161,17 +167,18 @@ class WorktreeCommands:
         take what the remote already has. A history that will not fast-forward raises the
         `GitError` the caller parks the Run on.
         """
-        held = self._attempt(
-            "-C", str(worktree), "ls-remote", "--heads", ORIGIN, END_OF_OPTIONS, branch
-        )
-        if not (held or "").strip():
+        if not _origin_holds(self._attempt, worktree, branch):
             return None
         fetched = self._run("-C", str(worktree), "fetch", ORIGIN, END_OF_OPTIONS, branch)
         merged = self._run("-C", str(worktree), *NO_HOOKS, "merge", "--ff-only", "FETCH_HEAD")
         return fetched + merged
 
-    def merge(self: _Runner, worktree: Path, branch: str) -> str | None:
+    def merge(self: _Runner, worktree: Path, branch: str) -> str | NoUpstream | None:
         """Abort any merge in progress, fetch, and merge `origin/{branch}` with `--no-ff`.
+
+        **A branch the origin does not hold is `NO_UPSTREAM`, decided before the fetch** —
+        the fetch would fail on it, and a fresh initiative branch has no origin ref until its
+        first push. The question is `sync`'s own (`ls-remote --heads`).
 
         **The abort is guarded by a probe, not by ignoring a failure.** `git merge --abort`
         exits 128 when there is no merge to abort, so it cannot be run unconditionally;
@@ -193,6 +200,8 @@ class WorktreeCommands:
         """
         if self._attempt("-C", str(worktree), "rev-parse", "--verify", "--quiet", "MERGE_HEAD"):
             self._run("-C", str(worktree), *NO_HOOKS, "merge", "--abort")
+        if not _origin_holds(self._attempt, worktree, branch):
+            return NO_UPSTREAM
         self._run("-C", str(worktree), "fetch", ORIGIN, END_OF_OPTIONS, branch)
         remote = f"{ORIGIN}/{branch}"
         contained = self._attempt(

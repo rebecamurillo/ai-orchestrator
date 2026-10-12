@@ -70,7 +70,7 @@ from __future__ import annotations
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from orchestrator.domain.ports.git import Change, CloneResult, RemoteRef
+from orchestrator.domain.ports.git import Change, CloneResult, NoUpstream, RemoteRef
 from tests.unit.fakes.clock import FakeClock
 
 #: The answers a reachable repository with no BMAD manifest gives.
@@ -240,8 +240,8 @@ class FakeGit:
         answer: str | None = self._answer("sync", (worktree, branch))
         return answer
 
-    def merge(self, worktree: Path, branch: str) -> str | None:
-        answer: str | None = self._answer("merge", (worktree, branch))
+    def merge(self, worktree: Path, branch: str) -> str | NoUpstream | None:
+        answer: str | NoUpstream | None = self._answer("merge", (worktree, branch))
         return answer
 
     def status(self, worktree: Path, *, ignore_submodules: bool = False) -> str:
