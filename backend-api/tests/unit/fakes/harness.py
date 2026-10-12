@@ -6,9 +6,10 @@ dispatch as its first with a different answer, so "the first call blocks, the se
 finishes" is the shape 5.4 and 5.5 need, and a key built from the prompt would make every
 test restate the prompt it does not care about.
 
-Every call is recorded whole — `prompt`, `env`, `cwd`, `model`, `session_id` and
-`budget_usd_remaining` — because AD-5 is a rule about what reached the harness, and only a
-call log can settle "the executor passed the environment it built" in a unit test.
+Every call is recorded whole — `prompt`, `env`, `cwd`, `model`, `session_id`,
+`budget_usd_remaining` and `add_dirs` — because AD-5 is a rule about what reached the
+harness, and only a call log can settle "the executor passed the environment it built" in a
+unit test.
 
 `start` and `wait` are the port's two halves (5.4), recorded under their own names. Two
 call logs compared afterwards cannot tell "committed between them" from "committed after
@@ -23,7 +24,7 @@ consume the same script, so a test that scripts one result gets it whichever it 
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -89,6 +90,7 @@ class FakeHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         self.calls.append(
             {
@@ -102,6 +104,7 @@ class FakeHarness:
                 "timeout_min": timeout_min,
                 "stall_min": stall_min,
                 "log_path": log_path,
+                "add_dirs": tuple(add_dirs),
             }
         )
         return self._next(session_id, log_path)
@@ -118,6 +121,7 @@ class FakeHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessHandle:
         self.calls.append(
             {
@@ -131,6 +135,7 @@ class FakeHarness:
                 "timeout_min": timeout_min,
                 "stall_min": stall_min,
                 "log_path": log_path,
+                "add_dirs": tuple(add_dirs),
             }
         )
         return HarnessHandle(
@@ -155,6 +160,9 @@ class FakeHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         if self.on_resume is not None:
             self.on_resume()
@@ -165,9 +173,12 @@ class FakeHarness:
                 "session_id": session_id,
                 "message": message,
                 "env": dict(env),
+                "model": model,
+                "budget_usd_remaining": budget_usd_remaining,
                 "timeout_min": timeout_min,
                 "stall_min": stall_min,
                 "log_path": log_path,
+                "add_dirs": tuple(add_dirs),
             }
         )
         return self._next(session_id, log_path)

@@ -50,7 +50,7 @@ that trace, and `infrastructure/tracing/user_level.py` is the rule that reads it
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
 
@@ -197,6 +197,7 @@ class LocalHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         """First dispatch, start to finish: exactly `wait(start(...))` (AD-14)."""
         return self.wait(
@@ -210,6 +211,7 @@ class LocalHarness:
                 timeout_min=timeout_min,
                 log_path=log_path,
                 stall_min=stall_min,
+                add_dirs=add_dirs,
             )
         )
 
@@ -225,6 +227,7 @@ class LocalHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessHandle:
         """Start the dispatch and hand its group back before anything waits on it (AD-14).
 
@@ -232,7 +235,8 @@ class LocalHarness:
         used by neither: OpenCode names its own session, and the Run's remaining budget is
         enforced by the Gateway's own key budget rather than by a CLI flag this harness has.
         The handle carries the worktree instead, because `wait` may have to ask the session
-        store which session was opened in it.
+        store which session was opened in it. `add_dirs` is ignored: the `permission` block
+        `configure` writes allows edits and bash without a directory boundary.
         """
         argv = self._argv(cwd, model=model, message=prompt)
         self._record_prompt(log_path, prompt)
@@ -258,13 +262,17 @@ class LocalHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         """Continue `session_id` with `message` via `opencode run --session {session_id}` (AD-10).
 
         Exactly `wait(start_handle)` shaped as a single call: `_resume_argv` builds the argv
         (no `-m` — the session retains its own model), `_record_prompt` writes the message
         beside the log, and the handle carries the known `session_id` so `wait` falls back to
-        it when the stream reports none (story 3, 2026-09-25).
+        it when the stream reports none (story 3, 2026-09-25). `model` is not passed because the
+        session keeps its own; `budget_usd_remaining` and `add_dirs` are ignored as on `start`.
         """
         argv = self._resume_argv(cwd, session_id=session_id, message=message)
         self._record_prompt(log_path, message)

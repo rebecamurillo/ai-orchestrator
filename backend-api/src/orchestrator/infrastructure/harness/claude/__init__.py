@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from orchestrator.infrastructure.harness.claude.adapter import (
+from orchestrator.infrastructure.harness.claude.adapter import ClaudeHarness
+from orchestrator.infrastructure.harness.claude.aliases import (
     SUBSCRIPTION_KEY_HEADER,
-    ClaudeHarness,
     claude_aliases,
     claude_native_aliases,
     claude_subscription_aliases,

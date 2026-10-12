@@ -1,7 +1,7 @@
 """Reading a harness's own JSON back out of the log it shares with everything else (AD-10).
 
 Every harness this system dispatches prints machine-readable JSON — `claude -p --output-format
-json` prints one result envelope, `codex exec --json` prints one event per line — and every one
+stream-json` and `codex exec --json` each print one event per line — and every one
 of them prints it into a file that also holds stderr: npm's deprecation warnings, an OTLP
 exporter's shutdown errors, a proxy's TLS complaint. So the reading is the same problem twice,
 and this module is the one statement of it.

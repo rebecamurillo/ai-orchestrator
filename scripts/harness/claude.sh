@@ -94,8 +94,9 @@ JSON
 #                                        (plus "x-litellm-api-key: Bearer $LITELLM_API_KEY" when CLAUDE_SUBSCRIPTION_AUTH=true)
 #   TRACEPARENT=00-<run trace id>-<attempt span id>-01           (read by `claude -p`; parents claude_code.* spans under the Run)
 #   OTEL_LOG_USER_PROMPTS=1 / OTEL_LOG_TOOL_CONTENT=1            only when Project.log_prompt_content is true
-# Invocation shape (PRD FR-14; --bare is unusable): claude -p --session-id <uuid> --permission-mode dontAsk
-#   --allowedTools $CLAUDE_ALLOWED_TOOLS --disallowedTools "mcp__*,Bash(git push*)" --output-format json --max-budget-usd <remaining> "<prompt>"
+# Invocation shape (PRD FR-14; --bare is unusable): claude -p --session-id <uuid> [--add-dir <hub root>]
+#   --permission-mode dontAsk --allowedTools $CLAUDE_ALLOWED_TOOLS --disallowedTools "mcp__*,Bash(git push*)"
+#   --output-format stream-json --verbose --max-budget-usd <remaining> [--model <model>] "<prompt>"
 
 doctor() {
   claude --version

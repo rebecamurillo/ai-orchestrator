@@ -2,9 +2,10 @@
 
 The invocation is written once, here, and nowhere else:
 
-    claude -p --session-id {uuid} --permission-mode dontAsk
+    claude -p --session-id {uuid} [--add-dir {hub root}] --permission-mode dontAsk
            --allowedTools {CLAUDE_ALLOWED_TOOLS} --disallowedTools "mcp__*,Bash(git push*)"
-           --output-format json --max-budget-usd {remaining} [--model {model}] "{prompt}"
+           --output-format stream-json --verbose --max-budget-usd {remaining}
+           [--model {model}] "{prompt}"
 
 `--bare` is not used and cannot be: at 2.1.x it exposes exactly `Bash, Edit, Read` — no
 `Task`, no `Write`, no `Skill` — and `bmad-build-auto` needs all three (addendum §B). The
@@ -12,8 +13,8 @@ container is the sandbox instead: `dontAsk` with an explicit allowlist, and `mcp
 because a container has no personal connectors and the exclusion should be stated rather
 than assumed.
 
-**Resume** (AD-10): drops `--session-id` and `--max-budget-usd`; keeps `--permission-mode`,
-`--allowedTools`, `--disallowedTools` — a resumed attempt runs in the same container.
+**Resume** (AD-10): `--resume {id}` replaces `--session-id`; every other flag is the
+dispatch's, `--model` included — a resumed session not told its model runs on the default.
 
 **Usage** is tolerant: the log is scanned for the last `"type": "result"` JSON object; fields
 from `total_cost_usd`, `usage.input_tokens`, `usage.output_tokens`; missing → `None`. The
@@ -28,12 +29,18 @@ object travels as `raw_result` (AD-10 forbids deciding what other fields mean).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 
 from orchestrator.domain.ports.harness import HarnessCapabilities, HarnessHandle, HarnessResult
 from orchestrator.domain.ports.process import Handle, ProcessRunner
+from orchestrator.infrastructure.harness.claude.aliases import (
+    SUBSCRIPTION_KEY_HEADER,
+    claude_aliases,
+    claude_native_aliases,
+    claude_subscription_aliases,
+)
 from orchestrator.infrastructure.harness.claude.result import (
     ENCODING,
     RESULT_TYPE,
@@ -43,7 +50,6 @@ from orchestrator.infrastructure.harness.claude.result import (
     result_object,
     usage_from,
 )
-from orchestrator.infrastructure.harness.env import AliasBuilder
 from orchestrator.infrastructure.harness.probe import ProbeResult, run_probe_script
 from orchestrator.infrastructure.settings import Settings
 
@@ -70,31 +76,13 @@ PERMISSION_MODE = "dontAsk"
 #: A deny beats the allowlist's `Bash(git *)`: no personal MCP connectors in a container, and
 #: an agent never pushes — `git.push` does, with a credential the harness is never handed.
 DISALLOWED_TOOLS = "mcp__*,Bash(git push*)"
-#: One JSON result object per run, on stdout, which is what `usage` is read from.
-OUTPUT_FORMAT = "json"
-
-#: The five headers every gateway request of an attempt carries (AD-11), in the order
-#: `scripts/harness/claude.sh` documents them. `ANTHROPIC_CUSTOM_HEADERS` is one string of
-#: `Name: value` lines, so the order is the order a reader of that file sees.
-HEADER_SOURCES: tuple[tuple[str, str], ...] = (
-    ("langfuse_session_id", "ORCH_RUN_ID"),
-    ("langfuse_tags", "ORCH_LANGFUSE_TAGS"),
-    ("x-litellm-end-user-id", "ORCH_RUN_ID"),
-    ("x-litellm-session-id", "ORCH_ATTEMPT_ID"),
-    ("x-litellm-tags", "ORCH_TAGS"),
-)
-
-#: Where the Gateway's virtual key travels when `Authorization` is not carrying it.
-#:
-#: On a Claude subscription, Claude Code puts its own OAuth token in `Authorization` and the
-#: Gateway forwards that upstream (`forward_client_headers_to_llm_api`, host-side), so the
-#: key LiteLLM authenticates *this instance* with needs a header of its own. This is the one
-#: LiteLLM reads it from. It carries `Bearer <key>`, the same shape `Authorization` would.
-SUBSCRIPTION_KEY_HEADER = "x-litellm-api-key"
-
-#: The two names Claude Code reads to put prompt and tool content into its OTLP spans. Added
-#: only when the Project asked for content logging (`ORCH_LOG_CONTENT == "1"`).
-CONTENT_LOGGING_NAMES = ("OTEL_LOG_USER_PROMPTS", "OTEL_LOG_TOOL_CONTENT")
+#: One JSON event per line, appended to the log as it happens: the runner's stall detector
+#: reads log growth as liveness, and a killed attempt still leaves its transcript. Claude
+#: Code refuses `stream-json` under `-p` without `--verbose`.
+OUTPUT_FORMAT = "stream-json"
+VERBOSE = "--verbose"
+#: Variadic in Claude Code's own parser: `_argv` always follows its value with a flag.
+ADD_DIR = "--add-dir"
 
 #: The suffix the prompt is written under, beside the attempt's own log.
 PROMPT_SUFFIX = ".prompt"
@@ -103,87 +91,6 @@ PROMPT_SUFFIX = ".prompt"
 BUDGET_PRECISION = Decimal("0.01")
 #: What is passed when nothing remains: the CLI is never handed a negative amount.
 NO_BUDGET = "0.00"
-
-
-def claude_aliases(contract: Mapping[str, str]) -> dict[str, str]:
-    """The harness-native names `scripts/harness/claude.sh` declares, derived from contract.
-
-    `HARNESS_ENV_ALIASES=(ANTHROPIC_AUTH_TOKEN=LITELLM_API_KEY ANTHROPIC_CUSTOM_HEADERS=derived)`
-    — the token is the Gateway's virtual key and never an Anthropic one (AD-5), and the
-    headers are the five lines AD-11 pins, built from contract values so nothing here reads
-    a setting of its own.
-
-    The content-logging pair is not an alias and is not in either script list: it is a
-    switch, present only when `ORCH_LOG_CONTENT` says the Project asked for it.
-    """
-    headers = "\n".join(f"{header}: {contract[name]}" for header, name in HEADER_SOURCES)
-    aliases = {
-        "ANTHROPIC_AUTH_TOKEN": contract["LITELLM_API_KEY"],
-        "ANTHROPIC_CUSTOM_HEADERS": headers,
-    }
-    if contract.get("ORCH_LOG_CONTENT") == "1":
-        aliases.update(dict.fromkeys(CONTENT_LOGGING_NAMES, "1"))
-    return aliases
-
-
-def claude_subscription_aliases(contract: Mapping[str, str]) -> dict[str, str]:
-    """`claude_aliases` for an instance whose Claude Code is logged in on a subscription.
-
-    Two edits to the default set, and it is written as two edits — derived from
-    `claude_aliases` rather than restated — so the five attribution headers AD-11 pins and
-    the content-logging switch cannot come to differ between the modes by being typed twice:
-
-    - `ANTHROPIC_AUTH_TOKEN` is **dropped**. Set, Claude Code sends it as `Authorization`
-      instead of the subscription's OAuth token, and the subscription is never used. Its
-      absence is the whole mechanism, not an omission.
-    - `SUBSCRIPTION_KEY_HEADER` is added, carrying the same virtual key the dropped name
-      held. `Authorization` now belongs to the OAuth token, so the key that identifies this
-      instance to the Gateway — for the budget, the rate limit and the spend log — moves to
-      the header LiteLLM reads it from when `Authorization` is not its own.
-
-    Still the Gateway's virtual key and never an Anthropic one (AD-5): the subscription's
-    credential is Claude Code's own, held in `AGENT_HOME`, and never passes through here.
-
-    This is the one place the environment departs from `scripts/harness/claude.sh`'s
-    `HARNESS_ENV_ALIASES` array, which states the default; `tests/unit/
-    test_harness_env_subscription.py` states this mode's key set as an equality against it.
-    """
-    aliases = claude_aliases(contract)
-    del aliases["ANTHROPIC_AUTH_TOKEN"]
-    aliases["ANTHROPIC_CUSTOM_HEADERS"] = "\n".join(
-        (
-            aliases["ANTHROPIC_CUSTOM_HEADERS"],
-            f"{SUBSCRIPTION_KEY_HEADER}: Bearer {contract['LITELLM_API_KEY']}",
-        )
-    )
-    return aliases
-
-
-def claude_native_aliases(tracing_enabled: bool) -> AliasBuilder:
-    """Gateway-off AliasBuilder factory: no ANTHROPIC_AUTH_TOKEN; Langfuse headers when tracing on.
-
-    No LiteLLM proxy — `ANTHROPIC_AUTH_TOKEN` is never set. `claude` reaches Anthropic
-    directly; a Project `ANTHROPIC_API_KEY` travels through `env_for`'s Project-variable
-    layer (AD-5). `HEADER_SOURCES[:2]` = `langfuse_session_id` + `langfuse_tags` only (no
-    LiteLLM headers). Content-logging pair: same `ORCH_LOG_CONTENT == "1"` rule.
-    **Gateway-off vs subscription mode.** `CLAUDE_SUBSCRIPTION_AUTH=true` with gateway on
-    routes through LiteLLM. With gateway off there is no proxy to read any header;
-    `alias_table`'s gateway-off branch short-circuits before the subscription check to
-    prevent conflation of the two modes.
-    """
-
-    def builder(contract: Mapping[str, str]) -> dict[str, str]:
-        aliases: dict[str, str] = {}
-        if tracing_enabled:
-            headers = "\n".join(
-                f"{header}: {contract[name]}" for header, name in HEADER_SOURCES[:2]
-            )
-            aliases["ANTHROPIC_CUSTOM_HEADERS"] = headers
-        if contract.get("ORCH_LOG_CONTENT") == "1":
-            aliases.update(dict.fromkeys(CONTENT_LOGGING_NAMES, "1"))
-        return aliases
-
-    return builder
 
 
 class ClaudeHarness:
@@ -211,6 +118,7 @@ class ClaudeHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         """First dispatch, start to finish: exactly `wait(start(...))` (AD-14)."""
         return self.wait(
@@ -224,6 +132,7 @@ class ClaudeHarness:
                 timeout_min=timeout_min,
                 log_path=log_path,
                 stall_min=stall_min,
+                add_dirs=add_dirs,
             )
         )
 
@@ -239,10 +148,11 @@ class ClaudeHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessHandle:
         """Start the dispatch and hand its group back before anything waits on it (AD-14)."""
         argv = self._argv(
-            ["--session-id", session_id],
+            ["--session-id", session_id, *_add_dir_flags(add_dirs)],
             budget_usd_remaining=budget_usd_remaining,
             model=model,
             message=prompt,
@@ -268,12 +178,15 @@ class ClaudeHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         """Continue the session this row already opened — `retry`'s path only (AD-10)."""
         argv = self._argv(
-            ["--resume", session_id],
-            budget_usd_remaining=None,
-            model=None,
+            ["--resume", session_id, *_add_dir_flags(add_dirs)],
+            budget_usd_remaining=budget_usd_remaining,
+            model=model,
             message=message,
         )
         self._record_prompt(log_path, message)
@@ -314,6 +227,7 @@ class ClaudeHarness:
             DISALLOWED_TOOLS,
             "--output-format",
             OUTPUT_FORMAT,
+            VERBOSE,
         ]
         if budget_usd_remaining is not None:
             argv += ["--max-budget-usd", render_budget(budget_usd_remaining)]
@@ -383,6 +297,11 @@ class ClaudeHarness:
         """The prompt, beside the log, so an attempt's record holds what was asked."""
         log_path.parent.mkdir(parents=True, exist_ok=True)
         Path(f"{log_path}{PROMPT_SUFFIX}").write_text(message, encoding=ENCODING)
+
+
+def _add_dir_flags(add_dirs: Sequence[Path]) -> list[str]:
+    """`--add-dir` and its values, placed before `--permission-mode` by `_argv`'s callers."""
+    return [ADD_DIR, *map(str, add_dirs)] if add_dirs else []
 
 
 def render_budget(remaining: Decimal) -> str:

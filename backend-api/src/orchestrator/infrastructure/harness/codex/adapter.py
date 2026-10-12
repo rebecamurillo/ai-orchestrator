@@ -40,7 +40,7 @@ it already knows the thread it continued, so it keeps that id when the stream na
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
 
@@ -158,6 +158,7 @@ class CodexHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         """First dispatch, start to finish: exactly `wait(start(...))` (AD-14)."""
         return self.wait(
@@ -171,6 +172,7 @@ class CodexHarness:
                 timeout_min=timeout_min,
                 log_path=log_path,
                 stall_min=stall_min,
+                add_dirs=add_dirs,
             )
         )
 
@@ -186,13 +188,15 @@ class CodexHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessHandle:
         """Start the dispatch and hand its group back before anything waits on it (AD-14).
 
         `session_id` and `budget_usd_remaining` are accepted because the port declares them and
         used by neither: Codex names its own thread, and the Run's remaining budget is enforced
         by the Gateway's own key budget rather than by a CLI flag this harness has. The handle
-        therefore carries no session — `wait` is the half that can report one.
+        therefore carries no session — `wait` is the half that can report one. `add_dirs` is
+        ignored: `config.toml`'s `danger-full-access` sandbox already reaches every path.
         """
         argv = self._argv(
             [WORKTREE_FLAG, str(cwd)],
@@ -221,13 +225,18 @@ class CodexHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         """Continue the thread this row already opened — `retry`'s path only (AD-10).
 
         **Provisional** (addendum §B, 7.2 verifies): `codex exec resume {id} --json "{message}"`
         is the brief's documented form, and it is passed exactly, with no worktree, model or
         `-o` flag of its own — a resumed turn runs in the same process group, in the same
-        directory the runner starts it in, under the thread's own configuration.
+        directory the runner starts it in, under the thread's own configuration. So `model`,
+        `budget_usd_remaining` and `add_dirs` are accepted and not passed: where `-m` would
+        go in the resume form is unverified, and a guessed flag is as wrong as a missing one.
         """
         argv = [EXECUTABLE, EXEC, RESUME, session_id, JSON_FLAG, message]
         self._record_prompt(log_path, message)

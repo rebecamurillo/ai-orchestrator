@@ -50,7 +50,9 @@ declares no `workdir` reaches exactly the calls it always did.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -70,6 +72,7 @@ from orchestrator.application.steps.context import (
     log_path,
     operator_retry,
     redispatched,
+    require_cwd,
     require_env,
     require_harness_env,
     require_harnesses,
@@ -80,12 +83,11 @@ from orchestrator.application.steps.context import (
     retrying,
 )
 from orchestrator.application.steps.registry import register
-from orchestrator.application.templates.agent_row import (
-    STORY_ID_KEY,
-)
+from orchestrator.application.templates.agent_row import STORY_ID_KEY
 from orchestrator.application.templates.rows import STALL_KEY, TIMEOUT_KEY
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
+from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.harness import Harness
 from orchestrator.domain.values import Park, StepResult
@@ -99,12 +101,8 @@ KIND = "agent"
 HARNESS_KEY = "harness"
 MODEL_KEY = "model"
 
-#: The two commits this module makes, and the documents it writes between them. The WIP one
-#: is `agent_workdir`'s — the tree it lands in is that module's question — and re-exported
-#: here, beside `WHOLE_TREE`, so this module's own name still answers "what does an `agent`
-#: row commit" and "what does it freeze" (H4, 2026-09-23). The prompt itself has no
-#: constant to re-export any more: since the Operator decision of 2026-09-27 every sentence
-#: is the row's own `prompts` clause, and `agent_prompt.py` only fills and joins them.
+#: The two commits this module makes and the documents it writes between them, re-exported so
+#: this module still answers "what does an `agent` row commit and freeze" (H4, 2026-09-23).
 WIP_MESSAGE = agent_workdir.WIP_MESSAGE
 WHOLE_TREE = agent_workdir.WHOLE_TREE
 PREPARE_MESSAGE = agent_prepare.PREPARE_MESSAGE
@@ -226,9 +224,10 @@ def _orphan_control(ctx: StepContext) -> None:
     while waited < LOCK_TIMEOUT_SECONDS and workspace.exists(INDEX_LOCK):
         ctx.ports.clock.sleep(LOCK_POLL_SECONDS)
         waited += LOCK_POLL_SECONDS
-    closed = previous.model_copy(
-        update={"status": "error", "ended_at": ctx.ports.clock.now(), "output_ref": INTERRUPTED}
-    )
+    # the log names what the killed process streamed before it died, for GET …/log
+    killed_log = str(log_path(replace(ctx, attempt=previous)))
+    update = {"status": "error", "ended_at": ctx.ports.clock.now(), "output_ref": INTERRUPTED}
+    closed = previous.model_copy(update={**update, "log_path": killed_log})
     committed(ctx, lambda attempts: attempts.mark_finished(closed))
 
 
@@ -308,21 +307,14 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
     """Start the harness, commit its group, then wait for it — AD-14's order, exactly. A
     resumed session skips the middle write: `Harness.resume` is one call, so no handle sits
     between two halves for a dead backend to lose."""
-    run, environment = require_run(ctx), require_env(ctx)
+    run = require_run(ctx)
     timeout_min = ctx.with_resolved.get(TIMEOUT_KEY)
     stall_min = ctx.with_resolved.get(STALL_KEY, DEFAULT_STALL_MIN)
-    env = require_harness_env(ctx)(
-        dispatch.attempt,
-        run=run,
-        project_slug=environment.project_slug,
-        project_env=environment.project.env_vars,
-        log_content=environment.project.log_prompt_content,
-        story_id=_text(ctx, STORY_ID_KEY) or None,
-        traceparent=traceparent,
-    )
+    env = _environment(ctx, dispatch.attempt, traceparent)
     # the member checkout on a `workdir` row, the worktree root otherwise: the process's own
     # folder, and therefore the one the stall detector watches (AD-9, AD-17, H4).
     dispatch_cwd = agent_workdir.tree(ctx)
+    add_dirs, model = _add_dirs(ctx, dispatch_cwd), (_text(ctx, MODEL_KEY) or None)
     if dispatch.resume_id is not None:
         resumed = dispatch.harness.resume(
             cwd=dispatch_cwd,
@@ -332,18 +324,22 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
             timeout_min=timeout_min,
             log_path=log_path(ctx),
             stall_min=stall_min,
+            model=model,
+            budget_usd_remaining=_remaining(run),
+            add_dirs=add_dirs,
         )
         return agent_tail.finish(ctx, dispatch.attempt, resumed, timeout_min, stall_min)
     handle = dispatch.harness.start(
         cwd=dispatch_cwd,
         prompt=dispatch.prompt,
         env=env,
-        model=(_text(ctx, MODEL_KEY) or None),
+        model=model,
         session_id=dispatch.session_id,
-        budget_usd_remaining=run.budget_usd - run.spend_usd if run.budget_usd is not None else None,
+        budget_usd_remaining=_remaining(run),
         timeout_min=timeout_min,
         log_path=log_path(ctx),
         stall_min=stall_min,
+        add_dirs=add_dirs,
     )
     # the session travels with the group: a dead backend must leave a resumable attempt
     running = dispatch.attempt.model_copy(
@@ -358,9 +354,33 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
     return agent_tail.finish(ctx, running, dispatch.harness.wait(handle), timeout_min, stall_min)
 
 
+def _environment(ctx: StepContext, attempt: Attempt, traceparent: str) -> dict[str, str]:
+    """Exactly what `HarnessEnv` builds for this attempt (AD-5, AD-10)."""
+    environment = require_env(ctx)
+    return require_harness_env(ctx)(
+        attempt,
+        run=require_run(ctx),
+        project_slug=environment.project_slug,
+        project_env=environment.project.env_vars,
+        log_content=environment.project.log_prompt_content,
+        story_id=_text(ctx, STORY_ID_KEY) or None,
+        traceparent=traceparent,
+    )
+
+
+def _remaining(run: Run) -> Decimal | None:
+    """What the Run may still spend, or `None` when it has no budget (FR-17)."""
+    return run.budget_usd - run.spend_usd if run.budget_usd is not None else None
+
+
+def _add_dirs(ctx: StepContext, dispatch_cwd: Path) -> tuple[Path, ...]:
+    """The hub root for a dispatch standing in a submodule: the specs and `git -C` live there."""
+    root = require_cwd(ctx)
+    return () if dispatch_cwd == root else (root,)
+
+
 def _text(ctx: StepContext, key: str) -> str:
-    """One of this row's resolved keys as a string — `STORY_ID_KEY` is the Story it works
-    on, flattened onto the row by the planner (AD-7)."""
+    """One of this row's resolved keys as a string, as the planner flattened it (AD-7)."""
     return resolved_text(ctx.with_resolved, key)
 
 

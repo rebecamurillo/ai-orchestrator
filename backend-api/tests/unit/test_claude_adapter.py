@@ -5,7 +5,8 @@ whole list rather than by substring: PRD FR-14 pins the invocation, `--bare` is 
 (addendum §B), and a flag silently dropped would change what the agent may do without
 changing any other gate. Two shapes are pinned — a first dispatch and a `--resume` — and
 their difference is itself a rule: a resumed attempt runs in the same container with the
-same tools, so it keeps `--disallowedTools` and drops only the session and budget flags.
+same tools, so it keeps `--disallowedTools` and swaps only the session flag; told no model
+and no budget, it passes neither (O-2, unattended-hub-run PLAN.md, 2026-10-12).
 
 Everything else here is about what the adapter is *not* allowed to interpret. It reads the
 log for the last JSON object, fills `usage` from three fields when they are all there, and
@@ -112,6 +113,8 @@ def test_the_adapter_names_itself_and_its_capabilities(harness: ClaudeHarness) -
 def test_the_dispatch_argv_is_the_documented_invocation(
     harness: ClaudeHarness, runner: FakeProcessRunner, settings: Settings, log_path: Path
 ) -> None:
+    """Revised for O-1 of `_bmad-output/specs/unattended-hub-run/PLAN.md` (2026-10-12):
+    `--output-format json` became `stream-json --verbose`; every other token is unchanged."""
     dispatch(harness, log_path)
 
     assert runner.called("start")[0]["cmd"] == [
@@ -126,7 +129,8 @@ def test_the_dispatch_argv_is_the_documented_invocation(
         "--disallowedTools",
         "mcp__*,Bash(git push*)",
         "--output-format",
-        "json",
+        "stream-json",
+        "--verbose",
         "--max-budget-usd",
         "12.50",
         "--model",
@@ -312,6 +316,9 @@ def test_a_nonzero_exit_is_reported_as_it_stands(settings: Settings, log_path: P
 def test_the_resume_argv_uses_the_session_and_carries_the_message_last(
     harness: ClaudeHarness, runner: FakeProcessRunner, settings: Settings, log_path: Path
 ) -> None:
+    """Revised for O-1 of `_bmad-output/specs/unattended-hub-run/PLAN.md` (2026-10-12), as
+    the dispatch shape above; O-2's model and budget on resume are pinned in
+    `test_claude_adapter_unattended.py`."""
     harness.resume(
         cwd=WORKTREE,
         session_id=SESSION_ID,
@@ -333,7 +340,8 @@ def test_the_resume_argv_uses_the_session_and_carries_the_message_last(
         "--disallowedTools",
         "mcp__*,Bash(git push*)",
         "--output-format",
-        "json",
+        "stream-json",
+        "--verbose",
         "Answer from the operator: use pnpm.",
     ]
 

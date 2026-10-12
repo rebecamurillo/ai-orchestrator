@@ -52,7 +52,7 @@ cannot leak one, and `TerminalEnvironment` is what that builder returns.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -257,12 +257,17 @@ class Harness(Protocol):
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         """Dispatch `prompt` in `cwd`, with exactly `env` and nothing of this process's own.
 
         `env` is what `infrastructure/harness/env.py` built (AD-5): the adapter adds no
         name to it and reads no credential of its own. `model` is `None` when the Template
         bound none, and the harness's configured default then decides.
+
+        `add_dirs` are directories outside `cwd` the agent must still reach — the hub
+        worktree root when `cwd` is a `workdir` submodule checkout. A harness with no such
+        notion ignores them.
 
         Exactly `wait(start(...))`: a caller with nothing to do between the two halves
         calls this and never sees a handle.
@@ -281,6 +286,7 @@ class Harness(Protocol):
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessHandle:
         """Start the dispatch and hand back its handle, without waiting for it.
 
@@ -308,9 +314,17 @@ class Harness(Protocol):
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         """Continue `session_id` with `message`. Only `retry` on the same row uses this, and
-        no row ever resumes another row's session (AD-10)."""
+        no row ever resumes another row's session (AD-10).
+
+        `model`, `budget_usd_remaining` and `add_dirs` mean what they mean on `run`. A
+        harness whose session does not keep its model must restate it here, or the retry
+        runs on the harness's default rather than the row's.
+        """
         ...
 
     def resume_command(self, cwd: str, session_id: str) -> str | None:

@@ -1,12 +1,13 @@
-"""Reading a `claude -p --output-format json` run back out of its own log (AD-10).
+"""Reading a `claude -p --output-format stream-json` run back out of its own log (AD-10).
 
 Split out of `adapter.py` because the two things are different: that module writes the
 invocation, this one reads what came back, and only this one is tolerant by design. The log
 holds stdout and stderr interleaved — npm warnings, an OTLP exporter's errors and the
-harness's own result envelope all share the file — so every function here answers "nothing
-this system could read" rather than raising, and `usage_from` reports `None` for a result
-that is present but not a number. Nothing inside the envelope is interpreted; `raw_result`
-carries the object on whole, and 5.7 reads the budget-cap field out of it.
+harness's own events, one JSON object per line, all share the file — so every function here
+answers "nothing this system could read" rather than raising, and `usage_from` reports
+`None` for a result that is present but not a number. Nothing inside the envelope is
+interpreted; `raw_result` carries the object on whole, and 5.7 reads the budget-cap field
+out of it.
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ __all__ = [
     "usage_from",
 ]
 
-#: The envelope field `claude -p --output-format json` puts on its own final object, and the
+#: The envelope field `claude -p` puts on its own final object, and the
 #: value that marks it. Reading it is the same class of read as `session_id` — the harness's
 #: own framing, not anything the model produced (AD-10).
 RESULT_TYPE_FIELD = "type"
@@ -48,14 +49,15 @@ def result_object(text: str) -> dict[str, Any] | None:
     """The harness's own result object, or `None` when the log holds no JSON at all.
 
     The brief's rule is "the last JSON object", and that is the fallback here rather than
-    the rule, because stdout and stderr share one file: an OTLP exporter error or an npm
-    error payload printed *after* the result would take its place, and `usage` would go
-    `None` on a run that reported it. So the last object carrying `"type": "result"` wins.
+    the rule. A stream ends with its result event, but stdout and stderr share one file: an
+    OTLP exporter error or an npm error payload printed *after* the result would take its
+    place, and `usage` would go `None` on a run that reported it. So the last object
+    carrying `"type": "result"` wins.
 
     That is not an interpretation of model output (AD-10). `type` is the envelope field
-    `--output-format json` puts on the object it prints — the same class of read as
-    `session_id`, which this adapter already takes from the harness's own framing. Nothing
-    inside the envelope is read here; `raw_result` carries it on whole.
+    `claude -p` puts on every object it prints — the same class of read as `session_id`,
+    which this adapter already takes from the harness's own framing. Nothing inside the
+    envelope is read here; `raw_result` carries it on whole.
     """
     objects = json_objects(text)
     envelopes = objects_with(objects, RESULT_TYPE_FIELD, RESULT_TYPE)

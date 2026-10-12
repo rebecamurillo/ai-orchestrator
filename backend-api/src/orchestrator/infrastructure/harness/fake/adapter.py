@@ -37,8 +37,9 @@ re-creates the same path ends with the write; a path that names a directory or i
 absent is skipped rather than reported, the same silence every other scenario key keeps.
 `scenario._deletes` has already dropped anything that could reach outside the worktree.
 
-**It reads no model and never leaves the worktree.** `model` and `budget_usd_remaining` are
-accepted because the port declares them and ignored because a scenario decides everything;
+**It reads no model and never leaves the worktree.** `model`, `budget_usd_remaining` and
+`add_dirs` are accepted because the port declares them and ignored because a scenario decides
+everything;
 `native_tracing` is `False`, so the attempt's span is the orchestrator's own (AD-11).
 """
 
@@ -46,7 +47,7 @@ from __future__ import annotations
 
 import json
 import shlex
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
 
@@ -120,6 +121,7 @@ class FakeHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         """First dispatch, start to finish: exactly `wait(start(...))` (AD-14)."""
         return self.wait(
@@ -133,6 +135,7 @@ class FakeHarness:
                 timeout_min=timeout_min,
                 log_path=log_path,
                 stall_min=stall_min,
+                add_dirs=add_dirs,
             )
         )
 
@@ -148,6 +151,7 @@ class FakeHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessHandle:
         """Apply the scenario's writes, then start its process and hand back the group."""
         return self._dispatch(
@@ -169,6 +173,9 @@ class FakeHarness:
         timeout_min: float | None,
         log_path: Path,
         stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
         """The next scenario for the same story, under the session already opened."""
         return self.wait(
