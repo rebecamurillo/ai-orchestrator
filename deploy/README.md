@@ -6,7 +6,7 @@ and opens it on `http://127.0.0.1:4321`.
 
 The stack is three containers — the web UI, the API, and PostgreSQL — pulling the images a
 release publishes to GitHub Container Registry
-(`ghcr.io/optimai-labs/ai-orchestrator/{backend-api,web-client}`, `linux/amd64` and
+(`ghcr.io/rebecamurillo/ai-orchestrator/{backend-api,web-client}`, `linux/amd64` and
 `linux/arm64`). The images are private: a GitHub token that can read them is the one
 thing you have to bring.
 
@@ -35,7 +35,7 @@ different version than it. Log Docker in first (`docker login ghcr.io -u <your-g
 the token as the password), then:
 
 ```bash
-docker run --rm ghcr.io/optimai-labs/ai-orchestrator/backend-api:1.0.0-beta kit bootstrap | tar x
+docker run --rm ghcr.io/rebecamurillo/ai-orchestrator/backend-api:1.0.0-beta kit bootstrap | tar x
 cd ai-orchestrator
 ./install.sh
 ```

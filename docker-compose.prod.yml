@@ -50,7 +50,7 @@ services:
     restart: always
 
   backend-api:
-    image: ghcr.io/optimai-labs/ai-orchestrator/backend-api:${IMAGE_TAG:?set it in .env.prod — the release tag this host runs}
+    image: ghcr.io/rebecamurillo/ai-orchestrator/backend-api:${IMAGE_TAG:?set it in .env.prod — the release tag this host runs}
     env_file: !override
       - path: .env.prod
         required: true
@@ -58,6 +58,6 @@ services:
     restart: always
 
   web-client:
-    image: ghcr.io/optimai-labs/ai-orchestrator/web-client:${IMAGE_TAG:?set it in .env.prod — the release tag this host runs}
+    image: ghcr.io/rebecamurillo/ai-orchestrator/web-client:${IMAGE_TAG:?set it in .env.prod — the release tag this host runs}
     logging: *logging
     restart: always

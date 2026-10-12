@@ -39,10 +39,9 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  # `github.repository` is `OptimAI-labs/ai-orchestrator`, and GHCR rejects an uppercase
-  # path. Written out rather than lowercased in a shell step so the value is readable at
-  # the point it is used.
-  IMAGE_NAMESPACE: ghcr.io/optimai-labs/ai-orchestrator
+  # GHCR rejects an uppercase path, so this is the lowercased `github.repository`. Written
+  # out rather than derived in a shell step so the value is readable at the point it is used.
+  IMAGE_NAMESPACE: ghcr.io/rebecamurillo/ai-orchestrator
 
 jobs:
   # A tag is a claim that a commit is releasable. This job checks the claim against the

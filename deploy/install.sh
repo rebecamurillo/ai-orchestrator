@@ -439,7 +439,7 @@ doctor_images() {
 		report fail image "IMAGE_TAG is not set — put the release tag you mean to run in ${env_file}"
 	else
 		for image in backend-api web-client; do
-			if ! docker image inspect "ghcr.io/optimai-labs/ai-orchestrator/${image}:${tag}" \
+			if ! docker image inspect "ghcr.io/rebecamurillo/ai-orchestrator/${image}:${tag}" \
 				>/dev/null 2>&1; then missing="${missing}${image} "; fi
 		done
 		if [[ -n "$missing" ]]; then

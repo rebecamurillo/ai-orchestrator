@@ -270,7 +270,7 @@ over HTTP:
 
 - **Run the stack** — the client package comes out of the backend image, so it always matches
   the release about to run:
-  `docker run --rm ghcr.io/optimai-labs/ai-orchestrator/backend-api:<tag> kit bootstrap | tar x`,
+  `docker run --rm ghcr.io/rebecamurillo/ai-orchestrator/backend-api:<tag> kit bootstrap | tar x`,
   then `cd ai-orchestrator && ./install.sh` with a GitHub token that can read the packages.
   What it extracts is `deploy/`: `install.sh`, the compose pulling the private GHCR images,
   the env contract, the optional `deploy/llm-platform/` stack, and `deploy/kit/`.
@@ -285,7 +285,7 @@ over HTTP:
   (`deploy/kit/skills/orchestrator/`) teaches the full API protocol: the version handshake,
   project and repository setup, template discovery, preflight, run creation, polling, and
   signals. The project needs `ORCHESTRATOR_BASE_URL` and `ORCHESTRATOR_TOKEN` in its
-  environment. `/plugin marketplace add OptimAI-labs/ai-orchestrator` remains for a Claude
+  environment. `/plugin marketplace add rebecamurillo/ai-orchestrator` remains for a Claude
   Code user who prefers the plugin route.
 
 ### Build the images yourself
@@ -311,7 +311,7 @@ emulation, which is slow for backend-api (three npm CLIs and Chromium's system l
 but finishes; `release.yml` is the same build with one native runner per architecture.
 
 To run the client package from images built here instead of pulled:
-`PUSH=0 scripts/push-images.sh`, then `docker run --rm ghcr.io/optimai-labs/ai-orchestrator/backend-api:$(cat VERSION) kit bootstrap | tar x`
+`PUSH=0 scripts/push-images.sh`, then `docker run --rm ghcr.io/rebecamurillo/ai-orchestrator/backend-api:$(cat VERSION) kit bootstrap | tar x`
 and `cd ai-orchestrator && ./install.sh --no-pull` — no GitHub token is asked for and nothing
 is pulled.
 

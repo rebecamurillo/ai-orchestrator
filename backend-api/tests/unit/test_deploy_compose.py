@@ -48,7 +48,7 @@ DEPLOY_ENV_EXAMPLE = REPO_ROOT / "deploy" / ".env.example"
 APP_SERVICES = ("backend-api", "web-client")
 EVERY_SERVICE = ("postgres", *APP_SERVICES)
 
-IMAGE_NAMESPACE = "ghcr.io/optimai-labs/ai-orchestrator"
+IMAGE_NAMESPACE = "ghcr.io/rebecamurillo/ai-orchestrator"
 
 #: Named volumes the stack declares — the same three as the base stack.
 VOLUMES = ("pgdata", "work", "agent-home")

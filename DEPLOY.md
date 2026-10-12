@@ -20,8 +20,8 @@ them stops being correct at two replicas, it says so.
 is pushed:
 
 ```
-ghcr.io/optimai-labs/ai-orchestrator/backend-api:<tag>
-ghcr.io/optimai-labs/ai-orchestrator/web-client:<tag>
+ghcr.io/rebecamurillo/ai-orchestrator/backend-api:<tag>
+ghcr.io/rebecamurillo/ai-orchestrator/web-client:<tag>
 ```
 
 Each image is pushed under two names — the release tag, and `sha-<commit>`. There is
@@ -33,7 +33,7 @@ answer that question without the registry:
 
 ```bash
 docker inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}} {{index .Config.Labels "org.opencontainers.image.revision"}}' \
-  ghcr.io/optimai-labs/ai-orchestrator/backend-api:v1.2.0
+  ghcr.io/rebecamurillo/ai-orchestrator/backend-api:v1.2.0
 ```
 
 The images are built for `linux/amd64` and `linux/arm64`, each natively on its own runner
@@ -45,7 +45,7 @@ The release itself carries **no asset** — a note naming the images and the boo
 nothing to download. The client package comes out of the backend image instead:
 
 ```bash
-docker run --rm ghcr.io/optimai-labs/ai-orchestrator/backend-api:<tag> kit bootstrap | tar x
+docker run --rm ghcr.io/rebecamurillo/ai-orchestrator/backend-api:<tag> kit bootstrap | tar x
 cd ai-orchestrator && ./install.sh
 ```
 
@@ -121,7 +121,7 @@ The host needs a checkout, because the compose files, `deploy/llm-platform/` and
 it. Check out **the same tag the images were built from**:
 
 ```bash
-git clone https://github.com/OptimAI-labs/ai-orchestrator.git
+git clone https://github.com/rebecamurillo/ai-orchestrator.git
 cd ai-orchestrator
 git checkout v1.2.0
 ```
@@ -287,7 +287,7 @@ The checklist for a build a client tests before there is a tag (first done for `
 3. `make push` — `scripts/push-images.sh` builds `linux/amd64` + `linux/arm64` with buildx
    (the foreign architecture under emulation; both images in ~3 min from a warm cache) and
    pushes `:<VERSION>` and `:sha-<commit>`. It refuses early when the registry denies access.
-   The first push creates both packages under `OptimAI-labs`, private.
+   The first push creates both packages under `rebecamurillo`, private.
 4. Grant the client's GitHub user Read on both packages (§1), or they pull `denied`.
 5. Nothing to send. The client bootstraps out of the image they just got read access to:
    `docker run --rm <backend-api image>:<VERSION> kit bootstrap | tar x`. `make bundle`

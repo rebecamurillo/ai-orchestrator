@@ -223,13 +223,13 @@ Then compose the report. Title: one line, the symptom, not the guess. Body:
 Transport:
 
 ```bash
-gh auth status && gh issue create --repo OptimAI-labs/ai-orchestrator \
+gh auth status && gh issue create --repo rebecamurillo/ai-orchestrator \
   --title "<title>" --body-file <file>
 ```
 
 **The repository is private today.** If `gh auth status` fails, or the user has no access to
 it, say so plainly: write the report to `issue.md` beside the diagnostics, hand them the
-prefilled URL `https://github.com/OptimAI-labs/ai-orchestrator/issues/new`, and tell them to
+prefilled URL `https://github.com/rebecamurillo/ai-orchestrator/issues/new`, and tell them to
 paste it and attach the diagnostics file themselves. Do not attach a diagnostics file to
 anything the user has not read.
 

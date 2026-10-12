@@ -24,7 +24,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tag="${1:-$(tr -d '[:space:]' < "${root}/VERSION")}"
-namespace="${IMAGE_NAMESPACE:-ghcr.io/optimai-labs/ai-orchestrator}"
+namespace="${IMAGE_NAMESPACE:-ghcr.io/rebecamurillo/ai-orchestrator}"
 platforms="${PLATFORMS:-linux/amd64,linux/arm64}"
 push="${PUSH:-1}"
 revision="$(git -C "$root" rev-parse HEAD)"
@@ -73,7 +73,7 @@ build() {   # build <component> <context> <dockerfile>
 		--file "$dockerfile" \
 		--tag "${namespace}/${component}:${tag}" \
 		--tag "${namespace}/${component}:sha-${revision}" \
-		--label "org.opencontainers.image.source=https://github.com/OptimAI-labs/ai-orchestrator" \
+		--label "org.opencontainers.image.source=https://github.com/rebecamurillo/ai-orchestrator" \
 		--label "org.opencontainers.image.revision=${revision}" \
 		--label "org.opencontainers.image.version=${tag}" \
 		--provenance=false --sbom=false \

@@ -119,7 +119,7 @@ The `work` volume grows without bound: base clones, a worktree per Run, logs.
   worktrees and logs are kept that long, then `worktree_gc` removes them on that schedule.
   Lowering the retention is the first lever and needs only `./install.sh start`.
 - Superseded image tags are the other half and are **not** swept. `docker image rm` on an old
-  `ghcr.io/optimai-labs/ai-orchestrator/*` tag is the fix — **ask first, every time**: the
+  `ghcr.io/rebecamurillo/ai-orchestrator/*` tag is the fix — **ask first, every time**: the
   image you remove is the rollback that is no longer available.
 - `./install.sh doctor` reports free space on the docker data root and warns above 90 %.
 - Never `docker compose down -v`. That deletes the database.

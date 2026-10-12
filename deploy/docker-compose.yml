@@ -62,7 +62,7 @@ services:
     restart: always
 
   backend-api:
-    image: ghcr.io/optimai-labs/ai-orchestrator/backend-api:${IMAGE_TAG:?set it in .env — the release tag this host runs}
+    image: ghcr.io/rebecamurillo/ai-orchestrator/backend-api:${IMAGE_TAG:?set it in .env — the release tag this host runs}
     env_file:
       # the one process that holds every credential (AD-5); required, because a stack that
       # silently started without its contract would be misconfigured rather than refused
@@ -98,7 +98,7 @@ services:
     restart: always
 
   web-client:
-    image: ghcr.io/optimai-labs/ai-orchestrator/web-client:${IMAGE_TAG:?set it in .env — the release tag this host runs}
+    image: ghcr.io/rebecamurillo/ai-orchestrator/web-client:${IMAGE_TAG:?set it in .env — the release tag this host runs}
     environment:
       # exactly five (AD-5). Never GITHUB_TOKEN, never LITELLM_SPEND_KEY, never DATABASE_URL.
       ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN:?set it in .env, copied from .env.example}
