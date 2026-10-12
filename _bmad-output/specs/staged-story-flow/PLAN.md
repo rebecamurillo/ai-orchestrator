@@ -159,3 +159,28 @@ Branch `feat/staged-family` off main; one commit per green story.
 - Closed on main since revision 1, no longer owed here: retry model downgrade (O-2 of
   unattended-hub-run), stall signal on read-only phases (O-1), hub sync/commit-story
   (T-1/T-4), per-Run limits (O-7).
+
+## 6. Built (2026-10-12, branch `feat/staged-family`)
+
+Stories 3, 4 and 6 of §4 landed (commits `00c33e6`, `457379e`, `0ed3904`): the three skills,
+the six `staged-*` templates with their family headers, `templates/README.md` and the two
+tests that pin names and headers, the menu (`ROOT_TEMPLATES`, staged roots first) and the
+operator and kit docs. `make lint` and `make test` green.
+
+Decided while building, without the Operator in the loop:
+- **D-4 → no planner change.** `templates/defaults.py` binds literal defaults only, and
+  `test_with_defaults_applies_literals_only` pins that from the 2026-10-09 ruling — not a
+  behaviour change this work declares. Instead the Run's own `model` is the implementer's,
+  and `plan_model` / `review_model` are `required: true` on the two roots. Root required-ness
+  is enforced by the form, not by the planner: a Run created over the API with a blank one
+  falls to the harness default model. O-1 (expression defaults) stays available as a later
+  refinement that would make one `model` enough.
+- **D-2 → repository commands.** `staged-epic` runs the repository record's own commands;
+  `epics.yaml` carries no per-epic command for the single-repository root.
+- **D-3 → both roots**, `staged-initiative-repo` included.
+
+Still owed: O-2 (trajectory and checkpoint alert aggregate over a frame's agent rows — today
+they record the `plan` row alone); a staged e2e journey with its own fixture scenario set;
+an image rebuild so the skills reach the agent-home volume (`skills_install` syncs at boot);
+the AGENTS.md line-16 family sentence (anchor); a web-client restart to read the new
+`ROOT_TEMPLATES` in the local `.env`.
