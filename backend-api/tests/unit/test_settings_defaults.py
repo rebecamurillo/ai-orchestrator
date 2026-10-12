@@ -52,6 +52,12 @@ OFF_BY_DEFAULT = frozenset(
         "langfuse_public_key",
         "langfuse_secret_key",
         "langfuse_project_id",
+        # Notifications (story O-8, 2026-10-12): blank is the off switch, so the contract
+        # line is blank too and the code default equals it; listed because the sourceable
+        # and blank-is-meaningful checks below enumerate the group.
+        "notify_webhook_url",
+        "notify_webhook_secret",
+        "public_base_url",
     }
 )
 

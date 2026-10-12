@@ -386,12 +386,8 @@ def _maybe_record_trajectory(ports: WriterPorts, row: StepRun) -> None:
 
 def _fail(ports: WriterPorts, run: Run, row: StepRun, result: StepResult) -> Run:
     """`on_fail: fail`: the Run ends `failed`, and the record carries the row's reason."""
-    failed = set_run(
-        ports,
-        run,
-        status=run_transition(run.status, "fail"),
-        ended_at=ports.clock.now(),
-    )
+    status = run_transition(run.status, "fail")
+    failed = set_run(ports, run, result.reason, status=status, ended_at=ports.clock.now())
     record(
         ports,
         failed,

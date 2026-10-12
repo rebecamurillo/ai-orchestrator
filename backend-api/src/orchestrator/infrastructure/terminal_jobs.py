@@ -22,8 +22,10 @@ from orchestrator.application.jobs.terminal_poll import TerminalPollPorts, run_t
 from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.notifier import Notifier
 from orchestrator.infrastructure.db import open_writer_ports
 from orchestrator.infrastructure.db.writers import SessionFactory
+from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.workspace import FsWorkspace
 
@@ -32,10 +34,13 @@ TERMINAL_POLL_NAME = "terminal_poll"
 
 
 def _terminal_poll_job(
-    session_factory: SessionFactory, git: Git, engine: WorkflowEngine
+    session_factory: SessionFactory,
+    git: Git,
+    engine: WorkflowEngine,
+    notifier: Notifier | None = None,
 ) -> Callable[[], None]:
     def run() -> None:
-        with open_writer_ports(session_factory) as writers:
+        with open_writer_ports(session_factory, notifier=notifier) as writers:
             ports = TerminalPollPorts(
                 signal=SignalPorts(writers=writers, engine=engine),
                 git=git,
@@ -56,6 +61,6 @@ def engine_jobs(
         (
             TERMINAL_POLL_NAME,
             settings.terminal_poll_cron,
-            _terminal_poll_job(session_factory, git, engine),
+            _terminal_poll_job(session_factory, git, engine, build_notifier(settings)),
         )
     ]

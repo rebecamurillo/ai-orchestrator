@@ -32,11 +32,18 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BeforeValidator, Field, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, EnvSettingsSource, NoDecode, SettingsConfigDict
+from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic_settings import BaseSettings, EnvSettingsSource, SettingsConfigDict
 from pydantic_settings.sources import PydanticBaseSettingsSource
 
 from orchestrator.domain.entities.harness import HARNESS_NAMES
+from orchestrator.infrastructure.settings_types import (
+    CLAUDE_ALLOWED_TOOLS_DEFAULT,
+    LOCAL_MODELS_DEFAULT,
+    READINESS_MODELS_DEFAULT,
+    CommaSeparated,
+    CommaSeparatedPairs,
+)
 
 LogLevel = Literal["debug", "info", "warning", "error", "critical"]
 
@@ -48,11 +55,15 @@ LogLevel = Literal["debug", "info", "warning", "error", "critical"]
 #: `attempt:{id}`, since `/spend/logs/v2` has no tag filter of its own (`research/spend.md`).
 SpendMatch = Literal["session", "attempt_tag"]
 
+#: The body a Run notification is posted in: the structured event, or the one-line
+#: `{"text": ...}` Slack and Mattermost incoming webhooks accept.
+NotifyFormat = Literal["json", "slack"]
+
 MIN_TCP_PORT = 1
 MAX_TCP_PORT = 65535
 
-#: The Gateway and tracing fields whose blank value the application *reads* rather than
-#: treats as an absence: blanking a base URL is the documented off switch (`gateway_enabled`,
+#: The Gateway, tracing and notification fields whose blank value the application *reads*, not
+#: an absence: blanking a base URL is the documented off switch (`gateway_enabled`,
 #: `tracing_enabled`), and `_validate_service_config` refuses a non-blank base URL paired
 #: with a blank key. Every other defaulted field takes a blank environment value as "not
 #: set" — see `_BlankMeansUnset` below.
@@ -65,37 +76,11 @@ BLANK_IS_MEANINGFUL = frozenset(
         "langfuse_public_key",
         "langfuse_secret_key",
         "langfuse_project_id",
+        "notify_webhook_url",
+        "notify_webhook_secret",
+        "public_base_url",
     }
 )
-
-
-#: Shipped defaults for the three list- and mapping-shaped settings, spelled here rather
-#: than inline so the field declarations stay one line each. Each equals its `.env.example`
-#: value, which `test_settings_defaults.py` proves rather than trusts.
-READINESS_MODELS_DEFAULT = {
-    "claude": "claude-sonnet-4-6",
-    "codex": "gpt-5.4",
-    "local": "local-coder",
-}
-LOCAL_MODELS_DEFAULT = ["local-coder", "local-general"]
-CLAUDE_ALLOWED_TOOLS_DEFAULT = [
-    "Task",
-    "Bash(uv run *)",
-    "Bash(git *)",
-    "Bash(rm *)",
-    "Bash(pnpm *)",
-    "Bash(npm *)",
-    "Bash(npx *)",
-    "Bash(yarn *)",
-    "Bash(make *)",
-    "Edit",
-    "Read",
-    "Write",
-    "Glob",
-    "Grep",
-    "Skill",
-    "ToolSearch",
-]
 
 
 class _BlankMeansUnset(EnvSettingsSource):
@@ -125,49 +110,6 @@ class _BlankMeansUnset(EnvSettingsSource):
                 and not fields[name].is_required()
             )
         }
-
-
-def _split_csv(value: object) -> object:
-    """Read a comma-separated environment value as a list, leaving lists alone."""
-    if isinstance(value, str):
-        return [item.strip() for item in value.split(",") if item.strip()]
-    return value
-
-
-CommaSeparated = Annotated[
-    list[str],
-    NoDecode,
-    BeforeValidator(_split_csv),
-    Field(min_length=1),
-]
-
-
-def _split_pairs(value: object) -> object:
-    """Read `name=value,name=value` as a mapping, leaving mappings alone.
-
-    `_split_csv`'s shape for a setting that binds something *per* name. Every failure is
-    raised here rather than tolerated, because each of them is a name that would silently
-    bind nothing: a pair with no `=`, no name, or no value.
-    """
-    if not isinstance(value, str):
-        return value
-    pairs: dict[str, str] = {}
-    for item in value.split(","):
-        if not item.strip():
-            continue
-        name, separator, bound = item.partition("=")
-        if not separator or not name.strip() or not bound.strip():
-            raise ValueError(f"{item.strip()!r} is not a `name=value` pair")
-        pairs[name.strip()] = bound.strip()
-    return pairs
-
-
-CommaSeparatedPairs = Annotated[
-    dict[str, str],
-    NoDecode,
-    BeforeValidator(_split_pairs),
-    Field(min_length=1),
-]
 
 
 class Settings(BaseSettings):
@@ -271,6 +213,14 @@ class Settings(BaseSettings):
     #: make the SDK's own blocking `get_trace_url()` project lookup (5.2's own spike).
     langfuse_project_id: str = ""
 
+    # ── Notifications ────────────────────────────────────────────────────────
+    #: Blank is the off switch (`notify_enabled`). The secret signs the body when set.
+    notify_webhook_url: str = ""
+    notify_webhook_secret: SecretStr = SecretStr("")
+    notify_webhook_format: NotifyFormat = "json"
+    #: Where the web client is reached from outside; blank omits the Run link.
+    public_base_url: str = ""
+
     # ── Pinned tool versions carried by the image (AD-16) ────────────────────
     bmad_version: str = "6.11.0"
     claude_code_version: str = "2.1.258"
@@ -335,6 +285,11 @@ class Settings(BaseSettings):
     def tracing_enabled(self) -> bool:
         """True when LANGFUSE_BASE_URL is a non-blank, non-whitespace-only string."""
         return bool(self.langfuse_base_url.strip())
+
+    @property
+    def notify_enabled(self) -> bool:
+        """True when NOTIFY_WEBHOOK_URL is a non-blank, non-whitespace-only string."""
+        return bool(self.notify_webhook_url.strip())
 
     # ── cross-field validation ────────────────────────────────────────────────
 

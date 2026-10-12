@@ -77,6 +77,7 @@ from orchestrator.infrastructure.db import (
 from orchestrator.infrastructure.db.environment import read_run_environment
 from orchestrator.infrastructure.harness.models import model_table
 from orchestrator.infrastructure.harness.registry import build_harnesses, build_terminal_env
+from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
 from orchestrator.infrastructure.process.runner import RealProcessRunner
 from orchestrator.infrastructure.skill_catalog import FsSkillCatalog, manifest_path
@@ -372,7 +373,7 @@ def signal_effect_ports(request: Request) -> Iterator[SignalEffectPorts]:
     settings = from_state(request, SETTINGS)
     harnesses = build_harnesses(settings, RealProcessRunner())
     with SQLAlchemyUnitOfWork(session_factory) as preflight_uow:
-        with open_writer_ports(session_factory) as writers:
+        with open_writer_ports(session_factory, notifier=build_notifier(settings)) as writers:
             yield SignalEffectPorts(
                 signal=SignalPorts(
                     writers=writers,

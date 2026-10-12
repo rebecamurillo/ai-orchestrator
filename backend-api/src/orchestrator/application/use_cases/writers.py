@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from orchestrator.application.use_cases.announce import Announcer
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -88,6 +89,8 @@ class WriterPorts:
     #: site that predates this field — every frozen `WriterPorts(...)` construction keeps
     #: working unchanged. When set, `enqueue_dependents` uses it after a `done` transition.
     engine: WorkflowEngine | None = None
+    #: Tells the outside world a Run needs the Operator or has ended; `None` announces nothing.
+    announcer: Announcer | None = None
 
 
 def require_run(ports: WriterPorts, run_id: UUID) -> Run:
@@ -156,10 +159,16 @@ def set_row(ports: WriterPorts, row: StepRun, **update: Any) -> StepRun:
     return updated
 
 
-def set_run(ports: WriterPorts, run: Run, **update: Any) -> Run:
-    """Replace the Run with the same Run plus `update`. The only way a Run is written."""
+def set_run(ports: WriterPorts, run: Run, reason: str | None = None, **update: Any) -> Run:
+    """Replace the Run with the same Run plus `update`. The only way a Run is written.
+
+    `reason` is not a column: it is the sentence a terminal transition gives the notification,
+    which the cleared park fields no longer carry.
+    """
     updated = run.model_copy(update=update)
     ports.runs.update(updated)
+    if ports.announcer is not None:
+        ports.announcer.transition(run, updated, reason)
     return updated
 
 
@@ -223,6 +232,7 @@ def expire_run(ports: WriterPorts, run: Run) -> Run:
     expired = set_run(
         ports,
         run,
+        reason=RUN_EXPIRED,
         status=run_transition(run.status, "expire"),
         **clear_park(now),
     )
@@ -328,6 +338,8 @@ def _write_dependency_park(ports: WriterPorts, dep: Run, reason: str) -> None:
         }
     )
     ports.runs.update(parked)
+    if ports.announcer is not None:
+        ports.announcer.transition(dep, parked)
     record(ports, parked, Entry(event="dependency", actor="machine", path=None, text=reason))
 
 

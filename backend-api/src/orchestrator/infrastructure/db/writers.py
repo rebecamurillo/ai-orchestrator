@@ -23,15 +23,19 @@ from types import TracebackType
 
 from sqlalchemy.orm import Session
 
+from orchestrator.application.use_cases.announce import Announcer
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.gateway import Gateway
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.notifier import Notifier
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyAttemptRepository,
     SQLAlchemyGateRecordRepository,
+    SQLAlchemyProjectRepository,
+    SQLAlchemyRepositoryRepository,
     SQLAlchemyRunRepository,
     SQLAlchemyStepRunRepository,
     SQLAlchemyTrajectoryRepository,
@@ -74,6 +78,7 @@ def open_writer_ports(
     session_factory: SessionFactory,
     git: Git | None = None,
     engine: WorkflowEngine | None = None,
+    notifier: Notifier | None = None,
 ) -> Iterator[WriterPorts]:
     """One session's worth of `WriterPorts`, closed on every path.
 
@@ -82,16 +87,33 @@ def open_writer_ports(
     `trajectories` needs no adapter of its own beyond the session, so it is always built.
     `engine` is `None` for every caller that predates story 5-4: `_enqueue_dependents`
     degrades to a no-op when `None`, keeping every existing frozen `WriterPorts` unchanged.
+    `notifier` is `None` for a scope that never changes a Run's status; otherwise it is the
+    port every needs_you / terminal transition is announced through.
     """
     session = session_factory()
     try:
+        runs = SQLAlchemyRunRepository(session)
+        attempts = SQLAlchemyAttemptRepository(session)
+        clock = SystemClock()
+        announcer = (
+            None
+            if notifier is None
+            else Announcer(
+                notifier=notifier,
+                projects=SQLAlchemyProjectRepository(session),
+                repositories=SQLAlchemyRepositoryRepository(session),
+                attempts=attempts,
+                clock=clock,
+            )
+        )
         yield WriterPorts(
-            runs=SQLAlchemyRunRepository(session),
+            runs=runs,
             steps=SQLAlchemyStepRunRepository(session),
-            attempts=SQLAlchemyAttemptRepository(session),
+            attempts=attempts,
             records=SQLAlchemyGateRecordRepository(session),
             uow=SessionUnitOfWork(session),
-            clock=SystemClock(),
+            clock=clock,
+            announcer=announcer,
             git=git,
             trajectories=SQLAlchemyTrajectoryRepository(session),
             engine=engine,

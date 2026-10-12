@@ -65,6 +65,7 @@ from orchestrator.infrastructure.dbos.walker import WalkerDeps
 from orchestrator.infrastructure.gateway import build_gateway
 from orchestrator.infrastructure.harness import build_harness_env, build_harnesses
 from orchestrator.infrastructure.jobs import scheduled_jobs
+from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.process import RealProcessRunner
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
 from orchestrator.infrastructure.settings import Settings
@@ -132,9 +133,11 @@ def walker_deps(
         settings, httpx.Client(base_url=settings.litellm_base_url, timeout=SPEND_TIMEOUT_SECONDS)
     )
 
+    notifier = build_notifier(settings)
+
     def open_ports() -> AbstractContextManager[object]:
         engine = engine_ref[0] if engine_ref else None
-        return open_writer_ports(session_factory, git=git, engine=engine)
+        return open_writer_ports(session_factory, git=git, engine=engine, notifier=notifier)
 
     return WalkerDeps(
         open_ports=open_ports,
@@ -251,7 +254,9 @@ def dependency_startup_sweep(settings: Settings) -> None:
     for engine, session_factory, _git in _SERVING:
         if session_factory is None:
             continue
-        with open_writer_ports(session_factory, engine=engine) as ports:
+        with open_writer_ports(
+            session_factory, engine=engine, notifier=build_notifier(settings)
+        ) as ports:
             sweep_dependency_waiting(ports, engine)
 
 

@@ -29,6 +29,9 @@ from tests.unit.conftest import ENV_EXAMPLE, REPO_ROOT
 
 BASH = shutil.which("bash")
 
+#: Contract lines whose blank value is the documented off switch (story O-8, 2026-10-12).
+BLANK_BY_DESIGN = {"NOTIFY_WEBHOOK_URL", "NOTIFY_WEBHOOK_SECRET", "PUBLIC_BASE_URL"}
+
 pytestmark = pytest.mark.skipif(BASH is None, reason="bash not on PATH")
 
 
@@ -62,7 +65,9 @@ def test_every_variable_survives_the_round_trip() -> None:
 
     assert declared
     script = f'set -a; . "{ENV_EXAMPLE}"; set +a; ' + "; ".join(
-        f'test -n "${name}" || echo "empty: {name}"' for name in declared
+        f'test -n "${name}" || echo "empty: {name}"'
+        for name in declared
+        if name not in BLANK_BY_DESIGN
     )
     result = subprocess.run(  # fixed argv, no shell
         [BASH, "-e", "-c", script],

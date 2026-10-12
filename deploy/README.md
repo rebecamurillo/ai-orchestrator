@@ -239,6 +239,14 @@ uses the skills beside it and downloads nothing.
 The skill's `references/spec-folder.md` documents the `epics.yaml` / `stories.yaml` /
 `SPEC.md` format the templates read.
 
+## Notifications
+
+Set `NOTIFY_WEBHOOK_URL` in `.env` to be told when a Run needs you or ends. One POST is sent each time a Run enters `needs_you`, `done`, `failed` or `cancelled`; blank (the default) sends nothing. Delivery is best-effort: a webhook that is down is logged as `notify_failed` and never fails the Run.
+
+- `NOTIFY_WEBHOOK_FORMAT=json` posts the structured event (run, project, repository, template, status, park kind, reason, step path, attempt, spend, time). `slack` posts a one-line `{"text": ...}` that Slack and Mattermost incoming webhooks accept.
+- `NOTIFY_WEBHOOK_SECRET`, when set, adds `X-Orchestrator-Signature: sha256=<hex HMAC-SHA256 of the request body>` so the receiver can check the sender.
+- `PUBLIC_BASE_URL` (for example `https://orchestrator.example.com`) adds a link to the Run; blank leaves it out.
+
 ## Exposure
 
 Every published port binds `BIND_ADDRESS`, default `127.0.0.1` — the stack is reachable
@@ -276,8 +284,8 @@ register. Register only repositories you trust as much as this machine.
 
 ## Known limits of this package
 
-- No push notifications: agents and dashboards poll the API (the UI polls every 5 s
-  while a Run is active, 30 s idle).
+- No push channel to agents or the UI: they poll the API (the UI every 5 s while a Run is
+  active, 30 s idle). The webhook above is the one outbound notification.
 - The backend image is large (~1.1 GB compressed): it carries Python, Node, three
   harness CLIs, and Chromium system libraries for in-worktree browser tests.
 - The manual path still works: `cp .env.example .env`, fill in the REQUIRED section,
