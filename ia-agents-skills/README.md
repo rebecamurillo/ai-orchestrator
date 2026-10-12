@@ -18,6 +18,14 @@ The install script (`scripts/harness/_common.sh: install_operator_skills`) copie
 
 A `skills-manifest.json` is written one level above each skills directory after all skills (BMAD stubs and operator skills) are present. Its format is `{"skills":["name1","name2",...]}` sorted alphabetically.
 
+## Shipped skills
+
+- `spec-gate` — reviews a spec folder before the story loop (both template families).
+- `staged-plan`, `staged-implement`, `staged-review` — the three stages of the `staged-*`
+  templates (`templates/README.md`): one dispatch each per story, routed on a marker under
+  `{spec_folder}/stories/.auto/`. Edit a stage here, rebuild the image; the templates only
+  name the skill.
+
 ## Adding a skill
 
 1. Create a subdirectory here: `ia-agents-skills/<your-skill-name>/`
