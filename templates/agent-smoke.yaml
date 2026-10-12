@@ -1,0 +1,103 @@
+name: agent-smoke
+version: 1
+description: >-
+  a five-minute end-to-end check of one agent dispatch — the agent creates one file, the
+  Run verifies it, commits and pushes — for a new install, a changed harness policy, or a
+  template edit, before any real initiative is dispatched
+inputs:
+  project:     { type: project,    required: true }
+  repository:  { type: repository, required: true }
+  base_branch: { type: string,     required: true }
+  # `mode: attach` below takes this name exactly: the first Run creates the branch, every
+  # later Run on the same name finds it on origin, so `sync` and `merge` exercise both the
+  # `no upstream · no-op` and the `already merged` outcomes.
+  branch:      { type: string,     required: false, default: "smoke/orchestrator" }
+  # The file the agent is asked to create, repository-relative. Pick a name no real file has.
+  file:        { type: string,     required: false, default: "SMOKE.md" }
+  harness:     { type: enum, values: [claude, codex, local], default: claude }
+  model:       { type: string,     required: false }
+  # The two limits of the agent row, in minutes (`timeout_min` is the wall clock,
+  # `stall_min` the liveness signal). Short on purpose: a smoke dispatch that runs longer than
+  # this is itself the finding.
+  timeout_min: { type: number,     required: false, default: 10 }
+  stall_min:   { type: number,     required: false, default: 5 }
+steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "{{branch}}", mode: attach }
+    gate: deterministic
+
+  # Nothing to merge on the first Run (`no upstream · no-op`); on a later Run whatever origin
+  # holds on this branch, and a conflict is the one stop a human has to resolve.
+  - id: sync
+    uses: git.merge
+    with: { from: "{{branch}}" }
+    gate: deterministic
+
+  - id: setup
+    run: "{{repository.install_command}}"
+    timeout_min: 20
+    gate: deterministic
+
+  # Own-text dispatch: the whole instruction is here, no skill involved, so what the agent
+  # was told is readable off this row. The result file is what routes the row (FR-16): its
+  # frontmatter `status` must be `done`, or `blocked` with the reason under
+  # `## Auto Run Result`. Both files are new, so the protected-path check has nothing to say.
+  - id: write
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      prompt: >-
+        Smoke check of the orchestrator dispatch. Do exactly this, nothing more:
+        (1) Create the file {{file}} at the root of this repository with two lines: a first
+        line "# Orchestrator smoke" and a second line holding today's date in ISO 8601.
+        If the file already exists, append one line with today's date instead.
+        (2) Run the command `git status --short` and read its output.
+        (3) Create the file .orchestrator-smoke/result.md whose content is exactly a YAML
+        frontmatter fence with one key, `status: done`, followed by a heading
+        "## Auto Run Result" and the `git status --short` output as a fenced code block.
+        If any of these steps is impossible, write the same file with `status: blocked`
+        and, under the heading, one line "Blocking condition: <what stopped you>".
+        Do not run tests, do not commit, do not touch any other file.
+    expect:
+      files: [".orchestrator-smoke/result.md"]
+      success: [done]
+      blocked: [blocked]
+    retry:
+      max: 1
+      prompt: "No result file with status done or blocked was found at .orchestrator-smoke/result.md. Write it now as instructed."
+      resume_session: true
+    timeout_min: "{{timeout_min}}"
+    stall_min: "{{stall_min}}"
+    gate: liveness
+
+  # Deterministic proof the agent did the work, independent of what it reported.
+  - id: check
+    run: "test -s {{file}} && head -1 {{file}} | grep -q 'Orchestrator smoke'"
+    on_fail: fail
+    timeout_min: 2
+    gate: deterministic
+
+  # The repository's own gate, exactly as a story's `verify` row runs it; a repository with
+  # no command plans this `skipped · no command`.
+  - id: verify
+    run: "{{repository.unit_test_command}}"
+    on_fail: fail
+    timeout_min: 30
+    gate: deterministic
+
+  - id: commit
+    uses: git.commit
+    with: { message: "smoke: orchestrator dispatch check (orchestrator)" }
+    gate: deterministic
+
+  - id: merge
+    uses: git.merge
+    with: { from: "{{branch}}" }
+    gate: deterministic
+
+  - id: push
+    uses: git.push
+    with: { branch: "{{branch}}" }
+    gate: deterministic

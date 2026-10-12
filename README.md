@@ -117,7 +117,7 @@ Open `.env` and set these — the rest can keep their defaults:
 | `POSTGRES_PASSWORD` | a random string — and the same password inside `DATABASE_URL` |
 | `GITHUB_TOKEN` | a token that can clone the client's target repositories (read by git only; a harness never receives it) |
 | `LITELLM_BASE_URL`, `LANGFUSE_BASE_URL` | per your mode from step 3 — blank or absent disables |
-| `ROOT_TEMPLATES` | optional — the workflow templates `/workflows/new` offers, comma-separated, in the order you write them. `.env.example` sets the two shipped roots, `initiative-hub,repo-init`; blank or unset offers every stored template a Run can start from (everything but the ones only another template calls). Name a template you authored in `templates/` here to make it startable; a name nothing stores is ignored. Read at start-up, so a change needs a restart |
+| `ROOT_TEMPLATES` | optional — the workflow templates `/workflows/new` offers, comma-separated, in the order you write them. `.env.example` sets the three shipped roots, `initiative-hub,repo-init,agent-smoke`; blank or unset offers every stored template a Run can start from (everything but the ones only another template calls). Name a template you authored in `templates/` here to make it startable; a name nothing stores is ignored. Read at start-up, so a change needs a restart |
 
 ```bash
 python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
@@ -227,8 +227,9 @@ also the API under `/api/v1` with `Authorization: Bearer $ORCHESTRATOR_TOKEN`.
    | --- | --- |
    | `initiative-hub` | every epic of one initiative, in one Run, from a hub repository whose `repos/*` submodules are the member repositories |
    | `repo-init` | bootstrap the BMAD method into a repo, as a PR |
+   | `agent-smoke` | a five-minute check of one agent dispatch: the agent creates one file, the Run verifies, commits and pushes it — run it on a new install, after a harness-policy or template change, before any real initiative |
 
-   Those two are what `/workflows/new` offers (`ROOT_TEMPLATES` in `.env`; blank offers
+   Those three are what `/workflows/new` offers (`ROOT_TEMPLATES` in `.env`; blank offers
    every stored template a Run can start from). `templates/` also ships the hub flow's
    callees, `initiative-hub-epic` and `initiative-hub-story`, and the single-repository
    `epic` and `story`, which only the harness readiness diagnostic dispatches — none of
