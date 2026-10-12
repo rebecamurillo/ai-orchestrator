@@ -125,6 +125,26 @@ name. `repository` exposes `url`, `default_branch`, `install_command`,
 `quality_gate_command`, `unit_test_command`; `project` exposes `name`. Fields of an `item`
 are whatever the list file holds and are not checked: a missing one resolves empty.
 
+## The two shipped families
+
+Shipped templates come in two families that never share a callee, told apart by the first
+segment of the name and by the header comment under each file's `description:` (family,
+role, callers, sibling, what differs):
+
+- **staged** — `staged-initiative-hub` / `staged-hub-epic` / `staged-hub-story` and
+  `staged-initiative-repo` / `staged-epic` / `staged-story`. Three agent sessions per story,
+  each routed on its own marker under `{spec_folder}/stories/.auto/`: `plan` on
+  `plan_model` (skill `staged-plan`, writes the spec), `implement` on `model` (skill
+  `staged-implement`, tests first), a deterministic `verify` that sends a failure back to
+  `implement`, `review` on `review_model` (skill `staged-review`, sized S / M / L from the
+  diff). This is where new behaviour lands.
+- **auto** — `initiative-hub` / `initiative-hub-epic` / `initiative-hub-story` and the
+  readiness `epic` / `story`: one `bmad-build-auto` session per story. Kept as shipped;
+  fixes only.
+
+Customize the family the project runs. A change to a row both families share (the git rows,
+the epic tail) usually belongs in both; the sibling line in the header says which file.
+
 ## Common customizations
 
 - **Change what verifies a story or an epic.** Prefer data over a template edit: shell rows
@@ -136,7 +156,8 @@ are whatever the list file holds and are not checked: a missing one resolves emp
   then parks.
 - **Add a human stop.** A `checkpoint` step, or `pause_when` on an agent step.
 - **Give one step its own model or harness.** Write a literal in that step's `with.model` /
-  `with.harness` instead of `{{model}}` / `{{harness}}`.
+  `with.harness` instead of `{{model}}` / `{{harness}}`. The staged family already names a
+  model per stage (`plan_model`, `model`, `review_model`) as Run inputs.
 - **Longer or shorter limits.** `timeout_min` on any step; `stall_min` on an agent step that
   legitimately goes quiet for long stretches (a read-only review). Either takes an integer
   or a `{{ }}` expression bound to a `number` input, so a Run can set them: the shipped hub

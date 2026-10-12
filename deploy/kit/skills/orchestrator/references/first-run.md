@@ -33,8 +33,8 @@ The template follows the repository, not the other way round:
 
 | The registered repository is… | Template | What the demo spec looks like |
 | --- | --- | --- |
-| a plain repository | `epic` at its latest version | one spec folder: `SPEC.md` + `stories.yaml` |
-| a hub whose `repos/*` submodules are the members | `initiative-hub` at its latest version | an initiative folder: `epics.yaml` + one spec folder, the epic pointing at one member |
+| a plain repository | `epic` at its latest version (one session per story); `staged-initiative-repo` for the three-session flow, with an `epics.yaml` of one entry | one spec folder: `SPEC.md` + `stories.yaml` |
+| a hub whose `repos/*` submodules are the members | `initiative-hub` at its latest version, or `staged-initiative-hub` for the three-session flow | an initiative folder: `epics.yaml` + one spec folder, the epic pointing at one member |
 
 `epic` is not on the web UI's **New workflow** menu (the operator's `ROOT_TEMPLATES` names
 what the menu offers) but it is a root template and `POST /api/v1/runs` accepts it. Read
@@ -135,7 +135,8 @@ The `orchestrator` skill's **Launching a Run** section applies in full. For the 
    `harness`, `model`, `done_checkpoint`; for `initiative-hub`: `base_branch`, `branch`,
    `initiative_folder`, `harness`, `model`, and the three time limits `build_timeout_min`,
    `build_stall_min`, `epic_timeout_min` (minutes; leave them blank to take the template's
-   defaults, 180 / 90 / 60).
+   defaults, 180 / 90 / 60). A `staged-*` root adds `plan_model` and `review_model`
+   (required) and the per-stage limits `plan_timeout_min`, `review_timeout_min`.
 2. `POST /api/v1/runs/preflight` with everything you will send. Every `lines[]` entry must
    be `pass` or `skip`; read `rows[]` and confirm it shows exactly one story frame. A
    `plan_error` here names the spec file line at fault.

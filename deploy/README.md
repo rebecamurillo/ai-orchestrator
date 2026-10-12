@@ -154,8 +154,17 @@ The shipped templates are a starting point, not a fixed part of the product. Ope
 **Save as v{n+1}**. A saved version never changes; the save is a new version beside it, and
 the versions column keeps every earlier one.
 
-A template that calls another (`initiative-hub` → `initiative-hub-epic` →
-`initiative-hub-story`) names the callee by `name` and omits `version`, so it resolves to the
+Two families ship, side by side and never sharing a callee: **staged** (`staged-initiative-hub`
+and `staged-initiative-repo` on the menu — three agent sessions per story, plan / implement /
+review, each on its own model: the Run's `model` implements, `plan_model` plans and
+`review_model` reviews) and **auto** (`initiative-hub` — one `bmad-build-auto` session per
+story, kept exactly as it shipped). The first segment of the name is the family; the header
+comment under each file's `description:` names its role, its callers and its sibling in the
+other family, and what differs. Edit the family you run; a change to a row both share usually
+belongs in both.
+
+A template that calls another (`staged-initiative-hub` → `staged-hub-epic` →
+`staged-hub-story`) names the callee by `name` and omits `version`, so it resolves to the
 callee's latest saved version each time a Run is planned. Editing the story template is
 therefore one save: the next hub Run picks it up through the unchanged hub and epic files.
 The editor says so above the Save button — which callers *follow* this save and which are

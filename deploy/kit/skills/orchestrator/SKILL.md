@@ -118,15 +118,23 @@ Never guess a template's inputs and never skip preflight.
 
 1. **Discover templates** — `GET /api/v1/templates`, then
    `GET /api/v1/templates/{name}/{version}`: the response's `inputs` is the authoritative
-   list of what this template takes. Shipped templates (`initiative-hub` and its callees,
-   `repo-init`, and the single-repository `epic`/`story` kept for harness readiness) evolve;
-   read them, don't memorize them.
-   - **Multi-repo initiative, hub style (the current default)**: template
-     `initiative-hub` with repository = the hub repo whose `repos/*` submodules are the
-     members; inputs include `branch` (the one initiative branch shared by hub and
-     submodules) and `initiative_folder`. The `epics.yaml` it reads needs per-epic
-     `workdir` + full `install`/`test`/`quality_gate` commands — see
+   list of what this template takes. Shipped templates come in two families — `staged-*`
+   (three agent sessions per story: plan, implement, review, each on its own model) and
+   the build-auto family (`initiative-hub` and its callees, one session per story), plus
+   `repo-init`, `agent-smoke`, and the single-repository `epic`/`story` kept for harness
+   readiness. They evolve; read them, don't memorize them.
+   - **Multi-repo initiative, hub style (the default)**: template `staged-initiative-hub`
+     (or `initiative-hub` for the one-session flow) with repository = the hub repo whose
+     `repos/*` submodules are the members; inputs include `branch` (the one initiative
+     branch shared by hub and submodules) and `initiative_folder`. The `epics.yaml` it
+     reads needs per-epic `workdir` + full `install`/`test`/`quality_gate` commands — see
      `references/spec-folder.md`.
+   - **Single-repository initiative**: template `staged-initiative-repo` with the plain
+     repository; same `epics.yaml` shape without `workdir` or commands (the repository
+     record's own commands run).
+   - **Staged models**: a `staged-*` root takes `model` (implements), `plan_model` (plans,
+     and runs the epic's spec-gate / gen-e2e / retro) and `review_model` (reviews); the
+     last two are required. Ask the human for all three.
 2. **Preflight** — `POST /api/v1/runs/preflight` with everything you plan to send
    (`template_name`, `template_version`, `project_id`, `repository_id`, `base_branch`,
    `inputs`, `harness`, `model`, `budget_usd`). Every field is optional there — missing

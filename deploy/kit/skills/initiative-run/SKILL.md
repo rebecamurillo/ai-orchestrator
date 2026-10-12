@@ -43,7 +43,9 @@ Run will leave behind (branch, commits, PRs). Keep it to what the plan says.
 Then get three things from the human, in one exchange:
 
 - **harness** — `claude`, `codex` or `local`; null takes the instance default.
-- **model** — what the template's own routing does not already fix.
+- **model** — what the template's own routing does not already fix. A `staged-*` template
+  takes three: `model` (implements), `plan_model` (plans) and `review_model` (reviews); the
+  last two are required inputs, so ask for all three in the same exchange.
 - **budget** — `budget_usd`. One budget decision per Run. Never invent a number, never
   raise it silently, and never carry one over from a previous Run because it looked similar.
 
