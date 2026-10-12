@@ -133,7 +133,9 @@ The `orchestrator` skill's **Launching a Run** section applies in full. For the 
 1. `GET /api/v1/templates`, then the chosen template's latest version — its `inputs` are
    the list to bind. Expect, for `epic`: `base_branch`, `branch`, `spec_folder`,
    `harness`, `model`, `done_checkpoint`; for `initiative-hub`: `base_branch`, `branch`,
-   `initiative_folder`, `harness`, `model`.
+   `initiative_folder`, `harness`, `model`, and the three time limits `build_timeout_min`,
+   `build_stall_min`, `epic_timeout_min` (minutes; leave them blank to take the template's
+   defaults, 180 / 90 / 60).
 2. `POST /api/v1/runs/preflight` with everything you will send. Every `lines[]` entry must
    be `pass` or `skip`; read `rows[]` and confirm it shows exactly one story frame. A
    `plan_error` here names the spec file line at fault.

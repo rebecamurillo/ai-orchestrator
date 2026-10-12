@@ -2,15 +2,16 @@
 # orchestrator-watch — poll one Run, print every status change, exit on what needs a human.
 #
 #   orchestrator-watch <run_id> [--base-url URL] [--interval-active 5] [--interval-idle 30]
-#                               [--once] [--notify]
+#                               [--once] [--notify | --no-notify]
 #
 #   --base-url         the instance; default $ORCHESTRATOR_BASE_URL, else ./.env, else
 #                      http://127.0.0.1:8000
 #   --interval-active  seconds between polls while the Run is queued or running; minimum 5
 #   --interval-idle    seconds between polls in any other state; minimum 30
 #   --once             one poll, then exit with the code below
-#   --notify           also raise a desktop notification on each change (osascript on macOS,
-#                      notify-send on Linux); skipped in silence where neither exists
+#   --notify           raise a desktop notification on each change — the default (osascript on
+#                      macOS, notify-send on Linux; silent where neither exists)
+#   --no-notify        print only
 #
 # Exit codes, so a caller can branch without parsing anything:
 #   0  done, or --once on a Run still queued or running
@@ -37,7 +38,7 @@ base_url_arg=""
 interval_active=$MIN_ACTIVE
 interval_idle=$MIN_IDLE
 once=0
-notify=0
+notify=1
 
 say()  { printf '%s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
@@ -46,7 +47,7 @@ die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 usage() {
 	cat <<'TEXT'
 orchestrator-watch <run_id> [--base-url URL] [--interval-active 5] [--interval-idle 30]
-                            [--once] [--notify]
+                            [--once] [--notify | --no-notify]
 
   --base-url         the instance; default $ORCHESTRATOR_BASE_URL, else ./.env, else
                      http://127.0.0.1:8000
@@ -55,8 +56,9 @@ orchestrator-watch <run_id> [--base-url URL] [--interval-active 5] [--interval-i
   --interval-idle    seconds between polls in any other state; minimum 30, a smaller value
                      is raised to it
   --once             one poll, then exit
-  --notify           also raise a desktop notification on each change (osascript on macOS,
-                     notify-send on Linux); skipped in silence where neither exists
+  --notify           raise a desktop notification on each change — the default (osascript on
+                     macOS, notify-send on Linux; silent where neither exists)
+  --no-notify        print only
 
 Prints one line per status change: <UTC ts>  <status>  <spend_usd>/<budget_usd>. On
 needs_you it prints the alert (park_kind, reason), the admitted signals and the deep link,
@@ -90,6 +92,7 @@ while [[ $# -gt 0 ]]; do
 		--interval-idle=*) interval_idle="${1#--interval-idle=}" ;;
 		--once) once=1 ;;
 		--notify) notify=1 ;;
+		--no-notify) notify=0 ;;
 		-h|--help) usage; exit 0 ;;
 		-*) die "unknown argument: $1 (try --help)" ;;
 		*) [[ -z "$run_id" ]] || die "one run id at a time (got '$run_id' and '$1')"; run_id="$1" ;;

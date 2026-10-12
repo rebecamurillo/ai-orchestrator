@@ -13,6 +13,15 @@ inputs:
                                                               # folder per epic, all at the hub
   harness:            { type: enum, values: [claude, codex, local], default: claude }
   model:              { type: string,     required: false }
+  # The Run's time limits, in minutes, passed down to every epic and story (client change
+  # request 3, 2026-10-09): `build_timeout_min` is the hard wall clock of one story's build,
+  # `build_stall_min` how long a build may go without writing a file or a log line before it
+  # counts as hung, `epic_timeout_min` the wall clock and stall limit of the epic's own agent
+  # rows (`spec-gate`, `gen-e2e`, `retro`). One initiative's long reviews are another's
+  # hang, so the Run names them; left blank, each falls to its template default.
+  build_timeout_min:  { type: number,     required: false, default: 180 }
+  build_stall_min:    { type: number,     required: false, default: 90 }
+  epic_timeout_min:   { type: number,     required: false, default: 60 }
 
 # --- the epics.yaml convention this Run's callees read (H3, 2026-09-23) --------------------
 # One Run, one branch, every epic sequential — so this file's `epics.yaml` carries more than
@@ -88,3 +97,6 @@ steps:
             quality_gate: "{{epic.quality_gate}}"
             harness: "{{harness}}"
             model: "{{model}}"
+            build_timeout_min: "{{build_timeout_min}}"
+            build_stall_min: "{{build_stall_min}}"
+            epic_timeout_min: "{{epic_timeout_min}}"

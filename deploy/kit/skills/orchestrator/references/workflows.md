@@ -138,7 +138,10 @@ are whatever the list file holds and are not checked: a missing one resolves emp
 - **Give one step its own model or harness.** Write a literal in that step's `with.model` /
   `with.harness` instead of `{{model}}` / `{{harness}}`.
 - **Longer or shorter limits.** `timeout_min` on any step; `stall_min` on an agent step that
-  legitimately goes quiet for long stretches (a read-only review).
+  legitimately goes quiet for long stretches (a read-only review). Either takes an integer
+  or a `{{ }}` expression bound to a `number` input, so a Run can set them: the shipped hub
+  flow declares `build_timeout_min`, `build_stall_min` and `epic_timeout_min` for exactly
+  this, and an empty value falls to the kind's default.
 - **Another agent step.** Copy an existing one, give it a new `id`, its own `skill` or
   `prompt`, and its own `expect.files`.
 - **Reword what agents are told.** Edit the step's `prompts` and `retry.prompt`.
@@ -146,8 +149,10 @@ are whatever the list file holds and are not checked: a missing one resolves emp
 ## What a template cannot change
 
 - **Which shell commands an agent may run.** That is the harness allowlist on the instance
-  (`CLAUDE_ALLOWED_TOOLS` in its `.env`), not the workflow. An agent parked because `yarn`,
-  `npx` or another tool was denied is an instance fix — the `orchestrator-admin` skill.
+  (`CLAUDE_ALLOWED_TOOLS` in its `.env`), not the workflow. The shipped default allows every
+  shell command except `git push`; an instance that narrowed it and parks an agent because
+  `yarn`, `npx` or another tool was denied is an instance fix — the `orchestrator-admin`
+  skill.
 - **The protected-path guard, the budget rule, the status tokens.** These are the
   orchestrator's, whatever the template says.
 - **A Run already planned.** See *What a save does*.

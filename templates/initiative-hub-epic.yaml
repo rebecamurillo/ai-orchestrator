@@ -23,6 +23,14 @@ inputs:
                                                           # wants this bound
   harness:      { type: enum, values: [claude, codex, local], default: claude }
   model:        { type: string,     required: false }
+  # Limits bound from the Run's own inputs (client change request 3, 2026-10-09): the story
+  # row's two go to `initiative-hub-story`; the epic's own long reads (`spec-gate`, `retro`,
+  # `gen-e2e`) take one shared wall clock and the same value as their stall limit, because a
+  # read-heavy phase writes nothing and would otherwise look exactly like a hang. Empty
+  # resolves to the kind's default.
+  build_timeout_min: { type: number, required: false, default: 180 }
+  build_stall_min:   { type: number, required: false, default: 90 }
+  epic_timeout_min:  { type: number, required: false, default: 60 }
   # This file is a callee only, never a root `create_run` accepts (like `story@1`), so unlike
   # `epic@1` it declares no `done_checkpoint` input and runs no tail `checkpoint` step: the
   # caller's `epics` loop already plans one `checkpoint` row per epic via its own
@@ -73,7 +81,8 @@ steps:
       files: ["{{spec_folder}}/spec-gate-result.md"]
       success: [done]
       blocked: [blocked]
-    timeout_min: 30
+    timeout_min: "{{epic_timeout_min}}"
+    stall_min: "{{epic_timeout_min}}"
     gate: liveness
 
   - id: stories
@@ -95,6 +104,8 @@ steps:
             test: "{{test}}"
             harness: "{{harness}}"
             model: "{{model}}"
+            build_timeout_min: "{{build_timeout_min}}"
+            build_stall_min: "{{build_stall_min}}"
 
   # Unlike `spec-gate` and `retro`, this one carries `workdir`: the tests it writes are the
   # member repository's own, so it dispatches inside the submodule and its Story-shaped
@@ -114,7 +125,8 @@ steps:
         fully and follow it; every step, status and halt this dispatch owes is defined
         there. Do not run render_skill.py yourself.
       answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
-    timeout_min: 30
+    timeout_min: "{{epic_timeout_min}}"
+    stall_min: "{{epic_timeout_min}}"
     gate: liveness
 
   - id: commit-e2e
@@ -143,7 +155,8 @@ steps:
         fully and follow it; every step, status and halt this dispatch owes is defined
         there. Do not run render_skill.py yourself.
       answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
-    timeout_min: 30
+    timeout_min: "{{epic_timeout_min}}"
+    stall_min: "{{epic_timeout_min}}"
     gate: liveness
 
   # Hub-side, no `workdir`: stages the spec folder (SPEC.md, stories.yaml, every Story file
@@ -160,6 +173,16 @@ steps:
   - id: push-code
     uses: git.push
     with: { workdir: "{{workdir}}", branch: "{{branch}}" }
+    gate: deterministic
+
+  # Bring in whatever origin's initiative branch received during this epic before pushing,
+  # so `push-hub` is rejected only by a push that lands inside the window between these two
+  # rows — then the existing `retry` (sync first) is the right stop (client change request 2,
+  # 2026-10-09). No `workdir` form exists for `git.merge`, so `push-code` keeps its own
+  # behaviour; the member's branch is written by this Run alone.
+  - id: merge-hub
+    uses: git.merge
+    with: { from: "{{branch}}" }
     gate: deterministic
 
   - id: push-hub

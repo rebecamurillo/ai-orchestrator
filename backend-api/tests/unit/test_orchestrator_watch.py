@@ -20,6 +20,9 @@ What is pinned:
   can poll at 1 s will.
 - **The token reaches no output line.** A client pastes this output into a bug report.
 - **`--notify` degrades in silence** where no notifier exists, which is every CI box.
+- **Notification is the default** (K-1 of `_bmad-output/specs/unattended-hub-run/PLAN.md`,
+  2026-10-09): a client that parks overnight learns of it from the desktop, not from a
+  terminal it left open; `--no-notify` is the opt-out.
 """
 
 from __future__ import annotations
@@ -223,7 +226,15 @@ def test_help_names_every_flag_the_codes_and_the_web_url(box: Sandbox) -> None:
     result = box.run("--help")
 
     assert result.returncode == DONE, result.stderr
-    for flag in ("--base-url", "--interval-active", "--interval-idle", "--once", "--notify"):
+    flags = (
+        "--base-url",
+        "--interval-active",
+        "--interval-idle",
+        "--once",
+        "--notify",
+        "--no-notify",
+    )
+    for flag in flags:
         assert flag in result.stdout, flag
     assert "ORCHESTRATOR_WEB_URL" in result.stdout
     assert "4321" in result.stdout and "8000" in result.stdout
@@ -463,3 +474,45 @@ def test_notify_is_silent_where_no_notifier_exists(tmp_path: Path) -> None:
     assert len(lines) == 1, lines
     assert statuses_of(result.stdout) == ["done"]
     assert result.stderr == ""
+
+
+# ── notification is the default ──────────────────────────────────────────────
+
+
+NOTIFY_SHIM = """#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$NOTIFY_LOG"
+"""
+
+
+def _with_notifier(tmp_path: Path) -> tuple[Sandbox, Path]:
+    box = Sandbox(tmp_path, restricted=True)
+    log = tmp_path / "notify.log"
+    log.touch()
+    (box.bin / "notify-send").write_text(NOTIFY_SHIM)
+    (box.bin / "notify-send").chmod(0o755)
+    box.env["NOTIFY_LOG"] = str(log)
+    return box, log
+
+
+@needs_bash
+def test_a_status_change_notifies_without_any_flag(tmp_path: Path) -> None:
+    """K-1 (2026-10-09): the client that forgot the flag is the one asleep at the park."""
+    box, log = _with_notifier(tmp_path)
+    box.serves(summary("done", spend_usd="1.00"))
+
+    result = box.run(RUN_ID, "--once", **bearer())
+
+    assert result.returncode == DONE, result.stdout + result.stderr
+    assert log.read_text().splitlines() == [f"ai-orchestrator Run {RUN_ID} is done"]
+
+
+@needs_bash
+def test_no_notify_prints_only(tmp_path: Path) -> None:
+    box, log = _with_notifier(tmp_path)
+    box.serves(summary("done", spend_usd="1.00"))
+
+    result = box.run(RUN_ID, "--once", "--no-notify", **bearer())
+
+    assert result.returncode == DONE, result.stdout + result.stderr
+    assert statuses_of(result.stdout) == ["done"]
+    assert log.read_text() == ""

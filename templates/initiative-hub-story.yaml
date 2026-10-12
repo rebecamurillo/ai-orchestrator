@@ -11,12 +11,24 @@ inputs:
   test:        { type: string,     required: false }  # the epic's full per-story command
   harness:     { type: enum, values: [claude, codex, local], default: claude }
   model:       { type: string,     required: false }
+  # The two limits of the `build` row, bound by the caller from the Run's own inputs so one
+  # initiative can run long reviews and another short ones (client change request 3,
+  # 2026-10-09). Empty resolves to the kind's default, exactly as an absent key would.
+  build_timeout_min: { type: number, required: false, default: 180 }
+  build_stall_min:   { type: number, required: false, default: 90 }
 steps:
-  # Hub-side, no `workdir`: the specs live at the hub, so a fast-forward here is how an
-  # Operator's inline edit to `stories.yaml` or a Story file reaches this frame before it
-  # dispatches — exactly the reason `story@1` opens with this same row.
+  # Hub-side, no `workdir`: the specs live at the hub, so this row is how an Operator's edit
+  # to `stories.yaml` or a Story file — or any other commit the initiative branch received on
+  # origin since the last story — reaches this frame before it dispatches. A merge, not a
+  # fast-forward (client change request 2, 2026-10-09): the Run pushes the hub once per epic
+  # at `push-hub`, so by the second story the local branch is already ahead of origin and
+  # `--ff-only` would refuse every push origin received meanwhile. `git.merge` ends
+  # `already merged` when origin holds nothing new, `no upstream · no-op` before the first
+  # push, and parks `merge_conflict` only when two edits collide — the one case a human has
+  # to resolve. `commit-story` below is what keeps the hub tree clean for it.
   - id: sync
-    uses: git.sync
+    uses: git.merge
+    with: { from: "{{branch}}" }
     gate: deterministic
 
   # `workdir` moves the dispatch into the member checkout; the Story file itself still lands
@@ -63,7 +75,12 @@ steps:
       prompt: "No story file with a terminal status was found for story {{story.id}} in the spec folder named in the dispatch sentence. Finish the story and write that file, or set status: blocked with the reason."
       resume_session: true
     pause_when: "story.spec_checkpoint"
-    timeout_min: 90
+    # The wall clock is the hard ceiling; the stall detector is the liveness signal. A review
+    # phase reads for a long time and writes nothing, so the stall limit is sized for a
+    # healthy long review, not for a hang — the client's four killed attempts (31 to 80 min
+    # of work) all fit under these two.
+    timeout_min: "{{build_timeout_min}}"
+    stall_min: "{{build_stall_min}}"
     gate: liveness
 
   # The full command, `cd` included, is the epic's own data (`initiative-hub.yaml`'s
@@ -77,12 +94,19 @@ steps:
 
   # `workdir` here too: this row's protected-path check reads this frame's agent range from
   # the same tree `build` dispatched in (`walk_frame.py::frame_anchors`), and `git.commit`'s
-  # own `workdir` branch stages and commits only that submodule — never the hub. The Story
-  # file `build` wrote at the hub stays uncommitted until `initiative-hub-epic@1`'s
-  # `commit-retro` sweeps the whole spec folder in one row at the end of the epic; nothing
-  # in between needs it committed sooner; `sync`'s fast-forward tolerates an uncommitted
-  # tree exactly as `git merge --ff-only` always has.
+  # own `workdir` branch stages and commits only that submodule — never the hub.
   - id: commit-guard
     uses: git.commit
     with: { workdir: "{{workdir}}", message: "story {{story.id}}: {{story.title}} (orchestrator)" }
+    gate: deterministic
+
+  # Hub-side, no `workdir`: the Story file `build` wrote at the hub is committed by the
+  # story that wrote it, under its own title. Without this row it sat uncommitted until the
+  # epic's `commit-retro`, and the next retry's WIP sweep labelled finished work
+  # `wip: … (interrupted)` (client change request 7, 2026-10-09). The root `git.commit`
+  # stages the spec folder and the root tree, never a gitlink (AD-14), and ends
+  # `done · no changes` when the story wrote nothing at the hub.
+  - id: commit-story
+    uses: git.commit
+    with: { message: "story {{story.id}}: {{story.title}} — spec (orchestrator)" }
     gate: deterministic

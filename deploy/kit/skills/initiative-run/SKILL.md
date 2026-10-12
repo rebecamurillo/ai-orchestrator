@@ -67,9 +67,9 @@ idling against a poll loop burns context to learn nothing. `orchestrator-watch` 
 at `.orchestrator/bin/orchestrator-watch` (the installer prints the `PATH` line):
 
 ```bash
-orchestrator-watch <run_id>            # prints each status change; exits on what needs a human
+orchestrator-watch <run_id>            # prints each status change, raises a desktop notification
+                                       # per change (--no-notify silences it); exits on what needs a human
 orchestrator-watch <run_id> --once     # one poll, for a harness that cannot hold a process
-orchestrator-watch <run_id> --notify   # also a desktop notification per change
 ```
 
 It polls at the documented cadence and refuses tighter. Its exit code is the branch:
