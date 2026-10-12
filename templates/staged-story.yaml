@@ -1,0 +1,168 @@
+name: staged-story
+version: 1
+description: >-
+  staged: one story of a single-repository initiative in three agent sessions — plan,
+  implement, review — each on its own model, verified with the repository's own command
+# family: staged · role: story · method: plan / implement / verify / review, one session each
+# called by: staged-epic · calls: — · skills: staged-plan, staged-implement, staged-review
+# sibling: story (auto) — differs in: the one `build` row (bmad-build-auto) is
+#          three agent rows on three models; each row routes on its own marker under
+#          `{{spec_folder}}/stories/.auto/` instead of the Story file; `verify` redispatches
+#          `implement`; limits are per stage; `sync` merges instead of fast-forwarding.
+inputs:
+  project:      { type: project,    required: true }
+  repository:   { type: repository, required: true }
+  branch:       { type: string,     required: true }
+  spec_folder:  { type: path,       required: true }
+  story:        { type: item,       required: true }   # bound by the caller's for_each
+  harness:      { type: enum, values: [claude, codex, local], default: claude }
+  # Three models, one per stage. `model` (the Run's own field) is the implementer's;
+  # `plan_model` and `review_model` are the stronger ones a Run names beside it. Blank falls
+  # to the harness's own default model, which on a Gateway install may not be routed — the
+  # roots declare both as required for that reason.
+  model:        { type: string,     required: false }
+  plan_model:   { type: string,     required: false }
+  review_model: { type: string,     required: false }
+  # Limits per stage, in minutes, bound by the caller from the Run's own inputs. The stall
+  # limit is the liveness signal; a planning or review phase reads for long stretches, so
+  # each gets the stage's wall clock as its stall limit too. Empty resolves to the kind's
+  # default.
+  plan_timeout_min:   { type: number, required: false, default: 45 }
+  build_timeout_min:  { type: number, required: false, default: 180 }
+  build_stall_min:    { type: number, required: false, default: 90 }
+  review_timeout_min: { type: number, required: false, default: 60 }
+steps:
+  # How an Operator's edit to `stories.yaml` or a Story file — or any commit origin's
+  # initiative branch received since the last story — reaches this frame. A merge, not a
+  # fast-forward: by the second story the local branch is ahead of origin; a conflict is the
+  # one stop a human has to resolve.
+  - id: sync
+    uses: git.merge
+    with: { from: "{{branch}}" }
+    gate: deterministic
+
+  # --- 1. plan ------------------------------------------------------------------------------
+  # The marker, not the Story file, is what routes the row: an `answer` archives the row's
+  # first matched file to `.answers/`, and that must never be the spec itself.
+  - id: plan
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{plan_model}}"
+      skill: staged-plan
+      args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
+      prompt_extra: "{{story.invoke_dev_with}}"
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+      halt: "Halt after planning."
+    expect:
+      files: ["{{spec_folder}}/stories/.auto/{{story.id}}-01-plan.md"]
+      success: [done]
+      blocked: [blocked]
+      checkpoint: [ready-for-dev]
+      misconfigured_when:
+        - no stories.yaml found
+        - story id not found in stories.yaml
+        - no epic spec found
+        - ambiguous story file match
+        - missing spec_folder or story_id
+    retry:
+      max: 1
+      # No run-root-relative path here: a resumed session gets this prompt alone, with no
+      # dispatch sentence in front of it to absolutise `spec_folder`.
+      prompt: "The previous session left no readable plan marker for story {{story.id}} under stories/.auto/ in the spec folder named in the dispatch sentence. Finish the spec and write that marker last, with status done or status blocked."
+      resume_session: true
+    pause_when: "story.spec_checkpoint"
+    timeout_min: "{{plan_timeout_min}}"
+    stall_min: "{{plan_timeout_min}}"
+    gate: liveness
+
+  # --- 2. implement -------------------------------------------------------------------------
+  - id: implement
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: staged-implement
+      args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+      # Sent in front of the dispatch sentence only on the fresh dispatch that follows a
+      # `verify` failure (FR-10); the skill's "Sent back" section is what acts on it.
+      redispatch: |
+        YOU ARE BACK IN THIS STEP BECAUSE VERIFICATION FAILED. A previous session of this
+        step implemented the story and reported done; the orchestrator then ran the
+        repository's verify command and it failed:
+          Command:   {command}
+          Exit code: {code}
+          Output tail:
+        {tail}
+        Follow the skill's "Sent back" section: that failure, nothing else.
+    expect:
+      files: ["{{spec_folder}}/stories/.auto/{{story.id}}-02-implement.md"]
+      success: [done]
+      blocked: [blocked]
+      misconfigured_when:
+        - spec file missing or ambiguous
+        - missing spec_folder or story_id
+    retry:
+      max: 1
+      prompt: "The previous session left no readable implement marker for story {{story.id}} under stories/.auto/ in the spec folder named in the dispatch sentence. Finish the implementation, run the spec's Verification commands, and write that marker last, with status done or status blocked."
+      resume_session: true
+    timeout_min: "{{build_timeout_min}}"
+    stall_min: "{{build_stall_min}}"
+    gate: liveness
+
+  # --- 3. verify (deterministic; a failure sends the implementer back to its own breakage) --
+  - id: verify
+    run: "{{repository.unit_test_command}}"
+    on_fail: { redispatch: implement, max: 2 }
+    timeout_min: 30
+    gate: deterministic
+
+  # --- 4. review ----------------------------------------------------------------------------
+  - id: review
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{review_model}}"
+      skill: staged-review
+      args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    expect:
+      files: ["{{spec_folder}}/stories/.auto/{{story.id}}-03-review.md"]
+      success: [done]
+      blocked: [blocked]
+      misconfigured_when:
+        - spec file missing or ambiguous
+        - missing spec_folder or story_id
+    retry:
+      max: 1
+      prompt: "The previous session left no readable review marker for story {{story.id}} under stories/.auto/ in the spec folder named in the dispatch sentence. Finish the review at the tier the spec names, re-run the spec's Verification commands, and write that marker last, with status done or status blocked."
+      resume_session: true
+    timeout_min: "{{review_timeout_min}}"
+    stall_min: "{{review_timeout_min}}"
+    gate: liveness
+
+  # One tree: the code, the Story file and the three markers are committed together, under
+  # the story's own title, after the protected-path check.
+  - id: commit-guard
+    uses: git.commit
+    with: { message: "story {{story.id}}: {{story.title}} (orchestrator)" }
+    gate: deterministic

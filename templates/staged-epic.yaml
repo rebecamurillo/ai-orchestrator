@@ -1,0 +1,162 @@
+name: staged-epic
+version: 1
+description: >-
+  staged: one epic of a single-repository initiative on the initiative's one branch, every
+  story built by the staged plan / implement / review flow, verified end to end
+# family: staged · role: epic · method: spec-gate, stories loop, gen-e2e, e2e, retro, push
+# called by: staged-initiative-repo · calls: staged-story · skills: spec-gate (+ BMAD stubs)
+# sibling: epic (auto) — differs in: callee-only (no checkout, no `setup`/`baseline` of its
+#          own branch — the root owns the one initiative branch, as the hub flow does); the
+#          stories loop calls `staged-story`; three model inputs and four stage limits are
+#          passed through; the epic's own agent rows run on `plan_model`; `merge` before
+#          `push`; no `done_checkpoint` input and no tail checkpoint (the root's loop stops).
+inputs:
+  project:      { type: project,    required: true }
+  repository:   { type: repository, required: true }
+  base_branch:  { type: string,     required: true }
+  branch:       { type: string,     required: true }   # the initiative branch, bound by the
+                                                        # caller — never allocated here
+  spec_folder:  { type: path,       required: true }   # holds SPEC.md, stories.yaml, stories/
+  epic:         { type: item,       required: true }   # bound by the root's for_each; required
+                                                        # is what keeps this file off the menu
+  harness:      { type: enum, values: [claude, codex, local], default: claude }
+  # Three models: `model` implements, `plan_model` plans and runs this epic's own agent rows,
+  # `review_model` reviews (see `staged-story.yaml`).
+  model:        { type: string,     required: false }
+  plan_model:   { type: string,     required: false }
+  review_model: { type: string,     required: false }
+  # Limits bound from the Run's own inputs: the four stage limits go to `staged-story`; the
+  # epic's own long reads (`spec-gate`, `retro`, `gen-e2e`) take one shared wall clock and
+  # the same value as their stall limit. Empty resolves to the kind's default.
+  plan_timeout_min:   { type: number, required: false, default: 45 }
+  build_timeout_min:  { type: number, required: false, default: 180 }
+  build_stall_min:    { type: number, required: false, default: 90 }
+  review_timeout_min: { type: number, required: false, default: 60 }
+  epic_timeout_min:   { type: number, required: false, default: 60 }
+steps:
+  # The repository's own commands, from its record: a repository with no command plans the
+  # row `skipped · no command` (AD-7).
+  - id: setup
+    run: "{{repository.install_command}}"
+    timeout_min: 20
+    gate: deterministic
+
+  - id: baseline
+    run: "{{repository.unit_test_command}}"
+    on_fail: fail
+    gate: deterministic
+
+  - id: spec-gate
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{plan_model}}"
+      skill: spec-gate
+      args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    expect:
+      files: ["{{spec_folder}}/spec-gate-result.md"]
+      success: [done]
+      blocked: [blocked]
+    timeout_min: "{{epic_timeout_min}}"
+    stall_min: "{{epic_timeout_min}}"
+    gate: liveness
+
+  - id: stories
+    for_each: "{{spec_folder}}/stories.yaml"
+    as: story
+    pause_after_item_when: "story.done_checkpoint"
+    steps:
+      - id: story
+        uses: template
+        with:
+          name: staged-story
+          inputs:
+            project: "{{project}}"
+            repository: "{{repository}}"
+            branch: "{{branch}}"
+            spec_folder: "{{spec_folder}}"
+            story: "{{story}}"
+            harness: "{{harness}}"
+            model: "{{model}}"
+            plan_model: "{{plan_model}}"
+            review_model: "{{review_model}}"
+            plan_timeout_min: "{{plan_timeout_min}}"
+            build_timeout_min: "{{build_timeout_min}}"
+            build_stall_min: "{{build_stall_min}}"
+            review_timeout_min: "{{review_timeout_min}}"
+
+  - id: gen-e2e
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{plan_model}}"
+      skill: bmad-qa-generate-e2e-tests
+      args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    timeout_min: "{{epic_timeout_min}}"
+    stall_min: "{{epic_timeout_min}}"
+    gate: liveness
+
+  - id: commit-e2e
+    uses: git.commit
+    with: { message: "e2e: generated tests (orchestrator)" }
+    gate: deterministic
+
+  - id: e2e
+    run: "{{repository.quality_gate_command}}"
+    on_fail: { redispatch: gen-e2e, max: 2 }
+    timeout_min: 45
+    gate: deterministic
+
+  - id: retro
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{plan_model}}"
+      skill: bmad-retrospective
+      args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    timeout_min: "{{epic_timeout_min}}"
+    stall_min: "{{epic_timeout_min}}"
+    gate: liveness
+
+  - id: commit-retro
+    uses: git.commit
+    with: { message: "retro: epic retrospective (orchestrator)" }
+    gate: deterministic
+
+  # Bring in whatever origin's initiative branch received during this epic before pushing;
+  # a conflict is the one stop a human has to resolve.
+  - id: merge
+    uses: git.merge
+    with: { from: "{{branch}}" }
+    gate: deterministic
+
+  - id: push
+    uses: git.push
+    with: { branch: "{{branch}}" }
+    gate: deterministic
+
+  - id: link
+    uses: pr.link
+    with: { branch: "{{branch}}" }
+    gate: liveness

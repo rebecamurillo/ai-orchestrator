@@ -1,0 +1,79 @@
+name: staged-initiative-repo
+version: 1
+description: >-
+  staged: every epic of one initiative on one repository, in one Run, on one branch — each
+  story built in three agent sessions (plan, implement, review), each on its own model
+# family: staged · role: root (on the menu) · method: attach checkout, epics loop
+# called by: — · calls: staged-epic · skills: —
+# sibling: staged-initiative-hub (same family, hub scope) — differs in: no `submodules` row,
+#          no `workdir`/`install`/`test`/`quality_gate` per epic (the repository record's own
+#          commands run instead), one checkout and one branch for the whole initiative. The
+#          auto family has no single-repository initiative root: its `epic` is one epic on
+#          its own branch and is kept for harness readiness only.
+inputs:
+  project:            { type: project,    required: true }
+  repository:         { type: repository, required: true }
+  base_branch:        { type: string,     required: true }
+  branch:             { type: string,     required: true }  # the initiative branch, taken by
+                                                              # its exact name (mode: attach)
+  initiative_folder:  { type: path,       required: true }  # holds epics.yaml + one spec
+                                                              # folder per epic
+  harness:            { type: enum, values: [claude, codex, local], default: claude }
+  # Three models — see `staged-initiative-hub.yaml`: `model` implements, `plan_model` plans
+  # and runs each epic's own agent rows, `review_model` reviews; the two named ones are
+  # required so no stage falls to a harness default a Gateway may not route.
+  model:              { type: string,     required: false }
+  plan_model:         { type: string,     required: true }
+  review_model:       { type: string,     required: true }
+  # Per-stage limits in minutes, passed down to every epic and story; blank falls to each
+  # template's default.
+  plan_timeout_min:   { type: number,     required: false, default: 45 }
+  build_timeout_min:  { type: number,     required: false, default: 180 }
+  build_stall_min:    { type: number,     required: false, default: 90 }
+  review_timeout_min: { type: number,     required: false, default: 60 }
+  epic_timeout_min:   { type: number,     required: false, default: 60 }
+
+# --- the epics.yaml convention this Run's callee reads ----------------------------------------
+# One Run, one branch, every epic sequential, all in this one repository. Each entry carries
+# the list-file contract (`id`, `title`, `branch`, `spec_folder` — `lists.py::REQUIRED_FIELDS`;
+# `branch` is unused here, every epic works on this Run's one `branch` input) and may add
+#   done_checkpoint: "true" to stop after this epic — read by the `epics` loop below.
+# `spec_folder` is relative to `initiative_folder`. The commands an epic runs (`install`,
+# per-story `test`, end-to-end `quality_gate`) are the repository record's own, so an
+# initiative of one epic is an `epics.yaml` with one entry and nothing else to declare.
+steps:
+  # `mode: attach`: the Run works on the initiative branch by its exact name, cut from
+  # `base_branch` on the first Run and found on origin on every later one (AD-7, AD-14).
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "{{branch}}", mode: attach }
+    gate: deterministic
+
+  - id: epics
+    for_each: "{{initiative_folder}}/epics.yaml"
+    as: epic
+    # The stop after one epic: read here, at the loop that owns it, never re-declared as a
+    # tail step inside the callee, so one epic costs one checkpoint row and not two.
+    pause_after_item_when: "epic.done_checkpoint"
+    # parallel: reserved; sequential, list order is the dependency
+    steps:
+      - id: epic
+        uses: template
+        with:
+          name: staged-epic
+          inputs:
+            project: "{{project}}"
+            repository: "{{repository}}"
+            base_branch: "{{base_branch}}"
+            branch: "{{branch}}"
+            spec_folder: "{{initiative_folder}}/{{epic.spec_folder}}"
+            epic: "{{epic}}"
+            harness: "{{harness}}"
+            model: "{{model}}"
+            plan_model: "{{plan_model}}"
+            review_model: "{{review_model}}"
+            plan_timeout_min: "{{plan_timeout_min}}"
+            build_timeout_min: "{{build_timeout_min}}"
+            build_stall_min: "{{build_stall_min}}"
+            review_timeout_min: "{{review_timeout_min}}"
+            epic_timeout_min: "{{epic_timeout_min}}"
