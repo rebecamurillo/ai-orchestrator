@@ -131,11 +131,13 @@ The claude harness runs with `--permission-mode dontAsk` and the list in `CLAUDE
 `blocked` saying so. The symptom is every story parking at the same command — typically the
 target repository's package manager or test runner.
 
-The list must cover the toolchain of every repository the instance builds: one
-`Bash(<tool> *)` entry per command family (`Bash(yarn *)`, `Bash(npx *)`, `Bash(make *)`, …).
-Add the missing entry to the quoted value in `.env`, then `./install.sh start`. It is read at
-start-up, so the restart is required — say what is running and let the user choose the moment.
-A template cannot widen this list, and answering the park does not either.
+The shipped default allows `Bash` whole — the container is the sandbox, and `git push` stays
+denied by the adapter — so a fresh install never parks on a denied shell command. An
+instance that narrowed the list (installs before 2026-10-09 shipped a list of command
+families: `Bash(yarn *)`, `Bash(npx *)`, …) must cover the toolchain of every repository it
+builds, or go back to `Bash`. Edit the quoted value in `.env`, then `./install.sh start`. It
+is read at start-up, so the restart is required — say what is running and let the user choose
+the moment. A template cannot widen this list, and answering the park does not either.
 
 ## Template refresh
 

@@ -32,4 +32,7 @@ def test_split_pairs_refuses_a_pair_that_would_bind_nothing(bad: str) -> None:
 def test_the_shipped_defaults_are_the_documented_shapes() -> None:
     assert sorted(READINESS_MODELS_DEFAULT) == ["claude", "codex", "local"]
     assert LOCAL_MODELS_DEFAULT
-    assert "Bash(git *)" in CLAUDE_ALLOWED_TOOLS_DEFAULT
+    # C-1 / D-1 of `_bmad-output/specs/unattended-hub-run/PLAN.md` (2026-10-12): Bash whole,
+    # no command family; a listed family would be the narrowed shape the decision retired.
+    assert "Bash" in CLAUDE_ALLOWED_TOOLS_DEFAULT
+    assert not [t for t in CLAUDE_ALLOWED_TOOLS_DEFAULT if t.startswith("Bash(")]

@@ -176,9 +176,11 @@ with the kit, so the project's coding agent can propose and validate a template 
 you; it saves only on your go-ahead.
 
 A template does not decide which shell commands an agent may run. That is
-`CLAUDE_ALLOWED_TOOLS` in `.env`: it must list the package manager and test runner of every
-repository you build (`Bash(yarn *)`, `Bash(npx *)`, …), and a change needs
-`./install.sh start`.
+`CLAUDE_ALLOWED_TOOLS` in `.env`. The shipped value allows `Bash` whole — the container is
+the sandbox, and `git push` stays denied by the harness adapter — so an agent is never
+parked on a denied package manager or test runner. An install that narrows it to command
+families (`Bash(yarn *)`, `Bash(npx *)`, …) must list every tool its repositories use, and
+a change needs `./install.sh start`.
 
 ## The optional llm-platform stack (LiteLLM + Langfuse)
 
@@ -281,6 +283,13 @@ register. Register only repositories you trust as much as this machine.
   makes every probe fail `cli not at pinned version`.
 - `POSTGRES_DB` is fixed after first boot, and the stack supports exactly one
   `backend-api` replica.
+- **Two settings an upgrade from a release before 2026-10-12 keeps as they were.** A
+  Repository's `test_globs` is now exactly what you list, and an empty list freezes no test
+  file; rows saved earlier still hold the former three globs (`tests/**`, `**/*.test.*`,
+  `**/*.spec.*`) until you clear them in the Repository form, and every story that edits an
+  existing test parks `protected_path` until then. And `CLAUDE_ALLOWED_TOOLS` in your `.env`
+  still lists command families where the new default is `Bash` whole — replace the families
+  with `Bash` unless you want the narrower list.
 
 ## Known limits of this package
 

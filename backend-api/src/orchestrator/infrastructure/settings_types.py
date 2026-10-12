@@ -20,16 +20,13 @@ READINESS_MODELS_DEFAULT = {
     "local": "local-coder",
 }
 LOCAL_MODELS_DEFAULT = ["local-coder", "local-general"]
+#: `Bash` whole, not a list of command families (Operator decision D-1, 2026-10-12): the
+#: container is the sandbox, and an instance that lists families parks `blocked` on the first
+#: package manager or test runner it forgot — a park no answer can clear. `git push` stays
+#: denied by the adapter's own disallow list, which this value cannot widen.
 CLAUDE_ALLOWED_TOOLS_DEFAULT = [
     "Task",
-    "Bash(uv run *)",
-    "Bash(git *)",
-    "Bash(rm *)",
-    "Bash(pnpm *)",
-    "Bash(npm *)",
-    "Bash(npx *)",
-    "Bash(yarn *)",
-    "Bash(make *)",
+    "Bash",
     "Edit",
     "Read",
     "Write",
