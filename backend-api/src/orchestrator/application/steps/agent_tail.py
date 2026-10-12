@@ -5,10 +5,16 @@ Split out of `steps/agent.py` at the 400-line cap. `story_files` asks the row's 
 glob and `tail` routes on the one file that is left; the archive that repairs ambiguity
 lives with the Answer archive in `agent_answer.py`, beside the directory both derive.
 
-**Tail order (AD-9):** (1) protected-path check before routing — FR-31: anchor wins;
-(2) routing via `rules/routing.py`; (3) budget check after routing — FR-17: step keeps
-the status routing chose. `re_check` is the Operator's *Accept* path; `_spend_and_budget`
-parks `budget` on top of whatever `route` decided (FR-17).
+**Tail order (AD-9):** (1) routing via `rules/routing.py` (after `rules/harness_failure.py`
+has named an unreachable gateway, O-5), computed first only so (2) can name it: the
+protected-path check parks before any route acts — FR-31: anchor wins, and its reason carries
+the outcome it hides (O-6); (3) budget check after routing — FR-17: step keeps the status
+routing chose. `re_check` is the Operator's *Accept* path; `_spend_and_budget` parks `budget`
+on top of whatever `route` decided (FR-17).
+
+**A killed attempt still records its gateway spend (O-3)**, but its budget is not evaluated:
+the stall/timeout park is the stop the Operator must read, and the next dispatch's budget
+check sees the recorded spend anyway.
 
 **`done` still means "observed".** Gate is `liveness`; green only when `verify` says so.
 """
@@ -19,7 +25,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from orchestrator.application.rules import budget, protected_paths, routing
+from orchestrator.application.rules import (
+    budget,
+    harness_failure,
+    outcome,
+    protected_paths,
+    routing,
+)
 from orchestrator.application.rules.signals import accepted_files
 from orchestrator.application.steps import agent_workdir
 from orchestrator.application.steps.context import (
@@ -40,6 +52,7 @@ from orchestrator.application.templates.agent_row import (
 )
 from orchestrator.application.use_cases.spend import record_attempt_spend
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.harness import HarnessResult
 from orchestrator.domain.values import Park, Retry, StepResult
 
@@ -63,9 +76,8 @@ TIMED_OUT = "timeout {path} after {n} min"
 #: Verbatim format: `{path}` is the monitored worktree, `{n}` is `stall_min` (FR-10, NFR-8).
 STALLED = "stalled {path}: no activity for {n} min"
 
-#: What an anchor an attempt touched stops the Run with (AD-17), and how the files are named.
-#: A sentence of its own rather than `git_commit.py`'s: that one is about a commit that was
-#: refused, this one is about a dispatch that has already happened.
+#: What an anchor an attempt touched stops the Run with (AD-17); `git_commit.py` has its own
+#: sentence for a commit that was refused.
 PROTECTED = "protected path modified: {paths}"
 PATH_SEPARATOR = ", "
 
@@ -114,53 +126,54 @@ def finish(
         }
     )
     committed(ctx, lambda attempts: attempts.mark_finished(finished))
+    if not (result.stalled or result.timed_out):
+        return tail(ctx, finished, result)
+    _record_spend(ctx, finished, result)
+    hidden = outcome.STALLED if result.stalled else outcome.TIMED_OUT
+    hit = protected(ctx, finished, hidden)
+    log = str(result.log_path)
+    if hit is not None:
+        return hit.model_copy(update={"output_ref": log})
     if result.stalled:
-        hit = protected(ctx, finished)
-        if hit is not None:
-            return hit.model_copy(update={"output_ref": str(result.log_path)})
         stall_path = result.stall_cwd if result.stall_cwd is not None else "(unknown)"
-        stall_n = stall_min if stall_min is not None else 30
-        reason = STALLED.format(path=stall_path, n=stall_n)
-        return StepResult(
-            status="error",
-            gate=ctx.row.gate,
-            output_ref=str(result.log_path),
-            reason=reason,
-            park=Park(kind="timeout", reason=reason, path=ctx.row.path),
-        )
-    if result.timed_out:
-        hit = protected(ctx, finished)
-        if hit is not None:
-            return hit.model_copy(update={"output_ref": str(result.log_path)})
+        reason = STALLED.format(path=stall_path, n=stall_min if stall_min is not None else 30)
+    else:
         reason = TIMED_OUT.format(path=ctx.row.path, n=timeout_min)
-        return StepResult(
-            status="error",
-            gate=ctx.row.gate,
-            output_ref=str(result.log_path),
-            reason=reason,
-            park=Park(kind="timeout", reason=reason, path=ctx.row.path),
-        )
-    return tail(ctx, finished, result)
+    return StepResult(
+        status="error",
+        gate=ctx.row.gate,
+        output_ref=log,
+        reason=reason,
+        park=Park(kind="timeout", reason=reason, path=ctx.row.path),
+    )
 
 
 def tail(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> StepResult:
-    """What the dispatch reached, by the Story file it wrote and nothing else (FR-16).
-
-    `attempt` is the finished record, and the two checks marked below are its only readers
-    here: the protected-path check compares the agent's range against `attempt.start_sha`,
-    and the budget check reads the same attempt's usage and spend.
-    """
+    """What the dispatch reached, by the Story file it wrote and nothing else (FR-16)."""
     log = str(result.log_path)
-    # 5.6 — the protected-path check, before the routing. FR-31: a modified anchor wins over
-    # every route below, which it cannot do from behind one.
-    hit = protected(ctx, attempt)
+    routed, condition = _route(ctx, result)
+    hit = protected(ctx, attempt, outcome.routed_outcome(routed, condition))
     if hit is not None:
         return hit.model_copy(update={"output_ref": log})
+    final = _spend_and_budget(ctx, attempt, result, routed)
+    return final.model_copy(update={"output_ref": log})
+
+
+def _route(ctx: StepContext, result: HarnessResult) -> tuple[StepResult, str | None]:
+    """What the dispatch reached, and the blocking condition its file states (if any)."""
+    tokens_out = result.usage.tokens_out if result.usage is not None else None
+    unreachable = harness_failure.gateway_unreachable(result.raw_result, tokens_out)
+    if unreachable is not None:
+        failed = routing.retry_or_park(
+            unreachable, retry_of(ctx), ctx.row.retry_count, gate=ctx.row.gate, path=ctx.row.path
+        )
+        return failed, None
     files = story_files(ctx)
     if files is None:
-        return StepResult(status="done", gate=ctx.row.gate, output_ref=log)
+        return StepResult(status="done", gate=ctx.row.gate), None
+    story = _parsed(ctx, files)
     routed = routing.route(
-        _parsed(ctx, files),
+        story,
         files,
         result.exit_code,
         bool(ctx.with_resolved.get(SPEC_CHECKPOINT_KEY)),
@@ -170,30 +183,28 @@ def tail(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> StepResul
         gate=ctx.row.gate,
         path=ctx.row.path,
     )
-    # 5.7 — the attempt's spend and the budget check go here, after the routing. FR-17: the
-    # step keeps the status its file routed to and the Run parks on top of it.
-    final = _spend_and_budget(ctx, attempt, result, routed)
-    return final.model_copy(update={"output_ref": log})
+    return routed, story.blocking_condition if story is not None else None
+
+
+def _record_spend(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> Run | None:
+    """Price the attempt and recompute the Run's spend; `None` without a spend scope."""
+    if ctx.ports.spend_writes is None:
+        return None
+    with ctx.ports.spend_writes() as spend_ports:
+        return record_attempt_spend(spend_ports, require_run(ctx), attempt, result.usage)
 
 
 def _spend_and_budget(
     ctx: StepContext, attempt: Attempt, result: HarnessResult, routed: StepResult
 ) -> StepResult:
-    """FR-17, after `route` has already decided: record this attempt's spend, then park
-    `budget` on top of whatever the row reached. A routed stop (`park` already set, e.g.
-    `blocked`/`checkpoint`) keeps its own record and gets a second one via `budget_park`
-    (`apply_step_result.budget_second_record`); a routed `done` or a retry-path `error`
-    (no `park` of its own) gets the budget `Park` directly, and any `retry` is dropped —
-    a Run parks instead of retrying once it is over budget.
-
-    `ctx.ports.spend_writes` degrades like `tracer`: `None` skips the read entirely, which
-    is every `StepPorts(...)` this story predates.
+    """FR-17, after `route` has decided: record this attempt's spend, then park `budget` on
+    top of whatever the row reached. A routed stop keeps its own record and gets a second one
+    via `budget_park` (`apply_step_result.budget_second_record`); a routed `done` or a
+    retry-path `error` gets the budget `Park` directly and any `retry` is dropped.
     """
-    if ctx.ports.spend_writes is None:
+    run = _record_spend(ctx, attempt, result)
+    if run is None:
         return routed
-    run = require_run(ctx)
-    with ctx.ports.spend_writes() as spend_ports:
-        run = record_attempt_spend(spend_ports, run, attempt, result.usage)
     if _cap_exit(result):
         forced = budget.forced(run)
         return StepResult(status="error", gate=ctx.row.gate, reason=forced.reason, park=forced)
@@ -211,7 +222,7 @@ def _cap_exit(result: HarnessResult) -> bool:
     return isinstance(raw, Mapping) and raw.get(CAP_EXIT_FIELD) == CAP_EXIT_VALUE
 
 
-def protected(ctx: StepContext, attempt: Attempt) -> StepResult | None:
+def protected(ctx: StepContext, attempt: Attempt, hidden: str) -> StepResult | None:
     """AD-17 over this attempt's own range, or `None` when it touched no anchor.
 
     The range is `start_sha .. end_sha` — what the harness did between the SHA recorded
@@ -225,13 +236,16 @@ def protected(ctx: StepContext, attempt: Attempt) -> StepResult | None:
 
     A hit is never retried. `apply_step_result` parks the Run on it (AD-8) and the Operator
     answers with *Accept* or a skip; `re_check` below is what an Accept comes back to.
+
+    `hidden` (O-6) extends the reason only; the payload `hits` stay what `continue` compares.
     """
     environment = require_env(ctx)
     allowed = (*environment.accepted_paths, *protected_paths.declared(ctx.row.with_resolved))
     hits = protected_paths.check(agent_workdir.changes(ctx, attempt), environment.anchors, allowed)
     if not hits:
         return None
-    reason = PROTECTED.format(paths=PATH_SEPARATOR.join(hit.path for hit in hits))
+    paths = PATH_SEPARATOR.join(hit.path for hit in hits)
+    reason = f"{PROTECTED.format(paths=paths)} · {hidden}"
     return StepResult(
         status="error",
         gate=ctx.row.gate,

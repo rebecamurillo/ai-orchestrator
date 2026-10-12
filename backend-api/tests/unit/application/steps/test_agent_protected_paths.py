@@ -48,7 +48,6 @@ from tests.unit.application.steps.agent_fixtures import (
 from tests.unit.application.steps.agent_tail_fixtures import (
     END_SHA,
     LOG_PATH,
-    STORY_GLOB,
     a_tail_world,
 )
 from tests.unit.fakes.git import FakeGit
@@ -117,7 +116,7 @@ def test_an_anchor_the_attempts_range_modified_parks_the_run() -> None:
     assert result.gate == "liveness"
     assert result.park is not None
     assert result.park.kind == "protected_path"
-    assert result.reason == PROTECTED.format(paths=SPEC_MD)
+    assert result.reason == PROTECTED.format(paths=SPEC_MD) + " · story done"
 
 
 def test_the_hit_list_travels_on_the_result_for_the_gate_record() -> None:
@@ -137,13 +136,17 @@ def test_the_range_is_the_attempts_own_two_commits() -> None:
     assert world.git.called("diff_changes") == [(WORKTREE_PATH, HEAD_SHA, END_SHA)]
 
 
-def test_the_story_file_glob_is_never_asked_when_an_anchor_was_touched() -> None:
-    """FR-31: a modified anchor wins over every route, which it cannot do from behind one."""
+def test_a_routed_done_story_does_not_hide_the_anchor_park() -> None:
+    """FR-31: a modified anchor wins over every route. O-6 of
+    _bmad-output/specs/unattended-hub-run/PLAN.md (2026-10-12): the glob is now read, only so
+    the park's reason can name the outcome it hides; the park itself is unchanged."""
     world = a_protected_world(git=a_git(Change(path=SPEC_MD, kind="modified")))
 
-    run(world)
+    result = run(world)
 
-    assert STORY_GLOB not in world.workspace.globbed
+    assert result.park is not None
+    assert result.park.kind == "protected_path"
+    assert result.status == "error"
 
 
 def test_an_agents_file_created_anywhere_is_a_hit() -> None:
@@ -170,7 +173,7 @@ def test_only_the_frozen_test_file_is_a_hit_when_a_new_one_is_added_beside_it() 
 
     result = run(world)
 
-    assert result.reason == PROTECTED.format(paths=FROZEN_TEST)
+    assert result.reason == PROTECTED.format(paths=FROZEN_TEST) + " · story done"
 
 
 def test_what_the_attempt_left_uncommitted_is_checked_with_its_commits() -> None:
@@ -178,7 +181,7 @@ def test_what_the_attempt_left_uncommitted_is_checked_with_its_commits() -> None
 
     result = run(world)
 
-    assert result.reason == PROTECTED.format(paths=STORIES_YAML)
+    assert result.reason == PROTECTED.format(paths=STORIES_YAML) + " · story done"
 
 
 # ── what is not a hit ───────────────────────────────────────────────────────
@@ -275,7 +278,7 @@ def test_an_accepted_continue_still_parks_on_an_anchor_nobody_accepted() -> None
 
     result = run(world)
 
-    assert result.reason == PROTECTED.format(paths=STORIES_YAML)
+    assert result.reason == PROTECTED.format(paths=STORIES_YAML) + " · story done"
 
 
 def test_a_continue_carrying_no_files_is_an_ordinary_dispatch() -> None:
@@ -380,7 +383,7 @@ def test_a_dispatch_that_edited_an_anchor_and_then_hung_parks_on_the_anchor() ->
 
     assert result.park is not None
     assert result.park.kind == "protected_path"
-    assert result.reason == PROTECTED.format(paths=SPEC_MD)
+    assert result.reason == PROTECTED.format(paths=SPEC_MD) + " · timed out"
     assert result.output_ref == str(LOG_PATH)
 
 
@@ -403,7 +406,7 @@ def test_several_hits_are_one_sentence_and_one_ordered_payload() -> None:
 
     result = run(world)
 
-    assert result.reason == PROTECTED.format(paths=f"{STORIES_YAML}, {SPEC_MD}")
+    assert result.reason == PROTECTED.format(paths=f"{STORIES_YAML}, {SPEC_MD}") + " · story done"
     assert result.payload == {
         "hits": [
             {"path": STORIES_YAML, "kind": "modified"},

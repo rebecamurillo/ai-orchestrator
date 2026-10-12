@@ -443,7 +443,7 @@ def test_a_member_test_file_the_dispatch_edited_parks_the_run() -> None:
     assert result.status == "error"
     assert result.park is not None
     assert result.park.kind == "protected_path"
-    assert result.reason == PROTECTED.format(paths=f"{WORKDIR}/{MEMBER_TEST}")
+    assert result.reason == PROTECTED.format(paths=f"{WORKDIR}/{MEMBER_TEST}") + " · story done"
     assert result.payload == {"hits": [{"path": f"{WORKDIR}/{MEMBER_TEST}", "kind": "modified"}]}
 
 
@@ -453,7 +453,7 @@ def test_a_member_file_left_uncommitted_is_a_hit_like_a_committed_one() -> None:
         git=a_workdir_git(statuses={MEMBER: f" M {MEMBER_TEST}\n", WORKTREE: ""}),
     )
 
-    assert run(world).reason == PROTECTED.format(paths=f"{WORKDIR}/{MEMBER_TEST}")
+    assert run(world).reason == PROTECTED.format(paths=f"{WORKDIR}/{MEMBER_TEST}") + " · story done"
 
 
 def test_a_hub_anchor_the_same_dispatch_edited_is_a_hit_too() -> None:
@@ -462,7 +462,7 @@ def test_a_hub_anchor_the_same_dispatch_edited_is_a_hit_too() -> None:
         git=a_workdir_git(changes={MEMBER: (), WORKTREE: (Change(path=SPEC_MD, kind="modified"),)}),
     )
 
-    assert run(world).reason == PROTECTED.format(paths=SPEC_MD)
+    assert run(world).reason == PROTECTED.format(paths=SPEC_MD) + " · story done"
 
 
 def test_an_agents_file_inside_the_member_checkout_is_a_hit() -> None:
@@ -471,7 +471,7 @@ def test_an_agents_file_inside_the_member_checkout_is_a_hit() -> None:
         anchors=frozenset(), git=a_workdir_git(statuses={MEMBER: "?? AGENTS.md\n", WORKTREE: ""})
     )
 
-    assert run(world).reason == PROTECTED.format(paths=f"{WORKDIR}/AGENTS.md")
+    assert run(world).reason == PROTECTED.format(paths=f"{WORKDIR}/AGENTS.md") + " · story done"
 
 
 def test_the_hub_range_is_read_between_the_root_shas_and_the_member_range_between_its_own() -> None:
@@ -515,7 +515,9 @@ def test_a_hub_path_merely_starting_with_the_workdirs_name_is_still_checked() ->
         ),
     )
 
-    assert run(world).reason == PROTECTED.format(paths="repos/member-docs/AGENTS.md")
+    assert (
+        run(world).reason == PROTECTED.format(paths="repos/member-docs/AGENTS.md") + " · story done"
+    )
 
 
 def test_an_accepted_member_path_is_excluded_by_the_same_spelling() -> None:
@@ -559,7 +561,7 @@ def test_an_accepted_continue_re_checks_both_of_the_previous_attempts_trees() ->
         (Path(MEMBER), MEMBER_START, MEMBER_END),
         (Path(WORKTREE), ROOT_START, ROOT_END),
     ]
-    assert result.reason == PROTECTED.format(paths=f"{WORKDIR}/{MEMBER_TEST}")
+    assert result.reason == PROTECTED.format(paths=f"{WORKDIR}/{MEMBER_TEST}") + " · story done"
 
 
 def test_an_attempt_that_bounded_no_range_in_either_tree_asks_for_no_diff() -> None:
@@ -605,7 +607,7 @@ def test_a_root_rows_check_reads_one_tree_and_reports_its_paths_unqualified() ->
 
     result = run(world)
 
-    assert result.reason == PROTECTED.format(paths=SPEC_MD)
+    assert result.reason == PROTECTED.format(paths=SPEC_MD) + " · story done"
     assert world.git.called("status") == [(Path(WORKTREE),), (Path(WORKTREE),)]
 
 

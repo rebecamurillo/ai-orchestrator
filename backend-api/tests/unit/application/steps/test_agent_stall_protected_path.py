@@ -70,5 +70,5 @@ def test_a_dispatch_that_edited_an_anchor_and_then_stalled_parks_on_the_anchor()
 
     assert result.park is not None
     assert result.park.kind == "protected_path"
-    assert result.reason == PROTECTED.format(paths=SPEC_MD)
+    assert result.reason == PROTECTED.format(paths=SPEC_MD) + " · stalled"
     assert result.output_ref == str(LOG_PATH)

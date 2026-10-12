@@ -159,6 +159,13 @@ def _blocked(
     )
 
 
+def retry_or_park(
+    reason: str, retry: Retry | None, count: int, *, gate: Gate, path: str
+) -> StepResult:
+    """The bounded retry decision for a failure found outside the table (O-5)."""
+    return _retry(reason, retry, count, gate=gate, path=path)
+
+
 def _retry(reason: str, retry: Retry | None, count: int, *, gate: Gate, path: str) -> StepResult:
     """One more bounded attempt at this row, or the park its bound turns into (AD-9)."""
     if retry is not None and count < retry.max:

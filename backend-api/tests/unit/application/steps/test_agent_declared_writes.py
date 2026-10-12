@@ -94,7 +94,7 @@ def test_an_undeclared_agents_file_is_the_hit_it_always_was() -> None:
     result = run(world)
 
     assert result.status == "error"
-    assert result.reason == PROTECTED.format(paths=AGENTS)
+    assert result.reason == PROTECTED.format(paths=AGENTS) + " · story done"
 
 
 def test_declaring_one_agents_file_does_not_license_another() -> None:
@@ -102,7 +102,7 @@ def test_declaring_one_agents_file_does_not_license_another() -> None:
 
     result = run(world)
 
-    assert result.reason == PROTECTED.format(paths=NESTED_AGENTS)
+    assert result.reason == PROTECTED.format(paths=NESTED_AGENTS) + " · story done"
 
 
 def test_an_anchor_the_dispatch_was_not_sent_to_still_parks_the_run() -> None:
@@ -113,7 +113,7 @@ def test_an_anchor_the_dispatch_was_not_sent_to_still_parks_the_run() -> None:
     assert result.status == "error"
     assert result.park is not None
     assert result.park.kind == "protected_path"
-    assert result.reason == PROTECTED.format(paths=SPEC_MD)
+    assert result.reason == PROTECTED.format(paths=SPEC_MD) + " · story done"
 
 
 def test_only_the_undeclared_anchor_is_named_when_both_changed() -> None:
@@ -122,4 +122,4 @@ def test_only_the_undeclared_anchor_is_named_when_both_changed() -> None:
         git=a_git(Change(path=AGENTS, kind="added"), Change(path=SPEC_MD, kind="modified")),
     )
 
-    assert run(world).reason == PROTECTED.format(paths=SPEC_MD)
+    assert run(world).reason == PROTECTED.format(paths=SPEC_MD) + " · story done"

@@ -305,12 +305,12 @@ def test_a_timeout_is_still_parked_before_the_file_is_ever_read() -> None:
 
 
 def test_the_two_unimplemented_checks_are_named_where_ad_9_puts_them() -> None:
-    """AD-9's tail order: the protected-path check (5.6) before the routing, the spend and
-    budget read (5.7) after it. Both are seams in this story, and a seam nobody can find is
-    a seam that gets filled in the wrong place."""
+    """AD-9's tail order: the protected-path check parks before any route acts, the spend and
+    budget read after it. O-6 of _bmad-output/specs/unattended-hub-run/PLAN.md (2026-10-12):
+    the route is now computed first so the park's reason can name it."""
     body = inspect.getsource(agent_tail.tail)
 
-    assert body.index("5.6") < body.index("route(") < body.index("5.7")
+    assert body.index("_route(") < body.index("protected(") < body.index("_spend_and_budget(")
 
 
 def test_neither_seam_is_answering_anything_yet() -> None:
