@@ -205,8 +205,9 @@ class Step(BaseModel):
     #: What the file declared. `None` means the step is in `unvalidated` (NFR-2); it is
     #: never filled in from `meta.gate_default`.
     gate: Gate | None = None
-    timeout_min: int | None = None
-    stall_min: int | None = None
+    #: A positive integer, or one `{{ }}` resolved when the row is planned.
+    timeout_min: int | str | None = None
+    stall_min: int | str | None = None
     on_fail: OnFailAction | None = None
     redispatch: str | None = None
     redispatch_max: int | None = None

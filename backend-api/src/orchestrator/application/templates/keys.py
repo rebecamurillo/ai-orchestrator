@@ -77,6 +77,7 @@ from orchestrator.application.templates.table import (
     STEP_KEYS,
     TEMPLATE_KEYS,
     is_count,
+    is_minutes,
     is_slug,
     problem,
     unknown_keys,
@@ -256,8 +257,7 @@ def _check_step(
         return errors + _call_timing(node)
     if kind == AGENT_KIND:
         errors += check_agent_extras(node)
-    errors += _check_timeout(node)
-    errors += _check_stall_min(node)
+    errors += _check_minutes(node, "timeout_min") + _check_minutes(node, "stall_min")
     return errors + _check_on_fail(node, earlier_agents)
 
 
@@ -370,16 +370,10 @@ def _call_timing(node: LinedMap) -> list[ValidationError]:
     return errors
 
 
-def _check_timeout(node: LinedMap) -> list[ValidationError]:
-    if "timeout_min" not in node or is_count(node["timeout_min"]):
+def _check_minutes(node: LinedMap, key: str) -> list[ValidationError]:
+    if key not in node or is_minutes(node[key]):
         return []
-    return [problem(key_line(node, "timeout_min", node.line), INVALID_TIMEOUT)]
-
-
-def _check_stall_min(node: LinedMap) -> list[ValidationError]:
-    if "stall_min" not in node or is_count(node["stall_min"]):
-        return []
-    return [problem(key_line(node, "stall_min", node.line), INVALID_TIMEOUT)]
+    return [problem(key_line(node, key, node.line), INVALID_TIMEOUT)]
 
 
 def _check_on_fail(node: LinedMap, earlier_agents: set[str]) -> list[ValidationError]:

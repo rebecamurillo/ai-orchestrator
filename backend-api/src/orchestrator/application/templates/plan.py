@@ -47,6 +47,7 @@ from orchestrator.application.steps.plan_check import (
     URL_KEY,
 )
 from orchestrator.application.templates.branches import BranchAllocator, frame_branch
+from orchestrator.application.templates.defaults import with_defaults
 from orchestrator.application.templates.model import ParsedTemplate
 from orchestrator.application.templates.plan_model import (
     BASE_BRANCH_NOT_FOUND,
@@ -97,7 +98,8 @@ def plan_run(
     """Every row this Run will execute, read from one commit of one branch."""
     reader = PlanReader(git, base=base_dir, url=inputs.repository.url)
     allocator = BranchAllocator(reader)
-    scope = root_scope(inputs)
+    # literal defaults only: an expression default is validated, never substituted
+    scope = with_defaults(tree.root, root_scope(inputs))
     branch = working_branch(tree.root, scope)
     ref = plan_ref(reader, branch, inputs.base_branch)
     name, start = frame_branch(

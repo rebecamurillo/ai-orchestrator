@@ -30,12 +30,14 @@ from typing import Any
 from orchestrator.application.dto import RunInputs
 from orchestrator.application.graph import UNVALIDATED
 from orchestrator.application.steps import CHECKPOINT_KIND, SHELL_KIND, WHEN_KEY
+from orchestrator.application.templates import minutes
 from orchestrator.application.templates.agent_row import (
     PROMPT_EXTRA_KEY,
     agent_extras,
     prompt_extra,
 )
 from orchestrator.application.templates.branches import BranchAllocator, frame_branch, fresh_params
+from orchestrator.application.templates.defaults import with_defaults
 from orchestrator.application.templates.lists import (
     EPICS_KIND,
     ID_KEY,
@@ -86,12 +88,8 @@ UNNUMBERED = 0
 #: The `with` key a `run:` desugars into.
 COMMAND_KEY = "command"
 
-#: The key the planner writes onto every timed row's `with_resolved`. The `agent` keys
-#: are `agent_row`'s, because only that kind has them.
-TIMEOUT_KEY = "timeout_min"
-
-#: The key the planner writes onto agent rows' `with_resolved` for the stall detector.
-STALL_KEY = "stall_min"
+TIMEOUT_KEY = minutes.TIMEOUT_KEY
+STALL_KEY = minutes.STALL_KEY
 
 #: What one loop item is called in a label: the Story by its own id, the epic by its place.
 STORY_LABEL = "story"
@@ -214,7 +212,10 @@ def expand_call(step: Step, call: TemplateCall, frame: Frame, ctx: Context) -> l
             line=call.line,
             item=f"{call.name}@{'latest' if call.version is None else call.version}",
         )
-    scope = {name: resolve(value, frame.scope) for name, value in call.inputs}
+    # literal defaults only: an expression default is validated, never substituted
+    scope = with_defaults(
+        callee, {name: resolve(value, frame.scope) for name, value in call.inputs}
+    )
     declared = working_branch(callee, scope)
     name, start = frame_branch(
         ctx.allocator, declared, ctx.inputs.base_branch, attach=attach_mode(callee, scope)
@@ -354,12 +355,7 @@ def _resolved(step: Step, frame: Frame) -> dict[str, Any]:
     row carries everything that decides what it does; a kind that times nothing writes none.
     """
     resolved = {key: resolve(value, frame.scope) for key, value in step.params}
-    timeout = step.timeout_min if step.timeout_min is not None else step.meta.timeout_default_min
-    if timeout is not None:
-        resolved[TIMEOUT_KEY] = timeout
-    stall = step.stall_min if step.stall_min is not None else step.meta.stall_default_min
-    if stall is not None:
-        resolved[STALL_KEY] = stall
+    resolved.update(minutes.step_limits(step, frame.scope))
     routing = _routing(step, frame)
     if routing is not None:
         resolved[ON_FAIL_KEY] = routing

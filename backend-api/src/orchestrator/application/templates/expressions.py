@@ -40,6 +40,7 @@ from orchestrator.application.templates.lines import (
 from orchestrator.application.templates.model import (
     EXPRESSION_SYNTAX,
     INVALID_STATUS_TOKEN,
+    INVALID_TIMEOUT,
     STATUS_TOKENS,
     UNBOUND_VARIABLE,
     UNKNOWN_FIELD,
@@ -69,6 +70,10 @@ ITEM_TYPE = "item"
 
 #: The step key whose whole grammar is `output.status == <token>`.
 ESCALATE_KEY = "escalate_when"
+
+#: The step keys that take a count of minutes, and the input types an expression there may read.
+MINUTES_KEYS = ("timeout_min", "stall_min")
+MINUTES_TYPES = frozenset({"number", "string"})
 
 #: The braces themselves, for the leftovers an unbalanced pair leaves behind.
 OPEN = "{{"
@@ -154,6 +159,24 @@ def _check_step(node: LinedMap, scope: dict[str, str]) -> list[ValidationError]:
             errors += _check_condition(value, scope, at)
         else:
             errors += _scan(value, scope, at)
+        if key in MINUTES_KEYS:
+            errors += _check_minutes_types(value, scope, at)
+    return errors
+
+
+def _check_minutes_types(value: Any, scope: dict[str, str], line: int) -> list[ValidationError]:
+    """A limit reads a `number` or `string` input, or a field of a loop item, never an entity."""
+    if not isinstance(value, str):
+        return []
+    errors: list[ValidationError] = []
+    for inner in EXPRESSION.findall(value):
+        match = VARIABLE.match(inner)
+        if match is None or match.group(1) not in scope:
+            continue
+        declared, field = scope[match.group(1)], match.group(2)
+        readable = declared == ITEM_TYPE if field else declared in MINUTES_TYPES
+        if not readable:
+            errors.append(problem(line, INVALID_TIMEOUT))
     return errors
 
 

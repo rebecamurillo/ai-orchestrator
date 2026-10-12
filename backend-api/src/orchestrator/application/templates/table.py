@@ -91,6 +91,14 @@ def is_count(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= MIN_COUNT
 
 
+def is_minutes(value: object) -> bool:
+    """A `timeout_min` or `stall_min`: a positive integer literal, or text holding a `{{ }}`.
+
+    What the expression resolves to is only known when a Run is planned.
+    """
+    return is_count(value) or (isinstance(value, str) and "{{" in value)
+
+
 def unknown_keys(mapping: LinedMap, allowed: frozenset[str]) -> list[ValidationError]:
     """One `unknown key` per key the level does not accept, at that key's own line."""
     errors = []
