@@ -13,15 +13,7 @@ does today, read the code and `templates/*.yaml`; for how to develop here, read 
 
 ## What is pending
 
-- `specs/boot-environment-variables-conditional/PLAN.md` — two-tier boot environment
-  contract, planned 2026-09-20, not yet implemented.
-- `specs/unattended-hub-run/PLAN.md` — the client's nine change requests from a 64.8 h hub
-  Run; templates first, nine small code stories, decisions D-1..D-6 open. Planned 2026-10-09.
-- `specs/staged-story-flow/PLAN.md` — the staged story family (plan/implement/review, one
-  session each) beside the build-auto flow; revision 2 of 2026-10-12, decisions D-1..D-5 open.
-- `implementation-artifacts/post-mortem-2026-09-19.md` — orchestration-hardening fixes
-  A–I, saved for future planning; no epic cut yet.
-- `implementation-artifacts/deferred-work.md` — the append-only backlog.
+
 
 ## What lives here mechanically
 
