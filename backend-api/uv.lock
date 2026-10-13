@@ -1026,7 +1026,7 @@ wheels = [
 
 [[package]]
 name = "orchestrator"
-version = "1.0.0b0"
+version = "1.0.0b2"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
