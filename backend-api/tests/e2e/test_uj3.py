@@ -43,7 +43,7 @@ from orchestrator.infrastructure.db import (
     create_session_factory,
 )
 from orchestrator.infrastructure.settings import Settings
-from tests.e2e.helpers.gates_fixture import epic_template_as
+from tests.e2e.helpers.templates import save_epic_pair
 from tests.e2e.helpers.uj3_reads import Uj3Reads
 from tests.e2e.test_answer_signal import detail_of, poll_until, step_status
 from tests.e2e.test_run_creation import PROJECTS, RUNS, clone_check, create_project
@@ -188,10 +188,10 @@ def print_gate_record(report: Any, what: str, detail: dict[str, Any]) -> None:
 
 
 def start_journey_run(api: httpx.Client, gates: Uj3Reads, name: str) -> str:
-    """A fresh gates clone, a Template of this suite's own, and a Run on the `fake` harness.
-
-    `epic_template_as` rather than `epic@1` itself: `test_templates.py` asserts nothing pins
-    `epic@1`, and this suite has to pass twice against the same stack.
+    """A fresh gates clone, a Template pair of this suite's own, and a Run on the `fake`
+    harness. The suite's own fixture rather than a shipped Template (Operator ruling,
+    2026-10-15): nothing here follows `templates/*.yaml`, and the pair is saved under names
+    no earlier run can have taken, so the suite passes twice against the same stack.
     """
     project_id = create_project(api)
     created = api.post(
@@ -210,12 +210,7 @@ def start_journey_run(api: httpx.Client, gates: Uj3Reads, name: str) -> str:
     repository_id = str(created.json()["id"])
     clone_check(api, repository_id)
 
-    template_name = f"e2e-{name}-{uuid4().hex}"
-    saved = api.post(
-        f"/api/v1/templates/{template_name}/versions",
-        json={"yaml": epic_template_as(template_name)},
-    )
-    assert saved.status_code == HTTP_CREATED, saved.text
+    template_name, _ = save_epic_pair(api, f"e2e-{name}")
 
     started = api.post(
         RUNS,

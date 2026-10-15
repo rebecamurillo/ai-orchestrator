@@ -1,0 +1,63 @@
+name: @NAME@
+version: 1
+description: e2e fixture — one story to a verified commit
+inputs:
+  project:     { type: project,    required: true }
+  repository:  { type: repository, required: true }
+  branch:      { type: string,     required: true }
+  spec_folder: { type: path,       required: true }
+  story:       { type: item,       required: true }
+  harness:     { type: enum, values: [claude, codex, local], default: claude }
+  model:       { type: string,     required: false }
+steps:
+  - id: sync
+    uses: git.sync
+    gate: deterministic
+
+  - id: build
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: staged-implement
+      args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
+      prompt_extra: "{{story.invoke_dev_with}}"
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+      halt: "Halt after planning."
+    expect:
+      files: ["{{spec_folder}}/stories/{{story.id}}-*.md"]
+      success: [done]
+      blocked: [blocked]
+      checkpoint: [ready-for-dev]
+      misconfigured_when:
+        - no subagents
+        - no stories.yaml found
+        - story id not found in stories.yaml
+        - version-control metadata not writable
+        - no epic spec found
+        - unrecognized status in existing story file
+        - ambiguous story file match
+    retry:
+      max: 2
+      prompt: "No story file with a terminal status was found at {{spec_folder}}/stories/{{story.id}}-*.md. Finish the story and write that file, or set status: blocked with the reason."
+      resume_session: true
+    pause_when: "story.spec_checkpoint"
+    timeout_min: 90
+    gate: liveness
+
+  - id: verify
+    run: "{{repository.unit_test_command}}"
+    on_fail: { redispatch: build, max: 1 }
+    timeout_min: 30
+    gate: deterministic
+
+  - id: commit-guard
+    uses: git.commit
+    with: { message: "story {{story.id}}: {{story.title}} (orchestrator)" }
+    gate: deterministic

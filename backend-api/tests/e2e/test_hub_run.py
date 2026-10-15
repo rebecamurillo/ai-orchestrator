@@ -5,7 +5,7 @@ H1..H4 built the pieces — `git.submodule`, `workdir` on `git.commit`/`git.push
 on the `agent` kind's dual-tree attempt tracking — and each has unit coverage of its own.
 What none of them proves is that the *whole* workflow holds together against a real git
 process: a hub repository whose `repos/alpha` and `repos/beta` submodules are two entirely
-separate origins, one `initiative-hub@1` Run that walks both epics on a single shared
+separate origins, one hub-Run that walks both epics on a single shared
 branch, dispatching each epic's Story *inside* its own member checkout while every spec
 artifact — `SPEC.md`, `stories.yaml`, the Story files, the spec-gate result, the retro —
 stays at the hub. The model this journey exists to prove: code lands on each member's own
@@ -24,15 +24,11 @@ every other Epic 6 suite, and additionally needs `GIT_ALLOW_PROTOCOL=file` on `b
 `tests/e2e/helpers/hub_fixture.py`'s own module docstring for why the second variable exists
 and why it is e2e-only.
 
-**Nothing here pins shipped template content.** This journey *runs* `initiative-hub@1`,
-`initiative-hub-epic@1` and `initiative-hub-story@1` by their shipped names and latest
-stored version, resolved from the templates API rather than hardcoded — that is what the
-story exists to prove, and hard rule 6's "no test may pin shipped template content" is about
-step ids, ordering, counts and graph shapes a test asserts on, not about running the
-Template at all. The row paths asserted below are exactly the ones this journey polls for,
-and no more: neither `initiative-hub@1` nor its callees are referenced by
-`test_templates.py`'s frozen `pinned_by == 0` assertions (those name `epic@1` alone), so
-pinning them here breaks nothing.
+**The workflow it runs is the suite's own** (Operator ruling, 2026-10-15: no test reads,
+runs or asserts on the shipped `templates/*.yaml`). `tests/e2e/templates/hub*.yaml` are
+posted under names no earlier run can have taken — leaf first, so each caller's unpinned
+call resolves — and the row paths asserted below are that fixture's, exactly the ones this
+journey polls for. Before this date the journey ran `initiative-hub@1` by its shipped name.
 """
 
 from __future__ import annotations
@@ -46,16 +42,13 @@ import pytest
 
 from orchestrator.infrastructure.settings import Settings
 from tests.e2e.helpers.hub_fixture import HubFixture, HubRepos
+from tests.e2e.helpers.templates import save_hub_trio
 from tests.e2e.test_answer_signal import poll_until, step_status
-from tests.e2e.test_run_creation import PROJECTS, RUNS, TEMPLATES, clone_check, create_project
+from tests.e2e.test_run_creation import PROJECTS, RUNS, clone_check, create_project
 
 HTTP_OK = 200
 HTTP_CREATED = 201
 TIMEOUT_SECONDS = 10.0
-
-#: The shipped Templates this journey runs, by name — resolved to their latest stored
-#: version through the templates API, never hardcoded (see the module docstring).
-TEMPLATE_NAME = "initiative-hub"
 
 #: The Run's own inputs (H3's own convention: `branch` shared by the hub and every member,
 #: `initiative_folder` naming `epics.yaml` and the two epics' spec folders beneath it).
@@ -68,7 +61,7 @@ BETA_SPEC_FOLDER = f"{INITIATIVE_FOLDER}/beta-epic"
 ALPHA_WORKDIR = "repos/alpha"
 BETA_WORKDIR = "repos/beta"
 
-# ── row paths (`initiative-hub-epic@1`/`initiative-hub-story@1` inlined under `epics[i]`,
+# ── row paths (the hub-epic/hub-story fixtures inlined under `epics[i]`,
 # `rows.py`'s own "a call contributes no segment inside a loop") ──────────────────────────
 CHECKOUT = "checkout"
 SUBMODULES = "submodules"
@@ -161,16 +154,6 @@ def report(request: pytest.FixtureRequest) -> Any:
     return write
 
 
-def latest_version(api: httpx.Client, name: str) -> int:
-    """The highest stored version of a shipped Template, resolved through the API rather
-    than hardcoded — see the module docstring on why this journey may pin the name at all."""
-    response = api.get(f"{TEMPLATES}/{name}/versions")
-    assert response.status_code == HTTP_OK, response.text
-    items = response.json()["items"]
-    assert items, f"{name} has no stored versions"
-    return max(items)
-
-
 def origin_path(url: str) -> str:
     """The bare origin's filesystem path, for a direct `git -C` read — `HubRepos`' own URLs
     are `file://{path}`, so stripping the scheme is the path `-C` wants."""
@@ -182,7 +165,7 @@ def origin_path(url: str) -> str:
 def start_hub_run(
     api: httpx.Client, hub: HubFixture, *, poison_alpha: bool = False
 ) -> tuple[str, HubRepos]:
-    """A fresh hub-Run fixture and a Run of `initiative-hub@1`'s latest stored version."""
+    """A fresh hub-Run fixture, the hub trio saved under fresh names, and a Run of the hub."""
     project_id = create_project(api)
     repos = hub.make_hub(poison_alpha=poison_alpha)
     # `tests/**` is listed, not assumed: since the Operator decision of 2026-10-06 a
@@ -196,12 +179,12 @@ def start_hub_run(
     repository_id = str(created.json()["id"])
     clone_check(api, repository_id)
 
-    version = latest_version(api, TEMPLATE_NAME)
+    hub_name, _, _ = save_hub_trio(api, "e2e-hub")
     started = api.post(
         RUNS,
         json={
-            "template_name": TEMPLATE_NAME,
-            "template_version": version,
+            "template_name": hub_name,
+            "template_version": 1,
             "project_id": project_id,
             "repository_id": repository_id,
             "base_branch": BASE_BRANCH,
@@ -425,7 +408,7 @@ def test_beta_epic_ran_sequentially_after_alpha_and_the_run_ends_done(
     continued: dict[str, Any],
 ) -> None:
     """(d) sequential, and (e) terminal: beta-epic's whole frame is `done`, and so is the
-    Run — list order is the dependency `initiative-hub@1`'s own `epics` loop states."""
+    Run — list order is the dependency the hub fixture's own `epics` loop states."""
     detail = continued["detail"]
     assert continued["signalled"] == "running"
     assert detail["run"]["status"] == "done"

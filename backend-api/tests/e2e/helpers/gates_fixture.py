@@ -13,6 +13,10 @@ script runs through `docker compose exec -T backend-api`. Each route is tried in
 failure of both is reported with what each said — never skipped, because a gate that skips
 when the stack is missing reports success for a suite that ran nothing.
 
+**The workflow it runs is the suite's own.** `tests/e2e/helpers/templates.py` posts the
+test-owned epic and story fixtures (Operator ruling, 2026-10-15: no test follows
+`templates/*.yaml`); this module makes only the repository.
+
 **The `_bmad/` manifest is written here, not committed.** Pre-flight requires
 `_bmad/_config/manifest.yaml` at `plan_ref` stating exactly this instance's `BMAD_VERSION`
 (AD-16), and a committed one would go stale at the next pin bump and disable every Run
@@ -44,27 +48,6 @@ SOURCE_HERE = str(REPO_ROOT / "fixtures" / "gates-repo")
 SOURCE_IN_CONTAINER = "/app/fixtures/gates-repo"
 
 BRANCH = "main"
-
-#: The shipped Template this fixture is run through, and the line naming it.
-EPIC_TEMPLATE = REPO_ROOT / "templates" / "epic.yaml"
-NAME_LINE = "name: epic\n"
-
-
-def epic_template_as(name: str) -> str:
-    """`templates/epic.yaml` under a name of this suite's own.
-
-    A Run cannot be started on `epic@1` itself: `pinned_versions` records every version a
-    Run pinned, root or callee, and `tests/e2e/test_templates.py` asserts that nothing pins
-    `epic@1` — an assertion that has to keep holding when this suite runs twice against the
-    same stack. Saving the same plan under a fresh name pins that name instead, and leaves
-    the shipped Template's own read model exactly as the frozen test found it. The plan is
-    copied rather than written out here so this fixture cannot drift from the real one.
-    """
-    yaml = EPIC_TEMPLATE.read_text()
-    if NAME_LINE not in yaml:
-        pytest.fail(f"{EPIC_TEMPLATE} no longer opens with {NAME_LINE!r}")
-    return yaml.replace(NAME_LINE, f"name: {name}\n", 1)
-
 
 #: One script, run either here or inside the container: `$1` is the directory, `$2` the
 #: repository name, `$3` the fixture source, `$4` the `BMAD_VERSION` the manifest states.

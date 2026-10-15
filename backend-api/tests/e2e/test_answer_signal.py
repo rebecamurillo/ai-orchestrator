@@ -28,7 +28,8 @@ import httpx
 import pytest
 
 from orchestrator.infrastructure.settings import Settings
-from tests.e2e.helpers.gates_fixture import GatesFixture, epic_template_as
+from tests.e2e.helpers.gates_fixture import GatesFixture
+from tests.e2e.helpers.templates import save_epic_pair
 from tests.e2e.test_run_creation import (
     PROJECTS,
     RUNS,
@@ -128,12 +129,7 @@ def parked(api: httpx.Client, gates: GatesFixture, test_mode: None) -> Iterator[
     repository_id = str(created.json()["id"])
     clone_check(api, repository_id)
 
-    template_name = f"e2e-gates-{uuid4().hex}"
-    saved = api.post(
-        f"/api/v1/templates/{template_name}/versions",
-        json={"yaml": epic_template_as(template_name)},
-    )
-    assert saved.status_code == HTTP_CREATED, saved.text
+    template_name, _ = save_epic_pair(api, "e2e-gates")
 
     started = api.post(
         RUNS,

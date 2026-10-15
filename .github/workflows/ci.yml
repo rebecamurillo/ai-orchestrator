@@ -157,12 +157,18 @@ jobs:
         # flag from `docker-compose.e2e.yml` — so without this line every scenario driving a
         # scripted harness fails here while passing locally. It is a test-only switch and no
         # credential: `.env.example` ships it unset, and production never sets it.
+        #
+        # INIT_TEMPLATE names what `POST /repositories/{id}/init` dispatches. The e2e suite
+        # stores its own repo-init fixture under `e2e-repo-init` (Operator ruling 2026-10-15:
+        # no test follows a shipped Template), the same value `docker-compose.e2e.yml` gives
+        # `make e2e`'s stack.
         run: |
           cp .env.example .env
           key=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
           sed -i "s|^ORCHESTRATOR_SECRET_KEY=.*|ORCHESTRATOR_SECRET_KEY=$key|" .env
           sed -i "s|^POSTGRES_DB=.*|POSTGRES_DB=orchestrator_e2e|" .env
           sed -i "s|^ORCH_TEST_MODE=.*|ORCH_TEST_MODE=1|" .env
+          sed -i "s|^INIT_TEMPLATE=.*|INIT_TEMPLATE=e2e-repo-init|" .env
       - name: Start postgres
         run: docker compose up -d --wait postgres
       - name: Start backend-api from source
@@ -175,6 +181,16 @@ jobs:
         # repository's own `templates/` stands in for it. Without that last stand-in, seeding
         # reads an absent directory, finds nothing, and every shipped Template answers 404
         # while start-up still reports success.
+        #
+        # Two more since the installed-skill pre-flight became a `fail` (2026-09-24, "an
+        # unresolvable skill must fail, not improvise"): HARNESS_SCRIPTS_DIR is
+        # `/app/scripts/harness`, where start-up shells each harness script's `skills` verb
+        # to write the skill catalog, and AGENT_HOME is `/home/agent`, where that catalog
+        # lands — neither exists on the runner, so without these two stand-ins start-up logs
+        # `operator skills install failed`, no manifest is ever written, and `POST /runs`
+        # answers 409 `catalog unavailable` for every Template with a `skill:` row (the e2e
+        # fixtures dispatch the internal skills `ia-agents-skills/` holds, which the verb
+        # copies and names in the manifest — no image, no BMAD install needed).
         run: |
           set -a; . ./.env; set +a
           export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
@@ -182,6 +198,10 @@ jobs:
           mkdir -p "$WORK_DIR"
           export TEMPLATES_DIR="$GITHUB_WORKSPACE/templates"
           test -d "$TEMPLATES_DIR"
+          export HARNESS_SCRIPTS_DIR="$GITHUB_WORKSPACE/scripts/harness"
+          test -x "$HARNESS_SCRIPTS_DIR/claude.sh"
+          export AGENT_HOME="${RUNNER_TEMP:-/tmp}/agent-home"
+          mkdir -p "$AGENT_HOME"
           uv run --locked --directory backend-api python -m orchestrator.main > backend-api.log 2>&1 &
           for _ in $(seq 1 60); do
             curl -fsS http://127.0.0.1:8000/healthz && exit 0

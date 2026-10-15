@@ -1,12 +1,18 @@
 """`POST /repositories/{id}/init` end to end (SPEC CAP-10, FR-30): the epic's own success
 signal, from the Project screen's side rather than `POST /runs`'s.
 
-`tests/e2e/test_repo_init.py` already proves `repo-init@1` runs `plan -> checkout -> install
--> commit -> push -> link` for real; this module proves the two things only this endpoint
+`tests/e2e/test_repo_init.py` already proves the repo-init workflow runs `plan -> checkout ->
+install -> commit -> push -> link` for real; this module proves the two things only this endpoint
 adds: the two refusals (a failed clone check, a `repo-init` Run already going), and the
 completion hook — that a finished Run re-runs the Repository's own clone check, so `GET
 /projects/{id}` reads the installed version and the compare link without the Operator
 re-running the check by hand (the brief's own `[ASSUMPTION]`), and lists the Run `DON`.
+
+**The endpoint dispatches whatever `INIT_TEMPLATE` names**, by name and latest version. The
+gate's stacks name `e2e-repo-init` (`docker-compose.e2e.yml`, the `e2e-api` job), and this
+module stores the suite's own `tests/e2e/templates/repo-init.yaml` under it before the
+first `POST` (Operator ruling, 2026-10-15: no test reads, runs or asserts on the shipped
+`templates/*.yaml`). A stack configured otherwise fails the `template` assertion by name.
 """
 
 from __future__ import annotations
@@ -20,6 +26,7 @@ import httpx
 import pytest
 
 from orchestrator.infrastructure.settings import Settings
+from tests.e2e.helpers.templates import E2E_INIT_TEMPLATE, REPO_INIT, ensure_named
 from tests.e2e.test_clone_check import Fixtures
 from tests.e2e.test_run_creation import clone_check, create_project, create_repository
 
@@ -34,7 +41,6 @@ REPOSITORIES = "/api/v1/repositories"
 RUN_TIMEOUT_SECONDS = 900.0
 POLL_INTERVAL_SECONDS = 2.0
 
-TEMPLATE = "repo-init"
 DONE = "DON"
 
 
@@ -52,6 +58,13 @@ def api(stack: str, bearer: dict[str, str]) -> Iterator[httpx.Client]:
 @pytest.fixture(scope="module")
 def fixtures(settings: Settings) -> Fixtures:
     return Fixtures(settings.work_dir)
+
+
+@pytest.fixture(scope="module")
+def init_template(api: httpx.Client) -> str:
+    """`name@version` of what the stack's `INIT_TEMPLATE` resolves to once the fixture is
+    stored under it — what every Run this module starts must read as its `template`."""
+    return f"{E2E_INIT_TEMPLATE}@{ensure_named(api, REPO_INIT, E2E_INIT_TEMPLATE)}"
 
 
 def init_path(repository_id: str) -> str:
@@ -139,7 +152,9 @@ def cancel_run(api: httpx.Client, run_id: str) -> None:
 
 
 @pytest.fixture(scope="module")
-def initialised(api: httpx.Client, fixtures: Fixtures) -> Iterator[dict[str, Any]]:
+def initialised(
+    api: httpx.Client, fixtures: Fixtures, init_template: str
+) -> Iterator[dict[str, Any]]:
     """A Repository with no method, initialised end to end through this story's own route.
     The `finally` cancel (Operator revision, 2026-09-16) releases the queue slot a failed
     drive would otherwise hold for the rest of the stack's life (AD-12)."""
@@ -157,6 +172,7 @@ def initialised(api: httpx.Client, fixtures: Fixtures) -> Iterator[dict[str, Any
             "run_id": run_id,
             "status": wait_until_terminal(api, run_id),
             "checked_before": checked_before,
+            "template": init_template,
         }
     finally:
         cancel_run(api, run_id)
@@ -172,7 +188,7 @@ def test_the_completion_hook_re_runs_the_clone_check(
     """The brief's own `[ASSUMPTION: a completion hook re-runs the clone check]`, proven by
     the check's own timestamp advancing with no `POST .../clone-check` call from this test.
 
-    `bmad_version` itself stays `missing`: `repo-init@1` pushes `_bmad/` to `chore/bmad-init`
+    `bmad_version` itself stays `missing`: the fixture pushes `_bmad/` to `chore/bmad-init`
     only (AD-16), and the clone check reads `repository.default_branch` (FR-30's own words,
     AD-16's own "informational" on the Repository row) — `main` never changes until the
     Operator merges the compare link this Run's own row shows, which this vertical slice
@@ -194,14 +210,14 @@ def test_the_row_shows_the_compare_link_and_the_run_reads_done(
     run = run_of(project, initialised["run_id"])
 
     assert run["token"] == DONE
-    assert run["template"] == "repo-init@1"
+    assert run["template"] == initialised["template"]
     # a local `file://` origin is not GitHub (`test_repo_init.py`'s own finding): `pr.link`
     # records no compare URL for it, so this Run's own list carries none either
     assert run["compare_urls"] == []
 
 
 def test_a_second_init_while_the_first_is_still_going_is_refused(
-    api: httpx.Client, fixtures: Fixtures
+    api: httpx.Client, fixtures: Fixtures, init_template: str
 ) -> None:
     project_id = create_project(api)
     origin = fixtures.make()

@@ -1,4 +1,4 @@
-"""`repo-init@1`'s AD-16 "only" clause: `_bmad/` and the spec folders, nothing else.
+"""The repo-init workflow's AD-16 "only" clause: `_bmad/` and the spec folders, nothing else.
 
 `test_repo_init.py::test_no_skill_folder_was_committed` checks two named prefixes —
 `.claude/skills/bmad-*` and `.agents/skills/bmad-*` — are absent from the commit. That is
@@ -10,7 +10,9 @@ neither ignored prefix and forty-nine files landed in the commit anyway — invi
 that only ever asked about the two skill patterns by name. This module asks the general
 question instead, so a fourth tool, or a renamed one, cannot slip through the same gap again.
 
-This runs its own `repo-init@1`, the same way `test_repo_init.py` does, because the "only"
+This runs its own copy of the suite's repo-init fixture (`tests/e2e/templates/repo-init.yaml`,
+Operator ruling 2026-10-15: no test follows a shipped Template), the same way
+`test_repo_init.py` does, because the "only"
 claim can only be checked over the real `bmad-method` installer's real output, not over a
 fake: unit coverage of `_ignore_skill_folders` (`tests/unit/test_bmad_install_executor.py`)
 already proves the three lines it knows about are appended correctly, but it cannot prove
@@ -36,11 +38,11 @@ import pytest
 
 from orchestrator.application.steps.bmad_install import GITIGNORE
 from orchestrator.infrastructure.settings import Settings
+from tests.e2e.helpers.templates import save_repo_init
 from tests.e2e.test_clone_check import Fixtures
 from tests.e2e.test_repo_init import (
     NEEDS_YOU,
     SCRIPTED_HARNESS,
-    TEMPLATE,
     continued,
     name_of,
     read_back,
@@ -86,7 +88,7 @@ def origin(api: httpx.Client, fixtures: Fixtures) -> str:
 
 @pytest.fixture(scope="module")
 def initialised(api: httpx.Client, origin: str, settings: Settings) -> dict[str, Any]:
-    """`repo-init@1`, run to completion, exactly as `test_repo_init.py` runs it.
+    """The repo-init fixture, run to completion, exactly as `test_repo_init.py` runs it.
 
     Including its one stop: the `context-review` checkpoint parks the Run before the commit
     this module reads, so a fixture that only waited would read a branch that was never
@@ -96,7 +98,7 @@ def initialised(api: httpx.Client, origin: str, settings: Settings) -> dict[str,
     repository_id = create_repository(api, project_id, origin)
     clone_check(api, repository_id)
     payload = run_payload(
-        TEMPLATE,
+        save_repo_init(api, "e2e-repo-init-scope"),
         repository_id,
         project_id=project_id_of(api, repository_id),
         harness=SCRIPTED_HARNESS,

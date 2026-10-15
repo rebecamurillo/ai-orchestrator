@@ -2,21 +2,27 @@
 
 The unit suite proves the shape over the fake repository. What only the real stack settles
 is that the route is mounted where the contract says, behind the one credential, and that the
-graph is built from the text the real seeding actually stored — through the real repository,
-the real `TEMPLATES_DIR` — rather than from a fixture that happens to agree with it.
+graph is built from the text the real repository actually stored.
 
-Every read here is a read: no `POST`, no name of its own, nothing to clean up, so the suite
-passes as many times against one stack as it is run.
+Revised 2026-10-15 (Operator ruling: no test reads, runs or asserts on the shipped
+`templates/*.yaml`; a test that needs a workflow brings its own). Every graph here is read
+off the suite's own fixtures — `tests/e2e/templates/`, posted under names no earlier run can
+have taken — so the golden shapes below pin files this suite owns and nothing the Operator
+edits. Before this date they pinned `epic@1`, `story@1` and `repo-init@1`.
 
-`epic@1` is the case worth asserting whole. It is the only shipped Template with all four
-features at once — steps before and after a loop, a collapsed call, and an item checkpoint —
-so its node list, its group and its edges are pinned here exactly as the story's golden shape
-states them.
+The epic fixture is the case worth asserting whole: steps before and after a loop, a collapsed
+unpinned call, and an item checkpoint, all in one file.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from itertools import pairwise
+
 import httpx
+import pytest
+
+from tests.e2e.helpers.templates import save_epic_pair, save_repo_init
 
 HTTP_OK = 200
 HTTP_NOT_FOUND = 404
@@ -25,7 +31,7 @@ TEMPLATES = "/api/v1/templates"
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
 
-#: `repo-init@1` ships seven steps and no loop.
+#: The repo-init fixture: eight steps and no loop.
 REPO_INIT_NODES = [
     "checkout",
     "setup",
@@ -37,33 +43,51 @@ REPO_INIT_NODES = [
     "link",
 ]
 
+#: The epic fixture's node ids, in file order.
+EPIC_NODES = [
+    "checkout",
+    "setup",
+    "baseline",
+    "spec-gate",
+    "stories.story",
+    "stories.after",
+    "gen-e2e",
+    "commit-e2e",
+    "e2e",
+    "retro",
+    "commit-retro",
+    "push",
+    "link",
+    "done-checkpoint",
+]
 
-def test_epic_1_answers_the_golden_shape(authenticated: httpx.Client) -> None:
-    """Operator revision 2026-09-15: the quality-gate reorder (b0f3898 — unit on story,
-    e2e on epic) gave `epic@1` a `setup` step and an `e2e` step; this golden shape follows
-    the shipped file it mirrors. Stories 4-4..4-7 (2026-09-17) added `spec-gate`, the
-    `gen-e2e`/`commit-e2e` pair, `retro`/`commit-retro` and the final `done-checkpoint`;
-    the shape follows again."""
-    response = authenticated.get(f"{TEMPLATES}/epic/1/graph")
 
-    assert response.status_code == HTTP_OK
-    body = response.json()
-    assert [node["id"] for node in body["nodes"]] == [
-        "checkout",
-        "setup",
-        "baseline",
-        "spec-gate",
-        "stories.story",
-        "stories.after",
-        "gen-e2e",
-        "commit-e2e",
-        "e2e",
-        "retro",
-        "commit-retro",
-        "push",
-        "link",
-        "done-checkpoint",
-    ]
+@pytest.fixture(scope="module")
+def api(stack: str, bearer: dict[str, str]) -> Iterator[httpx.Client]:
+    with httpx.Client(base_url=stack, headers=bearer, timeout=10.0) as client:
+        yield client
+
+
+@pytest.fixture(scope="module")
+def names(api: httpx.Client) -> dict[str, str]:
+    """The suite's own epic, story and repo-init, stored once for the module."""
+    epic, story = save_epic_pair(api, "e2e-graph")
+    return {"epic": epic, "story": story, "repo_init": save_repo_init(api, "e2e-graph-init")}
+
+
+def graph_of(api: httpx.Client, name: str, version: int = 1) -> dict[str, object]:
+    response = api.get(f"{TEMPLATES}/{name}/{version}/graph")
+    assert response.status_code == HTTP_OK, response.text
+    body: dict[str, object] = response.json()
+    return body
+
+
+def test_the_epic_fixture_answers_its_golden_shape(
+    api: httpx.Client, names: dict[str, str]
+) -> None:
+    body = graph_of(api, names["epic"])
+
+    assert [node["id"] for node in body["nodes"]] == EPIC_NODES
     assert body["groups"] == [
         {
             "id": "stories",
@@ -73,36 +97,28 @@ def test_epic_1_answers_the_golden_shape(authenticated: httpx.Client) -> None:
         }
     ]
     assert body["edges"] == [
-        {"from": "checkout", "to": "setup"},
-        {"from": "setup", "to": "baseline"},
-        {"from": "baseline", "to": "spec-gate"},
-        {"from": "spec-gate", "to": "stories.story"},
-        {"from": "stories.story", "to": "stories.after"},
-        {"from": "stories.after", "to": "gen-e2e"},
-        {"from": "gen-e2e", "to": "commit-e2e"},
-        {"from": "commit-e2e", "to": "e2e"},
-        {"from": "e2e", "to": "retro"},
-        {"from": "retro", "to": "commit-retro"},
-        {"from": "commit-retro", "to": "push"},
-        {"from": "push", "to": "link"},
-        {"from": "link", "to": "done-checkpoint"},
+        {"from": before, "to": after} for before, after in pairwise(EPIC_NODES)
     ]
 
 
-def test_epic_1_collapses_its_call_to_story(authenticated: httpx.Client) -> None:
-    body = authenticated.get(f"{TEMPLATES}/epic/1/graph").json()
+def test_the_epic_fixture_collapses_its_unpinned_call_to_the_story(
+    api: httpx.Client, names: dict[str, str]
+) -> None:
+    body = graph_of(api, names["epic"])
 
     call = next(node for node in body["nodes"] if node["id"] == "stories.story")
     assert call["kind"] == "template"
-    # Operator decision 2026-10-02 (editable workflows, unpinned callees): the shipped `epic`
-    # file no longer pins `story`, so the call resolves at plan time and reads `version: None`
-    assert call["call"] == {"name": "story", "version": None}
-    assert call["label"] == "story@latest"
+    # an unpinned call resolves at plan time and reads `version: None` (Operator decision
+    # 2026-10-02, editable workflows)
+    assert call["call"] == {"name": names["story"], "version": None}
+    assert call["label"] == f"{names['story']}@latest"
     assert call["gate"] is None
 
 
-def test_epic_1_marks_its_item_checkpoint_human(authenticated: httpx.Client) -> None:
-    body = authenticated.get(f"{TEMPLATES}/epic/1/graph").json()
+def test_the_epic_fixture_marks_its_item_checkpoint_human(
+    api: httpx.Client, names: dict[str, str]
+) -> None:
+    body = graph_of(api, names["epic"])
 
     after = next(node for node in body["nodes"] if node["id"] == "stories.after")
     assert after["kind"] == "checkpoint"
@@ -110,61 +126,59 @@ def test_epic_1_marks_its_item_checkpoint_human(authenticated: httpx.Client) -> 
     assert after["human"] is True
 
 
-def test_story_1_marks_its_agent_step(authenticated: httpx.Client) -> None:
-    body = authenticated.get(f"{TEMPLATES}/story/1/graph").json()
+def test_the_story_fixture_marks_its_agent_step(api: httpx.Client, names: dict[str, str]) -> None:
+    body = graph_of(api, names["story"])
 
     assert [node["id"] for node in body["nodes"] if node["agent"]] == ["build"]
     build = next(node for node in body["nodes"] if node["id"] == "build")
     assert build["gate"] == "liveness"
 
 
-def test_repo_init_1_is_eight_nodes_chained_with_no_group(authenticated: httpx.Client) -> None:
-    body = authenticated.get(f"{TEMPLATES}/repo-init/1/graph").json()
+def test_the_repo_init_fixture_is_eight_nodes_chained_with_no_group(
+    api: httpx.Client, names: dict[str, str]
+) -> None:
+    body = graph_of(api, names["repo_init"])
 
     assert [node["id"] for node in body["nodes"]] == REPO_INIT_NODES
     assert body["groups"] == []
     assert len(body["edges"]) == len(REPO_INIT_NODES) - 1
 
 
-# Revised 2026-09-30 (Operator decision: the mono-repo `initiative` and `story-run` workflows
-# are retired to `templates/drafts/`, no longer seeded). The two `initiative@1` reads that
-# stood here — its loop group with the `.after` item checkpoint, and its collapsed call to
-# `epic@1` — now live in `test_template_graph_loop.py`, asserted over a caller of that suite's
-# own so no shipped file is pinned (hard rule 6).
-
-
-def test_no_stored_node_id_carries_an_index(authenticated: httpx.Client) -> None:
-    """AD-15: an id is joinable to `unvalidated` and stable across items. Revised 2026-09-30
-    (Operator decision: `initiative` retired to `templates/drafts/`): every stored version
-    the stack lists, shipped or posted, rather than four listed names."""
-    listed = authenticated.get(TEMPLATES).json()["items"]
-    assert listed
+def test_no_stored_node_id_carries_an_index(api: httpx.Client, names: dict[str, str]) -> None:
+    """AD-15: an id is joinable to `unvalidated` and stable across items — over every stored
+    version the stack lists, this module's own fixtures among them."""
+    listed = api.get(TEMPLATES).json()["items"]
+    assert {item["name"] for item in listed} >= set(names.values())
 
     for item in listed:
         for version in item["versions"]:
-            body = authenticated.get(f"{TEMPLATES}/{item['name']}/{version}/graph").json()
+            body = graph_of(api, item["name"], version)
 
             for node in body["nodes"]:
                 assert "[" not in node["id"] and "]" not in node["id"], node
                 assert not any(part.isdigit() for part in node["id"].split(".")), node
 
 
-def test_an_unknown_version_is_a_404_problem_document(authenticated: httpx.Client) -> None:
-    response = authenticated.get(f"{TEMPLATES}/epic/9/graph")
+def test_an_unknown_version_is_a_404_problem_document(
+    api: httpx.Client, names: dict[str, str]
+) -> None:
+    response = api.get(f"{TEMPLATES}/{names['epic']}/9/graph")
 
     assert response.status_code == HTTP_NOT_FOUND
     assert response.headers["content-type"].startswith(PROBLEM_MEDIA_TYPE)
 
 
-def test_an_unknown_name_is_a_404_problem_document(authenticated: httpx.Client) -> None:
-    response = authenticated.get(f"{TEMPLATES}/does-not-exist/1/graph")
+def test_an_unknown_name_is_a_404_problem_document(api: httpx.Client) -> None:
+    response = api.get(f"{TEMPLATES}/does-not-exist/1/graph")
 
     assert response.status_code == HTTP_NOT_FOUND
     assert response.headers["content-type"].startswith(PROBLEM_MEDIA_TYPE)
 
 
-def test_without_the_bearer_the_graph_is_refused(client: httpx.Client) -> None:
-    response = client.get(f"{TEMPLATES}/epic/1/graph")
+def test_without_the_bearer_the_graph_is_refused(
+    client: httpx.Client, names: dict[str, str]
+) -> None:
+    response = client.get(f"{TEMPLATES}/{names['epic']}/1/graph")
 
     assert response.status_code == httpx.codes.UNAUTHORIZED
     assert response.headers["content-type"].startswith(PROBLEM_MEDIA_TYPE)

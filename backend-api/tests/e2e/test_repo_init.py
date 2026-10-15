@@ -1,4 +1,6 @@
-"""`repo-init@1` end to end: the epic's headline acceptance (SPEC CAP-8, FR-30, AD-16).
+"""The repo-init workflow end to end: the epic's headline acceptance (SPEC CAP-8, FR-30,
+AD-16) — over the suite's own `tests/e2e/templates/repo-init.yaml` (Operator ruling,
+2026-10-15: no test reads, runs or asserts on the shipped `templates/*.yaml`).
 
 Everything the six git kinds decide is proven over fakes in the unit suite. What only the
 running stack settles is that they are *real*: that the image carries a `git` and an `npx`
@@ -22,8 +24,8 @@ ends `done` with `no compare link for this host`. That the compare URL itself is
 correctly is asserted against a `github.com` URL in `tests/unit/test_pr_link_executor.py`,
 where it can be checked without owning a GitHub repository.
 
-**The Run stops once, on purpose.** `repo-init@1`'s `context` step dispatches
-`bmad-project-context`, whose output is the repository's `AGENTS.md`, and the
+**The Run stops once, on purpose.** The fixture's `context` step dispatches an agent
+whose declared output is the repository's `AGENTS.md`, and the
 `context-review` step after it is a `checkpoint`: the Operator reads the block before it is
 committed. So this module does not wait for a Run that runs straight through — it waits for
 the park, answers it with *Continue*, and only then waits for `done`. The dispatch itself is
@@ -53,6 +55,7 @@ from orchestrator.infrastructure.db import (
     create_session_factory,
 )
 from orchestrator.infrastructure.settings import Settings
+from tests.e2e.helpers.templates import save_repo_init
 from tests.e2e.test_clone_check import FIXTURE_DIRECTORY, REPO_ROOT, Fixtures
 from tests.e2e.test_run_creation import (
     RUNS,
@@ -67,16 +70,16 @@ HTTP_CREATED = 201
 HTTP_OK = 200
 TIMEOUT_SECONDS = 10.0
 
-#: The shipped Template this module runs, and the branch it works on (AD-16). A Run never
-#: works on the name the Template declares: it works on the first ordinal of it the origin
-#: does not already hold (`templates/branches.py`), and this module's origin is made fresh,
-#: so it is always the first.
-TEMPLATE = "repo-init"
+#: The branch the fixture works on (AD-16). A Run never works on the name the Template
+#: declares: it works on the first ordinal of it the origin does not already hold
+#: (`templates/branches.py`), and this module's origin is made fresh, so it is always the
+#: first.
 DECLARED_BRANCH = "chore/bmad-init"
 INIT_BRANCH = f"{DECLARED_BRANCH}-1"
 COMMIT_SUBJECT = "chore: initialise BMAD method (orchestrator)"
 
-#: The rows `repo-init@1` plans, in order (`templates/repo-init.yaml` plus AD-7's row 1).
+#: The rows the fixture plans, in order (`tests/e2e/templates/repo-init.yaml` plus AD-7's
+#: row 1).
 #: `setup` is the declared install row (Operator decision, 2026-09-27); this module's
 #: repository declares no `install_command`, so it plans `skipped · no command`.
 ROWS = (
@@ -97,8 +100,8 @@ STOP_KIND = "checkpoint"
 #: What the Run's status is while it waits there (AD-8's operator half).
 NEEDS_YOU = "needs_you"
 
-#: The harness this suite dispatches on. The `context` step runs `bmad-project-context`,
-#: which is a conversation with an Operator; the scripted harness writes what its scenario
+#: The harness this suite dispatches on. The real `context` step is a conversation with an
+#: Operator; the scripted harness writes what its scenario
 #: says and, with no scenario in this fixture, writes nothing and exits 0
 #: (`infrastructure/harness/fake/scenario.py`). What is under test here is the plan, the
 #: stop and the branch — not what the skill would have said.
@@ -158,7 +161,7 @@ def sessions(settings: Settings) -> Iterator[Any]:
 def test_mode(api: httpx.Client) -> None:
     """Fail by name when the stack is not in test mode, rather than timing out later.
 
-    `repo-init@1` dispatches an agent since its `context` step landed, and the one harness
+    The fixture dispatches an agent at its `context` step, and the one harness
     this suite can run is the scripted one — the real skill is a conversation.
     """
     response = api.get("/api/v1/harnesses")
@@ -216,7 +219,7 @@ def initialised(
     repository_id = create_repository(api, project_id, origin)
     clone_check(api, repository_id)
     payload = run_payload(
-        TEMPLATE,
+        save_repo_init(api),
         repository_id,
         project_id=project_id_of(api, repository_id),
         harness=SCRIPTED_HARNESS,
@@ -304,7 +307,7 @@ def test_the_run_stops_for_the_operator_at_the_context_review(
 def test_the_context_step_wrote_its_agents_file_without_parking_on_it(
     initialised: dict[str, Any], sessions: Any
 ) -> None:
-    """AD-17 protects every `AGENTS.md`, and `repo-init@1` declares this one under `writes`
+    """AD-17 protects every `AGENTS.md`, and the fixture declares this one under `writes`
     — so the dispatch that was sent to write it is not a dispatch that went where nobody
     sent it. Without the declaration the Run would park `protected_path` on the `context`
     row instead of reaching its own checkpoint."""

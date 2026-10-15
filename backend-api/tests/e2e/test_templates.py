@@ -2,30 +2,28 @@
 
 The unit suite proves the rules over the fake repository: `save_version`'s next-number and
 name checks, `seed_shipped`'s retry-until-no-progress ordering, `calls`/`called_by`. What
-only a real Postgres and a real container start-up settle is the claim this story exists
-for: that every shipped Template is actually seeded — through the real migration, the real
-repository, the real `TEMPLATES_DIR` — before the process answers a request, and that a
-saved version's YAML comes back byte for byte.
+only a real Postgres settles is that a saved version lands through the real migration and
+the real repository, and that its YAML comes back byte for byte.
 
-The shipped Templates are never posted a new version here: this suite may run twice against
-the same stack (no `DELETE` exists), and every shipped name must stay exactly
-`versions: [1]` however many times it runs. Every write below targets a name of its own,
-made unique per run.
+Every write below targets a name of its own, made unique per run: this suite may run twice
+against the same stack (no `DELETE` exists).
 
-Revised 2026-09-30 (Operator decision: the mono-repo `initiative` and `story-run` workflows
-are retired to `templates/drafts/`, not seeded): the shipped names are read off the
-`templates/` directory instead of being listed, and the `called_by` leg — which read the
-shipped `initiative@1 -> epic@1` pin — is asserted over a caller/leaf pair of this suite's
-own, so no shipped file is pinned (hard rule 6).
+Revised 2026-10-15 (Operator ruling: no test reads, runs or asserts on the shipped
+`templates/*.yaml`; a test that needs a workflow brings its own). The seeding leg — which
+read the shipped names off the `templates/` directory — is gone: the seeding mechanism is
+`tests/unit/test_main_templates_seed.py`'s, and what is stored on a given stack is the
+Operator's business. The `epic@1` read model leg is asserted over the suite's own epic and
+story fixtures instead.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from uuid import uuid4
 
 import httpx
 import pytest
+
+from tests.e2e.helpers.templates import save_epic_pair
 
 HTTP_OK = 200
 HTTP_CREATED = 201
@@ -33,9 +31,6 @@ HTTP_NOT_FOUND = 404
 HTTP_UNPROCESSABLE = 422
 
 TEMPLATES = "/api/v1/templates"
-
-#: `backend-api/tests/e2e/test_templates.py` -> the repository root -> what the image seeds.
-SHIPPED_DIR = Path(__file__).resolve().parents[3] / "templates"
 
 #: The version number a save answers with once a name already holds one version.
 SECOND_VERSION = 2
@@ -76,44 +71,21 @@ def caller_name() -> str:
     return f"e2e-caller-{uuid4().hex}"
 
 
-def test_every_shipped_template_is_seeded_at_startup(authenticated: httpx.Client) -> None:
-    """Every `*.yaml` directly under `templates/` — the names derive from the directory, so
-    a shipped file added, renamed or retired to `templates/drafts/` never edits this test."""
-    shipped = sorted(path.stem for path in SHIPPED_DIR.glob("*.yaml"))
-    assert shipped, SHIPPED_DIR
+def test_the_epic_fixture_shows_its_unpinned_call_and_its_inputs(
+    authenticated: httpx.Client,
+) -> None:
+    """The read model of a caller that follows its callee unpinned (Operator decision
+    2026-10-02): `calls` names the story with no version, and the fresh pair is pinned by
+    no Run. Over the suite's own fixtures since 2026-10-15; it read `epic@1` before."""
+    epic, story = save_epic_pair(authenticated, "e2e-templates")
 
-    response = authenticated.get(TEMPLATES)
-
-    assert response.status_code == HTTP_OK
-    by_name = {item["name"]: item for item in response.json()["items"]}
-    for name in shipped:
-        assert name in by_name, (name, sorted(by_name))
-        assert 1 in by_name[name]["versions"], by_name[name]
-
-    assert response.json()["next_cursor"] is None
-
-
-def test_epic_1_shows_its_call_and_its_inputs(authenticated: httpx.Client) -> None:
-    response = authenticated.get(f"{TEMPLATES}/epic/1")
+    response = authenticated.get(f"{TEMPLATES}/{epic}/1")
 
     assert response.status_code == HTTP_OK
     body = response.json()
-    # Revised (Operator decision 2026-10-02, editable workflows: a `uses: template` call may
-    # omit `version`; it resolves to the callee's latest at validate and plan time; no
-    # cascade.): the shipped `epic` no
-    # longer pins `story`, and an exact `calls` value pinned shipped content anyway (the
-    # exemplar-freeze ruling, 2026-09-10). Structural in its place.
-    assert body["calls"], body["calls"]
-    for call in body["calls"]:
-        assert call.keys() == {"name", "version"}, call
-        assert isinstance(call["name"], str) and call["name"]
-        assert call["version"] is None or isinstance(call["version"], int)
-    assert isinstance(body["called_by"], list)
+    assert body["calls"] == [{"name": story, "version": None}]
+    assert body["called_by"] == []
     assert body["pinned_by"] == 0
-    # Revised: an exact input count pinned shipped template content, which the
-    # exemplar-freeze ruling (2026-09-10) forbids — and it broke the moment S5 added
-    # `done_checkpoint` to epic@1 (multi-repo initiative, 2026-09-23). Structural in its
-    # place: every declared input carries its full shape, whatever epic@1 currently lists.
     assert body["inputs"], body["inputs"]
     for decl in body["inputs"]:
         assert decl.keys() >= {"name", "type", "required", "default", "values"}, decl
@@ -173,8 +145,10 @@ def test_a_saved_version_round_trips_byte_for_byte(
     assert read_back.json()["yaml"] == text
 
     listed = authenticated.get(TEMPLATES)
+    assert listed.status_code == HTTP_OK
     by_name = {item["name"]: item for item in listed.json()["items"]}
     assert by_name[leaf_name]["versions"] == [1]
+    assert listed.json()["next_cursor"] is None
 
 
 def test_a_second_version_never_changes_the_first(

@@ -50,9 +50,16 @@ services:
     # and it is declared only here — never in `.env.example` or `docker-compose.yml` — so a
     # real deployment's environment never carries it and the CVE guard stays exactly as git
     # ships it for every Operator's own stack.
+    #
+    # `INIT_TEMPLATE: e2e-repo-init` (Operator ruling 2026-10-15: no test reads, runs or
+    # asserts on the shipped `templates/*.yaml`): `POST /repositories/{id}/init` dispatches
+    # whatever this names, and the e2e suite stores its own repo-init fixture under this
+    # name before it calls the endpoint. The `e2e-api` job writes the same value into its
+    # `.env`; production keeps `.env.example`'s default.
     environment:
       ORCH_TEST_MODE: "1"
       GIT_ALLOW_PROTOCOL: "file"
+      INIT_TEMPLATE: "e2e-repo-init"
     # The gate's stack is the one that never runs a real agent (the scripted `fake`
     # harness), so the hardening the base file gives up for sudo lives here: the image's
     # `sudo` binary is inert under `no-new-privileges`, and nothing in this stack misses

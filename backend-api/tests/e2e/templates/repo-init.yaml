@@ -1,0 +1,61 @@
+name: @NAME@
+version: 1
+description: e2e fixture — bootstrap the method into a repository, opened as a pull request
+inputs:
+  project:     { type: project,    required: true }
+  repository:  { type: repository, required: true }
+  base_branch: { type: string,     required: true }
+  harness:     { type: enum, values: [claude, codex, local], default: claude }
+  model:       { type: string,     required: false }
+steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "chore/bmad-init" }
+    gate: deterministic
+
+  - id: setup
+    run: "{{repository.install_command}}"
+    timeout_min: 20
+    gate: deterministic
+
+  - id: install
+    uses: bmad.install
+    timeout_min: 30
+    gate: deterministic
+
+  - id: context
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: staged-plan
+      args: { intent: setup, target: "." }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    writes: ["AGENTS.md"]
+    timeout_min: 45
+    gate: liveness
+
+  - id: context-review
+    uses: checkpoint
+    gate: human
+
+  - id: commit
+    uses: git.commit
+    with: { message: "chore: initialise BMAD method (orchestrator)" }
+    gate: deterministic
+
+  - id: push
+    uses: git.push
+    with: { branch: "chore/bmad-init" }
+    gate: deterministic
+
+  - id: link
+    uses: pr.link
+    with: { branch: "chore/bmad-init" }
+    gate: liveness

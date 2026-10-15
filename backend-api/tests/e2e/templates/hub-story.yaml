@@ -1,0 +1,75 @@
+name: @NAME@
+version: 1
+description: e2e fixture — one story of a hub-Run initiative, built inside its member submodule
+inputs:
+  project:     { type: project,    required: true }
+  repository:  { type: repository, required: true }
+  branch:      { type: string,     required: true }
+  spec_folder: { type: path,       required: true }
+  workdir:     { type: string,     required: true }
+  story:       { type: item,       required: true }
+  test:        { type: string,     required: false }
+  harness:     { type: enum, values: [claude, codex, local], default: claude }
+  model:       { type: string,     required: false }
+  build_timeout_min: { type: number, required: false, default: 180 }
+  build_stall_min:   { type: number, required: false, default: 90 }
+steps:
+  - id: sync
+    uses: git.merge
+    with: { from: "{{branch}}" }
+    gate: deterministic
+
+  - id: build
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: staged-implement
+      args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
+      prompt_extra: "{{story.invoke_dev_with}}"
+      workdir: "{{workdir}}"
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+      halt: "Halt after planning."
+    expect:
+      files: ["{{spec_folder}}/stories/{{story.id}}-*.md"]
+      success: [done]
+      blocked: [blocked]
+      checkpoint: [ready-for-dev]
+      misconfigured_when:
+        - no subagents
+        - no stories.yaml found
+        - story id not found in stories.yaml
+        - version-control metadata not writable
+        - no epic spec found
+        - unrecognized status in existing story file
+        - ambiguous story file match
+    retry:
+      max: 2
+      prompt: "No story file with a terminal status was found for story {{story.id}} in the spec folder named in the dispatch sentence. Finish the story and write that file, or set status: blocked with the reason."
+      resume_session: true
+    pause_when: "story.spec_checkpoint"
+    timeout_min: "{{build_timeout_min}}"
+    stall_min: "{{build_stall_min}}"
+    gate: liveness
+
+  - id: verify
+    run: "{{test}}"
+    on_fail: { redispatch: build, max: 1 }
+    timeout_min: 30
+    gate: deterministic
+
+  - id: commit-guard
+    uses: git.commit
+    with: { workdir: "{{workdir}}", message: "story {{story.id}}: {{story.title}} (orchestrator)" }
+    gate: deterministic
+
+  - id: commit-story
+    uses: git.commit
+    with: { message: "story {{story.id}}: {{story.title}} — spec (orchestrator)" }
+    gate: deterministic

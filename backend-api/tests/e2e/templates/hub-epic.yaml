@@ -1,0 +1,146 @@
+name: @NAME@
+version: 1
+description: e2e fixture — one epic of a hub-Run initiative, driven inside its member submodule
+inputs:
+  project:      { type: project,    required: true }
+  repository:   { type: repository, required: true }
+  base_branch:  { type: string,     required: true }
+  branch:       { type: string,     required: true }
+  spec_folder:  { type: path,       required: true }
+  workdir:      { type: string,     required: true }
+  install:      { type: string,     required: false }
+  test:         { type: string,     required: false }
+  quality_gate: { type: string,     required: false }
+  epic:         { type: item,       required: false }
+  harness:      { type: enum, values: [claude, codex, local], default: claude }
+  model:        { type: string,     required: false }
+  build_timeout_min: { type: number, required: false, default: 180 }
+  build_stall_min:   { type: number, required: false, default: 90 }
+  epic_timeout_min:  { type: number, required: false, default: 60 }
+steps:
+  - id: branch
+    uses: git.submodule
+    with: { workdir: "{{workdir}}", branch: "{{branch}}", base: "{{base_branch}}" }
+    gate: deterministic
+
+  - id: setup
+    run: "{{install}}"
+    timeout_min: 20
+    gate: deterministic
+
+  - id: baseline
+    run: "{{test}}"
+    on_fail: fail
+    gate: deterministic
+
+  - id: spec-gate
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: spec-gate
+      args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    expect:
+      files: ["{{spec_folder}}/spec-gate-result.md"]
+      success: [done]
+      blocked: [blocked]
+    timeout_min: "{{epic_timeout_min}}"
+    stall_min: "{{epic_timeout_min}}"
+    gate: liveness
+
+  - id: stories
+    for_each: "{{spec_folder}}/stories.yaml"
+    as: story
+    pause_after_item_when: "story.done_checkpoint"
+    steps:
+      - id: story
+        uses: template
+        with:
+          name: @STORY@
+          inputs:
+            project: "{{project}}"
+            repository: "{{repository}}"
+            branch: "{{branch}}"
+            spec_folder: "{{spec_folder}}"
+            workdir: "{{workdir}}"
+            story: "{{story}}"
+            test: "{{test}}"
+            harness: "{{harness}}"
+            model: "{{model}}"
+            build_timeout_min: "{{build_timeout_min}}"
+            build_stall_min: "{{build_stall_min}}"
+
+  - id: gen-e2e
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: staged-review
+      args: { folder: "{{spec_folder}}" }
+      workdir: "{{workdir}}"
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    timeout_min: "{{epic_timeout_min}}"
+    stall_min: "{{epic_timeout_min}}"
+    gate: liveness
+
+  - id: commit-e2e
+    uses: git.commit
+    with: { workdir: "{{workdir}}", message: "e2e: generated tests (orchestrator)" }
+    gate: deterministic
+
+  - id: e2e
+    run: "{{quality_gate}}"
+    on_fail: { redispatch: gen-e2e, max: 2 }
+    timeout_min: 45
+    gate: deterministic
+
+  - id: retro
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: staged-review
+      args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    timeout_min: "{{epic_timeout_min}}"
+    stall_min: "{{epic_timeout_min}}"
+    gate: liveness
+
+  - id: commit-retro
+    uses: git.commit
+    with: { message: "retro: epic retrospective (orchestrator)" }
+    gate: deterministic
+
+  - id: push-code
+    uses: git.push
+    with: { workdir: "{{workdir}}", branch: "{{branch}}" }
+    gate: deterministic
+
+  - id: merge-hub
+    uses: git.merge
+    with: { from: "{{branch}}" }
+    gate: deterministic
+
+  - id: push-hub
+    uses: git.push
+    with: { branch: "{{branch}}" }
+    gate: deterministic
