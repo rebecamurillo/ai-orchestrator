@@ -191,6 +191,13 @@ jobs:
         # answers 409 `catalog unavailable` for every Template with a `skill:` row (the e2e
         # fixtures dispatch the internal skills `ia-agents-skills/` holds, which the verb
         # copies and names in the manifest — no image, no BMAD install needed).
+        #
+        # GIT_ALLOW_PROTOCOL=file is what `docker-compose.e2e.yml` gives the containerised
+        # gate and this source-run backend never had: `git submodule update --init` refuses
+        # the `file` transport (CVE-2022-39253), and the hub-Run journey's member origins are
+        # `file://` bare repositories on this runner. `SubprocessGit` mirrors the variable
+        # from the backend's own process environment and nowhere else, so it is exported
+        # here, for this process, on a runner that is torn down with the job.
         run: |
           set -a; . ./.env; set +a
           export DATABASE_URL="postgresql+psycopg://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/$POSTGRES_DB"
@@ -202,6 +209,7 @@ jobs:
           test -x "$HARNESS_SCRIPTS_DIR/claude.sh"
           export AGENT_HOME="${RUNNER_TEMP:-/tmp}/agent-home"
           mkdir -p "$AGENT_HOME"
+          export GIT_ALLOW_PROTOCOL=file
           uv run --locked --directory backend-api python -m orchestrator.main > backend-api.log 2>&1 &
           for _ in $(seq 1 60); do
             curl -fsS http://127.0.0.1:8000/healthz && exit 0
