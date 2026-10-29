@@ -10,6 +10,7 @@ source "$(dirname "$0")/_common.sh"
 # below — OpenCode expands {env:...} textually, before parsing (adapter.py::local_aliases).
 HARNESS_ENV_ALIASES=(LANGFUSE_BASEURL=LANGFUSE_BASE_URL LANGFUSE_USER_ID=ORCH_RUN_ID OPENCODE_LANGFUSE_TAGS=ORCH_LANGFUSE_TAGS)
 : "${OPENCODE_VERSION:=1.18.26}"
+OPENCODE_PACKAGE="opencode-ai"
 : "${LOCAL_MODELS:=local-coder,local-general}"
 : "${LANGFUSE_OPENCODE_PLUGIN_VERSION:=0.3.0}"
 OPENCODE_CONFIG_DIR="${AGENT_HOME}/.config/opencode"
@@ -19,7 +20,8 @@ OPENCODE_CONFIG_DIR="${AGENT_HOME}/.config/opencode"
 SKILLS_DIR="${OPENCODE_CONFIG_DIR}/skills"
 
 install() {
-  npm install -g "opencode-ai@${OPENCODE_VERSION}"
+  require_plain_pin OPENCODE_VERSION "${OPENCODE_VERSION}"
+  npm_install_cli "${HARNESS_IMAGE_PREFIX}" "${OPENCODE_PACKAGE}" "${OPENCODE_VERSION}"
   # OpenCode reads ~/.claude/skills and ~/.agents/skills too; the codex.sh stubs suffice. Install its own dir anyway so it stands alone.
   bmad_install_global_skills opencode "${SKILLS_DIR}"
   install_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
@@ -29,6 +31,12 @@ install() {
 # `agent-home` volume shadows the image (`_common.sh::sync_operator_skills`).
 skills() {
   sync_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
+}
+
+installed_version() { cli_version_at "$1" '$NF'; }
+
+ensure() {
+  ensure_cli_at_pin opencode opencode "${OPENCODE_PACKAGE}" OPENCODE_VERSION "${OPENCODE_VERSION}" installed_version
 }
 
 configure() {
@@ -147,9 +155,11 @@ probe() {
 
 case "${1:-}" in
   install)                install ;;
+  # `ensure` reads only the pin: no Gateway or Langfuse value, exactly as `install` does not
+  ensure)                 ensure ;;
   # `skills` reads no Gateway or Langfuse value, exactly as `install` does not
   skills)                 skills ;;
   configure|doctor)       require_harness_env; "$1" ;;
   probe)                  require_harness_env; probe ;;
-  *)                      echo "usage: $0 install|skills|configure|doctor|probe" >&2; exit 2 ;;
+  *)                      echo "usage: $0 install|ensure|skills|configure|doctor|probe" >&2; exit 2 ;;
 esac

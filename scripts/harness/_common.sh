@@ -2,6 +2,7 @@
 # Shared helpers for scripts/harness/<name>.sh. Sourced, never executed.
 # Contract (AD-10, AD-20): each harness script implements
 #   install    — image build: install the CLI at the pinned version, copy BMAD skill stubs to the global dirs
+#   ensure     — container start, before configure: reinstall the CLI only when it is not at its pin
 #   configure  — container start: (re)generate the harness config from environment variables
 #   doctor     — readiness: print version, confirm skill discovery and gateway reachability; exit ≠ 0 on failure
 set -euo pipefail
@@ -45,6 +46,140 @@ HARNESS_ENV_CONTRACT=(ORCH_RUN_ID ORCH_ATTEMPT_ID ORCH_STORY_ID ORCH_HARNESS ORC
 #   x-litellm-end-user-id=$ORCH_RUN_ID  x-litellm-session-id=$ORCH_ATTEMPT_ID  x-litellm-tags=$ORCH_TAGS   (spend logs: GET /spend/logs/v2?end_user=&session_id=)
 
 log() { printf '[harness:%s] %s\n' "${HARNESS_NAME:-?}" "$*" >&2; }
+
+# The harness CLIs' own npm prefix, the mount point of the `harness-bin` volume, and the
+# image-only prefix `install` writes at build time (never mounted, so a volume never hides
+# it). Both kept apart from NPM_CONFIG_PREFIX (/opt/npm-global), which holds the image's
+# corepack shims and whatever an agent installs during a Run. Overridable only so a test can
+# point them at scratch directories.
+: "${HARNESS_PREFIX:=/opt/harness-cli}"
+: "${HARNESS_IMAGE_PREFIX:=/opt/harness-image}"
+
+# The pin shape every reader of a harness pin accepts. A test keeps its four copies identical:
+# scripts/harness/_common.sh, deploy/install.sh, scripts/push-images.sh, release.yml.
+PLAIN_VERSION='^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}([-+][0-9A-Za-z.-]+)?$'
+
+require_plain_pin() {  # $1 pin variable name, $2 value
+  [[ "$2" =~ $PLAIN_VERSION ]] && return 0
+  log "$1='$2' is not a plain version (x.y.z)"
+  return 1
+}
+
+# The one npm line `install` (image build) and `ensure` (container start) both run. npm's own
+# fetch retries are off (hard rule 7) and the whole call is bounded, so a stalled registry
+# cannot outlast the container's healthcheck.
+npm_install_cli() {  # $1 prefix, $2 npm package, $3 version
+  timeout 120 npm install -g --prefix "$1" --fetch-retries=0 --fetch-timeout=60000 "$2@$3"
+}
+
+# The first stdout line of `<executable> --version`, field $2 of it; empty when absent.
+cli_version_at() {  # $1 executable path, $2 awk field ($1 or $NF)
+  [ -x "$1" ] || return 0
+  { timeout 30 "$1" --version 2>/dev/null || true; } | head -1 | awk "{print $2}"
+}
+
+# Leftovers of a start interrupted inside `_place_cli`: a half-staged `.next` is dropped; a
+# `.prev` is put back when the live copy is missing, and dropped when the live copy landed.
+_recover_cli() {  # $1 npm package, $2 cli
+  local live="${HARNESS_PREFIX}/lib/node_modules/$1" link="${HARNESS_PREFIX}/bin/$2"
+  rm -rf "${live}.next"
+  rm -f "${link}.next"
+  if [ -e "${live}.prev" ]; then
+    if [ -e "$live" ]; then rm -rf "${live}.prev"; else mv "${live}.prev" "$live"; fi
+  fi
+  if [ -L "${link}.prev" ] || [ -e "${link}.prev" ]; then
+    if [ -L "$link" ] || [ -e "$link" ]; then rm -f "${link}.prev"; else mv "${link}.prev" "$link"; fi
+  fi
+}
+
+# A failed swap: the new copy is removed and the one set aside is put back.
+_undo_place() {  # $1 npm package, $2 cli
+  local live="${HARNESS_PREFIX}/lib/node_modules/$1" link="${HARNESS_PREFIX}/bin/$2"
+  if [ -e "${live}.prev" ]; then rm -rf "$live"; mv "${live}.prev" "$live"; fi
+  if [ -L "${link}.prev" ] || [ -e "${link}.prev" ]; then rm -f "$link"; mv "${link}.prev" "$link"; fi
+  rm -rf "${live}.next"
+  rm -f "${link}.next"
+}
+
+# Replace the volume's copy of one package and its bin link with $1's. The new copy is staged
+# as `.next`, the old one renamed to `.prev`, `.next` renamed into place, and only then is
+# `.prev` removed. A failed step puts `.prev` back; a start interrupted between the renames
+# leaves no live copy for a moment, and the next start's `_recover_cli` restores it.
+_place_cli() {  # $1 source prefix, $2 npm package, $3 cli, $4 cp|mv
+  local live="${HARNESS_PREFIX}/lib/node_modules/$2" link="${HARNESS_PREFIX}/bin/$3"
+  mkdir -p "$(dirname "$live")" "${HARNESS_PREFIX}/bin" || return 1
+  _recover_cli "$2" "$3"
+  if [ "$4" = cp ]; then
+    cp -a "$1/lib/node_modules/$2" "${live}.next" || { rm -rf "${live}.next"; return 1; }
+  else
+    mv "$1/lib/node_modules/$2" "${live}.next" || return 1
+  fi
+  cp -a "$1/bin/$3" "${link}.next" || { _undo_place "$2" "$3"; return 1; }
+  if [ -e "$live" ]; then mv "$live" "${live}.prev" || { _undo_place "$2" "$3"; return 1; }; fi
+  if [ -L "$link" ] || [ -e "$link" ]; then
+    mv "$link" "${link}.prev" || { _undo_place "$2" "$3"; return 1; }
+  fi
+  if ! { mv "${live}.next" "$live" && mv "${link}.next" "$link"; }; then
+    _undo_place "$2" "$3"
+    return 1
+  fi
+  rm -rf "${live}.prev"
+  rm -f "${link}.prev"
+}
+
+# `ensure`: the CLI on the `harness-bin` volume reconciled against the pin `.env` sets, in
+# this order: the image's own copy when it is at the pin (copied over the volume's on every
+# start, no network, so a changed volume copy is restored); else the volume's copy when it is
+# at the pin; else exactly one npm install into a staging prefix, moved in only when it
+# reports the pin, never retried (hard rule 7). Versions are read from those absolute paths,
+# never the first match on PATH. A non-zero exit refuses that harness only: ensure-all.sh
+# continues, and the probe reports `cli not at pinned version` until the next start.
+ensure_cli_at_pin() {  # $1 harness, $2 cli, $3 npm package, $4 pin variable name, $5 pin, $6 version-reading function
+  local name="$1" cli="$2" pkg="$3" pin="$5" reader="$6" have staging staged
+  require_plain_pin "$4" "$pin" || { log "${name} refused"; return 1; }
+  if [ "$("$reader" "${HARNESS_IMAGE_PREFIX}/bin/${cli}")" = "$pin" ]; then
+    if _place_cli "${HARNESS_IMAGE_PREFIX}" "$pkg" "$cli" cp; then
+      log "${name} ${pin} from image"
+      return 0
+    fi
+    log "${name}: copying ${pin} from ${HARNESS_IMAGE_PREFIX} failed"
+  fi
+  _recover_cli "$pkg" "$cli"
+  have="$("$reader" "${HARNESS_PREFIX}/bin/${cli}")"
+  if [ "$have" = "$pin" ]; then log "${name} ${pin} at pin"; return 0; fi
+  log "${name} ${have:-absent} → ${pin}"
+  staging="${HARNESS_PREFIX}/.staging/${name}"
+  rm -rf "$staging"
+  if ! mkdir -p "$staging" 2>/dev/null; then
+    log "${name}: cannot create ${staging}"
+    return 1
+  fi
+  if ! npm_install_cli "$staging" "$pkg" "$pin"; then
+    rm -rf "$staging"
+    log "${name}: npm install ${pkg}@${pin} failed (installed: $(_now "$reader" "$cli"), pin: ${pin})"
+    return 1
+  fi
+  staged="$("$reader" "${staging}/bin/${cli}")"
+  if [ "$staged" != "$pin" ]; then
+    rm -rf "$staging"
+    log "${name}: after install the cli reports ${staged:-absent}, not the pin ${pin} (installed: $(_now "$reader" "$cli"))"
+    return 1
+  fi
+  if ! _place_cli "$staging" "$pkg" "$cli" mv; then
+    rm -rf "$staging"
+    log "${name}: moving ${pin} into ${HARNESS_PREFIX} failed (installed: $(_now "$reader" "$cli"), pin: ${pin})"
+    return 1
+  fi
+  rm -rf "$staging"
+  log "${name} ${pin} at pin"
+}
+
+# What the volume's CLI reports now, for a failure line.
+_now() {  # $1 version-reading function, $2 cli
+  local v
+  v="$("$1" "${HARNESS_PREFIX}/bin/$2")"
+  printf '%s' "${v:-absent}"
+}
 
 # Langfuse OTLP endpoint + Basic auth header (research/tracing.md)
 langfuse_otlp_endpoint() { printf '%s/api/public/otel' "${LANGFUSE_BASE_URL%/}"; }

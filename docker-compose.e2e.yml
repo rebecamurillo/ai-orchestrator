@@ -1,8 +1,8 @@
 # ai-orchestrator — the overlay that makes the e2e gate a stack of its own.
 #
 # `make e2e` merges this over `docker-compose.yml` under the project name `aio-e2e`, so the
-# gate gets its own containers, its own `pgdata`, `work` and `agent-home` volumes and its own
-# database, and ends with `docker compose down -v`. The Projects the suite never deletes, the
+# gate gets its own containers, its own `pgdata`, `work`, `agent-home` and `harness-bin`
+# volumes and its own database, and ends with `docker compose down -v`. The Projects the suite never deletes, the
 # bare fixture repositories it makes and the base clones the backend cuts from them all die
 # with the run; none of it can reach `aio-dev`.
 #

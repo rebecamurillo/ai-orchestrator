@@ -137,12 +137,33 @@ jobs:
           # the job's own token, scoped by `packages: write` above; no repository secret
           password: ${{ github.token }}
 
+      # the harness CLI pins the contract declares, passed as build args so a release bakes
+      # `.env.example`'s values; the web-client Dockerfile declares no such ARG and ignores them
+      - name: Read the harness CLI pins from .env.example
+        id: pins
+        shell: bash
+        run: |
+          # the pin shape; a test keeps its four copies identical (see scripts/harness/_common.sh)
+          plain='^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}([-+][0-9A-Za-z.-]+)?$'
+          for name in CLAUDE_CODE_VERSION CODEX_VERSION OPENCODE_VERSION; do
+            line="$(grep -m1 "^${name}=" .env.example || true)"
+            value="$(printf '%s' "${line#*=}" | sed -E 's/(^|[[:space:]]+)#.*$//; s/[[:space:]]+$//')"
+            case "$value" in \"*\"|\'*\') value="${value:1:${#value}-2}" ;; esac
+            [[ "$value" =~ $plain ]] ||
+              { echo "::error::.env.example: ${name}='${value}' is not a plain version (x.y.z)"; exit 1; }
+            echo "${name}=${value}" >> "$GITHUB_OUTPUT"
+          done
+
       - name: Build and push ${{ matrix.component }} (${{ matrix.arch }})
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/${{ matrix.arch }}
+          build-args: |
+            CLAUDE_CODE_VERSION=${{ steps.pins.outputs.CLAUDE_CODE_VERSION }}
+            CODEX_VERSION=${{ steps.pins.outputs.CODEX_VERSION }}
+            OPENCODE_VERSION=${{ steps.pins.outputs.OPENCODE_VERSION }}
           push: true
           tags: |
             ${{ env.IMAGE_NAMESPACE }}/${{ matrix.component }}:${{ needs.verify.outputs.tag }}-${{ matrix.arch }}

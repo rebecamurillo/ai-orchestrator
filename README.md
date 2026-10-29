@@ -157,7 +157,15 @@ make up          # docker compose up -d --build: web-client, backend-api, postgr
 ```
 
 Everything runs in compose, and the harness CLIs (claude, codex, opencode) ship inside the
-backend image at pinned versions. The first run builds both images (minutes). The backend
+backend image at the `*_VERSION` pins in `.env` (passed as build arguments). They run from
+the `harness-bin` volume, and each start reconciles them against those pins: the image's own
+copy when it is at the pin, else one `npm install` of the pin (registry needed then). Raise a
+pin in `.env` and `docker compose up -d backend-api` (a recreate; `restart` keeps the old
+environment) installs it, with no rebuild. A pin that cannot be installed refuses that
+harness alone. `harness-bin` is not backed up. To re-seed it from the image, stop the stack
+and `docker volume rm <project>_harness-bin` — both take the stack down, so only with the
+Operator's go-ahead (hard rule 9).
+The first run builds both images (minutes). The backend
 runs its migrations before it binds — it never serves a half-migrated schema.
 
 **Mode B — local processes (faster iteration while developing):**

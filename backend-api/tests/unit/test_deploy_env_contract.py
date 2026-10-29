@@ -14,6 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from check_env_contract import (
     DEPLOY_ONLY_VARIABLES,
     compare_deploy,
@@ -21,7 +22,7 @@ from check_env_contract import (
     settings_variables,
 )
 
-from tests.unit.conftest import ENV_EXAMPLE, REPO_ROOT
+from tests.unit.conftest import ENV_EXAMPLE, REPO_ROOT, parse_env_example
 
 SCRIPT = REPO_ROOT / "scripts" / "check_env_contract.py"
 DEPLOY_ENV_EXAMPLE = REPO_ROOT / "deploy" / ".env.example"
@@ -149,3 +150,19 @@ def test_the_deploy_check_runs_only_after_the_root_check_passes(tmp_path: Path) 
 
     assert result.returncode != 0
     assert "deploy contract:" not in result.stderr
+
+
+# ── the harness CLI pins agree ───────────────────────────────────────────────
+#
+# spec-harness-upgrade-survives-redeploy (2026-10-29): `install.sh upgrade` reads the pins from
+# the new image's `deploy/.env.example` and a dev build from the root one; a value that
+# differs between the two would install one CLI in development and another on a client.
+
+
+@pytest.mark.parametrize("variable", ["CLAUDE_CODE_VERSION", "CODEX_VERSION", "OPENCODE_VERSION"])
+def test_each_harness_pin_has_the_same_value_in_both_copies(variable: str) -> None:
+    root = parse_env_example(ENV_EXAMPLE)
+    deploy = parse_env_example(DEPLOY_ENV_EXAMPLE)
+
+    assert root[variable]
+    assert deploy[variable] == root[variable]
