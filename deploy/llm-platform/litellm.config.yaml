@@ -102,6 +102,12 @@ model_list:
       api_base: os.environ/OPENROUTER_API_BASE
       api_key: os.environ/OPENROUTER_API_KEY
       use_chat_completions_api: true
+  - model_name: openrouter-glm-5.3
+    litellm_params:
+      model: openrouter/z-ai/glm-5.3
+      api_base: os.environ/OPENROUTER_API_BASE
+      api_key: os.environ/OPENROUTER_API_KEY
+      use_chat_completions_api: true 
 
   # ── decisions, TypeSafe Jev through the pass-through route (DRAFT 2026-10-02) ──
   # Not a chat model and never offered to a harness: the backend's `decide` kind (see
