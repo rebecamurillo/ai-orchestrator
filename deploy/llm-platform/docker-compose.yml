@@ -77,7 +77,7 @@ services:
 
   # ── S3-compatible storage for Langfuse's event and media uploads ───────────
   minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    image: cgr.dev/chainguard/minio
     restart: unless-stopped
     command: ['server', '/data', '--console-address', ':9001']
     environment:
@@ -97,7 +97,7 @@ services:
 
   # `langfuse-web` refuses to start without its bucket; creating it is a job, not a service
   minio-init:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    image: cgr.dev/chainguard/minio
     depends_on:
       minio: { condition: service_healthy }
     entrypoint:

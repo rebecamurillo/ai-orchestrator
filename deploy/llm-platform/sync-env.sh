@@ -84,7 +84,7 @@ open(path, "w").write("\n".join(out) + "\n")
 print("rewrote " + ", ".join(sorted(written)))
 PY
 
-echo "backup: ${backup#"$root"/}"
+echo "backup: ${backup}"
 echo
 echo "Langfuse  http://localhost:${LANGFUSE_PORT:-3000}  (${LANGFUSE_INIT_USER_EMAIL} / see LANGFUSE_INIT_USER_PASSWORD in deploy/llm-platform/.env)"
 echo "LiteLLM   ${litellm}"
