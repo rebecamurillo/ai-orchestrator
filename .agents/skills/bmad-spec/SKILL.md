@@ -1,6 +1,6 @@
 ---
 name: bmad-spec
-description: Distill any intent input into the SPEC kernel + companions — the canonical, preservation-validated machine contract for downstream work. Use when the user says "create a spec", "distill this into a spec", "validate this spec", "update the spec", or "break this into stories".
+description: 'Condense any input — an idea, brief, PRD, transcript, or mixed notes — into a short spec: SPEC.md plus supporting files that downstream skills build from. Also updates and validates existing specs, and can break a spec into stories. Use when the user says "create a spec", "distill this into a spec", "validate this spec", "update the spec", or "break this into stories"'
 ---
 
 # BMad Spec
@@ -18,7 +18,7 @@ Multiple skills may call to update the same spec over time.
 
 ## On Activation
 
-1. Resolve customization: `uv run {project-root}/_bmad/scripts/resolve_customization.py --skill {skill-root} --key workflow`. On failure, read `{skill-root}/customize.toml` directly.
+1. Resolve customization: `uv run {project-root}/_bmad/scripts/resolve_customization.py --skill {skill-root} --project-root {project-root} --key workflow`. On failure, read `{skill-root}/customize.toml` directly.
 2. Run `{workflow.activation_steps_prepend}`. Treat `{workflow.persistent_facts}` as foundational context (`file:` entries are loaded).
 3. Resolve config: `uv run {project-root}/_bmad/scripts/resolve_config.py --project-root {project-root}` (merges `_bmad/config.toml`, `_bmad/config.user.toml`, and the `_bmad/custom/` overrides). From the merged JSON resolve `{user_name}`, `{communication_language}`, `{document_output_language}`, `{project_name}`, `{output_folder}` (under `core`), and `{date}`.
 4. Detect mode. **Headless** when any of: no TTY, programmatic caller (another skill or non-interactive runner), or the first message pre-supplies all inputs and asks for an artifact path back. **Interactive** otherwise. In interactive mode, greet by `{user_name}` in `{communication_language}`, stay in that language, and mention that `bmad-party-mode` and `bmad-advanced-elicitation` are available for deeper exploration on any field.
@@ -133,7 +133,7 @@ When the user points the skill at an existing spec folder (or its SPEC.md) with 
 
 Requires `SPEC.md` on disk — run the normal Operation first if it doesn't exist yet. Headless runs never do this, even when the invocation text asks for it: if mode detection (On Activation, step 4) resolved headless, skip this section entirely and proceed with the normal headless response. In interactive mode, offer it at most once per run when the input reads as multiple independently shippable slices; a decline ends the offer for this run, not forever. Also run it on direct request ("break this into stories") whenever `SPEC.md` exists. When a spec update runs and `stories.yaml` exists, check the story descriptions against the updated spec; if any no longer matches, say so and offer to re-run Story Breakdown. The update itself never rewrites `stories.yaml`.
 
-Either way, walk the capabilities and constraints with the user and propose a story per independently reviewable slice — this is a conversation, not a silent render. For each story, ask the user for `spec_checkpoint` and any `invoke_dev_with` note rather than defaulting them silently; capturing that human judgment is what the fields are for. Note: the shipped `epic` template includes a `spec-gate` step that reviews the spec folder automatically before the story loop — set `spec_checkpoint: true` only for stories where human review between planning and implementation is genuinely warranted; the gate handles routine spec validation. Similarly, the epic tail pushes the branch and records the compare link before a final `done-checkpoint` human gate — this is the standard operator review point; set `done_checkpoint: true` only on a story that needs an additional mid-loop pause before e2e and push. If the conversation surfaces load-bearing detail beyond dispatch notes (a constraint, a design decision), route it into SPEC.md or a companion — `invoke_dev_with` carries dispatch notes only (Spec Law rule 7 still applies).
+Either way, walk the capabilities and constraints with the user and propose a story per independently reviewable slice — this is a conversation, not a silent render. For each story, ask the user for `spec_checkpoint`, `done_checkpoint`, and any `invoke_dev_with` note rather than defaulting them silently; capturing that human judgment is what the fields are for. If the conversation surfaces load-bearing detail beyond dispatch notes (a constraint, a design decision), route it into SPEC.md or a companion — `invoke_dev_with` carries dispatch notes only (Spec Law rule 7 still applies).
 
 The output is `stories.yaml`, a sibling of `SPEC.md` inside the spec folder, discovered by that fixed name — same convention as `SPEC.md` and `.memlog.md`. Never list it in `companions:` and never point a frontmatter key at it: companions carry the what-to-build contract every consumer reads; `stories.yaml` is input for whichever tool dispatches the stories.
 
