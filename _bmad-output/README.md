@@ -13,7 +13,8 @@ does today, read the code and `templates/*.yaml`; for how to develop here, read 
 
 ## What is pending
 
-
+- `specs/detach-bmad-rules/PLAN.md` — inventory of every BMAD rule coded into behaviour and ten
+  ordered PRs to remove them; decisions Q1..Q10 open. Planned 2026-10-30.
 
 ## What lives here mechanically
 
