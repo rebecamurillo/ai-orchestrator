@@ -154,20 +154,18 @@ def test_repo_init_persists_eight_rows_pins_one_version_and_enqueues_once() -> N
 
 def initiative_git_with_a_passing_preflight() -> FakeGit:
     """`fixtures.initiative_git()`, plus what `create_run` also re-runs pre-flight over:
-    each epic's `SPEC.md` (line 7) and the manifest `method_version_line` (line 9) reads —
-    neither of which the planner itself needs, so the planner's own fixture omits them.
+    each epic's `SPEC.md` (line 7), which the planner itself does not need, so the planner's
+    own fixture omits them.
 
     The `SPEC.md` paths sit under the Initiative folder: `epics.yaml` declares each
     `spec_folder` relative to it (PRD §3 "Initiative"), and line 7 reads the composed
     path. They were bare (`epic-1/SPEC.md`) while pre-flight read them verbatim —
     revised with that defect's fix (Operator ruling, 2026-09-16; hard rule 1 case (c))."""
     git = fixtures.initiative_git()
-    manifest = f"installation:\n  version: {fixtures.BMAD_VERSION}\n"
     git.files = {
         **(git.files or {}),
         (fixtures.BASE_SHA, f"{fixtures.INITIATIVE_FOLDER}/epic-1/SPEC.md"): "# spec",
         (fixtures.BASE_SHA, f"{fixtures.INITIATIVE_FOLDER}/epic-2/SPEC.md"): "# spec",
-        (fixtures.BASE_SHA, "_bmad/_config/manifest.yaml"): manifest,
     }
     return git
 

@@ -107,7 +107,6 @@ def preflight_and_plan(ports: PreflightPorts, req: PreflightRequest) -> Prefligh
     ctx = Context(
         git=ports.git,
         base_dir=resolved.base_dir,
-        bmad_version=ports.bmad_version,
         max_active_runs=ports.max_active_runs,
         repository=resolved.repository,
         runs=ports.runs,
@@ -167,7 +166,6 @@ def _lines(ctx: Context) -> list[Line]:
     lines += lists.spec_md_lines(ctx)
     lines.append(checks.harness_probe_line(ctx))
     lines += lists.installed_skill_lines(ctx)
-    lines.append(checks.method_version_line(ctx))
     lines.append(lists.existing_story_files_line(ctx, ids_by_path))
     lines.append(checks.clone_check_line(ctx))
     lines.append(checks.what_will_run_line(ctx))

@@ -18,11 +18,11 @@ All of the `orchestrator` skill's one-time setup, done and green:
 
 1. Handshake passed (`GET /api/v1/version`).
 2. Project and repository exist; `POST /api/v1/repositories/{id}/clone-check` is green.
-3. The repository is BMAD-initialized: `_bmad/_config/manifest.yaml` exists on the base
-   branch and names the instance's `bmad_version`. If not, run
-   `POST /api/v1/repositories/{id}/init` first and merge the PR it opens; the dispatched
-   agent reads the rendered skills out of `_bmad/`, and without them every story parks
-   `misconfigured`.
+3. If the workflow runs BMAD skills, the repository is BMAD-initialized: `_bmad/_config/manifest.yaml`
+   exists on the base branch and names the instance's `bmad_version`. Preflight does not
+   check this. If it is missing, run `POST /api/v1/repositories/{id}/init` first and merge
+   the PR it opens; the dispatched agent reads the rendered skills out of `_bmad/`, and
+   without them stories park `misconfigured`.
 4. The harness you will use is `enabled` in `GET /api/v1/harnesses`. If it is not, the
    instance's operator runs the readiness diagnostic (`orchestrator-admin`); do not try to
    prove a harness with a project Run.
@@ -175,8 +175,8 @@ Supervise with `orchestrator-watch <run_id>` where it is installed (see
   `continue`.
 - **`verify_failed`.** The registered test command failed after the story. Either the
   command was never green on this branch (check `baseline`'s log) or the agent broke it.
-- **`misconfigured`.** Usually the repository is not BMAD-initialized at the instance's
-  version, or the spec folder path is wrong. The alert names which.
+- **`misconfigured`.** Usually the repository is not BMAD-initialized, or the spec folder path is
+  wrong. The alert names which.
 - **`checkpoint`.** The `done_checkpoint` you asked for. Look, then `continue`.
 
 ## Pipeline proven when

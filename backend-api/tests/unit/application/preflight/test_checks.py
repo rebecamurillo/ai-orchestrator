@@ -1,4 +1,4 @@
-"""The pre-flight line-builders that need no list file (FR-8, lines 1-3, 6, 8, 9, 11, 12)."""
+"""The pre-flight line-builders that need no list file (FR-8, lines 1-3, 6, 8, 11, 12)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from orchestrator.application.preflight.model import (
     CHECK_CLONE_CHECK,
     CHECK_EPICS_YAML,
     CHECK_HARNESS,
-    CHECK_METHOD_VERSION,
     CHECK_ORIGIN,
     CHECK_STORIES_YAML,
     CHECK_WHAT_WILL_RUN,
@@ -108,7 +107,6 @@ def ctx(**overrides: object) -> Context:
     fields: dict[str, object] = {
         "git": FakeGit(),
         "base_dir": Path("/work/my-project/my-repo/base"),
-        "bmad_version": "6.11.0",
         "max_active_runs": 2,
         "repository": None,
         "runs": FakeRunRepository(),
@@ -636,68 +634,6 @@ def test_checkpoints_combines_more_than_one() -> None:
     assert checks.checkpoints_line(ctx(plan=plan)).text == (
         "story 1 · done checkpoint; story 2 · spec checkpoint"
     )
-
-
-# --- line 9: method version ---------------------------------------------------------------------
-
-MANIFEST_PATH = "_bmad/_config/manifest.yaml"
-
-
-def test_method_version_skips_without_a_plan() -> None:
-    assert checks.method_version_line(ctx()).status == "skip"
-
-
-def test_method_version_skips_when_the_plan_installs_the_method() -> None:
-    plan = Plan(plan_ref="sha", rows=(row(kind="bmad.install"),))
-
-    assert checks.method_version_line(ctx(plan=plan)) == Line(
-        CHECK_METHOD_VERSION,
-        "skip",
-        "plan installs the method",
-        None,
-    )
-
-
-def test_method_version_fails_missing_when_no_manifest() -> None:
-    plan = Plan(plan_ref="sha", rows=())
-    line = checks.method_version_line(ctx(plan=plan, git=FakeGit(read_file=[None])))
-
-    assert line == Line(
-        CHECK_METHOD_VERSION,
-        "fail",
-        "missing",
-        "run Initialise repository and merge its branch",
-    )
-
-
-def test_method_version_fails_missing_when_the_manifest_states_none() -> None:
-    plan = Plan(plan_ref="sha", rows=())
-    line = checks.method_version_line(
-        ctx(plan=plan, git=FakeGit(read_file=["no installation section here\n"]))
-    )
-
-    assert line.text == "missing"
-
-
-def test_method_version_fails_outdated() -> None:
-    plan = Plan(plan_ref="sha", rows=())
-    manifest = "installation:\n  version: 6.10.0\n"
-    line = checks.method_version_line(
-        ctx(plan=plan, bmad_version="6.11.0", git=FakeGit(read_file=[manifest]))
-    )
-
-    assert line.status == "fail"
-    assert line.text == "outdated: 6.10.0"
-
-
-def test_method_version_ok() -> None:
-    plan = Plan(plan_ref="sha", rows=())
-    manifest = "installation:\n  version: 6.11.0\n"
-    line = checks.method_version_line(
-        ctx(plan=plan, bmad_version="6.11.0", git=FakeGit(read_file=[manifest]))
-    )
-
-    assert line == Line(CHECK_METHOD_VERSION, "ok", "6.11.0", None)
 
 
 # --- line 11: clone check ------------------------------------------------------------------------

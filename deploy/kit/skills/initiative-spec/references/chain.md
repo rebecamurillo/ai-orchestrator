@@ -31,8 +31,8 @@ and the BMAD-version comparison.
   guessed. They are *candidates* here; step 6 is what proves them.
 - `installation.version` in the target's `_bmad/_config/manifest.yaml` equals
   `bmad_version` from `GET /api/v1/version` (AD-16). A mismatch or a missing manifest is
-  resolved before step 6 — preflight fails its method-version line otherwise, and the BMAD
-  skills a dispatched agent runs are not the ones you authored for.
+  resolved before step 6: preflight does not check it, and the BMAD skills a dispatched
+  agent runs are not the ones you authored for.
   `POST /api/v1/repositories/{id}/init` bootstraps a target that has none.
 - Where the harness supports subagents: one recon subagent per submodule, each returning a
   section; the lead merges them.

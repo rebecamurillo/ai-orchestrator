@@ -68,7 +68,6 @@ def make_ctx(
     return Context(
         git=FakeGit(),
         base_dir=Path("/work/my-project/my-repo/base"),
-        bmad_version="6.11.0",
         max_active_runs=2,
         repository=repository,
         runs=FakeRunRepository(runs or []),
