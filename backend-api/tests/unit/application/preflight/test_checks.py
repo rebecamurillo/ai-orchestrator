@@ -641,6 +641,7 @@ def test_checkpoints_combines_more_than_one() -> None:
 # --- line 9: method version ---------------------------------------------------------------------
 
 MANIFEST_PATH = "_bmad/_config/manifest.yaml"
+SKILL_ROW = row(kind="agent", with_resolved={"skill": "bmad-create-story"})
 
 
 def test_method_version_skips_without_a_plan() -> None:
@@ -658,8 +659,36 @@ def test_method_version_skips_when_the_plan_installs_the_method() -> None:
     )
 
 
+def test_method_version_skips_when_the_plan_dispatches_no_skill() -> None:
+    # own-text dispatch: neither an outdated nor a missing manifest can matter to it
+    own_text = row(kind="agent", with_resolved={"prompts": {"task": "say hi"}})
+    plan = Plan(plan_ref="sha", rows=(row(), own_text))
+    manifest = "installation:\n  version: 6.10.0\n"
+
+    for git in (FakeGit(read_file=[manifest]), FakeGit(read_file=[None])):
+        line = checks.method_version_line(ctx(plan=plan, bmad_version="6.11.0", git=git))
+
+        assert line == Line(CHECK_METHOD_VERSION, "skip", "plan dispatches no skill", None)
+
+
+def test_method_version_ignores_a_skill_on_a_row_that_is_not_an_agent() -> None:
+    plan = Plan(plan_ref="sha", rows=(row(kind="shell", with_resolved={"skill": "bmad-x"}),))
+
+    assert checks.method_version_line(ctx(plan=plan)).text == "plan dispatches no skill"
+
+
+def test_method_version_still_fails_when_the_plan_dispatches_a_skill() -> None:
+    plan = Plan(plan_ref="sha", rows=(row(kind="shell"), SKILL_ROW))
+    line = checks.method_version_line(
+        ctx(plan=plan, bmad_version="6.11.0", git=FakeGit(read_file=[None]))
+    )
+
+    assert line.status == "fail"
+    assert line.text == "missing"
+
+
 def test_method_version_fails_missing_when_no_manifest() -> None:
-    plan = Plan(plan_ref="sha", rows=())
+    plan = Plan(plan_ref="sha", rows=(SKILL_ROW,))
     line = checks.method_version_line(ctx(plan=plan, git=FakeGit(read_file=[None])))
 
     assert line == Line(
@@ -671,7 +700,7 @@ def test_method_version_fails_missing_when_no_manifest() -> None:
 
 
 def test_method_version_fails_missing_when_the_manifest_states_none() -> None:
-    plan = Plan(plan_ref="sha", rows=())
+    plan = Plan(plan_ref="sha", rows=(SKILL_ROW,))
     line = checks.method_version_line(
         ctx(plan=plan, git=FakeGit(read_file=["no installation section here\n"]))
     )
@@ -680,7 +709,7 @@ def test_method_version_fails_missing_when_the_manifest_states_none() -> None:
 
 
 def test_method_version_fails_outdated() -> None:
-    plan = Plan(plan_ref="sha", rows=())
+    plan = Plan(plan_ref="sha", rows=(SKILL_ROW,))
     manifest = "installation:\n  version: 6.10.0\n"
     line = checks.method_version_line(
         ctx(plan=plan, bmad_version="6.11.0", git=FakeGit(read_file=[manifest]))
@@ -691,7 +720,7 @@ def test_method_version_fails_outdated() -> None:
 
 
 def test_method_version_ok() -> None:
-    plan = Plan(plan_ref="sha", rows=())
+    plan = Plan(plan_ref="sha", rows=(SKILL_ROW,))
     manifest = "installation:\n  version: 6.11.0\n"
     line = checks.method_version_line(
         ctx(plan=plan, bmad_version="6.11.0", git=FakeGit(read_file=[manifest]))

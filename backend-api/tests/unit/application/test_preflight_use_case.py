@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from orchestrator.application.preflight.model import (
     CHECK_BRANCH,
     CHECK_HARNESS,
@@ -22,6 +24,7 @@ from orchestrator.application.use_cases.preflight import PreflightPorts, run_pre
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import CloneCheck, Repository
 from orchestrator.domain.entities.run import Run
+from orchestrator.domain.entities.template import TemplateVersion
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.values import Worktree
 from tests.unit.application.templates import plan_fixtures as fixtures
@@ -203,6 +206,56 @@ def test_method_version_outdated() -> None:
         "outdated: 6.10.0",
         "run Initialise repository and merge its branch",
     )
+
+
+OWN_TEXT_YAML = """\
+name: own-text
+version: 1
+inputs:
+  project:     { type: project,    required: true }
+  repository:  { type: repository, required: true }
+  base_branch: { type: string,     required: true }
+steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "own-text/x" }
+    gate: deterministic
+  - id: write
+    uses: agent
+    with: { harness: claude, prompt: "Create one file." }
+    gate: liveness
+"""
+
+
+def own_text_ports(git: FakeGit) -> PreflightPorts:
+    templates = FakeTemplateVersionRepository(
+        [TemplateVersion(name="own-text", version=1, yaml=OWN_TEXT_YAML, hash="sha", calls=())]
+    )
+    return ports(git=git, templates=templates)
+
+
+def own_text_request() -> PreflightRequest:
+    return epic_request(template_name="own-text", inputs={})
+
+
+@pytest.mark.parametrize("manifest", [None, "installation:\n  version: 6.10.0\n"])
+def test_method_version_skips_for_a_plan_that_dispatches_no_skill(manifest: str | None) -> None:
+    git = fixtures.epic_git()
+    if manifest is not None:
+        git.files[(fixtures.BASE_SHA, MANIFEST_PATH)] = manifest
+
+    result = run_preflight(own_text_ports(git), own_text_request())
+
+    assert result.plan_error is None
+    assert line(result, CHECK_METHOD_VERSION) == Line(
+        CHECK_METHOD_VERSION, "skip", "plan dispatches no skill"
+    )
+
+
+def test_method_version_stays_missing_for_a_plan_that_dispatches_a_skill() -> None:
+    result = run_preflight(ports(git=fixtures.epic_git()), epic_request())
+
+    assert line(result, CHECK_METHOD_VERSION).text == "missing"
 
 
 def test_ac5_missing_repository_id_every_line_skips() -> None:

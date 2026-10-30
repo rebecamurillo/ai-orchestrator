@@ -24,6 +24,7 @@ from orchestrator.application.preflight.model import (
     QUEUE_FREE,
     Line,
     PreflightRequest,
+    plan_dispatches_skill,
 )
 from orchestrator.application.steps import AGENT_KIND, CHECKPOINT_KIND, WORKTREE_KIND
 from orchestrator.application.templates.lists import EPICS_KIND, list_kind
@@ -69,8 +70,7 @@ NO_READINESS_RUN = "no readiness run"
 #: The one fix every failing method-version line names, verbatim.
 METHOD_VERSION_FIX = "run Initialise repository and merge its branch"
 
-#: The one kind (`application/steps/__init__.py::KIND_META`) line 9 is `skip` for — the
-#: plan installs the method itself, so there is nothing yet to compare a version against.
+#: A plan with this kind installs the method itself: nothing yet to compare a version against.
 BMAD_INSTALL_KIND = "bmad.install"
 
 
@@ -89,8 +89,7 @@ class Context:
     tree: ResolvedTree | None
     plan: Plan | None
     plan_error: PlanError | None
-    #: Live harness adapters keyed by name — used by `harness_probe_line` (story 2-2).
-    #: Defaults to empty so every existing `Context(...)` construction keeps compiling.
+    #: Live harness adapters keyed by name, read by `harness_probe_line`; empty by default.
     harness_registry: dict[str, HarnessAdapter] = field(default_factory=dict)
     #: `None` when no catalog is configured at all, which only a unit test's context is —
     #: `installed_skill_lines` `skip`s that, and `fail`s a catalog it cannot read (hub-Run
@@ -356,14 +355,15 @@ def _checkpoint_items(row: PlannedRow) -> list[str]:
 
 
 def method_version_line(ctx: Context) -> Line:
-    """Line 9: `_bmad/_config/manifest.yaml` at `plan_ref`, `skip` when the plan installs it."""
+    """Line 9: the manifest at `plan_ref`; `skip` if the plan installs it or uses no skill."""
     if ctx.plan is None:
         return Line(CHECK_METHOD_VERSION, "skip", "plan not built")
     if any(row.kind == BMAD_INSTALL_KIND for row in ctx.plan.rows):
         return Line(CHECK_METHOD_VERSION, "skip", "plan installs the method")
+    if not plan_dispatches_skill(ctx.plan):
+        return Line(CHECK_METHOD_VERSION, "skip", "plan dispatches no skill")
     manifest = ctx.git.read_file(ctx.base_dir, ctx.plan.plan_ref, MANIFEST_PATH)
-    # an unreadable manifest and a manifest that states no version are one line, not two:
-    # both mean "this clone does not say which method version it holds"
+    # unreadable and version-less manifests are one line: the clone states no method version
     stated = installed_version(manifest) if manifest is not None else None
     if stated is None:
         return Line(CHECK_METHOD_VERSION, "fail", "missing", fix=METHOD_VERSION_FIX)

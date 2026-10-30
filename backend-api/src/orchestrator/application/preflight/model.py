@@ -18,7 +18,8 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from orchestrator.application.templates.plan_model import PlanError
+from orchestrator.application.steps import AGENT_KIND
+from orchestrator.application.templates.plan_model import Plan, PlanError
 from orchestrator.domain.values import PlannedRow
 
 LineStatus = Literal["ok", "warn", "fail", "skip"]
@@ -85,3 +86,13 @@ class PreflightResult:
     rows: tuple[PlannedRow, ...] | None
     plan_error: PlanError | None
     conflict_consent_required: bool = False
+
+
+def row_skill(row: PlannedRow) -> str | None:
+    """The skill an `agent` row dispatches, or `None` when it is own-text or not an agent."""
+    skill = row.with_resolved.get("skill") if row.kind == AGENT_KIND else None
+    return skill if isinstance(skill, str) and skill else None
+
+
+def plan_dispatches_skill(plan: Plan) -> bool:
+    return any(row_skill(row) is not None for row in plan.rows)

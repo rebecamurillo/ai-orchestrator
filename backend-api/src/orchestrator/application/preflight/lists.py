@@ -21,8 +21,8 @@ from orchestrator.application.preflight.model import (
     CHECK_SPEC_MD,
     CHECK_STORIES_YAML,
     Line,
+    row_skill,
 )
-from orchestrator.application.steps import AGENT_KIND
 from orchestrator.application.templates.lines import load_sequence, load_with_lines
 from orchestrator.application.templates.lists import stories_directory
 from orchestrator.domain.entities.run import Run
@@ -225,10 +225,8 @@ def installed_skill_lines(ctx: Context) -> list[Line]:
         return []
     skill_names: list[str] = []
     for plan_row in ctx.plan.rows:
-        if plan_row.kind != AGENT_KIND:
-            continue
-        skill = plan_row.with_resolved.get("skill")
-        if isinstance(skill, str) and skill and skill not in skill_names:
+        skill = row_skill(plan_row)
+        if skill is not None and skill not in skill_names:
             skill_names.append(skill)
     if not skill_names:
         return []
