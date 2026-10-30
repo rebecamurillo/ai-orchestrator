@@ -9,10 +9,10 @@ source "$(dirname "$0")/_common.sh"
 # OPENCODE_LANGFUSE_TAGS is ORCH_LANGFUSE_TAGS escaped for the JSON string it is substituted into
 # below — OpenCode expands {env:...} textually, before parsing (adapter.py::local_aliases).
 HARNESS_ENV_ALIASES=(LANGFUSE_BASEURL=LANGFUSE_BASE_URL LANGFUSE_USER_ID=ORCH_RUN_ID OPENCODE_LANGFUSE_TAGS=ORCH_LANGFUSE_TAGS)
-: "${OPENCODE_VERSION:=1.18.26}"
+: "${OPENCODE_VERSION:=1.19.5}"
 OPENCODE_PACKAGE="opencode-ai"
 : "${LOCAL_MODELS:=local-coder,local-general}"
-: "${LANGFUSE_OPENCODE_PLUGIN_VERSION:=0.3.0}"
+: "${LANGFUSE_OPENCODE_PLUGIN_VERSION:=0.7.0}"
 OPENCODE_CONFIG_DIR="${AGENT_HOME}/.config/opencode"
 
 # OpenCode's own skills dir. Named once so `install`, `skills` and `doctor` cannot drift;

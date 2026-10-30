@@ -381,7 +381,7 @@ stack_up() {
 			"$(get_var "$env_file" BACKEND_API_PORT) BACKEND_API_PORT .env"
 	fi
 	if [[ "$pull" -eq 1 ]]; then compose pull; else say "--no-pull: using the images already on this machine"; fi
-	compose up -d --wait --wait-timeout 300
+	compose up -d --wait --wait-timeout 1800
 }
 
 # ── 6. proof, and where to go ────────────────────────────────────────────────
@@ -967,7 +967,7 @@ print_harness_row() {   # print_harness_row NAME → 0 enabled, 1 disabled, 2 no
 # Recreated, never `compose restart`: a restart keeps the environment the container was
 # created with, so a changed `.env` value would never reach it.
 recreate_backend() {   # recreate_backend WHAT → WHAT is what .env now holds, said on failure
-	compose up -d --no-deps --wait --wait-timeout 600 backend-api && return 0
+	compose up -d --no-deps --wait --wait-timeout 1800 backend-api && return 0
 	say "$1 is written to .env; backend-api did not come back healthy with it."
 	warn "backend-api did not become healthy after the recreate — ./install.sh logs"
 	return 1

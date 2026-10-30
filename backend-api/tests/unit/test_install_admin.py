@@ -60,7 +60,7 @@ SECRET_MIN_LENGTH = 8
 
 #: How the installer applies a changed `.env` to backend-api
 #: (spec-harness-upgrade-survives-redeploy).
-RECREATE = "up -d --no-deps --wait --wait-timeout 600 backend-api"
+RECREATE = "up -d --no-deps --wait --wait-timeout 1800 backend-api"
 
 needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not on PATH")
 
@@ -87,7 +87,7 @@ case "$*" in
 \t\techo "Unable to find image" >&2; exit 125 ;;
 esac
 case "$*" in
-\t*"up -d --no-deps --wait --wait-timeout 600 backend-api") exit "${SHIM_RECREATE_RC:-0}" ;;
+\t*"up -d --no-deps --wait --wait-timeout 1800 backend-api") exit "${SHIM_RECREATE_RC:-0}" ;;
 \t*"ps --status running --services"*) printf '%s\\n' ${SHIM_RUNNING:-}; exit 0 ;;
 \t*" logs "*) if [ -n "${SHIM_LOGS:-}" ]; then cat "$SHIM_LOGS"; fi; exit 0 ;;
 \t*" ps") echo "NAME STATUS"; exit 0 ;;
@@ -975,7 +975,9 @@ def test_upgrade_prints_the_planned_pin_changes_before_it_asks(
     path, env = installed
     before_text = (path / ".env").read_text()
     before = parse_env_example(path / ".env")
-    release = _release_env(path, CLAUDE_CODE_VERSION="2.1.300", CODEX_VERSION="0.100.0")
+    # 99.0.0 stays above any pin, so bumping the contract's pins cannot turn it into a downgrade
+    # (Operator, 2026-10-30: pins follow the latest release).
+    release = _release_env(path, CLAUDE_CODE_VERSION="99.0.0", CODEX_VERSION="0.100.0")
 
     result = _run(
         "upgrade",
@@ -988,7 +990,7 @@ def test_upgrade_prints_the_planned_pin_changes_before_it_asks(
 
     assert result.returncode != 0
     assert "upgrade cancelled" in result.stderr
-    assert f"CLAUDE_CODE_VERSION {before['CLAUDE_CODE_VERSION']} → 2.1.300" in result.stdout
+    assert f"CLAUDE_CODE_VERSION {before['CLAUDE_CODE_VERSION']} → 99.0.0" in result.stdout
     downgrade = next(line for line in result.stdout.splitlines() if "CODEX_VERSION" in line)
     assert f"{before['CODEX_VERSION']} → 0.100.0" in downgrade
     assert "downgrade" in downgrade

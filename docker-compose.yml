@@ -99,7 +99,7 @@ services:
       retries: 20
       # before the socket is bound a start reconciles the harness CLIs (up to three bounded
       # npm installs of 120s each when pins changed) and runs `alembic upgrade head`
-      start_period: 600s
+      start_period: 1800s
     restart: unless-stopped
 
   web-client:

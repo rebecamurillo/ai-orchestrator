@@ -16,7 +16,7 @@ HARNESS_ENV_ALIASES=(ANTHROPIC_AUTH_TOKEN=LITELLM_API_KEY ANTHROPIC_CUSTOM_HEADE
 # moves into ANTHROPIC_CUSTOM_HEADERS as `x-litellm-api-key: Bearer $LITELLM_API_KEY`.
 # That mode also needs `forward_client_headers_to_llm_api: true` on the Gateway and one
 # `claude login` inside the container; both are host-side and documented in deploy/llm-platform/README.md.
-: "${CLAUDE_CODE_VERSION:=2.1.258}"
+: "${CLAUDE_CODE_VERSION:=2.1.314}"
 CLAUDE_PACKAGE="@anthropic-ai/claude-code"
 
 # Claude reads ~/.claude/skills, not ~/.agents/skills. Named once: `install`, `skills` and

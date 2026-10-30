@@ -484,7 +484,7 @@ def test_ensure_runs_npm_with_no_fetch_retries_and_bounded(name: str, tmp_path: 
     assert ran.result.returncode == 0, ran.result.stderr
     assert "--fetch-retries=0" in ran.npm_calls[0].split()
     assert "--fetch-timeout=60000" in ran.npm_calls[0].split()
-    assert any(call.startswith("120 npm install -g ") for call in ran.timeout_calls)
+    assert any(call.startswith("600 npm install -g ") for call in ran.timeout_calls)
     version_reads = [call for call in ran.timeout_calls if call.endswith(" --version")]
     assert version_reads
     assert all(call.startswith("30 ") for call in version_reads)

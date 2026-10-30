@@ -144,11 +144,30 @@ the moment. A template cannot widen this list, and answering the park does not e
 
 ## Upgrade a harness CLI
 
+**Pin the latest release.** When you set up or edit `.env` or `.env.example`, pin the latest
+release of each of these, unless the user names a version. Look each one up, then write the
+exact number, never the word `latest`, which the container refuses:
+
+```bash
+npm view @anthropic-ai/claude-code version                 # CLAUDE_CODE_VERSION
+npm view @openai/codex version                             # CODEX_VERSION
+npm view opencode-ai version                               # OPENCODE_VERSION
+npm view @langfuse/opencode-observability-plugin version   # LANGFUSE_OPENCODE_PLUGIN_VERSION
+```
+
+`BMAD_VERSION` is outside this rule: it must equal the manifest in every target repository
+(AD-16), so it moves only when those repositories do. `./install.sh upgrade` sets the pins to the
+release's values, which can be older than the latest, so check them again after an upgrade.
+
+A newer release can change a flag the adapters pass. After raising a pin, re-run readiness for
+that harness. If it fails, tell the user which version failed and how, and do not fall back silently
+to an older one: the choice of version is theirs.
+
 The `*_VERSION` pins in `.env` (`CLAUDE_CODE_VERSION`, `CODEX_VERSION`, `OPENCODE_VERSION`) are
 what the container runs. At every start `backend-api` checks each CLI against its pin, in
 order: the image's own copy at the pin is copied onto the `harness-bin` volume
 (`/opt/harness-cli`), which also undoes any change made to the volume's copy; else the
-volume's copy at the pin is kept; else one `npm install -g` of the pin runs, bounded to two
+volume's copy at the pin is kept; else one `npm install -g` of the pin runs, bounded to ten
 minutes with no fetch retries, and replaces the volume's copy only once it reports the pin.
 Only that last case touches the network.
 

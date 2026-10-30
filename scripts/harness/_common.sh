@@ -66,10 +66,13 @@ require_plain_pin() {  # $1 pin variable name, $2 value
 }
 
 # The one npm line `install` (image build) and `ensure` (container start) both run. npm's own
-# fetch retries are off (hard rule 7) and the whole call is bounded, so a stalled registry
-# cannot outlast the container's healthcheck.
-npm_install_cli() {  # $1 prefix, $2 npm package, $3 version
-  timeout 120 npm install -g --prefix "$1" --fetch-retries=0 --fetch-timeout=60000 "$2@$3"
+# fetch retries are off (hard rule 7). Only a container start passes a bound, so a stalled
+# registry cannot outlast the healthcheck; codex takes minutes on an ordinary connection, and a
+# bound on the build would fail the image for it.
+npm_install_cli() {  # $1 prefix, $2 npm package, $3 version, $4 seconds allowed (optional)
+  local bound=()
+  if [ -n "${4:-}" ]; then bound=(timeout "$4"); fi
+  ${bound[@]+"${bound[@]}"} npm install -g --prefix "$1" --fetch-retries=0 --fetch-timeout=60000 "$2@$3"
 }
 
 # The first stdout line of `<executable> --version`, field $2 of it; empty when absent.
@@ -154,7 +157,7 @@ ensure_cli_at_pin() {  # $1 harness, $2 cli, $3 npm package, $4 pin variable nam
     log "${name}: cannot create ${staging}"
     return 1
   fi
-  if ! npm_install_cli "$staging" "$pkg" "$pin"; then
+  if ! npm_install_cli "$staging" "$pkg" "$pin" 600; then
     rm -rf "$staging"
     log "${name}: npm install ${pkg}@${pin} failed (installed: $(_now "$reader" "$cli"), pin: ${pin})"
     return 1
