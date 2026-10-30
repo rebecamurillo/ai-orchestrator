@@ -2,8 +2,8 @@
 title: 'Detach coded rules from the BMAD method'
 type: 'plan'
 created: '2026-10-30'
-status: 'proposed — not implemented; decisions in section 7 are open'
-revised: '2026-10-30 — BMAD stays a default install of every harness; PR #8 merged'
+status: 'proposed — not implemented; Q1, Q6, Q9, Q10, Q11, Q12 decided 2026-10-30; Q2, Q3, Q4, Q5, Q7, Q8 open'
+revised: '2026-10-30 — Operator answers recorded (Q1, Q6, Q9, Q10, Q11, Q12); BMAD stays a default install of every harness; PR #8 merged'
 baseline: 'origin/main fc5d800 for every file PR #8 changed; origin/main a2cccc2 for the rest, none of which changed between the two'
 ---
 
@@ -234,15 +234,15 @@ later without undoing anything (Q2).
 
 ### PR #9
 
-**Recommendation: do not merge. Close it, unmerged, when PR 1 merges.** Everything it adds
+**Decided (Operator, 2026-10-30, Q1): do not merge. Close it, unmerged, when PR 1 merges.** Everything it adds
 (the `plan dispatches no skill` skip, the AD-16 exception, the two helpers) would be deleted by
 PR 1, and the two conflict on the same lines of `checks.py`, `test_checks.py` and AD-16.
 
 Two things are worth carrying into PR 1: the `OWN_TEXT_YAML` fixture from its
 `test_preflight_use_case.py` becomes the regression test for "a plan runs on a repository with
 no method", and `row_skill` is a reasonable small refactor of `lists.py:225-231` only if PR 1
-needs it, which it does not. This plan did not touch PR #9. If the Operator chooses to keep the
-gate for skill plans (Q1), PR #9 is already that change and PR 1 is dropped.
+needs it, which it does not. This plan did not touch PR #9. The Operator removed the gate for every plan
+(Q1), so PR 1 stands and PR #9 is closed once it merges.
 
 PR #8 (harness upgrades) merged at `fc5d800`, so nothing here waits for it. It supplies the
 pattern PR 4 reuses (`ensure_cli_at_pin`, `_common.sh:137`; `ensure-all.sh`). Its line
@@ -279,7 +279,9 @@ was something to hide rather than a default to report.
   `deploy/.env.example:124` (the comment becomes *"the BMAD stubs installed in every harness; no
   relation to any repository"*); `deploy/kit/skills/orchestrator/SKILL.md:67-68`,
   `references/first-run.md:21-24,178`, `initiative-spec/SKILL.md:102-105`, `references/chain.md:32-34`;
-  spine `:218,:441,:455`.
+  spine `:218,:441,:455`. By the Operator's answer to Q9 (2026-10-30), PR 1 also carries the edits to
+  `AGENTS.md:7` (proposed text in Q9) and `backend-api/AGENTS.md:30`, for which the plan proposed no text;
+  the PR description names the wording for the Operator's review.
 - **Tests:** remove the line-9 block in `test_checks.py`; revise `test_preflight_use_case.py:128,194-205`.
   New: a plan with a skill row on a repository with no manifest has no `method version` line and
   `read_file` is never asked for that path; `create_run` accepts it; the catalog check still fails
@@ -494,9 +496,9 @@ was something to hide rather than a default to report.
   a BMAD runner, not as a product that carries BMAD.
 - **Files:** `README.md:3`, `backend-api/pyproject.toml:4`, `mcp/facade.py:44`,
   `NewWorkflowFields.tsx:64`, `plugin.json:3`, `marketplace.json:10`, `orchestrator/SKILL.md:3,8`,
-  comments. **`AGENTS.md:7` and `backend-api/AGENTS.md:30` are anchors only the Operator changes**
-  (hard rule 1), so they are proposed text in the PR description, unless the Operator approves the
-  edit (Q9).
+  comments. `AGENTS.md:7` and `backend-api/AGENTS.md:30` are anchors only the Operator changes (hard
+  rule 1); the Operator authorised both edits on 2026-10-30 (Q9) and they ship in PR 1, so PR 9 does
+  not touch them.
 - **Tests:** copy assertions only, if any. **API / DB:** the MCP instruction string; none. **Risk:** none.
 - Can ship any time after PR 1.
 
@@ -571,22 +573,23 @@ reach the rest.
 
 ## 7. Open questions for the Operator
 
-Each has a recommendation; PR 1 can start on Q1 alone, and PR 4 needs Q4.
+Each has a recommendation. The Operator answered Q1, Q6, Q9, Q10, Q11 and Q12 on 2026-10-30; those rows
+are decisions. Q2, Q3, Q4, Q5, Q7 and Q8 are open: their recommendations are not decided. PR 4 needs Q4.
 
-| # | question | recommendation |
+| # | question | recommendation / decision |
 | --- | --- | --- |
-| Q1 | Remove the gate for every plan, including BMAD-skill plans, accepting the loss in section 3? PR #9 stands only if the answer is no. | **Yes, remove for all, and close PR #9 unmerged after PR 1.** This is what was asked; the check was also weaker than documented. |
-| Q2 | Is a guard row enough, or should templates get a declarative `requires:` preflight list, so the refusal comes before the Run exists? | **Guard rows now.** The gap is seconds and no spend, and it adds no DSL. Add `requires:` later if a real need shows up. |
-| Q3 | In `staged-epic` and `staged-hub-epic`, a repository with no `_bmad/` can build its stories but not run the epic tail. Stop at the tail, or skip the tail? | **Stop at the tail.** Stories and their commits are kept and a skipped retrospective would be silent. An Operator can use a template without those rows. |
-| Q4 | `BMAD_VERSION`: where does the pin live, and how does the installed version move? | **`.env`, as a fourth pin beside the three CLIs, on PR #8's mechanism: the image's bundle when it is at the pin, else one bounded registry attempt, moved by `install.sh upgrade` and `install.sh harness bmad --version X`. The shipped value moves to 6.12.4. `/version` keeps `bmad_version` and adds `bmad_installed`.** Production already sets this variable and the stubs simply do not follow it; this makes it true. *Cheaper:* image only, with a differing pin merely logged: no registry at boot, but an `.env` edit then does nothing until a new image. *Rejected:* a literal with no override (the previous recommendation), which ignores production's 6.12.4, and a generic `packaged_tools` field, which renames a report for no behaviour. |
-| Q5 | *Initialise repository* can no longer react to a version. Keep it always available, or remove it, since `repo-init` is on the menu? | **Keep it, offered whenever no init Run is in progress, including after a finished one.** The endpoint and `is_init` are already generic, it is the one action that needs no form, and with the method cell gone it is how a repository's `_bmad/` reaches a newer pin. Production's repositories at 6.11.0 are that case today. |
-| Q6 | Should the default readiness Run prove the BMAD stubs? A neutral default proves the harness, not the stubs. | **Neutral by default, even with BMAD installed by default.** Default is not dependency: with `epic` as the default, a stub fault could withdraw or refuse a harness, which is the app rule this plan removes. PR 4 reports the stubs' state instead, and readiness is about the harness (`harness_readiness_evaluate.py:27-31`). What is lost is proof that a real session discovers a stub; `READINESS_TEMPLATE=epic` stays available for an instance that wants it. |
-| Q7 | Scrub the stored `bmad_version` key and stale lines with a migration? | **No.** A tolerant reader and the daily overwrite are enough; a migration adds rollback risk for tidiness. Reconsider at PR 10 only if the key's presence confuses someone. |
-| Q8 | Do PR 7 and PR 8 at all? Without them the rendering and the Question format still assume BMAD, though only softly, and a non-BMAD template still works if it writes those conventions. | **Yes, but they can wait for a non-BMAD template to exist.** PR 7 is the riskiest here. If the near goal is only "no BMAD rule blocks me", beta.3 and beta.4 achieve it. PR 8's empty-question park is worth fixing on its own earlier, since it hits the first non-BMAD template that blocks. |
-| Q9 | `AGENTS.md:7` and `backend-api/AGENTS.md:30` are anchors. Approve an edit? | **Yes.** Proposed line 7: *"An orchestrator that runs agent workflows against other repositories: a Run plans every step up front, …"*. Everything else in that sentence stays. |
-| Q10 | Rename `_bmad-output/`, or stop using BMAD to develop this repository? | **Leave both.** It is this repository's own tooling, the spine's path is referenced from many places, and it is not product behaviour. |
-| Q11 | Should an instance be able to opt out of the default install, with a setting such as `BMAD_INSTALL=false` or a blank `INIT_TEMPLATE`? New; nothing in this plan assumes one. | **No, not now.** Once PRs 1 to 6 land nothing depends on BMAD, so an opt-out would protect no rule, while adding a setting and a branch to the install. The one cost of the default is 49 more skills visible to each harness (`README.md:412`), unmeasured. Reconsider if that proves to cost something, or if an instance has a reason to keep the stubs out. |
-| Q12 | Does "installed by default" extend to `_bmad/` in target repositories? New. | **No.** The default covers the harness; a repository receives `_bmad/` only through `repo-init`, as a PR. A worktree overlay at dispatch would make the skills work everywhere, but it writes unreviewed files into a repository and needs exactly the coded method knowledge this plan removes. The consequence is finding 6: a BMAD skill on a repository with no `_bmad/` stops at its guard row. |
+| Q1 | Remove the gate for every plan, including BMAD-skill plans, accepting the loss in section 3? PR #9 stands only if the answer is no. | **Decided, Operator, 2026-10-30: yes, remove the method version gate for all plans; PR #9 is closed once PR 1 merges.** Recommendation as written: **Yes, remove for all, and close PR #9 unmerged after PR 1.** This is what was asked; the check was also weaker than documented. |
+| Q2 | Is a guard row enough, or should templates get a declarative `requires:` preflight list, so the refusal comes before the Run exists? | **Open.** Recommendation, not decided: **Guard rows now.** The gap is seconds and no spend, and it adds no DSL. Add `requires:` later if a real need shows up. |
+| Q3 | In `staged-epic` and `staged-hub-epic`, a repository with no `_bmad/` can build its stories but not run the epic tail. Stop at the tail, or skip the tail? | **Open.** Recommendation, not decided: **Stop at the tail.** Stories and their commits are kept and a skipped retrospective would be silent. An Operator can use a template without those rows. |
+| Q4 | `BMAD_VERSION`: where does the pin live, and how does the installed version move? | **Open.** Recommendation, not decided: **`.env`, as a fourth pin beside the three CLIs, on PR #8's mechanism: the image's bundle when it is at the pin, else one bounded registry attempt, moved by `install.sh upgrade` and `install.sh harness bmad --version X`. The shipped value moves to 6.12.4. `/version` keeps `bmad_version` and adds `bmad_installed`.** Production already sets this variable and the stubs simply do not follow it; this makes it true. *Cheaper:* image only, with a differing pin merely logged: no registry at boot, but an `.env` edit then does nothing until a new image. *Rejected:* a literal with no override (the previous recommendation), which ignores production's 6.12.4, and a generic `packaged_tools` field, which renames a report for no behaviour. |
+| Q5 | *Initialise repository* can no longer react to a version. Keep it always available, or remove it, since `repo-init` is on the menu? | **Open.** Recommendation, not decided: **Keep it, offered whenever no init Run is in progress, including after a finished one.** The endpoint and `is_init` are already generic, it is the one action that needs no form, and with the method cell gone it is how a repository's `_bmad/` reaches a newer pin. Production's repositories at 6.11.0 are that case today. |
+| Q6 | Should the default readiness Run prove the BMAD stubs? A neutral default proves the harness, not the stubs. | **Decided, Operator, 2026-10-30: agreed. The default readiness has no BMAD check and must not block.** Recommendation as written: **Neutral by default, even with BMAD installed by default.** Default is not dependency: with `epic` as the default, a stub fault could withdraw or refuse a harness, which is the app rule this plan removes. PR 4 reports the stubs' state instead, and readiness is about the harness (`harness_readiness_evaluate.py:27-31`). What is lost is proof that a real session discovers a stub; `READINESS_TEMPLATE=epic` stays available for an instance that wants it. |
+| Q7 | Scrub the stored `bmad_version` key and stale lines with a migration? | **Open.** Recommendation, not decided: **No.** A tolerant reader and the daily overwrite are enough; a migration adds rollback risk for tidiness. Reconsider at PR 10 only if the key's presence confuses someone. |
+| Q8 | Do PR 7 and PR 8 at all? Without them the rendering and the Question format still assume BMAD, though only softly, and a non-BMAD template still works if it writes those conventions. | **Open.** Recommendation, not decided: **Yes, but they can wait for a non-BMAD template to exist.** PR 7 is the riskiest here. If the near goal is only "no BMAD rule blocks me", beta.3 and beta.4 achieve it. PR 8's empty-question park is worth fixing on its own earlier, since it hits the first non-BMAD template that blocks. |
+| Q9 | `AGENTS.md:7` and `backend-api/AGENTS.md:30` are anchors. Approve an edit? | **Decided, Operator, 2026-10-30: yes, the Operator authorises editing `AGENTS.md:7` and `backend-api/AGENTS.md:30`; the edits ship in PR 1.** Recommendation as written: **Yes.** Proposed line 7: *"An orchestrator that runs agent workflows against other repositories: a Run plans every step up front, …"*. Everything else in that sentence stays. |
+| Q10 | Rename `_bmad-output/`, or stop using BMAD to develop this repository? | **Decided, Operator, 2026-10-30: leave `_bmad-output/` and this repository's own use of BMAD as is.** Recommendation as written: **Leave both.** It is this repository's own tooling, the spine's path is referenced from many places, and it is not product behaviour. |
+| Q11 | Should an instance be able to opt out of the default install, with a setting such as `BMAD_INSTALL=false` or a blank `INIT_TEMPLATE`? New; nothing in this plan assumes one. | **Decided, Operator, 2026-10-30: no opt-out of the default install.** Recommendation as written: **No, not now.** Once PRs 1 to 6 land nothing depends on BMAD, so an opt-out would protect no rule, while adding a setting and a branch to the install. The one cost of the default is 49 more skills visible to each harness (`README.md:412`), unmeasured. Reconsider if that proves to cost something, or if an instance has a reason to keep the stubs out. |
+| Q12 | Does "installed by default" extend to `_bmad/` in target repositories? New. | **Decided, Operator, 2026-10-30: no, the default install does not extend to `_bmad/` in target repositories.** Recommendation as written: **No.** The default covers the harness; a repository receives `_bmad/` only through `repo-init`, as a PR. A worktree overlay at dispatch would make the skills work everywhere, but it writes unreviewed files into a repository and needs exactly the coded method knowledge this plan removes. The consequence is finding 6: a BMAD skill on a repository with no `_bmad/` stops at its guard row. |
 
 ## 8. What this plan did not verify
 
