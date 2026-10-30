@@ -66,9 +66,11 @@ def progress(run: Run, rows: Sequence[StepRun]) -> Progress | None:
     """
     if not any(story_frame(row.path) is not None for row in rows):
         return None
-    story_commits = [row for row in rows if row.kind == COMMIT_KIND]
-    stories_total = len(story_commits)
-    stories_done = sum(1 for row in story_commits if row.status in SETTLED)
+    commits = _commits_by_story(rows)
+    stories_total = len(commits)
+    stories_done = sum(
+        1 for story_rows in commits.values() if all(row.status in SETTLED for row in story_rows)
+    )
     epics_total: int | None = None
     epics_done: int | None = None
     epic_pushes = [
@@ -90,18 +92,24 @@ def story_cells(
     run: Run, rows: Sequence[StepRun], attempts_by_row: Mapping[UUID, Sequence[Attempt]]
 ) -> list[StoryCell]:
     """One cell per story frame, in plan order — state off the frame's own commit-guard row."""
-    commit_rows = sorted((row for row in rows if row.kind == COMMIT_KIND), key=lambda row: row.seq)
     cells = []
-    for commit_row in commit_rows:
-        frame = story_frame(commit_row.path)
-        if frame is None:
-            continue
+    for frame, commit_rows in _commits_by_story(rows).items():
         frame_cost = Decimal("0")
         for frame_row in rows_in_frame(rows, frame):
             for attempt in attempts_by_row.get(frame_row.id, ()):
                 frame_cost += attempt.cost_usd or Decimal("0")
-        cells.append(_story_cell(run, rows, frame, commit_row, frame_cost))
+        cells.append(_story_cell(run, rows, frame, commit_rows, frame_cost))
     return cells
+
+
+def _commits_by_story(rows: Sequence[StepRun]) -> dict[str, list[StepRun]]:
+    """Each Story frame's `git.commit` rows in plan order; a Story may carry several."""
+    grouped: dict[str, list[StepRun]] = {}
+    for row in sorted(rows, key=lambda row: row.seq):
+        frame = story_frame(row.path)
+        if row.kind == COMMIT_KIND and frame is not None:
+            grouped.setdefault(frame, []).append(row)
+    return grouped
 
 
 def summary(run: Run, rows: Sequence[StepRun]) -> Summary | None:
@@ -174,20 +182,23 @@ def _operator_skipped(rows: Sequence[StepRun], frame: str) -> bool:
 
 
 def _story_cell(
-    run: Run, rows: Sequence[StepRun], frame: str, commit_row: StepRun, cost_usd: Decimal
+    run: Run, rows: Sequence[StepRun], frame: str, commit_rows: Sequence[StepRun], cost_usd: Decimal
 ) -> StoryCell:
     epic = epic_frame(frame)
     epic_index = bracket_index(epic) if epic is not None else 0
-    if commit_row.status == "skipped":
+    if all(row.status == "skipped" for row in commit_rows):
         state = "skipped"
-    elif commit_row.status == "done":
+    elif all(row.status in SETTLED for row in commit_rows):
         state = "done"
     elif _frame_is_current(run, rows, frame):
         state = "current"
     else:
         state = "future"
     return StoryCell(
-        epic_index=epic_index, story_id=commit_row.story_id or "", state=state, cost_usd=cost_usd
+        epic_index=epic_index,
+        story_id=commit_rows[0].story_id or "",
+        state=state,
+        cost_usd=cost_usd,
     )
 
 
