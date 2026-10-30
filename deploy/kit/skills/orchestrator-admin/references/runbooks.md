@@ -17,7 +17,10 @@ machine, and the release notes answer it.
 ```
 
 The pre-flight prints `running <newer> → target 1.1.0`, so the downgrade is visible before the
-confirm. It still takes a `pg_dump` first, which is what you want.
+confirm. It still takes a `pg_dump` first, which is what you want. It also rewrites the
+harness CLI pins in `.env` to the older release's values, listed (marked `downgrade`) before
+the confirm. A release image too old to carry those pins leaves them as they are, with a
+warning.
 
 **The release migrated the schema in a way the old code cannot read** — there is no rollback,
 only a restore, and everything written since the dump is lost. Say that in those words, get
@@ -138,6 +141,51 @@ families: `Bash(yarn *)`, `Bash(npx *)`, …) must cover the toolchain of every 
 builds, or go back to `Bash`. Edit the quoted value in `.env`, then `./install.sh start`. It
 is read at start-up, so the restart is required — say what is running and let the user choose
 the moment. A template cannot widen this list, and answering the park does not either.
+
+## Upgrade a harness CLI
+
+The `*_VERSION` pins in `.env` (`CLAUDE_CODE_VERSION`, `CODEX_VERSION`, `OPENCODE_VERSION`) are
+what the container runs. At every start `backend-api` checks each CLI against its pin, in
+order: the image's own copy at the pin is copied onto the `harness-bin` volume
+(`/opt/harness-cli`), which also undoes any change made to the volume's copy; else the
+volume's copy at the pin is kept; else one `npm install -g` of the pin runs, bounded to two
+minutes with no fetch retries, and replaces the volume's copy only once it reports the pin.
+Only that last case touches the network.
+
+```bash
+./install.sh harness claude --version 2.1.260   # or codex / opencode
+```
+
+1. It rewrites the pin in `.env`, keeping the line's trailing comment.
+2. It recreates `backend-api` (`docker compose up -d`; `restart` keeps the old environment
+   and never applies a pin). That is an interruption, so say what is running and let the
+   user choose the moment (`--yes` answers the confirmation). With the stack down it writes
+   the pin only, and `./install.sh start` applies it.
+3. It prints that harness's `[harness:<name>]` log lines from this start; a `refused` line
+   fails the command. Then it prints the harness row, which reads `disabled` until readiness is re-run, because a
+   pin change resets it. Re-run it from the web UI's Fleet page, or
+   `POST /api/v1/harnesses/{name}/readiness`. If the recreate does not come back healthy,
+   the pin is still written; `./install.sh logs` says why.
+
+The start-up install needs the npm registry only when a pin differs from the image's. A pin it cannot
+install — a typo, a version that does not exist, no network — refuses that harness alone:
+its probe reports `cli not at pinned version`, and the API and the other harnesses keep
+working. `./install.sh logs` names the harness and both versions. Nothing retries until the
+next start: put back a version that installs and recreate.
+
+`./install.sh upgrade --tag X` logs in to ghcr.io and pulls the release image before it asks
+to continue; declining writes nothing. It reads the three pins from that image and, before its
+confirmation, lists each one that differs as `NAME old → new`, marking a downgrade. It
+writes them only after the confirmation. A pin raised by hand is overwritten then; raise it
+again afterwards if it is still wanted. `.env` must declare all three pins, or the upgrade
+stops before writing anything.
+
+`harness-bin` is not backed up; `./install.sh uninstall` removes it. To re-seed it from the
+image: stop the stack, then `docker volume rm <project>_harness-bin`. Both take the
+instance down — say so and get the go-ahead first.
+
+Read the CLI's release notes before raising a pin; the harness scripts' flags were verified
+against the version `.env.example` ships.
 
 ## Template refresh
 

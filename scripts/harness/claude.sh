@@ -17,6 +17,7 @@ HARNESS_ENV_ALIASES=(ANTHROPIC_AUTH_TOKEN=LITELLM_API_KEY ANTHROPIC_CUSTOM_HEADE
 # That mode also needs `forward_client_headers_to_llm_api: true` on the Gateway and one
 # `claude login` inside the container; both are host-side and documented in deploy/llm-platform/README.md.
 : "${CLAUDE_CODE_VERSION:=2.1.258}"
+CLAUDE_PACKAGE="@anthropic-ai/claude-code"
 
 # Claude reads ~/.claude/skills, not ~/.agents/skills. Named once: `install`, `skills` and
 # `doctor` must not drift, and `skills-manifest.json` — the instance's skill catalog — is
@@ -24,7 +25,8 @@ HARNESS_ENV_ALIASES=(ANTHROPIC_AUTH_TOKEN=LITELLM_API_KEY ANTHROPIC_CUSTOM_HEADE
 SKILLS_DIR="${AGENT_HOME}/.claude/skills"
 
 install() {
-  npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+  require_plain_pin CLAUDE_CODE_VERSION "${CLAUDE_CODE_VERSION}"
+  npm_install_cli "${HARNESS_IMAGE_PREFIX}" "${CLAUDE_PACKAGE}" "${CLAUDE_CODE_VERSION}"
   bmad_install_global_skills claude-code "${SKILLS_DIR}"
   install_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
 }
@@ -34,6 +36,12 @@ install() {
 # for why the boot-time copy exists at all (the `agent-home` volume shadows the image).
 skills() {
   sync_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
+}
+
+installed_version() { cli_version_at "$1" '$1'; }
+
+ensure() {
+  ensure_cli_at_pin claude claude "${CLAUDE_PACKAGE}" CLAUDE_CODE_VERSION "${CLAUDE_CODE_VERSION}" installed_version
 }
 
 configure() {
@@ -174,9 +182,11 @@ probe() {
 
 case "${1:-}" in
   install)                install ;;
+  # `ensure` reads only the pin: no Gateway or Langfuse value, exactly as `install` does not
+  ensure)                 ensure ;;
   # `skills` reads no Gateway or Langfuse value, exactly as `install` does not
   skills)                 skills ;;
   configure|doctor)       require_harness_env; "$1" ;;
   probe)                  require_harness_env; probe ;;
-  *)                      echo "usage: $0 install|skills|configure|doctor|probe" >&2; exit 2 ;;
+  *)                      echo "usage: $0 install|ensure|skills|configure|doctor|probe" >&2; exit 2 ;;
 esac

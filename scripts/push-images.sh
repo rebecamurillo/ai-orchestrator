@@ -20,9 +20,49 @@
 # nothing else — never a build argument, never a layer (hard rule 5). Each image is labelled
 # with the commit it was built from, so `docker inspect` on a client machine answers "what is
 # this" without the registry.
+#
+# The harness CLI pins (CLAUDE_CODE_VERSION, CODEX_VERSION, OPENCODE_VERSION) are passed as
+# build arguments read from the repository's `.env.example`, because a published image carries
+# the contract's pins; `.env` is never read. One also set in this script's environment must
+# equal the contract's, or nothing is built. To publish another pin, change `.env.example`.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# The pin shape every reader of a harness pin accepts. A test keeps its four copies identical:
+# scripts/harness/_common.sh, deploy/install.sh, scripts/push-images.sh, release.yml.
+PLAIN_VERSION='^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}([-+][0-9A-Za-z.-]+)?$'
+
+# NAME's value from the first `NAME=` line of the repository's `.env.example`, read as compose
+# reads it: a `#` comment after whitespace dropped, then a matched pair of quotes.
+contract_value() {
+	local line value
+	[[ -f "${root}/.env.example" ]] || return 0
+	line="$(grep "^$1=" "${root}/.env.example" | head -1 || true)"
+	[[ -n "$line" ]] || return 0
+	value="${line#*=}"
+	value="$(printf '%s' "$value" | sed -E 's/(^|[[:space:]]+)#.*$//; s/[[:space:]]+$//')"
+	case "$value" in \"*\"|\'*\') value="${value:1:${#value}-2}" ;; esac
+	printf '%s' "$value"
+}
+
+pin_args=()
+for name in CLAUDE_CODE_VERSION CODEX_VERSION OPENCODE_VERSION; do
+	value="$(contract_value "$name")"
+	given="${!name:-}"
+	if [[ -n "$given" && -n "$value" && "$given" != "$value" ]]; then
+		echo "${name}=${given} in the environment, ${value} in .env.example — the image carries the contract's pin; nothing was built" >&2
+		exit 1
+	fi
+	[[ -n "$value" ]] || value="$given"
+	[[ -n "$value" ]] || continue
+	if ! [[ "$value" =~ $PLAIN_VERSION ]]; then
+		echo "${name}='${value}' is not a plain version (x.y.z) — nothing was built" >&2
+		exit 1
+	fi
+	pin_args+=(--build-arg "${name}=${value}")
+done
+
 tag="${1:-$(tr -d '[:space:]' < "${root}/VERSION")}"
 namespace="${IMAGE_NAMESPACE:-ghcr.io/rebecamurillo/ai-orchestrator}"
 platforms="${PLATFORMS:-linux/amd64,linux/arm64}"
@@ -70,6 +110,7 @@ build() {   # build <component> <context> <dockerfile>
 	echo "== ${namespace}/${component}:${tag} (${platforms})"
 	docker buildx build \
 		--platform "$platforms" \
+		${pin_args[@]+"${pin_args[@]}"} \
 		--file "$dockerfile" \
 		--tag "${namespace}/${component}:${tag}" \
 		--tag "${namespace}/${component}:sha-${revision}" \

@@ -41,6 +41,8 @@ from tests.unit.test_compose_services import (
     WEB_CLIENT_VARIABLES,
     mapping_keys,
 )
+from tests.unit.test_compose_services import compose_text as base_compose_text
+from tests.unit.test_compose_services import service as base_service
 
 DEPLOY_COMPOSE = REPO_ROOT / "deploy" / "docker-compose.yml"
 DEPLOY_ENV_EXAMPLE = REPO_ROOT / "deploy" / ".env.example"
@@ -271,6 +273,34 @@ def test_the_named_volume_is_declared(name: str) -> None:
 )
 def test_the_volume_is_mounted_where_the_contract_puts_it(volume: str, variable: str) -> None:
     assert f"- {volume}:${{{variable}" in service("backend-api")
+
+
+# ── harness-bin: the harness CLIs outlive a recreate ────────────────────────
+#
+# spec-harness-upgrade-survives-redeploy (2026-10-29): the harness CLIs' own npm prefix
+# `/opt/harness-cli` is the named volume `harness-bin` in both stacks, so a CLI `ensure`
+# reconciled to its pin survives a recreate. `/opt/npm-global` (the corepack shims) stays in
+# the image. Both stacks are asserted here.
+
+HARNESS_PREFIX = "/opt/harness-cli"
+
+
+@pytest.mark.parametrize("stack", ["base", "deploy"])
+def test_harness_bin_is_declared_and_mounted_at_the_harness_prefix(stack: str) -> None:
+    text = base_compose_text() if stack == "base" else compose_text()
+    backend = base_service("backend-api") if stack == "base" else service("backend-api")
+
+    assert "harness-bin" in _names(_block(text, "volumes"))
+    assert f"- harness-bin:{HARNESS_PREFIX}" in backend
+    assert "/opt/npm-global" not in backend
+
+
+@pytest.mark.parametrize("stack", ["base", "deploy"])
+def test_the_image_copy_of_the_harness_clis_is_never_mounted(stack: str) -> None:
+    """`ensure` restores the volume from it, so no volume may hide it."""
+    text = base_compose_text() if stack == "base" else compose_text()
+
+    assert "/opt/harness-image" not in text
 
 
 # ── still no credential in the file ──────────────────────────────────────────

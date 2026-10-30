@@ -4,7 +4,10 @@
 # `scripts/harness/`. See `docker-compose.yml`.
 #
 # Configuration is the environment (AD-20), so nothing here reads `.env`: the only values
-# baked in are version pins, and every one of them is an ARG with a literal default. No
+# baked in are version pins. The toolchain pins are ARGs with a literal default; the three
+# harness CLI pins are valueless ARGs that compose fills from `.env` (`build.args`); unset,
+# the `: "${X:=default}"` line in `scripts/harness/<name>.sh` applies, which equals
+# `.env.example`. No
 # credential is a build argument — `docker history` shows those — and `.dockerignore` keeps
 # a filled `.env` out of the build context entirely (hard rule 5, AD-5).
 #
@@ -34,14 +37,15 @@ ENV PYTHONUNBUFFERED=1 \
     AGENT_HOME=${AGENT_HOME} \
     WORK_DIR=${WORK_DIR} \
     HOME=${AGENT_HOME} \
-    # npm's global prefix sits outside every named volume on purpose: `agent-home` is
-    # seeded from the image only while it is empty, so a CLI installed under HOME would
-    # go stale the first time the image was rebuilt.
+    # npm's global prefix sits outside every named volume on purpose: it holds the corepack
+    # shims, which must follow the image. The harness CLIs live apart, in /opt/harness-cli
+    # (the `harness-bin` volume, reconciled against the `*_VERSION` pins at every start), and
+    # come first on PATH; /opt/harness-image, the build's own copy, is on no PATH.
     NPM_CONFIG_PREFIX=/opt/npm-global \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     NPM_CONFIG_FUND=false \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
-    PATH=/app/backend-api/.venv/bin:/opt/npm-global/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+    PATH=/app/backend-api/.venv/bin:/opt/harness-cli/bin:/opt/npm-global/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -102,11 +106,11 @@ RUN set -eux; \
     useradd --create-home --home-dir "${AGENT_HOME}" --shell /bin/bash --uid 1000 agent; \
     echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent; \
     chmod 0440 /etc/sudoers.d/agent; \
-    mkdir -p "${WORK_DIR}" /opt/npm-global/bin /app; \
+    mkdir -p "${WORK_DIR}" /opt/npm-global/bin /opt/harness-image /opt/harness-cli /app; \
     corepack enable --install-directory /opt/npm-global/bin; \
     # Node's default global location is also agent-owned: `corepack enable` and any tool
     # that ignores NPM_CONFIG_PREFIX writes here, and the agent user must install freely.
-    chown -R agent:agent "${WORK_DIR}" "${AGENT_HOME}" /opt/npm-global /app \
+    chown -R agent:agent "${WORK_DIR}" "${AGENT_HOME}" /opt/npm-global /opt/harness-image /opt/harness-cli /app \
         /usr/local/bin /usr/local/lib/node_modules
 
 USER agent
@@ -143,9 +147,22 @@ WORKDIR /app
 # Each harness installs its CLI at its pinned version and copies the BMAD skill stubs into
 # the global skill directory it reads (AD-16). Run as `agent`, so the stubs land under
 # AGENT_HOME owned by the user that will read them.
+#
+# The pins are valueless ARGs: compose passes `.env`'s value, and unset, the script default
+# installs. Declared here, not with the others, because a changed ARG busts the cache of
+# every RUN after it, and only these installs read them.
+ARG CLAUDE_CODE_VERSION
+ARG CODEX_VERSION
+ARG OPENCODE_VERSION
+#
+# `install` writes the CLIs to /opt/harness-image, which is never mounted: each start's
+# `ensure` copies from it whenever it is at the pin, so a release's CLIs reach an existing
+# `harness-bin` volume without the registry. The copy into /opt/harness-cli seeds a volume
+# created from this image.
 RUN scripts/harness/claude.sh install \
  && scripts/harness/codex.sh install \
- && scripts/harness/opencode.sh install
+ && scripts/harness/opencode.sh install \
+ && cp -a /opt/harness-image/. /opt/harness-cli/
 
 # The client install, entire (agent-delivery-kit plan §1): `docker run --rm <image> kit
 # bootstrap | tar x` hands a machine `install.sh`, the compose file, the env contract,

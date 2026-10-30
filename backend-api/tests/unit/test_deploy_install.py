@@ -496,6 +496,65 @@ def test_the_release_workflow_creates_the_release_and_attaches_no_bundle() -> No
     assert "/api/v1/kit/install.sh" in script
 
 
+# spec-harness-upgrade-survives-redeploy (2026-10-29): a release bakes `.env.example`'s harness
+# CLI pins into the backend image through build arguments read by a `pins` step.
+
+
+@pytest.mark.parametrize("variable", ["CLAUDE_CODE_VERSION", "CODEX_VERSION", "OPENCODE_VERSION"])
+def test_the_release_build_passes_each_harness_pin_from_the_pins_step(variable: str) -> None:
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text())
+    steps = workflow["jobs"]["build"]["steps"]
+    pins_at = next(i for i, step in enumerate(steps) if step.get("id") == "pins")
+    build_at, build = next(
+        (i, step) for i, step in enumerate(steps) if "build-push-action" in step.get("uses", "")
+    )
+
+    assert pins_at < build_at
+    assert variable in steps[pins_at]["run"]
+    args = build["with"]["build-args"].splitlines()
+    assert f"{variable}=${{{{ steps.pins.outputs.{variable} }}}}" in args
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ('CLAUDE_CODE_VERSION="2.1.3"  # a comment', "2.1.3"),
+        ("CLAUDE_CODE_VERSION='2.1.3'", "2.1.3"),
+        ("CLAUDE_CODE_VERSION=2.1.3 # one space", "2.1.3"),
+        ('CLAUDE_CODE_VERSION="2.1.3', None),
+        ("CLAUDE_CODE_VERSION=latest", None),
+    ],
+    ids=["double quotes", "single quotes", "one space", "unmatched quote", "latest"],
+)
+def test_the_release_pins_step_reads_a_plain_version_or_fails(
+    tmp_path: Path, line: str, expected: str | None
+) -> None:
+    """The step's own script, run against a scratch `.env.example`."""
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text())
+    step = next(step for step in workflow["jobs"]["build"]["steps"] if step.get("id") == "pins")
+    (tmp_path / ".env.example").write_text(
+        f"{line}\nCODEX_VERSION=0.152.1\nOPENCODE_VERSION=1.18.26\n"
+    )
+    output = tmp_path / "github_output"
+
+    result = subprocess.run(  # fixed argv, no shell
+        ["bash", "-e", "-c", step["run"]],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env={**os.environ, "GITHUB_OUTPUT": str(output)},
+        check=False,
+    )
+
+    if expected is None:
+        assert result.returncode != 0
+        assert "CLAUDE_CODE_VERSION" in result.stdout + result.stderr
+    else:
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert f"CLAUDE_CODE_VERSION={expected}" in output.read_text().splitlines()
+
+
 def test_the_release_asset_downloader_is_gone() -> None:
     """`get.sh` read the asset with a `repo`-scoped token; nothing needs that scope now."""
     assert not (DEPLOY_DIR / "get.sh").exists()

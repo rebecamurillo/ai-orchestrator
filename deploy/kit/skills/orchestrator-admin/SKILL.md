@@ -111,8 +111,10 @@ How to read it:
   from a different release than the instance runs. The line names the `upgrade --tag` that
   reconciles them. Decide which number is the intended one before running it.
 - **`warn` on a harness** — the `failing_check` is the first failing readiness line
-  verbatim. `cli not at pinned version` means `.env`'s `*_VERSION` was edited without
-  pulling an image built with it; `not logged in (claude auth status)` means the subscription
+  verbatim. `cli not at pinned version` means the CLI in the container is not the
+  `*_VERSION` `.env` pins — `backend-api` was not recreated since the pin changed, or the
+  start-up install of that pin failed (`./install.sh logs` names both versions);
+  `./install.sh harness <name> --version <pin>` applies it (see *Harness setup*); `not logged in (claude auth status)` means the subscription
   login expired (see below). Re-run the diagnostic with
   `POST /api/v1/harnesses/{name}/readiness`, or from the web UI's Fleet page.
 - **`warn` on `gateway`** — `llm-platform/` is installed but `LITELLM_BASE_URL` is blank,
@@ -158,9 +160,24 @@ curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \
 `POST /api/v1/harnesses/{name}/readiness` runs the end-to-end diagnostic, which is what
 actually sets `enabled`. `../orchestrator/references/api.md` has the shapes.
 
-The CLIs are baked into the image at the versions `.env` pins. Changing a `*_VERSION` without
-pulling an image built with it makes every probe fail `cli not at pinned version` — the fix is
-to put the value back, not to edit the check.
+The CLIs ship in the image and run from the `harness-bin` volume (`/opt/harness-cli`). At
+every start `backend-api` compares each CLI with its `*_VERSION` in `.env`: the image's copy
+is used when it is at the pin, otherwise one `npm install` of the pin runs — so a CLI upgrade
+needs no new image:
+
+```bash
+./install.sh harness claude --version 2.1.260   # codex → CODEX_VERSION, opencode → OPENCODE_VERSION
+```
+
+It writes the pin into `.env`, recreates `backend-api` (after a confirmation; `--yes` answers
+it), prints that harness's start-up log lines (a `refused` one fails the command) and
+the harness row. A pin equal to the current one changes nothing. `docker compose restart` never applies a pin: it keeps the
+old environment. The change resets that harness's readiness, so re-run it afterwards.
+A pin that cannot be installed refuses that harness alone; the API and the other harnesses
+keep working. `./install.sh logs` names the harness and both versions. Put back a version
+that installs and recreate. `./install.sh upgrade` moves the pins to the new release's.
+`references/runbooks.md`, *Upgrade a harness CLI*, is the full runbook.
+Never edit the probe's version check to make a row green.
 
 ### Claude Max/Pro subscription instead of an API key
 
@@ -236,7 +253,7 @@ anything the user has not read.
 ## The rest — `references/runbooks.md`
 
 Rollback, backup and restore, secret rotation, models and defaults, spend reporting, garbage
-collection, the harness tool allowlist and template refresh are each a short runbook in
+collection, the harness tool allowlist, a harness CLI upgrade and template refresh are each a short runbook in
 `references/runbooks.md`. Read the one the question is about; they carry the commands and the
 consequences.
 

@@ -140,3 +140,10 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/implementation-artifacts/spec-run-diagram-hierarchy-view.md`
   summary: Hot-path lookups in `run-tree.ts`/`flow-layout.ts` are quadratic and re-run on every 5 s poll.
   evidence: `labelOfFirstMember` runs `graph.nodes.find` per group after sorting members, `containerOf` walks the path per row, and `flowLayout` runs `cards.find` inside the retry loop; `detail.steps` is a fresh array each fetch so the memo never holds. Immaterial at the 35-node fixture, worth indexing by id for a large hub Run.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-harness-upgrade-survives-redeploy.md`
+  summary: An e2e or durability scenario that recreates backend-api and checks the harness-bin volume, the PATH order and the probe after a pin change.
+  evidence: Review loop 2 found the "raised pin survives a recreate" claim is proven only through shims and unit tests; no gate recreates a real container.
+- source_spec: `_bmad-output/implementation-artifacts/spec-harness-upgrade-survives-redeploy.md`
+  summary: `install.sh doctor` and `diagnose` report harness CLI drift against the pins and the state of the harness-bin volume.
+  evidence: Review loop 2 noted that a refused harness surfaces only as a disabled row; doctor has no check naming the cause.

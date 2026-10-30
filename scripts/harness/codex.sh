@@ -7,6 +7,7 @@ source "$(dirname "$0")/_common.sh"
 # AD-10: codex reads the contract names directly through env_http_headers and env_key; no aliases.
 HARNESS_ENV_ALIASES=()
 : "${CODEX_VERSION:=0.152.1}"
+CODEX_PACKAGE="@openai/codex"
 export CODEX_HOME="${CODEX_HOME:-${AGENT_HOME}/.codex}"
 
 # Codex reads $HOME/.agents/skills (+ $CWD/.agents/skills). Named once so `install` and
@@ -14,7 +15,8 @@ export CODEX_HOME="${CODEX_HOME:-${AGENT_HOME}/.codex}"
 SKILLS_DIR="${AGENT_HOME}/.agents/skills"
 
 install() {
-  npm install -g "@openai/codex@${CODEX_VERSION}"
+  require_plain_pin CODEX_VERSION "${CODEX_VERSION}"
+  npm_install_cli "${HARNESS_IMAGE_PREFIX}" "${CODEX_PACKAGE}" "${CODEX_VERSION}"
   bmad_install_global_skills codex "${SKILLS_DIR}"
   install_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
 }
@@ -23,6 +25,12 @@ install() {
 # `agent-home` volume shadows the image (`_common.sh::sync_operator_skills`).
 skills() {
   sync_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
+}
+
+installed_version() { cli_version_at "$1" '$NF'; }
+
+ensure() {
+  ensure_cli_at_pin codex codex "${CODEX_PACKAGE}" CODEX_VERSION "${CODEX_VERSION}" installed_version
 }
 
 configure() {
@@ -111,9 +119,11 @@ probe() {
 
 case "${1:-}" in
   install)                install ;;
+  # `ensure` reads only the pin: no Gateway or Langfuse value, exactly as `install` does not
+  ensure)                 ensure ;;
   # `skills` reads no Gateway or Langfuse value, exactly as `install` does not
   skills)                 skills ;;
   configure|doctor)       require_harness_env; "$1" ;;
   probe)                  require_harness_env; probe ;;
-  *)                      echo "usage: $0 install|skills|configure|doctor|probe" >&2; exit 2 ;;
+  *)                      echo "usage: $0 install|ensure|skills|configure|doctor|probe" >&2; exit 2 ;;
 esac

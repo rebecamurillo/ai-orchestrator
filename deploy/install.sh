@@ -11,7 +11,8 @@
 #   ./install.sh diagnose                         # a redacted report to attach to a bug report
 #   ./install.sh harness claude --subscription    # Claude Max/Pro auth instead of an API key
 #   ./install.sh harness claude --api-key         # back to the gateway's own API key
-#   ./install.sh upgrade --tag v0.2.0             # pre-flight, backup, retag, pull, restart
+#   ./install.sh harness claude --version 2.1.260 # pin a harness CLI (claude|codex|opencode), recreate
+#   ./install.sh upgrade --tag v0.2.0             # login + pull, show pin changes, ask, backup, retag, restart
 #   ./install.sh uninstall                        # stop and DELETE the data, after confirmation
 #   ./install.sh env --tag v0.1.0                 # only write .env (what `install` does first)
 #   ./install.sh --no-pull                        # images built on this machine: no registry login, no pull
@@ -52,6 +53,8 @@ tag_arg=""
 command=""
 harness_arg=""       # the harness `harness` acts on
 subscription=""      # "" neither flag, 1 --subscription, 0 --api-key
+version_arg=""       # the harness CLI version `harness --version` pins
+version_given=0      # 1 once --version appeared, so an empty value is refused rather than ignored
 scratch=""           # where an API answer is parked while it is read; removed on exit
 trap '[[ -z "$scratch" ]] || rm -rf "$scratch"' EXIT
 
@@ -62,7 +65,7 @@ warn() { printf 'warning: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
-	sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+	sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 # ── arguments ────────────────────────────────────────────────────────────────
@@ -78,6 +81,17 @@ while [[ $# -gt 0 ]]; do
 		--no-platform) with_platform=0 ;;
 		--subscription) subscription=1 ;;
 		--api-key) subscription=0 ;;
+		--version|--version=*)
+			[[ "$version_given" -eq 0 ]] ||
+				die "--version given twice: ./install.sh harness <claude|codex|opencode> --version X"
+			version_given=1
+			if [[ "$1" == --version=* ]]; then
+				version_arg="${1#--version=}"
+			else
+				[[ $# -ge 2 && "$2" != -* ]] ||
+					die "--version needs a value: ./install.sh harness <claude|codex|opencode> --version X"
+				version_arg="$2"; shift
+			fi ;;
 		-h|--help) usage; exit 0 ;;
 		# `harness` takes the harness name as a bare word; nothing else here does
 		*) [[ "$command" == "harness" && -z "$harness_arg" ]] || die "unknown argument: $1 (try --help)"
@@ -86,6 +100,8 @@ while [[ $# -gt 0 ]]; do
 	shift
 done
 command="${command:-install}"
+[[ "$version_given" -eq 0 || "$command" == "harness" ]] ||
+	die "--version is only for: ./install.sh harness <claude|codex|opencode> --version X"
 
 # ── small helpers ────────────────────────────────────────────────────────────
 need_cmd() { command -v "$1" >/dev/null 2>&1 || die "$1 is not installed — $2"; }
@@ -122,6 +138,29 @@ set_var() {
 	' "$file" > "$tmp"
 	cat "$tmp" > "$file"
 	rm -f "$tmp"
+}
+
+# The pin shape every reader of a harness pin accepts. A test keeps its four copies identical:
+# scripts/harness/_common.sh, deploy/install.sh, scripts/push-images.sh, release.yml.
+PLAIN_VERSION='^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}([-+][0-9A-Za-z.-]+)?$'
+is_plain_version() { [[ "$1" =~ $PLAIN_VERSION ]]; }
+
+# 0 when plain version $1 is older than plain version $2. `+build` is ignored; a pre-release
+# sorts below its release; two pre-releases of one x.y.z compare as text.
+version_older() {
+	local a="${1%%+*}" b="${2%%+*}" pa="" pb="" i
+	local -a x y
+	[[ "$a" != *-* ]] || pa="${a#*-}"
+	[[ "$b" != *-* ]] || pb="${b#*-}"
+	IFS=. read -r -a x <<< "${a%%-*}"
+	IFS=. read -r -a y <<< "${b%%-*}"
+	for i in 0 1 2; do
+		(( 10#${x[$i]} < 10#${y[$i]} )) && return 0
+		(( 10#${x[$i]} > 10#${y[$i]} )) && return 1
+	done
+	[[ -n "$pa" ]] || return 1
+	[[ -n "$pb" ]] || return 0
+	[[ "$pa" < "$pb" ]]
 }
 
 is_placeholder() { case "$1" in ""|*change-me*) return 0 ;; *) return 1 ;; esac; }
@@ -729,12 +768,15 @@ cmd_upgrade() {
 	fi
 	[[ "$new" != "$running" ]] ||
 		die "${new} is already what is running — nothing to upgrade; pass the newer tag"
+	require_pin_declarations
+	resolve_token
+	ghcr_login
+	read_release_pins "$new"
+	plan_release_pins
 	say "Read the release notes first. A release that bumps DBOS_APPLICATION_VERSION makes"
 	say "every in-flight Run unrecoverable — drain or cancel Runs before such an upgrade."
 	say "Migrations run forward only; the backup below is what a rollback restores from."
 	confirm "Continue?" || die "upgrade cancelled"
-	resolve_token
-	ghcr_login
 	mkdir -p "${here}/backups"
 	backup="${here}/backups/orchestrator-${old}-$(date -u +%Y%m%dT%H%M%SZ).dump"
 	if compose ps --status running --services 2>/dev/null | grep -q '^postgres$'; then
@@ -745,9 +787,92 @@ cmd_upgrade() {
 		warn "postgres is not running — no backup taken"
 	fi
 	set_var "$env_file" IMAGE_TAG "$new"
+	write_release_pins
 	stack_up
 	verify
 	print_access
+}
+
+HARNESS_PIN_VARIABLES=(CLAUDE_CODE_VERSION CODEX_VERSION OPENCODE_VERSION)
+release_pins=()   # empty: the release image carries no contract, and the pins stay as they are
+
+# Every pin is checked before anything is written, so `.env` is never left half-upgraded.
+require_pin_declarations() {
+	local name
+	for name in "${HARNESS_PIN_VARIABLES[@]}"; do
+		grep -q "^${name}=" "$env_file" ||
+			die ".env does not declare ${name} — add the line from .env.example; nothing was changed"
+	done
+}
+
+# The harness CLI pins a release ships, read from its own backend image: `harness-bin`
+# outlives the image, so a release's CLIs reach this host only through these pins.
+read_release_pins() {   # read_release_pins TAG → fills release_pins, or dies having written nothing
+	local tag="$1" image file errors name value rc=0
+	local -a run_flags=(--rm)
+	image="$(backend_image)"
+	[[ -n "$image" ]] || die "no backend-api image in ${compose_file##*/} — nothing was changed"
+	image="${image}:${tag}"
+	file="${scratch}/release.env.example"
+	if [[ "$pull" -eq 1 ]]; then
+		docker pull "$image" >/dev/null || die "docker pull ${image} failed"
+	else
+		run_flags+=(--pull never)
+	fi
+	errors="${scratch}/release.err"
+	docker run "${run_flags[@]}" --entrypoint cat "$image" /app/deploy/.env.example \
+		> "$file" 2> "$errors" || rc=$?
+	release_pins=()
+	if [[ "$rc" -ne 0 ]]; then
+		# only `cat`'s own answer means a release older than the pins' contract
+		if [[ "$rc" -lt 125 ]] && grep -q 'No such file' "$errors"; then
+			warn "${image} carries no /app/deploy/.env.example, so the harness pins in .env stay as they are."
+			warn "Set ${HARNESS_PIN_VARIABLES[*]} in .env to that release's values by hand."
+			return 0
+		fi
+		die "cannot read /app/deploy/.env.example from ${image} — nothing was changed:"$'\n'"$(cat "$errors")"
+	fi
+	for name in "${HARNESS_PIN_VARIABLES[@]}"; do
+		value="$(get_var "$file" "$name")"
+		is_plain_version "$value" ||
+			die "${image} carries no usable ${name} in /app/deploy/.env.example — nothing was changed"
+		release_pins+=("$value")
+	done
+}
+
+# A harness pin from .env, a `#` comment after any whitespace dropped (get_var drops only `  #`).
+env_pin() {
+	get_var "$env_file" "$1" | sed -E 's/[[:space:]]+#.*$//'
+}
+
+plan_release_pins() {
+	local i name old new note changed=0
+	[[ "${#release_pins[@]}" -gt 0 ]] || return 0
+	for i in "${!HARNESS_PIN_VARIABLES[@]}"; do
+		name="${HARNESS_PIN_VARIABLES[$i]}"; new="${release_pins[$i]}"
+		old="$(env_pin "$name")"
+		[[ "$old" != "$new" ]] || continue
+		[[ "$changed" -eq 1 ]] || say "harness CLI pins this upgrade writes to .env:"
+		changed=1
+		note=""
+		if is_plain_version "$old" && version_older "$new" "$old"; then note="   (downgrade)"; fi
+		say "  ${name} ${old:-unset} → ${new}${note}"
+	done
+	[[ "$changed" -eq 1 ]] || say "harness CLI pins: unchanged"
+}
+
+write_release_pins() {
+	local i name
+	[[ "${#release_pins[@]}" -gt 0 ]] || return 0
+	for i in "${!HARNESS_PIN_VARIABLES[@]}"; do
+		name="${HARNESS_PIN_VARIABLES[$i]}"
+		[[ "$(env_pin "$name")" != "${release_pins[$i]}" ]] || continue
+		set_var "$env_file" "$name" "${release_pins[$i]}"
+	done
+}
+
+backend_image() {
+	sed -n 's/^ *image: *\(.*\/backend-api\):.*/\1/p' "$compose_file" | head -1
 }
 
 cmd_doctor() {
@@ -816,15 +941,101 @@ cmd_diagnose() {
 	say "a log line can carry anything a target repository printed."
 }
 
-# ── harness: which credential the claude harness authenticates with ──────────
+# ── harness: a CLI pin, or which credential the claude harness authenticates with ──
+# The row a harness has in /api/v1/harnesses, printed as one line.
+print_harness_row() {   # print_harness_row NAME → 0 enabled, 1 disabled, 2 no row to read
+	local name="$1" body code row
+	body="${scratch}/harnesses.json"
+	code="$(api_get /api/v1/harnesses "$body")"
+	if [[ "$code" != "200" ]]; then
+		say "/api/v1/harnesses answered ${code} — ./install.sh logs"
+		return 2
+	fi
+	row="$(json_items "$body" name | grep -E '"name" *: *"'"$name"'"' | head -1 || true)"
+	if [[ -z "$row" ]]; then
+		say "${name} is not in /api/v1/harnesses — ./install.sh logs"
+		return 2
+	fi
+	if [[ "$(item_word "$row" enabled)" == "true" ]]; then
+		say "${name}: enabled"
+		return 0
+	fi
+	say "${name}: disabled — $(item_string "$row" failing_check)"
+	return 1
+}
+
+# Recreated, never `compose restart`: a restart keeps the environment the container was
+# created with, so a changed `.env` value would never reach it.
+recreate_backend() {   # recreate_backend WHAT → WHAT is what .env now holds, said on failure
+	compose up -d --no-deps --wait --wait-timeout 600 backend-api && return 0
+	say "$1 is written to .env; backend-api did not come back healthy with it."
+	warn "backend-api did not become healthy after the recreate — ./install.sh logs"
+	return 1
+}
+
+# `harness <name> --version X`: the pin is `.env`'s, and the container's entrypoint (`ensure`)
+# installs it at the next start onto the `harness-bin` volume — no new image needed.
+cmd_harness_version() {
+	local variable="$1" since lines
+	if [[ "$(env_pin "$variable")" == "$version_arg" ]]; then
+		say "${harness_arg} is already pinned at ${version_arg} — nothing to do."
+		return 0
+	fi
+	set_var "$env_file" "$variable" "$version_arg"
+	step "${harness_arg} → ${version_arg}"
+	say "${variable}=${version_arg} in .env now. backend-api installs it when it is recreated"
+	say "(from the image when it ships that version, else one npm install onto harness-bin). A pin"
+	say "that cannot be installed refuses ${harness_arg} alone until the next start."
+	if compose ps --status running --services 2>/dev/null | grep -q '^backend-api$'; then
+		if confirm "Recreate backend-api so it installs ${harness_arg} ${version_arg}?"; then
+			since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+			recreate_backend "${variable}=${version_arg}" || return 1
+			step "verifying"
+			lines="$(compose logs --no-log-prefix --since "$since" backend-api 2>/dev/null |
+				grep -F "[harness:${harness_arg}]" || true)"
+			[[ -z "$lines" ]] || say "$lines"
+			if grep -q 'refused' <<< "$lines"; then
+				warn "backend-api refused ${harness_arg} at ${version_arg} — the lines above say why; ./install.sh logs"
+				return 1
+			fi
+			say "The row reads disabled until readiness is re-run:"
+			print_harness_row "$harness_arg" || true
+		else
+			say "Not recreated: ./install.sh start applies the pin."
+		fi
+	else
+		say
+		say "backend-api is not running: ./install.sh start applies the pin."
+	fi
+	say
+	say "The pin change resets ${harness_arg}'s readiness. Re-run it from the web UI's Fleet page,"
+	say "or POST /api/v1/harnesses/${harness_arg}/readiness."
+}
+
 cmd_harness() {
-	local body code row
+	local rc
 	[[ -f "$env_file" ]] || die ".env is missing — run ./install.sh first"
 	[[ -n "$harness_arg" ]] ||
-		die "harness needs a name: ./install.sh harness claude --subscription (or --api-key)"
+		die "harness needs a name: ./install.sh harness claude --subscription (or --api-key, or --version X)"
+	if [[ "$version_given" -eq 1 ]]; then
+		local variable
+		case "$harness_arg" in
+			claude)   variable=CLAUDE_CODE_VERSION ;;
+			codex)    variable=CODEX_VERSION ;;
+			opencode) variable=OPENCODE_VERSION ;;
+			*) die "unknown harness '${harness_arg}' — one of claude, codex, opencode" ;;
+		esac
+		[[ -z "$subscription" ]] ||
+			die "--version cannot be combined with --subscription or --api-key: ./install.sh harness <claude|codex|opencode> --version X"
+		is_plain_version "$version_arg" ||
+			die "--version needs a version like 2.1.260, not '${version_arg}': ./install.sh harness <claude|codex|opencode> --version X"
+		scratch="$(mktemp -d)"
+		cmd_harness_version "$variable"
+		return
+	fi
 	[[ "$harness_arg" == "claude" ]] ||
 		die "only claude has a subscription login; ${harness_arg} authenticates with an API key alone — set it in llm-platform/.env and restart the gateway"
-	[[ -n "$subscription" ]] || die "harness claude needs --subscription or --api-key"
+	[[ -n "$subscription" ]] || die "harness claude needs --subscription, --api-key or --version X"
 	scratch="$(mktemp -d)"
 
 	if [[ "$subscription" -eq 1 ]]; then
@@ -864,27 +1075,17 @@ cmd_harness() {
 			compose exec backend-api claude login ||
 				warn "claude login did not finish — re-run ./install.sh harness claude --subscription"
 		fi
-		if confirm "Restart backend-api so it re-reads .env?"; then
-			compose restart backend-api
+		if confirm "Recreate backend-api so it re-reads .env?"; then
+			recreate_backend "CLAUDE_SUBSCRIPTION_AUTH" || return 1
 			step "verifying"
-			body="${scratch}/harnesses.json"
-			code="$(api_get /api/v1/harnesses "$body")"
-			if [[ "$code" != "200" ]]; then
-				say "/api/v1/harnesses answered ${code} — ./install.sh logs"
-			else
-				row="$(json_items "$body" name | grep -E '"name" *: *"claude"' | head -1 || true)"
-				if [[ -z "$row" ]]; then
-					say "claude is not in /api/v1/harnesses — ./install.sh logs"
-				elif [[ "$(item_word "$row" enabled)" == "true" ]]; then
-					say "claude: enabled"
-				else
-					say "claude: disabled — $(item_string "$row" failing_check)"
-					say "In this mode the probe runs 'claude auth status' and refuses there first,"
-					say "so an expired login shows up as that line."
-				fi
+			rc=0
+			print_harness_row claude || rc=$?
+			if [[ "$rc" -eq 1 ]]; then
+				say "In this mode the probe runs 'claude auth status' and refuses there first,"
+				say "so an expired login shows up as that line."
 			fi
 		else
-			say "Not restarted: backend-api keeps the old setting until ./install.sh start."
+			say "Not recreated: backend-api keeps the old setting until ./install.sh start."
 		fi
 	else
 		say
@@ -904,7 +1105,8 @@ cmd_uninstall() {
 	[[ -f "$env_file" ]] || die ".env is missing — nothing was installed here"
 	step "uninstall"
 	say "This stops ai-orchestrator and DELETES its volumes: the database, every clone and"
-	say "worktree, and the agent home. .env is kept so the token survives; delete it yourself."
+	say "worktree, the agent home and the harness CLIs (harness-bin). .env is kept so the token"
+	say "survives; delete it yourself."
 	if [[ "$yes" -eq 0 ]]; then
 		read -r -p "Type 'delete' to confirm: " answer
 		[[ "$answer" == "delete" ]] || die "uninstall cancelled"

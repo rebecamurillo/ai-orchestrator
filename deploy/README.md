@@ -287,9 +287,21 @@ register. Register only repositories you trust as much as this machine.
   migrated the schema is expected to fail closed. `./install.sh upgrade` takes the backup
   a rollback restores from; by hand it is
   `docker compose exec postgres pg_dump -U orchestrator -Fc orchestrator > backup.dump`.
-- **Harness CLI versions are baked into the image.** The `*_VERSION` variables in `.env`
-  exist for the runtime probe check; changing one without pulling an image built with it
-  makes every probe fail `cli not at pinned version`.
+- **Harness CLI versions are `.env`'s `*_VERSION` pins.** The image ships the release's
+  pins. At every start `backend-api` copies the image's CLI onto the `harness-bin` volume
+  (`/opt/harness-cli`) when the image's is at the pin, and otherwise runs one `npm install`
+  of the pin there, kept across a recreate.
+- `./install.sh harness <claude|codex|opencode> --version X` edits the pin and recreates
+  `backend-api`. `docker compose restart` does not apply a pin: it keeps the old environment.
+- The registry is needed at start only when a pin differs from the image's. A pin that
+  cannot be installed refuses that harness alone (`cli not at pinned version`); the API
+  still starts. The logs name the harness and both versions. Nothing retries until the next
+  start.
+- `./install.sh upgrade` shows the pin changes before it asks, marks a downgrade, then
+  writes the new release's values. A rollback does the same with the older release's.
+- `harness-bin` is not backed up, and `./install.sh uninstall` removes it. To re-seed it
+  from the image, stop the stack and `docker volume rm <project>_harness-bin`; both take
+  the instance down, so ask the Operator first.
 - `POSTGRES_DB` is fixed after first boot, and the stack supports exactly one
   `backend-api` replica.
 - **Two settings an upgrade from a release before 2026-10-12 keeps as they were.** A

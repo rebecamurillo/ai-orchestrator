@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 from tests.unit.conftest import ENV_EXAMPLE, REPO_ROOT, parse_env_example
+from tests.unit.test_compose_services import service as compose_service
 
 BACKEND_DOCKERFILE = REPO_ROOT / "backend-api" / "Dockerfile"
 WEB_DOCKERFILE = REPO_ROOT / "web-client" / "Dockerfile"
@@ -59,8 +60,15 @@ SECRET_VARIABLES = (
     "LANGFUSE_SECRET_KEY",
 )
 
-#: The order `backend-api/docker-entrypoint.sh` must run things in.
-STARTUP_ORDER = ("configure", "alembic upgrade head", "orchestrator.main")
+#: The order `backend-api/docker-entrypoint.sh` must run things in: the CLIs are reconciled
+#: with their pins first, and a refused harness does not stop the start
+#: (spec-harness-upgrade-survives-redeploy, 2026-10-29).
+STARTUP_ORDER = (
+    "scripts/harness/ensure-all.sh",
+    "configure",
+    "alembic upgrade head",
+    "orchestrator.main",
+)
 
 HARNESSES = ("claude", "codex", "opencode")
 
@@ -233,6 +241,39 @@ def test_no_harness_version_is_re_pinned_in_a_dockerfile(component: str) -> None
         assert contract[variable] not in text, f"{variable} is pinned in two places"
 
 
+#: The pins `.env` sets and the image build honours (spec-harness-upgrade-survives-redeploy).
+HARNESS_PINS = ("CLAUDE_CODE_VERSION", "CODEX_VERSION", "OPENCODE_VERSION")
+
+
+@pytest.mark.parametrize("variable", HARNESS_PINS)
+def test_each_harness_pin_is_a_valueless_build_argument(variable: str) -> None:
+    """Valueless, so an unset argument falls back to the harness script's default."""
+    args = build_args(dockerfile("backend-api"))
+
+    assert variable in args, f"ARG {variable} is not declared"
+    assert args[variable] == "", f"ARG {variable} carries a literal"
+
+
+def compose_backend_build_args() -> list[str]:
+    """The entries under `args:` in the dev compose file's backend-api `build:`."""
+    lines = compose_service("backend-api").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.strip() == "args:")
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    entries = []
+    for line in lines[start + 1 :]:
+        if line.strip() and len(line) - len(line.lstrip()) <= indent:
+            break
+        if line.strip():
+            entries.append(line.strip())
+    return entries
+
+
+@pytest.mark.parametrize("variable", HARNESS_PINS)
+def test_compose_passes_each_pin_to_the_build_by_name(variable: str) -> None:
+    """A bare name: compose resolves it from `.env`, and omits it where `.env` does not set it."""
+    assert f"- {variable}" in compose_backend_build_args()
+
+
 @pytest.mark.parametrize("variable", ["AGENT_HOME", "WORK_DIR"])
 def test_the_path_the_image_builds_is_the_path_the_contract_mounts(variable: str) -> None:
     """The named volumes are mounted at `${AGENT_HOME}` and `${WORK_DIR}` from `.env`. If the
@@ -286,6 +327,51 @@ def test_the_entrypoint_configures_then_migrates_then_serves() -> None:
     positions = [text.index(step) for step in STARTUP_ORDER]
 
     assert positions == sorted(positions), STARTUP_ORDER
+
+
+def test_the_entrypoint_reconciles_every_harness_cli_before_configuring() -> None:
+    """A command line of its own, not a substring: it runs before the first `configure`."""
+    lines = [line.strip() for line in code(ENTRYPOINT.read_text()).splitlines()]
+    ensure_at = lines.index("scripts/harness/ensure-all.sh")
+    configure_at = next(
+        i for i, line in enumerate(lines) if re.search(r"\.sh\S*\s+configure\b", line)
+    )
+
+    assert ensure_at < configure_at, lines
+
+
+def test_the_harness_prefix_precedes_the_npm_prefix_on_path() -> None:
+    """The volume's CLIs win over anything an agent installs into NPM_CONFIG_PREFIX."""
+    text = dockerfile("backend-api")
+    match = re.search(r"PATH=(\S+)", text)
+    assert match
+    directories = match.group(1).split(":")
+
+    assert "/opt/harness-cli/bin" in directories
+    assert directories.index("/opt/harness-cli/bin") < directories.index("/opt/npm-global/bin")
+    assert "NPM_CONFIG_PREFIX=/opt/npm-global" in text
+
+
+def test_the_harness_prefix_is_created_for_the_agent_user() -> None:
+    """A named volume takes its ownership from the image's directory on first creation."""
+    text = code(dockerfile("backend-api"))
+
+    assert re.search(r"mkdir -p [^;]*/opt/harness-cli", text)
+    assert re.search(r"chown -R agent:agent [^;]*/opt/harness-cli", text)
+
+
+def test_the_image_copy_is_created_for_the_agent_user_and_seeds_the_volume() -> None:
+    """`install` writes `/opt/harness-image`, never mounted; the build copies it into
+    `/opt/harness-cli` so a fresh `harness-bin` volume is seeded with the same CLIs."""
+    text = code(dockerfile("backend-api"))
+
+    assert re.search(r"mkdir -p [^;]*/opt/harness-image", text)
+    assert re.search(r"chown -R agent:agent [^;]*/opt/harness-image", text)
+    install_at = text.index("scripts/harness/opencode.sh install")
+    copy = re.search(r"cp -a /opt/harness-image/\. /opt/harness-cli/", text)
+    assert copy
+    assert copy.start() > install_at
+    assert "/opt/harness-image/bin" not in text, "the image copy is never on PATH"
 
 
 def test_the_entrypoint_configures_every_harness() -> None:

@@ -78,6 +78,8 @@ services:
       - work:${WORK_DIR:-/work}
       # ~/.claude ~/.codex ~/.config/opencode: the harness configs and the BMAD skill stubs
       - agent-home:${AGENT_HOME:-/home/agent}
+      # the harness CLIs' npm prefix, reconciled against the `*_VERSION` pins at each start
+      - harness-bin:/opt/harness-cli
     # not hardened, deliberately (Operator decision, 2026-09-11): this container is the
     # sandbox real agents run in, and a harness may `sudo apt-get` what a target
     # repository's install script needs. README.md § Trust says what that implies.
@@ -92,8 +94,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-      # the first start runs `alembic upgrade head` before the socket is bound
-      start_period: 60s
+      # before the socket is bound a start reconciles the harness CLIs (up to three bounded
+      # npm installs of 120s each when pins changed) and runs `alembic upgrade head`
+      start_period: 600s
     logging: *logging
     restart: always
 
@@ -142,3 +145,7 @@ volumes:
   # the agent's home — harness configs and the BMAD skill stubs (AD-16). Seeded from the
   # backend image the first time it is created, and not backed up (spine Operations).
   agent-home:
+  # /opt/harness-cli — the harness CLIs, not backed up. Seeded from the image on first
+  # creation; at each start `ensure` copies the image's CLI back when it is at the pin and
+  # otherwise installs the `*_VERSION` pin here, so an upgrade outlives a recreate.
+  harness-bin:

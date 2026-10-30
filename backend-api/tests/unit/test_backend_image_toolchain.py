@@ -33,7 +33,7 @@ from tests.unit.conftest import REPO_ROOT
 BACKEND_DOCKERFILE = REPO_ROOT / "backend-api" / "Dockerfile"
 
 #: The npm prefix the image already puts on PATH and already gives to `agent`. Corepack's
-#: shims go here for the same reason the harness CLIs do.
+#: shims go here, in the image layer; the harness CLIs have their own prefix on a volume.
 NPM_PREFIX = "/opt/npm-global"
 
 #: The apt packages a target Repository's commands need and the base image does not carry.

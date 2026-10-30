@@ -58,6 +58,10 @@ PRIVATE_MODE = 0o600
 #: below this a value is too short for "it is absent from the output" to prove anything
 SECRET_MIN_LENGTH = 8
 
+#: How the installer applies a changed `.env` to backend-api
+#: (spec-harness-upgrade-survives-redeploy).
+RECREATE = "up -d --no-deps --wait --wait-timeout 600 backend-api"
+
 needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not on PATH")
 
 #: Answers every `docker` shape the three commands use, records argv, and changes nothing.
@@ -72,8 +76,18 @@ case "$*" in
 \tinfo) exit 0 ;;
 \t"image inspect"*) exit "${SHIM_IMAGE_RC:-0}" ;;
 \t"system df"*) echo "Images 1.1GB reclaimable 0B"; exit 0 ;;
+\t"run --rm "*"--entrypoint cat "*)
+\t\tif [ "${SHIM_IMAGE_ENV:-}" = none ]; then
+\t\t\techo "cat: /app/deploy/.env.example: No such file or directory" >&2; exit 1
+\t\tfi
+\t\tif [ "${SHIM_IMAGE_ENV:-}" = broken ]; then
+\t\t\techo "Error response from daemon: layer does not exist" >&2; exit 1
+\t\tfi
+\t\tif [ -n "${SHIM_IMAGE_ENV:-}" ]; then cat "$SHIM_IMAGE_ENV"; exit 0; fi
+\t\techo "Unable to find image" >&2; exit 125 ;;
 esac
 case "$*" in
+\t*"up -d --no-deps --wait --wait-timeout 600 backend-api") exit "${SHIM_RECREATE_RC:-0}" ;;
 \t*"ps --status running --services"*) printf '%s\\n' ${SHIM_RUNNING:-}; exit 0 ;;
 \t*" logs "*) if [ -n "${SHIM_LOGS:-}" ]; then cat "$SHIM_LOGS"; fi; exit 0 ;;
 \t*" ps") echo "NAME STATUS"; exit 0 ;;
@@ -147,9 +161,10 @@ HARNESS_BODY = {
 
 
 def _run(
-    *args: str, cwd: Path, env: dict[str, str] | None = None
+    *args: str, cwd: Path, env: dict[str, str] | None = None, answers: str | None = None
 ) -> subprocess.CompletedProcess[str]:
-    """Run the installer the way a client does — as a command, no shell."""
+    """Run the installer the way a client does — as a command, no shell. `answers` is what the
+    operator types at the prompts, one line each."""
     dropped = {"GHCR_TOKEN", "GITHUB_TOKEN", "IMAGE_TAG", "DOCKER_CONFIG"}
     clean = {k: v for k, v in os.environ.items() if k not in dropped}
     return subprocess.run(  # fixed argv, no shell
@@ -159,6 +174,7 @@ def _run(
         cwd=cwd,
         env={**clean, **(env or {})},
         check=False,
+        input=answers,
     )
 
 
@@ -525,8 +541,28 @@ def test_harness_claude_logs_in_inside_the_container_and_verifies(
 
     calls = _docker_calls(path)
     assert "exec backend-api claude login" in calls, calls
-    assert "restart backend-api" in calls, calls
+    # spec-harness-upgrade-survives-redeploy (2026-10-29): applied by recreating backend-api,
+    # since `compose restart` keeps the creation-time environment and never re-reads `.env`.
+    assert RECREATE in calls, calls
+    assert " restart " not in calls, calls
     assert "claude: enabled" in result.stdout
+
+
+@needs_bash
+def test_harness_claude_subscription_explains_a_disabled_row(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+    served = path / "served" / "harnesses.json"
+    body = json.loads(served.read_text())
+    body["items"][0].update(enabled=False, failing_check="not logged in (claude auth status)")
+    served.write_text(json.dumps(body))
+
+    result = _run("harness", "claude", "--subscription", "--yes", cwd=path, env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "claude: disabled — not logged in (claude auth status)" in result.stdout
+    assert "claude auth status' and refuses there first" in result.stdout
 
 
 @needs_bash
@@ -592,3 +628,606 @@ def test_the_admin_skill_states_the_rules_it_cannot_leave_to_the_installer() -> 
     assert "DBOS_APPLICATION_VERSION" in text
     assert "references/runbooks.md" in text
     assert (ADMIN_SKILL / "references" / "runbooks.md").is_file()
+
+
+# ── harness <name> --version: the pin edited, then applied by a recreate ─────
+#
+# spec-harness-upgrade-survives-redeploy (2026-10-29). Recreating is what
+# makes the container's `ensure` reconcile the CLI to the new pin; `compose restart` would keep
+# the old environment. The shims stand in for docker and the API.
+
+PIN_VARIABLES = {
+    "claude": "CLAUDE_CODE_VERSION",
+    "codex": "CODEX_VERSION",
+    "opencode": "OPENCODE_VERSION",
+}
+
+
+@needs_bash
+@pytest.mark.parametrize(("name", "variable"), sorted(PIN_VARIABLES.items()))
+def test_harness_version_writes_the_pin_and_recreates_the_backend(
+    installed: tuple[Path, dict[str, str]], name: str, variable: str
+) -> None:
+    path, env = installed
+
+    result = _run("harness", name, "--version", "9.8.7", "--yes", cwd=path, env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert parse_env_example(path / ".env")[variable] == "9.8.7"
+    calls = _docker_calls(path)
+    assert RECREATE in calls, calls
+    assert " restart " not in calls, calls
+    assert f"POST /api/v1/harnesses/{name}/readiness" in result.stdout
+    for secret in _secrets(path):
+        assert secret not in result.stdout + result.stderr
+
+
+@needs_bash
+def test_harness_version_prints_the_harness_row(installed: tuple[Path, dict[str, str]]) -> None:
+    path, env = installed
+
+    enabled = _run("harness", "claude", "--version", "2.1.260", "--yes", cwd=path, env=env)
+    failing = _run("harness", "codex", "--version", "0.200.0", "--yes", cwd=path, env=env)
+
+    assert "claude: enabled" in enabled.stdout
+    assert "codex: disabled — cli: not at pinned version" in failing.stdout
+
+
+@needs_bash
+def test_harness_version_keeps_the_trailing_comment(installed: tuple[Path, dict[str, str]]) -> None:
+    path, env = installed
+    dotenv = path / ".env"
+    pin = parse_env_example(dotenv)["CLAUDE_CODE_VERSION"]
+    dotenv.write_text(
+        dotenv.read_text().replace(
+            f"CLAUDE_CODE_VERSION={pin}", f"CLAUDE_CODE_VERSION={pin}  # bumped for a fix"
+        )
+    )
+
+    result = _run("harness", "claude", "--version", "2.1.260", "--yes", cwd=path, env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "CLAUDE_CODE_VERSION=2.1.260  # bumped for a fix" in dotenv.read_text().splitlines()
+
+
+@needs_bash
+def test_harness_version_with_the_stack_down_writes_the_pin_and_says_start_applies_it(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+
+    result = _run(
+        "harness",
+        "claude",
+        "--version",
+        "2.1.260",
+        "--yes",
+        cwd=path,
+        env={**env, "SHIM_RUNNING": ""},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert parse_env_example(path / ".env")["CLAUDE_CODE_VERSION"] == "2.1.260"
+    assert "./install.sh start" in result.stdout
+    assert " up " not in _docker_calls(path)
+
+
+@needs_bash
+def test_harness_version_for_an_unknown_harness_names_the_three(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+    before = (path / ".env").read_text()
+
+    result = _run("harness", "gemini", "--version", "1.0.0", "--yes", cwd=path, env=env)
+
+    assert result.returncode == 1
+    for name in PIN_VARIABLES:
+        assert name in result.stderr
+    assert " up " not in _docker_calls(path)
+    assert (path / ".env").read_text() == before
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("--yes", "harness", "claude", "--version"),
+        ("harness", "claude", "--version", "--yes"),
+        ("harness", "claude", "--version=", "--yes"),
+        ("harness", "claude", "--version", "2.1.260", "--subscription", "--yes"),
+        ("harness", "claude", "--version", "2.1.260", "--api-key", "--yes"),
+        ("harness", "claude", "--version", "latest", "--yes"),
+        ("harness", "claude", "--version", "^2.1", "--yes"),
+        ("start", "--version", "2.1.260", "--yes"),
+        ("upgrade", "--tag", "2.0.0", "--version", "2.1.260", "--yes"),
+        ("harness", "claude", "--version", "2.1.260", "--version", "2.1.261", "--yes"),
+        ("harness", "claude", "--version=2.1.260", "--version", "2.1.261", "--yes"),
+    ],
+    ids=[
+        "trailing, last argv",
+        "followed by a flag",
+        "empty",
+        "with --subscription",
+        "with --api-key",
+        "latest",
+        "a range",
+        "with start",
+        "with upgrade",
+        "twice",
+        "twice, mixed forms",
+    ],
+)
+def test_harness_version_misuse_is_refused_and_writes_nothing(
+    installed: tuple[Path, dict[str, str]], argv: tuple[str, ...]
+) -> None:
+    path, env = installed
+    before = (path / ".env").read_text()
+
+    result = _run(*argv, cwd=path, env=env)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "--version" in result.stderr
+    assert (path / ".env").read_text() == before
+    calls = _docker_calls(path)
+    assert " up " not in calls, calls
+    assert " pull" not in calls, calls
+
+
+# ── upgrade moves the harness pins to the release's ─────────────────────────
+#
+# spec-harness-upgrade-survives-redeploy (2026-10-29): `harness-bin` outlives the image, so the
+# new release's CLIs arrive only through the pins its own `/app/deploy/.env.example` carries.
+
+RELEASE_IMAGE = "ghcr.io/rebecamurillo/ai-orchestrator/backend-api:2.0.0"
+
+
+def _release_env(path: Path, **pins: str) -> Path:
+    """The new image's `.env.example`: this bundle's, with the given pins changed."""
+    text = (path / ".env.example").read_text()
+    contract = parse_env_example(path / ".env.example")
+    for variable, value in pins.items():
+        text = text.replace(f"{variable}={contract[variable]}", f"{variable}={value}")
+    release = path / "release.env.example"
+    release.write_text(text)
+    return release
+
+
+@needs_bash
+def test_upgrade_rewrites_each_differing_pin_and_prints_it(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+    before = parse_env_example(path / ".env")
+    release = _release_env(path, CLAUDE_CODE_VERSION="2.1.300", OPENCODE_VERSION="1.20.0")
+
+    result = _run(
+        "upgrade", "--tag", "2.0.0", "--yes", cwd=path, env={**env, "SHIM_IMAGE_ENV": str(release)}
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    after = parse_env_example(path / ".env")
+    assert after["IMAGE_TAG"] == "2.0.0"
+    assert after["CLAUDE_CODE_VERSION"] == "2.1.300"
+    assert after["OPENCODE_VERSION"] == "1.20.0"
+    assert after["CODEX_VERSION"] == before["CODEX_VERSION"]
+    assert f"CLAUDE_CODE_VERSION {before['CLAUDE_CODE_VERSION']} → 2.1.300" in result.stdout
+    assert f"OPENCODE_VERSION {before['OPENCODE_VERSION']} → 1.20.0" in result.stdout
+    assert "CODEX_VERSION" not in result.stdout
+    calls = _docker_calls(path)
+    assert f"pull {RELEASE_IMAGE}" in calls, calls
+    assert f"run --rm --entrypoint cat {RELEASE_IMAGE} /app/deploy/.env.example" in calls, calls
+    lines = calls.splitlines()
+    read_at = next(i for i, line in enumerate(lines) if line.startswith("run --rm"))
+    up_at = next(i for i, line in enumerate(lines) if " up " in line)
+    assert read_at < up_at
+
+
+@needs_bash
+def test_upgrade_with_the_release_pins_unchanged_writes_none(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+    before = parse_env_example(path / ".env")
+    release = _release_env(path)
+
+    result = _run(
+        "upgrade", "--tag", "2.0.0", "--yes", cwd=path, env={**env, "SHIM_IMAGE_ENV": str(release)}
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    after = parse_env_example(path / ".env")
+    for variable in PIN_VARIABLES.values():
+        assert after[variable] == before[variable]
+        assert f"{variable} " not in result.stdout
+
+
+@needs_bash
+def test_upgrade_with_no_pull_reads_the_local_image(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+    release = _release_env(path, CODEX_VERSION="0.200.0")
+
+    result = _run(
+        "upgrade",
+        "--tag",
+        "2.0.0",
+        "--yes",
+        "--no-pull",
+        cwd=path,
+        env={**env, "SHIM_IMAGE_ENV": str(release)},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert parse_env_example(path / ".env")["CODEX_VERSION"] == "0.200.0"
+    calls = _docker_calls(path)
+    assert "pull ghcr.io" not in calls, calls
+    # `docker run` would otherwise pull an absent image itself
+    assert f"run --rm --pull never --entrypoint cat {RELEASE_IMAGE}" in calls, calls
+
+
+@needs_bash
+@pytest.mark.parametrize("missing", ["image", "pin"])
+def test_upgrade_dies_before_writing_when_the_image_yields_no_pins(
+    installed: tuple[Path, dict[str, str]], missing: str
+) -> None:
+    path, env = installed
+    before = (path / ".env").read_text()
+    extra: dict[str, str] = {}
+    if missing == "pin":
+        release = _release_env(path)
+        release.write_text(
+            "\n".join(
+                line
+                for line in release.read_text().splitlines()
+                if not line.startswith("CODEX_VERSION=")
+            )
+        )
+        extra["SHIM_IMAGE_ENV"] = str(release)
+
+    result = _run("upgrade", "--tag", "2.0.0", "--yes", cwd=path, env={**env, **extra})
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert RELEASE_IMAGE in result.stderr
+    assert (path / ".env").read_text() == before
+    calls = _docker_calls(path)
+    assert " up " not in calls, calls
+    assert "pg_dump" not in calls, calls
+
+
+# ── recreate outcomes and the upgrade's pin plan ────────────────────────────
+#
+# The recreate can be declined or fail, `--version=X` is a form of its own, and `upgrade`
+# shows the pin changes before it asks, refuses a `.env` that does not declare a pin, and
+# tolerates an older release image.
+
+
+@needs_bash
+def test_harness_version_in_the_equals_form_writes_the_pin(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+
+    result = _run("harness", "codex", "--version=9.8.7", "--yes", cwd=path, env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert parse_env_example(path / ".env")["CODEX_VERSION"] == "9.8.7"
+    assert RECREATE in _docker_calls(path)
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    "argv",
+    [("harness", "claude", "--version", "2.1.260"), ("harness", "claude", "--subscription")],
+    ids=["version", "subscription"],
+)
+def test_a_declined_recreate_runs_no_up_and_says_so(
+    installed: tuple[Path, dict[str, str]], argv: tuple[str, ...]
+) -> None:
+    path, env = installed
+
+    result = _run(*argv, cwd=path, env=env, answers="n\n")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Not recreated" in result.stdout
+    calls = _docker_calls(path)
+    assert " up " not in calls, calls
+    assert " restart " not in calls, calls
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    "argv",
+    [("harness", "claude", "--version", "2.1.260"), ("harness", "claude", "--subscription")],
+    ids=["version", "subscription"],
+)
+def test_a_failed_recreate_points_at_the_logs_and_exits_non_zero(
+    installed: tuple[Path, dict[str, str]], argv: tuple[str, ...]
+) -> None:
+    path, env = installed
+
+    result = _run(*argv, "--yes", cwd=path, env={**env, "SHIM_RECREATE_RC": "1"})
+
+    assert result.returncode != 0
+    assert "./install.sh logs" in result.stderr
+    assert "written" in result.stdout
+    assert "claude: enabled" not in result.stdout
+
+
+@needs_bash
+def test_harness_version_says_the_row_reads_disabled_until_readiness_reruns(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    """`sync_pins` resets readiness on a pin change; the installer must not imply `enabled`."""
+    path, env = installed
+
+    result = _run("harness", "codex", "--version", "0.200.0", "--yes", cwd=path, env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "disabled until readiness is re-run" in result.stdout
+
+
+@needs_bash
+def test_upgrade_prints_the_planned_pin_changes_before_it_asks(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+    before_text = (path / ".env").read_text()
+    before = parse_env_example(path / ".env")
+    release = _release_env(path, CLAUDE_CODE_VERSION="2.1.300", CODEX_VERSION="0.100.0")
+
+    result = _run(
+        "upgrade",
+        "--tag",
+        "2.0.0",
+        cwd=path,
+        env={**env, "SHIM_IMAGE_ENV": str(release)},
+        answers="n\n",
+    )
+
+    assert result.returncode != 0
+    assert "upgrade cancelled" in result.stderr
+    assert f"CLAUDE_CODE_VERSION {before['CLAUDE_CODE_VERSION']} → 2.1.300" in result.stdout
+    downgrade = next(line for line in result.stdout.splitlines() if "CODEX_VERSION" in line)
+    assert f"{before['CODEX_VERSION']} → 0.100.0" in downgrade
+    assert "downgrade" in downgrade
+    claude = next(line for line in result.stdout.splitlines() if "CLAUDE_CODE_VERSION" in line)
+    assert "downgrade" not in claude
+    assert (path / ".env").read_text() == before_text
+    calls = _docker_calls(path)
+    assert "pg_dump" not in calls, calls
+    assert " up " not in calls, calls
+
+
+@needs_bash
+def test_upgrade_with_a_release_image_without_the_contract_keeps_the_pins(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    """An older release ships no `/app/deploy/.env.example`: a rollback to it stays possible."""
+    path, env = installed
+    before = parse_env_example(path / ".env")
+
+    result = _run(
+        "upgrade", "--tag", "2.0.0", "--yes", cwd=path, env={**env, "SHIM_IMAGE_ENV": "none"}
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "warning:" in result.stderr
+    assert RELEASE_IMAGE in result.stderr
+    after = parse_env_example(path / ".env")
+    assert after["IMAGE_TAG"] == "2.0.0"
+    for variable in PIN_VARIABLES.values():
+        assert after[variable] == before[variable]
+
+
+@needs_bash
+def test_upgrade_dies_before_any_write_when_dotenv_declares_no_pin(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+    dotenv = path / ".env"
+    dotenv.write_text(
+        "\n".join(
+            line
+            for line in dotenv.read_text().splitlines()
+            if not line.startswith("CODEX_VERSION=")
+        )
+        + "\n"
+    )
+    before = dotenv.read_text()
+    release = _release_env(path, CLAUDE_CODE_VERSION="2.1.300")
+
+    result = _run(
+        "upgrade", "--tag", "2.0.0", "--yes", cwd=path, env={**env, "SHIM_IMAGE_ENV": str(release)}
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "CODEX_VERSION" in result.stderr
+    assert dotenv.read_text() == before
+    calls = _docker_calls(path)
+    assert "pg_dump" not in calls, calls
+    assert " up " not in calls, calls
+    assert not (path / "backups").exists() or not any((path / "backups").iterdir())
+
+
+@needs_bash
+def test_harness_version_at_the_current_pin_recreates_nothing(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+    pin = parse_env_example(path / ".env")["CLAUDE_CODE_VERSION"]
+
+    result = _run("harness", "claude", "--version", pin, "--yes", cwd=path, env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"already pinned at {pin}" in result.stdout
+    assert " up " not in _docker_calls(path)
+
+
+@needs_bash
+def test_harness_version_prints_this_starts_harness_log_lines(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+    logs = path / "backend.log"
+    logs.write_text(
+        "backend-api-1  | [harness:codex] codex 0.152.1 → 0.200.0\n"
+        "backend-api-1  | [harness:claude] claude 2.1.258 at pin\n"
+        "backend-api-1  | [harness:codex] codex 0.200.0 at pin\n"
+    )
+
+    result = _run(
+        "harness",
+        "codex",
+        "--version",
+        "0.200.0",
+        "--yes",
+        cwd=path,
+        env={**env, "SHIM_LOGS": str(logs)},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "[harness:codex] codex 0.200.0 at pin" in result.stdout
+    assert "[harness:claude]" not in result.stdout
+    logs_call = next(line for line in _docker_calls(path).splitlines() if " logs " in line)
+    assert "--since " in logs_call
+    assert logs_call.rstrip().endswith("backend-api")
+
+
+@needs_bash
+def test_harness_version_refused_at_start_warns_and_exits_non_zero(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+    logs = path / "backend.log"
+    logs.write_text(
+        "backend-api-1  | [harness:codex] codex: npm install @openai/codex@0.999.0 failed\n"
+        "backend-api-1  | [harness:codex] refused until the next start\n"
+    )
+
+    result = _run(
+        "harness",
+        "codex",
+        "--version",
+        "0.999.0",
+        "--yes",
+        cwd=path,
+        env={**env, "SHIM_LOGS": str(logs)},
+    )
+
+    assert result.returncode != 0
+    assert "[harness:codex] refused until the next start" in result.stdout
+    assert "warning:" in result.stderr
+
+
+@needs_bash
+def test_upgrade_shows_dockers_own_error_when_the_release_cannot_be_read(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    """Only `No such file` means an older release; anything else is a failure, said in full."""
+    path, env = installed
+    before = (path / ".env").read_text()
+
+    result = _run(
+        "upgrade", "--tag", "2.0.0", "--yes", cwd=path, env={**env, "SHIM_IMAGE_ENV": "broken"}
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert RELEASE_IMAGE in result.stderr
+    assert "layer does not exist" in result.stderr
+    assert (path / ".env").read_text() == before
+
+
+@needs_bash
+def test_upgrade_without_the_release_contract_names_the_pins_to_set_by_hand(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+
+    result = _run(
+        "upgrade", "--tag", "2.0.0", "--yes", cwd=path, env={**env, "SHIM_IMAGE_ENV": "none"}
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    for variable in PIN_VARIABLES.values():
+        assert variable in result.stderr
+    assert "by hand" in result.stderr
+
+
+@needs_bash
+def test_upgrade_with_a_missing_image_shows_dockers_output(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+
+    result = _run("upgrade", "--tag", "2.0.0", "--yes", cwd=path, env=env)
+
+    assert result.returncode == 1
+    assert "Unable to find image" in result.stderr
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("old", "new", "downgrade"),
+    [
+        ("2.1.258", "2.1.99", True),
+        ("2.1.99", "2.1.258", False),
+        ("2.1.300", "2.1.300-beta.1", True),
+        ("1.2.3+build-7", "1.2.3", False),
+        ("2.1.300-beta.2", "2.1.300-beta.1", True),
+        ("2.1.300-beta.1", "2.1.300-beta.2", False),
+    ],
+)
+def test_upgrade_marks_only_a_downgrade(
+    installed: tuple[Path, dict[str, str]], old: str, new: str, *, downgrade: bool
+) -> None:
+    path, env = installed
+    dotenv = path / ".env"
+    current = parse_env_example(dotenv)["CLAUDE_CODE_VERSION"]
+    dotenv.write_text(
+        dotenv.read_text().replace(f"CLAUDE_CODE_VERSION={current}", f"CLAUDE_CODE_VERSION={old}")
+    )
+    release = _release_env(path, CLAUDE_CODE_VERSION=new)
+
+    result = _run(
+        "upgrade",
+        "--tag",
+        "2.0.0",
+        cwd=path,
+        env={**env, "SHIM_IMAGE_ENV": str(release)},
+        answers="n\n",
+    )
+
+    line = next(line for line in result.stdout.splitlines() if "CLAUDE_CODE_VERSION" in line)
+    assert f"{old} → {new}" in line
+    assert ("downgrade" in line) is downgrade
+
+
+@needs_bash
+def test_upgrade_reads_a_dotenv_pin_past_a_one_space_comment(
+    installed: tuple[Path, dict[str, str]],
+) -> None:
+    path, env = installed
+    dotenv = path / ".env"
+    current = parse_env_example(dotenv)["CLAUDE_CODE_VERSION"]
+    dotenv.write_text(
+        dotenv.read_text().replace(
+            f"CLAUDE_CODE_VERSION={current}", f"CLAUDE_CODE_VERSION={current} # kept by hand"
+        )
+    )
+    before = dotenv.read_text()
+    release = _release_env(path)
+
+    result = _run(
+        "upgrade",
+        "--tag",
+        "2.0.0",
+        cwd=path,
+        env={**env, "SHIM_IMAGE_ENV": str(release)},
+        answers="n\n",
+    )
+
+    assert "CLAUDE_CODE_VERSION" not in result.stdout
+    assert "harness CLI pins: unchanged" in result.stdout
+    assert dotenv.read_text() == before
