@@ -9,15 +9,17 @@
  * owns; this component holds no state and decides nothing — it renders what it is given and
  * reports each edit back through `onChange`.
  *
- * The MODEL field has two shapes and the `models` prop is what picks between them (7.3). A
- * harness that publishes models — `local`, whose aliases are this instance's own `LOCAL_MODELS`
- * — gets a select over exactly those, because a free-text name the Gateway serves no route for
- * is a Run that pre-flights clean, starts, and fails at its first model call. Every other
- * harness gets the text field it has always had: it takes a model name its provider publishes,
- * which this instance holds no list of. The island decides which by asking the selected harness
- * (`modelsFor`); this component only renders the answer.
+ * The MODEL field has two shapes and the `models` prop picks between them. The island passes
+ * the selected harness's live probe list (`GET /harnesses/{name}/probe`): a non-empty list gives
+ * a select over exactly those models, because a name the harness does not serve is a Run that
+ * pre-flights clean, starts, and fails at its first model call. An empty or unretrievable list
+ * gives the free-text field; this component only renders the answer.
+ *
+ * Every Template input named `model*` or `*model` renders the same control from the same list
+ * (`ModelField`).
  */
 import type { components } from '../api/schema';
+import ModelField from './ModelField';
 import { fieldsFor, type TemplateCatalog } from '../lib/newwf/catalog';
 import {
   isTemplateName,
@@ -46,6 +48,12 @@ interface Props {
   models?: string[];
   note: string | undefined;
   onChange: (next: FormState) => void;
+}
+
+/** The backend binds a literal declared default when an input is blank, so the blank option
+ * names it; a templated default (`{{`) has no literal to show. */
+function blankLabelFor(initial: string): string | undefined {
+  return initial !== '' && !initial.includes('{{') ? `— (template default: ${initial})` : undefined;
 }
 
 export default function NewWorkflowFields({
@@ -148,12 +156,22 @@ export default function NewWorkflowFields({
           <span className="newwf-field-label">
             {field.label} {field.required ? '*' : '(optional)'}
           </span>
-          <input
-            type="text"
-            data-testid={`newwf-input-${field.key}`}
-            value={state.inputs[field.key] ?? ''}
-            onChange={(event) => onChange(withInput(state, field.key, event.target.value))}
-          />
+          {field.modelChoice ? (
+            <ModelField
+              testId={`newwf-input-${field.key}`}
+              value={state.inputs[field.key] ?? ''}
+              models={models}
+              blankLabel={blankLabelFor(field.initial)}
+              onChange={(value) => onChange(withInput(state, field.key, value))}
+            />
+          ) : (
+            <input
+              type="text"
+              data-testid={`newwf-input-${field.key}`}
+              value={state.inputs[field.key] ?? ''}
+              onChange={(event) => onChange(withInput(state, field.key, event.target.value))}
+            />
+          )}
         </label>
       ))}
 
@@ -162,28 +180,13 @@ export default function NewWorkflowFields({
         title="LLM model the harness calls. Blank uses the harness default; the list shows only what the live probe returned."
       >
         <span className="newwf-field-label">MODEL (optional)</span>
-        {models.length > 0 ? (
-          <select
-            data-testid="newwf-model"
-            value={state.model}
-            onChange={(event) => onChange({ ...state, model: event.target.value })}
-          >
-            <option value="">—</option>
-            {models.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            type="text"
-            data-testid="newwf-model"
-            placeholder="harness default"
-            value={state.model}
-            onChange={(event) => onChange({ ...state, model: event.target.value })}
-          />
-        )}
+        <ModelField
+          testId="newwf-model"
+          value={state.model}
+          models={models}
+          placeholder="harness default"
+          onChange={(value) => onChange({ ...state, model: value })}
+        />
       </label>
 
       <label

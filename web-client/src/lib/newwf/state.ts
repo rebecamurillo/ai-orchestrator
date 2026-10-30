@@ -126,6 +126,37 @@ export function withHarness(state: FormState, harness: string, harnesses: Harnes
   return { ...state, harness, model: keep ? state.model : '' };
 }
 
+/** Every model-named input back at its declared default — the harness it was chosen for is gone. */
+export function resetModelInputs(state: FormState, catalog: TemplateCatalog): FormState {
+  const inputs = { ...state.inputs };
+  for (const field of fieldsFor(catalog, state.template)) {
+    if (field.modelChoice) inputs[field.key] = field.initial;
+  }
+  return { ...state, inputs };
+}
+
+/**
+ * With a non-empty `models` list, a model-named input holding a value outside it is cleared:
+ * a select cannot show it, and submitting it unseen is the failure this form exists to prevent.
+ * An empty list means free text, so values stand. Returns `state` itself when nothing changes.
+ */
+export function reconcileModelInputs(
+  state: FormState,
+  models: string[],
+  catalog: TemplateCatalog,
+): FormState {
+  if (models.length === 0) return state;
+  let inputs: Record<string, string> | undefined;
+  for (const field of fieldsFor(catalog, state.template)) {
+    const value = state.inputs[field.key] ?? '';
+    if (field.modelChoice && value !== '' && !models.includes(value)) {
+      inputs ??= { ...state.inputs };
+      inputs[field.key] = '';
+    }
+  }
+  return inputs ? { ...state, inputs } : state;
+}
+
 /** The Repositories of the selected Project, or none while nothing is selected. */
 export function repositoriesFor(
   projects: components['schemas']['ProjectRead'][],
