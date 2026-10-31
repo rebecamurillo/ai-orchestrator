@@ -22,7 +22,7 @@ export default function StoriesStrip({ stories }: Props) {
       {groups.map(([epicIndex, cells]) => (
         <div key={epicIndex} className="wf-stories-epic">
           <p className="wf-stories-epic-head">
-            epic {epicIndex} · {epicDoneCount(cells)}
+            epic {epicIndex + 1} · {epicDoneCount(cells)}
           </p>
           <div className="wf-stories-cells">
             {cells.map((cell) => (
