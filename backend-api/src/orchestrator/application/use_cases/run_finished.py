@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
 
-from orchestrator.application.preflight.checks import BMAD_INSTALL_KIND
+from orchestrator.application.steps.bmad_install import KIND as BMAD_INSTALL_KIND
 from orchestrator.application.use_cases.clone_check import _base, _checked
 from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.ports.clock import Clock

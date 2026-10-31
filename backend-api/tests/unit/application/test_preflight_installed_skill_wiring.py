@@ -42,7 +42,6 @@ def test_missing_skill_produces_fail_line_and_would_block_start() -> None:
     ctx = Context(
         git=FakeGit(),
         base_dir=Path("/work/proj/repo/base"),
-        bmad_version="6.11.0",
         max_active_runs=2,
         repository=None,
         runs=FakeRunRepository(),

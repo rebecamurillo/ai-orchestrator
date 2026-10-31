@@ -41,7 +41,7 @@ from tests.unit.fakes.templates import FakeTemplateVersionRepository
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 BUDGET = Decimal("10")
 
-#: `repo-init@1` has a `bmad.install` step (method_version_line → skip) and an `agent`
+#: `repo-init@1` has a `bmad.install` step and an `agent`
 #: step (harness_probe_line → evaluated), which is the combination these tests need.
 _TEMPLATE = "repo-init"
 _VERSION = 1

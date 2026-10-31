@@ -64,8 +64,10 @@ instance; against a different version it describes an API that is not there.
 
    `<harness>` is `kit.json`'s `harness` (`claude`, `codex`, `opencode` or `all`).
 
-`bmad_version` is the BMAD release the instance authors for (AD-16) — a target repository
-whose `_bmad/_config/manifest.yaml` names a different one is not ready to dispatch.
+`bmad_version` is the BMAD release installed in the instance's harnesses (AD-16). The
+orchestrator does not compare it with any repository: preflight has no method-version line.
+A BMAD skill renders from the target's own `_bmad/`, so a repository whose manifest names
+another version, or none, may render a different workflow than the one you authored for.
 
 ## One-time setup: project and repository
 

@@ -7,10 +7,12 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from orchestrator.application.preflight.model import (
     CHECK_BRANCH,
     CHECK_HARNESS,
-    CHECK_METHOD_VERSION,
+    CHECK_INSTALLED_SKILL,
     CHECK_STORIES_YAML,
     QUEUE_FREE,
     Line,
@@ -22,6 +24,7 @@ from orchestrator.application.use_cases.preflight import PreflightPorts, run_pre
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import CloneCheck, Repository
 from orchestrator.domain.entities.run import Run
+from orchestrator.domain.entities.template import TemplateVersion
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.values import Worktree
 from tests.unit.application.templates import plan_fixtures as fixtures
@@ -29,11 +32,14 @@ from tests.unit.fakes.git import FakeGit
 from tests.unit.fakes.harnesses import FakeHarnessRepository
 from tests.unit.fakes.projects import FakeProjectRepository, FakeRepositoryRepository
 from tests.unit.fakes.runs import FakeRunRepository
+from tests.unit.fakes.skill_catalog import FakeSkillCatalog
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 WORK_DIR = Path("/work")
 MANIFEST_PATH = "_bmad/_config/manifest.yaml"
+#: The name the removed FR-8 line 9 carried; no plan gets a line by it (Operator, 2026-10-30).
+METHOD_VERSION = "method version"
 #: `repo-init@1`'s row count (4.2's own AC): plan, checkout, install, commit, push, link.
 REPO_INIT_ROW_COUNT = 8
 
@@ -125,7 +131,7 @@ def test_ac1_repo_init_full_success() -> None:
     assert len(result.rows) == REPO_INIT_ROW_COUNT
     assert result.queue_note == QUEUE_FREE
     assert line(result, CHECK_BRANCH).text == "chore/bmad-init-1 · will create from main"
-    assert line(result, CHECK_METHOD_VERSION).status == "skip"
+    assert METHOD_VERSION not in [candidate.check for candidate in result.lines]
 
 
 def test_ac2_stories_yaml_ids_not_prefix_free() -> None:
@@ -191,18 +197,72 @@ def test_ac4_held_branch() -> None:
     assert result.queue_note == "queues behind epic · feat/x"
 
 
-def test_method_version_outdated() -> None:
-    git = fixtures.epic_git()
-    git.files[(fixtures.WORK_SHA, MANIFEST_PATH)] = "installation:\n  version: 6.10.0\n"
+OWN_SKILL_YAML = """\
+name: own-skill
+version: 1
+inputs:
+  project:     { type: project,    required: true }
+  repository:  { type: repository, required: true }
+  base_branch: { type: string,     required: true }
+steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "own-skill/x" }
+    gate: deterministic
+  - id: write
+    uses: agent
+    with: { harness: claude, skill: bmad-build-auto }
+    prompts:
+      dispatch: "Run the skill {skill}."
+      rendered: "The workflow for skill {skill} is rendered at {path}."
+    gate: liveness
+"""
 
-    result = run_preflight(ports(git=git, bmad_version=fixtures.BMAD_VERSION), epic_request())
 
-    assert line(result, CHECK_METHOD_VERSION) == Line(
-        CHECK_METHOD_VERSION,
-        "fail",
-        "outdated: 6.10.0",
-        "run Initialise repository and merge its branch",
+def own_skill_ports(git: FakeGit, *, installed: frozenset[str]) -> PreflightPorts:
+    templates = FakeTemplateVersionRepository(
+        [TemplateVersion(name="own-skill", version=1, yaml=OWN_SKILL_YAML, hash="sha", calls=())]
     )
+    return ports(git=git, templates=templates, skill_catalog=FakeSkillCatalog(installed))
+
+
+def own_skill_request() -> PreflightRequest:
+    return epic_request(template_name="own-skill", inputs={})
+
+
+@pytest.mark.parametrize(
+    "manifest", [None, "installation:\n  version: 6.10.0\n", "installation:\n  version: 6.12.4\n"]
+)
+def test_a_skill_plan_has_no_method_version_line_whatever_the_manifest(
+    manifest: str | None,
+) -> None:
+    """Operator ruling 2026-10-30 (Q1): no plan is checked against a method version, so a
+    skill plan on a repository with a missing or different manifest is not refused for it."""
+    git = fixtures.epic_git()
+    if manifest is not None:
+        git.files[(fixtures.BASE_SHA, MANIFEST_PATH)] = manifest
+        git.files[(fixtures.WORK_SHA, MANIFEST_PATH)] = manifest
+
+    result = run_preflight(
+        own_skill_ports(git, installed=frozenset({"bmad-build-auto"})), own_skill_request()
+    )
+
+    assert result.plan_error is None
+    assert result.rows is not None
+    assert any(row.with_resolved.get("skill") == "bmad-build-auto" for row in result.rows)
+    assert METHOD_VERSION not in [candidate.check for candidate in result.lines]
+    assert all(MANIFEST_PATH != arguments[2] for arguments in git.called("read_file"))
+    assert line(result, CHECK_INSTALLED_SKILL).status == "ok"
+    assert result.start_allowed is True
+
+
+def test_the_installed_skill_check_still_refuses_an_unknown_skill() -> None:
+    result = run_preflight(
+        own_skill_ports(fixtures.epic_git(), installed=frozenset()), own_skill_request()
+    )
+
+    assert line(result, CHECK_INSTALLED_SKILL).status == "fail"
+    assert result.start_allowed is False
 
 
 def test_ac5_missing_repository_id_every_line_skips() -> None:

@@ -17,7 +17,6 @@ from orchestrator.application.preflight.model import (
     CHECK_CLONE_CHECK,
     CHECK_EPICS_YAML,
     CHECK_HARNESS,
-    CHECK_METHOD_VERSION,
     CHECK_ORIGIN,
     CHECK_STORIES_YAML,
     CHECK_WHAT_WILL_RUN,
@@ -33,10 +32,6 @@ from orchestrator.application.templates.plan_model import (
     Plan,
     PlanError,
     ResolvedTree,
-)
-from orchestrator.application.use_cases.clone_check import (
-    MANIFEST_PATH,
-    installed_version,
 )
 from orchestrator.domain.entities.harness import Harness
 from orchestrator.domain.entities.repository import Repository
@@ -66,13 +61,6 @@ LIST_FILE_REASONS = frozenset(
 #: What a Run this harness/repository check has no readiness run to report says.
 NO_READINESS_RUN = "no readiness run"
 
-#: The one fix every failing method-version line names, verbatim.
-METHOD_VERSION_FIX = "run Initialise repository and merge its branch"
-
-#: The one kind (`application/steps/__init__.py::KIND_META`) line 9 is `skip` for — the
-#: plan installs the method itself, so there is nothing yet to compare a version against.
-BMAD_INSTALL_KIND = "bmad.install"
-
 
 @dataclass(frozen=True)
 class Context:
@@ -80,7 +68,6 @@ class Context:
 
     git: Git
     base_dir: Path
-    bmad_version: str
     max_active_runs: int
     repository: Repository | None
     runs: RunRepository
@@ -353,23 +340,6 @@ def _checkpoint_items(row: PlannedRow) -> list[str]:
     ):
         return [f"story {row.story_id} · spec checkpoint"]
     return []
-
-
-def method_version_line(ctx: Context) -> Line:
-    """Line 9: `_bmad/_config/manifest.yaml` at `plan_ref`, `skip` when the plan installs it."""
-    if ctx.plan is None:
-        return Line(CHECK_METHOD_VERSION, "skip", "plan not built")
-    if any(row.kind == BMAD_INSTALL_KIND for row in ctx.plan.rows):
-        return Line(CHECK_METHOD_VERSION, "skip", "plan installs the method")
-    manifest = ctx.git.read_file(ctx.base_dir, ctx.plan.plan_ref, MANIFEST_PATH)
-    # an unreadable manifest and a manifest that states no version are one line, not two:
-    # both mean "this clone does not say which method version it holds"
-    stated = installed_version(manifest) if manifest is not None else None
-    if stated is None:
-        return Line(CHECK_METHOD_VERSION, "fail", "missing", fix=METHOD_VERSION_FIX)
-    if stated != ctx.bmad_version:
-        return Line(CHECK_METHOD_VERSION, "fail", f"outdated: {stated}", fix=METHOD_VERSION_FIX)
-    return Line(CHECK_METHOD_VERSION, "ok", stated)
 
 
 def clone_check_line(ctx: Context) -> Line:

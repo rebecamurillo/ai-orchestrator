@@ -100,9 +100,9 @@ Not `anytime`, not skippable, and not satisfied by what the user tells you:
 3. **Existing initiative folders.** Their naming, their `epics.yaml` flavour, and whether
    the ids you intend to use are already taken.
 4. **The method version (AD-16).** `GET /api/v1/version` gives `bmad_version`. The
-   target's `_bmad/_config/manifest.yaml` must state the same `installation.version`. A
-   different one is not a note: preflight fails its method-version line, and the BMAD
-   skills a dispatched agent runs are not the ones you authored for. Resolve it before
+   target's `_bmad/_config/manifest.yaml` should state the same `installation.version`.
+   Preflight does not check it, but a different one is not a note: the BMAD skills a
+   dispatched agent runs are not the ones you authored for. Resolve it before
    step 6 — `POST /api/v1/repositories/{id}/init` bootstraps a target that has none.
 
 `CONTEXT.md` is the output and the thing steps 2–6 cite. Write what you verified, not what

@@ -4,7 +4,7 @@ Read this first, then the `AGENTS.md` of the component you are changing. This fi
 
 ## What this repository is
 
-An orchestrator that runs BMAD dev-loop workflows against other repositories: a Run plans every step up front, executes them durably, dispatches stories to a coding-agent harness (claude, codex, opencode), verifies with the target repository's own commands, and stops for the operator only at declared checkpoints or when an agent is blocked.
+An orchestrator that runs agent workflows against other repositories: a Run plans every step up front, executes them durably, dispatches stories to a coding-agent harness (claude, codex, opencode), verifies with the target repository's own commands, and stops for the operator only at declared checkpoints or when an agent is blocked.
 
 Two deployables, one compose file:
 

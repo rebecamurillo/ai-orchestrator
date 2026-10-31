@@ -71,7 +71,6 @@ def _ctx(**overrides: object) -> Context:
     fields: dict[str, object] = {
         "git": FakeGit(),
         "base_dir": Path("/work/proj/repo/base"),
-        "bmad_version": "6.11.0",
         "max_active_runs": 2,
         "repository": None,
         "runs": FakeRunRepository(),
