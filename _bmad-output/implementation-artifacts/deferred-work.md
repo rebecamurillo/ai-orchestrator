@@ -147,3 +147,12 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/implementation-artifacts/spec-harness-upgrade-survives-redeploy.md`
   summary: `install.sh doctor` and `diagnose` report harness CLI drift against the pins and the state of the harness-bin volume.
   evidence: Review loop 2 noted that a refused harness surfaces only as a disabled row; doctor has no check naming the cause.
+- source_spec: `_bmad-output/implementation-artifacts/spec-model-input-selectors.md`
+  summary: A form reloaded with a harness in its URL has no way to fetch the model list in place, and a failed probe cannot be retried without switching harness.
+  evidence: The probe fires only from the radio's `onChange` (`HarnessList.tsx:80`), which an already-checked radio never fires; switching away and back resets the model inputs. MODEL behaved the same before this change, and the approved spec excludes a probe on load.
+- source_spec: `_bmad-output/implementation-artifacts/spec-model-input-selectors.md`
+  summary: A failed model-list retrieval gives the Operator no explanation; the select just becomes free text.
+  evidence: A non-2xx or thrown probe drops the result silently, which reads the same as a harness that publishes no models, and free text is the path with no validation of model inputs (`create_run.py` checks only `req.model`).
+- source_spec: `_bmad-output/implementation-artifacts/spec-model-input-selectors.md`
+  summary: `NewWorkflow.tsx` exceeds the 300-line component limit in `web-client/AGENTS.md`; the probe-result rules could move to a pure function in `lib/newwf/state.ts`.
+  evidence: The island was already 365 lines at this spec's baseline and grew with it.

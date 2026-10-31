@@ -75,6 +75,8 @@ export interface TemplateInputField {
   required: boolean;
   /** The Template's declared `default:` as text, or `''`. */
   initial: string;
+  /** Rendered as the harness's probed-model select when a list exists (see `isModelInput`). */
+  modelChoice: boolean;
 }
 
 export interface TemplateEntry {
@@ -122,6 +124,14 @@ function isBindable(input: InputDeclOut): boolean {
   return !RUNTIME_BOUND_TYPES.has(input.type) && !FORM_OWNED_NAMES.has(input.name);
 }
 
+/** A string input whose name starts or ends with `model` takes a model name (Operator decision
+ * 2026-10-30), so `data_model` and `modeling_notes` qualify by design. */
+export function isModelInput(input: Pick<InputDeclOut, 'name' | 'type'>): boolean {
+  return (
+    input.type === 'string' && (input.name.startsWith('model') || input.name.endsWith('model'))
+  );
+}
+
 /** `spec_folder` → `SPEC FOLDER`. */
 export function deriveLabel(name: string): string {
   return name.replace(/_/g, ' ').toUpperCase();
@@ -140,6 +150,7 @@ export function deriveFields(inputs: InputDeclOut[]): TemplateInputField[] {
       tooltip: copy?.tooltip ?? `Passed to the template as ${input.name}.`,
       required: input.required,
       initial: initialOf(input),
+      modelChoice: isModelInput(input),
     } satisfies TemplateInputField;
   });
 }

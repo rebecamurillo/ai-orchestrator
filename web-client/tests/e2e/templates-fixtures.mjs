@@ -354,6 +354,8 @@ TEMPLATES[STORY_RUN_NAME] = {
         { name: 'branch', type: 'string', required: true, default: null, values: [] },
         { name: 'spec_folder', type: 'path', required: true, default: null, values: [] },
         { name: 'story_id', type: 'string', required: true, default: null, values: [] },
+        { name: 'model_x', type: 'string', required: false, default: null, values: [] },
+        { name: 'model_y', type: 'string', required: false, default: 'not-served', values: [] },
         {
           name: 'harness',
           type: 'enum',

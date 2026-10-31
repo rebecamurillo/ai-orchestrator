@@ -32,6 +32,8 @@ import {
   CONSENT_CHECK_TEXT,
   cloneCheckNote,
   preflightBody,
+  reconcileModelInputs,
+  resetModelInputs,
   repositoriesFor,
   repositoryById,
   runBody,
@@ -128,6 +130,10 @@ export default function NewWorkflow({ templates, catalog, projects, harnesses, i
     window.location.href = '/runs';
   }
 
+  function dropProbe(name: string): void {
+    setProbeResults((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => k !== name)));
+  }
+
   async function runProbe(name: string): Promise<void> {
     const seq = ++probeSeqRef.current;
     setProbeInFlight(true);
@@ -136,16 +142,24 @@ export default function NewWorkflow({ templates, catalog, projects, harnesses, i
       if (seq !== probeSeqRef.current) return;
       if (data) {
         setProbeResults((prev) => ({ ...prev, [name]: data }));
-        if (!data.ok) {
-          setState((prev) => (prev.harness === name ? { ...prev, harness: '', model: '' } : prev));
-        } else {
-          setState((prev) =>
-            prev.harness === name && data.models.length > 0 && !data.models.includes(prev.model)
-              ? { ...prev, model: '' }
-              : prev,
-          );
+        const cur = stateRef.current;
+        if (cur.harness === name) {
+          let next: FormState;
+          if (!data.ok) {
+            next = resetModelInputs({ ...cur, harness: '', model: '' }, catalog);
+          } else {
+            next = reconcileModelInputs(cur, data.models, catalog);
+            if (data.models.length > 0 && !data.models.includes(next.model)) {
+              next = { ...next, model: '' };
+            }
+          }
+          if (JSON.stringify(next) !== JSON.stringify(cur)) update(next);
         }
+      } else {
+        dropProbe(name);
       }
+    } catch {
+      if (seq === probeSeqRef.current) dropProbe(name);
     } finally {
       if (seq === probeSeqRef.current) setProbeInFlight(false);
     }
@@ -280,7 +294,9 @@ export default function NewWorkflow({ templates, catalog, projects, harnesses, i
             repositories={repositories}
             models={probeResults[state.harness]?.models ?? []}
             note={note}
-            onChange={update}
+            onChange={(next) =>
+              update(reconcileModelInputs(next, probeResults[next.harness]?.models ?? [], catalog))
+            }
           />
           {usesHarness(state.template, catalog) ? (
             <HarnessList
@@ -288,7 +304,9 @@ export default function NewWorkflow({ templates, catalog, projects, harnesses, i
               selected={state.harness}
               probeResults={probeResults}
               onSelect={(name) => {
-                update({ ...stateRef.current, harness: name, model: '' });
+                update(
+                  resetModelInputs({ ...stateRef.current, harness: name, model: '' }, catalog),
+                );
                 void runProbe(name);
               }}
               onRunReadiness={runReadiness}
