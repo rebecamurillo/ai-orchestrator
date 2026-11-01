@@ -1,0 +1,75 @@
+# Epic 1: Senior consult
+- id: "1-1"
+  title: Stop identity and stale answers refused
+  description: >-
+    Give each stop an identity that answers must name, and refuse a stale one on the Run page and API (CAP-4).
+- id: "1-2"
+  title: Named provider errors
+  description: >-
+    A provider failure parks under its real cause instead of `harness exit 1`, and never consults (CAP-5).
+- id: "1-3"
+  title: Test-impact search in staged planning
+  description: >-
+    `staged-plan` searches every test lane, including `test.fixme` e2e specs, and declares the tests the story changes (CAP-6).
+- id: "1-4"
+  title: Senior consult at a blocked stop
+  description: >-
+    A row that declares a consult gets a read-only senior session at a `blocked` stop, which resumes the original agent or parks for a human (CAP-1). This sets the consult design later stories reuse.
+  spec_checkpoint: true
+- id: "1-5"
+  title: Test-edit approval and diff review
+  description: >-
+    The senior approves named test files at a `blocked` stop and reviews the diff at a `protected_path` stop on tests (CAP-2). Preflight warns when the repository has empty `test_globs`.
+  spec_checkpoint: true
+  invoke_dev_with: >-
+    Precondition: the Operator's amendment to hard rule 1 and AD-17 must already be in AGENTS.md. If it is not, report blocked and do not start.
+- id: "1-6"
+  title: Senior consult at verify_failed
+  description: >-
+    Once the template's retries are used up, the senior's diagnosis goes into one further fresh redispatch, and the next stop parks for a human (CAP-3).
+  done_checkpoint: true
+# Epic 2: Operator control
+- id: "2-1"
+  title: Pause signal
+  description: >-
+    The Operator can pause a running Run, which parks when the current step ends with nothing killed (CAP-8).
+- id: "2-2"
+  title: Rejected retro parks the Run
+  description: >-
+    A `rejected` retrospective verdict parks the Run for a human before the next epic and names its findings (CAP-9).
+- id: "2-3"
+  title: Operator senior session backend
+  description: >-
+    Open, message and close a senior session at any stop, scoped to story, epic or Run, with its edits committed, billed and its anchor edits confirmed before close (CAP-7).
+  spec_checkpoint: true
+- id: "2-4"
+  title: Operator senior session on the Run page
+  description: >-
+    The Run page offers the session at any stop, with scope and model choice, the conversation, anchor confirmation and the closing signal (CAP-7).
+  done_checkpoint: true
+# Epic 3: Channel and alerts
+- id: "3-1"
+  title: Channel port, Project settings and Mattermost adapter
+  description: >-
+    Each Project chooses `off` or `mattermost` with its token, channel, allowed people and metadata-only option, and can test the connection (CAP-10). This sets the port the Slack adapter must fit.
+  spec_checkpoint: true
+- id: "3-2"
+  title: Slack adapter
+  description: >-
+    The same port and Project settings work with `slack` (CAP-10).
+- id: "3-3"
+  title: Escalation thread and reminders
+  description: >-
+    A stop that needs a human posts one new thread per question with composed context and mentions, plus a reminder every 4 hours while parked (CAP-11).
+  done_checkpoint: true
+# Epic 4: Thread replies
+- id: "4-1"
+  title: Reply polling and routing checks
+  description: >-
+    A job reads open threads and sends `answer` for the first reply that passes every check, resuming the original agent (CAP-12).
+  spec_checkpoint: true
+- id: "4-2"
+  title: Thread lock and closing notices
+  description: >-
+    Any answer or end of the stop closes the thread for good and posts who answered, and a mention in a closed thread gets one notice (CAP-12).
+  done_checkpoint: true
