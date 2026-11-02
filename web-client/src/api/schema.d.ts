@@ -540,6 +540,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the Operator's senior session on a Run */
+        get: operations["get_session_api_v1_runs__run_id__session_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/signals": {
         parameters: {
             query?: never;
@@ -807,6 +824,19 @@ export interface components {
             row_kind?: string | null;
             /** Token */
             token: string;
+        };
+        /**
+         * AnchorEditOut
+         * @description One anchor the session changed, spelled as AD-17 spells a hit.
+         */
+        AnchorEditOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "added" | "modified" | "deleted";
+            /** Path */
+            path: string;
         };
         /**
          * AttemptDetailOut
@@ -1114,7 +1144,7 @@ export interface components {
             /** Attempt N */
             attempt_n: number | null;
             /** Event */
-            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause") | ("start" | "done" | "failed" | "cancelled" | "started_by_operator") | ("redispatch" | "retry_auto" | "consult" | "senior_answer" | "senior_accept") | "spec_edit";
+            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end") | ("start" | "done" | "failed" | "cancelled" | "started_by_operator") | ("redispatch" | "retry_auto" | "consult" | "senior_answer" | "senior_accept") | "spec_edit";
             /**
              * Id
              * Format: uuid
@@ -1916,7 +1946,7 @@ export interface components {
          */
         RunDetailOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
             alert: components["schemas"]["AlertOut"] | null;
             cost: components["schemas"]["CostOut"];
             /** Gate Record */
@@ -1941,7 +1971,7 @@ export interface components {
             /** Accepted Paths */
             accepted_paths: string[];
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
             /** Branch */
             branch: string;
             /** Budget Usd */
@@ -2004,7 +2034,7 @@ export interface components {
          */
         RunEventsOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
             /** Budget Usd */
             budget_usd: string | null;
             /** Changed */
@@ -2246,7 +2276,7 @@ export interface components {
          */
         RunSummaryOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
             /** Branch */
             branch: string;
             /** Budget Usd */
@@ -2295,6 +2325,26 @@ export interface components {
             yaml: string;
         };
         /**
+         * SessionOut
+         * @description Whether a session holds the Run, whether one can start here, and what it changed.
+         */
+        SessionOut: {
+            /** Active */
+            active: boolean;
+            /** Anchor Edits */
+            anchor_edits: components["schemas"]["AnchorEditOut"][];
+            /** Available */
+            available: boolean;
+            /** Harness */
+            harness: string | null;
+            /** Model */
+            model: string | null;
+            /** Scope */
+            scope: ("story" | "epic" | "run") | null;
+            /** Scopes */
+            scopes: ("story" | "epic" | "run")[];
+        };
+        /**
          * SignalIn
          * @description `POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.
          */
@@ -2303,7 +2353,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause";
+            kind: "answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end";
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -4195,6 +4245,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunGraphOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_session_api_v1_runs__run_id__session_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionOut"];
                 };
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */

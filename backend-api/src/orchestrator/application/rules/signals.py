@@ -58,6 +58,8 @@ __all__ = [
     "NON_TERMINAL",
     "PARKED",
     "REBASELINE_FAILED",
+    "SENIOR_SESSION_OPEN",
+    "SENIOR_SESSION_SIGNALS",
     "TERMINAL_RESUMED",
     "TERMINAL_SESSION_SIGNALS",
     "VALID",
@@ -78,6 +80,12 @@ __all__ = [
 #: the Run's own `terminal_session` is what makes it true.
 TERMINAL_SESSION_SIGNALS: tuple[SignalKind, ...] = ("cancel", "terminal_release")
 
+#: The only kinds an open senior session admits and offers (AD-23), in `VALID`'s order.
+SENIOR_SESSION_SIGNALS: tuple[SignalKind, ...] = ("cancel", "session_end")
+
+#: What every other kind is refused with while the session holds the Run.
+SENIOR_SESSION_OPEN = "senior session open: end it before {kind}"
+
 #: `validate`'s own `row_statuses` column for `skip_step`, read off the table once so the
 #: offer and the refusal cannot drift (Operator, 2026-09-26): the three statuses the step
 #: machine has a `skip` edge from. `or frozenset()` is mypy's due on `Rule.row_statuses`
@@ -96,7 +104,12 @@ def validate(
     code). `signal_run` always has them; the two branches that validate a signal carrying no
     frame at all (`start`, a dependency `continue`) pass none, because no predicate of
     theirs reads one.
+
+    The senior session's lock comes first (AD-23): it holds every caller of `signal_run`,
+    the chat reply and `terminal_poll` included, not only the router.
     """
+    if run.senior_session and signal.kind not in SENIOR_SESSION_SIGNALS:
+        raise Conflict(SENIOR_SESSION_OPEN.format(kind=signal.kind))
     rule = VALID[signal.kind]
     if run.status not in rule.run_statuses:
         raise _refuse(run, signal)
@@ -179,12 +192,13 @@ def run_admitted_signals(
     action that would move the same row from here — Answer, Continue, Skip story, Skip epic,
     Retry — is dropped; `cancel` and `terminal_release` are what is left. It is read before
     the status tests below rather than after them, so the answer does not depend on which
-    status a Run happens to be in while the flag is set.
+    status a Run happens to be in while the flag is set. An open senior session replaces it
+    the same way, with `cancel` and `session_end` (AD-23).
     """
     if run.status in TERMINAL_RUN:
         return ()
-    if run.terminal_session:
-        return TERMINAL_SESSION_SIGNALS
+    if run.senior_session or run.terminal_session:
+        return SENIOR_SESSION_SIGNALS if run.senior_session else TERMINAL_SESSION_SIGNALS
     if run.status == "queued" and not run.engine_ref:
         return ("start", "cancel")
     if run.status != "needs_you":

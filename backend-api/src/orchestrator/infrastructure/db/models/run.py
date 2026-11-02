@@ -115,6 +115,7 @@ class RunRow(Base):
     compare_urls: Mapped[list[str]] = mapped_column(JSONB())
     trace_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
     terminal_session: Mapped[bool] = mapped_column(Boolean())
+    senior_session: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
     terminal_clean_polls: Mapped[int] = mapped_column(Integer())
     active_seconds: Mapped[int] = mapped_column(Integer())
     last_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

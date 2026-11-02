@@ -94,11 +94,11 @@ def frame_anchors(
             frozen_test_files=_frozen_test_files(frame.attempts),
         ),
         ranges=_agent_ranges(frame.attempts),
-        workdir=_workdir(row),
+        workdir=row_workdir(row),
     )
 
 
-def _workdir(row: StepRun | None) -> str:
+def row_workdir(row: StepRun | None) -> str:
     """The submodule this row runs in, normalised, or `""` — the same reading
     `steps/agent_workdir.py::declared` does, over the same resolved key (AD-9)."""
     written = str(row.with_resolved.get(WORKDIR_KEY) or "").strip() if row is not None else ""

@@ -83,6 +83,8 @@ SignalKind = Literal[
     "terminal_resume",
     "start",
     "pause",
+    "session_start",
+    "session_end",
 ]
 SIGNAL_KINDS: tuple[SignalKind, ...] = get_args(SignalKind)
 

@@ -49,6 +49,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from orchestrator.application.rules import session
 from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -232,18 +233,6 @@ def _is_saved(run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[S
     return not run.engine_ref
 
 
-def _no_terminal_session(
-    run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[StepRun]
-) -> bool:
-    return not run.terminal_session
-
-
-def _in_terminal_session(
-    run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[StepRun]
-) -> bool:
-    return run.terminal_session
-
-
 def raised_budget(payload: dict[str, Any]) -> Decimal:
     """The validated `budget_usd` of a `budget_raise`.
 
@@ -344,21 +333,21 @@ VALID: dict[SignalKind, Rule] = {
     ),
     "terminal_start": Rule(
         park_kinds=ANY_PARK - frozenset({PAUSED}),
-        extra=_no_terminal_session,
+        extra=session.no_open_session,
         text="terminal session started",
         operator_action=False,
     ),
     "terminal_release": Rule(
         park_kinds=ANY_PARK,
         run_statuses=NON_TERMINAL,
-        extra=_in_terminal_session,
+        extra=session.in_terminal_session,
         text="terminal session released",
         operator_action=False,
     ),
     "terminal_resume": Rule(
         park_kinds=frozenset({"blocked"}),
         row_statuses=frozenset({"blocked"}),
-        extra=_in_terminal_session,
+        extra=session.in_terminal_session,
         run_event="terminal_resume",
         actor="terminal",
         # the brief's own sentence (6.7, FR-21), and it states the *evidence* rather than
@@ -386,6 +375,19 @@ VALID: dict[SignalKind, Rule] = {
         run_statuses=frozenset({"running"}),
         extra=_no_pause_requested,
         text="pause requested by the operator",
+    ),
+    "session_start": Rule(
+        park_kinds=ANY_PARK - frozenset({"dependency"}),
+        extra=session.can_start_session,
+        text="senior session started",
+        operator_action=False,
+    ),
+    "session_end": Rule(
+        park_kinds=ANY_PARK,
+        extra=session.in_senior_session,
+        text="senior session ended",
+        text_from=session.ended_text,
+        operator_action=False,
     ),
 }
 

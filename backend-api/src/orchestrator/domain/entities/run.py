@@ -108,6 +108,9 @@ class Run(BaseModel):
     #: The Langfuse trace this Run's attempt spans hang under (AD-11).
     trace_id: str | None = None
     terminal_session: bool = False
+    #: The Operator's senior session holds the Run (AD-23): every signal but `session_end`
+    #: and `cancel` is refused until it is cleared.
+    senior_session: bool = False
     #: How many consecutive `terminal_poll` fires have found the Story file `done` and the
     #: tree clean (AD-13, AD-14, FR-21). Two is the threshold; anything unclean resets it to
     #: zero, and sending `terminal_resume` spends it back to zero, so a second terminal

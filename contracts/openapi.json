@@ -117,6 +117,30 @@
         "title": "AlertOut",
         "type": "object"
       },
+      "AnchorEditOut": {
+        "description": "One anchor the session changed, spelled as AD-17 spells a hit.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "added",
+              "modified",
+              "deleted"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "kind"
+        ],
+        "title": "AnchorEditOut",
+        "type": "object"
+      },
       "AttemptDetailOut": {
         "description": "One attempt's full detail, as returned by the step-run detail endpoint.\n\n`dispatch_prompt` and `command` derive from the step's `with_resolved`: they are the\nsame for every attempt of the step and carried here so the frontend needs only this\nobject.  `result` is extracted per-attempt from the spec file at `end_sha`.",
         "properties": {
@@ -1043,7 +1067,9 @@
                   "terminal_release",
                   "terminal_resume",
                   "start",
-                  "pause"
+                  "pause",
+                  "session_start",
+                  "session_end"
                 ],
                 "type": "string"
               },
@@ -3301,7 +3327,9 @@
                 "terminal_release",
                 "terminal_resume",
                 "start",
-                "pause"
+                "pause",
+                "session_start",
+                "session_end"
               ],
               "type": "string"
             },
@@ -3413,7 +3441,9 @@
                 "terminal_release",
                 "terminal_resume",
                 "start",
-                "pause"
+                "pause",
+                "session_start",
+                "session_end"
               ],
               "type": "string"
             },
@@ -3608,7 +3638,9 @@
                 "terminal_release",
                 "terminal_resume",
                 "start",
-                "pause"
+                "pause",
+                "session_start",
+                "session_end"
               ],
               "type": "string"
             },
@@ -4206,7 +4238,9 @@
                 "terminal_release",
                 "terminal_resume",
                 "start",
-                "pause"
+                "pause",
+                "session_start",
+                "session_end"
               ],
               "type": "string"
             },
@@ -4323,6 +4357,87 @@
         "title": "SaveVersionIn",
         "type": "object"
       },
+      "SessionOut": {
+        "description": "Whether a session holds the Run, whether one can start here, and what it changed.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "anchor_edits": {
+            "items": {
+              "$ref": "#/components/schemas/AnchorEditOut"
+            },
+            "title": "Anchor Edits",
+            "type": "array"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "story",
+                  "epic",
+                  "run"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "scopes": {
+            "items": {
+              "enum": [
+                "story",
+                "epic",
+                "run"
+              ],
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "active",
+          "available",
+          "scopes",
+          "scope",
+          "harness",
+          "model",
+          "anchor_edits"
+        ],
+        "title": "SessionOut",
+        "type": "object"
+      },
       "SignalIn": {
         "description": "`POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.",
         "properties": {
@@ -4340,7 +4455,9 @@
               "terminal_release",
               "terminal_resume",
               "start",
-              "pause"
+              "pause",
+              "session_start",
+              "session_end"
             ],
             "title": "Kind",
             "type": "string"
@@ -7708,6 +7825,89 @@
         "summary": "Read one Run's graph",
         "tags": [
           "templates"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/session": {
+      "get": {
+        "operationId": "get_session_api_v1_runs__run_id__session_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`run_id` does not parse as a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read the Operator's senior session on a Run",
+        "tags": [
+          "runs"
         ]
       }
     },

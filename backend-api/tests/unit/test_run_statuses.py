@@ -127,7 +127,9 @@ def test_the_park_kinds_are_the_thirteen_the_brief_lists() -> None:
     )
 
 
-def test_the_signal_kinds_are_the_thirteen_ad_13_names() -> None:
+def test_the_signal_kinds_are_the_fifteen_ad_13_names() -> None:
+    # story 2-3, 2026-11-02: "session_start" and "session_end" added, as AD-13's 2026-11-01
+    # amendment declares; they open and close the Operator's senior session (AD-23).
     # story 2-1, 2026-11-02: "pause" added, as AD-13's 2026-11-01 amendment declares.
     # operator revision 2026-09-18: "start" added for the deferred-start signal (story 5-3);
     # anchor exception 4 granted 2026-09-18T13:17:20Z.
@@ -146,6 +148,8 @@ def test_the_signal_kinds_are_the_thirteen_ad_13_names() -> None:
         "terminal_resume",
         "start",
         "pause",
+        "session_start",
+        "session_end",
     )
 
 

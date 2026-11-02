@@ -35,7 +35,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from orchestrator.application.rules import signals
+from orchestrator.application.rules import session, signals
 from orchestrator.application.rules.frames import (
     epic_frame,
     in_frame,
@@ -61,6 +61,7 @@ from orchestrator.application.use_cases.writers import (
 )
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
+from orchestrator.domain.errors import Conflict
 from orchestrator.domain.statuses import SignalKind, StepEvent, step_transition
 from orchestrator.domain.values import Signal, Worktree
 
@@ -81,6 +82,9 @@ UNSTARTED: frozenset[str] = frozenset({"planned", "queued"})
 
 #: The park kind that makes `skip_epic` give up on the epic's push and compare link.
 PUSH_REJECTED = "push_rejected"
+
+#: What a close is refused with while one of the session's turns has not ended (AD-23).
+TURN_RUNNING = "turn running"
 
 
 @dataclass(frozen=True)
@@ -277,7 +281,8 @@ def _cancel(
         if attempt is not None and attempt.pgid is not None and attempt.ended_at is None:
             pgids.append(attempt.pgid)
     plan = CancelPlan(pgids=tuple(pgids), worktrees=run.worktrees)
-    return Effect(run_update={"ended_at": ports.clock.now()}, cancel_plan=plan)
+    update: dict[str, Any] = {"ended_at": ports.clock.now(), "senior_session": False}
+    return Effect(run_update=update, cancel_plan=plan)
 
 
 def _terminal_start(
@@ -302,6 +307,24 @@ def _terminal_resume(
     set_row(ports, row, status=step_transition(row.status, "terminal_resume"))
     queued = resume_from(ports, row)
     return Effect(run_update={"terminal_session": False}, finished=not queued)
+
+
+def _session_start(
+    _p: WriterPorts, _run: Run, _rows: Sequence[StepRun], _row: StepRun | None, _s: Signal
+) -> Effect:
+    """The session holds the Run on its stop; no row moves (AD-23)."""
+    return Effect(run_update={"senior_session": True}, resume=False)
+
+
+def _session_end(
+    ports: WriterPorts, run: Run, _rows: Sequence[StepRun], park_row: StepRun | None, s: Signal
+) -> Effect:
+    """Released on the same stop, once the turns the anchor check read are all there are."""
+    attempts = ports.attempts.list_for_row(_parked(park_row).id)
+    turns = session.session_attempts(attempts, ports.records.list_for_run(run.id))
+    if session.turn_open(turns) or s.payload.get(session.TURNS_KEY) != len(turns):
+        raise Conflict(TURN_RUNNING)
+    return Effect(run_update={"senior_session": False}, resume=False)
 
 
 def _skip_frame(ports: WriterPorts, rows: Sequence[StepRun], park_row: StepRun) -> str | None:
@@ -367,4 +390,6 @@ EFFECTS: dict[SignalKind, EffectFn] = {
     "terminal_release": _terminal_release,
     "terminal_resume": _terminal_resume,
     "pause": _pause,
+    "session_start": _session_start,
+    "session_end": _session_end,
 }

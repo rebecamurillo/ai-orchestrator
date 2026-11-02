@@ -53,6 +53,8 @@ from uuid import UUID
 from orchestrator.application.rules.protected_paths import hit_paths, park_record_payload
 from orchestrator.application.rules.signals import accepted_files, row_at, validate
 from orchestrator.application.steps.context import RunEnvironment
+from orchestrator.application.use_cases import session_checks
+from orchestrator.application.use_cases.session_checks import SessionPorts
 from orchestrator.application.use_cases.signal_effects import CancelPlan
 from orchestrator.application.use_cases.signal_run import (
     SignalOutcome,
@@ -116,30 +118,43 @@ class SignalEffectPorts:
 
 def handle_signal(ports: SignalEffectPorts, run_id: UUID, signal: Signal) -> SignalOutcome:
     """Validate against AD-13, check the Accept's own agreement, then apply the effect."""
-    _refuse_early(ports.signal, run_id, signal)
+    _refuse_early(ports, run_id, signal)
     outcome = signal_run(ports.signal, run_id, signal)
     if signal.kind == "cancel" and outcome.cancel_plan is not None:
         _apply_cancel(ports, run_id, outcome.cancel_plan)
     return outcome
 
 
-def _refuse_early(ports: SignalPorts, run_id: UUID, signal: Signal) -> None:
+def session_ports(ports: SignalEffectPorts) -> SessionPorts:
+    """The senior session's checks read through the signal's own writers, `Git` and the
+    registry `SignalPorts.preflight` probes with (AD-23)."""
+    preflight = ports.signal.preflight
+    return SessionPorts(
+        writers=ports.signal.writers,
+        git=ports.git,
+        harnesses=preflight.harness_registry if preflight is not None else {},
+    )
+
+
+def _refuse_early(effect_ports: SignalEffectPorts, run_id: UUID, signal: Signal) -> None:
     """Everything that refuses a signal before a single row moves, in the order it applies.
 
     The stale stop first, so an answer written for another stop always hears which stop
     the Run is at (AD-24). `validate` next, so a genuine AD-13 mismatch keeps its own
-    refusal text; then the
+    refusal text; then the senior session's own checks (`session_checks.refuse`); then the
     terminal session, which holds every action but its own; then the Accept's own agreement
     with the hit list the park recorded. `signal_run` re-reads and re-validates everything it
     writes inside its own unit of work — this reads ahead of it rather than writing anything,
     which is why refusing here leaves the Run exactly as it stood.
     """
+    ports = effect_ports.signal
     writers = ports.writers
     run = require_run(writers, run_id)
     refuse_stale_stop(run, signal)
     rows = writers.steps.list_for_run(run_id)
     park_row = row_at(rows, run.park_path)
     validate(run, park_row, signal, rows)
+    session_checks.refuse(session_ports(effect_ports), run, rows, park_row, signal)
     _refuse_during_terminal_session(run, signal)
     _refuse_unmatched_accept(ports, run, signal)
 

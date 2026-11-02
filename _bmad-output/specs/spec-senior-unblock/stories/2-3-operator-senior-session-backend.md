@@ -2,9 +2,9 @@
 title: 'Operator senior session: lock and close'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
-baseline_commit: '8c2a6beb6278c1e5f853467e9d60d21840595291'
+baseline_commit: 'c4d212b2ba1bf653c085ebff988df7b611b1f0be'
 review_loop_iteration: 0
 context: []
 ---
@@ -68,14 +68,43 @@ Under `backend-api/src/orchestrator/` unless stated.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend-api/tests/unit/application/test_session_lock.py`, `test_session_start.py`, `test_session_end.py`, `tests/unit/test_session_router.py`, `tests/unit/test_run_repository_for_update.py` -- new. Cover every matrix row through the shared fakes, with session attempts seeded in `FakeAttemptRepository`, and see each fail first (TDD).
-- [ ] The two test edits named under Decided.
-- [ ] Code Map in order: domain and migration, rules and table, `get_for_update` and `signal_run`, checks and effects, read model and router, then `make openapi`.
+- [x] `backend-api/tests/unit/application/test_session_lock.py`, `test_session_start.py`, `test_session_end.py`, `tests/unit/test_session_router.py`, `tests/unit/test_run_repository_for_update.py` -- new. Cover every matrix row through the shared fakes, with session attempts seeded in `FakeAttemptRepository`, and see each fail first (TDD).
+- [x] The two test edits named under Decided.
+- [x] Code Map in order: domain and migration, rules and table, `get_for_update` and `signal_run`, checks and effects, read model and router, then `make openapi`.
 
 **Acceptance Criteria:**
 - Given a seeded session attempt on a hub Run whose parked row declares `workdir`, when it edited `repos/m/AGENTS.md` and the hub's `SPEC.md`, then `session_end` names both, spelled as AD-17 spells hits.
 - Given an open session, when `GET /runs/{id}` is read, then `admitted_signals` is `["cancel", "session_end"]`, and after `session_end` it is the stop's own set again.
 - Given an existing database, when migrations run, then every Run reads `senior_session = false`.
+
+## Implementation Notes
+
+Built tests first at baseline `c4d212b`: the new test files failed on import before any source existed.
+
+**What HEAD already had.** Story 2-1 landed `RunRepository.get_for_update` (port, adapter, shared fake), and `signal_run` already reads the Run through `require_run(..., lock=True)` in all three of its units of work. This story reuses it, so `signal_run.py` and `tests/unit/fakes/runs.py` are unchanged. `test_run_repository_for_update.py` was not written: 2-1's `test_run_lock_adapter.py` covers the adapter's `SELECT … FOR UPDATE`. `test_session_lock.py` asserts that two signals that both passed the unlocked early read serialise on the lock, and that the second one is refused. The migration is `0026_run_senior_session`.
+
+**Where the code went.** `signals_table.py` was at 393 lines, so the session predicates live in the new pure `rules/session.py`. The terminal predicates moved with them, because `terminal_start` now reads both flags (`no_open_session`). The table imports the module and stays at 395 lines. `session_start` is admitted on `paused` (AD-13: `paused` admits `continue`, `cancel` and `session_start`). `session_checks.SessionPorts` carries the writers, the diff port and the registry, and `use_cases/signals.py::session_ports` builds it from `SignalEffectPorts`. `read_environment` is not needed: the Run's spec folder is read from `run.inputs`, as `infrastructure/db/environment.py` reads it. `walk_frame._workdir` became the public `row_workdir`, so the anchor check reads `workdir` exactly as the walker does. `main.py` stays at 400 lines: a four-line comment on the seed re-export became two lines.
+
+**Choices the spec left open.**
+- A failing Probe is a 422 on `session_start`, as the spec says. `create_run` answers the same failure with a 409.
+- An unknown scope is a 422: `unknown scope {s}: one of story, epic, run`.
+- The close checks for a `confirmed_paths` entry that is not an edit (422) before it checks for unconfirmed edits (409).
+- A tree contributes changes only when the session recorded a start SHA for it: the dispatch tree needs `start_sha`, and the hub root needs `root_start_sha`.
+- A tree whose HEAD cannot be read contributes only its uncommitted files.
+- A `session_end` that reaches `signal_run` without `turns` in its payload is refused `turn running`. A caller that skipped the anchor check is refused, not trusted.
+- `PUT /runs/{id}/files` answers with the existing `PARKED_REQUIRED` sentence, unchanged.
+- The `session_end` record's text names the confirmed files: `senior session ended; confirmed: …`.
+
+**Revised test (rule 1(b), AD-13's 2026-11-01 amendment, story 2-3, 2026-11-02).** `test_run_statuses.py::test_the_signal_kinds_are_the_thirteen_ad_13_names` is now `…_fifteen_…`, and its tuple gains `session_start` and `session_end` after `pause`. No other existing test changed. `test_terminal_signals.py` and `test_signal_rules.py` pass unchanged.
+
+**New test files.** In `application/`: `test_session_lock.py`, `test_session_start.py`, `test_session_end.py`, `test_session_rules.py`, `test_session_view.py`, and the helper `session_fixtures.py`. At the top level: `test_session_router.py` and `test_run_senior_session_storage.py`.
+
+**Gates.**
+- `make openapi` regenerated `contracts/openapi.json` and `web-client/src/api/schema.d.ts`; `gen:api --check` reports no drift.
+- `make lint` passes.
+- `make test` passes: 9020 backend tests (1 skipped) and 1729 web-client tests, with 100% branch coverage on `domain` and `application`.
+- `DBOS_APPLICATION_VERSION` is unchanged.
+- Not run here: `make e2e`, `make e2e-ui` and `make durability`. The migrations e2e test has therefore not yet applied `0026` to a real database.
 
 ## Spec Change Log
 

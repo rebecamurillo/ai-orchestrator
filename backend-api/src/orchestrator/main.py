@@ -71,6 +71,7 @@ from orchestrator.api.routers import (
     run_events,
     run_files,
     runs,
+    session,
     signals,
     step_detail,
     templates,
@@ -92,10 +93,8 @@ from orchestrator.infrastructure.db import (
 )
 from orchestrator.infrastructure.db import migrations as db_migrations
 
-# the harness-table seed moved to `infrastructure/db/seed.py` for the reason the registry
-# below moved: this module is at its 400-line cap and that is one subject of its own. Both
-# names are re-exported here, where `run_migrations` names one collaborator and
-# `tests/unit/test_main_harness_registry.py` reads the pin table from `orchestrator.main`.
+# re-exported: `run_migrations` names one collaborator, and
+# `tests/unit/test_main_harness_registry.py` reads the pin table from `orchestrator.main`
 from orchestrator.infrastructure.db.seed import (  # noqa: F401
     HARNESS_VERSION_SETTINGS,
     seed_harness_table,
@@ -322,6 +321,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         run_attempts.router,
         step_detail.router,
         signals.router,
+        session.router,
         run_files.router,
         harnesses.router,
         queue.router,

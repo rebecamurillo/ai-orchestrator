@@ -206,7 +206,7 @@ def write_run_file(ports: RunFilesWritePorts, run_id: UUID, path: str, content: 
         raise Forbidden(OUTSIDE_SPEC_FOLDER.format(path=path))
     if path in run.plan_refs:
         raise Conflict(PLANNED_AT.format(sha=run.plan_refs[path]))
-    if run.status != "needs_you" or run.terminal_session:
+    if run.status != "needs_you" or run.terminal_session or run.senior_session:
         raise Conflict(PARKED_REQUIRED)
     workspace = ports.workspace(run.worktree_path)
     try:
