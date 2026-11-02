@@ -1,0 +1,106 @@
+/* Styling for `ChannelForm.tsx`, scoped by hand under `.channel-form`; tokens only. */
+
+.channel-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: var(--detail-max);
+  margin-top: var(--space-10);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-line);
+}
+
+.channel-form .channel-title {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-section-head);
+  letter-spacing: var(--type-section-head-tracking);
+  text-transform: var(--type-section-head-transform);
+}
+
+.channel-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.channel-form .field-label {
+  color: var(--color-text-secondary);
+  font-size: var(--type-eyebrow);
+  letter-spacing: var(--type-eyebrow-tracking);
+  text-transform: var(--type-eyebrow-transform);
+}
+
+.channel-form input[type='text'],
+.channel-form input[type='password'],
+.channel-form textarea,
+.channel-form select {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+}
+
+.channel-form textarea {
+  min-height: 4.5em;
+  resize: vertical;
+}
+
+.channel-form .field-error {
+  color: var(--color-signal-failed);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.channel-form .secondary-line {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.channel-form .switch-label,
+.channel-form .masked-value {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+}
+
+.channel-form .actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.channel-form .status-word {
+  color: var(--color-text-secondary);
+  font-size: var(--type-status-token);
+  letter-spacing: var(--type-status-token-tracking);
+}
+
+.channel-form .control {
+  padding: var(--space-3) var(--space-8);
+  border: 1px solid var(--color-accent);
+  background: none;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  cursor: pointer;
+}
+
+.channel-form .masked-value .control {
+  padding: 0;
+  border: none;
+}
+
+.channel-form .control:disabled {
+  border-color: var(--color-line-strong);
+  color: var(--color-text-tertiary);
+  cursor: default;
+}

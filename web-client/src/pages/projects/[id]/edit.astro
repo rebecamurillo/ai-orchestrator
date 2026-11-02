@@ -19,9 +19,11 @@ import type { components } from '../../../api/schema';
 import { draftToInitial, type SaveFailure } from '../../../actions/projects';
 import CloneCheckReadout from '../../../components/projects/CloneCheckReadout.astro';
 import EmptyState from '../../../components/EmptyState.astro';
+import ChannelForm from '../../../islands/ChannelForm';
 import ProjectForm from '../../../islands/ProjectForm';
 import type { ProjectFormInitial } from '../../../islands/project-form-logic';
 import Shell from '../../../layouts/Shell.astro';
+import '../../../styles/channel-form.css';
 import '../../../styles/project-form.css';
 
 export const prerender = false;
@@ -100,6 +102,7 @@ const saved = Astro.url.searchParams.get('saved') === '1';
             </p>
           )}
           <ProjectForm client:load initial={initial} errors={errors ?? []} mode="edit" />
+          {project && <ChannelForm client:load projectId={projectId} />}
         </section>
         <section class="readout-pane">
           <h2 class="readout-title">CLONE CHECK</h2>

@@ -2,7 +2,7 @@
 title: 'Project channel form'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
 baseline_commit: '2460a484df02e3db8e88834fef9153551b3d3515'
 review_loop_iteration: 0
