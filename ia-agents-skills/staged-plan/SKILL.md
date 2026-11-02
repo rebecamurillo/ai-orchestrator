@@ -49,8 +49,9 @@ file the implementer will create or edit. Do not survey the codebase.
 **Test-impact search** — before step 3, with `grep -rn` over the test lanes. This is a search
 for named terms, not a survey.
 
-- Lanes, all four: `backend-api/tests/unit` and `backend-api/tests/e2e` (pytest),
-  `web-client/tests/unit` (vitest), `web-client/tests/e2e` (Playwright). Include specs marked
+- Lanes, every one this repository has: find them in its `AGENTS.md`, its test runner configs
+  (`pytest`, `vitest`, `jest`, `playwright`, `cypress` and the like) and its package scripts,
+  not by assuming a layout. Unit, integration and e2e lanes all count. Include specs marked
   `test.fixme`, `test.skip` or `describe.skip`, and pytest `skip` or `xfail`: they never go
   red by running, so they surface only when someone reaches them.
 - Terms, from what the story changes: labels and copy, identifiers, routes, exports, enum

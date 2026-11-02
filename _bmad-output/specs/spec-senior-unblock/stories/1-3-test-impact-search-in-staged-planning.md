@@ -2,7 +2,7 @@
 title: 'Test-impact search in staged planning'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'ff879624f57c3c7c31cabf28214f82b751e6d916'
 review_loop_iteration: 0
@@ -19,7 +19,7 @@ context: []
 
 ## Boundaries & Constraints
 
-**Always:** The search names all four lanes: `backend-api/tests/unit`, `backend-api/tests/e2e`, `web-client/tests/unit`, `web-client/tests/e2e`. Each contradicted test names its file, its assertion and the declared behaviour change.
+**Always:** The search covers every test lane of the repository being planned, found from its `AGENTS.md`, its test runner configs and its package scripts, never from this repository's layout. Specs marked `test.fixme` or skipped are searched too.
 
 **Never:** No new marker status. `staged-implement` and `staged-review` are untouched. No existing test file is edited; the new test is a new file. No test pins shipped template content (hard rule 6). `AGENTS.md` is not touched.
 
@@ -35,7 +35,7 @@ context: []
 
 ## Code Map
 
-- `ia-agents-skills/staged-plan/SKILL.md` -- step 2 gains the test-impact search: the four lanes and the skipped-spec markers, the terms to search, the contradicted-test rule, and the closing search line under `## Do not touch`. Nothing else in the file changes.
+- `ia-agents-skills/staged-plan/SKILL.md` -- step 2 gains the test-impact search: how to find the repository's own lanes and the skipped-spec markers, the terms to search, the contradicted-test rule, and the closing search line under `## Do not touch`. Nothing else in the file changes.
 - `backend-api/tests/unit/test_staged_plan_test_impact.py` -- new; reads the skill the way `test_operator_skills_contract.py` does. Asserts the search sits before step 3, names every lane, `test.fixme` and `test.skip`, the change kinds, the `## Do not touch` record and `none found`, and that no marker status was added.
 - `ia-agents-skills/README.md`, `staged-implement/SKILL.md`, `staged-review/SKILL.md` -- not touched.
 
@@ -57,7 +57,13 @@ The search is written as `grep -rn` over the lanes, and labelled "not a survey",
 
 ## Spec Change Log
 
+- 2026-11-02, lead review: the intent named this repository's lane paths. Amended to the target repository's own lanes, because the skill runs against other repositories. Known-bad state avoided: a test-impact search that finds nothing in every real target. KEEP: the skipped-spec markers, the change terms, and the "none found" record line.
+
 ## Review Triage Log
+
+| Finding | Layer | Verdict | Route | Evidence and action |
+| --- | --- | --- | --- | --- |
+| The skill named this repository's four test folders, but `staged-plan` plans stories in target repositories | lead review | high | patch | The baseline Run planned in `assob-webapp`, whose lanes are `tests/` and `e2e/`; the planner would have searched folders that do not exist there. The skill now finds lanes from the target's own `AGENTS.md`, runner configs and scripts; the test asserts this and that no local path is named. |
 
 ## Verification
 
