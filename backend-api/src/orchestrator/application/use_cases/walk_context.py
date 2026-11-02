@@ -9,6 +9,8 @@ and handed over as frozen values on `RunEnvironment`/`StepPorts` (AD-8).
 **`resume_signal` is the Operator's record, or else the senior's** (AD-22): a `senior_answer`
 `rules/consult.py::delivers` still owes the row. It travels as a real record so the `agent`
 executor's session path reads it exactly as it reads an Operator's `answer {mode: session}`.
+A `verify_failed` diagnosis is the exception: it rides on `VerifyFailure.diagnosis` instead, so
+it reaches a fresh redispatch and never resumes the row's old session (AD-10).
 """
 
 from __future__ import annotations
@@ -17,9 +19,9 @@ from collections.abc import Mapping
 from dataclasses import replace
 from uuid import UUID
 
-from orchestrator.application.rules.consult import delivers
+from orchestrator.application.rules.consult import delivers, diagnosis
 from orchestrator.application.steps import StepContext, StepPorts
-from orchestrator.application.steps.context import VerifyFailure
+from orchestrator.application.steps.verify_failure import VerifyFailure
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY, REDISPATCH_TARGET_SEQ
 from orchestrator.application.templates.rows import COMMAND_KEY
 from orchestrator.application.use_cases.walk_frame import (
@@ -117,10 +119,14 @@ def _verify_failure(
     latest = attempts[-1] if attempts else None
     reader = step.logs
     tail = reader.tail(latest.log_path, VERIFY_LOG_LINES) if reader and latest else []
+    owed = diagnosis(
+        row, writers.attempts.list_for_row(row.id), writers.records.list_for_run(run_id)
+    )
     return VerifyFailure(
         command=str(sender.with_resolved.get(COMMAND_KEY) or ""),
         exit_code=latest.exit_code if latest is not None else None,
         log_tail=tuple(tail),
+        diagnosis=owed,
     )
 
 

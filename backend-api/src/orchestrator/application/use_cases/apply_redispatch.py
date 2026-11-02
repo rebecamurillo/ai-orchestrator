@@ -2,13 +2,16 @@
 the Run to an earlier row, or says why it cannot.
 
 Two bounds: a target that was skipped cannot be re-run, and a target whose
-`redispatch_count` reached the Template's `max` parks `verify_failed` instead. Under both,
-the target is queued through AD-8's `redispatch` pair, counted, and recorded.
+`redispatch_count` reached the Template's `max` parks `verify_failed` instead, unless the
+verify row declares a consult (`verify_consult.py`, story 1-6): then the target is queued for
+the senior and the stop parks only if the next failure finds the bound still used up. Under
+the bound, the target is queued through AD-8's `redispatch` pair, counted, and recorded.
 """
 
 from __future__ import annotations
 
 from orchestrator.application.rules.signals import REBASELINE_FAILED
+from orchestrator.application.use_cases import verify_consult
 from orchestrator.application.use_cases.writers import (
     Entry,
     WriterPorts,
@@ -41,9 +44,9 @@ def redispatch(
     if target.status == "skipped":
         return Park(kind="verify_failed", reason=REBASELINE_FAILED, path=row.path), False
     if target.redispatch_count >= redispatch.max:
-        total = redispatch.max + 1
-        reason = VERIFY_FAILED.format(n=total)
-        return Park(kind="verify_failed", reason=reason, path=row.path), False
+        reason = VERIFY_FAILED.format(n=target.redispatch_count + 1)
+        exhausted = Park(kind="verify_failed", reason=reason, path=row.path)
+        return verify_consult.offer(ports, run, row, target, exhausted)
     count = target.redispatch_count + 1
     set_row(
         ports,

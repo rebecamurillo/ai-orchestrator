@@ -84,6 +84,8 @@ ON_FAIL_KEY = "on_fail"
 #: nothing else, which is what makes the row a complete instruction (AD-7).
 REDISPATCH_TARGET_SEQ = "target_seq"
 REDISPATCH_MAX = "max"
+#: A third, present only when the row plans a senior (`rules/consult.py::verify_block`).
+REDISPATCH_CONSULT = "consult"
 
 
 @dataclass(frozen=True)
@@ -109,6 +111,8 @@ class Redispatched:
     template: str
     version: int
     line: int
+    #: The planned `consult` block (story 1-6); `None` for a blank senior model.
+    consult: dict[str, Any] | None = None
 
 
 # --- what a plan can skip, and say why -------------------------------------------------------

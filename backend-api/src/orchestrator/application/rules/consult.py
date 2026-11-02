@@ -6,6 +6,10 @@ which record delivers its answer. Pure: no port, no I/O.
 the body is the answer. `.orchestrator/` holds a `.gitignore` of `*`, so neither HEAD nor
 `git status` ever sees the folder, and the unchanged-tree check stays exact.
 
+**A `verify_failed` stop is declared by the `run` row** (`on_fail {redispatch, max, consult}`)
+and consulted on the redispatch target, whose entry carries the declared block. Its answer
+is a diagnosis for one further fresh redispatch (`diagnosis`), never a `delivers` record.
+
 **Everything but a usable answer or an escalation fails closed.** `accept` is a decision
 story 1-5 gives a meaning to; until then it is no readable decision, like an answer with an
 empty body.
@@ -24,6 +28,7 @@ from orchestrator.application.templates.table import CONSULT_KEY
 from orchestrator.domain.entities.attempt import Attempt, agent_attempts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.step_run import StepRun
+from orchestrator.domain.statuses import ParkKind
 from orchestrator.domain.values import ConsultOutcome
 
 #: The entry keys `step_run.consults[kind]` is written with.
@@ -32,6 +37,10 @@ QUESTION_KEY = "question"
 SNAPSHOT_KEY = "snapshot"
 ANSWERED_BY_KEY = "answered_by"
 ORPHAN_PGID_KEY = "orphan_pgid"
+#: A `verify_failed` entry also carries the block the verify row declared (the target row
+#: declares none for that stop) and the verify row's path, where the stop parks.
+DECLARED_KEY = "declared"
+PARK_PATH_KEY = "park_path"
 DUE = "due"
 ANSWER: ConsultOutcome = "answer"
 ESCALATE: ConsultOutcome = "escalate"
@@ -41,6 +50,12 @@ FAILED: ConsultOutcome = "failed"
 CONSULT_EVENT = "consult"
 SENIOR_ANSWER_EVENT = "senior_answer"
 KIND_KEY = "kind"
+TEXT_KEY = "text"
+VERIFY_FAILED: ParkKind = "verify_failed"
+
+#: Where a verify row's planned consult sits: `with_resolved["on_fail"]["consult"]`.
+ON_FAIL_KEY = "on_fail"
+CONSULT_BLOCK_KEY = "consult"
 
 #: The planned block's keys, as `templates/consult.py::plan_consult` writes them.
 ON_KEY = "on"
@@ -58,7 +73,9 @@ REASON_KEY = "reason"
 STATUSES = frozenset({ANSWER, "accept", ESCALATE})
 
 #: Every runtime token a consult clause may name; an unknown one stays literal prose.
-PLACEHOLDER = re.compile(r"\{(skill|spec_folder|story_id|condition|decision|answer)\}")
+PLACEHOLDER = re.compile(
+    r"\{(skill|spec_folder|story_id|condition|decision|answer|command|code|tail|log)\}"
+)
 
 
 @dataclass(frozen=True)
@@ -74,6 +91,20 @@ def declared(with_resolved: Mapping[str, Any]) -> Mapping[str, Any] | None:
     """The row's planned `consult` block, or `None` for a row that consults nobody."""
     block = with_resolved.get(CONSULT_KEY)
     return block if isinstance(block, Mapping) else None
+
+
+def verify_block(with_resolved: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """The consult a `run` row's planned `on_fail` redispatch carries, or `None` (story 1-6)."""
+    route = with_resolved.get(ON_FAIL_KEY)
+    block = route.get(CONSULT_BLOCK_KEY) if isinstance(route, Mapping) else None
+    return block if isinstance(block, Mapping) else None
+
+
+def block_of(with_resolved: Mapping[str, Any], entry: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The block a consult runs on: the entry's own when the stop was declared elsewhere (a
+    `verify_failed` stop is declared by the verify row), else the row's."""
+    own = entry.get(DECLARED_KEY)
+    return own if isinstance(own, Mapping) else declared(with_resolved) or {}
 
 
 def offered(with_resolved: Mapping[str, Any], consults: Mapping[str, Any], kind: str) -> bool:
@@ -138,9 +169,14 @@ def fill(clause: str, values: Mapping[str, str]) -> str:
     return PLACEHOLDER.sub(lambda match: values.get(match.group(1), match.group(0)), clause)
 
 
-def answer_text(with_resolved: Mapping[str, Any], question: str, body: str) -> str:
-    """What the resumed agent is sent: the consult's own `answer` clause, filled."""
-    block = declared(with_resolved) or {}
+def answer_text(
+    with_resolved: Mapping[str, Any],
+    question: str,
+    body: str,
+    entry: Mapping[str, Any] | None = None,
+) -> str:
+    """What the agent is sent: the consult's own `answer` clause, filled."""
+    block = block_of(with_resolved, entry or {})
     prompts = block.get(PROMPTS_KEY)
     clause = prompts.get(ANSWER_CLAUSE) if isinstance(prompts, Mapping) else None
     if not isinstance(clause, str):
@@ -151,22 +187,47 @@ def answer_text(with_resolved: Mapping[str, Any], question: str, body: str) -> s
 def delivers(
     row: StepRun, attempts: Iterable[Attempt], records: Iterable[GateRecord]
 ) -> GateRecord | None:
-    """The row's latest `senior_answer` while it is still owed, or `None`.
+    """The row's latest `blocked` `senior_answer` while it is still owed, or `None`.
 
     Owed while the entry reads `answer` and no `agent` attempt numbered above the consult
-    that answered has come back (`end_sha` is written only by the agent's tail).
+    that answered has come back (`end_sha` is written only by the agent's tail). A
+    `verify_failed` diagnosis is never delivered as a record: see `diagnosis`.
     """
-    answered_by = _answered_by(row.consults)
+    return _owed(row, attempts, records, verify=False)
+
+
+def diagnosis(row: StepRun, attempts: Iterable[Attempt], records: Iterable[GateRecord]) -> str:
+    """The senior's diagnosis the row's next fresh redispatch still owes, or `""` (story 1-6).
+
+    Owed on the same terms as `delivers`. It reaches the agent beside the failure text of a
+    redispatch, in a new session, never as a message into the row's old one (AD-10).
+    """
+    found = _owed(row, attempts, records, verify=True)
+    return str(found.payload.get(TEXT_KEY, "")) if found is not None else ""
+
+
+def _owed(
+    row: StepRun, attempts: Iterable[Attempt], records: Iterable[GateRecord], *, verify: bool
+) -> GateRecord | None:
+    answered_by = _answered_by(row.consults, verify)
     if answered_by is None:
         return None
     if any(a.n > answered_by and a.end_sha is not None for a in agent_attempts(attempts)):
         return None
-    mine = [r for r in records if r.event == SENIOR_ANSWER_EVENT and r.path == row.path]
+    mine = [
+        r
+        for r in records
+        if r.event == SENIOR_ANSWER_EVENT
+        and r.path == row.path
+        and (r.payload.get(KIND_KEY) == VERIFY_FAILED) == verify
+    ]
     return mine[-1] if mine else None
 
 
-def _answered_by(consults: Mapping[str, Any]) -> int | None:
-    for entry in consults.values():
+def _answered_by(consults: Mapping[str, Any], verify: bool) -> int | None:
+    for kind, entry in consults.items():
+        if (kind == VERIFY_FAILED) != verify:
+            continue
         if not isinstance(entry, Mapping) or entry.get(STATE_KEY) != ANSWER:
             continue
         number = entry.get(ANSWERED_BY_KEY)

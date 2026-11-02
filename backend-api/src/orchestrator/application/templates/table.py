@@ -41,6 +41,10 @@ CONSULT_KEYS = frozenset({"model", "harness", "skill", "on", "timeout_min", PROM
 CONSULT_REQUIRED = ("model", "skill", "on", PROMPTS_KEY)
 CONSULT_PROMPTS_KEYS = frozenset({"dispatch", "answer"})
 CONSULT_ON = frozenset({"blocked"})
+#: The same block under a `run` row's `on_fail {redispatch, max, consult}` (story 1-6): the
+#: stop is implied, so `on` is optional and may only name it.
+REDISPATCH_CONSULT_ON = frozenset({"verify_failed"})
+REDISPATCH_CONSULT_REQUIRED = ("model", "skill", PROMPTS_KEY)
 
 AGENT_KEYS = frozenset(
     {"expect", "retry", "escalate_when", "pause_when", WRITES_KEY, PROMPTS_KEY, CONSULT_KEY}
@@ -62,6 +66,7 @@ EXPECT_KEYS = frozenset(
 )
 RETRY_KEYS = frozenset({"max", "prompt", "resume_session"})
 REDISPATCH_KEYS = frozenset({"redispatch", "max"})
+REDISPATCH_OPTIONAL = frozenset({CONSULT_KEY})
 
 #: The input types a text default fits. `number` and `enum` have rules of their own;
 #: `project`, `repository` and `item` are bound at run time and fit no default at all.

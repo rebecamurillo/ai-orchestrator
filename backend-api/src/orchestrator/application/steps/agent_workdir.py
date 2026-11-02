@@ -81,7 +81,7 @@ from orchestrator.application.steps.context import (
 )
 from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY, STORY_ID_KEY
 from orchestrator.domain.entities.attempt import Attempt
-from orchestrator.domain.ports.git import Change, GitError
+from orchestrator.domain.ports.git import Change, Git, GitError
 from orchestrator.domain.values import Park, StepResult
 
 #: AD-9's own sentence for a `workdir` that is not a workdir — the same words
@@ -112,7 +112,12 @@ def declared(ctx: StepContext) -> str:
     Template used — the same normalisation `infrastructure/git/submodules.py` applies before
     it compares a workdir with what `git submodule status` listed.
     """
-    written = resolved_text(ctx.with_resolved, WORKDIR_KEY)
+    return declared_in(ctx.with_resolved)
+
+
+def declared_in(with_resolved: Mapping[str, Any]) -> str:
+    """`declared` for a caller holding a row's `with_resolved` and no `StepContext`."""
+    written = resolved_text(with_resolved, WORKDIR_KEY)
     return str(PurePosixPath(written)) if written else ""
 
 
@@ -203,14 +208,18 @@ def wip_commit(ctx: StepContext) -> StepResult | None:
 
 def sweep(ctx: StepContext, message: str) -> None:
     """Commit whatever either tree holds under `message`; raises `GitError` for the caller."""
-    git, root = ctx.ports.git, require_cwd(ctx)
-    workdir = declared(ctx)
+    sweep_trees(ctx.ports.git, require_cwd(ctx), declared(ctx), message)
+
+
+def sweep_trees(git: Git, root: Path, workdir: str, message: str) -> None:
+    """`sweep` for a caller holding no `StepContext`: the run worktree `root` and the
+    normalised `workdir` (`""` for none) are all it asks."""
     if not workdir:
         if git.status(root).strip():
             git.stage(root)
             git.commit(root, message)
         return
-    if git.status(tree(ctx)).strip():
+    if git.status(root / workdir).strip():
         git.commit(root, message, workdir=workdir)
     if git.status(root, ignore_submodules=True).strip():
         git.stage(root)

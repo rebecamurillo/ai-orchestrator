@@ -9,6 +9,9 @@ any other routing reads it.
   answer is recorded as `senior_answer` (actor `senior`) with payload `{mode: session, text,
   kind}`, `text` being the consult's own `answer` clause, and the row is requeued. The next
   `agent` attempt finds that record as its `resume_signal` (`walk_context.py`).
+- **A `verify_failed` answer** is a diagnosis, not a message into a session (AD-10): it is
+  recorded with no `mode`, and the requeue counts as one further redispatch on
+  `redispatch_count`, so the next failure finds the bound still used up and parks.
 - **Anything else** marks the entry and returns `None`: the result carries its own park.
 
 The Run never leaves `running` here and nothing is announced: no person is waiting yet.
@@ -51,7 +54,13 @@ def apply_consult(
         set_row(ports, row, consults={**row.consults, found.kind: entry})
         return None
     entry[rules.ANSWERED_BY_KEY] = attempt_n
-    text = rules.answer_text(row.with_resolved, found.question, found.answer)
+    text = rules.answer_text(row.with_resolved, found.question, found.answer, entry)
+    payload = {rules.TEXT_KEY: text, rules.KIND_KEY: found.kind}
+    counted: dict[str, Any] = {}
+    if found.kind == rules.VERIFY_FAILED:
+        counted["redispatch_count"] = row.redispatch_count + 1
+    else:
+        payload["mode"] = SESSION
     record(
         ports,
         run,
@@ -61,10 +70,10 @@ def apply_consult(
             path=row.path,
             text=found.answer,
             attempt_n=attempt_n,
-            payload={"mode": SESSION, "text": text, rules.KIND_KEY: found.kind},
+            payload=payload,
         ),
     )
-    _requeue(ports, row, {**row.consults, found.kind: entry})
+    _requeue(ports, row, {**row.consults, found.kind: entry}, counted)
     return run
 
 
@@ -88,8 +97,10 @@ def _offered(
             payload={rules.KIND_KEY: found.kind},
         ),
     )
-    _requeue(ports, row, {**row.consults, found.kind: entry})
+    _requeue(ports, row, {**row.consults, found.kind: entry}, {})
 
 
-def _requeue(ports: WriterPorts, row: StepRun, consults: dict[str, Any]) -> None:
-    set_row(ports, row, status=step_transition(row.status, "retry"), consults=consults)
+def _requeue(
+    ports: WriterPorts, row: StepRun, consults: dict[str, Any], counted: dict[str, Any]
+) -> None:
+    set_row(ports, row, status=step_transition(row.status, "retry"), consults=consults, **counted)

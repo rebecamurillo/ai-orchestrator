@@ -15,6 +15,12 @@ never resumed, the `pgid` update, `wait`, `mark_finished` and the spend, all ins
 attempt span. Only then are the trees checked against the offer's snapshot and the decision
 read through the Workspace port (`rules/consult.py`).
 
+**A `verify_failed` consult** (story 1-6) is the same attempt on the redispatch target. It is
+offered by `use_cases/verify_consult.py`, not by `offer`; it runs on the block its entry
+carries, and is told the failing command, exit code and output tail and the log of the
+target's last `agent` attempt. Its stop parks on the verify row, and the target returns to
+`done`.
+
 **It fails closed, always.** Every outcome but an answer parks the original `blocked` stop,
 with the senior's reason added when it gave one, and every exception is caught into the
 same park: a stop the Operator can read and answer, never an `internal` one.
@@ -40,6 +46,7 @@ from orchestrator.application.steps.context import (
     StepContext,
     committed,
     log_path,
+    require_env,
     require_harnesses,
     require_process,
     require_run,
@@ -125,15 +132,18 @@ class _Stop:
     kind: ParkKind
     question: str
     entry: dict[str, Any]
+    #: The senior's block: the entry's own for a stop declared elsewhere, else the row's.
+    block: Mapping[str, Any]
 
 
 def run(ctx: StepContext) -> StepResult:
     """The consult attempt, whole; every failure is the original stop, parked."""
     found = consult.due(ctx.row.consults)
     if found is None:
-        return _parked(ctx, _Stop(BLOCKED, ctx.row.reason or "", {}), FAILED, NOT_DUE)
+        return _parked(ctx, _Stop(BLOCKED, ctx.row.reason or "", {}, {}), FAILED, NOT_DUE)
     kind, entry = found
-    stop = _Stop(kind, str(entry.get(consult.QUESTION_KEY, "")), dict(entry))  # type: ignore[arg-type]
+    block = consult.block_of(ctx.with_resolved, entry)
+    stop = _Stop(kind, str(entry.get(consult.QUESTION_KEY, "")), dict(entry), block)  # type: ignore[arg-type]
     try:
         return _consult(ctx, stop)
     except GitError as error:
@@ -151,7 +161,7 @@ def _consult(ctx: StepContext, stop: _Stop) -> StepResult:
     remaining = agent_env.remaining(require_run(ctx))
     if remaining is not None and remaining <= 0:
         return _parked(ctx, stop, FAILED, NO_BUDGET)
-    block = consult.declared(ctx.with_resolved) or {}
+    block = stop.block
     name = str(block.get(HARNESS_KEY) or "") or resolved_text(ctx.with_resolved, HARNESS_KEY)
     harness = require_harnesses(ctx).get(name)
     if harness is None:
@@ -165,7 +175,7 @@ def _consult(ctx: StepContext, stop: _Stop) -> StepResult:
         update={"pgid": None, "harness": name, "model": str(block.get("model") or "") or None}
     )
     committed(ctx, lambda attempts: attempts.mark_started(started))
-    result, spent = _dispatch(ctx, _Senior(harness, started, prompt, tree))
+    result, spent = _dispatch(ctx, _Senior(harness, started, prompt, tree, block))
     return _with_budget(ctx, stop, _outcome(ctx, stop, result, workspace.read(decision)), spent)
 
 
@@ -181,8 +191,24 @@ def _prompt(ctx: StepContext, block: Mapping[str, Any], stop: _Stop, decision: s
             "story_id": resolved_text(scope, STORY_ID_KEY),
             "condition": stop.question,
             "decision": decision,
+            **_failure(ctx, stop),
         },
     )
+
+
+def _failure(ctx: StepContext, stop: _Stop) -> dict[str, str]:
+    """A `verify_failed` stop's own tokens: the failing command, its exit code and output
+    tail as the walker resolved them (`VerifyFailure`), and the log of the target row's last
+    `agent` attempt, which a senior reads to see what the agent did. Empty for any other stop."""
+    if stop.kind != consult.VERIFY_FAILED:
+        return {}
+    failure = require_env(ctx).verify_failure
+    previous = ctx.previous_attempt
+    facts = {"log": str(previous.log_path or "") if previous is not None else ""}
+    if failure is None:
+        return {**facts, "command": "", "code": "", "tail": ""}
+    code = NO_EXIT_CODE if failure.exit_code is None else str(failure.exit_code)
+    return {**facts, "command": failure.command, "code": code, "tail": "\n".join(failure.log_tail)}
 
 
 @dataclass(frozen=True)
@@ -193,6 +219,7 @@ class _Senior:
     started: Attempt
     prompt: str
     tree: Path
+    block: Mapping[str, Any]
 
 
 def _dispatch(ctx: StepContext, senior: _Senior) -> tuple[HarnessResult, Run | None]:
@@ -208,7 +235,6 @@ def _senior(
     ctx: StepContext, senior: _Senior, traceparent: str
 ) -> tuple[HarnessResult, Run | None]:
     """Start, commit the group, wait, record the finish and the spend (AD-8, AD-11, AD-14)."""
-    block = consult.declared(ctx.with_resolved) or {}
     handle = senior.harness.start(
         cwd=senior.tree,
         prompt=senior.prompt,
@@ -216,7 +242,7 @@ def _senior(
         model=senior.started.model,
         session_id=str(new_id()),
         budget_usd_remaining=agent_env.remaining(require_run(ctx)),
-        timeout_min=block.get("timeout_min"),
+        timeout_min=senior.block.get("timeout_min"),
         log_path=log_path(ctx),
         stall_min=_stall_min(ctx),
         add_dirs=agent_env.add_dirs(ctx, senior.tree),
@@ -257,7 +283,7 @@ def _outcome(ctx: StepContext, stop: _Stop, result: HarnessResult, text: str | N
     if files:
         why = TREE_CHANGED.format(files=", ".join(files))
         return _parked(ctx, stop, FAILED, why, log_ref)
-    crashed = _crash(ctx, result)
+    crashed = _crash(ctx, result, stop.block)
     if crashed is not None:
         return _parked(ctx, stop, FAILED, crashed, log_ref)
     outcome, said = consult.verdict(consult.parse(text))
@@ -275,11 +301,10 @@ def _outcome(ctx: StepContext, stop: _Stop, result: HarnessResult, text: str | N
     )
 
 
-def _crash(ctx: StepContext, result: HarnessResult) -> str | None:
+def _crash(ctx: StepContext, result: HarnessResult, block: Mapping[str, Any]) -> str | None:
     if result.stalled:
         return STALLED.format(n=_stall_min(ctx))
     if result.timed_out:
-        block = consult.declared(ctx.with_resolved) or {}
         return TIMED_OUT.format(n=block.get("timeout_min"))
     if result.exit_code != 0:
         code = NO_EXIT_CODE if result.exit_code is None else result.exit_code
@@ -309,14 +334,19 @@ def _parked(  # noqa: PLR0913 — the stop, the sentence, its one value, and wha
     *,
     outcome: ConsultOutcome = "failed",
 ) -> StepResult:
-    """The original stop, parked, its reason carrying what the consult came to."""
+    """The original stop, parked, its reason carrying what the consult came to.
+
+    A `verify_failed` stop parks on the verify row the offer named, and the target row it
+    consulted on goes back to `done`: its work was finished before the gate failed."""
     reason = template.format(question=stop.question, why=value, reason=value, line=value)
+    verify = stop.kind == consult.VERIFY_FAILED
+    path = str(stop.entry.get(consult.PARK_PATH_KEY) or ctx.row.path)
     return StepResult(
-        status="blocked",
+        status="done" if verify else "blocked",
         gate=ctx.row.gate,
         output_ref=output_ref,
         reason=reason,
-        park=Park(kind=stop.kind, reason=reason, path=ctx.row.path),
+        park=Park(kind=stop.kind, reason=reason, path=path),
         consult=Consult(kind=stop.kind, question=stop.question, outcome=outcome),
     )
 

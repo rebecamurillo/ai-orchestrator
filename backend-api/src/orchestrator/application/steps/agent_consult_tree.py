@@ -21,6 +21,7 @@ from orchestrator.application.rules.protected_paths import uncommitted
 from orchestrator.application.steps import agent_workdir
 from orchestrator.application.steps.context import StepContext, require_cwd, resolved_text
 from orchestrator.application.templates.agent_row import STORY_ID_KEY
+from orchestrator.domain.ports.git import Git
 
 WIP_MESSAGE = "wip: story {id} attempt {n} (consult)"
 
@@ -39,8 +40,16 @@ def sweep_and_snapshot(ctx: StepContext, n: int) -> dict[str, Any]:
     """Commit both trees under the consult's WIP message, then record them; raises
     `GitError` for the caller to park on."""
     story_id = resolved_text(ctx.with_resolved, STORY_ID_KEY)
-    agent_workdir.sweep(ctx, WIP_MESSAGE.format(id=story_id, n=n))
-    return {half: _state(ctx, at) for half, at, _ in _trees(ctx)}
+    message = WIP_MESSAGE.format(id=story_id, n=n)
+    return snapshot_trees(ctx.ports.git, require_cwd(ctx), agent_workdir.declared(ctx), message)
+
+
+def snapshot_trees(git: Git, root: Path, workdir: str, message: str) -> dict[str, Any]:
+    """`sweep_and_snapshot` for a caller holding no `StepContext` (the `verify_failed` offer,
+    made by `apply_step_result`): the run worktree `root`, the normalised `workdir` or `""`."""
+    agent_workdir.sweep_trees(git, root, workdir, message)
+    halves = {TREE: root / workdir, ROOT: root} if workdir else {TREE: root}
+    return {half: {HEAD: git.head_sha(at), STATUS: git.status(at)} for half, at in halves.items()}
 
 
 def changed(ctx: StepContext, snapshot: Mapping[str, Any]) -> tuple[str, ...]:

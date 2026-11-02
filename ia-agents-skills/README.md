@@ -26,7 +26,8 @@ A `skills-manifest.json` is written one level above each skills directory after 
   `{spec_folder}/stories/.auto/`. Edit a stage here, rebuild the image; the templates only
   name the skill.
 - `senior-consult` — the senior at a `blocked` stop of a `staged-*` row that declares a
-  `consult`: answers the agent or escalates, through one decision file (AD-22).
+  `consult`, or at a `verify_failed` stop once a `verify` row's redispatches are used up:
+  answers the agent or escalates, through one decision file (AD-22).
 
 ## Adding a skill
 

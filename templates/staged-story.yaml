@@ -151,7 +151,27 @@ steps:
   # --- 3. verify (deterministic; a failure sends the implementer back to its own breakage) --
   - id: verify
     run: "{{repository.unit_test_command}}"
-    on_fail: { redispatch: implement, max: 2 }
+    on_fail:
+      redispatch: implement
+      max: 2
+      consult:
+        model: "{{senior_model}}"
+        skill: senior-consult
+        timeout_min: 30
+        prompts:
+          dispatch: |
+            Run the skill {skill}. The implementer on story {story_id} (spec folder {spec_folder})
+            reported done, and the repository's verify command still fails after its redispatches
+            were used up:
+              Command:   {command}
+              Exit code: {code}
+              Output tail:
+            {tail}
+            The implementer's last session log is at {log}. Diagnose the failure and write your
+            decision to {decision}.
+          answer: |
+            The senior reviewer diagnosed the failing verification ({condition}):
+            {answer}
     timeout_min: 30
     gate: deterministic
 

@@ -25,8 +25,10 @@ from orchestrator.application.preflight.model import (
 from orchestrator.application.steps import AGENT_KIND
 from orchestrator.application.templates.lines import load_sequence, load_with_lines
 from orchestrator.application.templates.lists import stories_directory
+from orchestrator.application.templates.plan_model import ON_FAIL_KEY
 from orchestrator.application.templates.table import CONSULT_KEY
 from orchestrator.domain.entities.run import Run
+from orchestrator.domain.values import PlannedRow
 
 EPICS_FILENAME = "epics.yaml"
 STORIES_FILENAME = "stories.yaml"
@@ -228,11 +230,7 @@ def installed_skill_lines(ctx: Context) -> list[Line]:
         return []
     skill_names: list[str] = []
     for plan_row in ctx.plan.rows:
-        if plan_row.kind != AGENT_KIND:
-            continue
-        consult = plan_row.with_resolved.get(CONSULT_KEY)
-        senior = consult.get("skill") if isinstance(consult, Mapping) else None
-        for skill in (plan_row.with_resolved.get("skill"), senior):
+        for skill in _row_skills(plan_row):
             if isinstance(skill, str) and skill and skill not in skill_names:
                 skill_names.append(skill)
     if not skill_names:
@@ -265,6 +263,17 @@ def installed_skill_lines(ctx: Context) -> list[Line]:
             for name in missing
         ]
     return [Line(CHECK_INSTALLED_SKILL, "ok", "ok")]
+
+
+def _row_skills(plan_row: PlannedRow) -> list[object]:
+    """The skills one planned row dispatches: an `agent` row's own and its consult's, and the
+    consult a `run` row's `on_fail` redispatch declares for `verify_failed` (story 1-6)."""
+    resolved = plan_row.with_resolved
+    own = [resolved.get("skill")] if plan_row.kind == AGENT_KIND else []
+    blocks = [resolved.get(CONSULT_KEY) if plan_row.kind == AGENT_KIND else None]
+    route = resolved.get(ON_FAIL_KEY)
+    blocks.append(route.get(CONSULT_KEY) if isinstance(route, Mapping) else None)
+    return [*own, *(b.get("skill") for b in blocks if isinstance(b, Mapping))]
 
 
 def _new_partition_branch(ctx: Context) -> str | None:

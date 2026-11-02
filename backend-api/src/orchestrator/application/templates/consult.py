@@ -43,8 +43,16 @@ DISPATCH = "dispatch"
 ANSWER = "answer"
 
 
-def check_consult(node: LinedMap) -> list[ValidationError]:
-    """Every offence in one row's `consult` block, each at the line of the key holding it."""
+def check_consult(
+    node: LinedMap,
+    stops: frozenset[str] = CONSULT_ON,
+    required: tuple[str, ...] = CONSULT_REQUIRED,
+) -> list[ValidationError]:
+    """Every offence in one row's `consult` block, each at the line of the key holding it.
+
+    `stops` and `required` are an agent row's by default; a `run` row's `on_fail` passes its
+    own (`templates/on_fail.py`), where the one stop is implied.
+    """
     if CONSULT_KEY not in node:
         return []
     line = key_line(node, CONSULT_KEY, node.line)
@@ -52,11 +60,11 @@ def check_consult(node: LinedMap) -> list[ValidationError]:
     if block is None:
         return [problem(line, INVALID_VALUE)]
     errors = unknown_keys(block, CONSULT_KEYS)
-    errors += [problem(line, MISSING_KEY) for key in CONSULT_REQUIRED if key not in block]
+    errors += [problem(line, MISSING_KEY) for key in required if key not in block]
     for key in TEXT_KEYS:
         if key in block and not isinstance(block[key], str):
             errors.append(problem(key_line(block, key, line), INVALID_VALUE))
-    if ON_KEY in block and not _known_stops(block[ON_KEY]):
+    if ON_KEY in block and not _known_stops(block[ON_KEY], stops):
         errors.append(problem(key_line(block, ON_KEY, line), INVALID_CONSULT_ON))
     if TIMEOUT_KEY in block and not is_minutes(block[TIMEOUT_KEY]):
         errors.append(problem(key_line(block, TIMEOUT_KEY, line), INVALID_TIMEOUT))
@@ -65,9 +73,9 @@ def check_consult(node: LinedMap) -> list[ValidationError]:
     return errors
 
 
-def _known_stops(value: Any) -> bool:
+def _known_stops(value: Any, known: frozenset[str]) -> bool:
     stops = as_seq(value)
-    return bool(stops) and all(stop in CONSULT_ON for stop in stops or ())
+    return bool(stops) and all(stop in known for stop in stops or ())
 
 
 def _check_prompts(block: LinedMap, line: int) -> list[ValidationError]:
@@ -82,8 +90,9 @@ def _check_prompts(block: LinedMap, line: int) -> list[ValidationError]:
     return errors
 
 
-def parse_consult(node: LinedMap) -> ConsultDecl | None:
-    """The block of a row that has passed `check_consult`, or `None` when it declares none."""
+def parse_consult(node: LinedMap, implied: tuple[str, ...] = ()) -> ConsultDecl | None:
+    """The block of a row that has passed `check_consult`, or `None` when it declares none.
+    `implied` is the stop list a block that names none stands for."""
     block = as_map(node.get(CONSULT_KEY))
     if block is None:
         return None
@@ -93,7 +102,7 @@ def parse_consult(node: LinedMap) -> ConsultDecl | None:
         model=block["model"],
         harness=block.get("harness"),
         skill=block["skill"],
-        on=tuple(as_seq(block[ON_KEY]) or ()),
+        on=tuple(as_seq(block.get(ON_KEY)) or implied),
         timeout_min=block.get(TIMEOUT_KEY),
         prompt_dispatch=prompts[DISPATCH],
         prompt_answer=prompts[ANSWER],

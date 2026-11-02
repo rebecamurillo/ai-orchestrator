@@ -48,6 +48,7 @@ from orchestrator.application.templates.model import (
     ValidationError,
     ValidationResult,
 )
+from orchestrator.application.templates.on_fail import parse_redispatch_consult
 from orchestrator.application.templates.table import (
     RUN_KEY,
     RUN_SUGAR_KIND,
@@ -186,6 +187,7 @@ def _step(node: LinedMap) -> Step:
         on_fail=action,
         redispatch=redispatch,
         redispatch_max=limit,
+        redispatch_consult=parse_redispatch_consult(node),
         agent=_agent(node) if kind == AGENT_KIND else None,
         call=_call(params) if kind == TEMPLATE_CALL_KIND else None,
     )

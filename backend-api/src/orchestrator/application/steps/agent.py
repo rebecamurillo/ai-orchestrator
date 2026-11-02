@@ -75,7 +75,6 @@ from orchestrator.application.steps.context import (
     log_path,
     operator_retry,
     redispatched,
-    require_env,
     require_harnesses,
     require_process,
     require_run,
@@ -287,13 +286,9 @@ def _planned(
         prompt_file_content=prompt_file_content,
         workflow_path=workflow,
     )
-    if redispatched(ctx) and (failure := require_env(ctx).verify_failure) is not None:
-        # what a fresh dispatch is told when a `verify` row has just sent the Story back
-        # (FR-10): once, on this attempt alone — a retry of it reads `redispatched(ctx)` as
-        # `False` (context.py's own "nothing is appended twice") and never repeats it.
-        clause = agent_prompt.redispatch_clause(scope, failure)
-        if clause:
-            prompt = f"{clause} {prompt}"
+    sent_back = _sent_back(ctx, scope)
+    if sent_back:
+        prompt = f"{sent_back} {prompt}"
     if retry is not None or (operator_retry(ctx) and operator_mode == "restart"):
         op = str(ctx.resume_signal.payload.get("text", "")) if ctx.resume_signal else ""
         hint = retry.prompt if retry else getattr(agent_tail.retry_of(ctx), "prompt", "")
@@ -302,6 +297,19 @@ def _planned(
         # own — the separator is the one thing composed here (Operator decision, 2026-09-27).
         prompt = f"{op or hint} {prompt}" if op or hint else prompt
     return _Dispatch(harness, attempt, prompt, session)
+
+
+def _sent_back(ctx: StepContext, scope: Mapping[str, Any]) -> str:
+    """What a fresh dispatch is told when a `verify` row has just sent the Story back
+    (FR-10): once, on this attempt alone — a retry of it reads `redispatched(ctx)` as
+    `False` (context.py's own "nothing is appended twice") and never repeats it. A senior's
+    diagnosis still owed (AD-22) is told in the same breath, so a dispatch a crash
+    interrupted before it came back says both again to the new session."""
+    environment = ctx.ports.run_env
+    failure = environment.verify_failure if environment is not None else None
+    if failure is None or not (redispatched(ctx) or failure.diagnosis):
+        return ""
+    return agent_prompt.redispatch_clause(scope, failure)
 
 
 def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:

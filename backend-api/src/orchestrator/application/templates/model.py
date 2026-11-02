@@ -232,6 +232,8 @@ class Step(BaseModel):
     on_fail: OnFailAction | None = None
     redispatch: str | None = None
     redispatch_max: int | None = None
+    #: The senior a `run` row's redispatch consults once its bound is used up (story 1-6).
+    redispatch_consult: ConsultDecl | None = None
     agent: AgentExtras | None = None
     call: TemplateCall | None = None
 
