@@ -100,6 +100,24 @@
   white-space: nowrap;
 }
 
+/* the stop's chat thread (story 3-3): neutral, the error kept whole and wrapped */
+.wf-chat-thread {
+  margin: 0;
+  padding: var(--space-3) var(--space-8);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+}
+
+.wf-chat-thread-error {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .wf-summary {
   padding: var(--space-5) var(--space-8);
   border-bottom: 1px solid var(--color-line);

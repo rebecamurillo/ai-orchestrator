@@ -875,6 +875,7 @@ export interface components {
         /** AlertOut */
         AlertOut: {
             attribution?: components["schemas"]["AttributionOut"] | null;
+            chat_thread?: components["schemas"]["ChatThreadOut"] | null;
             checkpoint_story?: components["schemas"]["CheckpointStoryOut"] | null;
             /** Park Kind */
             park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | null;
@@ -1100,6 +1101,25 @@ export interface components {
             detail: string;
             /** Ok */
             ok: boolean;
+        };
+        /**
+         * ChatThreadOut
+         * @description The stop's chat thread (story 3-3): its platform, how far it got, and why it failed.
+         *     `error` is shown verbatim, whatever the state.
+         */
+        ChatThreadOut: {
+            /** Error */
+            error: string | null;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "mattermost" | "slack";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "posting" | "open" | "closed" | "failed";
         };
         /**
          * ChatUserIn
