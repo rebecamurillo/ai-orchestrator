@@ -207,3 +207,11 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/specs/spec-senior-unblock/stories/3-4-project-channel-storage-api-and-connection-test.md`
   summary: The connection test lets the browser drive a request from the backend to any base URL it can reach, and reads up to 300 characters of a non-2xx body back (low under the single-Operator trust model).
   evidence: Story 3-4 lead review, 2026-11-02. Accepted for now. Settle if the instance ever has more than one login, by restricting base URLs to an allow-list setting.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/3-2-slack-adapter.md`
+  summary: Slack Tier 3 allows about 50 `conversations.replies` calls a minute per workspace, so polling every 30 s starts drawing 429s at about 25 open threads in one workspace (low).
+  evidence: Story 3-2 lead review, 2026-11-02. Settle in 4-3 or later: stop the read pass for that Project's fire on the first 429, or space the reads out.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/3-2-slack-adapter.md`
+  summary: Slack replies are not checked against the bot's own team, so in a Slack Connect channel only the allowed-user id list separates people from other workspaces (low, defence in depth).
+  evidence: Story 3-2 lead review, 2026-11-02, not reproduced. Settle at the 4-2 live check, by confirming that user ids are unique across connected workspaces.

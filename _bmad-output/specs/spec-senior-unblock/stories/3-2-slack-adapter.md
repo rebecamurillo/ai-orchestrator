@@ -2,7 +2,7 @@
 title: 'Slack adapter'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: '94f0f44f04d7243b4d7241b81e83eadca4afdf8b'
 review_loop_iteration: 0
