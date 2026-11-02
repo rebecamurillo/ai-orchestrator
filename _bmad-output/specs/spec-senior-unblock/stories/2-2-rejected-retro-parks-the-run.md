@@ -2,7 +2,7 @@
 title: 'Rejected retro parks the Run'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: '985fb785301aea442ec6123e68bac7fc5578683a'
 review_loop_iteration: 0
