@@ -2,9 +2,9 @@
 title: 'Escalation thread and reminders'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
-baseline_commit: 'TBD (3-2''s last commit; set at dispatch)'
+baseline_commit: 'd016040'
 review_loop_iteration: 0
 context: []
 ---
@@ -206,11 +206,11 @@ Under `backend-api/src/orchestrator/` unless stated.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] Shared fakes:
+- [x] Shared fakes:
   - `tests/unit/fakes/chat_thread.py` holds `FakeChatThreadRepository` (`get_for_update` returns `get`, and `add` honours both unique keys) and `FakeChatNoticeRepository`.
   - `list_all` is added to 3-4's `FakeProjectChannelRepository`.
   - `reply_mentions` and `on_send` are added to `FakeChatChannel`, so `test_chat_fake.py` needs no revision.
-- [ ] New tests, each seen failing first, covering every matrix row through the shared fakes, `FakeCrypto` and `FakeClock`:
+- [x] New tests, each seen failing first, covering every matrix row through the shared fakes, `FakeCrypto` and `FakeClock`:
   - `tests/unit/application/test_chat_message.py` (including the exact-length cut)
   - `test_chat_post.py`, `test_chat_remind.py`, `test_chat_notice.py` and `test_chat_poll.py` (isolation, order, `on_send` transaction check, log hygiene with `structlog.testing.capture_logs`)
   - `tests/unit/test_chat_repository_adapter.py`: the compiled SQL is `ON CONFLICT DO NOTHING` with no target, `add` returns `rowcount == 1`, and the anti-join is covered
@@ -218,7 +218,7 @@ Under `backend-api/src/orchestrator/` unless stated.
   - `test_mattermost_neutralise.py` and `test_slack_neutralise.py`, plus reply-mention and length-refusal cases in each
   - `web-client/tests/unit/run-chat-thread.test.ts`
   - `web-client/tests/e2e/run-detail-chat-thread.spec.ts`, against a stubbed backend: a `failed` thread shows `wf-chat-thread-error` right after `wf-alert`
-- [ ] Code Map in order, then `make openapi`. No existing test changes. `test_terminal_poll_wiring.py` still sees only `terminal_poll`, because its calls pass no `chat`.
+- [x] Code Map in order, then `make openapi`. No existing test changes. `test_terminal_poll_wiring.py` still sees only `terminal_poll`, because its calls pass no `chat`.
 
 **Acceptance Criteria:**
 - Given one parked stop and a fake `post` that runs a second fire before it returns, when both finish, then `FakeChatChannel.posts` holds exactly one post and the table holds one row.
@@ -236,6 +236,16 @@ Under `backend-api/src/orchestrator/` unless stated.
   2. **`ChatThreadRepository.add -> bool`** is additive to 4-1's "at least" list.
 - **Proposed AD-25 amendment**, for the Operator to ratify:
   > `reply(thread, text, mentions=())` renders mentions as `post` does; an adapter delivers text as one message or raises `ChatError`, never splits. `chat_notice(gate_record_id, run_id, created_at, error)` holds the one-line channel post for a `senior_accept`, claimed by its primary key, posted once, never reposted. Reminders mention the allowed people. One backend process; thread times come from the `Clock` port.
+- **Proposed addendum from implementation**, for the Operator to ratify with the amendment above:
+  > `ChatPorts` and `ChatPollPorts` live in `application/jobs/chat_ports.py` (`chat_poll.py` re-exports `ChatPollPorts`), with `notices`, `projects` and `repositories` required beside 4-1's three. The chat factory `serving` holds sits in `infrastructure/terminal_jobs.py::CHAT_SLOT`, which `chat_poll` reads on every fire. Mattermost refuses a mention whose handle is `channel`, `here` or `all`; Slack refuses a message longer than 4,000 characters after escaping.
+- **Implementation decisions (2026-11-02, dev):**
+  - The cut marker is written when anything was cut, a field cap included, so a 10,000-character question shows it even when the capped text fits.
+  - A senior-accept line with no row `story_id` leaves out `· story {id}`; with no Run link it leaves out `· {link}`.
+  - `parked {h} h` counts whole hours since the thread's `created_at`, the post, which is within one poll of the park.
+  - When `factory.open` raises `ChatError`, the claimed row's `error` is the redacted detail alone; any other exception gives `channel could not be opened: {Class}`.
+  - Due stops are posted oldest Run first. The pass pre-checks `get_by_stop` without a lock, so a stop that has its thread takes no Run lock each fire; the claim re-checks under the lock.
+  - The remind pass pre-checks the period from the thread alone before locking, for the same reason.
+  - `FakeUnitOfWork` gains a read-only `is_open`, which the `on_send` checks use.
 - **No `DBOS_APPLICATION_VERSION` bump.** A new schedule is not a change to the walker's sequence. Before 4-3, a recovered scheduled fire re-runs the job, and the database claims keep posting at most once.
 - **Shutdown window.** A fire already running when `ChatChannels.close()` is called can fail its posts as `internal: {Class}`. Only fires that start after `serving` exits are skipped.
 
