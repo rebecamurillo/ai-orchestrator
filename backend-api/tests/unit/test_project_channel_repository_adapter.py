@@ -26,11 +26,13 @@ from orchestrator.infrastructure.db import (
     ProjectChannelRow,
     SQLAlchemyProjectChannelRepository,
 )
-from orchestrator.infrastructure.db.repositories.project_channel import to_entity
+from orchestrator.infrastructure.db.repositories.project_channel import (
+    allowed_users_json,
+    to_entity,
+)
 from tests.unit.conftest import REPO_ROOT
 
 AT = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
-LATER = datetime(2026, 11, 2, 10, 0, tzinfo=UTC)
 TABLE = Base.metadata.tables["project_channel"]
 MIGRATION = REPO_ROOT / "backend-api" / "alembic" / "versions" / "0028_project_channel.py"
 
@@ -200,35 +202,33 @@ def test_the_adapter_satisfies_the_port() -> None:
     assert isinstance(repository(RecordingSession()), ProjectChannelRepository)
 
 
-def test_a_put_of_a_new_channel_adds_a_row_and_reads_back_equal() -> None:
-    session = RecordingSession()
-    channel = a_channel()
-
-    repository(session).put(channel)
-
-    (row,) = session.added
-    assert row.allowed_users == [{"id": "u1", "handle": "alice"}, {"id": "u2", "handle": "bob"}]
-    assert to_entity(row) == channel
-    assert repository(session).get(channel.project_id) == channel
-
-
-def test_a_put_over_a_stored_channel_replaces_its_fields_in_place() -> None:
-    session = RecordingSession()
-    channel = a_channel()
-    repository(session).put(channel)
-    replacement = a_channel(
+def a_row(channel: ProjectChannel) -> ProjectChannelRow:
+    return ProjectChannelRow(
         project_id=channel.project_id,
-        channel_id="c2",
-        token_enc="gAAAAA-other",
-        allowed_users=(ChatUser(id="u3", handle="carol"),),
-        metadata_only=False,
-        updated_at=LATER,
+        provider=channel.provider,
+        base_url=channel.base_url,
+        channel_id=channel.channel_id,
+        token_enc=channel.token_enc,
+        allowed_users=allowed_users_json(channel),
+        metadata_only=channel.metadata_only,
+        created_at=channel.created_at,
+        updated_at=channel.updated_at,
     )
 
-    repository(session).put(replacement)
 
-    assert len(session.added) == 1
-    assert repository(session).get(channel.project_id) == replacement
+# Revised: story 3-4 review, 2026-11-02 — `put` became one upsert, so the two tests that
+# pinned its ORM add-then-update path are replaced. The statement is pinned in
+# `test_project_channel_upsert.py`; the row-to-entity mapping they covered is pinned here.
+def test_a_stored_row_reads_back_as_the_channel_it_was_built_from() -> None:
+    channel = a_channel()
+    session = RecordingSession([a_row(channel)])
+
+    assert session.rows[0].allowed_users == [
+        {"id": "u1", "handle": "alice"},
+        {"id": "u2", "handle": "bob"},
+    ]
+    assert to_entity(session.rows[0]) == channel
+    assert repository(session).get(channel.project_id) == channel
 
 
 def test_a_get_of_no_row_is_none() -> None:
@@ -236,9 +236,9 @@ def test_a_get_of_no_row_is_none() -> None:
 
 
 def test_a_delete_removes_the_row_and_a_second_is_a_no_op() -> None:
-    session = RecordingSession()
+    # Revised: story 3-4 review, 2026-11-02 — seeded directly, since `put` no longer adds
     channel = a_channel()
-    repository(session).put(channel)
+    session = RecordingSession([a_row(channel)])
 
     repository(session).delete(channel.project_id)
     repository(session).delete(channel.project_id)

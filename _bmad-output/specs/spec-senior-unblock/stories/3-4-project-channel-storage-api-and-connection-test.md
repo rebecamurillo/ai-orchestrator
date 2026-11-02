@@ -86,6 +86,13 @@ Under `backend-api/src/orchestrator/` unless stated.
 
 - 2026-11-02, lead review: split out of the 3-1 draft. Added the builtin, cascade, `SecretStr` and allowed-user rules, and the `main.py` mount. The draft's mount inside `projects.router` would break a frozen test.
 - 2026-11-02, implementation. The Code Map names `infrastructure.chat.open_channel` as the factory. A bare function cannot satisfy `ChatChannelFactory.open`, so `main()` wires one shared `ChatChannels()` (3-1's done state), stores it as `app.state.chat`, and closes it in a `finally` after uvicorn returns or raises. `main.py` made room by moving `crypto_factory` unchanged into `infrastructure/crypto/factory.py`, which `main` re-imports.
+- 2026-11-02, story 3-4 review. Six fixes:
+  - A token the current key cannot open makes Test answer 200 `{ok: false}`. The `Crypto` port gains `DecryptionError`, which the Fernet adapter raises as a subclass of `InvalidToken`, so env-var callers behave as before.
+  - `is_valid_base_url` answers `False` for a malformed host and refuses userinfo, a query and a fragment.
+  - `put` is one `INSERT … ON CONFLICT (project_id) DO UPDATE`.
+  - Lead decision: a kept token never follows a host change. Such a request gets 422 `token: enter the token again when the host changes`, comparing base URLs without a trailing `/`.
+  - The dead behavioural half of `test_run_environment_channel.py` is replaced by a static check over `db/environment.py` and `harness/env.py`.
+  - Three tests in this story's `test_project_channel_repository_adapter.py` pinned the old add-then-update `put`. They were revised under hard rule 1(b), with dated notes.
 
 ## Implementation Notes
 

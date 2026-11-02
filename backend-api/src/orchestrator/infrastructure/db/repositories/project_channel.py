@@ -1,13 +1,16 @@
 """The SQLAlchemy adapter for the `ProjectChannelRepository` port.
 
 It mirrors `tests/unit/fakes/project_channel.py`: `put` inserts or replaces, and `delete`
-of a missing row is a no-op.
+of a missing row is a no-op. `put` is one `INSERT … ON CONFLICT DO UPDATE`, so two first
+saves racing on one Project cannot fail on the primary key.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
+
+from sqlalchemy.dialects.postgresql import insert
 
 from orchestrator.domain.entities.project_channel import ProjectChannel
 from orchestrator.domain.ports.chat import ChatProvider, ChatUser
@@ -19,13 +22,14 @@ if TYPE_CHECKING:  # pragma: no cover — typing only
 USER_ID_KEY = "id"
 USER_HANDLE_KEY = "handle"
 
-#: The fields `put` writes over a stored row. `project_id` and `created_at` are not among them.
+#: The columns `put` writes over a stored row. `project_id` and `created_at` are not among them.
 MUTABLE_FIELDS = (
     "provider",
     "base_url",
     "channel_id",
     "token_enc",
     "metadata_only",
+    "allowed_users",
     "updated_at",
 )
 
@@ -62,21 +66,26 @@ class SQLAlchemyProjectChannelRepository:
         return None if row is None else to_entity(row)
 
     def put(self, channel: ProjectChannel) -> None:
-        row = self._session.get(ProjectChannelRow, channel.project_id)
-        if row is None:
-            self._session.add(
-                ProjectChannelRow(
-                    project_id=channel.project_id,
-                    created_at=channel.created_at,
-                    allowed_users=allowed_users_json(channel),
-                    **{name: getattr(channel, name) for name in MUTABLE_FIELDS},
-                )
+        values: dict[str, Any] = {
+            "project_id": channel.project_id,
+            "provider": channel.provider,
+            "base_url": channel.base_url,
+            "channel_id": channel.channel_id,
+            "token_enc": channel.token_enc,
+            "allowed_users": allowed_users_json(channel),
+            "metadata_only": channel.metadata_only,
+            "created_at": channel.created_at,
+            "updated_at": channel.updated_at,
+        }
+        statement = (
+            insert(ProjectChannelRow.__table__)
+            .values(**values)
+            .on_conflict_do_update(
+                index_elements=["project_id"],
+                set_={name: values[name] for name in MUTABLE_FIELDS},
             )
-            return
-        for name in MUTABLE_FIELDS:
-            setattr(row, name, getattr(channel, name))
-        # rebuilt rather than mutated: SQLAlchemy does not track a change inside a JSON value
-        row.allowed_users = allowed_users_json(channel)
+        )
+        self._session.execute(statement)
 
     def delete(self, project_id: UUID) -> None:
         row = self._session.get(ProjectChannelRow, project_id)

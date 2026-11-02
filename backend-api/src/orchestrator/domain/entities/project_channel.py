@@ -28,15 +28,15 @@ def _has_whitespace(value: str) -> bool:
 
 
 def is_valid_base_url(url: str) -> bool:
-    """`http(s)://host[:port][/path]`, with no whitespace anywhere."""
-    if _has_whitespace(url):
+    """`http(s)://host[:port][/path]`: no whitespace, userinfo, query or fragment."""
+    if _has_whitespace(url) or "?" in url or "#" in url:
         return False
-    parts = urlsplit(url)
     try:
+        parts = urlsplit(url)
         parts.port  # noqa: B018 — a malformed port raises only when read
     except ValueError:
         return False
-    return parts.scheme in BASE_URL_SCHEMES and bool(parts.hostname)
+    return parts.scheme in BASE_URL_SCHEMES and bool(parts.hostname) and "@" not in parts.netloc
 
 
 def is_valid_channel_id(value: str) -> bool:

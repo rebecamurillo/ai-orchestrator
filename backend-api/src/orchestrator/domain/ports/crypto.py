@@ -15,6 +15,10 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 
+class DecryptionError(ValueError):
+    """A token this instance cannot open: tampered with, or issued under another key."""
+
+
 @runtime_checkable
 class Crypto(Protocol):
     """Reversible encryption of a single value, keyed by the instance."""
@@ -27,6 +31,6 @@ class Crypto(Protocol):
         """Return the plaintext of a token this instance issued.
 
         A token that was tampered with, or issued under another key, is refused rather
-        than decoded into whatever the bytes happen to say.
+        than decoded into whatever the bytes happen to say, as a `DecryptionError`.
         """
         ...

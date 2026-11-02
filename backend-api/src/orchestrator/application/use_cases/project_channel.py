@@ -21,13 +21,17 @@ from orchestrator.domain.entities.project_channel import (
 from orchestrator.domain.errors import Conflict, Invalid
 from orchestrator.domain.ports.chat import ChatChannelFactory, ChatError, ChatProvider, ChatUser
 from orchestrator.domain.ports.clock import Clock
-from orchestrator.domain.ports.crypto import Crypto
+from orchestrator.domain.ports.crypto import Crypto, DecryptionError
 from orchestrator.domain.ports.repositories import ProjectChannelRepository, ProjectRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 
 NO_CHANNEL_REASON = "no channel is set"
 NO_STORED_TOKEN_REASON = "token: no stored token to keep"
 OTHER_PROVIDER_TOKEN_REASON = "token: the stored token belongs to another provider"
+OTHER_HOST_TOKEN_REASON = "token: enter the token again when the host changes"
+UNDECRYPTABLE_REASON = (
+    "the stored token cannot be decrypted with the current key; save the token again"
+)
 NO_ALLOWED_USER_REASON = "allowed_users: at least one allowed user is needed"
 REDACTED = "***"
 
@@ -87,7 +91,7 @@ def put_channel(ports: ChannelPorts, project_id: UUID, draft: ChannelDraft) -> P
         provider=provider,
         base_url=base_url,
         channel_id=channel_id,
-        token_enc=_token_enc(stored, provider, draft.token, ports.crypto),
+        token_enc=_token_enc(stored, provider, base_url, draft.token, ports.crypto),
         allowed_users=draft.allowed_users,
         metadata_only=draft.metadata_only,
         created_at=now if stored is None else stored.created_at,
@@ -104,7 +108,10 @@ def test_channel(ports: ChannelPorts, project_id: UUID) -> ChannelTest:
     stored = ports.channels.get(project_id)
     if stored is None:
         raise Conflict(NO_CHANNEL_REASON)
-    token = ports.crypto.decrypt(stored.token_enc)
+    try:
+        token = ports.crypto.decrypt(stored.token_enc)
+    except DecryptionError:
+        return ChannelTest(ok=False, detail=UNDECRYPTABLE_REASON)
     try:
         channel = ports.factory.open(stored.provider, stored.base_url, stored.channel_id, token)
         handle = channel.probe()
@@ -121,7 +128,11 @@ def _required(value: str | None, name: str, provider: ChatProvider) -> str:
 
 
 def _token_enc(
-    stored: ProjectChannel | None, provider: ChatProvider, token: str | None, crypto: Crypto
+    stored: ProjectChannel | None,
+    provider: ChatProvider,
+    base_url: str,
+    token: str | None,
+    crypto: Crypto,
 ) -> str:
     if token is not None:
         return crypto.encrypt(token)
@@ -129,4 +140,7 @@ def _token_enc(
         raise Invalid(NO_STORED_TOKEN_REASON)
     if stored.provider != provider:
         raise Invalid(OTHER_PROVIDER_TOKEN_REASON)
+    if stored.base_url.rstrip("/") != base_url.rstrip("/"):
+        # a kept bearer must not be sent to a host the Operator never typed it for
+        raise Invalid(OTHER_HOST_TOKEN_REASON)
     return stored.token_enc
