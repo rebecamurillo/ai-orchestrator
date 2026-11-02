@@ -133,10 +133,12 @@ steps:
       skill: bmad-retrospective
       args: { folder: "{{spec_folder}}" }
       prompt_extra: >-
-        When RETROSPECTIVE.md is final, write the verdict last to {{spec_folder}}/stories/.auto/retro.md
-        and never in place of that document. Its frontmatter `status` is exactly one of `accepted`,
-        `accepted-with-open-items` or `rejected`, as recorded in RETROSPECTIVE.md; a human decision
-        that overrides the machine verdict is the verdict. Under the frontmatter write a
+        Run the skill headless (-H): this dispatch has no one to answer its questions.
+        When RETROSPECTIVE.md is final, write the verdict last to {{spec_folder}}/stories/.auto/retro.md,
+        overwriting whatever is there, and never in place of that document. Its frontmatter `status`
+        is exactly one of `accepted`, `accepted-with-open-items` or `rejected`, as recorded in
+        RETROSPECTIVE.md; a human decision that overrides the machine verdict is the verdict, and
+        RETROSPECTIVE.md's own `verdict` is updated to it first. Under the frontmatter write a
         `## Auto Run Result` section with a `Status:` line. For `rejected`, add a
         `Blocking condition:` line naming every finding that stands, each with its source,
         separated by `; `, then the same findings as a bulleted list.

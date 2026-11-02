@@ -72,6 +72,13 @@ Tests first; they pass against the unchanged source, because the contract machin
 
 ## Review Triage Log
 
+| Finding | Layer | Verdict | Route | Evidence and action |
+| --- | --- | --- | --- | --- |
+| Retro dispatched without headless mode; with unfinished stories it stops to ask and parks `no story file` | lead review | medium | patch | `prompt_extra` now says to run the skill headless (-H). |
+| A stale `retro.md` from an earlier Run of the epic could stand in for a skipped write | lead review | medium | patch | `prompt_extra` now says to overwrite whatever is there, as the staged story skills do. |
+| A human override could leave `RETROSPECTIVE.md` saying `rejected` beside an `accepted` marker | lead review | low | patch | `prompt_extra` now says to update the document's `verdict` first. |
+| Tests never went red: they cover routing that already existed, and nothing fails if a shipped row loses `expect` | lead review | low | reject | Hard rule 6 forbids pinning shipped template content; review, the YAML comment and the README guard it. |
+
 ## Verification
 
 **Commands:**
