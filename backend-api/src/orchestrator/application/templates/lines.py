@@ -24,7 +24,7 @@ skip a subtree it cannot read and still report every problem it can name in the 
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Hashable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,7 +39,6 @@ FOR_EACH_KEY = "for_each"
 AS_KEY = "as"
 
 BOOL_TAG = "tag:yaml.org,2002:bool"
-STR_TAG = "tag:yaml.org,2002:str"
 
 
 class LinedMap(dict[Any, Any]):
@@ -71,20 +70,48 @@ class LineLoader(yaml.SafeLoader):
     """
 
     def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> LinedMap:
-        # YAML 1.1 resolves a plain `on`, `yes` or `no` to a bool, and AD-22 names a DSL key
-        # `on`: a plain key is kept as the text it was written as. Values are untouched.
-        for key, _ in node.value:
-            if isinstance(key, yaml.ScalarNode) and key.tag == BOOL_TAG and key.style is None:
-                key.tag = STR_TAG
-        mapping = LinedMap(super().construct_mapping(node, deep=True))
+        # YAML 1.1 resolves an untagged plain `on`, `yes` or `no` to a bool, and AD-22 names a
+        # DSL key `on`: such a key is taken as the text it was written as. The node is left
+        # alone, so an alias of it used as a value, and an explicit `!!bool` key, keep YAML's
+        # own reading; pairs are built one by one because two such keys would collide as bools.
+        self.flatten_mapping(node)
+        built: dict[Any, Any] = {}
+        for key_node, value_node in node.value:
+            key = key_node.value if _bool_text(key_node) else self._deep(key_node)
+            if not isinstance(key, Hashable):
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    "found unhashable key",
+                    key_node.start_mark,
+                )
+            built[key] = self._deep(value_node)
+        mapping = LinedMap(built)
         mapping.line = node.start_mark.line + 1
         mapping.key_lines = {key.value: key.start_mark.line + 1 for key, _ in node.value}
         return mapping
+
+    def _deep(self, node: yaml.Node) -> Any:
+        construct: Callable[..., Any] = self.construct_object
+        return construct(node, deep=True)
 
     def construct_sequence(self, node: yaml.SequenceNode, deep: bool = False) -> LinedSeq:
         sequence = LinedSeq(super().construct_sequence(node, deep=True))
         sequence.line = node.start_mark.line + 1
         return sequence
+
+
+def _bool_text(key: yaml.Node) -> bool:
+    """Whether `key` is a plain scalar YAML resolved to a bool with no tag written on it.
+
+    The node does not record whether its tag was explicit, so the source is read: anything
+    written before the value (an anchor, a tag) is in the slice ahead of it.
+    """
+    if not isinstance(key, yaml.ScalarNode) or key.tag != BOOL_TAG or key.style is not None:
+        return False
+    start, end = key.start_mark, key.end_mark
+    written = (start.buffer or "")[start.pointer : end.pointer]
+    return "!" not in written[: len(written) - len(key.value)]
 
 
 def _lined_map(loader: LineLoader, node: yaml.MappingNode) -> LinedMap:

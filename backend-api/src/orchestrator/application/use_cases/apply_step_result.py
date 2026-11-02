@@ -117,8 +117,8 @@ RESULT_EVENTS: dict[StepStatus, StepEvent] = {
     "skipped": "skip",
 }
 
-#: The redispatch's three sentences, still reachable here, where the writer that parks
-#: with them always kept them.
+#: The redispatch's three sentences, also named here: callers read the reasons this
+#: writer parks with from this module.
 VERIFY_FAILED = apply_redispatch.VERIFY_FAILED
 REDISPATCHED = apply_redispatch.REDISPATCHED
 REBASELINE_FAILED = signals.REBASELINE_FAILED
