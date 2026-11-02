@@ -75,5 +75,11 @@ class Workspace(Protocol):
     def remove(self, path: str) -> None:
         """Remove the file or directory at `path`, recursively; already gone is not a
         failure (AD-14) — `worktree_gc` (SPEC CAP-11) calls this on a Run it may have swept
-        before, and a second sweep must land as cleanly as the first."""
+        before, and a second sweep must land as cleanly as the first. A link is removed
+        itself, dangling or not, and what it points to is left alone."""
+        ...
+
+    def is_link(self, path: str) -> bool:
+        """Whether `path`, or a folder between the root and it, is a symbolic link: a file
+        an agent can redirect, which a reader that must not be fooled refuses (AD-22)."""
         ...

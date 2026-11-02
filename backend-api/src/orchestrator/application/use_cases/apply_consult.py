@@ -43,6 +43,7 @@ from orchestrator.domain.values import Consult, StepResult
 #: The session delivery a `senior_answer` asks for, in the shape `signal_run` writes.
 SESSION = "session"
 
+#: An approval with no reason accepts nothing: AD-17's amendment has the record name it.
 ACCEPTED = "accepted by the senior: {files}"
 REASON_KEY = "reason"
 
@@ -76,7 +77,7 @@ def apply_consult(
         set_row(ports, row, consults={**row.consults, found.kind: entry})
         return None
     entry[rules.ANSWERED_BY_KEY] = attempt_n
-    if found.approved_files:
+    if found.approved_files and found.reason.strip():
         run = _accept(ports, run, row, found, attempt_n)
     text = rules.answer_text(row.with_resolved, found.question, found.answer, entry)
     payload = {rules.TEXT_KEY: text, rules.KIND_KEY: found.kind}
@@ -115,7 +116,7 @@ def _accept(
             event=rules.ACCEPT_EVENT,
             actor="senior",
             path=row.path,
-            text=f"{text} · {found.reason}" if found.reason else text,
+            text=f"{text} · {found.reason}",
             attempt_n=attempt_n,
             payload={FILES_KEY: files, REASON_KEY: found.reason, rules.KIND_KEY: found.kind},
         ),

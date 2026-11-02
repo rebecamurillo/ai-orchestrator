@@ -142,7 +142,7 @@ def a_hub_world(decision: str) -> World:
 
 
 def test_a_hub_row_approves_the_workdir_spelling() -> None:
-    result = run(a_hub_world(approving("[repos/member/tests/a.py]")))
+    result = run(a_hub_world(approving("[repos/member/tests/a.py]", reason="AC 2")))
 
     assert result.consult is not None
     assert result.consult.outcome == "answer"

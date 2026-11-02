@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from orchestrator.application.use_cases.apply_consult import apply_consult
 from orchestrator.domain.values import Consult, Park, StepResult
 from tests.unit.application.test_consult_apply import (
@@ -68,12 +70,15 @@ def test_the_files_are_accepted_and_recorded_before_the_answer() -> None:
     assert world.row(BUILD).status == "queued"
 
 
-def test_an_acceptance_with_no_reason_names_the_files_only() -> None:
+@pytest.mark.parametrize("reason", ["", "   "])
+def test_files_with_no_reason_are_never_accepted(reason: str) -> None:
+    """AD-17's amendment: the record names the senior and the reason, or there is none."""
     world = a_consulted_world()
 
-    apply(world, an_approving_answer(("tests/a.py",), reason=""))
+    apply(world, an_approving_answer(("tests/a.py",), reason=reason))
 
-    assert world.records()[0].text == "accepted by the senior: tests/a.py"
+    assert "senior_accept" not in world.events()
+    assert world.stored_run().accepted_paths == ()
 
 
 def test_the_list_gains_no_duplicate() -> None:

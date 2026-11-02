@@ -206,7 +206,8 @@ def _consult(ctx: StepContext, stop: _Stop) -> StepResult:
     )
     committed(ctx, lambda attempts: attempts.mark_started(started))
     result, spent = _dispatch(ctx, _Senior(harness, started, prompt, tree, block))
-    return _with_budget(ctx, stop, _outcome(ctx, stop, result, workspace.read(decision)), spent)
+    text = agent_consult_review.read_decision(workspace, decision)
+    return _with_budget(ctx, stop, _outcome(ctx, stop, result, text), spent)
 
 
 def _prompt(ctx: StepContext, block: Mapping[str, Any], stop: _Stop, decision: str) -> str:

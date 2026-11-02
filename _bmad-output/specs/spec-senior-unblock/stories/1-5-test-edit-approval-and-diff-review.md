@@ -106,13 +106,15 @@ Paths are under `backend-api/src/orchestrator/application/` unless stated.
 
 ## Implementation Notes
 
-- **Gates.** `make lint` passes. `make test` passes: 8657 backend tests (1 skipped) and 1711 web-client tests, with `domain` and `application` at 100% branch coverage. `make openapi` regenerated `contracts/openapi.json` and `schema.d.ts`, because `GateEvent` widened by `senior_accept`. Neither file has drift.
+- **Gates.** `make lint` passes. `make test` passes: 8676 backend tests (1 skipped) and 1711 web-client tests, with `domain` and `application` at 100% branch coverage. `make openapi` regenerated `contracts/openapi.json` and `schema.d.ts`, because `GateEvent` widened by `senior_accept`. Neither file has drift.
 - **Not run.** `make e2e` and `make e2e-ui` were out of scope by instruction.
 - **Rebased on 1-6.** The Code Map holds at HEAD. `agent_consult.py` was at 389 lines and is now 396. So the answer is built in `agent_consult_review.answered`, which returns the `Consult` or the refusal, next to `prepare` and `approval_error`. `_outcome` parses once and passes the `Decision` on.
-- **Decided: `Consult.reason`.** The acceptance record's payload carries the decision's `reason`, so `Consult` gains `reason: str = ""` beside `approved_files`. The text drops ` · {reason}` when the senior gave no reason.
+- **Decided: `Consult.reason`.** The acceptance record carries the decision's `reason`, so `Consult` gains `reason: str = ""` beside `approved_files`. An approval with a blank reason fails closed (`approval names no reason`), and the writer accepts nothing without one (Review Triage 2).
 - **Decided: only a `blocked` answer approves.** A `verify_failed` answer (1-6) carries no files, and nothing is accepted. The diagnosis is still delivered.
 - **Decided: the planted baseline.** `prepare` removes any file at the `.story.md` path as well as at the decision path, so an agent cannot plant a baseline either.
 - **Message spelling.** The matrix's `…not a frozen test file: {p}` is written `approved file is not a frozen test file: {p}`. A path outside `{workdir}/` on a hub row reads the same.
+- **Known limits (Review Triage 3).** The kill reaches only the blocked agent's own process group. A child it started with `setsid` escapes it, though the decision is still read only from a regular file. A recorded `pgid` the kernel has since reused would be signalled too. The 1-4 orphan kill shares this hazard.
+- **Port widened (Review Triage 1).** `Workspace.is_link` is new. `FsWorkspace` implements it, and the shared `FakeWorkspace` gains `is_link` and a public `links` set, which its `remove` clears. No existing assertion changed.
 - **Tests revised (rule 1(b)).** `test_gate_events.py::test_the_machine_events_are_ad_9s_two_bounded_re_executions` now pins `senior_accept`, citing story 1-5, 2026-11-02 and the AD-17/AD-22 amendments. The shared fixture `consult_fixtures.a_consult_world` now writes the decision in `FakeHarness.on_wait`, while the senior runs, instead of seeding it before `run`. The coordinator approved this on 2026-11-02, because the planted-file rule removes a file that is already there. No assertion was changed, and all 36 callers in `test_consult_run.py` and `test_verify_consult_run.py` pass unchanged. The old shape is now pinned as the planted case in `test_consult_approval_run.py`. No other existing test was edited.
 
 ## Spec Change Log
@@ -120,3 +122,9 @@ Paths are under `backend-api/src/orchestrator/application/` unless stated.
 - 2026-11-02, lead review: split. The `protected_path` diff review and `accept` moved to story 1-8. Added the decided event, scope and story baseline; the removal of a planted decision file; and the workdir prefix rule. Known-bad states avoided: an agent pre-approving its own edits through the self-ignored folder or the live story file, and a hub approval landing in the wrong tree. KEEP: the acceptance record's shape, and failing the whole consult on one bad path.
 
 ## Review Triage Log
+
+| # | Finding | Verdict | Resolution |
+|---|---------|---------|------------|
+| 1 | A dangling symlink planted at the decision path survived `FsWorkspace.remove`, because `is_dir` and `exists` follow links. Once its target was written, `read` returned the agent's `approved_files` (verified on a real tree) | fix | `remove` now deletes a link itself first. A new `Workspace.is_link` names a path that is a link or lies under a linked folder. The consult reads the decision through `agent_consult_review.read_decision`, which refuses such a path (`no readable decision`), and it writes no baseline through a link. Covered on a real `tmp_path` tree by `test_consult_decision_links.py`, and on the fake by `test_consult_approval_hardening.py` |
+| 2 | An approval with an empty `reason` was accepted, and the record then named no reason | fix | `answered` refuses non-empty `approved_files` with a blank reason (`approval names no reason`). `apply_consult` accepts nothing without one, and its text is always `{files} · {reason}`. My own `test_an_acceptance_with_no_reason_names_the_files_only` became the refusal case, and the hub approval test gained a reason. Both are new tests of this story |
+| 3 | A process the blocked agent left running could rewrite the decision after it was cleared, because `runner.wait` does not kill the group on a normal exit | fix | `prepare` first kills the blocked agent attempt's recorded `pgid` through `ProcessRunner.kill_group`, before it clears anything. The `setsid` escape and `pgid` reuse are noted as known limits |

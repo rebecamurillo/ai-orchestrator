@@ -1,16 +1,22 @@
 """What a `blocked` consult reviews a test-edit approval against (AD-17's and AD-22's
 2026-11-02 amendments, hard rule 1).
 
-**Before the senior is dispatched** (`prepare`), the consult attempt clears its own decision
-path and the story baseline beside it: `.orchestrator/` is ignored by git, so the blocked
-agent could have written either, and a planted decision must never read as the senior's. It
+**Before the senior is dispatched** (`prepare`), the consult attempt kills the blocked
+agent's process group, so nothing it left running writes afterwards, then clears its own
+decision path and the story baseline beside it: `.orchestrator/` is ignored by git, so the
+agent could have written either, and a planted decision must never read as the senior's. A
+decision path that is a link, or lies under one, is never read (`read_decision`). It
 then copies the story file as it stood at the row's first agent start, read from git rather
 than from the tree, because the live story file is one the agent asking for approval can
 write its own declaration into. No copy is written unless exactly one file matched then.
 
 **An approval** (`approval_error`) names only frozen test files of the frame's anchor set, in
 AD-17's run-worktree spelling: on a `workdir` row only paths under `{workdir}/`. A document
-is never approved. One bad path fails the whole consult.
+is never approved, nor an approval that gives no reason: the acceptance record names it. One
+bad path fails the whole consult.
+
+**Known limit.** The kill reaches the agent's own process group only: a child it started in
+a new session (`setsid`) escapes it. The decision is still read only from a regular file.
 """
 
 from __future__ import annotations
@@ -25,18 +31,25 @@ from orchestrator.application.steps.context import (
     StepContext,
     require_cwd,
     require_env,
+    require_process,
     require_workspace,
 )
+from orchestrator.domain.ports.workspace import Workspace
 from orchestrator.domain.statuses import ParkKind
 from orchestrator.domain.values import Consult
 
 BLOCKED: ParkKind = "blocked"
 IS_ANCHOR = "approved file is an anchor: {path}"
 NOT_FROZEN = "approved file is not a frozen test file: {path}"
+NO_REASON = "approval names no reason"
 
 
 def prepare(ctx: StepContext, decision: str) -> None:
-    """Clear `decision` and the story baseline, then copy the baseline from git."""
+    """Kill the blocked agent's group, clear `decision` and the story baseline, then copy
+    the baseline from git."""
+    blocked = ctx.previous_attempt
+    if blocked is not None and blocked.pgid is not None:
+        require_process(ctx).kill_group(blocked.pgid)
     workspace = require_workspace(ctx, str(agent_workdir.tree(ctx)))
     story = consult.story_path(ctx.row.seq, ctx.attempt.n)
     workspace.remove(decision)
@@ -54,8 +67,13 @@ def prepare(ctx: StepContext, decision: str) -> None:
     if len(matched) != 1:
         return
     text = git.read_file(root, sha, matched[0])
-    if text is not None:
+    if text is not None and not workspace.is_link(story):
         workspace.write(story, text)
+
+
+def read_decision(workspace: Workspace, decision: str) -> str | None:
+    """The decision file's text, or `None` when it is a link or lies under one."""
+    return None if workspace.is_link(decision) else workspace.read(decision)
 
 
 def answered(
@@ -69,6 +87,8 @@ def answered(
     refused = approval_error(ctx, files)
     if refused is not None:
         return refused
+    if files and not decision.reason.strip():
+        return NO_REASON
     return Consult(
         kind=kind,
         question=question,
