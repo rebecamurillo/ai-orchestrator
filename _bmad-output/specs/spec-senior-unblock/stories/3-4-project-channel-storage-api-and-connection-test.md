@@ -2,9 +2,9 @@
 title: 'Project channel storage, API and connection test'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
-baseline_commit: '2460a484df02e3db8e88834fef9153551b3d3515'
+baseline_commit: '302ef490d8e3750a8d696d66fbd1896f16813871'
 review_loop_iteration: 0
 context: []
 ---
@@ -65,9 +65,9 @@ Under `backend-api/src/orchestrator/` unless stated.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend-api/tests/unit/fakes/project_channel.py` -- `FakeProjectChannelRepository`, the shared fake that 3-3 and 4-1 reuse.
-- [ ] New tests, each seen failing first: `tests/unit/application/test_project_channel.py` (every matrix row with `FakeCrypto` and 3-1's `FakeChatChannelFactory`), `test_project_channel_router.py`, `test_project_channel_schemas.py`, `test_project_channel_repository_adapter.py`, `test_run_environment_channel.py`, and `tests/e2e/test_project_channel.py` (save, read, keep, off, and Test against `http://127.0.0.1:9` answering `ok: false`).
-- [ ] Domain, port, migration, model, repository, use case, schemas, provider, router, mount, then `make openapi`.
+- [x] `backend-api/tests/unit/fakes/project_channel.py` -- `FakeProjectChannelRepository`, the shared fake that 3-3 and 4-1 reuse.
+- [x] New tests, each seen failing first: `tests/unit/application/test_project_channel.py` (every matrix row with `FakeCrypto` and 3-1's `FakeChatChannelFactory`), `test_project_channel_router.py`, `test_project_channel_schemas.py`, `test_project_channel_repository_adapter.py`, `test_run_environment_channel.py`, and `tests/e2e/test_project_channel.py` (save, read, keep, off, and Test against `http://127.0.0.1:9` answering `ok: false`).
+- [x] Domain, port, migration, model, repository, use case, schemas, provider, router, mount, then `make openapi`.
 
 **Acceptance Criteria:**
 - Given a channel saved with token `tok-<uuid>`, when `GET /projects`, `GET /projects/{id}`, `GET .../channel` and a refused `.../test` are read in e2e, then no body contains it.
@@ -85,3 +85,13 @@ Under `backend-api/src/orchestrator/` unless stated.
 ## Spec Change Log
 
 - 2026-11-02, lead review: split out of the 3-1 draft. Added the builtin, cascade, `SecretStr` and allowed-user rules, and the `main.py` mount. The draft's mount inside `projects.router` would break a frozen test.
+- 2026-11-02, implementation. The Code Map names `infrastructure.chat.open_channel` as the factory. A bare function cannot satisfy `ChatChannelFactory.open`, so `main()` wires one shared `ChatChannels()` (3-1's done state), stores it as `app.state.chat`, and closes it in a `finally` after uvicorn returns or raises. `main.py` made room by moving `crypto_factory` unchanged into `infrastructure/crypto/factory.py`, which `main` re-imports.
+
+## Implementation Notes
+
+- **Built:** `domain/entities/project_channel.py` (entity, `ProjectChannelView` with `token_set`, the pure shape rules), the `ProjectChannelRepository` port, `application/use_cases/project_channel.py` (`get_channel`, `put_channel`, `test_channel`, reusing `projects.py::_require` and `_refuse_builtin`), the model, adapter and migration `0028_project_channel`, `api/schemas/project_channel.py`, `api/providers_channel.py`, `api/routers/project_channel.py`, `infrastructure/crypto/factory.py`, and the mount and wiring in `main.py` (397 lines). The contract was regenerated with `make openapi`.
+- **Tests:** the shared fake `tests/unit/fakes/project_channel.py`, plus nine new test modules: the six the spec names, `test_project_channel_entity.py`, `test_crypto_factory.py` and `test_main_chat_channels.py` (close at shutdown, and also when serving raises). All of them failed at collection before the code existed. No existing test was revised.
+- **Token proofs:** the token is encrypted on write and kept by copying the ciphertext, with no decrypt. `ChannelDraft.token` and `ProjectChannel.token_enc` are `repr=False`, and the schema token is a `SecretStr`. Validator messages are fixed text, so a 422 never echoes the token. `structlog` capture shows no log line during save, read and a refused test. Project reads, channel reads and a refused probe carry no token, in the router tests and in e2e. `test_channel` also replaces the token with `***` in a `ChatError` detail, in case a factory does not redact. `environment.py` names no channel storage, and its `ProjectContext` holds only the Project's own variables.
+- **Shape rules:** these sit at the schema, at their field path. A `mattermost` body needs `base_url`, `channel_id` and at least one allowed user (`validate_default` field validators). A token is non-empty printable ASCII with no whitespace, which matches the adapter's own refusal. The use case repeats the presence checks as `Invalid("<field>: …")` for callers outside the API. A keep is refused when the stored token belongs to another provider (`token: the stored token belongs to another provider`).
+- **Gates:** `make lint` green (test pairs 304 modules). `make test` green: backend 9,468 passed and 1 skipped, domain and application at 100% branch coverage; web-client 1,771 passed. `make openapi` regenerated `contracts/openapi.json` and `schema.d.ts` with no drift. `make e2e` was not run, by instruction. `tests/e2e/test_project_channel.py` and schemathesis on the new routes are still unverified.
+

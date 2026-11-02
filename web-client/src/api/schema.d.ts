@@ -191,6 +191,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/channel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a Project's chat channel
+         * @description The stored channel, or `provider: off` when none is set. The token is never returned.
+         */
+        get: operations["get_channel_api_v1_projects__project_id__channel_get"];
+        /**
+         * Save or turn off a Project's chat channel
+         * @description Store the channel with its token encrypted, or delete it for `provider: off`.
+         *
+         *     Without `token`, the stored token is kept when the provider is unchanged.
+         */
+        put: operations["put_channel_api_v1_projects__project_id__channel_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/channel/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe a Project's saved chat channel
+         * @description One probe of the saved channel, with no retry. A refusal answers `ok: false` with the
+         *     platform's own text.
+         */
+        post: operations["test_channel_api_v1_projects__project_id__channel_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/repositories": {
         parameters: {
             query?: never;
@@ -997,6 +1044,79 @@ export interface components {
             token: string;
             /** Version */
             version: number;
+        };
+        /**
+         * ChannelIn
+         * @description `PUT` body. Without `token`, the stored one is kept for the same provider; `off`
+         *     needs no other field and deletes the channel.
+         */
+        ChannelIn: {
+            /** Allowed Users */
+            allowed_users?: components["schemas"]["ChatUserIn"][];
+            /** Base Url */
+            base_url?: string | null;
+            /** Channel Id */
+            channel_id?: string | null;
+            /**
+             * Metadata Only
+             * @default false
+             */
+            metadata_only: boolean;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "off" | "mattermost";
+            /** Token */
+            token?: string | null;
+        };
+        /**
+         * ChannelOut
+         * @description The channel as it leaves this API. The token is never returned, only `token_set`.
+         */
+        ChannelOut: {
+            /** Allowed Users */
+            allowed_users: components["schemas"]["ChatUserOut"][];
+            /** Base Url */
+            base_url: string | null;
+            /** Channel Id */
+            channel_id: string | null;
+            /** Metadata Only */
+            metadata_only: boolean;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "off" | "mattermost";
+            /** Token Set */
+            token_set: boolean;
+        };
+        /**
+         * ChannelTestOut
+         * @description One probe of the saved channel: `ok`, and the platform's own words when it is not.
+         */
+        ChannelTestOut: {
+            /** Detail */
+            detail: string;
+            /** Ok */
+            ok: boolean;
+        };
+        /**
+         * ChatUserIn
+         * @description A person allowed to answer: the platform's user id and the handle people type.
+         */
+        ChatUserIn: {
+            /** Handle */
+            handle: string;
+            /** Id */
+            id: string;
+        };
+        /** ChatUserOut */
+        ChatUserOut: {
+            /** Handle */
+            handle: string;
+            /** Id */
+            id: string;
         };
         /**
          * CheckpointStoryOut
@@ -3134,6 +3254,186 @@ export interface operations {
                 };
             };
             /** @description Another Project already holds that name. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_channel_api_v1_projects__project_id__channel_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    put_channel_api_v1_projects__project_id__channel_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The Project is built in and cannot be edited. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    test_channel_api_v1_projects__project_id__channel_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelTestOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The Project has no channel set. */
             409: {
                 headers: {
                     [name: string]: unknown;

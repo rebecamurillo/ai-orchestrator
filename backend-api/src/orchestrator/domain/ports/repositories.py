@@ -17,6 +17,7 @@ from uuid import UUID
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.project import Project
+from orchestrator.domain.entities.project_channel import ProjectChannel
 from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -45,6 +46,23 @@ class ProjectRepository(Protocol):
 
     def update(self, project: Project) -> None:
         """Replace the stored Project with this one, matched on its id."""
+        ...
+
+
+@runtime_checkable
+class ProjectChannelRepository(Protocol):
+    """Stored chat channels, at most one per Project. No row means `off` (AD-25)."""
+
+    def get(self, project_id: UUID) -> ProjectChannel | None:
+        """This Project's channel, or `None`."""
+        ...
+
+    def put(self, channel: ProjectChannel) -> None:
+        """Store this Project's channel, replacing any stored one."""
+        ...
+
+    def delete(self, project_id: UUID) -> None:
+        """Remove this Project's channel; nothing stored is not an error."""
         ...
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from orchestrator.infrastructure.db.models.harness import HarnessRow
 from orchestrator.infrastructure.db.models.project import ProjectRow
+from orchestrator.infrastructure.db.models.project_channel import ProjectChannelRow
 from orchestrator.infrastructure.db.models.repository import RepositoryRow
 from orchestrator.infrastructure.db.models.run import (
     AttemptRow,
@@ -23,6 +24,7 @@ __all__ = [
     "AttemptRow",
     "GateRecordRow",
     "HarnessRow",
+    "ProjectChannelRow",
     "ProjectRow",
     "RepositoryRow",
     "RunRow",
