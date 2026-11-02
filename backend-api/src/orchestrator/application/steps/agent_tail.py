@@ -33,7 +33,7 @@ from orchestrator.application.rules import (
     routing,
 )
 from orchestrator.application.rules.signals import accepted_files
-from orchestrator.application.steps import agent_workdir
+from orchestrator.application.steps import agent_failure, agent_workdir
 from orchestrator.application.steps.context import (
     StepContext,
     committed,
@@ -90,9 +90,8 @@ HITS_KEY = protected_paths.HITS_KEY
 CONTINUE_EVENT = "continue"
 
 #: The field and value `claude -p --output-format json` puts on its result object when
-#: `--max-budget-usd` stopped it (AD-10, FR-14). 5.11 confirmed this against the shipped
-#: 2.1.258 bundle's own error-result schema: `subtype` carries `"error_max_budget_usd"` when
-#: `terminal_reason === "budget_exhausted"` — `"max_budget"` occurs zero times in the bundle.
+#: `--max-budget-usd` stopped it (AD-10, FR-14): `subtype` carries `"error_max_budget_usd"`
+#: when `terminal_reason === "budget_exhausted"`, and `"max_budget"` is never written.
 CAP_EXIT_FIELD = "subtype"
 CAP_EXIT_VALUE = "error_max_budget_usd"
 
@@ -182,6 +181,7 @@ def _route(ctx: StepContext, result: HarnessResult) -> tuple[StepResult, str | N
         contract=route_contract_of(ctx.with_resolved),
         gate=ctx.row.gate,
         path=ctx.row.path,
+        exit_reason=agent_failure.provider_reason(ctx, result),
     )
     return routed, story.blocking_condition if story is not None else None
 

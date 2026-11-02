@@ -84,15 +84,17 @@ def route(  # noqa: PLR0913, PLR0917 — the FR-16 table's own columns, in its o
     contract: RouteContract = DEFAULT,
     gate: Gate,
     path: str,
+    exit_reason: str | None = None,
 ) -> StepResult:
     """What the dispatch reached, by FR-16's table over the row's own contract.
 
     `gate` and `path` are keyword-only because they are facts of the *row* rather than of the
     contract: the gate the planner recorded (AD-7) travels back out unchanged on every
     result, and `Park.path` names the row that stopped the Run. Everything else is what the
-    dispatch left behind.
+    dispatch left behind. `exit_reason` is what a failed attempt reports about itself (CAP-5);
+    it is the sentence for a non-zero exit in place of `harness exit {code}`, nothing more.
     """
-    live = _liveness(story_file, files, exit_code)
+    live = _liveness(story_file, files, exit_code, exit_reason)
     if live is not None:
         return _parked(live, gate=gate, path=path)
     assert story_file is not None  # `_liveness` answers for every other shape
@@ -111,12 +113,16 @@ def route(  # noqa: PLR0913, PLR0917 — the FR-16 table's own columns, in its o
     if exit_code:
         # `None` and `0` are both "the harness reported no failure": only a timeout produces
         # `None`, and the executor parked that before this rule was ever reached.
-        return _retry(HARNESS_EXIT.format(code=exit_code), retry, retry_count, gate=gate, path=path)
+        reason = exit_reason or HARNESS_EXIT.format(code=exit_code)
+        return _retry(reason, retry, retry_count, gate=gate, path=path)
     return StepResult(status="done", gate=gate)
 
 
 def _liveness(
-    story_file: StoryFile | None, files: Sequence[str], exit_code: int | None
+    story_file: StoryFile | None,
+    files: Sequence[str],
+    exit_code: int | None,
+    exit_reason: str | None,
 ) -> str | None:
     """The reason the glob's answer is not one readable file, or `None` when it is.
 
@@ -134,7 +140,9 @@ def _liveness(
     is untouched, and a zero-exit empty glob still reads `no story file`.
     """
     if not files:
-        return HARNESS_EXIT.format(code=exit_code) if exit_code else NO_STORY_FILE
+        if not exit_code:
+            return NO_STORY_FILE
+        return exit_reason or HARNESS_EXIT.format(code=exit_code)
     if len(files) > 1:
         return AMBIGUOUS_STORY_FILE.format(names=NAME_SEPARATOR.join(sorted(files)))
     if story_file is None:
