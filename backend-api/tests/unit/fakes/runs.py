@@ -196,6 +196,19 @@ class FakeAttemptRepository:
         self.calls.append(("update", attempt.id))
         self._replace(attempt)
 
+    # Story 2-5 (spine AD-23, 2026-11-02): the start-up read of the session turns a crash
+    # left queued, as the adapter filters it.
+    def list_queued_sessions(self) -> list[Attempt]:
+        self.calls.append(("list_queued_sessions", None))
+        return sorted(
+            (
+                a
+                for a in self.attempts.values()
+                if a.role == "session" and a.status == "queued" and a.ended_at is None
+            ),
+            key=lambda attempt: (attempt.started_at is not None, attempt.started_at, attempt.n),
+        )
+
     def _replace(self, attempt: Attempt) -> None:
         if attempt.id not in self.attempts:
             raise ValueError(f"no attempt with id {attempt.id} is stored")

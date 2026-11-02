@@ -2,9 +2,9 @@
 title: 'Operator senior session turns'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
-baseline_commit: '8c2a6beb6278c1e5f853467e9d60d21840595291'
+baseline_commit: '6edfcfaa46390b3c6fce9196ffeee259b0e71659'
 review_loop_iteration: 0
 context: []
 ---
@@ -79,14 +79,54 @@ Under `backend-api/src/orchestrator/` unless stated.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend-api/tests/unit/application/test_session_turn_*.py`, `tests/unit/test_dbos_session_walker.py`, `tests/unit/test_session_messages_router.py`, `tests/unit/test_harness_start_resume.py` -- new. Cover every matrix row through the shared fakes and fixture templates, and see each fail first (TDD).
-- [ ] The test edits named under Decided.
-- [ ] Code Map in order: domain and migration, then the harness port, the engine port and DBOS, the turn use case and sweep, the read model and router, the skill, then `make openapi`.
+- [x] `backend-api/tests/unit/application/test_session_turn_*.py`, `tests/unit/test_dbos_session_walker.py`, `tests/unit/test_session_messages_router.py`, `tests/unit/test_harness_start_resume.py` -- new. Cover every matrix row through the shared fakes and fixture templates, and see each fail first (TDD).
+- [x] The test edits named under Decided.
+- [x] Code Map in order: domain and migration, then the harness port, the engine port and DBOS, the turn use case and sweep, the read model and router, the skill, then `make openapi`.
 
 **Acceptance Criteria:**
 - Given two turns on a fixture template, when the second runs, then it resumes the first turn's `session_id`. Given the same Run, when `answer {mode: session}` follows `session_end`, then it resumes the original agent attempt's session.
 - Given a hub Run whose parked row declares `workdir`, when a turn edits both trees, then each tree gets its own `session: turn 1 (orchestrator)` commit.
 - Given a turn whose spend write meets a `cancel`, when both commit, then the Run is `cancelled` and `spend_usd` includes the turn.
+
+## Implementation Notes
+
+I wrote the tests first, at baseline `6edfcfa`. The new test files failed on import before any source existed.
+
+**Where the code went.**
+- `use_cases/session_turn.py` holds `post_message`, `read_turn`, `run_turn` and `commit_turn`.
+- `use_cases/session_dispatch.py` holds the dispatch, the interrupt and the attempt writes.
+- `use_cases/session_sweep.py` is the startup sweep.
+- `infrastructure/dbos/session_walker.py` builds `run_session_turn`.
+- Migration `0027_attempt_session_text` adds `message` and `reply`. `reply` is part of the finish half.
+- The startup sweep runs inside `startup.dependency_startup_sweep`, after the dependency sweep, so `main.py` stays at 400 lines.
+- `record_attempt_spend` gains `locked=True`, which re-reads the Run through `get_for_update` inside its own unit of work.
+- HEAD has no `agent_workdir.sweep_trees`. The turn uses `agent_workdir.sweep`, which commits both trees.
+
+**Choices the spec left open.**
+- The first-turn sweep (`wip: before session`) runs on the first turn of the session that has no earlier `start_sha`. This is not always the first attempt: if turn 1 never dispatched (unknown harness, git error), turn 2 still sweeps. Otherwise the agent's leftover dirt would count as session anchor edits.
+- Crash recovery (from the 2-3 review): the workflow calls `session_commit` in a `finally`. `commit_turn` writes `ended_at` on every path:
+  - a turn still `queued` or `running` closes `error` `attempt interrupted`;
+  - an unexpected exception closes the turn `error` with the exception's text.
+
+  A turn left `running` is recovered by DBOS at launch. It is killed, closed, billed and committed, and `session_end` then passes. `test_session_turn_flow.py` and `test_dbos_session_walker.py` test this.
+- An exception during dispatch makes the turn `error` with `{Class}: {message}`. It is never re-dispatched.
+- Empty opening-line values become `-`, and whitespace is collapsed so the line stays one line.
+- The skill refusal is skipped when no catalog port is wired, as in pre-flight and `agent_skill`.
+- The route declares its 500 in the contract.
+
+**Revised tests (rule 1(b), story 2-5, 2026-11-02, AD-23).**
+- `test_dbos_adapter.py::test_launching_configures_starts_and_then_declares_the_queue`: two `register_queue` calls. `test_dbos_session_walker.py` asserts `(SESSION_QUEUE, CONCURRENCY)`.
+- `test_session_router.py::test_a_stop_reads_an_available_session`: the expected body gains `"turn_running": False, "turns": []`. The coordinator approved this one, which was not in the spec's list. `test_session_messages_router.py` asserts a running turn and a non-empty `turns`.
+- The fakes `engine.py` (`enqueue_session_turn`, `session_turn_error`), `harness.py` (`start_resume`) and `runs.py` (`list_queued_sessions`) gain new members.
+
+**DBOS_APPLICATION_VERSION** stays `1`. The walker's five steps are unchanged, and the turn workflow is new, so no recorded step sequence changed.
+
+**Gates.**
+- `make lint` is green.
+- `make test`: 9154 backend passed (1 skipped) and 1729 web-client passed, with 100% branch coverage on `domain` and `application`.
+- `make openapi` shows no drift.
+- Not run: `make e2e`, `make e2e-ui`, `make durability` and the manual checks.
+- `session_start` returns 422 on the dev stack until the image is rebuilt with `ia-agents-skills/senior-session`.
 
 ## Verification
 

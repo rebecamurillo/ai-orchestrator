@@ -18,7 +18,7 @@ from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.git import Change
-from orchestrator.domain.statuses import AttemptRole, SignalKind
+from orchestrator.domain.statuses import TERMINAL_RUN, AttemptRole, SignalKind
 from orchestrator.domain.values import Signal
 
 SESSION_ROLE: AttemptRole = "session"
@@ -37,6 +37,15 @@ CONFIRMED_KEY = "confirmed_paths"
 TURNS_KEY = "turns"
 
 ENDED_CONFIRMED = "senior session ended; confirmed: {paths}"
+
+#: The operator-authored skill a session's first turn names, and the fact a blank becomes.
+OPENING_SKILL = "senior-session"
+EMPTY_FACT = "-"
+#: Where every turn leaves its answer, in the dispatch tree's self-ignored folder.
+REPLY_FILE = ".orchestrator/session/reply.md"
+REPLY_LIMIT = 64 * 1024
+WIP_MESSAGE = "wip: before session (orchestrator)"
+TURN_MESSAGE = "session: turn {k} (orchestrator)"
 
 
 def no_open_session(
@@ -132,3 +141,39 @@ def ended_text(payload: dict[str, Any]) -> str | None:
     if not confirmed:
         return None
     return ENDED_CONFIRMED.format(paths=", ".join(confirmed))
+
+
+def session_open(run: Run) -> bool:
+    """A turn may be queued or dispatched only while the session holds a live Run."""
+    return run.senior_session and run.status not in TERMINAL_RUN
+
+
+def turn_number(turns: Sequence[Attempt], attempt: Attempt) -> int:
+    """`attempt`'s place among the session's attempts, from 1."""
+    ordered = sorted(turns, key=lambda turn: turn.n)
+    return next(
+        (k for k, turn in enumerate(ordered, start=1) if turn.id == attempt.id), len(ordered) + 1
+    )
+
+
+def resumable(turns: Sequence[Attempt], attempt: Attempt) -> str | None:
+    """The session of the newest earlier turn that recorded one (AD-23)."""
+    earlier = [turn for turn in turns if turn.n < attempt.n and turn.session_id]
+    return max(earlier, key=lambda turn: turn.n).session_id if earlier else None
+
+
+def needs_sweep(turns: Sequence[Attempt], attempt: Attempt) -> bool:
+    """True until a turn of this session has recorded where its range starts: the first
+    dispatch is the one that commits what the Run was left holding."""
+    return not any(turn.n < attempt.n and turn.start_sha for turn in turns)
+
+
+def opening_line(facts: Sequence[str | None], text: str) -> str:
+    """The skill and the stop's facts, values only and `-` when empty, then the text."""
+    values = (" ".join(str(fact or "").split()) or EMPTY_FACT for fact in facts)
+    return f"{OPENING_SKILL} {' '.join(values)}\n{text}"
+
+
+def capped(reply: str | None) -> str:
+    """The reply file's text, cut to `REPLY_LIMIT` bytes on a character boundary."""
+    return (reply or "").encode()[:REPLY_LIMIT].decode(errors="ignore")

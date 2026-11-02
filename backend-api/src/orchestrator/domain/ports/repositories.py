@@ -207,6 +207,11 @@ class AttemptRepository(Protocol):
         """Replace the stored attempt with this one, matched on its id."""
         ...
 
+    def list_queued_sessions(self) -> list[Attempt]:
+        """Every `session` attempt still `queued` with no `ended_at`, oldest first: the turns
+        a restart re-enqueues (AD-23)."""
+        ...
+
 
 @runtime_checkable
 class GateRecordRepository(Protocol):

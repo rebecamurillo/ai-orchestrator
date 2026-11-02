@@ -40,6 +40,7 @@ class FakeWorkflowEngine:
         self._clock = clock or FakeClock(EPOCH)
         self._uow = uow
         self._next_ref = 0
+        self.session_turn_error: Exception | None = None
 
     def _note_commit_state(self) -> None:
         if self._uow is not None:
@@ -76,3 +77,11 @@ class FakeWorkflowEngine:
 
     def schedule(self, name: str, cron: str, job: Callable[[], None]) -> None:
         self.calls.append(("schedule", (name, cron)))
+
+    # Story 2-5 (spine AD-6 amendment, 2026-11-02): the turn workflow's enqueue.
+    # `session_turn_error` is what a test sets to make it raise.
+    def enqueue_session_turn(self, run_id: UUID, attempt_id: UUID) -> None:
+        self.calls.append(("enqueue_session_turn", (run_id, attempt_id)))
+        self._note_commit_state()
+        if self.session_turn_error is not None:
+            raise self.session_turn_error

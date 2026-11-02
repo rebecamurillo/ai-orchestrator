@@ -80,6 +80,10 @@ class Attempt(BaseModel):
     cost_usd: Decimal | None = None
     #: True while `cost_usd` is the harness's estimate and not the gateway's settled spend.
     cost_provisional: bool = False
+    #: A `session` attempt's Operator message, written when it is queued (AD-23).
+    message: str = ""
+    #: The reply file a `session` turn left, read when the turn is committed (AD-23).
+    reply: str = ""
 
 
 def agent_attempts(attempts: Iterable[Attempt]) -> list[Attempt]:

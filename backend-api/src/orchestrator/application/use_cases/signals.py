@@ -133,6 +133,7 @@ def session_ports(ports: SignalEffectPorts) -> SessionPorts:
         writers=ports.signal.writers,
         git=ports.git,
         harnesses=preflight.harness_registry if preflight is not None else {},
+        skill_catalog=preflight.skill_catalog if preflight is not None else None,
     )
 
 

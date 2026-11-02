@@ -84,7 +84,13 @@ def test_launching_configures_starts_and_then_declares_the_queue() -> None:
 
     a_launched_engine(fake)
 
-    assert [name for name, _ in fake.calls] == ["configure", "start", "register_queue"]
+    # Story 2-5, 2026-11-02 (AD-23): the session turns' own queue is declared after `runs`.
+    assert [name for name, _ in fake.calls] == [
+        "configure",
+        "start",
+        "register_queue",
+        "register_queue",
+    ]
     assert fake.configured is not None
     assert fake.configured["name"] == APP_NAME
     assert fake.configured["application_version"] == "1"

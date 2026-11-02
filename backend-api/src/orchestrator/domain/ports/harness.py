@@ -324,6 +324,27 @@ class Harness(Protocol):
         `model`, `budget_usd_remaining` and `add_dirs` mean what they mean on `run`. A
         harness whose session does not keep its model must restate it here, or the retry
         runs on the harness's default rather than the row's.
+
+        Exactly `wait(start_resume(...))`.
+        """
+        ...
+
+    def start_resume(  # noqa: PLR0913 — the same list `resume` takes
+        self,
+        *,
+        cwd: Path,
+        session_id: str,
+        message: str,
+        env: Mapping[str, str],
+        timeout_min: float | None,
+        log_path: Path,
+        stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
+    ) -> HarnessHandle:
+        """Start the resumed dispatch and hand back its handle, without waiting for it, so a
+        resumed process records its group before it is awaited (AD-14, as amended for AD-23).
         """
         ...
 

@@ -182,7 +182,37 @@ class ClaudeHarness:
         budget_usd_remaining: Decimal | None = None,
         add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
-        """Continue the session this row already opened — `retry`'s path only (AD-10)."""
+        """Continue the session this row already opened: exactly `wait(start_resume(...))`."""
+        return self.wait(
+            self.start_resume(
+                cwd=cwd,
+                session_id=session_id,
+                message=message,
+                env=env,
+                timeout_min=timeout_min,
+                log_path=log_path,
+                stall_min=stall_min,
+                model=model,
+                budget_usd_remaining=budget_usd_remaining,
+                add_dirs=add_dirs,
+            )
+        )
+
+    def start_resume(  # noqa: PLR0913 — the port's own signature (AD-10)
+        self,
+        *,
+        cwd: Path,
+        session_id: str,
+        message: str,
+        env: Mapping[str, str],
+        timeout_min: float | None,
+        log_path: Path,
+        stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
+    ) -> HarnessHandle:
+        """Start `--resume {session_id}` and hand its group back before anything waits on it."""
         argv = self._argv(
             ["--resume", session_id, *_add_dir_flags(add_dirs)],
             budget_usd_remaining=budget_usd_remaining,
@@ -190,16 +220,14 @@ class ClaudeHarness:
             message=message,
         )
         self._record_prompt(log_path, message)
-        return self.wait(
-            self._start(
-                argv,
-                cwd=cwd,
-                env=env,
-                timeout_min=timeout_min,
-                log_path=log_path,
-                session_id=session_id,
-                stall_min=stall_min,
-            )
+        return self._start(
+            argv,
+            cwd=cwd,
+            env=env,
+            timeout_min=timeout_min,
+            log_path=log_path,
+            session_id=session_id,
+            stall_min=stall_min,
         )
 
     def resume_command(self, cwd: str, session_id: str) -> str:

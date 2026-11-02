@@ -204,6 +204,8 @@ class AttemptRow(Base):
     tokens_out: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     cost_usd: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     cost_provisional: Mapped[bool] = mapped_column(Boolean())
+    message: Mapped[str] = mapped_column(Text(), server_default="")
+    reply: Mapped[str] = mapped_column(Text(), server_default="")
 
 
 class GateRecordRow(Base):

@@ -24,6 +24,7 @@ from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import Conflict, Invalid
 from orchestrator.domain.ports.git import Change, Git
 from orchestrator.domain.ports.harness import Harness
+from orchestrator.domain.ports.skill_catalog import SkillCatalog
 from orchestrator.domain.values import Signal
 
 UNKNOWN_SCOPE = "unknown scope {scope}: one of {scopes}"
@@ -36,6 +37,7 @@ NO_WORKTREE = "no worktree yet"
 NO_BUDGET = "no remaining budget"
 UNCONFIRMED = "anchor edits neither confirmed nor reverted: {paths}"
 NOT_AN_EDIT = "not an anchor edit of this session: {paths}"
+NO_SKILL = f"skill {session.OPENING_SKILL} is not installed"
 
 #: The Run input naming its spec folder, as `infrastructure/db/environment.py` reads it.
 SPEC_FOLDER_INPUT = "spec_folder"
@@ -43,11 +45,14 @@ SPEC_FOLDER_INPUT = "spec_folder"
 
 @dataclass(frozen=True)
 class SessionPorts:
-    """The writers' reads, the `Git` the trees are diffed through, and the live registry."""
+    """The writers' reads, the `Git` the trees are diffed through, the live registry, and
+    the installed-skills catalog the opening line's skill is looked up in."""
 
     writers: WriterPorts
     git: Git
     harnesses: Mapping[str, Harness] = field(default_factory=dict)
+    #: `None` only in a process wired with no catalog, which then checks no skill.
+    skill_catalog: SkillCatalog | None = None
 
 
 def refuse(
@@ -111,10 +116,20 @@ def _refuse_start(ports: SessionPorts, run: Run, rows: Sequence[StepRun], signal
     model = signal.payload.get(session.MODEL_KEY)
     if model and probe.models and model not in probe.models:
         raise Invalid(MODEL_UNLISTED.format(model=model, models=list(probe.models)))
+    _refuse_missing_skill(ports.skill_catalog)
     if run.worktree_path is None:
         raise Conflict(NO_WORKTREE)
     if run.budget_usd is not None and run.budget_usd - run.spend_usd <= 0:
         raise Conflict(NO_BUDGET)
+
+
+def _refuse_missing_skill(catalog: SkillCatalog | None) -> None:
+    """The opening line names the skill; a catalog that cannot answer holds no skill."""
+    if catalog is None:
+        return
+    installed = catalog.installed_skills()
+    if installed is None or session.OPENING_SKILL not in installed:
+        raise Invalid(NO_SKILL)
 
 
 def _refuse_end(

@@ -95,6 +95,9 @@ async def test_a_stop_reads_an_available_session(api: Api) -> None:
         "harness": None,
         "model": None,
         "anchor_edits": [],
+        # Story 2-5, 2026-11-02 (AD-23): the read model gains the session's turns.
+        "turn_running": False,
+        "turns": [],
     }
 
 

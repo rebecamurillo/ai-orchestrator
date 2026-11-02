@@ -557,6 +557,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/session/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send the senior session one message, queued as its next turn */
+        post: operations["post_session_message_api_v1_runs__run_id__session_messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/signals": {
         parameters: {
             query?: never;
@@ -1416,6 +1433,14 @@ export interface components {
             masked: string;
             /** Name */
             name: string;
+        };
+        /**
+         * MessageIn
+         * @description The Operator's message to the senior; blank text is refused by the use case.
+         */
+        MessageIn: {
+            /** Text */
+            text: string;
         };
         /**
          * NodeCallOut
@@ -2343,6 +2368,41 @@ export interface components {
             scope: ("story" | "epic" | "run") | null;
             /** Scopes */
             scopes: ("story" | "epic" | "run")[];
+            /** Turn Running */
+            turn_running: boolean;
+            /** Turns */
+            turns: components["schemas"]["SessionTurnOut"][];
+        };
+        /**
+         * SessionTurnOut
+         * @description One turn: the message, the reply file the senior left (`""` when it left none, and
+         *     the attempt's log is then the answer), and how the turn ended.
+         */
+        SessionTurnOut: {
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Cost Usd */
+            cost_usd: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /** Exit Code */
+            exit_code: number | null;
+            /** Message */
+            message: string;
+            /** Reply */
+            reply: string;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "queued" | "running" | "done" | "blocked" | "checkpoint" | "error" | "skipped";
+            /** Turn */
+            turn: number;
         };
         /**
          * SignalIn
@@ -4321,6 +4381,82 @@ export interface operations {
             };
             /** @description `run_id` does not parse as a UUID. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_session_message_api_v1_runs__run_id__session_messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionTurnOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No senior session is open, a turn is running, or no budget remains. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The text is empty, or the body does not parse. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The turn could not be enqueued; it was closed `error`. */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

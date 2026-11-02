@@ -183,6 +183,41 @@ class FakeHarness:
         )
         return self._next(session_id, log_path)
 
+    # Story 2-5 (spine AD-10 amendment, 2026-11-02): the resumed half that hands back its
+    # group. `resume` stays one recorded call; `wait` consumes the same script.
+    def start_resume(  # noqa: PLR0913 — the port's own signature
+        self,
+        *,
+        cwd: Path,
+        session_id: str,
+        message: str,
+        env: Mapping[str, str],
+        timeout_min: float | None,
+        log_path: Path,
+        stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
+    ) -> HarnessHandle:
+        self.calls.append(
+            {
+                "method": "start_resume",
+                "cwd": cwd,
+                "session_id": session_id,
+                "message": message,
+                "env": dict(env),
+                "model": model,
+                "budget_usd_remaining": budget_usd_remaining,
+                "timeout_min": timeout_min,
+                "stall_min": stall_min,
+                "log_path": log_path,
+                "add_dirs": tuple(add_dirs),
+            }
+        )
+        return HarnessHandle(
+            session_id=session_id, log_path=log_path, pid=DEFAULT_PID, pgid=self.pgid
+        )
+
     def resume_command(self, cwd: str, session_id: str) -> str:
         return f"cd {cwd} && {self.name} --resume {session_id}"
 
