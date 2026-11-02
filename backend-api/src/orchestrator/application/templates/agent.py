@@ -11,6 +11,7 @@ checking — with one exception that is not a deeper check but the invariant its
 
 from __future__ import annotations
 
+from orchestrator.application.templates.consult import check_consult
 from orchestrator.application.templates.lines import LinedMap, as_map, as_seq, key_line
 from orchestrator.application.templates.model import (
     CONFLICTING_ROUTE,
@@ -71,6 +72,7 @@ def check_agent_extras(node: LinedMap) -> list[ValidationError]:
     errors += _check_writes(node)
     errors += _check_prompt_clauses(node)
     errors += _check_required_prompts(node)
+    errors += check_consult(node)
     return errors + _check_retry_shapes(node)
 
 

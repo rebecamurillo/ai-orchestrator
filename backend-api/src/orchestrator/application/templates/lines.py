@@ -38,6 +38,9 @@ STEPS_KEY = "steps"
 FOR_EACH_KEY = "for_each"
 AS_KEY = "as"
 
+BOOL_TAG = "tag:yaml.org,2002:bool"
+STR_TAG = "tag:yaml.org,2002:str"
+
 
 class LinedMap(dict[Any, Any]):
     """A YAML mapping that remembers its own line and the line of each of its keys."""
@@ -68,6 +71,11 @@ class LineLoader(yaml.SafeLoader):
     """
 
     def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> LinedMap:
+        # YAML 1.1 resolves a plain `on`, `yes` or `no` to a bool, and AD-22 names a DSL key
+        # `on`: a plain key is kept as the text it was written as. Values are untouched.
+        for key, _ in node.value:
+            if isinstance(key, yaml.ScalarNode) and key.tag == BOOL_TAG and key.style is None:
+                key.tag = STR_TAG
         mapping = LinedMap(super().construct_mapping(node, deep=True))
         mapping.line = node.start_mark.line + 1
         mapping.key_lines = {key.value: key.start_mark.line + 1 for key, _ in node.value}

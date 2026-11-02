@@ -25,6 +25,8 @@ A `skills-manifest.json` is written one level above each skills directory after 
   templates (`templates/README.md`): one dispatch each per story, routed on a marker under
   `{spec_folder}/stories/.auto/`. Edit a stage here, rebuild the image; the templates only
   name the skill.
+- `senior-consult` — the senior at a `blocked` stop of a `staged-*` row that declares a
+  `consult`: answers the agent or escalates, through one decision file (AD-22).
 
 ## Adding a skill
 

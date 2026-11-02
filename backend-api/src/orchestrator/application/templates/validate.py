@@ -23,6 +23,7 @@ from typing import Any
 
 from orchestrator.application.steps import AGENT_KIND, KIND_META, TEMPLATE_CALL_KIND
 from orchestrator.application.templates.calls import check_calls
+from orchestrator.application.templates.consult import parse_consult
 from orchestrator.application.templates.expressions import check_expressions
 from orchestrator.application.templates.keys import check_keys
 from orchestrator.application.templates.lines import (
@@ -232,6 +233,7 @@ def _agent(node: LinedMap) -> AgentExtras:
         prompt_answer=_text(prompts.get("answer")),
         prompt_halt=_text(prompts.get("halt")),
         prompt_redispatch=_text(prompts.get("redispatch")),
+        consult=parse_consult(node),
     )
 
 

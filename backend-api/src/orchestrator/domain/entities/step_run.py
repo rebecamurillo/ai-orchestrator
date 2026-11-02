@@ -49,3 +49,7 @@ class StepRun(BaseModel):
     #: The innermost `…stories[n]` / `epics[n]` prefix of `path`, or `None` outside a frame.
     frame: str | None = None
     story_id: str | None = None
+    #: AD-22's consult entries, keyed by the stop kind consulted on: `{state: due | answer |
+    #: escalate | failed, question, snapshot, answered_by?, orphan_pgid?}`. One per kind for
+    #: the life of the row; only `apply_step_result` and `start_attempt` write it.
+    consults: dict[str, Any] = Field(default_factory=dict)

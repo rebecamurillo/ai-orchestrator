@@ -83,8 +83,9 @@ SIGNAL_KINDS: tuple[SignalKind, ...] = get_args(SignalKind)
 Gate = Literal["liveness", "deterministic", "human", "unvalidated"]
 GATES: tuple[Gate, ...] = get_args(Gate)
 
-#: Who a `gate_record` says did the thing it records.
-Actor = Literal["operator", "machine", "terminal"]
+#: Who a `gate_record` says did the thing it records. `senior` is a consult's outcome,
+#: written by `apply_step_result` (AD-8 amendment, 2026-11-01).
+Actor = Literal["operator", "machine", "terminal", "senior"]
 ACTORS: tuple[Actor, ...] = get_args(Actor)
 
 #: The four events that are neither a park nor a signal: the Run's own beginning and ends.
@@ -96,10 +97,11 @@ LIFECYCLE_EVENTS: tuple[LifecycleEvent, ...] = get_args(LifecycleEvent)
 
 #: The bounded re-executions AD-9 records without a Run transition of their own:
 #: `redispatch` when a verify failure sends a Run back to an earlier row (4.5),
-#: `retry_auto` when a Template's own `retry {max, prompt}` fires (Epic 5). `expired` is
-#: not here: AD-13 applies the 30-day `recv` expiry as Run `failed`, which is a lifecycle
-#: event the Run already has.
-MachineEvent = Literal["redispatch", "retry_auto"]
+#: `retry_auto` when a Template's own `retry {max, prompt}` fires (Epic 5), and AD-22's
+#: `consult` (a stop sent to a senior) and `senior_answer` (the senior's answer, delivered
+#: to the row's next agent attempt). `expired` is not here: AD-13 applies the 30-day `recv`
+#: expiry as Run `failed`, which is a lifecycle event the Run already has.
+MachineEvent = Literal["redispatch", "retry_auto", "consult", "senior_answer"]
 MACHINE_EVENTS: tuple[MachineEvent, ...] = get_args(MachineEvent)
 
 #: AD-8's own three alphabets, concatenated: what a `gate_record.event` carries for a Run

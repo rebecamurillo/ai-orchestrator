@@ -54,10 +54,12 @@ from uuid import UUID
 
 import structlog
 
+from orchestrator.application.rules import signals
 from orchestrator.application.rules.frames import rows_after
-from orchestrator.application.rules.signals import REBASELINE_FAILED
 from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
+from orchestrator.application.use_cases import apply_redispatch
+from orchestrator.application.use_cases.apply_consult import apply_consult
 from orchestrator.application.use_cases.record_trajectory import record_trajectory
 from orchestrator.application.use_cases.writers import (
     FINISHED,
@@ -84,7 +86,7 @@ from orchestrator.domain.statuses import (
     run_transition,
     step_transition,
 )
-from orchestrator.domain.values import Park, Redispatch, RunUpdates, StepResult
+from orchestrator.domain.values import Park, RunUpdates, StepResult
 
 log = structlog.get_logger(__name__)
 
@@ -115,15 +117,11 @@ RESULT_EVENTS: dict[StepStatus, StepEvent] = {
     "skipped": "skip",
 }
 
-#: The park a redispatch turns into once the Template's bound is used up (AD-9).
-VERIFY_FAILED = "verify failed {n}/{n}"
-
-#: The park a redispatch turns into when the row it would go back to was never run. Stated
-#: in `rules/signals.py`, which also reads it: the stop that reason names offers no second
-#: *Skip story* (6.4), and a rules module may not import a use case to learn its own text.
-
-#: What the gate record says when a redispatch fires.
-REDISPATCHED = "verify failed, story re-dispatched {n}/{max}"
+#: The redispatch's three sentences, still reachable here, where the writer that parks
+#: with them always kept them.
+VERIFY_FAILED = apply_redispatch.VERIFY_FAILED
+REDISPATCHED = apply_redispatch.REDISPATCHED
+REBASELINE_FAILED = signals.REBASELINE_FAILED
 
 #: What it says when a Template's own `retry` fires — the reason the executor gave, and
 #: which of the contract's attempts this is (AD-9: bounded, recorded, never silent).
@@ -217,13 +215,19 @@ def _route(
 ) -> Run:
     """Where the Run goes now: back, parked, on to the successor, done, or failed.
 
+    A consult (AD-22) is applied first: an offer or a delivered answer requeues the row
+    before `on_fail` is read, so `on_fail: fail` cannot end a Run a senior is answering.
+
     A result carrying both a `redispatch` and a `park` routes backwards: the brief applies
     the redispatch (c) before it reads `result.park` (d), and an exhausted redispatch has
     its own park to raise. No shipped executor returns both.
     """
+    consulted = apply_consult(ports, run, row, result, attempt)
+    if consulted is not None:
+        return consulted
     park, went_back = result.park, False
     if result.redispatch is not None:
-        park, went_back = _redispatch(ports, run, row, result.redispatch, attempt)
+        park, went_back = apply_redispatch.redispatch(ports, run, row, result.redispatch, attempt)
     if park is not None:
         return _park(ports, run, row, park, attempt, payload=result.payload)
     if went_back:
@@ -233,9 +237,7 @@ def _route(
         return run
     if row.status in FINISHED:
         return _advance(ports, run, row)
-    if row.status == "error":
-        return _on_fail(ports, run, row, result)
-    return run
+    return _on_fail(ports, run, row, result) if row.status == "error" else run
 
 
 def _on_fail(ports: WriterPorts, run: Run, row: StepRun, result: StepResult) -> Run:
@@ -246,42 +248,6 @@ def _on_fail(ports: WriterPorts, run: Run, row: StepRun, result: StepResult) -> 
     if action == CONTINUE:
         return _advance(ports, run, row)
     return run
-
-
-def _redispatch(
-    ports: WriterPorts,
-    run: Run,
-    row: StepRun,
-    redispatch: Redispatch,
-    attempt: Attempt | None,
-) -> tuple[Park | None, bool]:
-    """Send the Run back to an earlier row, or say why it cannot (AD-9's two bounds)."""
-    target = require_row(ports, run.id, redispatch.target_seq)
-    if target.status == "skipped":
-        return Park(kind="verify_failed", reason=REBASELINE_FAILED, path=row.path), False
-    if target.redispatch_count >= redispatch.max:
-        total = redispatch.max + 1
-        reason = VERIFY_FAILED.format(n=total)
-        return Park(kind="verify_failed", reason=reason, path=row.path), False
-    count = target.redispatch_count + 1
-    set_row(
-        ports,
-        target,
-        status=step_transition(target.status, "redispatch"),
-        redispatch_count=count,
-    )
-    record(
-        ports,
-        run,
-        Entry(
-            event="redispatch",
-            actor="machine",
-            path=row.path,
-            text=REDISPATCHED.format(n=count, max=redispatch.max),
-            attempt_n=attempt.n if attempt is not None else None,
-        ),
-    )
-    return None, True
 
 
 def _retry(

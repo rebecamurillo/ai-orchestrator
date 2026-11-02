@@ -45,6 +45,8 @@ def to_entity(row: StepRunRow) -> StepRun:
         redispatch_count=row.redispatch_count,
         frame=row.frame,
         story_id=row.story_id,
+        # the server default applies on insert only; a row built in memory carries none
+        consults=dict(row.consults or {}),
     )
 
 
@@ -65,6 +67,7 @@ def row_values(step: StepRun) -> dict[str, Any]:
         "redispatch_count": step.redispatch_count,
         "frame": step.frame,
         "story_id": step.story_id,
+        "consults": dict(step.consults),
     }
 
 

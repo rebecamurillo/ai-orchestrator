@@ -34,7 +34,17 @@ WRITES_KEY = "writes"
 PROMPTS_KEY = "prompts"
 PROMPTS_KEYS = frozenset({"dispatch", "rendered", "answer", "halt", "redispatch"})
 
-AGENT_KEYS = frozenset({"expect", "retry", "escalate_when", "pause_when", WRITES_KEY, PROMPTS_KEY})
+#: AD-22's `consult {model, harness?, skill, on, timeout_min?, prompts {dispatch, answer}}`.
+#: `on` names the stops a senior may take instead of a person; 1-5 and 1-6 widen it.
+CONSULT_KEY = "consult"
+CONSULT_KEYS = frozenset({"model", "harness", "skill", "on", "timeout_min", PROMPTS_KEY})
+CONSULT_REQUIRED = ("model", "skill", "on", PROMPTS_KEY)
+CONSULT_PROMPTS_KEYS = frozenset({"dispatch", "answer"})
+CONSULT_ON = frozenset({"blocked"})
+
+AGENT_KEYS = frozenset(
+    {"expect", "retry", "escalate_when", "pause_when", WRITES_KEY, PROMPTS_KEY, CONSULT_KEY}
+)
 FOR_EACH_KEYS = frozenset(
     {
         "id",

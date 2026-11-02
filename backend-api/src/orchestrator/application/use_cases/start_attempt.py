@@ -16,7 +16,8 @@ Three things happen, in this order, and nothing else:
 3. **The Attempt is added**, numbered from the row's own latest: `n + 1`, or `1` for a row
    that has never run. `AttemptRepository.add` refuses a duplicate `(step_run_id, n)`, so a
    second start on the same row while one is stored is a stored refusal, not a silent
-   overwrite.
+   overwrite. Its role is always written: `consult` while the row's consult entry is `due`
+   (AD-22), `agent` otherwise — the entity's default would label a consult an agent's.
 
 **A row that is already `running` is the interrupted one** (FR-12, AD-6). The walker runs
 the start and the execution inside one durable step, so a backend killed mid-step re-executes
@@ -37,6 +38,7 @@ from uuid import UUID
 
 import structlog
 
+from orchestrator.application.rules import consult
 from orchestrator.application.use_cases.writers import (
     RUN_STARTED,
     Entry,
@@ -47,11 +49,11 @@ from orchestrator.application.use_cases.writers import (
     set_row,
     set_run,
 )
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.attempt import AGENT_ROLE, Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ids import new_id
-from orchestrator.domain.statuses import run_transition, step_transition
+from orchestrator.domain.statuses import AttemptRole, run_transition, step_transition
 
 log = structlog.get_logger(__name__)
 
@@ -61,6 +63,9 @@ RUNNING = "running"
 
 #: The line a recovered, never-ended Attempt leaves when it is closed.
 INTERRUPTED = "attempt interrupted"
+
+#: The role of an attempt opened on a row whose consult entry is `due` (AD-21, AD-22).
+CONSULT_ROLE: AttemptRole = "consult"
 
 
 def start_attempt(
@@ -75,13 +80,14 @@ def start_attempt(
         run = require_run(ports, run_id)
         row = require_row(ports, run_id, seq)
         _start_run(ports, run)
-        previous = _open_the_row(ports, row)
+        previous, row = _open_the_row(ports, row)
         attempt = Attempt(
             id=new_id(),
             run_id=run.id,
             step_run_id=row.id,
             n=previous.n + 1 if previous is not None else 1,
             status="running",
+            role=CONSULT_ROLE if consult.due(row.consults) is not None else AGENT_ROLE,
             started_at=ports.clock.now(),
             engine_ref=dict(engine_ref or {}),
         )
@@ -90,7 +96,7 @@ def start_attempt(
     return attempt
 
 
-def _open_the_row(ports: WriterPorts, row: StepRun) -> Attempt | None:
+def _open_the_row(ports: WriterPorts, row: StepRun) -> tuple[Attempt | None, StepRun]:
     """Move the row to `running`, or close the Attempt the restart interrupted."""
     previous = ports.attempts.get_latest(row.id)
     if row.status == RUNNING:
@@ -99,9 +105,21 @@ def _open_the_row(ports: WriterPorts, row: StepRun) -> Attempt | None:
             ports.attempts.mark_finished(
                 previous.model_copy(update={"status": "error", "ended_at": ports.clock.now()})
             )
-        return previous
-    set_row(ports, row, status=step_transition(row.status, "start"))
-    return previous
+            row = _hand_over_the_orphan(ports, row, previous)
+        return previous, row
+    return previous, set_row(ports, row, status=step_transition(row.status, "start"))
+
+
+def _hand_over_the_orphan(ports: WriterPorts, row: StepRun, interrupted: Attempt) -> StepRun:
+    """An interrupted consult's process group, onto its entry, for the next consult attempt
+    to kill first (AD-22): the timers that bounded it lived in the dead backend's
+    `ProcessRunner`, so nothing else would ever stop it."""
+    found = consult.due(row.consults)
+    if interrupted.role != CONSULT_ROLE or found is None:
+        return row
+    kind, entry = found
+    handed = {**entry, consult.ORPHAN_PGID_KEY: interrupted.pgid}
+    return set_row(ports, row, consults={**row.consults, kind: handed})
 
 
 def _start_run(ports: WriterPorts, run: Run) -> None:

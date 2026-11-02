@@ -33,7 +33,7 @@ from orchestrator.application.rules import (
     routing,
 )
 from orchestrator.application.rules.signals import accepted_files
-from orchestrator.application.steps import agent_failure, agent_workdir
+from orchestrator.application.steps import agent_consult, agent_failure, agent_workdir
 from orchestrator.application.steps.context import (
     StepContext,
     committed,
@@ -154,7 +154,7 @@ def tail(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> StepResul
     hit = protected(ctx, attempt, outcome.routed_outcome(routed, condition))
     if hit is not None:
         return hit.model_copy(update={"output_ref": log})
-    final = _spend_and_budget(ctx, attempt, result, routed)
+    final = agent_consult.offer(ctx, attempt, _spend_and_budget(ctx, attempt, result, routed))
     return final.model_copy(update={"output_ref": log})
 
 

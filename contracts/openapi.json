@@ -986,7 +986,8 @@
             "enum": [
               "operator",
               "machine",
-              "terminal"
+              "terminal",
+              "senior"
             ],
             "title": "Actor",
             "type": "string"
@@ -1055,7 +1056,9 @@
               {
                 "enum": [
                   "redispatch",
-                  "retry_auto"
+                  "retry_auto",
+                  "consult",
+                  "senior_answer"
                 ],
                 "type": "string"
               },

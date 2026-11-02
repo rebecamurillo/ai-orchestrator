@@ -2,9 +2,9 @@
 title: 'Senior consult at a blocked stop'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
-baseline_commit: 'e9a4654957960ad463c42989d67f2c1e3e8ae205'
+baseline_commit: 'da1c73d99d64d496add4d22ded209c1bf9d0784e'
 review_loop_iteration: 0
 context: []
 ---
@@ -72,12 +72,12 @@ Under `backend-api/src/orchestrator/` unless stated.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend-api/tests/unit/application/test_consult_*.py` -- new; cover every matrix row through the shared fakes and fixture YAML, seen failing first -- TDD.
-- [ ] `backend-api/tests/unit/application/test_walk_consult_loop.py` -- new; `next_row` → `attempt_row` → `apply_result` three times over `FakeHarness`, ending in a resumed session.
-- [ ] `backend-api/tests/unit/test_run_statuses.py`, `tests/unit/test_gate_events.py` -- revise the two named assertions as decided.
-- [ ] Domain, migration, templates, rules, steps, use cases, preflight, schemas -- per Code Map. Files at the 400-line cap make room by extracting a cohesive function into a new module with its test pair, never by deleting comments.
-- [ ] `ia-agents-skills/senior-consult/SKILL.md` and `backend-api/tests/unit/test_senior_consult_skill.py` (new). The skill states the architect role ("review and validate the agent's concern against the story's intent"), the SPEC must-escalate list, the decision format (frontmatter `status`, `reason`; the body is the answer), and "change nothing but the decision file". The test asserts each.
-- [ ] Shipped templates -- per Code Map; validated by the existing loader only.
+- [x] `backend-api/tests/unit/application/test_consult_*.py` -- new; cover every matrix row through the shared fakes and fixture YAML, seen failing first -- TDD.
+- [x] `backend-api/tests/unit/application/test_walk_consult_loop.py` -- new; `next_row` → `attempt_row` → `apply_result` three times over `FakeHarness`, ending in a resumed session.
+- [x] `backend-api/tests/unit/test_run_statuses.py`, `tests/unit/test_gate_events.py` -- revise the two named assertions as decided.
+- [x] Domain, migration, templates, rules, steps, use cases, preflight, schemas -- per Code Map. Files at the 400-line cap make room by extracting a cohesive function into a new module with its test pair, never by deleting comments.
+- [x] `ia-agents-skills/senior-consult/SKILL.md` and `backend-api/tests/unit/test_senior_consult_skill.py` (new). The skill states the architect role ("review and validate the agent's concern against the story's intent"), the SPEC must-escalate list, the decision format (frontmatter `status`, `reason`; the body is the answer), and "change nothing but the decision file". The test asserts each.
+- [x] Shipped templates -- per Code Map; validated by the existing loader only.
 
 **Acceptance Criteria:**
 - Given a fixture Run whose agent blocks and whose senior answers, when the walk finishes the row, then no `blocked` gate record exists, the Run never left `running`, and the harness received `resume` with attempt n's `session_id`.
@@ -99,6 +99,19 @@ The snapshot is taken in `offer`, after the sweep, and stored on the entry. A re
 **Manual checks (if no CLI):**
 - On the dev stack, the Operator runs one consult each on `claude`, `codex` and `local`, and sees the decision file written. This closes spine open item 7.
 - A planned `staged-initiative-repo` Run with `senior_model` set carries `consult` on its three story agent rows; with it blank, none.
+
+## Implementation Notes
+
+- **Decided: trajectory.** AD-19 says the row records the Story's *agent* attempts. `record_trajectory` now lists `agent_attempts(...)` in `attempts` and reads `harness`, `model` and `start_sha` from them, so a senior's session never reads as the trajectory of the agent that built the Story. `cost_usd`, the tokens and `wall_clock_seconds` still sum every role, because AD-21 has spend read every role and the consult is part of what the Story cost. `AttemptRecord` gains no `role`. Where every attempt is `agent`, the row is unchanged. Covered by `test_consult_trajectory.py`.
+- **Decided: role on every write.** `start_attempt` always writes `role` explicitly: `consult` while the row's entry is `due`, `agent` otherwise. `agent_consult.run` writes the attempt only through `model_copy` of that entity, so `mark_started`, the `pgid` update and `mark_finished` keep it. `test_consult_start_attempt.py` and `test_consult_run.py` assert the stored role.
+- **Decided: orphans.** When `start_attempt` closes an interrupted `consult` attempt, `_hand_over_the_orphan` copies its `pgid`, even `None`, onto the due entry as `orphan_pgid`. `agent_consult.run` kills that group first, before the budget check. `apply_consult` drops `orphan_pgid` when it marks the entry. Covered by `test_consult_start_attempt.py` and `test_consult_run.py::test_an_orphaned_senior_is_killed_before_anything_else`.
+- **Decided: the senior's harness.** The offer checks that the *row's* harness can resume, since that is the session the answer goes to. The consult itself runs on `consult.harness`, or the row's harness when that is blank. Stall reads the row's `stall_min`, default 30. The timeout is `consult.timeout_min`, and none means no limit. A tree change is checked first, then a crash, then the decision. Each one fails closed with its own reason.
+- **Decided: answer over budget.** The entry is marked `answer` with no `answered_by`, and no `senior_answer` is recorded. The stop parks `blocked` (` · senior answered: {first line}`) with the `budget` record on top. Nothing is delivered later, since `delivers` needs a recorded answer. An escalation or failure over budget gets the `budget` record too.
+- **Surprised: `on` is a YAML 1.1 bool.** The bare key `on:` loaded as `True`, so the spine's `consult {on: [...]}` reported an unknown key. `templates/lines.py::LineLoader` now keeps a plain-scalar key that resolves to a bool as the text it was written as. This applies to keys only. Values such as `flag: on` stay booleans. No shipped or fixture template had such a key. Covered by `test_consult_template.py::test_a_plain_on_key_is_text_and_a_plain_on_value_stays_a_bool`.
+- **Surprised: line caps.** `apply_step_result.py` was at 400. `_redispatch` moved whole to `use_cases/apply_redispatch.py`, which has its own test. `VERIFY_FAILED`, `REDISPATCHED` and `REBASELINE_FAILED` stay reachable from `apply_step_result` (`test_skip_story_admitted.py` imports the last one). To keep ruff's six-return limit, `_route` now ends in one conditional return. `agent.py`'s `_environment`, `_remaining` and `_add_dirs` moved to `steps/agent_env.py`, which the consult reuses. `walk._context` and its helpers moved to `use_cases/walk_context.py`, and `walk.VERIFY_LOG_LINES` stays importable. `agent_tail.py` is still at 400: the hook changed two existing lines and added none.
+- **Surprised: no schema edit was needed.** `api/schemas/run_views.py` types `event` and `actor` as `GateEvent` and `Actor`. Widening the two Literals widens the contract. `make openapi` regenerated `contracts/openapi.json` and `schema.d.ts`.
+- **Tests revised (rule 1(b)).** `test_run_statuses.py::test_the_actors_are_the_three_a_gate_record_can_name` now pins `senior`. `test_gate_events.py::test_the_machine_events_are_ad_9s_two_bounded_re_executions` now pins `consult` and `senior_answer`. Each edit cites story 1-4, 2026-11-02, and the AD-8/AD-22 amendments of 2026-11-01. No other existing test was edited.
+- **Not run.** `make e2e`, `make e2e-ui` and the dev-stack manual checks were not run in this session (out of scope by instruction). The migrations e2e for 0024 and spine open item 7's live check per harness are still open.
 
 ## Spec Change Log
 

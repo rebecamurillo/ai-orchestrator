@@ -26,6 +26,9 @@ inputs:
   model:              { type: string,     required: false }
   plan_model:         { type: string,     required: true }
   review_model:       { type: string,     required: true }
+  # The senior a blocked agent row consults before a person is asked (AD-22). Blank:
+  # no consult is planned, and every blocked stop parks for a person as before.
+  senior_model:       { type: string,     required: false }
   # The Run's time limits, in minutes, passed down to every epic and story: one wall clock per
   # stage (`plan_timeout_min`, `build_timeout_min`, `review_timeout_min`), the implementer's
   # own stall limit (`build_stall_min` — plan and review take their wall clock as the stall
@@ -108,6 +111,7 @@ steps:
             model: "{{model}}"
             plan_model: "{{plan_model}}"
             review_model: "{{review_model}}"
+            senior_model: "{{senior_model}}"
             plan_timeout_min: "{{plan_timeout_min}}"
             build_timeout_min: "{{build_timeout_min}}"
             build_stall_min: "{{build_stall_min}}"
