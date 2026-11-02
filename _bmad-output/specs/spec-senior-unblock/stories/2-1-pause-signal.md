@@ -2,7 +2,7 @@
 title: 'Pause signal'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'a976f2d53431e51beaf7718e3c6135555f27709c'
 review_loop_iteration: 0
