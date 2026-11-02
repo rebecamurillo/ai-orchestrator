@@ -2,7 +2,7 @@
 title: 'Diff review at a protected_path stop'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'f1883b473af9e0800dd7088e1b9bcf2a655a6b64'
 review_loop_iteration: 0
