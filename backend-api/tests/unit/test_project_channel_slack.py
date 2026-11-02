@@ -134,7 +134,9 @@ def test_the_factory_sends_each_slack_bot_its_own_token() -> None:
     def respond(request: httpx.Request) -> httpx.Response:
         seen.append((request.url.path, request.headers["Authorization"]))
         if request.url.path.endswith("/auth.test"):
-            return httpx.Response(200, json={"ok": True, "user_id": "UB", "user": "bot"})
+            # Story 3-2 review, 2026-11-02 (hard rule 1(b)): `auth.test` must name a `bot_id`.
+            auth = {"ok": True, "user_id": "UB", "user": "bot", "bot_id": "B1"}
+            return httpx.Response(200, json=auth)
         return httpx.Response(200, json={"ok": True, "channel": {"is_member": True}})
 
     factory = ChatChannels(transport=httpx.MockTransport(respond))

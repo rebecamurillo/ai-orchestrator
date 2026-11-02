@@ -198,7 +198,13 @@ def test_post_names_each_user_by_id_on_the_first_line_and_answers_the_ts() -> No
     assert (seen[0].method, seen[0].url.path) == ("POST", "/api/chat.postMessage")
     assert seen[0].headers["Content-Type"] == "application/json; charset=utf-8"
     assert seen[0].headers["Authorization"] == f"Bearer {TOKEN}"
-    assert json.loads(seen[0].content) == {"channel": CHANNEL, "text": "<@U1> <@U2>\nRun blocked"}
+    # Story 3-2 review, 2026-11-02 (hard rule 1(b)): every post now also sends no unfurls.
+    assert json.loads(seen[0].content) == {
+        "channel": CHANNEL,
+        "text": "<@U1> <@U2>\nRun blocked",
+        "unfurl_links": False,
+        "unfurl_media": False,
+    }
 
 
 def test_post_without_mentions_sends_the_text_alone() -> None:
@@ -230,10 +236,13 @@ def test_reply_posts_under_the_root_ts() -> None:
 
     channel.reply(ROOT, "on it")
 
+    # Story 3-2 review, 2026-11-02 (hard rule 1(b)): every reply now also sends no unfurls.
     assert json.loads(seen[0].content) == {
         "channel": CHANNEL,
         "text": "on it",
         "thread_ts": ROOT.id,
+        "unfurl_links": False,
+        "unfurl_media": False,
     }
 
 

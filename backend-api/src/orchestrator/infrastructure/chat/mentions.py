@@ -8,7 +8,7 @@ end, failing closed. `re.ASCII` stops Unicode case folds (the long s, the Kelvin
 
 Slack (`slack_*`) names a user as `<@ID>` or `<@ID|label>`, matched exactly and case-sensitively,
 after the same masking. Slack stores a typed `>` as `&gt;`, so a line opening with either is
-a quote.
+a quote, and a line opening with `>>>` (`&gt;&gt;&gt;`) quotes everything after it.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import re
 _FENCE = re.compile(r"^[ \t]*(`{3,}|~{3,}).*?(?:^[ \t]*\1[ \t]*$|\Z)", re.MULTILINE | re.DOTALL)
 _INLINE_CODE = re.compile(r"(`+).+?\1", re.DOTALL)
 _QUOTE = re.compile(r"^[ \t]*>.*$", re.MULTILINE)
-_SLACK_QUOTE = re.compile(r"^[ \t]*(?:>|&gt;).*$", re.MULTILINE)
+_SLACK_QUOTE = re.compile(r"^[ \t]*(?:(?:>>>|&gt;&gt;&gt;)[\s\S]*\Z|(?:>|&gt;).*$)", re.MULTILINE)
 
 
 def _blank(match: re.Match[str]) -> str:

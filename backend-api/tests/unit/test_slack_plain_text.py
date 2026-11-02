@@ -15,7 +15,8 @@ from orchestrator.infrastructure.chat.slack import SlackChannel
 
 BOT = "UBOT"
 ROOT = ThreadRef(id="1700000000.000000")
-AUTH = {"ok": True, "user_id": BOT, "user": "orchestrator"}
+# Story 3-2 review, 2026-11-02 (hard rule 1(b)): `auth.test` must now name a `bot_id`.
+AUTH = {"ok": True, "user_id": BOT, "user": "orchestrator", "bot_id": "B1"}
 
 
 def read_one(text: str) -> tuple[str, str, bool]:

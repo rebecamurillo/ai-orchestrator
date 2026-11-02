@@ -31,6 +31,7 @@ from orchestrator.domain.ports.chat import ChatError, ChatUser, Reply, ThreadRef
 from orchestrator.infrastructure.chat.http import (
     TOKEN_REFUSED,
     Params,
+    excerpt,
     exchange,
     new_client,
     redact_token,
@@ -42,8 +43,12 @@ from orchestrator.infrastructure.chat.mentions import slack_mentions_bot, slack_
 PER_PAGE = 200
 #: Bounds on one thread read, since `next_cursor` is the server's to choose.
 MAX_PAGES = 50
-#: How much of a non-2xx body a detail carries.
-ERROR_BODY_LIMIT = 300
+HTTPS_REQUIRED = "a Slack base URL must use https"
+NOT_A_BOT = "auth.test: the token is not a bot token"
+#: An id rendered as `<@id>` must be a Slack user id, or it could close the bracket and
+#: open `<!channel>`.
+_USER_ID = re.compile(r"[A-Z0-9]+")
+USER_ID_REFUSED = "a mention's user id is not a Slack user id"
 #: Any of these, set to anything, marks a message that is not a person's own words: a bot,
 #: an app or workflow posting under someone's id, or an event (join, broadcast, edit).
 NOT_A_PERSON = ("subtype", "bot_id", "bot_profile", "app_id")
@@ -68,6 +73,8 @@ class SlackChannel:
     ) -> None:
         if not sendable(token):
             raise ChatError(TOKEN_REFUSED)
+        if not base_url.lower().startswith("https://"):
+            raise ChatError(HTTPS_REQUIRED)
         self._base = base_url.rstrip("/")
         self._channel_id = channel_id
         self._token = token
@@ -75,6 +82,8 @@ class SlackChannel:
         self._me: ChatUser | None = None
 
     def post(self, text: str, mentions: Sequence[ChatUser]) -> ThreadRef:
+        if not all(_USER_ID.fullmatch(user.id) for user in mentions):
+            raise ChatError(USER_ID_REFUSED)
         names = " ".join(f"<@{user.id}>" for user in mentions)
         message = f"{names}\n{_escape(text)}" if names else _escape(text)
         return ThreadRef(id=self._post({"channel": self._channel_id, "text": message}))
@@ -124,8 +133,9 @@ class SlackChannel:
             self._me = self._call("POST", "auth.test", _identity)
         return self._me
 
-    def _post(self, body: dict[str, str]) -> str:
-        return self._call("POST", "chat.postMessage", _ts, body=body)
+    def _post(self, body: dict[str, object]) -> str:
+        quiet = {**body, "unfurl_links": False, "unfurl_media": False}
+        return self._call("POST", "chat.postMessage", _ts, body=quiet)
 
     def _call[T](
         self,
@@ -134,7 +144,7 @@ class SlackChannel:
         parse: Callable[[dict[str, Any]], T],
         *,
         params: Params | None = None,
-        body: dict[str, str] | None = None,
+        body: dict[str, object] | None = None,
     ) -> T:
         url = f"{self._base}/{method}"
         headers = JSON_UTF8 if body is not None else None
@@ -144,14 +154,14 @@ class SlackChannel:
         if status == _TOO_MANY:
             raise ChatError(f"{method}: 429 rate limited, {_retry_after(answer_headers)}")
         if not httpx.codes.is_success(status):
-            cut = content.decode("utf-8", "replace")[:ERROR_BODY_LIMIT]
+            cut = excerpt(content.decode("utf-8", "replace"), self._token)
             raise self._error(f"{method}: {status} {cut}".rstrip())
         try:
             answer = _require(json.loads(content), dict)
         except ValueError, _Unexpected:
             raise ChatError(f"unexpected response from {method}") from None
         if answer.get("ok") is not True:
-            raise self._error(f"{method}: {_refusal(answer)}")
+            raise self._error(f"{method}: {_refusal(answer, self._token)}")
         try:
             return parse(answer)
         except KeyError, TypeError, ValueError, _Unexpected:
@@ -180,11 +190,12 @@ def _retry_after(headers: httpx.Headers) -> str:
     return f"Retry-After {value} s" if _RETRY_AFTER.fullmatch(value) else "no Retry-After given"
 
 
-def _refusal(answer: dict[str, Any]) -> str:
+def _refusal(answer: dict[str, Any], token: str) -> str:
     error, needed = answer.get("error"), answer.get("needed")
     if not isinstance(error, str):
         return "refused without an error code"
-    return f"{error} (needed: {needed})" if isinstance(needed, str) else error
+    code = excerpt(error, token)
+    return f"{code} (needed: {excerpt(needed, token)})" if isinstance(needed, str) else code
 
 
 def _set(value: object) -> bool:
@@ -236,7 +247,11 @@ def _timestamp(value: object) -> str:
 
 
 def _identity(answer: dict[str, Any]) -> ChatUser:
-    return ChatUser(id=_require(answer["user_id"], str), handle=_require(answer["user"], str))
+    me = ChatUser(id=_require(answer["user_id"], str), handle=_require(answer["user"], str))
+    bot_id = answer.get("bot_id")
+    if not isinstance(bot_id, str) or not bot_id:
+        raise ChatError(NOT_A_BOT)
+    return me
 
 
 def _membership(answer: dict[str, Any]) -> tuple[bool, bool]:

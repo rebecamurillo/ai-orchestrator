@@ -22,6 +22,8 @@ from orchestrator.infrastructure.redact import redact
 TIMEOUT_SECONDS = 10.0
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 TOKEN_REFUSED = "the token must be non-empty printable ASCII with no whitespace"
+#: How much of a platform's own error text a detail carries.
+ERROR_BODY_LIMIT = 300
 
 Params = Mapping[str, str | int]
 
@@ -48,6 +50,11 @@ def redact_token(detail: str, token: str) -> str:
     for form in {token, repr(token)[1:-1], repr(token.encode())[2:-1]}:
         detail = redact(detail, form)
     return detail
+
+
+def excerpt(text: str, token: str, limit: int = ERROR_BODY_LIMIT) -> str:
+    """`text` redacted, then cut. Cut first, a token straddling the limit leaks its prefix."""
+    return redact_token(text, token)[:limit]
 
 
 def read_capped(response: httpx.Response) -> bytes:

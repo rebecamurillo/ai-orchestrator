@@ -18,7 +18,8 @@ from orchestrator.infrastructure.chat.slack import MAX_PAGES, SlackChannel
 
 BASE = "https://slack.example.test/api"
 TOKEN = "xoxb-1234-5678-sekrit"
-AUTH = {"ok": True, "user_id": "UBOT", "user": "orchestrator"}
+# Story 3-2 review, 2026-11-02 (hard rule 1(b)): `auth.test` must now name a `bot_id`.
+AUTH = {"ok": True, "user_id": "UBOT", "user": "orchestrator", "bot_id": "B1"}
 ROOT = ThreadRef(id="1700000000.000000")
 
 

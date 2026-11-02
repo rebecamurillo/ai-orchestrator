@@ -14,6 +14,7 @@ undefined. Each page is re-sorted by `(create_at, id)`, the store's own order
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -21,9 +22,11 @@ import httpx
 
 from orchestrator.domain.ports.chat import ChatError, ChatUser, Reply, ThreadRef
 from orchestrator.infrastructure.chat.http import (
+    ERROR_BODY_LIMIT,
     MAX_RESPONSE_BYTES,
     TIMEOUT_SECONDS,
     TOKEN_REFUSED,
+    excerpt,
     exchange,
     new_client,
     redact_token,
@@ -34,8 +37,9 @@ from orchestrator.infrastructure.chat.mentions import mentions_bot, strip_mentio
 API = "/api/v4"
 #: The server's `PerPageMaximum`.
 PER_PAGE = 200
-#: How much of an error body that is not an `AppError` a detail carries.
-ERROR_BODY_LIMIT = 300
+#: A handle rendered as `@handle` must be a username, or it could carry `@channel` or a newline.
+_USERNAME = re.compile(r"[a-z0-9._-]+")
+HANDLE_REFUSED = "a mention's handle is not a Mattermost username"
 #: Bounds on one thread read, since `has_next` and a body are the server's to choose.
 MAX_PAGES = 50
 #: `props` flags marking a post someone made through an integration, under their own user id.
@@ -77,6 +81,8 @@ class MattermostChannel:
         self._me: ChatUser | None = None
 
     def post(self, text: str, mentions: Sequence[ChatUser]) -> ThreadRef:
+        if not all(_USERNAME.fullmatch(user.handle) for user in mentions):
+            raise ChatError(HANDLE_REFUSED)
         names = " ".join(f"@{user.handle}" for user in mentions)
         message = f"{names}\n{text}" if names else text
         return ThreadRef(id=self._create({"channel_id": self._channel_id, "message": message}))
@@ -138,7 +144,7 @@ class MattermostChannel:
             self._client, method, url, self._token, path, params=params, json=body
         )
         if not httpx.codes.is_success(status):
-            raise self._error(f"{status} {_message(content)}".rstrip())
+            raise self._error(f"{status} {_message(content, self._token)}".rstrip())
         try:
             return parse(json.loads(content))
         except ValueError, KeyError, TypeError, _Unexpected:
@@ -148,14 +154,15 @@ class MattermostChannel:
         return ChatError(redact_token(detail, self._token))
 
 
-def _message(content: bytes) -> str:
+def _message(content: bytes, token: str) -> str:
     try:
         body = json.loads(content)
     except ValueError:
         body = None
-    if isinstance(body, dict) and isinstance(body.get("message"), str):
-        return body["message"]
-    return content.decode("utf-8", "replace")[:ERROR_BODY_LIMIT]
+    message = body.get("message") if isinstance(body, dict) else None
+    if isinstance(message, str):
+        return excerpt(message, token)
+    return excerpt(content.decode("utf-8", "replace"), token)
 
 
 def _parse_cursor(cursor: str | None) -> Position | None:

@@ -117,4 +117,21 @@ Slack Web API facts, verified 2026-11-02:
 - **Built:** `infrastructure/chat/http.py` and `slack.py` (new), the Slack matchers in `mentions.py`, which now shares one `_without` helper with `strip_mentions`, `slack` in `open_channel`, and `slack` in `ProviderIn`. `REQUIRED_REASON` now names the provider. `mattermost.py` sends through `http.exchange` with no behaviour change (its two suites pass unchanged), and it lists the moved names in `__all__`, so `from …mattermost import TIMEOUT_SECONDS, MAX_RESPONSE_BYTES, new_client` still resolves. The port, the use case, the entity, the fakes and the migration are unchanged. `make openapi` added `slack` to the `provider` enum of `ChannelIn` and `ChannelOut`.
 - **Tests:** five new modules. All of them failed at collection before the code existed. The four rule-1(b) revisions listed under Tasks were the only existing tests that failed once `slack` was allowed, and each now names this story and its date. The two refusal cases now use the unknown provider `teams`, so "an unknown provider is refused at its field" keeps its coverage.
 - **Gates:** `make lint` green (test pairs 306 modules). `make test` green: backend 9,625 passed and 1 skipped, with domain and application at 100% branch coverage and the chat modules fully covered; web-client 1,846 passed. A second `make openapi` changed nothing.
-- **Pre-existing, not touched:** `mypy` on `infrastructure/chat` (outside the gate) reports `no-any-return` at `mattermost.py::_message`, from 3-1.
+- **Pre-existing:** `mypy` on `infrastructure/chat`, which is outside the gate, reported `no-any-return` at `mattermost.py::_message`, from 3-1. The review fix below rewrote that function, and `mypy` on `infrastructure/chat` is now clean.
+
+## Review Triage Log
+
+Review of 6eadca3, 2026-11-02. The tests are in `tests/unit/test_chat_adapter_review.py`, and each failed before its fix.
+
+| Finding | Verdict | Action |
+| --- | --- | --- |
+| D1. Error text was cut to 300 characters before it was redacted, so a token straddling the cut leaked its prefix. This was in Slack's non-2xx body and in `mattermost.py::_message`. | medium-high, AD-5 | `http.excerpt(text, token)` redacts and then cuts. Both adapters use it for non-2xx bodies, Slack's `ok:false` `error` and `needed`, and Mattermost's `AppError.message`, which is now capped too. There are straddling-token tests for each adapter. |
+| D2. Slack's `>>>` (`&gt;&gt;&gt;`) quotes the rest of the message, but a mention after it counted. | medium | `_SLACK_QUOTE` blanks from a line that opens with `>>>` to the end of the text. |
+| D3. A configured user id such as `U1><!channel` injected `<!channel>`. | medium | Slack refuses a mention id that is not `^[A-Z0-9]+$`, and Mattermost a handle that is not `^[a-z0-9._-]+$`. Each raises a fixed `ChatError` before any request, without echoing the value. The schema is unchanged. |
+| D4. The xoxb token could travel over plain http. | medium | `SlackChannel.__init__` refuses a base URL that does not start with `https://` (`a Slack base URL must use https`). Mattermost keeps http for LAN hosts. |
+| Nit. Link unfurls. | low | `chat.postMessage` sends `unfurl_links: false` and `unfurl_media: false`. |
+| Nit. A user token passed for a bot token. | low | `auth.test` must answer a non-empty `bot_id`; otherwise it raises `auth.test: the token is not a bot token`. |
+
+Revisions under rule 1(b), each citing "story 3-2 review, 2026-11-02":
+- the two exact-body assertions in `test_slack_adapter.py`, which now also expect the unfurl flags;
+- the `auth.test` fixtures in `test_slack_adapter_hardening.py`, `test_slack_plain_text.py` and `test_project_channel_slack.py`, which gain `bot_id`.
