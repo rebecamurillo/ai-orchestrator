@@ -49,6 +49,7 @@ from orchestrator.application.steps import shell as _shell  # noqa: F401
 from orchestrator.application.use_cases.dependency_sweep import sweep_dependency_waiting
 from orchestrator.application.use_cases.session_sweep import sweep_session_turns
 from orchestrator.application.use_cases.session_turn import TurnPorts
+from orchestrator.domain.ports.chat import ChatChannelFactory
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
@@ -72,7 +73,7 @@ from orchestrator.infrastructure.process import RealProcessRunner
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.skill_catalog import FsSkillCatalog, manifest_path
-from orchestrator.infrastructure.terminal_jobs import engine_jobs
+from orchestrator.infrastructure.terminal_jobs import CHAT_SLOT, current_chat, engine_jobs
 from orchestrator.infrastructure.tracing import build_tracer
 from orchestrator.infrastructure.workspace import FsWorkspace
 
@@ -204,6 +205,7 @@ def serving(
     engine: DbosWorkflowEngine,
     session_factory: SessionFactory | None = None,
     git: Git | None = None,
+    chat: ChatChannelFactory | None = None,
 ) -> Iterator[DbosWorkflowEngine]:
     """Name the engine the start-up step is to launch, for the length of the server's life.
 
@@ -211,9 +213,14 @@ def serving(
     is what lets `schedule_jobs` build the two jobs' own ports from the app's adapters
     rather than a fresh connection pool, while every test that calls `serving(engine)` with
     the engine alone keeps working unchanged — it never reaches `schedule_jobs` either way.
+
+    `chat` goes in `terminal_jobs.CHAT_SLOT` for as long as this block runs, and `chat_poll`
+    reads it there on every fire; a fire after this block has exited does nothing.
     """
     entry = (engine, session_factory, git)
     _SERVING.append(entry)
+    if chat is not None:
+        CHAT_SLOT.append(chat)
     try:
         yield engine
     finally:
@@ -221,6 +228,8 @@ def serving(
         # named. Nothing nests one today; this costs nothing and does not have to be read
         # twice to be sure of that.
         _SERVING.remove(entry)
+        if chat is not None:
+            CHAT_SLOT.remove(chat)
 
 
 def launch_engine() -> None:
@@ -287,5 +296,7 @@ def schedule_engine_jobs(settings: Settings) -> None:
     for engine, session_factory, git in _SERVING:
         if session_factory is None or git is None:
             continue
-        for name, cron, job in engine_jobs(settings, session_factory, git, engine):
+        for name, cron, job in engine_jobs(
+            settings, session_factory, git, engine, chat=current_chat()
+        ):
             engine.schedule(name, cron, job)

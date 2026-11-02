@@ -14,6 +14,8 @@ from orchestrator.infrastructure.db.engine import create_engine_from
 # table in `Base.metadata`, which is what `alembic --autogenerate` compares against
 from orchestrator.infrastructure.db.models import (
     AttemptRow,
+    ChatNoticeRow,
+    ChatThreadRow,
     GateRecordRow,
     HarnessRow,
     ProjectChannelRow,
@@ -27,6 +29,8 @@ from orchestrator.infrastructure.db.models import (
 )
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyAttemptRepository,
+    SQLAlchemyChatNoticeRepository,
+    SQLAlchemyChatThreadRepository,
     SQLAlchemyGateRecordRepository,
     SQLAlchemyHarnessRepository,
     SQLAlchemyHistoryQuery,
@@ -46,6 +50,8 @@ __all__ = [
     "NAMING_CONVENTION",
     "AttemptRow",
     "Base",
+    "ChatNoticeRow",
+    "ChatThreadRow",
     "GateRecordRow",
     "HarnessRow",
     "ProjectChannelRow",
@@ -53,6 +59,8 @@ __all__ = [
     "RepositoryRow",
     "RunRow",
     "SQLAlchemyAttemptRepository",
+    "SQLAlchemyChatNoticeRepository",
+    "SQLAlchemyChatThreadRepository",
     "SQLAlchemyGateRecordRepository",
     "SQLAlchemyHarnessRepository",
     "SQLAlchemyHistoryQuery",

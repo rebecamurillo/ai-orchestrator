@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from orchestrator.domain.entities.project_channel import ProjectChannel
@@ -64,6 +65,10 @@ class SQLAlchemyProjectChannelRepository:
     def get(self, project_id: UUID) -> ProjectChannel | None:
         row = self._session.get(ProjectChannelRow, project_id)
         return None if row is None else to_entity(row)
+
+    def list_all(self) -> list[ProjectChannel]:
+        statement = select(ProjectChannelRow).order_by(ProjectChannelRow.project_id)
+        return [to_entity(row) for row in self._session.scalars(statement).all()]
 
     def put(self, channel: ProjectChannel) -> None:
         values: dict[str, Any] = {

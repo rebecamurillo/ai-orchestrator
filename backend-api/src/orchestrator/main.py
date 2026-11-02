@@ -354,7 +354,7 @@ def main() -> None:
     # owns one pooled HTTP client for every Project's channel, so it is closed here
     chat = ChatChannels()
     try:
-        with serving(engine, session_factory, git):
+        with serving(engine, session_factory, git, chat=chat):
             _serve(settings, session_factory, git, engine, chat)
     finally:
         chat.close()

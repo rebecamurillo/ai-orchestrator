@@ -63,6 +63,7 @@ from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
     SQLAlchemyAttemptRepository,
+    SQLAlchemyChatThreadRepository,
     SQLAlchemyGateRecordRepository,
     SQLAlchemyHarnessRepository,
     SQLAlchemyHistoryQuery,
@@ -293,6 +294,7 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
                 name in harnesses and harnesses[name].capabilities.resume
             ),
             git=git_adapter(request),
+            chat_threads=SQLAlchemyChatThreadRepository(uow.session),
         )
 
 

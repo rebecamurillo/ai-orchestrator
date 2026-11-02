@@ -40,6 +40,11 @@ class FakeUnitOfWork:
         self._entered = False
         self.calls.append("exit")
 
+    @property
+    def is_open(self) -> bool:
+        """Whether a `with` block is open on it now (story 3-3's no-send-in-a-transaction check)."""
+        return self._entered
+
     def commit(self) -> None:
         self._require_open("commit")
         self.committed = True

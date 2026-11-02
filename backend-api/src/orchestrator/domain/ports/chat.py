@@ -58,14 +58,17 @@ class ChatError(Exception):
 
 @runtime_checkable
 class ChatChannel(Protocol):
-    """Post, reply, read replies and check access in one channel. Every failure is `ChatError`."""
+    """Post, reply, read replies and check access in one channel. Every failure is `ChatError`.
+
+    An adapter delivers text as one message or raises `ChatError`; it never splits.
+    """
 
     def post(self, text: str, mentions: Sequence[ChatUser]) -> ThreadRef:
         """Start a thread naming `mentions`, each in the adapter's own syntax."""
         ...
 
-    def reply(self, thread: ThreadRef, text: str) -> None:
-        """Post `text` in `thread`."""
+    def reply(self, thread: ThreadRef, text: str, mentions: Sequence[ChatUser] = ()) -> None:
+        """Post `text` in `thread`, naming `mentions` as `post` names them."""
         ...
 
     def replies_since(self, thread: ThreadRef, cursor: str | None) -> list[Reply]:

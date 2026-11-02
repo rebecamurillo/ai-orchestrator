@@ -7,7 +7,7 @@ with `ChatError`, as an adapter refuses a malformed one.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from orchestrator.domain.ports.chat import ChatError, ChatProvider, ChatUser, Reply, ThreadRef
 
@@ -22,6 +22,8 @@ class FakeChatChannel:
         self.probe_handle = probe_handle
         self.posts: list[tuple[str, tuple[ChatUser, ...]]] = []
         self.replies: list[tuple[ThreadRef, str]] = []
+        self.reply_mentions: list[tuple[ChatUser, ...]] = []
+        self.on_send: Callable[[], None] | None = None
         self.reads: list[tuple[ThreadRef, str | None]] = []
         self.probes = 0
         self._threads: dict[str, list[Reply]] = {}
@@ -36,15 +38,18 @@ class FakeChatChannel:
         self._threads.setdefault(thread.id, []).extend(replies)
 
     def post(self, text: str, mentions: Sequence[ChatUser]) -> ThreadRef:
+        self._sending()
         self._raise_scripted()
         self.posts.append((text, tuple(mentions)))
         thread = ThreadRef(id=f"thread-{len(self.posts)}")
         self._threads.setdefault(thread.id, [])
         return thread
 
-    def reply(self, thread: ThreadRef, text: str) -> None:
+    def reply(self, thread: ThreadRef, text: str, mentions: Sequence[ChatUser] = ()) -> None:
+        self._sending()
         self._raise_scripted()
         self.replies.append((thread, text))
+        self.reply_mentions.append(tuple(mentions))
 
     def replies_since(self, thread: ThreadRef, cursor: str | None) -> list[Reply]:
         self._raise_scripted()
@@ -61,6 +66,10 @@ class FakeChatChannel:
         self._raise_scripted()
         self.probes += 1
         return self.probe_handle
+
+    def _sending(self) -> None:
+        if self.on_send is not None:
+            self.on_send()
 
     def _raise_scripted(self) -> None:
         error, self._error = self._error, None

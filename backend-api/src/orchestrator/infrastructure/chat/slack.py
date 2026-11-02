@@ -49,6 +49,10 @@ NOT_A_BOT = "auth.test: the token is not a bot token"
 #: open `<!channel>`.
 _USER_ID = re.compile(r"[A-Z0-9]+")
 USER_ID_REFUSED = "a mention's user id is not a Slack user id"
+#: `chat.postMessage` may split a longer `text` into several messages, and a split root
+#: breaks the thread, so a message is refused past this (the port never splits).
+MAX_TEXT_CHARS = 4000
+TOO_LONG = "text too long after escaping: {n}"
 #: Any of these, set to anything, marks a message that is not a person's own words: a bot,
 #: an app or workflow posting under someone's id, or an event (join, broadcast, edit).
 NOT_A_PERSON = ("subtype", "bot_id", "bot_profile", "app_id")
@@ -82,14 +86,12 @@ class SlackChannel:
         self._me: ChatUser | None = None
 
     def post(self, text: str, mentions: Sequence[ChatUser]) -> ThreadRef:
-        if not all(_USER_ID.fullmatch(user.id) for user in mentions):
-            raise ChatError(USER_ID_REFUSED)
-        names = " ".join(f"<@{user.id}>" for user in mentions)
-        message = f"{names}\n{_escape(text)}" if names else _escape(text)
+        message = _message(text, mentions)
         return ThreadRef(id=self._post({"channel": self._channel_id, "text": message}))
 
-    def reply(self, thread: ThreadRef, text: str) -> None:
-        self._post({"channel": self._channel_id, "text": _escape(text), "thread_ts": thread.id})
+    def reply(self, thread: ThreadRef, text: str, mentions: Sequence[ChatUser] = ()) -> None:
+        message = _message(text, mentions)
+        self._post({"channel": self._channel_id, "text": message, "thread_ts": thread.id})
 
     def replies_since(self, thread: ThreadRef, cursor: str | None) -> list[Reply]:
         after = _parse_cursor(cursor)
@@ -169,6 +171,16 @@ class SlackChannel:
 
     def _error(self, detail: str) -> ChatError:
         return ChatError(redact_token(detail, self._token))
+
+
+def _message(text: str, mentions: Sequence[ChatUser]) -> str:
+    if not all(_USER_ID.fullmatch(user.id) for user in mentions):
+        raise ChatError(USER_ID_REFUSED)
+    names = " ".join(f"<@{user.id}>" for user in mentions)
+    message = f"{names}\n{_escape(text)}" if names else _escape(text)
+    if len(message) > MAX_TEXT_CHARS:
+        raise ChatError(TOO_LONG.format(n=len(message)))
+    return message
 
 
 def _escape(text: str) -> str:

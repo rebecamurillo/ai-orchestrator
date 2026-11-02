@@ -9,6 +9,11 @@ A thread is paged explicitly: the server returns a whole thread for `perPage=0` 
 now" (`server/channels/api4/post.go::getPostThread`), and without `direction` the order is
 undefined. Each page is re-sorted by `(create_at, id)`, the store's own order
 (`sqlstore/post_store.go::Get`), rather than trusting `order` to be ascending.
+
+Outgoing text is neutralised (story 3-3, D1): `props.disable_group_highlight` does not
+suppress notifications, so `@channel` in an agent's question would ping everyone. Each `@`
+that could open a mention gets U+2060 after it, and `[`, `]` are escaped so no link renders
+under another text. Only the adapter's own prefix names people.
 """
 
 from __future__ import annotations
@@ -40,6 +45,12 @@ PER_PAGE = 200
 #: A handle rendered as `@handle` must be a username, or it could carry `@channel` or a newline.
 _USERNAME = re.compile(r"[a-z0-9._-]+")
 HANDLE_REFUSED = "a mention's handle is not a Mattermost username"
+#: Usernames the server reads as a group mention, never as a person.
+GROUP_HANDLES = frozenset({"channel", "here", "all"})
+GROUP_REFUSED = "a mention's handle names a group: channel, here or all"
+WORD_JOINER = "\u2060"
+#: An `@` that could open a mention: not preceded by a word character, as in an address.
+_MENTION_START = re.compile(r"(?<!\w)@")
 #: Bounds on one thread read, since `has_next` and a body are the server's to choose.
 MAX_PAGES = 50
 #: `props` flags marking a post someone made through an integration, under their own user id.
@@ -81,14 +92,12 @@ class MattermostChannel:
         self._me: ChatUser | None = None
 
     def post(self, text: str, mentions: Sequence[ChatUser]) -> ThreadRef:
-        if not all(_USERNAME.fullmatch(user.handle) for user in mentions):
-            raise ChatError(HANDLE_REFUSED)
-        names = " ".join(f"@{user.handle}" for user in mentions)
-        message = f"{names}\n{text}" if names else text
+        message = _message(text, mentions)
         return ThreadRef(id=self._create({"channel_id": self._channel_id, "message": message}))
 
-    def reply(self, thread: ThreadRef, text: str) -> None:
-        self._create({"channel_id": self._channel_id, "message": text, "root_id": thread.id})
+    def reply(self, thread: ThreadRef, text: str, mentions: Sequence[ChatUser] = ()) -> None:
+        message = _message(text, mentions)
+        self._create({"channel_id": self._channel_id, "message": message, "root_id": thread.id})
 
     def replies_since(self, thread: ThreadRef, cursor: str | None) -> list[Reply]:
         after = _parse_cursor(cursor)
@@ -144,7 +153,7 @@ class MattermostChannel:
             self._client, method, url, self._token, path, params=params, json=body
         )
         if not httpx.codes.is_success(status):
-            raise self._error(f"{status} {_message(content, self._token)}".rstrip())
+            raise self._error(f"{status} {_error_message(content, self._token)}".rstrip())
         try:
             return parse(json.loads(content))
         except ValueError, KeyError, TypeError, _Unexpected:
@@ -154,7 +163,24 @@ class MattermostChannel:
         return ChatError(redact_token(detail, self._token))
 
 
-def _message(content: bytes, token: str) -> str:
+def neutralise(text: str) -> str:
+    """`text` that can open no mention and no link: U+2060 after each `@` that could start
+    one, and `[`, `]` escaped. The adapter's own mention prefix is built apart."""
+    escaped = text.replace("[", "\\[").replace("]", "\\]")
+    return _MENTION_START.sub(f"@{WORD_JOINER}", escaped)
+
+
+def _message(text: str, mentions: Sequence[ChatUser]) -> str:
+    if not all(_USERNAME.fullmatch(user.handle) for user in mentions):
+        raise ChatError(HANDLE_REFUSED)
+    if any(user.handle in GROUP_HANDLES for user in mentions):
+        raise ChatError(GROUP_REFUSED)
+    names = " ".join(f"@{user.handle}" for user in mentions)
+    body = neutralise(text)
+    return f"{names}\n{body}" if names else body
+
+
+def _error_message(content: bytes, token: str) -> str:
     try:
         body = json.loads(content)
     except ValueError:

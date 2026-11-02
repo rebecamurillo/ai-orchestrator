@@ -11,10 +11,12 @@ rule, and rules live in `application/`.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.chat_thread import ChatNotice, ChatThread, ChatThreadState
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.project_channel import ProjectChannel
@@ -55,6 +57,10 @@ class ProjectChannelRepository(Protocol):
 
     def get(self, project_id: UUID) -> ProjectChannel | None:
         """This Project's channel, or `None`."""
+        ...
+
+    def list_all(self) -> list[ProjectChannel]:
+        """Every stored channel, ordered by `project_id`."""
         ...
 
     def put(self, channel: ProjectChannel) -> None:
@@ -241,4 +247,56 @@ class GateRecordRepository(Protocol):
 
     def list_for_run(self, run_id: UUID) -> list[GateRecord]:
         """Every record of this Run, oldest first, `id` breaking a tie on `at`."""
+        ...
+
+
+@runtime_checkable
+class ChatThreadRepository(Protocol):
+    """Stored stop threads (AD-25). A write reads its row through `get_for_update` first,
+    after the Run's lock when it takes both."""
+
+    def add(self, thread: ChatThread) -> bool:
+        """Store a new thread; `False`, storing nothing, when its stop or `ref` is taken."""
+        ...
+
+    def get(self, thread_id: UUID) -> ChatThread | None:
+        """The thread with this id, or `None`."""
+        ...
+
+    def get_for_update(self, thread_id: UUID) -> ChatThread | None:
+        """The thread with this id under a row lock, or `None`."""
+        ...
+
+    def get_by_stop(self, run_id: UUID, park_seq: int) -> ChatThread | None:
+        """The thread of this Run's stop `park_seq`, or `None`."""
+        ...
+
+    def list_open_for_project(self, project_id: UUID) -> list[ChatThread]:
+        """Every `open` thread on this Project's Runs, oldest first."""
+        ...
+
+    def list_by_state(self, state: ChatThreadState) -> list[ChatThread]:
+        """Every thread in `state`, oldest first."""
+        ...
+
+    def update(self, thread: ChatThread) -> None:
+        """Replace the stored thread with this one, matched on its id."""
+        ...
+
+
+@runtime_checkable
+class ChatNoticeRepository(Protocol):
+    """Claims on posting `senior_accept` records to a Project's channel (AD-25)."""
+
+    def add(self, notice: ChatNotice) -> bool:
+        """Claim the record; `False`, storing nothing, when it is already claimed."""
+        ...
+
+    def unposted_accepts(self, project_id: UUID, since: datetime) -> list[GateRecord]:
+        """Every `senior_accept` on this Project's Runs at or after `since` with no claim,
+        oldest first, whatever the Run's status."""
+        ...
+
+    def set_error(self, gate_record_id: UUID, error: str) -> None:
+        """Keep why the claimed record's post failed."""
         ...

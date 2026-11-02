@@ -41,6 +41,16 @@
               }
             ]
           },
+          "chat_thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatThreadOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "checkpoint_story": {
             "anyOf": [
               {
@@ -802,6 +812,47 @@
           "detail"
         ],
         "title": "ChannelTestOut",
+        "type": "object"
+      },
+      "ChatThreadOut": {
+        "description": "The stop's chat thread (story 3-3): its platform, how far it got, and why it failed.\n`error` is shown verbatim, whatever the state.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "provider": {
+            "enum": [
+              "mattermost",
+              "slack"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "posting",
+              "open",
+              "closed",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "state",
+          "error"
+        ],
+        "title": "ChatThreadOut",
         "type": "object"
       },
       "ChatUserIn": {

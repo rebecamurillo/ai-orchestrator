@@ -7,6 +7,7 @@ exactly that reason: a model nothing imported would be invisible to `alembic
 
 from __future__ import annotations
 
+from orchestrator.infrastructure.db.models.chat import ChatNoticeRow, ChatThreadRow
 from orchestrator.infrastructure.db.models.harness import HarnessRow
 from orchestrator.infrastructure.db.models.project import ProjectRow
 from orchestrator.infrastructure.db.models.project_channel import ProjectChannelRow
@@ -22,6 +23,8 @@ from orchestrator.infrastructure.db.models.trajectory import TrajectoryRow
 
 __all__ = [
     "AttemptRow",
+    "ChatNoticeRow",
+    "ChatThreadRow",
     "GateRecordRow",
     "HarnessRow",
     "ProjectChannelRow",

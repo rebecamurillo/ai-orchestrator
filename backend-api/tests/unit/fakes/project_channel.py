@@ -24,6 +24,10 @@ class FakeProjectChannelRepository:
     def get(self, project_id: UUID) -> ProjectChannel | None:
         return self.channels.get(project_id)
 
+    def list_all(self) -> list[ProjectChannel]:
+        """Every stored channel, ordered by `project_id` as the adapter's `ORDER BY` is."""
+        return [self.channels[key] for key in sorted(self.channels)]
+
     def put(self, channel: ProjectChannel) -> None:
         self.channels[channel.project_id] = channel
 

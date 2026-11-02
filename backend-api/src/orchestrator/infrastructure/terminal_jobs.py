@@ -18,12 +18,17 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from orchestrator.application.jobs.chat_poll import ChatPollPorts, run_chat_poll
 from orchestrator.application.jobs.terminal_poll import TerminalPollPorts, run_terminal_poll
 from orchestrator.application.use_cases.signal_run import SignalPorts
+from orchestrator.domain.ports.chat import ChatChannelFactory
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.notifier import Notifier
+from orchestrator.infrastructure.clock import SystemClock
+from orchestrator.infrastructure.crypto.factory import crypto_factory
 from orchestrator.infrastructure.db import open_writer_ports
+from orchestrator.infrastructure.db.chat import open_chat_ports
 from orchestrator.infrastructure.db.writers import SessionFactory
 from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.settings import Settings
@@ -31,6 +36,18 @@ from orchestrator.infrastructure.workspace import FsWorkspace
 
 #: The name `engine.schedule` registers it under, and the key of its own cron setting.
 TERMINAL_POLL_NAME = "terminal_poll"
+#: The chat job (AD-25), on `*/{CHAT_POLL_SECONDS} * * * * *`.
+CHAT_POLL_NAME = "chat_poll"
+CHAT_POLL_CRON = "*/{seconds} * * * * *"
+
+#: The chat factory `dbos/startup.py::serving` holds while the server runs, cleared on exit:
+#: the factory's client is closed at shutdown, so a fire after that must not reach it. The
+#: chat job reads this on every fire rather than closing over the factory.
+CHAT_SLOT: list[ChatChannelFactory] = []
+
+
+def current_chat() -> ChatChannelFactory | None:
+    return CHAT_SLOT[-1] if CHAT_SLOT else None
 
 
 def _terminal_poll_job(
@@ -53,14 +70,48 @@ def _terminal_poll_job(
     return run
 
 
+def _chat_poll_job(settings: Settings, session_factory: SessionFactory) -> Callable[[], None]:
+    started_at = SystemClock().now()
+    crypto = crypto_factory(settings)
+    notifier = build_notifier(settings)
+
+    def run() -> None:
+        factory = current_chat()
+        if factory is None:
+            return
+        with open_chat_ports(session_factory, notifier) as chat:
+            run_chat_poll(
+                ChatPollPorts(
+                    chat=chat,
+                    factory=factory,
+                    crypto=crypto,
+                    clock=SystemClock(),
+                    public_base_url=settings.public_base_url,
+                    reminder_hours=settings.chat_reminder_hours,
+                    started_at=started_at,
+                )
+            )
+
+    return run
+
+
 def engine_jobs(
-    settings: Settings, session_factory: SessionFactory, git: Git, engine: WorkflowEngine
+    settings: Settings,
+    session_factory: SessionFactory,
+    git: Git,
+    engine: WorkflowEngine,
+    chat: ChatChannelFactory | None = None,
 ) -> list[tuple[str, str, Callable[[], None]]]:
-    """`(name, cron, job)` for every scheduled job that signals a Run through the engine."""
-    return [
+    """`(name, cron, job)` for every scheduled job that signals a Run through the engine, and
+    `chat_poll` when a chat factory is given (story 3-3)."""
+    jobs = [
         (
             TERMINAL_POLL_NAME,
             settings.terminal_poll_cron,
             _terminal_poll_job(session_factory, git, engine, build_notifier(settings)),
         )
     ]
+    if chat is not None:
+        cron = CHAT_POLL_CRON.format(seconds=settings.chat_poll_seconds)
+        jobs.append((CHAT_POLL_NAME, cron, _chat_poll_job(settings, session_factory)))
+    return jobs

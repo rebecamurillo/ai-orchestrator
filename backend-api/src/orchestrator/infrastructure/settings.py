@@ -61,6 +61,8 @@ NotifyFormat = Literal["json", "slack"]
 
 MIN_TCP_PORT = 1
 MAX_TCP_PORT = 65535
+#: The `CHAT_POLL_SECONDS` values a six-field cron repeats evenly within a minute.
+CHAT_POLL_PERIODS = frozenset({10, 12, 15, 20, 30})
 
 #: The Gateway, tracing and notification fields whose blank value the application *reads*, not
 #: an absence: blanking a base URL is the documented off switch (`gateway_enabled`,
@@ -221,6 +223,11 @@ class Settings(BaseSettings):
     #: Where the web client is reached from outside; blank omits the Run link.
     public_base_url: str = ""
 
+    # ── Chat (AD-25) ─────────────────────────────────────────────────────────
+    #: `chat_poll` runs on `*/{s} * * * * *`, so `s` must divide a minute evenly.
+    chat_poll_seconds: int = 30
+    chat_reminder_hours: Annotated[int, Field(ge=1)] = 4
+
     # ── Pinned tool versions carried by the image (AD-16) ────────────────────
     bmad_version: str = "6.11.0"
     claude_code_version: str = "2.1.314"
@@ -344,6 +351,13 @@ class Settings(BaseSettings):
                 f"missing {missing or 'nothing'}, unknown {unknown or 'nothing'} — "
                 "one `name=model` pair for each harness the image installs, and no other"
             )
+        return value
+
+    @field_validator("chat_poll_seconds")
+    @classmethod
+    def _divides_a_minute(cls, value: int) -> int:
+        if value not in CHAT_POLL_PERIODS:
+            raise ValueError(f"must be one of {sorted(CHAT_POLL_PERIODS)}, got {value}")
         return value
 
     @field_validator("work_dir", "agent_home")
