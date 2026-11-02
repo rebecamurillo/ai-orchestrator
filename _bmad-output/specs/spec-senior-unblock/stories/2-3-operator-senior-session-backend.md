@@ -2,7 +2,7 @@
 title: 'Operator senior session: lock and close'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'c4d212b2ba1bf653c085ebff988df7b611b1f0be'
 review_loop_iteration: 0
