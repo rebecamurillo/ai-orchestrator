@@ -28,7 +28,7 @@ from orchestrator.application.rules.frames import rows_in_frame, story_frame
 from orchestrator.application.rules.protected_paths import park_record_payload
 from orchestrator.application.steps import AGENT_KIND, COMMIT_KIND, COMMIT_MESSAGE_KEY, SHELL_KIND
 from orchestrator.application.use_cases.run_view_types import Alert, Attribution, CheckpointStory
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.attempt import Attempt, agent_attempts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -108,7 +108,9 @@ def _checkpoint_story(
     build_row = next((row for row in frame_rows if row.kind == AGENT_KIND), None)
     commit_row = next((row for row in frame_rows if row.kind == COMMIT_KIND), None)
     verify_row = next((row for row in frame_rows if row.kind == SHELL_KIND), None)
-    attempts = len(attempts_by_row.get(build_row.id, ())) if build_row is not None else 0
+    attempts = (
+        len(agent_attempts(attempts_by_row.get(build_row.id, ()))) if build_row is not None else 0
+    )
     cost = Decimal("0")
     for frame_row in frame_rows:
         for one in attempts_by_row.get(frame_row.id, ()):

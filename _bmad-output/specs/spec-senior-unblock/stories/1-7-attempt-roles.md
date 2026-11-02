@@ -85,3 +85,11 @@ AD-21 names one repository method. Three reads are needed: the latest `agent` at
 - **Surprised.** The column's server default only applies on insert. `test_history_repository_adapter.py` builds an `AttemptRow` in memory with no `role`, which read as `None` and failed entity validation. Under rule 1(a), the code was fixed, not the test: `to_entity` reads a missing role as `agent`. `test_attempt_role_adapter.py` covers that case.
 - **Surprised.** The fake's `latest_for_run` orders by `n` while the adapter orders by `started_at`. Both now filter on role, and their ordering is unchanged.
 - **Tests.** New test files: `tests/unit/application/test_attempt_roles.py` (seen failing first), `tests/unit/test_attempt_role_adapter.py`, `tests/unit/test_step_detail_role.py` and `web-client/tests/unit/attempt-table-role.test.ts`. The only existing test file edited is `tests/unit/fakes/runs.py`, under rule 1(b), and the edit names story 1-7 and 2026-11-01. `make e2e` was not run in this session.
+
+## Review Triage
+
+| # | Finding | Verdict | Resolution |
+|---|---------|---------|------------|
+| 1 | `run_views.py::_step_row` took `latest` and the attempt count over every role. The Answer hint (`answer.ts::answerTarget`, reading `latest.n`) then named the consult's archive number, and the diagram counted the consult as a retry | fix | `latest` and `attempts` read `agent_attempts(attempts)`; `cost_usd` stays summed over every role. Covered by `tests/unit/application/test_attempt_roles_step_rows.py`, seen failing first |
+| 2 | `run_views_alert.py::_checkpoint_story` counted every role in "N attempts" | fix | Counts the build row's `agent` attempts; the frame cost still sums every role. Same test file |
+| 3 | `test_attempt_role_adapter.py` asserted `"attempt.role" in rendered`, which the SELECT column list already satisfies, so removing the filter left it green | fix | Now asserts `attempt.role = :role_1` in the WHERE clause. Both tests failed with the filter removed and pass with it restored |

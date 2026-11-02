@@ -69,7 +69,7 @@ def test_get_latest_agent_filters_on_the_row_and_the_role() -> None:
     assert latest == attempt
     rendered = str(session.statements[0])
     assert "attempt.step_run_id" in rendered
-    assert "attempt.role" in rendered
+    assert "attempt.role = :role_1" in rendered
     assert "ORDER BY attempt.n DESC" in rendered
 
 
@@ -86,7 +86,7 @@ def test_latest_for_run_filters_on_the_role() -> None:
 
     rendered = str(session.statements[0])
     assert "attempt.run_id" in rendered
-    assert "attempt.role" in rendered
+    assert "attempt.role = :role_1" in rendered
 
 
 def test_migration_0023_adds_the_column_with_the_agent_default() -> None:
