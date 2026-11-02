@@ -2,7 +2,7 @@
 title: 'Named provider errors'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'c7a6d9154ae6a8c674467978b2fee3c9782b60d7'
 review_loop_iteration: 0
