@@ -43,6 +43,9 @@ interface Server {
   startRefusal: { status: number; detail: string } | null;
   messageRefusal: { status: number; detail: string } | null;
   probe: { ok: boolean; models: string[]; version: string; failing_reason: string | null };
+  /** The number of the stop the Run is at; a stale signal moves it, as another tab would. */
+  parkSeq: number;
+  scopes: string[];
 }
 
 function newServer(over: Partial<Server> = {}): Server {
@@ -54,6 +57,8 @@ function newServer(over: Partial<Server> = {}): Server {
     edits: [],
     signals: [],
     messages: [],
+    parkSeq: 4,
+    scopes: ['story', 'epic', 'run'],
     startRefusal: null,
     messageRefusal: null,
     probe: {
@@ -66,7 +71,7 @@ function newServer(over: Partial<Server> = {}): Server {
   };
 }
 
-function run(): Record<string, unknown> {
+function run(server: Server): Record<string, unknown> {
   return {
     id: RUN_ID,
     status: 'needs_you',
@@ -86,7 +91,8 @@ function run(): Record<string, unknown> {
     worktree_path: '/work/orchestrator',
     worktrees: [],
     accepted_paths: [],
-    park_seq: 4,
+    park_seq: server.parkSeq,
+    ...(server.active ? { senior_session: true } : {}),
   };
 }
 
@@ -140,7 +146,7 @@ function detail(server: Server): Record<string, unknown> {
     gate_record: [],
     admitted_signals: admitted,
     summary: null,
-    run: { ...run(), admitted_signals: admitted },
+    run: { ...run(server), admitted_signals: admitted },
   };
 }
 
@@ -148,7 +154,7 @@ function sessionRead(server: Server): Record<string, unknown> {
   return {
     active: server.active,
     available: server.available && !server.active,
-    scopes: ['story', 'epic', 'run'],
+    scopes: server.scopes,
     scope: server.active ? 'story' : null,
     harness: server.active ? 'claude' : null,
     model: server.active ? 'claude-opus-4' : null,
@@ -225,6 +231,12 @@ async function serve(page: Page, server: Server): Promise<void> {
   await page.route(`**/api/runs/${RUN_ID}/signals`, (route) => {
     const body = route.request().postDataJSON() as Record<string, unknown>;
     server.signals.push(body);
+    if (body.kind === 'cancel') {
+      // the Run has moved to a new stop since this page read it
+      server.parkSeq += 1;
+      server.scopes = ['run'];
+      return json(route, 409, problem(409, `stale stop: the Run is at stop ${server.parkSeq}`));
+    }
     if (body.kind === 'session_start') {
       if (server.startRefusal) {
         return json(
@@ -526,5 +538,95 @@ test.describe('closing the session', () => {
 
     await expect(page.getByTestId('wf-cancel')).toBeEnabled();
     await expect(page.getByTestId('wf-session-close')).toBeDisabled();
+  });
+});
+
+test.describe('a new stop', () => {
+  async function moveToNewStop(page: Page): Promise<void> {
+    await page.getByTestId('wf-cancel').click();
+    await page.getByTestId('wf-cancel-confirm-yes').click();
+    await expect(page.getByTestId('wf-signal-error').first()).toContainText('stale stop');
+    await page.getByTestId('wf-cancel-confirm-no').click();
+  }
+
+  test('starts the form clean: no kept scope, harness or probe from the last stop', async ({
+    page,
+  }) => {
+    const server = newServer();
+    await open(page, server);
+
+    await page.getByTestId('wf-session-offer').click();
+    await page.getByTestId('wf-session-scope').selectOption('epic');
+    await page.getByTestId('wf-session-harness').selectOption('claude');
+    await expect(page.getByTestId('wf-session-model')).toBeVisible();
+
+    await moveToNewStop(page);
+
+    await expect(page.getByTestId('wf-session-form')).toHaveCount(0);
+    await page.getByTestId('wf-session-offer').click();
+    // the new stop offers only the Run scope, and nothing carries over from the old form
+    await expect(page.getByTestId('wf-session-scope')).toHaveValue('run');
+    await expect(page.getByTestId('wf-session-scope').locator('option')).toHaveText(['Run']);
+    await expect(page.getByTestId('wf-session-harness')).toHaveValue('');
+    await expect(page.getByTestId('wf-session-model')).toHaveCount(0);
+  });
+
+  test('does not carry an unsent message into the next stop', async ({ page }) => {
+    const server = newServer({ active: true, turns: [finishedTurn()] });
+    await open(page, server);
+
+    await page.getByTestId('wf-session-message').fill('half a thought');
+    await moveToNewStop(page);
+
+    await expect(page.getByTestId('wf-session-message')).toHaveValue('');
+  });
+});
+
+test.describe('accessible names and focus', () => {
+  test('names each row’s buttons by file and keeps Confirm’s word fixed', async ({ page }) => {
+    const server = newServer({
+      active: true,
+      turns: [finishedTurn()],
+      edits: [
+        { kind: 'modified', path: 'stories.yaml' },
+        { kind: 'added', path: 'SPEC.md' },
+      ],
+    });
+    await open(page, server);
+
+    await page.getByTestId('wf-session-close').click();
+
+    const confirm = page.getByRole('button', { name: 'Confirm stories.yaml' });
+    await expect(confirm).toHaveText('Confirm');
+    await expect(confirm).toHaveAttribute('aria-pressed', 'false');
+    await confirm.click();
+    await expect(confirm).toHaveText('Confirm');
+    await expect(confirm).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'Revert SPEC.md' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Confirm SPEC.md' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  test('moves focus to the control that replaces the one that unmounted', async ({ page }) => {
+    const server = newServer({ edits: [{ kind: 'modified', path: 'stories.yaml' }] });
+    await open(page, server);
+
+    await page.getByTestId('wf-session-offer').click();
+    await expect(page.getByTestId('wf-session-scope')).toBeFocused();
+    await page.getByTestId('wf-session-dismiss').click();
+    await expect(page.getByTestId('wf-session-offer')).toBeFocused();
+
+    await page.getByTestId('wf-session-offer').click();
+    await page.getByTestId('wf-session-harness').selectOption('claude');
+    await page.getByTestId('wf-session-start').click();
+    await expect(page.getByTestId('wf-session-message')).toBeFocused();
+
+    await page.getByTestId('wf-session-close').click();
+    await expect(page.getByTestId('wf-session-anchors')).toBeFocused();
+    await page.getByRole('button', { name: 'Confirm stories.yaml' }).click();
+    await page.getByTestId('wf-session-close-confirmed').click();
+    await expect(page.getByTestId('wf-session-offer')).toBeFocused();
   });
 });

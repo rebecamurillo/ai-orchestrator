@@ -326,7 +326,9 @@ export default function RunDetail({ runId }: Props) {
           runId={runId}
           plannedFile={plannedFile}
         />
+        {/* keyed like the stop: form choices and a draft belong to the stop they were made at */}
         <SessionPanel
+          key={detail.run.park_seq ?? 0}
           runId={runId}
           session={session}
           admitted={detail.admitted_signals}

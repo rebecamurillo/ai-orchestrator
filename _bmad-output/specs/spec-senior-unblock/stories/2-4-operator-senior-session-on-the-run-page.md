@@ -87,15 +87,25 @@ Built tests first at baseline `a7b5b9a`.
 **Decisions.**
 - The offer is a separate panel under the stop body, not a button inside `StopBody`: `admitted_signals` never lists `session_start` (story 2-3), so `StopBody`'s filters cannot carry it, and the stop body stays untouched.
 - The session is read only while the Run is `needs_you`: `scopes` is empty otherwise and a terminal Run holds no session.
-- The unconfirmed refusal is recognised by the server's sentence (`session_checks.UNCONFIRMED`); the list itself comes from the read's `anchor_edits`, which the server computes while the session is active.
+- A refused close opens the review when the read's `anchor_edits` is non-empty; the server computes it while the session is active and the page never parses the refusal's text.
 - A revert is a plain message (CAP-7). The page does not claim the file is restored: it leaves the list when a later poll no longer lists it.
-- *Edit* in the artifact modal still reads `terminal_session` only; during a senior session the server's refusal shows in the modal (the Run summary carries no `senior_session` flag).
+- The Run read models carry `senior_session` (omitted when false), so the artifact modal withholds *Edit* during a session.
 
 **Gates.** `make lint` passes; `make test` passes (9170 backend with 1 skipped, 1768 web-client; `src/lib/run/session.ts` at 100 % lines); `make openapi` leaves no drift. `run-detail-session.spec.ts` was written against mocked endpoints and not run in this session: `make e2e-ui` is the parent's gate, so the story stays `in-review` until it passes.
 
 ## Spec Change Log
 
+- 2026-11-02, review. The frozen "No backend change" gave way to one read-model field, `senior_session` on the Run summary, at the lead's direction (triage row 3). KEEP: every matrix outcome.
+
 ## Review Triage Log
+
+| Finding | Layer | Verdict | Route | Evidence and action |
+| --- | --- | --- | --- | --- |
+| `SessionPanel` unkeyed while `StopBody` is keyed on `park_seq`: form scope, probe and an unsent draft survive into the next stop, and a kept `story` scope gets a 422 where only `run` is offered | edge, blind | high | patch | Reproduced by reading `RunDetail.tsx`. The panel is keyed on `park_seq`; neither `session_start` nor `session_end` moves it, so a session does not reset mid-way. Browser specs move the stop through a stale-stop 409 and assert a clean form and an empty draft. |
+| Close refusal recognised by the server's sentence (`UNCONFIRMED_PREFIX`) | blind | medium | patch | The text can change without a contract change. `opensReview` opens the list on any refused `session_end` when the read's `anchor_edits` is non-empty, and re-checks on each newer read. The prefix and its test are removed. |
+| Artifact modal *Edit* offered during a senior session; the Run summary carried no flag | edge | medium | patch | `senior_session` added to `RunStateOut`, omitted when false (the `pause_requested` pattern), so frozen exact-key tests pass; `make openapi` regenerated; `canEditFile` also checks `!run.senior_session`. Backend tests in `test_run_senior_session_read_model.py`. |
+| `session_start` still offered during a terminal session, then refused 409 | verification | none | reject | Not reproduced: `run_admitted_signals` returns `cancel`, `terminal_release` while `terminal_session` is set and never lists `session_start`; `can_start_session` makes the read's `available` false. Pinned by a new test rather than changed. |
+| Per-row *Confirm*/*Revert* share names; *Confirm* changes its word; focus drops when the form or Close unmounts | blind | medium | patch | `aria-label` carries the file; the word stays *Confirm* and `aria-pressed` alone states it. Focus moves to the scope select, the offer, the message box or the anchor list, once the post in flight ends (a disabled control cannot take focus). Browser spec asserts each. |
 
 ## Verification
 

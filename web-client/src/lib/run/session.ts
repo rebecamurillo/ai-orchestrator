@@ -25,7 +25,6 @@ export const CLOSE_LABEL = 'Close session';
 export const CLOSE_CONFIRMED_LABEL = 'Close with confirmed files';
 export const SEND_LABEL = 'Send';
 export const CONFIRM_LABEL = 'Confirm';
-export const CONFIRMED_LABEL = 'Confirmed';
 export const REVERT_LABEL = 'Revert';
 export const NO_REPLY_LINE = 'no reply file';
 export const LOG_LINK_LABEL = 'log';
@@ -47,10 +46,6 @@ export const SCOPE_LABELS: Record<SessionScope, string> = {
   epic: 'epic',
   run: 'Run',
 };
-
-/** `application/use_cases/session_checks.py::UNCONFIRMED` begins with this sentence; the
- * list of files that follows it is read from the session, not parsed out of the text. */
-const UNCONFIRMED_PREFIX = 'anchor edits neither confirmed nor reverted';
 
 const SESSION_START: SignalKind = 'session_start';
 const SESSION_END: SignalKind = 'session_end';
@@ -113,8 +108,10 @@ export function endBody(confirmedPaths: readonly string[]): SignalIn {
   return { kind: SESSION_END, payload: { confirmed_paths: [...confirmedPaths] } };
 }
 
-export function isUnconfirmedRefusal(error: ProblemDetail | null): boolean {
-  return error?.detail?.startsWith(UNCONFIRMED_PREFIX) ?? false;
+/** A refused close opens the anchor review when the session lists edits. The list is the
+ * server's structured fact; the refusal's sentence is shown to the Operator, not parsed. */
+export function opensReview(refusal: ProblemDetail | null, session: SessionOut | null): boolean {
+  return refusal !== null && (session?.anchor_edits.length ?? 0) > 0;
 }
 
 export function toggleConfirmed(confirmed: ReadonlySet<string>, path: string): Set<string> {

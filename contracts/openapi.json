@@ -3553,6 +3553,10 @@
             "title": "Repository",
             "type": "string"
           },
+          "senior_session": {
+            "title": "Senior Session",
+            "type": "boolean"
+          },
           "spend_usd": {
             "title": "Spend Usd",
             "type": "string"
@@ -4313,6 +4317,10 @@
             "format": "uuid",
             "title": "Repository",
             "type": "string"
+          },
+          "senior_session": {
+            "title": "Senior Session",
+            "type": "boolean"
           },
           "spend_usd": {
             "title": "Spend Usd",

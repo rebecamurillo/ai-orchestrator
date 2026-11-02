@@ -82,10 +82,15 @@ export function fileName(path: string): string {
   return parts[parts.length - 1] ?? path;
 }
 
-/** Whether the Edit control shows for this path: a parked Run, no terminal session, and
- * not one of the two list files (`isListFile`'s own gate). */
+/** Whether the Edit control shows for this path: a parked Run, no terminal or senior session,
+ * and not one of the two list files (`isListFile`'s own gate). */
 export function canEditFile(run: RunSummary, path: string, folder: string): boolean {
-  return run.status === 'needs_you' && !run.terminal_session && !isListFile(folder, path);
+  return (
+    run.status === 'needs_you' &&
+    !run.terminal_session &&
+    !run.senior_session &&
+    !isListFile(folder, path)
+  );
 }
 
 /**

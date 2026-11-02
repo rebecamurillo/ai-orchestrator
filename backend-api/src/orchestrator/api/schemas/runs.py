@@ -143,6 +143,7 @@ class RunSummaryOut(RunStateOut):
             created_at=run.created_at,
             park_seq=run.park_seq,
             pause_requested=run.pause_requested,
+            senior_session=run.senior_session,
             admitted_signals=run_admitted_signals(
                 run, park_row_kind, park_row_status=park_row_status, rows=rows
             ),

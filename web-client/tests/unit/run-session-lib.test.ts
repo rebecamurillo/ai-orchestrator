@@ -12,12 +12,12 @@ import {
   confirmedFor,
   defaultScope,
   endBody,
-  isUnconfirmedRefusal,
   keepsFastPoll,
   logHref,
   messageBody,
   messagesRequestPath,
   offersSession,
+  opensReview,
   reconcileModel,
   revertMessage,
   sessionOpen,
@@ -140,27 +140,17 @@ describe('the close', () => {
     });
   });
 
-  it('recognises the server refusal for unconfirmed anchor edits', () => {
+  it('opens the anchor review on a refused close when the session lists edits', () => {
+    const refusal = { status: 409, title: 'Conflict', type: 'about:blank', detail: 'any text' };
+    const edits = [{ kind: 'modified', path: 'stories.yaml' }] as SessionOut['anchor_edits'];
+    expect(opensReview(refusal, session({ active: true, anchor_edits: edits }))).toBe(true);
+    // whatever the sentence says: the list is the structured fact, the text is not parsed
     expect(
-      isUnconfirmedRefusal({
-        status: 409,
-        title: 'Conflict',
-        type: 'about:blank',
-        detail: 'anchor edits neither confirmed nor reverted: stories.yaml',
-      }),
+      opensReview({ ...refusal, detail: 'turn running' }, session({ anchor_edits: edits })),
     ).toBe(true);
-    expect(
-      isUnconfirmedRefusal({
-        status: 409,
-        title: 'Conflict',
-        type: 'about:blank',
-        detail: 'turn running',
-      }),
-    ).toBe(false);
-    expect(isUnconfirmedRefusal({ status: 409, title: 'Conflict', type: 'about:blank' })).toBe(
-      false,
-    );
-    expect(isUnconfirmedRefusal(null)).toBe(false);
+    expect(opensReview(refusal, session({ active: true }))).toBe(false);
+    expect(opensReview(refusal, null)).toBe(false);
+    expect(opensReview(null, session({ active: true, anchor_edits: edits }))).toBe(false);
   });
 
   it('toggles a confirmation without touching the set it was given', () => {

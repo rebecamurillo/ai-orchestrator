@@ -145,13 +145,16 @@ class StopNumberOut(BaseModel):
 
 
 class RunStateOut(StopNumberOut):
-    """The Run read model: the stop number, and a pause waiting for the current row to end.
+    """The Run read model: the stop number, a pause waiting for the current row to end, and an
+    open senior session.
 
-    Both are absent until they mean something, so a client pinning the keys of a Run that has
-    neither stopped nor been asked to pause sees none of them.
+    Each is absent until it means something, so a client pinning the keys of a Run that has
+    not stopped, been asked to pause or opened a session sees none of them.
     """
 
     pause_requested: bool = Field(default=False, json_schema_extra=drop_default)
+    #: A senior session holds the Run (AD-23), so a client withholds what the lock refuses.
+    senior_session: bool = Field(default=False, json_schema_extra=drop_default)
 
     @model_serializer(mode="wrap")
     def _omit_unset_state(self, handler: Any):
@@ -161,4 +164,6 @@ class RunStateOut(StopNumberOut):
             data.pop("park_seq", None)
         if not self.pause_requested:
             data.pop("pause_requested", None)
+        if not self.senior_session:
+            data.pop("senior_session", None)
         return data

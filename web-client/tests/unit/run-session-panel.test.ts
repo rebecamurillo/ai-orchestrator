@@ -261,12 +261,20 @@ describe('SessionAnchors', () => {
     expect(html).toContain('added');
     expect(html).toContain('data-testid="wf-session-confirm-stories.yaml"');
     expect(html).toContain('data-testid="wf-session-revert-stories.yaml"');
+    // each row's buttons are told apart by name, not by their position in the list
+    expect(html).toContain('aria-label="Confirm stories.yaml"');
+    expect(html).toContain('aria-label="Revert stories.yaml"');
+    expect(html).toContain('aria-label="Confirm repos/m/AGENTS.md"');
+    expect(html).toContain('aria-label="Revert repos/m/AGENTS.md"');
     expect(html).toMatch(/<button[^>]*data-testid="wf-session-close-confirmed"[^>]*disabled=""/);
   });
 
   it('marks a confirmed file and closes only when every file is confirmed', () => {
     const some = anchors(['stories.yaml']);
     expect(some).toMatch(/data-testid="wf-session-confirm-stories.yaml"[^>]*aria-pressed="true"/);
+    // the word stays Confirm; only aria-pressed carries the state
+    expect(some).not.toContain('Confirmed');
+    expect(some.match(/aria-pressed="false"/g)).toHaveLength(1);
     expect(some).toMatch(/<button[^>]*data-testid="wf-session-close-confirmed"[^>]*disabled=""/);
     const all = anchors(['stories.yaml', 'repos/m/AGENTS.md']);
     expect(all).not.toMatch(/<button[^>]*data-testid="wf-session-close-confirmed"[^>]*disabled=""/);

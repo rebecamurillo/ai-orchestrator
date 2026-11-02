@@ -2034,6 +2034,8 @@ export interface components {
              * Format: uuid
              */
             repository: string;
+            /** Senior Session */
+            senior_session?: boolean;
             /** Spend Usd */
             spend_usd: string;
             /**
@@ -2329,6 +2331,8 @@ export interface components {
              * Format: uuid
              */
             repository: string;
+            /** Senior Session */
+            senior_session?: boolean;
             /** Spend Usd */
             spend_usd: string;
             /**

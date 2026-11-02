@@ -22,9 +22,9 @@ import {
   confirmedFor,
   defaultScope,
   endBody,
-  isUnconfirmedRefusal,
   messageBody,
   offersSession,
+  opensReview,
   canSend,
   reconcileModel,
   revertMessage,
@@ -40,6 +40,8 @@ import {
 import SessionAnchors from './SessionAnchors';
 import SessionStart from './SessionStart';
 import SessionTurns from './SessionTurns';
+
+const OFFER_SELECTOR = '[data-testid="wf-session-offer"]';
 
 type ProblemDetail = components['schemas']['ProblemDetail'];
 type Refusal = Promise<ProblemDetail | null>;
@@ -78,7 +80,35 @@ export default function SessionPanel({
   const [draft, setDraft] = useState('');
   const [confirmed, setConfirmed] = useState<ReadonlySet<string>>(new Set());
   const [reviewing, setReviewing] = useState(false);
+  const [refusal, setRefusal] = useState<ProblemDetail | null>(null);
   const probeSeqRef = useRef(0);
+  const sectionRef = useRef<HTMLElement>(null);
+  const mountedRef = useRef(false);
+
+  // The control the Operator just used unmounts when the panel changes shape, which would drop
+  // focus to the page. Each change hands it to the control that replaces it; the first render
+  // leaves focus where the page put it.
+  // The target waits for the post in flight, because a disabled control cannot take focus.
+  const wantFocusRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (mountedRef.current) wantFocusRef.current = open ? 'textarea' : OFFER_SELECTOR;
+  }, [open]);
+  useEffect(() => {
+    if (mountedRef.current && !open) wantFocusRef.current = formOpen ? 'select' : OFFER_SELECTOR;
+  }, [formOpen]);
+  useEffect(() => {
+    if (mountedRef.current && reviewing)
+      wantFocusRef.current = '[data-testid="wf-session-anchors"]';
+  }, [reviewing]);
+  useEffect(() => {
+    const selector = wantFocusRef.current;
+    if (selector === null || posting !== null || sending) return;
+    wantFocusRef.current = null;
+    sectionRef.current?.querySelector<HTMLElement>(selector)?.focus();
+  });
+  useEffect(() => {
+    mountedRef.current = true;
+  }, []);
 
   useEffect(() => {
     if (!formOpen || harnesses !== null) return;
@@ -100,8 +130,17 @@ export default function SessionPanel({
   useEffect(() => {
     if (open) return;
     setReviewing(false);
+    setRefusal(null);
     setConfirmed(new Set());
   }, [open]);
+
+  // evaluated against each newer read too, so edits that reach the page after the refused
+  // close's own refetch still open the review
+  useEffect(() => {
+    if (!opensReview(refusal, session)) return;
+    setReviewing(true);
+    setRefusal(null);
+  }, [refusal, session]);
 
   async function chooseHarness(name: string): Promise<void> {
     const seq = ++probeSeqRef.current;
@@ -140,8 +179,7 @@ export default function SessionPanel({
   }
 
   async function close(paths: readonly string[]): Promise<void> {
-    const refusal = await onEnd(endBody(paths));
-    if (isUnconfirmedRefusal(refusal)) setReviewing(true);
+    setRefusal(await onEnd(endBody(paths)));
   }
 
   if (open) {
@@ -149,7 +187,7 @@ export default function SessionPanel({
     const busy = posting !== null || sending;
     const edits = session?.anchor_edits ?? [];
     return (
-      <section className="wf-session" data-testid="wf-session">
+      <section ref={sectionRef} className="wf-session" data-testid="wf-session">
         <p className="wf-session-lock" data-testid="wf-session-lock">
           {LOCK_LINE}
         </p>
@@ -205,7 +243,7 @@ export default function SessionPanel({
   if (!offersSession(session)) return null;
 
   return (
-    <section className="wf-session" data-testid="wf-session-offer-zone">
+    <section ref={sectionRef} className="wf-session" data-testid="wf-session-offer-zone">
       {formOpen ? (
         <SessionStart
           scopes={session?.scopes ?? []}

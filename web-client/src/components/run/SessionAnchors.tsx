@@ -8,7 +8,6 @@ import {
   ANCHOR_BUSY_LINE,
   ANCHOR_LINE,
   CLOSE_CONFIRMED_LABEL,
-  CONFIRMED_LABEL,
   CONFIRM_LABEL,
   NO_ANCHOR_LINE,
   REVERT_LABEL,
@@ -37,7 +36,7 @@ export default function SessionAnchors({
 }: Props) {
   const held = turnRunning || posting;
   return (
-    <div className="wf-session-anchors" data-testid="wf-session-anchors">
+    <div className="wf-session-anchors" data-testid="wf-session-anchors" tabIndex={-1}>
       <p className="wf-answer-hint">{edits.length === 0 ? NO_ANCHOR_LINE : ANCHOR_LINE}</p>
       {turnRunning ? <p className="wf-session-note">{ANCHOR_BUSY_LINE}</p> : null}
       <ul className="wf-session-anchor-list">
@@ -48,16 +47,18 @@ export default function SessionAnchors({
             <button
               type="button"
               className="wf-signal"
+              aria-label={`${CONFIRM_LABEL} ${edit.path}`}
               data-testid={`wf-session-confirm-${edit.path}`}
               aria-pressed={confirmed.has(edit.path)}
               disabled={held}
               onClick={() => onToggle(edit.path)}
             >
-              {confirmed.has(edit.path) ? CONFIRMED_LABEL : CONFIRM_LABEL}
+              {CONFIRM_LABEL}
             </button>
             <button
               type="button"
               className="wf-signal"
+              aria-label={`${REVERT_LABEL} ${edit.path}`}
               data-testid={`wf-session-revert-${edit.path}`}
               disabled={held}
               onClick={() => onRevert(edit.path)}
