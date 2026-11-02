@@ -48,6 +48,7 @@ from orchestrator.application.steps import pr_link as _pr_link  # noqa: F401
 from orchestrator.application.steps import shell as _shell  # noqa: F401
 from orchestrator.application.use_cases.dependency_sweep import sweep_dependency_waiting
 from orchestrator.application.use_cases.session_sweep import sweep_session_turns
+from orchestrator.application.use_cases.session_turn import TurnPorts
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
@@ -252,7 +253,7 @@ def dependency_startup_sweep(settings: Settings) -> None:
     entry opens a DB session, runs `sweep_dependency_waiting`, then closes it. Idempotent:
     runs that were already enqueued are invisible to `list_dependents` (story 5-4, AD-12).
 
-    The senior session turns a crash left queued are swept next, in the same scope (AD-23).
+    The senior session turns a crash left open are swept next, in the same scope (AD-23).
     """
     for engine, session_factory, _git in _SERVING:
         if session_factory is None:
@@ -261,7 +262,12 @@ def dependency_startup_sweep(settings: Settings) -> None:
             session_factory, engine=engine, notifier=build_notifier(settings)
         ) as ports:
             sweep_dependency_waiting(ports, engine)
-            sweep_session_turns(ports, engine)
+            held = engine.held_session_turns()
+            deps = engine.walker_deps
+            turn_ports = TurnPorts(
+                writers=ports, step=deps.step_ports, read_environment=deps.read_environment
+            )
+            sweep_session_turns(turn_ports, engine, held)
 
 
 def schedule_engine_jobs(settings: Settings) -> None:

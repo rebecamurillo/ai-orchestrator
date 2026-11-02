@@ -38,8 +38,9 @@ class TreeEntry:
 class Workspace(Protocol):
     """Reads and writes rooted at one worktree; every path is relative and normalised."""
 
-    def read(self, path: str) -> str | None:
-        """The file's text, or `None` when nothing is there."""
+    def read(self, path: str, *, errors: str = "strict") -> str | None:
+        """The file's text, or `None` when nothing is there. `errors` is the decoder's:
+        `replace` reads a file the agent wrote in any bytes rather than raising."""
         ...
 
     def write(self, path: str, text: str) -> None:

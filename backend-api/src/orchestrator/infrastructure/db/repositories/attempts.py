@@ -27,14 +27,13 @@ from uuid import UUID
 from sqlalchemy import select
 
 from orchestrator.domain.entities.attempt import AGENT_ROLE, Attempt
-from orchestrator.domain.statuses import AttemptRole, StepStatus
+from orchestrator.domain.statuses import AttemptRole
 from orchestrator.infrastructure.db.models.run import AttemptRow
 
 if TYPE_CHECKING:  # pragma: no cover — typing only
     from sqlalchemy.orm import Session
 
 SESSION_ROLE: AttemptRole = "session"
-QUEUED: StepStatus = "queued"
 
 #: What `mark_started` writes: the half a restart has to find (AD-8). `root_start_sha` joins
 #: `start_sha` rather than the finished half because it is recorded at the same moment — the
@@ -204,15 +203,11 @@ class SQLAlchemyAttemptRepository:
         ).first()
         return None if row is None else to_entity(row)
 
-    def list_queued_sessions(self) -> list[Attempt]:
-        """Every `session` attempt still `queued` and open, oldest first (AD-23)."""
+    def list_open_sessions(self) -> list[Attempt]:
+        """Every `session` attempt not yet closed, oldest first (AD-23)."""
         rows = self._session.scalars(
             select(AttemptRow)
-            .where(
-                AttemptRow.role == SESSION_ROLE,
-                AttemptRow.status == QUEUED,
-                AttemptRow.ended_at.is_(None),
-            )
+            .where(AttemptRow.role == SESSION_ROLE, AttemptRow.ended_at.is_(None))
             .order_by(AttemptRow.started_at)
         ).all()
         return [to_entity(row) for row in rows]

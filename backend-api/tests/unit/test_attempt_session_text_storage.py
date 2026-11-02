@@ -1,5 +1,5 @@
 """`attempt.message` and `attempt.reply` (story 2-5, AD-23), and the start-up read of the
-session turns a crash left queued.
+session turns a crash left open.
 
 Both columns are `TEXT NOT NULL` with server default `''`, so every attempt stored before
 migration 0027 reads empty. `message` is written once, by `add`; `reply` is the finish half's.
@@ -80,32 +80,33 @@ def test_the_reply_is_the_finish_halfs_and_the_message_neithers() -> None:
     assert {"message", "reply"} <= set(attempts_module.MUTABLE_COLUMNS)
 
 
-def test_the_queued_session_turns_are_read_in_sql() -> None:
+def test_the_open_session_turns_are_read_in_sql() -> None:
     turn = a_turn()
     session = RecordingSession(scalars_queue=[[AttemptRow(**attempts_module.row_values(turn))]])
 
-    found = SQLAlchemyAttemptRepository(session).list_queued_sessions()  # type: ignore[arg-type]
+    found = SQLAlchemyAttemptRepository(session).list_open_sessions()  # type: ignore[arg-type]
 
     assert found == [turn]
     rendered = str(session.statements[0])
     assert "attempt.role = :role_1" in rendered
-    assert "attempt.status = :status_1" in rendered
+    assert "attempt.status =" not in rendered
     assert "attempt.ended_at IS NULL" in rendered
     assert "ORDER BY attempt.started_at" in rendered
 
 
 def test_the_fake_reads_the_same_turns() -> None:
-    queued = a_turn()
+    queued = a_turn(started_at=EPOCH)
+    running = a_turn(status="running")
     repository = FakeAttemptRepository(
         [
             queued,
-            a_turn(status="running"),
+            running,
             a_turn(role="agent"),
             a_turn(ended_at=EPOCH, status="queued", n=3),
         ]
     )
 
-    assert repository.list_queued_sessions() == [queued]
+    assert repository.list_open_sessions() == [queued, running]
 
 
 def test_migration_0027_adds_both_columns_with_an_empty_default() -> None:

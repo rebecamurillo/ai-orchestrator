@@ -8,7 +8,7 @@ session per scope. Every double is a shared fake (AD-18).
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +28,7 @@ from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.ports.harness import HarnessResult
+from orchestrator.domain.ports.workspace import Workspace
 from tests.unit.application.session_fixtures import (
     BUILD,
     SPEC_FOLDER,
@@ -73,6 +74,8 @@ class TurnWorld:
     failing_write: int | None = None
     writes: int = 0
     traced: bool = True
+    #: A `Workspace` factory of a test's own, such as `FsWorkspace` over a real tree.
+    workspace_factory: Callable[[str | None], Workspace] | None = None
 
     @property
     def git(self) -> FakeGit:
@@ -92,7 +95,7 @@ class TurnWorld:
             clock=self.session.world.clock,
             work_dir="/work",
             process=self.process,
-            workspace=self.workspace,
+            workspace=self.workspace_factory or self.workspace,
             tracer=self.tracer if self.traced else None,
             harnesses={"claude": self.harness},
             harness_env=self.harness_env,

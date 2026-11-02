@@ -126,6 +126,15 @@ class DbosWorkflowEngine:
             raise RuntimeError(NOT_LAUNCHED)
         self._engine.enqueue(SESSION_QUEUE, self._turn, str(attempt_id), partition_key=str(run_id))
 
+    @property
+    def walker_deps(self) -> WalkerDeps:
+        """What the walk and the turn workflow run on, for the start-up sweep's own turns."""
+        return self._deps
+
+    def held_session_turns(self) -> frozenset[UUID]:
+        """The turns the session queue holds, enqueued or running: the engine's to recover."""
+        return frozenset(UUID(entry.workflow_id) for entry in self._engine.queued(SESSION_QUEUE))
+
     def signal(self, run_id: UUID, signal: Signal) -> None:
         """Deliver one Operator signal (AD-13) to the Run's single `recv` wait."""
         self._engine.send(

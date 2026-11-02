@@ -45,7 +45,8 @@ class FakeWorkspace:
         #: plants one; `remove` deletes the link, as `FsWorkspace.remove` does.
         self.links: set[str] = set()
 
-    def read(self, path: str) -> str | None:
+    # Story 2-5 review (2026-11-02): the port's `errors`; text held here decodes already.
+    def read(self, path: str, *, errors: str = "strict") -> str | None:
         self._checked(path)
         return self._files.get(path)
 

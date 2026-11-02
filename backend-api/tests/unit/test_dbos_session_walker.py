@@ -29,7 +29,8 @@ from orchestrator.infrastructure.dbos.walker import WalkerDeps
 from orchestrator.infrastructure.engine.local import LocalWorkflowEngine
 from orchestrator.infrastructure.settings import Settings
 from tests.unit.application.session_turn_fixtures import TurnWorld, a_turn_world
-from tests.unit.fakes.dbos import FakeDurableEngine
+from tests.unit.fakes.clock import EPOCH
+from tests.unit.fakes.dbos import FakeDurableEngine, a_queued_workflow
 
 CONCURRENCY = 3
 COST = Decimal("0.250000")
@@ -157,6 +158,26 @@ def test_launching_declares_the_session_queue_after_the_runs_queue() -> None:
     assert ("workflow", "run_session_turn") in fake.declared
 
 
+def test_the_turn_workflow_is_registered_before_the_engine_starts_recovering() -> None:
+    fake = FakeDurableEngine()
+
+    an_engine(fake).launch()
+
+    assert fake.calls.index(("workflow", "run_session_turn")) < fake.calls.index(("start", None))
+
+
+def test_the_adapter_names_the_turns_the_session_queue_holds() -> None:
+    held, other = new_id(), new_id()
+    fake = FakeDurableEngine(
+        queued=[a_queued_workflow(str(held), "PENDING", EPOCH)],
+    )
+    engine = an_engine(fake)
+
+    assert engine.held_session_turns() == frozenset({held})
+    assert ("queued", SESSION_QUEUE) in fake.calls
+    assert other not in engine.held_session_turns()
+
+
 def test_a_turn_is_enqueued_under_its_attempt_id_behind_its_run() -> None:
     fake = FakeDurableEngine()
     engine = an_engine(fake)
@@ -193,10 +214,20 @@ def test_the_startup_sweep_runs_the_session_sweep_after_the_dependency_sweep(
     monkeypatch.setattr(
         startup_module, "sweep_dependency_waiting", lambda *_a: order.append("dependency")
     )
-    monkeypatch.setattr(startup_module, "sweep_session_turns", lambda *_a: order.append("session"))
+    swept: list[object] = []
+
+    def session_sweep(ports: object, engine: object, held: object) -> None:
+        order.append("session")
+        swept.append((ports, held))
+
+    monkeypatch.setattr(startup_module, "sweep_session_turns", session_sweep)
     engine = an_engine(FakeDurableEngine(), world)
 
     with startup_module.serving(engine, session_factory=lambda: None):  # type: ignore[arg-type]
         startup_module.dependency_startup_sweep(Settings())
 
     assert order == ["dependency", "session"]
+    ((ports, held),) = swept
+    assert ports.writers is world.writers  # type: ignore[attr-defined]
+    assert ports.step is engine.walker_deps.step_ports  # type: ignore[attr-defined]
+    assert held == frozenset()

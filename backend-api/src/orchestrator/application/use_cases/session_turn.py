@@ -6,10 +6,13 @@ and the two engine steps of its own workflow, outside the walk.
 workflow never reads an attempt that is not there. A failed enqueue closes that attempt.
 
 `run_turn` is the `session_turn` step and `commit_turn` the `session_commit` step. The
-workflow calls the second on every path, so a turn is always closed, billed and, unless the
-Run ended, committed. Both read the turn afresh, so a step the engine re-executes after a
-crash finds what the last one left: a `running` turn is interrupted rather than dispatched
-twice, and a commit over a clean tree commits nothing.
+workflow calls the second on every path, so a turn is always closed and billed, and committed
+when it dispatched and the Run has not ended. A part of the close that fails is named on the
+turn and leaves the rest of the close, and the turn's own status, standing.
+
+Both steps read the turn afresh, so a step the engine re-executes after a crash finds what
+the last one left: a `running` turn is interrupted rather than dispatched twice, and a
+commit over a clean tree commits nothing.
 
 Every write is an `attempt` row, its own `status` included; nothing here writes a Run or
 Step status (AD-8, as amended for AD-23).
@@ -27,7 +30,6 @@ import structlog
 from orchestrator.application.rules import session
 from orchestrator.application.rules.signals import row_at
 from orchestrator.application.steps import agent_workdir
-from orchestrator.application.steps.agent_consult_review import read_decision
 from orchestrator.application.steps.context import (
     RunEnvironment,
     StepPorts,
@@ -36,7 +38,7 @@ from orchestrator.application.steps.context import (
 )
 from orchestrator.application.use_cases import session_dispatch
 from orchestrator.application.use_cases.session_checks import NO_BUDGET
-from orchestrator.application.use_cases.session_dispatch import Turn
+from orchestrator.application.use_cases.session_dispatch import SESSION_CLOSED, Turn
 from orchestrator.application.use_cases.session_view import SessionTurn, turn_of
 from orchestrator.application.use_cases.signal_effects import TURN_RUNNING
 from orchestrator.application.use_cases.spend import record_attempt_spend
@@ -54,7 +56,7 @@ log = structlog.get_logger(__name__)
 
 NO_SESSION = "no senior session open"
 EMPTY_MESSAGE = "message text is empty"
-SESSION_CLOSED = "session closed"
+REPLY = session.REPLY_FILE
 RAISED = "{name}: {message}"
 TURN_FAILED = "session turn failed"
 COMMIT_FAILED = "session commit failed"
@@ -167,13 +169,15 @@ def commit_turn(ports: TurnPorts, attempt_id: UUID) -> None:
     turn = read_turn(ports, attempt_id)
     if turn is None:
         return
-    ctx = turn.ctx
-    try:
-        update = _closing(turn)
-    except Exception as error:
-        log.exception(COMMIT_FAILED, run_id=str(turn.run.id), attempt=ctx.attempt.n)
-        update = {"status": "error", "output_ref": _raised(error)}
-    finished = ctx.attempt.model_copy(update={**update, "ended_at": ctx.ports.clock.now()})
+    ctx, attempt = turn.ctx, turn.ctx.attempt
+    fields: dict[str, Any] = {}
+    if attempt.status in UNRUN:
+        fields = {"status": "error", "output_ref": attempt.output_ref or INTERRUPTED}
+    if session.dispatched(attempt) and turn.run.status not in TERMINAL_RUN:
+        _guarded(turn, fields, _commit_trees)
+    _guarded(turn, fields, lambda done: agent_workdir.end_shas(done.ctx))
+    _guarded(turn, fields, _reply)
+    finished = attempt.model_copy(update={**fields, "ended_at": ctx.ports.clock.now()})
     committed(ctx, lambda attempts: attempts.mark_finished(finished))
     if ctx.ports.spend_writes is None:
         return
@@ -181,21 +185,31 @@ def commit_turn(ports: TurnPorts, attempt_id: UUID) -> None:
         record_attempt_spend(spend_ports, turn.run, finished, None, locked=True)
 
 
-def _closing(turn: Turn) -> dict[str, Any]:
-    """The finish half's fields: the commit's outcome, the reply and the end SHAs."""
-    ctx, attempt = turn.ctx, turn.ctx.attempt
-    update: dict[str, Any] = {}
-    if attempt.status in UNRUN:
-        update = {"status": "error", "output_ref": attempt.output_ref or INTERRUPTED}
-    if turn.run.status not in TERMINAL_RUN:
-        message = session.TURN_MESSAGE.format(k=session.turn_number(turn.turns, attempt))
-        try:
-            agent_workdir.sweep(ctx, message)
-        except GitError as error:
-            update = {"status": "error", "output_ref": session_dispatch.git_words(error)}
-    workspace = require_workspace(ctx, str(agent_workdir.tree(ctx)))
-    reply = session.capped(read_decision(workspace, session.REPLY_FILE))
-    return {**update, **agent_workdir.end_shas(ctx), "reply": reply}
+def _guarded(turn: Turn, fields: dict[str, Any], part: Callable[[Turn], dict[str, Any]]) -> None:
+    """One part of the close, whose failure is named on the turn and changes no status: a
+    turn that finished keeps what it reached, and the parts after it still run."""
+    try:
+        fields.update(part(turn))
+    except Exception as error:
+        log.exception(COMMIT_FAILED, run_id=str(turn.run.id), attempt=turn.ctx.attempt.n)
+        fields.setdefault("output_ref", turn.ctx.attempt.output_ref or _raised(error))
+
+
+def _commit_trees(turn: Turn) -> dict[str, Any]:
+    """Each tree's `session: turn {k}` commit; git's refusal makes the turn `error`."""
+    message = session.TURN_MESSAGE.format(k=session.turn_number(turn.turns, turn.ctx.attempt))
+    try:
+        agent_workdir.sweep(turn.ctx, message)
+    except GitError as error:
+        return {"status": "error", "output_ref": session_dispatch.git_words(error)}
+    return {}
+
+
+def _reply(turn: Turn) -> dict[str, Any]:
+    """The reply file, decoded whatever bytes the senior wrote; a link is not followed."""
+    workspace = require_workspace(turn.ctx, str(agent_workdir.tree(turn.ctx)))
+    text = None if workspace.is_link(REPLY) else workspace.read(REPLY, errors="replace")
+    return {"reply": session.capped(text)}
 
 
 def _close(writers: WriterPorts, attempt: Attempt, reason: str) -> None:

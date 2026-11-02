@@ -176,14 +176,17 @@ def test_an_open_turn_keeps_a_reason_it_already_recorded() -> None:
 
 
 def test_an_unexpected_failure_still_closes_the_turn_naming_it() -> None:
-    world = a_turn_world()
+    # Story 2-5 review, 2026-11-02: a finished turn is never downgraded by a late failure,
+    # and the parts of the close after it still run.
+    world = a_turn_world(git=FakeGit(head_sha=["a" * 40, END]))
     attempt_id = ran(world)
     world.git._scripts["status"] = [ValueError("porcelain unreadable")]
 
     world.commit(attempt_id)  # type: ignore[arg-type]
 
     stored = world.attempt(attempt_id)  # type: ignore[arg-type]
-    assert (stored.status, stored.output_ref) == ("error", "ValueError: porcelain unreadable")
+    assert (stored.status, stored.output_ref) == ("done", "ValueError: porcelain unreadable")
+    assert (stored.end_sha, stored.reply) == (END, "The route is in `api/v2`.")
     assert stored.ended_at is not None
 
 

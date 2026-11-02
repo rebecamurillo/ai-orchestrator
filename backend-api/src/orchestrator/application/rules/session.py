@@ -162,6 +162,11 @@ def resumable(turns: Sequence[Attempt], attempt: Attempt) -> str | None:
     return max(earlier, key=lambda turn: turn.n).session_id if earlier else None
 
 
+def dispatched(attempt: Attempt) -> bool:
+    """Whether the turn reached its start record, after which its trees hold its work."""
+    return attempt.pgid is not None or attempt.start_sha is not None
+
+
 def needs_sweep(turns: Sequence[Attempt], attempt: Attempt) -> bool:
     """True until a turn of this session has recorded where its range starts: the first
     dispatch is the one that commits what the Run was left holding."""

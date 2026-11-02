@@ -24,6 +24,7 @@ from orchestrator.application.steps.context import (
     StepContext,
     committed,
     log_path,
+    require_attempt_writes,
     require_harnesses,
     require_process,
     require_run,
@@ -39,6 +40,10 @@ from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.ports.harness import Harness, HarnessHandle
 
 UNKNOWN_HARNESS = "unknown harness {name}"
+UNDER_LINK = "reply file is under a link"
+SESSION_CLOSED = "session closed"
+#: The folder both turn files live under; `is_link` on it covers `.orchestrator` too.
+REPLY_FOLDER = ".orchestrator/session"
 #: The Run input naming its spec folder, for a parked row that resolved none of its own.
 SPEC_FOLDER_INPUT = "spec_folder"
 
@@ -97,6 +102,13 @@ def dispatch(turn: Turn) -> None:
             record(ctx, status="error", output_ref=git_words(error))
             return
     workspace = require_workspace(ctx, str(agent_workdir.tree(ctx)))
+    # a link left in the tree would carry these writes to whatever the backend's user can
+    # reach: a link at a file is removed, a link at a folder refuses the turn
+    if workspace.is_link(REPLY_FOLDER):
+        record(ctx, status="error", output_ref=UNDER_LINK)
+        return
+    for path in (consult.IGNORE_FILE, session.REPLY_FILE):
+        workspace.remove(path)
     workspace.write(consult.IGNORE_FILE, consult.IGNORE_ALL)
     workspace.write(session.REPLY_FILE, "")
     started = ctx.attempt.model_copy(
@@ -119,11 +131,14 @@ def _run(turn: Turn, harness: Harness, started: Attempt, traceparent: str) -> No
         update={"pgid": handle.pgid, "session_id": handle.session_id or None}
     )
     try:
-        committed(ctx, lambda attempts: attempts.update(running))
+        still_open = _commit_group(ctx, running)
     except BaseException:
         require_process(ctx).kill_group(handle.pgid)
         raise
+    if not still_open:
+        require_process(ctx).kill_group(handle.pgid)
     result = harness.wait(handle)
+    closed = {} if still_open else {"status": "error", "output_ref": SESSION_CLOSED}
     finished = running.model_copy(
         update={
             "status": "done" if result.exit_code == 0 else "error",
@@ -131,9 +146,21 @@ def _run(turn: Turn, harness: Harness, started: Attempt, traceparent: str) -> No
             "session_id": result.session_id,
             "log_path": str(result.log_path),
             **agent_tail.usage(result),
+            **closed,
         }
     )
     committed(ctx, lambda attempts: attempts.update(finished))
+
+
+def _commit_group(ctx: StepContext, running: Attempt) -> bool:
+    """Commit the group under the Run's row lock, and answer whether the session is still
+    open: a `cancel` that took the lock first found no group to kill, so killing this one is
+    then the caller's (AD-8, AD-14)."""
+    with require_attempt_writes(ctx)() as writers, writers.uow:
+        run = writers.runs.get_for_update(running.run_id)
+        writers.attempts.update(running)
+        writers.uow.commit()
+    return run is not None and session.session_open(run)
 
 
 def _start(turn: Turn, harness: Harness, started: Attempt, traceparent: str) -> HarnessHandle:
