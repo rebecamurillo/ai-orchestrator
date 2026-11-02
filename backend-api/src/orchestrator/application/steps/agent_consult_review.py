@@ -51,6 +51,8 @@ IS_ANCHOR = "approved file is an anchor: {path}"
 NOT_FROZEN = "approved file is not a frozen test file: {path}"
 NO_REASON = "approval names no reason"
 DIFFERS = "approved files differ from the hits"
+UNDER_LINK = "diff file is under a link"
+NO_START = "no start commit to diff {path} from"
 #: One hit's section of the diff file.
 DIFF_SECTION = "### {path}\n{diff}"
 
@@ -134,24 +136,24 @@ def same_files(approved: Sequence[str], payload: Mapping[str, Any]) -> bool:
     return set(approved) == set(hit_paths(dict(payload)))
 
 
-def write_diff(ctx: StepContext, entry: Mapping[str, Any]) -> None:
-    """Write the stopped attempt's diff of every hit beside the decision file; nothing
-    through a link, which the agent could have planted in the ignored folder."""
+def write_diff(ctx: StepContext, entry: Mapping[str, Any]) -> str | None:
+    """Write the stopped attempt's diff of every hit beside the decision file, or say why
+    there is none to write: the path lies under a link, which the agent could have planted
+    in the ignored folder, or a hit's tree has no start commit. The senior is never sent
+    nothing to read."""
     workspace = require_workspace(ctx, str(agent_workdir.tree(ctx)))
     path = consult.diff_path(ctx.row.seq, ctx.attempt.n)
     workspace.remove(path)
     if workspace.is_link(path):
-        return
-    hits = hit_paths(dict(entry.get(consult.HITS_KEY) or {}))
-    sections = [DIFF_SECTION.format(path=hit, diff=_diff(ctx, hit)) for hit in hits]
+        return UNDER_LINK
+    sections: list[str] = []
+    for hit in hit_paths(dict(entry.get(consult.HITS_KEY) or {})):
+        at, sha, name = _tree_of(ctx, ctx.previous_attempt, hit)
+        if sha is None:
+            return NO_START.format(path=hit)
+        sections.append(DIFF_SECTION.format(path=hit, diff=ctx.ports.git.diff(at, sha, name)))
     workspace.write(path, "\n".join(sections))
-
-
-def _diff(ctx: StepContext, hit: str) -> str:
-    """One hit's diff in its own tree: the workdir from `start_sha`, the root from
-    `root_start_sha` on a `workdir` row, else the one tree from `start_sha`."""
-    at, sha, name = _tree_of(ctx, ctx.previous_attempt, hit)
-    return ctx.ports.git.diff(at, sha, name) if sha is not None else ""
+    return None
 
 
 def _tree_of(ctx: StepContext, stopped: Attempt | None, hit: str) -> tuple[Path, str | None, str]:

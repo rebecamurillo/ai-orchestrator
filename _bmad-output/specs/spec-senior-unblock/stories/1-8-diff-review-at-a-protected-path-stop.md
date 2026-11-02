@@ -106,23 +106,30 @@ Paths are under `backend-api/src/orchestrator/application/` unless stated.
 
 ## Implementation Notes
 
-- **Gates.** `make lint` passes. `make test` passes: 8775 backend tests (1 skipped) and 1711 web-client tests, with `domain` and `application` at 100% branch coverage. No API schema changed (`Consult` is not in the contract), so `make openapi` had nothing to regenerate; `gen:api --check` in `make lint` reports no drift.
+- **Gates.** `make lint` passes. `make test` passes: 8779 backend tests (1 skipped) and 1711 web-client tests, with `domain` and `application` at 100% branch coverage. No API schema changed (`Consult` is not in the contract), so `make openapi` had nothing to regenerate; `gen:api --check` in `make lint` reports no drift.
 - **Not run.** `make e2e` and `make e2e-ui` were out of scope by instruction.
 - **Built on HEAD.** The Code Map held, with line references adapted. 1-5's `prepare`, `read_decision`, `is_document`, `Workspace.is_link` and the `senior_accept` writer are reused unchanged.
 - **Module splits (400-line cap).** `agent_tail.py` was at 400: `re_check` and `_reported` moved whole to `steps/agent_recheck.py` (test pair `test_agent_recheck.py`), and `agent.py` calls it there. `agent_consult.py` was at 397: the senior's own dispatch (`_Senior`, `_dispatch`, `_senior`, `_stall_min`) moved whole to `steps/agent_consult_senior.py` (test pair `test_agent_consult_senior.py`). The protected-path helpers (`qualifies`, `same_files`, `write_diff`, `accepted`) are in `agent_consult_review.py`.
 - **Decided: the hits on the entry.** The offer's `Consult.hits` is the hit's own payload (`{hits: [...]}`), stored on the entry under `hits` only when non-empty, so `blocked` entries are unchanged. Every fail-closed `protected_path` park returns that payload, status `error`.
 - **Decided: the spend.** `offer` takes the stopped dispatch's `HarnessResult` and, at a `protected_path` offer only, records its spend through `agent_tail.record_spend` (made public) before the sweep. The re-check later prices the same attempt with no usage, which recomputes rather than adds (`record_attempt_spend`).
-- **Decided: an accept over budget.** It parks `{reason} · consult failed: no remaining budget` with the `budget` record on top and outcome `failed`, keeping to the two reason forms the boundaries allow.
+- **Decided: an accept over budget (Review Triage 2).** It parks `{reason} · consult failed: senior accepted ({senior's reason}); no remaining budget` with the `budget` record on top and outcome `accept`, still in the `consult failed:` form the boundaries allow. Nothing is accepted.
 - **Decided: an accept with no reason.** It fails closed (`approval names no reason`, 1-5's wording), and `apply_consult` writes no `senior_accept` without files and a reason.
 - **Message spelling.** Files that differ read `approved files differ from the hits`. The row's reason after an accept is `senior accepted: {files}`. `approved_files` is stored in the hits' order.
-- **The diff file.** Each section is `### {path}\n{Git.diff}`, joined by a newline. A hit under `{workdir}/` is diffed in the member tree from `start_sha` with the prefix stripped. Any other hit on a `workdir` row is diffed in the root from `root_start_sha`. A stopped attempt with no start SHA gets an empty section. The file is removed first, and nothing is written through a link.
+- **The diff file.** Each section is `### {path}\n{Git.diff}`, joined by a newline. A hit under `{workdir}/` is diffed in the member tree from `start_sha` with the prefix stripped. Any other hit on a `workdir` row is diffed in the root from `root_start_sha`. The file is removed first. A diff path under a link, or a hit whose tree has no start SHA, parks before the senior is dispatched (Review Triage 4).
 - **Templates.** `staged-story.yaml` and `staged-hub-story.yaml`: the three consulting rows in each now declare `on: [blocked, protected_path]`, and `dispatch` says "this condition". The `answer` clauses are unchanged.
 - **Skill.** "Reviewing a protected-path diff" was added, and the frontmatter description names the protected-path stop.
 - **Loop fixture.** AD-17 freezes the frame's first started attempt's test set. So `test_consult_review_loop.py` gives the frame an earlier, finished row whose attempt recorded `tests/a.py`, and the implementer's first dispatch can hit it.
-- **Tests revised.** None. Every existing test passes unchanged, including `test_consult_rules.py`'s `accept until 1-5` case.
+- **Tests revised.** No test that predates this story was changed. Every one passes, including `test_consult_rules.py`'s `accept until 1-5` case. The review revised three of this story's own tests in `test_consult_review_run.py`, as the triage rows declare: the planted diff, the diff under a link, and the stopped attempt with no start now park before dispatch. The over-budget accept now asserts the new reason.
 
 ## Spec Change Log
 
 - 2026-11-02, lead review: split out of 1-5. Added the spend recorded before the offer, the `answered_by + 1` delivery and the `error`-status park. Known-bad states avoided: an accept applied again on every later attempt; a consult budget check that misses the stopped attempt's spend; a fail-closed park that the Operator's `continue` cannot accept. KEEP: the hits-only gate, and the hits payload on every fail-closed park.
 
 ## Review Triage Log
+
+| # | Finding | Verdict | Resolution |
+|---|---------|---------|------------|
+| 1 | Deleting `workspace.remove(path)` in `write_diff` survived every test. Under that mutation a link the agent planted at the `.diff` path survived, and the senior read a diff the agent chose | fix | `test_a_planted_diff_is_removed_and_the_senior_reads_the_real_one` plants a regular file and a link at the diff path and asserts the senior reads the real diff. The mutation now fails it |
+| 2 | An accept that ran out of budget parked as `consult failed: no remaining budget`, the same text as the refusal before any senior ran, so the accept and its reason were lost | fix | It now parks `· consult failed: senior accepted ({reason}); no remaining budget`, outcome `accept`, with the `budget` record on top |
+| 3 | The offer discarded the Run returned after recording the stopped attempt's spend, so a hit whose own dispatch overspent was still offered, then parked without the `budget` record | fix | `offer` runs `budget.check` on that Run. When it parks, there is no offer and the hit keeps `budget_park`, as the blocked path does |
+| 4 | A diff path under a link, or a stopped attempt with no start SHA, sent the senior nothing to read | fix | `write_diff` returns why, and the consult parks before dispatch: `diff file is under a link`, `no start commit to diff {path} from` (also on a hub root hit with no `root_start_sha`) |

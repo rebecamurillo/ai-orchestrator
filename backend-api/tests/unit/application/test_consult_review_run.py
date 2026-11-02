@@ -115,33 +115,54 @@ def test_the_diff_is_there_while_the_senior_runs() -> None:
     assert seen == [f"### {FROZEN}\n{DIFF_A}\n### {OTHER}\n{DIFF_B}"]
 
 
-def test_a_planted_diff_is_replaced_by_the_real_one() -> None:
+REAL_DIFF = f"### {FROZEN}\n{DIFF_A}\n### {OTHER}\n{DIFF_B}"
+
+
+@pytest.mark.parametrize("link", [False, True], ids=["a regular file", "a link"])
+def test_a_planted_diff_is_removed_and_the_senior_reads_the_real_one(link: bool) -> None:
+    """Review of story 1-8, 2026-11-02: the agent can write the ignored folder."""
     world = a_review_world(accepting(f"[{FROZEN}, {OTHER}]"))
     world.workspace.write(DIFF_FILE, "### tests/a.py\nnothing to see\n")
+    if link:
+        world.workspace.links.add(DIFF_FILE)
+    seen: list[str | None] = []
+    world.harness.on_wait = lambda: seen.append(world.workspace.read(DIFF_FILE))
 
     run(world)
 
-    assert "nothing to see" not in (world.workspace.read(DIFF_FILE) or "")
+    assert seen == [REAL_DIFF]
+    assert DIFF_FILE not in world.workspace.links
 
 
-def test_a_diff_path_under_a_link_is_never_written() -> None:
+def test_a_diff_folder_under_a_link_parks_before_the_senior_runs() -> None:
     world = a_review_world(accepting(f"[{FROZEN}, {OTHER}]"))
     world.workspace.links.add(".orchestrator/consult")
 
-    run(world)
+    fails_closed(world, "diff file is under a link")
 
     assert world.workspace.read(DIFF_FILE) is None
+    assert world.harness.calls == []
 
 
-def test_a_stopped_attempt_with_no_start_has_an_empty_diff() -> None:
+def test_a_stopped_attempt_with_no_start_parks_before_the_senior_runs() -> None:
+    """Review of story 1-8, 2026-11-02: a senior is never sent an empty diff to read."""
     world = a_review_world(accepting(f"[{FROZEN}, {OTHER}]"))
     stopped = an_attempt(world.row, 1, status="error", session_id=AGENT_SESSION, start_sha=None)
     world = replace(world, ctx=replace(world.ctx, previous_attempt=stopped))
 
-    run(world)
+    fails_closed(world, f"no start commit to diff {FROZEN} from")
 
-    assert world.workspace.read(DIFF_FILE) == f"### {FROZEN}\n\n### {OTHER}\n"
     assert world.git.called("diff") == []
+    assert world.harness.calls == []
+
+
+def test_a_consult_with_no_stopped_attempt_parks_before_the_senior_runs() -> None:
+    world = a_review_world(accepting(f"[{FROZEN}, {OTHER}]"))
+    world = replace(world, ctx=replace(world.ctx, previous_attempt=None))
+
+    fails_closed(world, f"no start commit to diff {FROZEN} from")
+
+    assert world.harness.calls == []
 
 
 def test_a_blocked_consult_writes_no_diff() -> None:
@@ -256,8 +277,13 @@ def test_an_acceptance_that_exhausts_the_budget_parks_with_the_budget_on_top() -
     )
     gateway.script(world.run.id, world.attempt.id, spend("5.00"))
 
-    result = fails_closed(world, "no remaining budget")
+    result = run(world)
 
+    reason = f"{QUESTION} · consult failed: senior accepted (AC 2 changes it); no remaining budget"
+    assert result.status == "error"
+    assert result.park == parked(reason)
+    assert result.payload == HITS
+    assert result.consult == Consult(kind="protected_path", question=QUESTION, outcome="accept")
     assert result.budget_park is not None
     assert result.budget_park.kind == "budget"
 
@@ -342,6 +368,24 @@ def test_a_hub_rows_acceptance_keeps_the_workdir_spelling() -> None:
     assert result.consult is not None
     assert result.consult.outcome == "accept"
     assert result.consult.approved_files == ("repos/member/tests/a.py", "tests/hub.py")
+
+
+def test_a_hub_root_hit_with_no_root_start_parks_before_the_senior_runs() -> None:
+    world = a_hub_review(accepting("[repos/member/tests/a.py, tests/hub.py]"))
+    stopped = world.ctx.previous_attempt
+    assert stopped is not None
+    world = replace(
+        world,
+        ctx=replace(
+            world.ctx, previous_attempt=stopped.model_copy(update={"root_start_sha": None})
+        ),
+    )
+
+    result = run(world)
+
+    assert result.park is not None
+    assert result.park.reason.endswith("consult failed: no start commit to diff tests/hub.py from")
+    assert world.harness.calls == []
 
 
 def test_a_hub_acceptance_spelled_without_the_workdir_fails_closed() -> None:

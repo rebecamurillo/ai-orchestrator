@@ -82,6 +82,8 @@ ACCEPTED = "senior accepted: {files}"
 PATHS = ", "
 ESCALATED = "{question} · senior: {reason}"
 ANSWERED_OVER_BUDGET = "{question} · senior answered: {line}"
+#: `FAILED`'s `{why}` for an acceptance whose own spend exhausted the budget.
+ACCEPTED_OVER_BUDGET = "senior accepted ({reason}); no remaining budget"
 FAILED = "{question} · consult failed: {why}"
 
 #: Why a consult failed closed, as `FAILED`'s `{why}`.
@@ -116,7 +118,10 @@ def offer(
         return final
     review = park.kind == PROTECTED_PATH
     if review and result is not None:
-        agent_tail.record_spend(ctx, attempt, result)
+        spent = agent_tail.record_spend(ctx, attempt, result)
+        over = budget.check(spent) if spent is not None else None
+        if over is not None:
+            return final.model_copy(update={"budget_park": over})
     try:
         snapshot = agent_consult_tree.sweep_and_snapshot(ctx, attempt.n)
     except GitError as error:
@@ -220,8 +225,11 @@ def _consult(ctx: StepContext, stop: _Stop) -> StepResult:
     workspace.write(consult.IGNORE_FILE, consult.IGNORE_ALL)
     decision = consult.decision_path(ctx.row.seq, ctx.attempt.n)
     agent_consult_review.prepare(ctx, decision)
-    if stop.kind == PROTECTED_PATH:
-        agent_consult_review.write_diff(ctx, stop.entry)
+    unwritten = (
+        agent_consult_review.write_diff(ctx, stop.entry) if stop.kind == PROTECTED_PATH else None
+    )
+    if unwritten is not None:
+        return _parked(ctx, stop, FAILED, unwritten)
     prompt = _prompt(ctx, block, stop, str(tree / decision))
     started = ctx.attempt.model_copy(
         update={"pgid": None, "harness": name, "model": str(block.get("model") or "") or None}
@@ -321,7 +329,9 @@ def _with_budget(ctx: StepContext, stop: _Stop, outcome: StepResult, run: Run | 
     if outcome.park is not None:
         return outcome.model_copy(update={"budget_park": park})
     if stop.kind == PROTECTED_PATH:
-        parked = _parked(ctx, stop, FAILED, NO_BUDGET, outcome.output_ref)
+        said = outcome.consult.reason if outcome.consult is not None else ""
+        why = ACCEPTED_OVER_BUDGET.format(reason=said)
+        parked = _parked(ctx, stop, FAILED, why, outcome.output_ref, outcome="accept")
         return parked.model_copy(update={"budget_park": park})
     line = _first_line(outcome.consult.answer if outcome.consult is not None else "")
     parked = _parked(ctx, stop, ANSWERED_OVER_BUDGET, line, outcome.output_ref, outcome="answer")

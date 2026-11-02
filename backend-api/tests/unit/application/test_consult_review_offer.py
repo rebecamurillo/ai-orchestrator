@@ -164,6 +164,25 @@ def test_the_stopped_attempts_spend_is_recorded_before_the_offer() -> None:
     assert stored.spend_usd == Decimal("2.00")
 
 
+def test_a_hit_whose_own_dispatch_overspent_parks_with_the_budget_on_top() -> None:
+    """Review of story 1-8, 2026-11-02: as a blocked stop over budget is, never offered."""
+    gateway = FakeGateway()
+    world, _ = spend_scope(
+        a_hit_world(FROZEN, run=a_run(budget_usd=Decimal("1.00"), spend_usd=Decimal("0"))),
+        gateway,
+    )
+    gateway.script(world.run.id, world.attempt.id, spend("5.00"))
+
+    result = run(world)
+
+    assert result.consult is None
+    assert result.park == Park(kind="protected_path", reason=reason_for(FROZEN), path=ROW_PATH)
+    assert result.payload == hits_of(FROZEN)
+    assert result.budget_park is not None
+    assert result.budget_park.kind == "budget"
+    assert not [call for call in world.git.called("commit") if call[1] == SWEEP]
+
+
 def test_a_hit_offered_with_no_dispatch_result_records_no_spend() -> None:
     gateway = FakeGateway()
     world, runs = spend_scope(
