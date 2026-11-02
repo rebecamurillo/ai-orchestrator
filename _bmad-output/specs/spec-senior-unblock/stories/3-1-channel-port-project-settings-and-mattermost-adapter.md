@@ -26,6 +26,9 @@ context: []
 **Decided (lead review, 2026-11-02):**
 - **Thread read pages explicitly.** In the server source, `perPage=0` returns the whole thread "for now", with a comment that it will become `PerPageDefault` (60) after the next ESR (`server/channels/api4/post.go::getPostThread`). The adapter therefore sends `perPage=200` (the server's `PerPageMaximum`) and `direction=down`, plus `fromCreateAt` and `fromPost` when a cursor is held. It repeats while `has_next` is true. The store applies `CreateAt > from OR (CreateAt = from AND Id > fromPost)`, ordered `CreateAt, Id ASC` (`sqlstore/post_store.go::Get`). Without `direction` the order is undefined.
 - **`Reply` carries `cursor`.** It is the adapter's opaque position just after that reply: Mattermost `"{create_at}:{id}"`, Slack its `ts`. It is a position, not an id, so a deleted reply cannot strand a thread. AD-25 gains this field. The exact text is in the Spec Change Log.
+- **`Reply` carries `body`, and some posts are not replies** (lead review of 4-1, 2026-11-02).
+  - `body` is `text` with every bot mention removed, by the same match `mentions_bot` uses, and is otherwise unchanged. `application/` therefore never parses platform syntax.
+  - `replies_since` also drops system posts (`type` not empty) and posts whose `props` carry `from_webhook`, `from_bot` or `from_plugin` as `"true"`. Such a post carries its owner's `user_id` beside someone else's words, so anyone holding an allowed person's webhook could answer as them.
 - **`mentions` are `ChatUser{id, handle}`**, so each adapter renders its own syntax: Mattermost `@handle`, Slack `<@id>`.
 - **Live check:** none in this story. "Done" rests on mock-transport tests. The Operator runs the live check at the 3-3 and 4-2 done checkpoints (spine open item 8, amended).
 
@@ -38,6 +41,8 @@ context: []
 | Post | text, two users | `POST /posts {channel_id, message: "@a @b\n<text>"}` → `ThreadRef(id)` | non-2xx → `ChatError` |
 | Reply | thread, text | `POST /posts` with `root_id` | as above |
 | Replies, first read | cursor `None`, 2 pages | every reply oldest first, without the root or the bot's own posts | N/A |
+| Replies, not a person | a system post, a webhook post, a bot post | dropped | N/A |
+| Body | `@bot fix @botty and @Bot.`, bot `bot` | `body` is `" fix @botty and ."` | N/A |
 | Replies, after cursor | `"1700:abc"` | query carries `fromCreateAt=1700&fromPost=abc` | malformed cursor → `ChatError` |
 | Host down | `httpx.ConnectError` | N/A | `ChatError("ConnectError: …")` |
 | Not JSON / missing key | 200 with HTML | N/A | `ChatError("unexpected response from <path>")` |
@@ -51,11 +56,11 @@ context: []
 Under `backend-api/src/orchestrator/`.
 
 - `domain/ports/chat.py` (new):
-  - `ChatProvider = Literal["mattermost", "slack"]`, `ChatUser{id, handle}`, `ThreadRef{id}`, `Reply{id, author_id, mentions_bot, text, cursor}`, and `ChatError(Exception)` with `.detail`.
+  - `ChatProvider = Literal["mattermost", "slack"]`, `ChatUser{id, handle}`, `ThreadRef{id}`, `Reply{id, author_id, mentions_bot, text, body, cursor}`, and `ChatError(Exception)` with `.detail`.
   - `ChatChannel` Protocol: `post(text, mentions: Sequence[ChatUser]) -> ThreadRef`, `reply(thread, text) -> None`, `replies_since(thread, cursor: str | None) -> list[Reply]`, `probe() -> str` (the bot's handle, without `@`).
   - `ChatChannelFactory` Protocol: `open(provider, base_url, channel_id, token) -> ChatChannel`.
-- `infrastructure/chat/mattermost.py` (new) -- `MattermostChannel(base_url, channel_id, token, client: httpx.Client | None = None)`. The base URL loses its trailing `/`. Timeout 10 s, `follow_redirects=False`, `client` injectable as in `notify/webhook.py`. `/users/me` is read once and cached for the bot's id and username. `probe` reads `GET /api/v4/users/me`, then `GET /api/v4/channels/{channel_id}/members/{me.id}`. `replies_since` reads `GET /api/v4/posts/{id}/thread` as Decided, walks `order`, and drops the root, the bot's posts and anything at or before the cursor. Non-2xx gives `"<status> <AppError.message>"`, or the body cut to 300 characters when it is not an AppError. `httpx.HTTPError` gives `"<ErrorType>: <str>"`.
-- `infrastructure/chat/mentions.py` (new, pure) -- `mentions_bot(text, username)`: `@username`, case-insensitive. The next character must not be one of `[a-z0-9_-]`, and must not be a `.` followed by such a character, so `@bot.` at the end of a sentence counts and `@bot.ops` does not. 3-2 reuses the module for Slack's `<@id>` form.
+- `infrastructure/chat/mattermost.py` (new) -- `MattermostChannel(base_url, channel_id, token, client: httpx.Client | None = None)`. The base URL loses its trailing `/`. Timeout 10 s, `follow_redirects=False`, `client` injectable as in `notify/webhook.py`. `/users/me` is read once and cached for the bot's id and username. `probe` reads `GET /api/v4/users/me`, then `GET /api/v4/channels/{channel_id}/members/{me.id}`. `replies_since` reads `GET /api/v4/posts/{id}/thread` as Decided, walks `order`, and drops the root, the bot's posts, the posts that are not a person's (Decided) and anything at or before the cursor. It fills `body` through `strip_mentions`. Non-2xx gives `"<status> <AppError.message>"`, or the body cut to 300 characters when it is not an AppError. `httpx.HTTPError` gives `"<ErrorType>: <str>"`.
+- `infrastructure/chat/mentions.py` (new, pure) -- `mentions_bot(text, username)`: `@username`, case-insensitive. The next character must not be one of `[a-z0-9_-]`, and must not be a `.` followed by such a character, so `@bot.` at the end of a sentence counts and `@bot.ops` does not. `strip_mentions(text, username)` removes every such match and nothing else. 3-2 reuses the module for Slack's `<@id>` form.
 - `infrastructure/chat/__init__.py` (new) -- `open_channel(provider, base_url, channel_id, token) -> ChatChannel`, matching `ChatChannelFactory`. `"slack"` raises `ChatError("slack is not available yet")` until 3-2.
 
 ## Tasks & Acceptance
@@ -69,6 +74,7 @@ Under `backend-api/src/orchestrator/`.
 - Given a token that appears in the error body, when any call fails, then `ChatError.detail` holds `***` and not the token.
 - Given a thread of 250 replies with the cursor at reply 100, when `replies_since` runs, then it makes two thread requests and returns replies 101 to 250 in order.
 - Given `"thanks @Bot."`, `"@bot.ops"` and `"@botty"` with bot `bot`, when `mentions_bot` runs, then only the first is true.
+- Given a thread holding a webhook post by an allowed user, when `replies_since` runs, then that post is not returned.
 
 ## Design Notes
 
@@ -96,3 +102,8 @@ API facts, verified 2026-11-02:
   - `ChatUser` mentions, which Slack needs.
 - Proposed AD-25 text, for the Operator to ratify: "`Reply{id, author_id, mentions_bot, text, cursor}`, where `cursor` is the adapter's opaque position just after that reply; `replies_since(thread, cursor)` returns, oldest first, the replies after it (`None` = from the start), excluding the root and the bot's own posts; `post` takes `ChatUser{id, handle}` mentions so each adapter renders its own syntax."
 - KEEP: the AD-25 method set, httpx with an injectable client, and the cited API facts.
+- 2026-11-02, lead review of story 4-1, before 3-1 was built. Two changes:
+  - `Reply.body` and `strip_mentions` were added, so 4-1 never parses platform syntax.
+  - System, webhook, bot and plugin posts are now dropped. A webhook post carries its owner's `user_id`, which would let anyone holding an allowed person's webhook answer as them.
+  - Proposed AD-25 text, for the Operator to ratify: "`Reply` gains `body`: `text` with every mention of the bot removed by the same match that sets `mentions_bot`. `replies_since` also excludes system posts and posts made through a webhook, a bot or a plugin."
+  - KEEP: the `cursor` field and the paging rule.

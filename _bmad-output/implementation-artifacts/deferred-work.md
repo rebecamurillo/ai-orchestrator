@@ -191,3 +191,7 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/specs/spec-senior-unblock/stories/4-1-reply-polling-and-routing-checks.md`
   summary: A backend killed after `signal_run` commits but before `engine.signal` delivers leaves the Run marked running with a walker still waiting on its recv, whoever sent the signal (high, pre-existing).
   evidence: Found while planning story 4-1, 2026-11-02. Settle with a durability-suite kill between the commit and the send; a fix is a startup sweep that re-sends the signal for a Run whose newest gate record is an unanswered signal.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/4-1-reply-polling-and-routing-checks.md`
+  summary: The Run page's terminal-session refusal still runs outside the Run lock, so a `terminal_start` and an `answer` sent together could both apply (medium).
+  evidence: Found in the story 4-1 lead review, 2026-11-02. The chat path re-checks under the lock; the web and API path through `handle_signal::_refuse_early` does not. Settle by moving the refusal under `get_for_update` once story 2-3 lands the lock.

@@ -84,10 +84,14 @@
   done_checkpoint: true
 # Epic 4: Thread replies
 - id: "4-1"
-  title: Reply polling and routing checks
+  title: Reply routing checks
   description: >-
-    A job reads open threads and sends `answer` for the first reply that passes every check, resuming the original agent (CAP-12).
+    A thread's new replies are checked in order under the Run and thread locks. The first allowed reply that mentions the bot at the Run's current `blocked` stop sends `answer` as `chat` and closes the thread in one commit (CAP-12).
   spec_checkpoint: true
+- id: "4-3"
+  title: Reply polling pass
+  description: >-
+    `chat_poll` reads each open thread on its Project's current channel and hands new replies to 4-1's checks, resuming the original session. A read failure is stored on the thread and logged once, and no exception reaches the scheduler (CAP-12).
 - id: "4-2"
   title: Thread lock and closing notices
   description: >-
