@@ -222,7 +222,9 @@ async def test_turning_off_deletes_the_row_and_is_idempotent(api: Harness) -> No
             "body.allowed_users",
         ),
         ({"allowed_users": [{"id": "u1", "handle": "@a"}]}, "body.allowed_users.0.handle"),
-        ({"provider": "slack"}, "body.provider"),
+        # Story 3-2, 2026-11-02 (hard rule 1(b)): `slack` is now accepted (see
+        # test_project_channel_slack.py); an unknown provider is still refused here.
+        ({"provider": "teams"}, "body.provider"),
     ],
 )
 async def test_a_bad_shape_is_a_422_at_its_field_and_writes_nothing(
@@ -363,4 +365,7 @@ async def test_the_contract_carries_the_token_write_only(api: Harness) -> None:
     assert "token" not in schemas["ChannelOut"]["properties"]
     assert "token_set" in schemas["ChannelOut"]["required"]
     assert "writeOnly" in repr(token)
-    assert "slack" not in repr(schemas["ChannelIn"]) + repr(schemas["ChannelOut"])
+    # Story 3-2, 2026-11-02 (hard rule 1(b)): the contract now offers `slack`, and only the
+    # three settings CAP-10 names.
+    for schema in ("ChannelIn", "ChannelOut"):
+        assert schemas[schema]["properties"]["provider"]["enum"] == ["off", "mattermost", "slack"]

@@ -7,6 +7,7 @@ import pytest
 from orchestrator.domain.ports.chat import ChatChannelFactory, ChatError
 from orchestrator.infrastructure.chat import ChatChannels, open_channel
 from orchestrator.infrastructure.chat.mattermost import MattermostChannel
+from orchestrator.infrastructure.chat.slack import SlackChannel
 
 
 def test_mattermost_opens_the_mattermost_adapter() -> None:
@@ -15,11 +16,15 @@ def test_mattermost_opens_the_mattermost_adapter() -> None:
     assert isinstance(channel, MattermostChannel)
 
 
-def test_slack_is_refused_until_its_adapter_lands() -> None:
-    with pytest.raises(ChatError) as caught:
-        open_channel("slack", "https://slack.com", "C1", "tok")
+def test_slack_opens_the_slack_adapter() -> None:
+    # Revised under hard rule 1(b) by story 3-2, 2026-11-02: `slack` was refused with
+    # "slack is not available yet" until its adapter landed; it now opens `SlackChannel`.
+    channel = open_channel("slack", "https://slack.com/api/", "C1", "tok")
 
-    assert caught.value.detail == "slack is not available yet"
+    assert isinstance(channel, SlackChannel)
+    assert not isinstance(channel, MattermostChannel)
+    assert channel._base == "https://slack.com/api"
+    assert channel._channel_id == "C1"
 
 
 def test_an_unknown_provider_is_refused_by_name() -> None:

@@ -2,7 +2,8 @@
 
 `token` is a `SecretStr` and leaves only as `token_set`. No validator message names a value,
 so a refused token is never echoed in a problem body. Every shape rule fails at the field it
-names, which is where the form puts its message. `slack` is not offered until 3-2.
+names, which is where the form puts its message. Every provider but `off` needs a base URL,
+a channel and an allowed user; Slack's base URL is its Web API root (story 3-2).
 """
 
 from __future__ import annotations
@@ -23,8 +24,8 @@ from orchestrator.domain.entities.project_channel import (
 )
 from orchestrator.domain.ports.chat import ChatUser
 
-ProviderIn = Literal["off", "mattermost"]
-NEEDS_FIELDS = "mattermost"
+ProviderIn = Literal["off", "mattermost", "slack"]
+NEEDS_FIELDS: tuple[ProviderIn, ...] = ("mattermost", "slack")
 
 BASE_URL_REASON = "a base URL is http(s)://host, with no whitespace"
 CHANNEL_ID_REASON = "a channel id is non-empty, with no whitespace"
@@ -33,7 +34,7 @@ HANDLE_REASON = "a handle is non-empty, without @ and without whitespace"
 TOKEN_REASON = "a token is printable ASCII with no whitespace"
 NO_USER_REASON = "a channel needs at least one allowed user"
 DUPLICATE_USER_REASON = "duplicate user id"
-REQUIRED_REASON = "required for a mattermost channel"
+REQUIRED_REASON = "required for a {provider} channel"
 
 _PRINTABLE_ASCII = range(0x21, 0x7F)
 
@@ -87,14 +88,15 @@ class ChannelIn(BaseModel):
     @field_validator("base_url", "channel_id")
     @classmethod
     def _present(cls, value: str | None, info: ValidationInfo) -> str | None:
-        if value is None and info.data.get("provider") == NEEDS_FIELDS:
-            raise ValueError(REQUIRED_REASON)
+        provider = info.data.get("provider")
+        if value is None and provider in NEEDS_FIELDS:
+            raise ValueError(REQUIRED_REASON.format(provider=provider))
         return value
 
     @field_validator("allowed_users")
     @classmethod
     def _users(cls, users: list[ChatUserIn], info: ValidationInfo) -> list[ChatUserIn]:
-        if not users and info.data.get("provider") == NEEDS_FIELDS:
+        if not users and info.data.get("provider") in NEEDS_FIELDS:
             raise ValueError(NO_USER_REASON)
         seen: set[str] = set()
         for user in users:

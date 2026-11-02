@@ -698,7 +698,8 @@
           "provider": {
             "enum": [
               "off",
-              "mattermost"
+              "mattermost",
+              "slack"
             ],
             "title": "Provider",
             "type": "string"
@@ -762,7 +763,8 @@
           "provider": {
             "enum": [
               "off",
-              "mattermost"
+              "mattermost",
+              "slack"
             ],
             "title": "Provider",
             "type": "string"

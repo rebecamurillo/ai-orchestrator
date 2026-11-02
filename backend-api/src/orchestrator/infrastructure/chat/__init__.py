@@ -10,7 +10,9 @@ from __future__ import annotations
 import httpx
 
 from orchestrator.domain.ports.chat import ChatChannel, ChatError, ChatProvider
-from orchestrator.infrastructure.chat.mattermost import MattermostChannel, new_client
+from orchestrator.infrastructure.chat.http import new_client
+from orchestrator.infrastructure.chat.mattermost import MattermostChannel
+from orchestrator.infrastructure.chat.slack import SlackChannel
 
 
 def open_channel(
@@ -23,7 +25,7 @@ def open_channel(
     if provider == "mattermost":
         return MattermostChannel(base_url, channel_id, token, client=client)
     if provider == "slack":
-        raise ChatError("slack is not available yet")
+        return SlackChannel(base_url, channel_id, token, client=client)
     raise ChatError(f"unknown chat provider {provider!r}")
 
 
@@ -42,4 +44,4 @@ class ChatChannels:
         self._client.close()
 
 
-__all__ = ["ChatChannels", "MattermostChannel", "open_channel"]
+__all__ = ["ChatChannels", "MattermostChannel", "SlackChannel", "open_channel"]

@@ -102,7 +102,9 @@ def test_the_token_is_a_secret_the_payload_never_renders() -> None:
         ({"allowed_users": [{"id": "u1", "handle": "@alice"}]}, ("allowed_users", 0, "handle")),
         ({"allowed_users": [{"id": "u1", "handle": "al ice"}]}, ("allowed_users", 0, "handle")),
         ({"allowed_users": [{"id": "", "handle": "alice"}]}, ("allowed_users", 0, "id")),
-        ({"provider": "slack"}, ("provider",)),
+        # Story 3-2, 2026-11-02 (hard rule 1(b)): `slack` is now accepted (see
+        # test_project_channel_slack.py); an unknown provider is still refused here.
+        ({"provider": "teams"}, ("provider",)),
         ({"base_url": "https://chat.example.com/\x00"}, ("base_url",)),
     ],
 )

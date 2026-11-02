@@ -1066,7 +1066,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "off" | "mattermost";
+            provider: "off" | "mattermost" | "slack";
             /** Token */
             token?: string | null;
         };
@@ -1087,7 +1087,7 @@ export interface components {
              * Provider
              * @enum {string}
              */
-            provider: "off" | "mattermost";
+            provider: "off" | "mattermost" | "slack";
             /** Token Set */
             token_set: boolean;
         };
