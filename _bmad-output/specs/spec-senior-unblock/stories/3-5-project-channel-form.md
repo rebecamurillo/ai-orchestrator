@@ -72,3 +72,4 @@ Under `web-client/`.
 ## Spec Change Log
 
 - 2026-11-02, lead review: split out of the 3-1 draft. Added Test disabled while the form is dirty, the token cleared after a save, the builtin refusal, and the check that `/projects/new` has no `channel-*` ids.
+- 2026-11-02, review: fields and controls are disabled while a Save is in flight; editing a field clears its own refusal; a `cancel` control (`channel-token-cancel`) follows `replace`; the token input is `autoComplete="new-password"`.

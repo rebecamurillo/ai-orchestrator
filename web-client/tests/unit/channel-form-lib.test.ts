@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { components } from '../../src/api/schema';
 import {
   bodyFromForm,
+  errorsAfterEdit,
   errorsByField,
   formFromChannel,
   formatAllowedUsers,
@@ -296,5 +297,31 @@ describe('errorsByField', () => {
       fields: {},
       detail: 'd',
     });
+  });
+});
+
+describe('errorsAfterEdit', () => {
+  const errors = {
+    fields: { base_url: 'a', channel_id: 'b', token: 'c', allowed_users: 'd', metadata_only: 'e' },
+    detail: 'general',
+  };
+
+  it.each([
+    ['baseUrl', { baseUrl: 'x' }, 'base_url'],
+    ['channelId', { channelId: 'x' }, 'channel_id'],
+    ['token', { token: 'x' }, 'token'],
+    ['allowedUsers', { allowedUsers: 'x' }, 'allowed_users'],
+    ['metadataOnly', { metadataOnly: true }, 'metadata_only'],
+  ])('drops only the refusal of %s', (_name, patch, field) => {
+    const result = errorsAfterEdit(errors, patch);
+    expect(result.fields).not.toHaveProperty(field);
+    expect(Object.keys(result.fields)).toHaveLength(4);
+    expect(result.detail).toBe('general');
+  });
+
+  it('keeps every refusal for a change that is no field, and does not mutate its input', () => {
+    expect(errorsAfterEdit(errors, { replacingToken: false, provider: 'off' })).toEqual(errors);
+    errorsAfterEdit(errors, { baseUrl: 'x' });
+    expect(errors.fields.base_url).toBe('a');
   });
 });

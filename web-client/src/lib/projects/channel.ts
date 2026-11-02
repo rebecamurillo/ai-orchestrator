@@ -138,3 +138,24 @@ export function errorsByField(
   if (Object.keys(fields).length > 0) return { fields, detail: null };
   return { fields, detail: problem.detail ?? problem.title ?? REQUEST_FAILED };
 }
+
+const EDIT_CLEARS: Partial<Record<keyof ChannelFormState, ChannelField>> = {
+  baseUrl: 'base_url',
+  channelId: 'channel_id',
+  token: 'token',
+  allowedUsers: 'allowed_users',
+  metadataOnly: 'metadata_only',
+};
+
+/** Editing a field drops that field's refusal, and only that one. */
+export function errorsAfterEdit(
+  errors: FieldErrors,
+  patch: Partial<ChannelFormState>,
+): FieldErrors {
+  const fields = { ...errors.fields };
+  for (const key of Object.keys(patch) as (keyof ChannelFormState)[]) {
+    const field = EDIT_CLEARS[key];
+    if (field !== undefined) delete fields[field];
+  }
+  return { ...errors, fields };
+}

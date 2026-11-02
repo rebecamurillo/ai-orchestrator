@@ -116,7 +116,8 @@ describe('loading', () => {
     await mount(SET);
     fireEvent.click(screen.getByTestId('channel-token-replace'));
     const input = field('channel-token-input');
-    expect(input.type).toBe('password');
+    expect(input.getAttribute('type')).toBe('password');
+    expect(input.getAttribute('autocomplete')).toBe('new-password');
     expect(input.value).toBe('');
   });
 
@@ -365,5 +366,128 @@ describe('testing', () => {
 
     type('channel-channel-id', 'chan2');
     expect(screen.queryByTestId('channel-test-status')).toBeNull();
+  });
+});
+
+describe('review fixes (story 3-5 review)', () => {
+  it('disables every field and control while a save is in flight, then enables them', async () => {
+    await mount(SET);
+    fireEvent.click(screen.getByTestId('channel-token-replace'));
+    let release: (value: unknown) => void = () => undefined;
+    PUT.mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
+    type('channel-channel-id', 'chan2');
+    fireEvent.click(screen.getByTestId('channel-save'));
+
+    const ids = [
+      'channel-provider',
+      'channel-base-url',
+      'channel-channel-id',
+      'channel-token-input',
+      'channel-allowed-users',
+      'channel-metadata-only',
+      'channel-token-cancel',
+    ];
+    await waitFor(() => expect(field('channel-provider').disabled).toBe(true));
+    for (const id of ids) expect(field(id).disabled).toBe(true);
+
+    release(ok({ ...SET, channel_id: 'chan2' }));
+    await waitFor(() => expect(field('channel-provider').disabled).toBe(false));
+    expect(field('channel-channel-id').disabled).toBe(false);
+  });
+
+  it('disables the replace control while a save is in flight', async () => {
+    await mount(SET);
+    let release: (value: unknown) => void = () => undefined;
+    PUT.mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
+    type('channel-channel-id', 'chan2');
+    fireEvent.click(screen.getByTestId('channel-save'));
+
+    await waitFor(() =>
+      expect((screen.getByTestId('channel-token-replace') as HTMLButtonElement).disabled).toBe(
+        true,
+      ),
+    );
+    release(ok(SET));
+    await waitFor(() =>
+      expect((screen.getByTestId('channel-token-replace') as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
+    );
+  });
+
+  it('clears the error of the field being edited and keeps the others', async () => {
+    await mount(SET);
+    type('channel-base-url', 'ftp://nope');
+    PUT.mockResolvedValueOnce(
+      problem(422, {
+        errors: [
+          { path: 'body.base_url', reason: 'a base URL is http(s)://host' },
+          { path: 'body.channel_id', reason: 'a channel id is non-empty' },
+        ],
+      }),
+    );
+    fireEvent.click(screen.getByTestId('channel-save'));
+    await screen.findByTestId('channel-base-url-error');
+
+    type('channel-base-url', 'https://chat.example.com');
+    expect(screen.queryByTestId('channel-base-url-error')).toBeNull();
+    expect(screen.getByTestId('channel-channel-id-error')).toBeTruthy();
+
+    type('channel-channel-id', 'chan2');
+    expect(screen.queryByTestId('channel-channel-id-error')).toBeNull();
+  });
+
+  it('clears the token error when a token is typed', async () => {
+    await mount(OFF);
+    await fillNewChannel();
+    PUT.mockResolvedValueOnce(
+      problem(422, { errors: [{ path: 'body.token', reason: 'a token is printable ASCII' }] }),
+    );
+    fireEvent.click(screen.getByTestId('channel-save'));
+    await screen.findByTestId('channel-token-error');
+
+    type('channel-token-input', 'again');
+    expect(screen.queryByTestId('channel-token-error')).toBeNull();
+  });
+
+  it('clears the allowed-users error, inline or from the API, when the textarea is edited', async () => {
+    await mount(SET);
+    type('channel-allowed-users', 'u1');
+    fireEvent.click(screen.getByTestId('channel-save'));
+    await screen.findByTestId('channel-allowed-users-error');
+    type('channel-allowed-users', 'u1 alice');
+    expect(screen.queryByTestId('channel-allowed-users-error')).toBeNull();
+
+    PUT.mockResolvedValueOnce(
+      problem(422, {
+        errors: [{ path: 'body.allowed_users.0.handle', reason: 'a handle is non-empty' }],
+      }),
+    );
+    fireEvent.click(screen.getByTestId('channel-save'));
+    await screen.findByTestId('channel-allowed-users-error');
+    type('channel-allowed-users', 'u1 bob');
+    expect(screen.queryByTestId('channel-allowed-users-error')).toBeNull();
+  });
+
+  it('cancels a replacement: the input goes, the typed token is dropped, `set` shows again', async () => {
+    await mount(SET);
+    fireEvent.click(screen.getByTestId('channel-token-replace'));
+    type('channel-token-input', 'half-typed');
+    expect((screen.getByTestId('channel-test') as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByTestId('channel-token-cancel'));
+    expect(screen.queryByTestId('channel-token-input')).toBeNull();
+    expect(screen.getByTestId('channel-token-state').textContent).toContain('set');
+    expect(document.body.innerHTML).not.toContain('half-typed');
+    expect((screen.getByTestId('channel-test') as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByTestId('channel-token-replace'));
+    expect(field('channel-token-input').value).toBe('');
+  });
+
+  it('offers no cancel when there is no stored token to fall back to', async () => {
+    await mount(OFF);
+    fireEvent.change(field('channel-provider'), { target: { value: 'mattermost' } });
+    expect(screen.queryByTestId('channel-token-cancel')).toBeNull();
   });
 });

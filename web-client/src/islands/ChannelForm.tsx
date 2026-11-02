@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import {
   bodyFromForm,
+  errorsAfterEdit,
   errorsByField,
   formFromChannel,
   isDirty,
@@ -86,6 +87,8 @@ export default function ChannelForm({ projectId }: Props) {
 
   function edit(patch: Partial<ChannelFormState>) {
     setForm((current) => (current ? { ...current, ...patch } : current));
+    setErrors((current) => errorsAfterEdit(current, patch));
+    if (patch.allowedUsers !== undefined) setUsersError(null);
     setProbe(null);
     setJustSaved(false);
   }
@@ -141,6 +144,7 @@ export default function ChannelForm({ projectId }: Props) {
         <span className="field-label">PROVIDER</span>
         <select
           value={form.provider}
+          disabled={busy}
           data-testid="channel-provider"
           onChange={(event) =>
             edit({ provider: event.target.value as ChannelFormState['provider'] })
@@ -158,6 +162,7 @@ export default function ChannelForm({ projectId }: Props) {
             <input
               type="text"
               value={form.baseUrl}
+              disabled={busy}
               data-testid="channel-base-url"
               onChange={(event) => edit({ baseUrl: event.target.value })}
             />
@@ -169,6 +174,7 @@ export default function ChannelForm({ projectId }: Props) {
             <input
               type="text"
               value={form.channelId}
+              disabled={busy}
               data-testid="channel-channel-id"
               onChange={(event) => edit({ channelId: event.target.value })}
             />
@@ -178,19 +184,34 @@ export default function ChannelForm({ projectId }: Props) {
           <div className="field">
             <span className="field-label">BOT TOKEN</span>
             {revealToken ? (
-              <input
-                type="password"
-                autoComplete="off"
-                value={form.token}
-                data-testid="channel-token-input"
-                onChange={(event) => edit({ token: event.target.value })}
-              />
+              <span className="masked-value">
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.token}
+                  disabled={busy}
+                  data-testid="channel-token-input"
+                  onChange={(event) => edit({ token: event.target.value })}
+                />
+                {form.tokenSet ? (
+                  <button
+                    type="button"
+                    className="control"
+                    disabled={busy}
+                    data-testid="channel-token-cancel"
+                    onClick={() => edit({ replacingToken: false, token: '' })}
+                  >
+                    cancel
+                  </button>
+                ) : null}
+              </span>
             ) : (
               <span className="masked-value" data-testid="channel-token-state">
                 set
                 <button
                   type="button"
                   className="control"
+                  disabled={busy}
                   data-testid="channel-token-replace"
                   onClick={() => edit({ replacingToken: true })}
                 >
@@ -205,6 +226,7 @@ export default function ChannelForm({ projectId }: Props) {
             <span className="field-label">ALLOWED USERS (one `id handle` per line)</span>
             <textarea
               value={form.allowedUsers}
+              disabled={busy}
               data-testid="channel-allowed-users"
               onChange={(event) => edit({ allowedUsers: event.target.value })}
             />
@@ -215,6 +237,7 @@ export default function ChannelForm({ projectId }: Props) {
             <input
               type="checkbox"
               checked={form.metadataOnly}
+              disabled={busy}
               data-testid="channel-metadata-only"
               onChange={(event) => edit({ metadataOnly: event.target.checked })}
             />

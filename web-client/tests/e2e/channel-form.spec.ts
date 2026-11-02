@@ -131,6 +131,22 @@ test.describe('Project channel form', () => {
     expect(Object.keys(seen.puts[0]!)).not.toContain('token');
   });
 
+  test('cancel after replace hides the input and reads `set` again', async ({ page }) => {
+    const seen = await mockChannel(page, { get: SET });
+    await open(page);
+
+    await page.getByTestId('channel-token-replace').click();
+    await page.getByTestId('channel-token-input').fill('half-typed');
+    await page.getByTestId('channel-token-cancel').click();
+
+    await expect(page.getByTestId('channel-token-input')).toHaveCount(0);
+    await expect(page.getByTestId('channel-token-state')).toContainText('set');
+    await page.getByTestId('channel-channel-id').fill('chan2');
+    await page.getByTestId('channel-save').click();
+    await expect(page.getByTestId('channel-saved')).toBeVisible();
+    expect(Object.keys(seen.puts[0]!)).not.toContain('token');
+  });
+
   test('a failed probe shows `failed` and the platform text beside the button', async ({
     page,
   }) => {
