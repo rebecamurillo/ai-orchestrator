@@ -45,9 +45,14 @@
   description: >-
     A `rejected` retrospective verdict parks the Run for a human before the next epic and names its findings (CAP-9).
 - id: "2-3"
-  title: Operator senior session backend
+  title: "Operator senior session: lock and close"
   description: >-
-    Open, message and close a senior session at any stop, scoped to story, epic or Run, with its edits committed, billed and its anchor edits confirmed before close (CAP-7).
+    Open and close a senior session at any stop, scoped to story, epic or Run. The Run is locked while it is open, and close is refused until each anchor edit is confirmed or reverted (CAP-7).
+  spec_checkpoint: true
+- id: "2-5"
+  title: Operator senior session turns
+  description: >-
+    Each message runs one durable, billed turn outside the walker that resumes the session's context and commits its edits as `session: turn {n}`. A crash or cancel kills the turn's process and never re-dispatches it (CAP-7).
   spec_checkpoint: true
 - id: "2-4"
   title: Operator senior session on the Run page

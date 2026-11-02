@@ -176,3 +176,14 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-5-test-edit-approval-and-diff-review.md`
   summary: The senior's story baseline is the story file at the start of the row's first `agent` attempt, so a later row's senior still sees declarations an earlier row's agent added to the story file in the same frame.
   evidence: Lead review 2026-11-02. In a staged frame the `plan` row writes the story file, so a frame-level baseline would show no story at all. Closing this needs a recorded "declared" point per frame, such as the spec checkpoint's commit.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-6-senior-consult-at-verify-failed.md`
+  summary: A backend killed after `apply_step_result` commits but before DBOS records the `apply_result` step replays it, hits `step_transition(error, "error")`, raises `InvalidTransition`, and leaves the Run stuck `running` (high, pre-existing, not introduced by this initiative).
+  evidence: Traced by the story 1-6 review, 2026-11-02, for every apply that does not park. Settle with a durability-suite kill at that point; the fix is an idempotent `apply_step_result` on replay.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/2-5-operator-senior-session-turns.md`
+  summary: A resumed `agent` attempt records no `pgid` (`steps/agent.py::_run` calls the blocking `Harness.resume`), so a backend killed during it leaves the harness running in the worktree while the next attempt dispatches, and `cancel` cannot kill it (AD-14).
+  evidence: Lead review 2026-11-02. Every 1-4 senior answer and every `mode: session` answer or retry takes this path. Story 2-5 adds `Harness.start_resume` and uses it for session turns only, so the fix is to route `_run`'s resume branch through `start_resume`, the `pgid` commit and `wait`, and revise the agent tests that pin `resume` calls under rule 1(b) in that story.
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/2-3-operator-senior-session-backend.md`
+  summary: On a hub Run, an edit inside a submodule other than the parked row's `workdir` is neither committed by a session turn nor listed at `session_end`. Agents share the gap: nothing enumerates the other initialized submodules (`steps/agent_workdir.py`, "Whenever it is built").
+  evidence: Lead review 2026-11-02. The root is staged with gitlinks excluded, and root status cannot tell an earlier epic's deliberate advance from a new edit. The `senior-session` skill confines edits to the two trees until a read-only submodule enumeration exists.
