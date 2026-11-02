@@ -138,6 +138,54 @@ services:
     logging: *logging
     restart: always
 
+  # Docker for Runs — off unless VERIFY_DOCKER=true (`./install.sh start --with-docker`
+  # enables the profile; by hand, `docker compose --profile docker up -d`). A Docker daemon
+  # for target repositories whose commands run `docker compose`; the backend image carries
+  # only the client. README.md § Trust weighs what a privileged sidecar gives an agent.
+  #   - inside backend-api's network namespace: a port a test publishes is on backend-api's
+  #     localhost, where the target's scripts look for it, and nowhere else
+  #   - dockerd listens on 127.0.0.1:2375 there only (`dockerd` first: given bare flags,
+  #     the dind entrypoint prepends its own `--host=tcp://0.0.0.0:2375`, which every
+  #     container on the compose network could reach). `scripts/docker_context.sh` points
+  #     the agent's CLI at this address.
+  #   - `work` at the same path as backend-api's, so a compose file's relative bind mount
+  #     (`./tests/fixtures:/fixtures`) resolves on this daemon's filesystem to the worktree
+  #   - bridge and pools on 10.213/16 and 10.214/16, away from 172.16/12 where compose and
+  #     Docker Desktop put their networks
+  #   - `docker-data` keeps pulled images and build cache across Runs and restarts
+  # A backend-api that is recreated or restarted leaves this container in a namespace
+  # nobody else is in; `restart: true` recreates it with compose's own recreate, and
+  # `./install.sh start` recreates it whenever backend-api cannot reach the daemon.
+  docker:
+    image: docker:29.4.3-dind
+    profiles: ["docker"]
+    privileged: true
+    network_mode: service:backend-api
+    environment:
+      # no TLS: the listener is loopback inside one namespace
+      DOCKER_TLS_CERTDIR: ""
+    command:
+      - dockerd
+      - --host=tcp://127.0.0.1:2375
+      - --tls=false
+      - --bip=10.213.0.1/24
+      - --default-address-pool=base=10.214.0.0/16,size=24
+    volumes:
+      - work:${WORK_DIR:-/work}
+      - docker-data:/var/lib/docker
+    depends_on:
+      backend-api:
+        condition: service_started
+        restart: true
+    healthcheck:
+      test: ["CMD", "docker", "--host", "tcp://127.0.0.1:2375", "version"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    logging: *logging
+    restart: always
+
 volumes:
   pgdata:
   # /work — base clones, worktrees, logs (AD-14)
@@ -149,3 +197,6 @@ volumes:
   # creation; at each start `ensure` copies the image's CLI back when it is at the pin and
   # otherwise installs the `*_VERSION` pin here, so an upgrade outlives a recreate.
   harness-bin:
+  # /var/lib/docker of the optional `docker` service: images and build cache of the
+  # target repositories' compose stacks. Not backed up; safe to remove while it is stopped.
+  docker-data:

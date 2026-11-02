@@ -249,6 +249,11 @@ class Settings(BaseSettings):
     #: non-image dev run this is `../scripts/harness` (relative to `backend-api/`). Never
     #: validated absolute like `work_dir`/`agent_home` because the dev value is relative.
     harness_scripts_dir: Path = Path("/app/scripts/harness")
+    #: Whether the optional `docker` service (compose profile `docker`) runs beside this
+    #: container. The container start reads the same variable to point the agent's docker
+    #: CLI at it (`scripts/docker_context.sh`); the application reads it only for
+    #: pre-flight's `docker` line. Off by default: the sidecar is privileged.
+    verify_docker: bool = False
 
     # ── Templates (AD-15) ────────────────────────────────────────────────────
     #: `../templates` in development, `/app/templates` in the image; never validated

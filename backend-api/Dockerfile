@@ -28,6 +28,16 @@ FROM ${PYTHON_IMAGE}
 ARG NODE_VERSION=24.20.0
 ARG GH_VERSION=2.100.0
 ARG PLAYWRIGHT_VERSION=1.62.1
+# The docker client equals the `docker` service's `docker:<version>-dind` in both compose files.
+ARG DOCKER_VERSION=29.4.3
+ARG DOCKER_SHA256_AMD64=bc9734a89d3edd15eeca8620961f6499ba69948814c85d7ac3488e34b3e16d01
+ARG DOCKER_SHA256_ARM64=fdde3dbedbd8dc9e9e54a3172e682b4e69e740296e580542ea9ceacebbbf4f4c
+ARG DOCKER_COMPOSE_VERSION=5.6.1
+ARG DOCKER_COMPOSE_SHA256_AMD64=47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0
+ARG DOCKER_COMPOSE_SHA256_ARM64=42cfa75f51ad0ccf290bad37899e0038a8c10a0069e85233ecc1d53e3ff1347d
+ARG DOCKER_BUILDX_VERSION=0.38.1
+ARG DOCKER_BUILDX_SHA256_AMD64=e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4
+ARG DOCKER_BUILDX_SHA256_ARM64=3b83b3731916ba433feccaaa689fe5bcdc81c641d92c8e6c2ea865dfa141c97a
 # Defaults matching `.env.example`; compose passes the real values through `env_file`.
 ARG AGENT_HOME=/home/agent
 ARG WORK_DIR=/work
@@ -89,6 +99,40 @@ RUN set -eux; \
     rm -f "${archive}" gh_checksums.txt; \
     gh --version
 
+# The docker CLI with its compose and buildx plugins, for a target repository whose commands
+# run `docker compose`. Client only: the daemon is the optional `docker` service
+# (`VERIFY_DOCKER`, deploy/README.md § Docker for Runs); without it every docker command
+# here answers `Cannot connect to the Docker daemon`. download.docker.com publishes no
+# checksum file for the static archive, so all three are pinned to a literal sha256 per
+# architecture, and a version bump without its checksums fails the build.
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) docker_arch=x86_64; plugin_arch=amd64; \
+             docker_sha="${DOCKER_SHA256_AMD64}"; \
+             compose_sha="${DOCKER_COMPOSE_SHA256_AMD64}"; \
+             buildx_sha="${DOCKER_BUILDX_SHA256_AMD64}" ;; \
+      arm64) docker_arch=aarch64; plugin_arch=arm64; \
+             docker_sha="${DOCKER_SHA256_ARM64}"; \
+             compose_sha="${DOCKER_COMPOSE_SHA256_ARM64}"; \
+             buildx_sha="${DOCKER_BUILDX_SHA256_ARM64}" ;; \
+      *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac; \
+    plugins=/usr/local/libexec/docker/cli-plugins; \
+    mkdir -p "${plugins}"; \
+    curl -fsSL -o docker.tgz \
+        "https://download.docker.com/linux/static/stable/${docker_arch}/docker-${DOCKER_VERSION}.tgz"; \
+    echo "${docker_sha}  docker.tgz" | sha256sum -c -; \
+    tar -xzf docker.tgz -C /usr/local/bin --strip-components=1 --no-same-owner docker/docker; \
+    rm -f docker.tgz; \
+    curl -fsSL -o "${plugins}/docker-compose" \
+        "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${docker_arch}"; \
+    echo "${compose_sha}  ${plugins}/docker-compose" | sha256sum -c -; \
+    curl -fsSL -o "${plugins}/docker-buildx" \
+        "https://github.com/docker/buildx/releases/download/v${DOCKER_BUILDX_VERSION}/buildx-v${DOCKER_BUILDX_VERSION}.linux-${plugin_arch}"; \
+    echo "${buildx_sha}  ${plugins}/docker-buildx" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/docker "${plugins}/docker-compose" "${plugins}/docker-buildx"; \
+    docker --version; docker compose version; docker buildx version
+
 # Chromium's shared system libraries, for the UI gate (`make e2e-ui`) a harness runs in a
 # target repository's worktree. Libraries only, as root — the browser itself needs no root
 # and comes from `make install-e2e`, onto the persistent `agent-home` volume.
@@ -128,6 +172,7 @@ RUN uv sync --locked --no-dev
 # reviewer reads.
 COPY --chown=agent:agent scripts/harness /app/scripts/harness
 COPY --chown=agent:agent scripts/readiness_fixture.sh /app/scripts/readiness_fixture.sh
+COPY --chown=agent:agent scripts/docker_context.sh /app/scripts/docker_context.sh
 COPY --chown=agent:agent backend-api/docker-entrypoint.sh /app/docker-entrypoint.sh
 
 # The shipped Templates (SPEC CAP-3): `seed_shipped` reads this path at start-up
