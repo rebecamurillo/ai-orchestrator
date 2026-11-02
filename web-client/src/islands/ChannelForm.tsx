@@ -7,13 +7,17 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '../api/client';
 import {
+  SLACK_NOTE,
   bodyFromForm,
+  chooseProvider,
   errorsAfterEdit,
   errorsByField,
   formFromChannel,
+  guarded,
   isDirty,
   type ChannelField,
   type ChannelFormState,
+  type ChannelProvider,
   type FieldErrors,
 } from '../lib/projects/channel';
 
@@ -26,16 +30,6 @@ type Probe = { ok: boolean; detail: string };
 
 const NOTE = 'the bot token is stored encrypted, never shown, and never given to an agent';
 const NO_ERRORS: FieldErrors = { fields: {}, detail: null };
-
-async function guarded<T>(
-  call: () => Promise<T>,
-): Promise<T | { data?: undefined; error?: undefined }> {
-  try {
-    return await call();
-  } catch {
-    return { error: undefined };
-  }
-}
 
 export default function ChannelForm({ projectId }: Props) {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
@@ -146,12 +140,11 @@ export default function ChannelForm({ projectId }: Props) {
           value={form.provider}
           disabled={busy}
           data-testid="channel-provider"
-          onChange={(event) =>
-            edit({ provider: event.target.value as ChannelFormState['provider'] })
-          }
+          onChange={(event) => edit(chooseProvider(form, event.target.value as ChannelProvider))}
         >
           <option value="off">off</option>
           <option value="mattermost">mattermost</option>
+          <option value="slack">slack</option>
         </select>
       </label>
 
@@ -243,6 +236,11 @@ export default function ChannelForm({ projectId }: Props) {
             />
             <span>metadata only</span>
           </label>
+          {form.provider === 'slack' ? (
+            <p className="secondary-line" data-testid="channel-slack-note">
+              {SLACK_NOTE}
+            </p>
+          ) : null}
         </>
       )}
 

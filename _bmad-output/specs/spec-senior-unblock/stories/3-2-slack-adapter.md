@@ -2,7 +2,7 @@
 title: 'Slack adapter'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-progress'
+status: 'in-review'
 route: 'dispatch'
 baseline_commit: '94f0f44f04d7243b4d7241b81e83eadca4afdf8b'
 review_loop_iteration: 0
@@ -24,9 +24,9 @@ context: []
 - Every `ChatError` detail is redacted against the token in its raw and escaped forms, as 3-1 does. A token httpx could not send is refused at construction without being echoed. The adapter logs nothing.
 - A failure raises `ChatError` with Slack's own error code. Nothing is retried, and a 429 is reported, not waited out (hard rule 7).
 - `replies_since` excludes what AD-25's 4-1 amendment excludes: the root, the bot's own posts, and every system, webhook, bot or app post. On Slack that means any message carrying `subtype`, `bot_id`, `bot_profile` or `app_id`, or a `type` other than `message`. It fails closed: a message without a string `user` is not a reply.
-- `Reply.body` is `text` with every bot mention removed by the match that sets `mentions_bot`, as the port defines it.
+- `Reply.body` is `text` with every bot mention removed by the match that sets `mentions_bot`, as the port defines it. Both are plain text (Decided).
 
-**Never:** No port change, no migration (the `provider` CHECK already holds `slack`), no new setting, no job. No web-client change except what `make openapi` regenerates. No live Slack in any test. No edit to an existing test beyond the three that pin "slack refused" (rule 1(b), below).
+**Never:** No port change, no migration (the `provider` CHECK already holds `slack`), no new setting, no job. No web-client change beyond what `make openapi` regenerates and the form's `slack` option (step two). No live Slack in any test. No edit to an existing test beyond the ones that pin "slack refused" (rule 1(b), below).
 
 **Decided (2026-11-02):**
 - **`base_url` is required for `slack`, as for `mattermost`.** The form will pre-fill `https://slack.com/api`. A server-side default would be a per-platform branch in the use case, which AD-25 prevents, and it would make 3-4's host-change rule compare a typed URL with an implied one. Required keeps that rule unchanged, and a GovSlack workspace types `https://slack-gov.com/api`. The adapter appends the method name (`{base_url}/chat.postMessage`), so `base_url` is the Web API root, ending in `/api`.
@@ -37,7 +37,8 @@ context: []
 - **`thread_broadcast` is excluded**, because it carries a `subtype`. A reply posted with *Also send to channel* does not count, which fails closed.
 - **Probe:** `auth.test` gives the bot's `user_id` and `user`, cached once both checks pass. `conversations.info` must answer `is_member: true` and not `is_archived`. `probe()` returns `user`.
 - **Rate limits (verified 2026-11-02):** the change Slack announced on 2025-05-29 cut `conversations.replies` and `conversations.history` to 1 request a minute and 15 messages a page for commercially distributed non-Marketplace apps. Internal customer-built apps keep Tier 3 (50+ a minute, `limit` up to 1,000). **The bot must therefore be an internal app, created in and installed to the team's own workspace**, with bot scopes `chat:write`, `channels:history` and `channels:read`, plus `groups:history` and `groups:read` for a private channel. The bot must also be invited to the channel.
-- **`body` keeps Slack's entities.** `&lt;`, `&gt;`, `&amp;` and other people's `<@U…>` stay as Slack wrote them, because the port defines `body` as `text` minus the bot's mentions and nothing else. Whether 4-1 needs them decoded is for the lead to decide.
+- **`text` and `body` are plain text** (lead decision, 2026-11-02, with no port amendment). The port's `text` and `body` mean plain text, and an adapter delivers plain text. The Slack adapter therefore decodes `&lt;`, `&gt;` and `&amp;` in both, with `&amp;` last, so `&amp;lt;` comes out as `&lt;`. Other people's `<@U…>` stay as written. The bot mention, and the code and quote masking, are matched on the raw markup before decoding, so a decoded `&lt;@BOT&gt;` is never a mention.
+- **The form (step two, 2026-11-02):** the 3-5 provider select gains `slack`. Choosing `slack` with an empty base URL pre-fills `https://slack.com/api`, and a typed one is kept. `mattermost` pre-fills nothing. A `slack` channel shows a note under its fields: "the bot must be an internal Slack app, invited to the channel, with scopes chat:write, channels:history and channels:read (groups:history and groups:read for a private channel)". The rule is `chooseProvider` in `src/lib/projects/channel.ts`. 3-5's Never list ("No `slack` option (3-2)") names this story.
 
 ## I/O & Edge-Case Matrix
 
@@ -53,6 +54,8 @@ context: []
 | Replies, after cursor | `"1700000000.000100"` | `oldest` sent; only later `ts` returned, even if the server ignores `oldest` | malformed → `ChatError` |
 | Not a person | `subtype` (bot_message, channel_join, thread_broadcast), `bot_id`, `bot_profile`, `app_id`, no `user` | dropped | N/A |
 | Mention | `<@BOT> fix it`, `<@BOT\|bot>`, `` `<@BOT>` ``, `&gt; <@BOT>`, `<@BOTX>` | true, true, false, false, false; `body` drops the counted ones | N/A |
+| Plain text | `<@BOT> a &lt; b &amp;&amp; c`, `&amp;lt;`, `&lt;@BOT&gt;` | `text` and `body` read `a < b && c`, `&lt;`, and `<@BOT>` (not a mention) | N/A |
+| Form | choose `slack` with an empty base URL; choose `mattermost` | `https://slack.com/api` pre-filled, the Slack note shown; nothing pre-filled, no note | N/A |
 | `ok:false` | `{"ok":false,"error":"missing_scope","needed":"chat:write"}` | N/A | `ChatError("chat.postMessage: missing_scope (needed: chat:write)")` |
 | 429 | `Retry-After: 30` | one request, not retried | `ChatError("conversations.replies: 429 rate limited, Retry-After 30 s")` |
 | Token echoed | an error body contains the token | N/A | detail shows `***` |
@@ -107,6 +110,7 @@ Slack Web API facts, verified 2026-11-02:
 ## Spec Change Log
 
 - 2026-11-02, written by the implementer from `stories.yaml` 3-2, AD-25 and its 3-1 and 4-1 amendments, and the 3-1 and 3-4 story files.
+- 2026-11-02, lead decision on the open `body` question. There is no port amendment, and Slack replies are decoded to plain text (Decided). Step two adds the form's `slack` option. Code Map additions: `web-client/src/lib/projects/channel.ts` gains `SLACK_BASE_URL`, `SLACK_NOTE` and `chooseProvider`, plus `guarded`, which moved unchanged out of the island to keep `ChannelForm.tsx` at 300 lines or fewer. `ChannelForm.tsx` gains the option and the note. The new tests are `backend-api/tests/unit/test_slack_plain_text.py`, `web-client/tests/unit/channel-form-slack.test.ts` and `web-client/tests/e2e/channel-form-slack.spec.ts`. No 3-5 test pinned "no slack option", so none was revised.
 
 ## Implementation Notes
 

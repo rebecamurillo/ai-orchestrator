@@ -46,6 +46,35 @@ const FIELDS: readonly ChannelField[] = [
 
 const REQUEST_FAILED = 'request failed';
 
+/** A call that threw (the network, not the API) reads as a refusal with no problem body. */
+export async function guarded<T>(
+  call: () => Promise<T>,
+): Promise<T | { data?: undefined; error?: undefined }> {
+  try {
+    return await call();
+  } catch {
+    return { error: undefined };
+  }
+}
+
+/** Slack's Web API root; the backend requires a base URL for every provider (story 3-2). */
+export const SLACK_BASE_URL = 'https://slack.com/api';
+
+export const SLACK_NOTE =
+  'the bot must be an internal Slack app, invited to the channel, with scopes chat:write, ' +
+  'channels:history and channels:read (groups:history and groups:read for a private channel)';
+
+/** The edit a provider choice makes: `slack` fills an empty base URL, nothing else does. */
+export function chooseProvider(
+  form: ChannelFormState,
+  provider: ChannelProvider,
+): Partial<ChannelFormState> {
+  if (provider === 'slack' && form.baseUrl.trim() === '') {
+    return { provider, baseUrl: SLACK_BASE_URL };
+  }
+  return { provider };
+}
+
 export function formatAllowedUsers(users: readonly ChatUser[]): string {
   return users.map((user) => `${user.id} ${user.handle}`).join('\n');
 }

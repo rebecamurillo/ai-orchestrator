@@ -11,6 +11,8 @@ commercially distributed app outside the Marketplace gets one `conversations.rep
 minute and 15 messages a page, which no thread poll survives.
 
 Outgoing text has `&`, `<` and `>` escaped, so text an agent wrote cannot ping `<!channel>`.
+A reply's `text` and `body` are plain text: those three entities are decoded after the bot
+mention is matched on the raw markup, and other people's `<@U…>` stay as written.
 A thread is read past `oldest`, and every message at or before the cursor is dropped again
 here, so a server that ignores `oldest` cannot hand a reply over twice.
 """
@@ -201,14 +203,21 @@ def _is_reply(message: dict[str, Any], thread: ThreadRef, me: ChatUser) -> bool:
     return isinstance(message.get("text"), str)
 
 
+def _unescape(text: str) -> str:
+    """`&amp;` goes last, so `&amp;lt;` decodes to `&lt;` and not to `<`."""
+    for character, entity in reversed(_ESCAPES):
+        text = text.replace(entity, character)
+    return text
+
+
 def _reply(message: dict[str, Any], me: ChatUser) -> Reply:
-    text = message["text"]
+    raw = message["text"]
     return Reply(
         id=message["ts"],
         author_id=message["user"],
-        mentions_bot=slack_mentions_bot(text, me.id),
-        text=text,
-        body=slack_strip_mentions(text, me.id),
+        mentions_bot=slack_mentions_bot(raw, me.id),
+        text=_unescape(raw),
+        body=_unescape(slack_strip_mentions(raw, me.id)),
         cursor=message["ts"],
     )
 
