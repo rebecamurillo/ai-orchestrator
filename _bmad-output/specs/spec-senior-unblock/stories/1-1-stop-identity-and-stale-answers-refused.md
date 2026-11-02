@@ -2,7 +2,7 @@
 title: 'Stop identity and stale answers refused'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'f92dcca08735f0eb382e93779cfe5eab7d3a83a6'
 review_loop_iteration: 0
@@ -81,7 +81,9 @@ Approved for implementation by the Operator's accepted stories table (2026-11-01
 
 Implemented in this session, not by a fresh subagent, with three independent review subagents. All review fixes were applied in place rather than by reverting and re-deriving, because none changed the design; the frozen intent stands.
 
-**Not done:** `make e2e` could not reach the tests. The image build was refused at `ghcr.io/astral-sh/uv:0.12.9` (`failed to fetch oauth token: denied`), a Docker credential problem on this host. The status stays `in-review` until that gate passes (hard rule 6). In its place, migration 0022 ran on a throwaway Postgres: up, down, up, and over existing rows (a parked Run reads 1, a running Run reads 0). Passing: `make lint`, `make test`, and Playwright (`make e2e-ui`: 289 passed plus 1 known skip; then the new spec alone after fixing a locator).
+**First attempt:** `make e2e` could not reach the tests. The image build was refused at `ghcr.io/astral-sh/uv:0.12.9` (`failed to fetch oauth token: denied`), a Docker credential problem on this host. The status stayed `in-review` until that gate passed (hard rule 6). In its place, migration 0022 ran on a throwaway Postgres: up, down, up, and over existing rows (a parked Run reads 1, a running Run reads 0). Passing: `make lint`, `make test`, and Playwright (`make e2e-ui`: 289 passed plus 1 known skip; then the new spec alone after fixing a locator).
+
+**Done, 2026-11-02:** after the Operator's `docker login`, `make e2e` passed: 250 passed, 11 deselected (the durability marker).
 
 ## Spec Change Log
 
