@@ -2,7 +2,7 @@
 title: 'Attempt roles'
 type: 'refactor'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'e9a4654957960ad463c42989d67f2c1e3e8ae205'
 review_loop_iteration: 0
