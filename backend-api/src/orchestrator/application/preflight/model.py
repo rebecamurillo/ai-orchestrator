@@ -38,6 +38,7 @@ CHECK_EXISTING_STORY_FILES = "existing story files"
 CHECK_CLONE_CHECK = "clone check"
 CHECK_WHAT_WILL_RUN = "what will run"
 CHECK_CONCURRENT_REPO = "concurrent branch"
+CHECK_DOCKER = "docker"
 
 #: The default `queue_note` — nothing holds the Repository and the instance is under its cap.
 QUEUE_FREE = "starts immediately if the repository is free"

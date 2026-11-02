@@ -169,6 +169,7 @@ def _preflight_ports(request: Request, uow: SQLAlchemyUnitOfWork, needed_by: str
         max_active_runs=settings.max_active_runs,
         work_dir=settings.work_dir,
         harness_registry=build_harnesses(settings, RealProcessRunner()),
+        verify_docker=settings.verify_docker,
     )
 
 
