@@ -9,10 +9,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from orchestrator.application.steps.agent import AgentExecutor
+from orchestrator.application.steps.registry import execute
 from orchestrator.application.steps.verify_failure import VerifyFailure
+from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.ports.harness import HarnessResult
 from orchestrator.domain.values import Consult, Park, StepResult
 from tests.unit.application.consult_fixtures import (
@@ -28,6 +31,7 @@ from tests.unit.application.steps.agent_fixtures import ROW_PATH, WORKTREE, a_ru
 from tests.unit.application.steps.agent_tail_fixtures import contracted
 from tests.unit.fakes.gateway import FakeGateway
 from tests.unit.fakes.git import FakeGit
+from tests.unit.fakes.logs import FakeLogReader
 
 VERIFY_PATH = "epics[0].stories[3].verify"
 QUESTION = "verify failed 3/3"
@@ -43,7 +47,7 @@ BLOCK: dict[str, Any] = {
     "prompts": {
         "dispatch": (
             "Run {skill} for {story_id} in {spec_folder}: {condition}. `{command}` exited "
-            "{code}:\n{tail}\nAgent log: {log}. Write {decision}."
+            "{code}:\n{tail}\nAgent log:\n{agent_log}\nWrite {decision}."
         ),
         "answer": 'Diagnosis of "{condition}": {answer}',
     },
@@ -76,7 +80,11 @@ def a_verify_consult_world(
     previous = previous.model_copy(update={"n": 3, "log_path": AGENT_LOG})
     environment = world.ctx.ports.run_env
     assert environment is not None
-    ports = replace(world.ctx.ports, run_env=replace(environment, verify_failure=failure))
+    ports = replace(
+        world.ctx.ports,
+        run_env=replace(environment, verify_failure=failure),
+        logs=FakeLogReader({AGENT_LOG: ["ran tests", "all green"]}),
+    )
     ctx = replace(world.ctx, row=row, previous_attempt=previous, ports=ports)
     return replace(world, ctx=ctx, row=row)
 
@@ -110,7 +118,8 @@ def test_the_senior_is_told_the_failure_the_log_and_where_to_write() -> None:
     [start] = world.harness.called("start")
     assert start["prompt"] == (
         "Run senior-consult for 4-1 in specs/notifications: verify failed 3/3. `make test` "
-        f"exited 2:\nFAILED a\n1 failed\nAgent log: {AGENT_LOG}. Write {ABSOLUTE_DECISION}."
+        "exited 2:\nFAILED a\n1 failed\nAgent log:\nran tests\nall green\n"
+        f"Write {ABSOLUTE_DECISION}."
     )
 
 
@@ -132,7 +141,7 @@ def test_a_failure_the_walker_resolved_no_facts_for_leaves_the_tokens_empty() ->
     AgentExecutor().execute(stripped)
 
     [start] = world.harness.called("start")
-    assert start["prompt"].endswith("exited :\n\nAgent log: . Write " + ABSOLUTE_DECISION + ".")
+    assert start["prompt"].endswith("exited :\n\nAgent log:\n\nWrite " + ABSOLUTE_DECISION + ".")
 
 
 def test_an_exit_code_nobody_recorded_is_said_so() -> None:
@@ -154,7 +163,7 @@ def test_the_target_never_having_run_an_agent_attempt_leaves_the_log_empty() -> 
 
     AgentExecutor().execute(unlogged)
 
-    assert "Agent log: . Write" in world.harness.called("start")[0]["prompt"]
+    assert "Agent log:\n\nWrite" in world.harness.called("start")[0]["prompt"]
 
 
 # ── the outcomes ─────────────────────────────────────────────────────────────
@@ -256,3 +265,76 @@ def test_an_entry_declaring_no_park_path_parks_on_the_row_it_ran_on() -> None:
 
     assert result.park is not None
     assert result.park.path == ROW_PATH
+
+
+# ── the first consult attempt: sweep and snapshot, inside the executor ───────
+
+SNAPSHOT = {"tree": {"head": SNAP_HEAD, "status": ""}}
+
+
+def a_snapshotting_world(**over: Any) -> World:
+    """The entry as `verify_consult.offer` leaves it: no snapshot yet."""
+    due = entry()
+    del due["snapshot"]
+    return a_verify_consult_world(due=due, **over)
+
+
+def test_an_entry_with_no_snapshot_sweeps_snapshots_and_dispatches_no_senior() -> None:
+    git = FakeGit(status=[" M src/a.py", ""], head_sha=[SNAP_HEAD])
+    world = a_snapshotting_world(git=git)
+
+    result = run(world)
+
+    assert git.called("commit") == [(Path(WORKTREE), "wip: story 4-1 attempt 3 (consult)")]
+    assert result.status == "error"
+    assert result.park is None
+    assert result.reason == f"consult: {QUESTION}"
+    assert result.consult == Consult(kind="verify_failed", question=QUESTION, snapshot=SNAPSHOT)
+    assert world.harness.calls == []
+
+
+def test_a_sweep_git_refuses_parks_the_verify_stop_with_git_s_words() -> None:
+    git = FakeGit(status=[GitError(command="git add", exit_code=128, output="index locked")])
+
+    failed(a_snapshotting_world(git=git), "index locked")
+
+
+def test_a_failure_that_is_not_git_s_reaches_the_registry_as_an_internal_park() -> None:
+    git = FakeGit(status=[OSError("disk full")])
+    world = a_snapshotting_world(git=git)
+
+    result = execute(world.ctx)
+
+    assert result.park is not None
+    assert (result.park.kind, result.consult) == ("internal", None)
+    assert world.harness.calls == []
+
+
+def test_a_replayed_executor_step_sweeps_once_and_answers_the_same_snapshot() -> None:
+    git = FakeGit(status=[" M src/a.py", ""], head_sha=[SNAP_HEAD])
+    world = a_snapshotting_world(git=git)
+
+    first, replayed = run(world), run(world)
+
+    assert len(git.called("commit")) == 1
+    assert first.consult == replayed.consult
+    assert world.harness.calls == []
+
+
+def test_a_snapshotted_entry_is_not_swept_again() -> None:
+    git = FakeGit(heads={WORKTREE: [SNAP_HEAD]}, statuses={WORKTREE: ""})
+    world = a_verify_consult_world(decision=a_decision(), git=git)
+
+    run(world)
+
+    assert git.called("commit") == []
+    assert len(world.harness.called("start")) == 1
+
+
+def test_a_run_with_no_log_reader_leaves_the_agent_log_empty() -> None:
+    world = a_verify_consult_world(decision=a_decision())
+    bare = replace(world.ctx, ports=replace(world.ctx.ports, logs=None))
+
+    AgentExecutor().execute(bare)
+
+    assert "Agent log:\n\nWrite" in world.harness.called("start")[0]["prompt"]

@@ -94,6 +94,9 @@ DEFAULT_STALL_MIN = 30
 
 CONSULT_FAILED = "consult failed"
 
+#: How much of the target's last agent log a `verify_failed` senior is handed.
+AGENT_LOG_LINES = 200
+
 
 def offer(ctx: StepContext, attempt: Attempt, final: StepResult) -> StepResult:
     """`final`, or the offer it becomes when the stop qualifies (see the module docstring)."""
@@ -144,6 +147,8 @@ def run(ctx: StepContext) -> StepResult:
     kind, entry = found
     block = consult.block_of(ctx.with_resolved, entry)
     stop = _Stop(kind, str(entry.get(consult.QUESTION_KEY, "")), dict(entry), block)  # type: ignore[arg-type]
+    if consult.SNAPSHOT_KEY not in entry:
+        return _snapshotted(ctx, stop)
     try:
         return _consult(ctx, stop)
     except GitError as error:
@@ -152,6 +157,28 @@ def run(ctx: StepContext) -> StepResult:
         log.exception(CONSULT_FAILED, path=ctx.row.path, attempt=ctx.attempt.n)
         why = RAISED.format(name=type(error).__name__, message=error)
         return _parked(ctx, stop, FAILED, why)
+
+
+def _snapshotted(ctx: StepContext, stop: _Stop) -> StepResult:
+    """The first attempt of a `verify_failed` consult, whose entry the writer left without a
+    snapshot: git work belongs to the executor's step (AD-22), so the sweep and the snapshot
+    are taken here and handed back as an offer, which `apply_consult` merges into the entry.
+    No senior is dispatched; the row's next attempt is the consult itself.
+
+    Only git's own refusal parks with its words. Any other exception propagates to the
+    registry, which parks `internal`, as an offer made in an agent's tail does.
+    """
+    previous = ctx.previous_attempt
+    try:
+        snapshot = agent_consult_tree.sweep_and_snapshot(ctx, previous.n if previous else 0)
+    except GitError as error:
+        return _parked(ctx, stop, FAILED, _git_words(error))
+    return StepResult(
+        status="error",
+        gate=ctx.row.gate,
+        reason=OFFERED.format(question=stop.question),
+        consult=Consult(kind=stop.kind, question=stop.question, snapshot=snapshot),
+    )
 
 
 def _consult(ctx: StepContext, stop: _Stop) -> StepResult:
@@ -198,13 +225,16 @@ def _prompt(ctx: StepContext, block: Mapping[str, Any], stop: _Stop, decision: s
 
 def _failure(ctx: StepContext, stop: _Stop) -> dict[str, str]:
     """A `verify_failed` stop's own tokens: the failing command, its exit code and output
-    tail as the walker resolved them (`VerifyFailure`), and the log of the target row's last
-    `agent` attempt, which a senior reads to see what the agent did. Empty for any other stop."""
+    tail as the walker resolved them (`VerifyFailure`), and the tail of the log of the target
+    row's last `agent` attempt, read through the `LogReader` port like `{tail}` is: a senior
+    is never handed a path under the log volume, which its sandbox may not reach. Empty for
+    any other stop."""
     if stop.kind != consult.VERIFY_FAILED:
         return {}
     failure = require_env(ctx).verify_failure
-    previous = ctx.previous_attempt
-    facts = {"log": str(previous.log_path or "") if previous is not None else ""}
+    previous, reader = ctx.previous_attempt, ctx.ports.logs
+    lines = reader.tail(previous.log_path, AGENT_LOG_LINES) if previous and reader else []
+    facts = {"agent_log": "\n".join(lines)}
     if failure is None:
         return {**facts, "command": "", "code": "", "tail": ""}
     code = NO_EXIT_CODE if failure.exit_code is None else str(failure.exit_code)

@@ -98,7 +98,7 @@ class Loop:
         """The third start is the senior writing its decision; any other is the agent."""
         if len(self.harness.called("start")) == SENIOR_START:
             decision = f"---\nstatus: answer\n---\n\n{DIAGNOSIS}\n"
-            self.workspace.write(".orchestrator/consult/001-3.decision.md", decision)
+            self.workspace.write(".orchestrator/consult/001-4.decision.md", decision)
         else:
             self.workspace.write(MARKER, a_story("done"))
 
@@ -176,8 +176,9 @@ def _expect() -> dict[str, Any]:
 
 
 #: build · verify fails · build (the template's redispatch) · verify fails and the bound is
-#: used up · build (the senior's consult attempt) · build (the diagnosed redispatch)
-TO_THE_DIAGNOSED_REDISPATCH = 6
+#: used up · build (the consult's sweep and snapshot) · build (the senior's consult attempt) ·
+#: build (the diagnosed redispatch)
+TO_THE_DIAGNOSED_REDISPATCH = 7
 
 
 def test_a_diagnosis_reaches_one_further_fresh_redispatch_and_a_pass_finishes_the_run() -> None:
@@ -212,7 +213,7 @@ def test_the_consult_attempt_belongs_to_the_build_row_and_the_senior_gets_the_fa
     loop.turns(TO_THE_DIAGNOSED_REDISPATCH)
 
     roles = [(a.n, a.role) for a in loop.world.attempts_of(BUILD)]
-    assert roles == [(1, "agent"), (2, "agent"), (3, "consult"), (4, "agent")]
+    assert roles == [(1, "agent"), (2, "agent"), (3, "consult"), (4, "consult"), (5, "agent")]
     senior = loop.harness.called("start")[2]
     assert COMMAND in senior["prompt"]
     assert senior["model"] == BLOCK["model"]
@@ -240,14 +241,14 @@ def test_an_escalation_parks_the_verify_stop_once_with_the_seniors_reason() -> N
     loop = Loop()
     loop.harness.on_wait = lambda: (
         loop.workspace.write(
-            ".orchestrator/consult/001-3.decision.md",
+            ".orchestrator/consult/001-4.decision.md",
             "---\nstatus: escalate\nreason: a product call\n---\n",
         )
         if len(loop.harness.called("start")) == SENIOR_START
         else loop.workspace.write(MARKER, a_story("done"))
     )
 
-    statuses = loop.turns(5)
+    statuses = loop.turns(6)
 
     assert statuses[-1] == "needs_you"
     world = loop.world
@@ -256,6 +257,26 @@ def test_an_escalation_parks_the_verify_stop_once_with_the_seniors_reason() -> N
     assert (run.park_kind, run.park_path) == ("verify_failed", VERIFY)
     assert world.status_of(BUILD) == "done"
     assert world.events() == ["redispatch", "consult", "verify_failed"]
+
+
+def test_a_replayed_snapshot_step_sweeps_once_and_records_one_consult() -> None:
+    loop = Loop()
+    loop.turns(4)
+    loop.git = FakeGit(status=[" M src/a.py", ""], head_sha=[HEAD])
+    seq = next_row(loop.ports(), loop.world.run.id)
+    assert seq is not None
+
+    attempt_row(loop.ports(), loop.world.run.id, seq, {"step": seq})
+    replayed = attempt_row(loop.ports(), loop.world.run.id, seq, {"step": seq})
+    apply_result(loop.ports(), loop.world.run.id, seq, replayed)
+
+    world = loop.world
+    assert len(loop.git.called("commit")) == 1
+    assert world.events().count("consult") == 1
+    assert world.row(BUILD).consults["verify_failed"]["state"] == "due"
+    assert "snapshot" in world.row(BUILD).consults["verify_failed"]
+    assert [a.role for a in world.attempts_of(BUILD)][2:] == ["consult", "consult"]
+    assert len(loop.harness.called("start")) == AGENT_STARTS
 
 
 def test_a_gate_that_declares_no_consult_parks_as_it_always_did() -> None:

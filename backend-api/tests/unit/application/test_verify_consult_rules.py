@@ -120,10 +120,10 @@ def test_the_answer_text_reads_the_entrys_clause() -> None:
 
 
 def test_the_failure_tokens_are_filled_in_a_dispatch_clause() -> None:
-    clause = "{command} exited {code}: {tail} (log {log}) {unknown}"
-    values = {"command": "make test", "code": "2", "tail": "boom", "log": "/work/1.log"}
+    clause = "{command} exited {code}: {tail} (log {agent_log}) {unknown}"
+    values = {"command": "make test", "code": "2", "tail": "boom", "agent_log": "a1\na2"}
 
-    assert consult.fill(clause, values) == "make test exited 2: boom (log /work/1.log) {unknown}"
+    assert consult.fill(clause, values) == "make test exited 2: boom (log a1\na2) {unknown}"
 
 
 # ── the diagnosis ────────────────────────────────────────────────────────────

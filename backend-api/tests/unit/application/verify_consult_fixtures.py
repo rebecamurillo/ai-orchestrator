@@ -26,7 +26,7 @@ BLOCK: dict[str, Any] = {
     "skill": "senior-consult",
     "on": ["verify_failed"],
     "timeout_min": None,
-    "prompts": {"dispatch": "d {command} {code} {tail} {log} {decision}", "answer": ANSWER},
+    "prompts": {"dispatch": "d {command} {code} {tail} {agent_log} {decision}", "answer": ANSWER},
 }
 
 

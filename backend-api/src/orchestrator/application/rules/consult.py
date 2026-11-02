@@ -74,7 +74,7 @@ STATUSES = frozenset({ANSWER, "accept", ESCALATE})
 
 #: Every runtime token a consult clause may name; an unknown one stays literal prose.
 PLACEHOLDER = re.compile(
-    r"\{(skill|spec_folder|story_id|condition|decision|answer|command|code|tail|log)\}"
+    r"\{(skill|spec_folder|story_id|condition|decision|answer|command|code|tail|agent_log)\}"
 )
 
 

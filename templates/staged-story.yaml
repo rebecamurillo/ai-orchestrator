@@ -167,8 +167,9 @@ steps:
               Exit code: {code}
               Output tail:
             {tail}
-            The implementer's last session log is at {log}. Diagnose the failure and write your
-            decision to {decision}.
+            The tail of the implementer's last session log:
+            {agent_log}
+            Diagnose the failure and write your decision to {decision}.
           answer: |
             The senior reviewer diagnosed the failing verification ({condition}):
             {answer}

@@ -4,7 +4,8 @@ any other routing reads it.
 - **An offer** (`Consult` with no `outcome`): the row's entry for that stop kind is written
   `due` with the question and the snapshot, `consult` is recorded (actor `machine`), and the
   row is requeued through `retry`'s own `error → queued` pair. `retry_count` is not touched:
-  a consult is not a retry of the Template's.
+  a consult is not a retry of the Template's. An entry the verify offer already wrote
+  (`verify_consult.py`: block and park path, no snapshot) keeps those keys.
 - **An answer**: the entry reads `answer` with `answered_by` (the consult attempt), the
   answer is recorded as `senior_answer` (actor `senior`) with payload `{mode: session, text,
   kind}`, `text` being the consult's own `answer` clause, and the row is requeued. The next
@@ -26,11 +27,19 @@ from orchestrator.application.use_cases.writers import Entry, WriterPorts, recor
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.statuses import step_transition
+from orchestrator.domain.statuses import StepStatus, step_transition
 from orchestrator.domain.values import Consult, StepResult
 
 #: The session delivery a `senior_answer` asks for, in the shape `signal_run` writes.
 SESSION = "session"
+
+
+def attempt_status(result: StepResult) -> StepStatus:
+    """The status the consult attempt closes with. A `verify_failed` consult that came to a
+    park returns its target row to `done` (`result.status`), but the attempt itself did not
+    succeed: it closes `error`, the status of the stop it could not clear."""
+    failed_closed = result.consult is not None and result.consult.kind == rules.VERIFY_FAILED
+    return "error" if failed_closed and result.park is not None else result.status
 
 
 def apply_consult(
@@ -81,6 +90,7 @@ def _offered(
     ports: WriterPorts, run: Run, row: StepRun, found: Consult, attempt_n: int | None
 ) -> None:
     entry = {
+        **row.consults.get(found.kind, {}),
         rules.STATE_KEY: rules.DUE,
         rules.QUESTION_KEY: found.question,
         rules.SNAPSHOT_KEY: dict(found.snapshot),

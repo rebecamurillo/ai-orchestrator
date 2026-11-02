@@ -86,7 +86,7 @@ escalation without your reason. Write the file last, then stop.
 
 The dispatch sentence can name a second kind of stop: the repository's verify command failed
 after the implementer reported done, and the Template's redispatches did not fix it. It
-quotes the command, its exit code and output tail, and the path of the implementer's last
+quotes the command, its exit code and output tail, and the tail of the implementer's last
 session log. The same hard rule holds: change nothing but the decision file.
 
 - **Read** the output tail, the session log, `git diff` and `git log` of the story's work, and

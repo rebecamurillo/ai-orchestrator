@@ -59,7 +59,7 @@ from orchestrator.application.rules.frames import rows_after
 from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
 from orchestrator.application.use_cases import apply_redispatch
-from orchestrator.application.use_cases.apply_consult import apply_consult
+from orchestrator.application.use_cases.apply_consult import apply_consult, attempt_status
 from orchestrator.application.use_cases.record_trajectory import record_trajectory
 from orchestrator.application.use_cases.writers import (
     FINISHED,
@@ -195,7 +195,7 @@ def _close_attempt(ports: WriterPorts, row: StepRun, result: StepResult) -> Atte
         return None
     named: dict[str, Any] = {
         "ended_at": ports.clock.now(),
-        "status": result.status,
+        "status": attempt_status(result),
         "output_ref": result.output_ref,
     }
     # Only when named: `agent` wrote its own through `mark_finished`, and this would blank it.
@@ -295,7 +295,9 @@ def _park(  # noqa: PLR0913 — the park, the attempt it happened on and what it
     carries one — `retry_auto` and `redispatch` are records this module decides itself.
     """
     on_row = park if park.path is not None else park.model_copy(update={"path": row.path})
-    return park_run(ports, run, on_row, attempt.n if attempt is not None else None, payload)
+    # an attempt number belongs to its own row: a stop another row owns carries none
+    n = attempt.n if attempt is not None and on_row.path == row.path else None
+    return park_run(ports, run, on_row, n, payload)
 
 
 def _advance(ports: WriterPorts, run: Run, row: StepRun) -> Run:

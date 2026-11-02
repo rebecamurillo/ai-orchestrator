@@ -46,7 +46,7 @@ def redispatch(
     if target.redispatch_count >= redispatch.max:
         reason = VERIFY_FAILED.format(n=target.redispatch_count + 1)
         exhausted = Park(kind="verify_failed", reason=reason, path=row.path)
-        return verify_consult.offer(ports, run, row, target, exhausted)
+        return verify_consult.offer(ports, row, target, exhausted)
     count = target.redispatch_count + 1
     set_row(
         ports,

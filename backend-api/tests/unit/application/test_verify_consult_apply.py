@@ -18,6 +18,7 @@ from tests.unit.application.verify_consult_fixtures import (
     MAX,
     QUESTION,
     VERIFY,
+    a_failed_verify,
     a_verify_world,
     an_answer,
 )
@@ -144,3 +145,72 @@ def test_a_closed_consult_drops_the_orphan_group_it_was_handed() -> None:
     apply(world, a_closed("escalate"))
 
     assert "orphan_pgid" not in world.row(BUILD).consults["verify_failed"]
+
+
+# ── the snapshot offer ───────────────────────────────────────────────────────
+
+NO_SNAPSHOT: dict[str, Any] = {k: v for k, v in DUE.items() if k != "snapshot"}
+
+
+def a_snapshot_offer() -> StepResult:
+    return StepResult(
+        status="error",
+        gate="liveness",
+        reason=f"consult: {QUESTION}",
+        consult=Consult(kind="verify_failed", question=QUESTION, snapshot=DUE["snapshot"]),
+    )
+
+
+def test_the_snapshot_is_merged_into_the_entry_the_writer_left() -> None:
+    world = a_verify_world(build="running", consults={"verify_failed": dict(NO_SNAPSHOT)})
+    an_attempt(world, BUILD, n=3, status="done", end_sha="e" * 40)
+    an_attempt(world, BUILD, n=4, role="consult")
+
+    apply(world, a_snapshot_offer())
+
+    build = world.row(BUILD)
+    assert build.status == "queued"
+    assert build.redispatch_count == MAX
+    assert build.consults["verify_failed"] == DUE
+
+
+def test_the_consult_is_recorded_once_with_the_snapshot_attempt() -> None:
+    world = a_verify_world(build="running", consults={"verify_failed": dict(NO_SNAPSHOT)})
+    an_attempt(world, BUILD, n=4, role="consult")
+
+    apply(world, a_snapshot_offer())
+
+    [line] = world.records()
+    assert (line.event, line.actor, line.path, line.attempt_n) == ("consult", "machine", BUILD, 4)
+    assert line.payload == {"kind": "verify_failed"}
+    assert world.stored_run().status == "running"
+
+
+# ── the park's record and the attempt's status ───────────────────────────────
+
+
+def test_the_park_record_carries_no_attempt_of_the_other_row() -> None:
+    world = a_consulting_world()
+
+    apply(world, a_closed("escalate"))
+
+    [line] = world.records()
+    assert (line.event, line.path, line.attempt_n) == ("verify_failed", VERIFY, None)
+
+
+def test_a_consult_that_failed_closed_closes_its_attempt_error_not_done() -> None:
+    world = a_consulting_world()
+
+    apply(world, a_closed("failed"))
+
+    assert world.attempts_of(BUILD)[-1].status == "error"
+    assert world.status_of(BUILD) == "done"
+
+
+def test_a_park_on_the_rows_own_path_keeps_the_attempt_number() -> None:
+    world = a_verify_world(block=None)
+    an_attempt(world, VERIFY, n=1)
+
+    apply_step_result(world.ports, world.run.id, world.row(VERIFY).seq, a_failed_verify())
+
+    assert world.records()[-1].attempt_n == 1
