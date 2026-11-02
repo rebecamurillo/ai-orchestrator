@@ -2,7 +2,7 @@
 title: 'Project channel storage, API and connection test'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: '302ef490d8e3750a8d696d66fbd1896f16813871'
 review_loop_iteration: 0

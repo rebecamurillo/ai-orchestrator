@@ -203,3 +203,7 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/specs/spec-senior-unblock/stories/3-1-channel-port-project-settings-and-mattermost-adapter.md`
   summary: Two Mattermost reply-trust edges are unverified - slash-command response_url posts may appear under the invoking user without from_webhook, and a system admin can edit an allowed user's post before the poll reads it (suspected, medium if real).
   evidence: Story 3-1 review, 2026-11-02, not reproduced. Settle at the 4-2 live check: post through a slash command and via an admin edit, and confirm neither is read as the allowed user's reply.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/3-4-project-channel-storage-api-and-connection-test.md`
+  summary: The connection test lets the browser drive a request from the backend to any base URL it can reach, and reads up to 300 characters of a non-2xx body back (low under the single-Operator trust model).
+  evidence: Story 3-4 lead review, 2026-11-02. Accepted for now. Settle if the instance ever has more than one login, by restricting base URLs to an allow-list setting.
