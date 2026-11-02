@@ -2,7 +2,7 @@
 title: 'Senior consult at verify_failed'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'a11b1dfa1a010d9ca1abc5d58022474c20651d7d'
 review_loop_iteration: 0
