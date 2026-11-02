@@ -2,9 +2,9 @@
 title: 'Diff review at a protected_path stop'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
-baseline_commit: 'a11b1dfa1a010d9ca1abc5d58022474c20651d7d'
+baseline_commit: 'f1883b473af9e0800dd7088e1b9bcf2a655a6b64'
 review_loop_iteration: 0
 context: []
 ---
@@ -82,10 +82,10 @@ Paths are under `backend-api/src/orchestrator/application/` unless stated.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] Rebase on stories 1-6 and 1-5.
-- [ ] `backend-api/tests/unit/application/test_consult_review_*.py` (new): one test per matrix row, through the shared fakes and fixture YAML, each seen failing first.
-- [ ] `backend-api/tests/unit/test_senior_consult_review_skill.py` (new): asserts each addition to the skill.
-- [ ] Every module in the Code Map, at 400 lines or fewer, each new module with a test module. No existing test needs revising: in `test_consult_rules.py`, the `accept until 1-5` case still holds, because `accept` at `blocked` stays unreadable.
+- [x] Rebase on stories 1-6 and 1-5.
+- [x] `backend-api/tests/unit/application/test_consult_review_*.py` (new): one test per matrix row, through the shared fakes and fixture YAML, each seen failing first.
+- [x] `backend-api/tests/unit/test_senior_consult_review_skill.py` (new): asserts each addition to the skill.
+- [x] Every module in the Code Map, at 400 lines or fewer, each new module with a test module. No existing test needs revising: in `test_consult_rules.py`, the `accept until 1-5` case still holds, because `accept` at `blocked` stays unreadable.
 
 **Acceptance Criteria:**
 - Given a fixture Run whose implementer edits a frozen test and whose senior accepts, when the walk ends, then:
@@ -105,6 +105,21 @@ Paths are under `backend-api/src/orchestrator/application/` unless stated.
 - `make e2e`: passes.
 
 ## Implementation Notes
+
+- **Gates.** `make lint` passes. `make test` passes: 8775 backend tests (1 skipped) and 1711 web-client tests, with `domain` and `application` at 100% branch coverage. No API schema changed (`Consult` is not in the contract), so `make openapi` had nothing to regenerate; `gen:api --check` in `make lint` reports no drift.
+- **Not run.** `make e2e` and `make e2e-ui` were out of scope by instruction.
+- **Built on HEAD.** The Code Map held, with line references adapted. 1-5's `prepare`, `read_decision`, `is_document`, `Workspace.is_link` and the `senior_accept` writer are reused unchanged.
+- **Module splits (400-line cap).** `agent_tail.py` was at 400: `re_check` and `_reported` moved whole to `steps/agent_recheck.py` (test pair `test_agent_recheck.py`), and `agent.py` calls it there. `agent_consult.py` was at 397: the senior's own dispatch (`_Senior`, `_dispatch`, `_senior`, `_stall_min`) moved whole to `steps/agent_consult_senior.py` (test pair `test_agent_consult_senior.py`). The protected-path helpers (`qualifies`, `same_files`, `write_diff`, `accepted`) are in `agent_consult_review.py`.
+- **Decided: the hits on the entry.** The offer's `Consult.hits` is the hit's own payload (`{hits: [...]}`), stored on the entry under `hits` only when non-empty, so `blocked` entries are unchanged. Every fail-closed `protected_path` park returns that payload, status `error`.
+- **Decided: the spend.** `offer` takes the stopped dispatch's `HarnessResult` and, at a `protected_path` offer only, records its spend through `agent_tail.record_spend` (made public) before the sweep. The re-check later prices the same attempt with no usage, which recomputes rather than adds (`record_attempt_spend`).
+- **Decided: an accept over budget.** It parks `{reason} · consult failed: no remaining budget` with the `budget` record on top and outcome `failed`, keeping to the two reason forms the boundaries allow.
+- **Decided: an accept with no reason.** It fails closed (`approval names no reason`, 1-5's wording), and `apply_consult` writes no `senior_accept` without files and a reason.
+- **Message spelling.** Files that differ read `approved files differ from the hits`. The row's reason after an accept is `senior accepted: {files}`. `approved_files` is stored in the hits' order.
+- **The diff file.** Each section is `### {path}\n{Git.diff}`, joined by a newline. A hit under `{workdir}/` is diffed in the member tree from `start_sha` with the prefix stripped. Any other hit on a `workdir` row is diffed in the root from `root_start_sha`. A stopped attempt with no start SHA gets an empty section. The file is removed first, and nothing is written through a link.
+- **Templates.** `staged-story.yaml` and `staged-hub-story.yaml`: the three consulting rows in each now declare `on: [blocked, protected_path]`, and `dispatch` says "this condition". The `answer` clauses are unchanged.
+- **Skill.** "Reviewing a protected-path diff" was added, and the frontmatter description names the protected-path stop.
+- **Loop fixture.** AD-17 freezes the frame's first started attempt's test set. So `test_consult_review_loop.py` gives the frame an earlier, finished row whose attempt recorded `tests/a.py`, and the implementer's first dispatch can hit it.
+- **Tests revised.** None. Every existing test passes unchanged, including `test_consult_rules.py`'s `accept until 1-5` case.
 
 ## Spec Change Log
 

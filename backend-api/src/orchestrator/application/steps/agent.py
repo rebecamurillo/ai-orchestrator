@@ -27,7 +27,7 @@ middle write is the one thing a *resumed* session skips — `Harness.resume` is 
 which is the very case this guards — while `end_sha` is written only by the tail.
 
 **One resume reaches this module and dispatches nothing.** A `continue` carrying accepted
-files runs only the check and routing over the previous attempt — `agent_tail.re_check`
+files runs only the check and routing over the previous attempt — `agent_recheck.re_check`
 handles it before any new commits are placed in front of the range it reads.
 
 **A `consult` attempt runs none of this module's sequence** (AD-21, AD-22): it is a senior's
@@ -64,6 +64,7 @@ from orchestrator.application.steps import (
     agent_env,
     agent_prepare,
     agent_prompt,
+    agent_recheck,
     agent_render,
     agent_skill,
     agent_tail,
@@ -140,7 +141,7 @@ class AgentExecutor:
     def execute(self, ctx: StepContext) -> StepResult:
         if ctx.attempt.role == agent_consult.CONSULT_ROLE:
             return agent_consult.run(ctx)
-        accepted = agent_tail.re_check(ctx)
+        accepted = agent_recheck.re_check(ctx)
         if accepted is not None:
             return accepted
         found = _harness(ctx)

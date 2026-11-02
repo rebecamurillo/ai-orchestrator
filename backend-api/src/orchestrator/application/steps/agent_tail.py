@@ -9,7 +9,7 @@ lives with the Answer archive in `agent_answer.py`, beside the directory both de
 has named an unreachable gateway, O-5), computed first only so (2) can name it: the
 protected-path check parks before any route acts — FR-31: anchor wins, and its reason carries
 the outcome it hides (O-6); (3) budget check after routing — FR-17: step keeps the status
-routing chose. `re_check` is the Operator's *Accept* path; `_spend_and_budget` parks `budget`
+routing chose. `agent_recheck.re_check` is the *Accept* path; `_spend_and_budget` parks `budget`
 on top of whatever `route` decided (FR-17).
 
 **A killed attempt still records its gateway spend (O-3)**, but its budget is not evaluated:
@@ -22,7 +22,6 @@ check sees the recorded spend anyway.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from pathlib import Path
 from typing import Any
 
 from orchestrator.application.rules import (
@@ -32,7 +31,6 @@ from orchestrator.application.rules import (
     protected_paths,
     routing,
 )
-from orchestrator.application.rules.signals import accepted_files
 from orchestrator.application.steps import agent_consult, agent_failure, agent_workdir
 from orchestrator.application.steps.context import (
     StepContext,
@@ -127,7 +125,7 @@ def finish(
     committed(ctx, lambda attempts: attempts.mark_finished(finished))
     if not (result.stalled or result.timed_out):
         return tail(ctx, finished, result)
-    _record_spend(ctx, finished, result)
+    record_spend(ctx, finished, result)
     hidden = outcome.STALLED if result.stalled else outcome.TIMED_OUT
     hit = protected(ctx, finished, hidden)
     log = str(result.log_path)
@@ -153,7 +151,7 @@ def tail(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> StepResul
     routed, condition = _route(ctx, result)
     hit = protected(ctx, attempt, outcome.routed_outcome(routed, condition))
     if hit is not None:
-        return hit.model_copy(update={"output_ref": log})
+        return agent_consult.offer(ctx, attempt, hit, result).model_copy(update={"output_ref": log})
     final = agent_consult.offer(ctx, attempt, _spend_and_budget(ctx, attempt, result, routed))
     return final.model_copy(update={"output_ref": log})
 
@@ -186,7 +184,7 @@ def _route(ctx: StepContext, result: HarnessResult) -> tuple[StepResult, str | N
     return routed, story.blocking_condition if story is not None else None
 
 
-def _record_spend(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> Run | None:
+def record_spend(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> Run | None:
     """Price the attempt and recompute the Run's spend; `None` without a spend scope."""
     if ctx.ports.spend_writes is None:
         return None
@@ -202,7 +200,7 @@ def _spend_and_budget(
     via `budget_park` (`apply_step_result.budget_second_record`); a routed `done` or a
     retry-path `error` gets the budget `Park` directly and any `retry` is dropped.
     """
-    run = _record_spend(ctx, attempt, result)
+    run = record_spend(ctx, attempt, result)
     if run is None:
         return routed
     if _cap_exit(result):
@@ -235,7 +233,7 @@ def protected(ctx: StepContext, attempt: Attempt, hidden: str) -> StepResult | N
     the anchor set, `accepted_paths`, the reason sentence, the payload — is unchanged.
 
     A hit is never retried. `apply_step_result` parks the Run on it (AD-8) and the Operator
-    answers with *Accept* or a skip; `re_check` below is what an Accept comes back to.
+    answers with *Accept* or a skip; `agent_recheck.re_check` is what an Accept comes back to.
 
     `hidden` (O-6) extends the reason only; the payload `hits` stay what `continue` compares.
     """
@@ -253,29 +251,6 @@ def protected(ctx: StepContext, attempt: Attempt, hidden: str) -> StepResult | N
         park=Park(kind="protected_path", reason=reason, path=ctx.row.path),
         payload=protected_paths.hits_payload(hits),
     )
-
-
-def re_check(ctx: StepContext) -> StepResult | None:
-    """The Accept branch (AD-9): a `continue` carrying files re-runs the tail, dispatching
-    nothing. `None` for every other resume, which is the ordinary dispatch.
-
-    The Operator answered a `protected_path` park by accepting the paths, so the work the
-    row was doing is already in the worktree — re-dispatching would ask the harness to do it
-    again, and would put a WIP commit and a prepare commit in front of a range the check is
-    about to read. What is left is the check and the routing, over the *previous* attempt's
-    own two SHAs, with `run.accepted_paths` — which `signal_run` has already extended —
-    excluded.
-
-    The discriminator is `StepContext` alone, as AD-9 requires: the event plus a payload that
-    carries files. A `continue` on a `checkpoint` park carries none, and a row whose first
-    attempt was resumed has no range to re-read.
-    """
-    signal, previous = ctx.resume_signal, ctx.previous_attempt
-    if signal is None or signal.event != CONTINUE_EVENT or previous is None:
-        return None
-    if not accepted_files(signal.payload):
-        return None
-    return tail(ctx, previous, _reported(previous))
 
 
 def story_files(ctx: StepContext) -> tuple[str, ...] | None:
@@ -372,21 +347,6 @@ def usage(result: HarnessResult) -> dict[str, Any]:
         "cost_usd": figures.cost_usd,
         "cost_provisional": True,
     }
-
-
-def _reported(attempt: Attempt) -> HarnessResult:
-    """What the dispatch that parked already reported, rebuilt from its own attempt row.
-
-    The Accept branch runs no harness, and `tail` takes what one returned: the exit code and
-    the log are the attempt's columns (AD-8's `mark_finished` wrote them), so the routing
-    reads exactly what it read the first time. `usage` is left out on purpose — the spend of
-    that dispatch was recorded against that dispatch, and 5.7 must not count it twice.
-    """
-    return HarnessResult(
-        session_id=attempt.session_id or "",
-        exit_code=attempt.exit_code,
-        log_path=Path(attempt.log_path or ""),
-    )
 
 
 def _parsed(ctx: StepContext, files: tuple[str, ...]) -> StoryFile | None:

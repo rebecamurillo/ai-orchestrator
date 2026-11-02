@@ -14,6 +14,11 @@ is a diagnosis for one further fresh redispatch (`diagnosis`), never a `delivers
 stop is no readable decision, like an answer with an empty body. An answer may name
 `approved_files` (AD-17's 2026-11-02 amendment); a value that is not a list of strings makes
 the whole file unreadable.
+
+**At a `protected_path` stop** (story 1-8) only `accept` or an escalation is read; an answer
+fails closed. An acceptance is delivered once, to the `agent` attempt right after the consult
+that made it: the re-check it runs writes no `end_sha`, so `_owed`'s rule would deliver it
+again on every later attempt.
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ from typing import Any
 from orchestrator.application.story_file import FRONTMATTER_FENCE, frontmatter
 from orchestrator.application.templates.lines import load_with_lines
 from orchestrator.application.templates.table import CONSULT_KEY
-from orchestrator.domain.entities.attempt import Attempt, agent_attempts
+from orchestrator.domain.entities.attempt import AGENT_ROLE, Attempt, agent_attempts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.statuses import MachineEvent, ParkKind
@@ -44,6 +49,7 @@ DECLARED_KEY = "declared"
 PARK_PATH_KEY = "park_path"
 DUE = "due"
 ANSWER: ConsultOutcome = "answer"
+ACCEPT: ConsultOutcome = "accept"
 ESCALATE: ConsultOutcome = "escalate"
 FAILED: ConsultOutcome = "failed"
 
@@ -54,6 +60,9 @@ ACCEPT_EVENT: MachineEvent = "senior_accept"
 KIND_KEY = "kind"
 TEXT_KEY = "text"
 VERIFY_FAILED: ParkKind = "verify_failed"
+PROTECTED_PATH: ParkKind = "protected_path"
+#: A `protected_path` entry's copy of the hits payload the park would have recorded.
+HITS_KEY = "hits"
 
 #: Where a verify row's planned consult sits: `with_resolved["on_fail"]["consult"]`.
 ON_FAIL_KEY = "on_fail"
@@ -71,12 +80,14 @@ DECISION_FILE = ".orchestrator/consult/{seq:03d}-{n}.decision.md"
 #: The story file as it stood at the row's first agent start, written beside the decision
 #: file for the senior to judge an approval against: the agent can rewrite the live one.
 STORY_FILE = ".orchestrator/consult/{seq:03d}-{n}.story.md"
+#: The stopped attempt's diff of every `protected_path` hit, for the senior to review.
+DIFF_FILE = ".orchestrator/consult/{seq:03d}-{n}.diff"
 
 #: What a decision file's frontmatter may say (`accept` is 1-5's).
 STATUS_KEY = "status"
 REASON_KEY = "reason"
 APPROVED_FILES_KEY = "approved_files"
-STATUSES = frozenset({ANSWER, "accept", ESCALATE})
+STATUSES = frozenset({ANSWER, ACCEPT, ESCALATE})
 
 #: Every runtime token a consult clause may name; an unknown one stays literal prose.
 PLACEHOLDER = re.compile(
@@ -141,6 +152,11 @@ def story_path(seq: int, n: int) -> str:
     return STORY_FILE.format(seq=seq, n=n)
 
 
+def diff_path(seq: int, n: int) -> str:
+    """The hits' diff of attempt `n` of row `seq`, beside its decision file."""
+    return DIFF_FILE.format(seq=seq, n=n)
+
+
 def parse(text: str | None) -> Decision | None:
     """The file as the walker reads it, or `None` for every way it can be unreadable."""
     head = frontmatter(text or "")
@@ -171,11 +187,17 @@ def _body(text: str) -> str:
     return "\n".join(lines[close + 1 :]).strip()
 
 
-def verdict(decision: Decision | None) -> tuple[ConsultOutcome, str]:
-    """What the decision comes to: the answer's body, the escalation's reason, or nothing."""
-    if decision is not None and decision.status == ANSWER and decision.body:
+def verdict(decision: Decision | None, kind: str = "blocked") -> tuple[ConsultOutcome, str]:
+    """What the decision comes to: the answer's body, the escalation's reason, or nothing.
+    At a `protected_path` stop an `accept` comes to its reason, and an answer to nothing."""
+    if decision is None:
+        return FAILED, ""
+    review = kind == PROTECTED_PATH
+    if review and decision.status == ACCEPT:
+        return ACCEPT, decision.reason
+    if not review and decision.status == ANSWER and decision.body:
         return ANSWER, decision.body
-    if decision is not None and decision.status == ESCALATE:
+    if decision.status == ESCALATE:
         return ESCALATE, decision.reason
     return FAILED, ""
 
@@ -203,13 +225,41 @@ def answer_text(
 def delivers(
     row: StepRun, attempts: Iterable[Attempt], records: Iterable[GateRecord]
 ) -> GateRecord | None:
-    """The row's latest `blocked` `senior_answer` while it is still owed, or `None`.
+    """The row's `protected_path` acceptance for this attempt, else its latest `blocked`
+    `senior_answer` while it is still owed, or `None`.
 
-    Owed while the entry reads `answer` and no `agent` attempt numbered above the consult
-    that answered has come back (`end_sha` is written only by the agent's tail). A
-    `verify_failed` diagnosis is never delivered as a record: see `diagnosis`.
+    The acceptance reaches only the `agent` attempt numbered right after the consult that
+    accepted. An answer is owed while the entry reads `answer` and no `agent` attempt
+    numbered above the consult that answered has come back (`end_sha` is written only by the
+    agent's tail). A `verify_failed` diagnosis is never delivered as a record: see `diagnosis`.
     """
-    return _owed(row, attempts, records, verify=False)
+    listed, logged = list(attempts), list(records)
+    accepted = _accepted(row, listed, logged)
+    if accepted is not None:
+        return accepted
+    return _owed(row, listed, logged, verify=False)
+
+
+def _accepted(
+    row: StepRun, attempts: list[Attempt], records: list[GateRecord]
+) -> GateRecord | None:
+    entry = row.consults.get(PROTECTED_PATH)
+    if not isinstance(entry, Mapping) or entry.get(STATE_KEY) != ACCEPT:
+        return None
+    number = entry.get(ANSWERED_BY_KEY)
+    current = max(attempts, key=lambda attempt: attempt.n, default=None)
+    if not isinstance(number, int) or current is None or current.role != AGENT_ROLE:
+        return None
+    if current.n != number + 1:
+        return None
+    mine = [
+        r
+        for r in records
+        if r.event == ACCEPT_EVENT
+        and r.path == row.path
+        and r.payload.get(KIND_KEY) == PROTECTED_PATH
+    ]
+    return mine[-1] if mine else None
 
 
 def diagnosis(row: StepRun, attempts: Iterable[Attempt], records: Iterable[GateRecord]) -> str:

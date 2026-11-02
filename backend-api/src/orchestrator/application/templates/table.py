@@ -35,12 +35,12 @@ PROMPTS_KEY = "prompts"
 PROMPTS_KEYS = frozenset({"dispatch", "rendered", "answer", "halt", "redispatch"})
 
 #: AD-22's `consult {model, harness?, skill, on, timeout_min?, prompts {dispatch, answer}}`.
-#: `on` names the stops a senior may take instead of a person; 1-5 and 1-6 widen it.
+#: `on` names the stops a senior may take instead of a person.
 CONSULT_KEY = "consult"
 CONSULT_KEYS = frozenset({"model", "harness", "skill", "on", "timeout_min", PROMPTS_KEY})
 CONSULT_REQUIRED = ("model", "skill", "on", PROMPTS_KEY)
 CONSULT_PROMPTS_KEYS = frozenset({"dispatch", "answer"})
-CONSULT_ON = frozenset({"blocked"})
+CONSULT_ON = frozenset({"blocked", "protected_path"})
 #: The same block under a `run` row's `on_fail {redispatch, max, consult}` (story 1-6): the
 #: stop is implied, so `on` is optional and may only name it.
 REDISPATCH_CONSULT_ON = frozenset({"verify_failed"})

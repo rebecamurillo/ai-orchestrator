@@ -67,8 +67,9 @@ class Retry(BaseModel):
     resume_session: bool = True
 
 
-#: What a consult attempt came to (AD-22): delivered, sent to a person, or failed closed.
-ConsultOutcome = Literal["answer", "escalate", "failed"]
+#: What a consult attempt came to (AD-22): delivered, accepted (a `protected_path` hit,
+#: AD-17's 2026-11-02 amendment), sent to a person, or failed closed.
+ConsultOutcome = Literal["answer", "accept", "escalate", "failed"]
 
 
 class Consult(BaseModel):
@@ -91,6 +92,8 @@ class Consult(BaseModel):
     #: decision's `reason`, which the acceptance record carries.
     approved_files: tuple[str, ...] = ()
     reason: str = ""
+    #: A `protected_path` offer's hits payload, which every fail-closed park carries again.
+    hits: dict[str, Any] = Field(default_factory=dict)
 
 
 class Worktree(BaseModel):

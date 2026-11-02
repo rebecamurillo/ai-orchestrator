@@ -13,6 +13,10 @@ any other routing reads it.
 - **An answer approving test files** (AD-17's 2026-11-02 amendment) first extends
   `run.accepted_paths`, without duplicates, and records `senior_accept` (actor `senior`), so
   the stop records show who accepted. Run-wide, as the Operator's `continue` is.
+- **An acceptance of a `protected_path` hit** (story 1-8) records the same `senior_accept`
+  and no `senior_answer`, reads `accept` with `answered_by`, and requeues the row: the next
+  `agent` attempt re-checks the stopped one with that record (`agent_recheck.py`). The
+  offer stored the hits payload on the entry for every fail-closed park to carry.
 - **A `verify_failed` answer** is a diagnosis, not a message into a session (AD-10): it is
   recorded with no `mode`, and the requeue counts as one further redispatch on
   `redispatch_count`, so the next failure finds the bound still used up and parks.
@@ -73,12 +77,15 @@ def apply_consult(
         if key != rules.ORPHAN_PGID_KEY
     }
     entry[rules.STATE_KEY] = found.outcome
-    if found.outcome != rules.ANSWER or result.park is not None:
+    if found.outcome not in (rules.ANSWER, rules.ACCEPT) or result.park is not None:
         set_row(ports, row, consults={**row.consults, found.kind: entry})
         return None
     entry[rules.ANSWERED_BY_KEY] = attempt_n
     if found.approved_files and found.reason.strip():
         run = _accept(ports, run, row, found, attempt_n)
+    if found.outcome == rules.ACCEPT:
+        _requeue(ports, row, {**row.consults, found.kind: entry}, {})
+        return run
     text = rules.answer_text(row.with_resolved, found.question, found.answer, entry)
     payload = {rules.TEXT_KEY: text, rules.KIND_KEY: found.kind}
     counted: dict[str, Any] = {}
@@ -132,6 +139,7 @@ def _offered(
         rules.STATE_KEY: rules.DUE,
         rules.QUESTION_KEY: found.question,
         rules.SNAPSHOT_KEY: dict(found.snapshot),
+        **({rules.HITS_KEY: dict(found.hits)} if found.hits else {}),
     }
     record(
         ports,

@@ -1,6 +1,6 @@
 ---
 name: senior-consult
-description: The senior consult at a blocked stop or a failed verification — review and validate a coding agent's blocking concern against the story's intent, then write one decision file that either answers the agent or escalates to a human. Reads; writes nothing but the decision file.
+description: The senior consult at a blocked stop, a protected-path stop or a failed verification — review and validate a coding agent's blocking concern or frozen-test edit against the story's intent, then write one decision file that answers or accepts, or escalates to a human. Reads; writes nothing but the decision file.
 ---
 
 # Senior consult
@@ -114,6 +114,30 @@ approved_files: [tests/test_example.py]
 
 A file that is not a frozen test, or any anchor, fails the whole consult and nothing is
 approved. A file you do not name stays frozen.
+
+## Reviewing a protected-path diff
+
+When the condition starts with `protected path modified:`, the agent asked nothing: it changed
+existing test files, which are frozen, and the Run stopped. The condition lists every file it
+changed. Read the `.diff` file beside your decision file (the same name, ending `.diff` instead
+of `.decision.md`): under a `### {path}` header it holds each listed file's change since the
+agent started. Read the `.story.md` baseline beside it too.
+
+Accept only when "required", as "Approving test edits" defines it, holds for each hunk of each
+listed file:
+
+```markdown
+---
+status: accept
+reason: <one sentence: which acceptance criterion changes the behaviour each test pins>
+approved_files: [tests/test_example.py]
+---
+```
+
+- `approved_files` names every listed path, spelled exactly as the condition lists it, and
+  nothing else. A list with fewer or more files fails the consult.
+- An accept with no `reason` fails the consult. An `answer` is not read at this stop.
+- Otherwise, or when unsure, escalate, naming the file and the hunk the story does not require.
 
 ## At a failed verification
 

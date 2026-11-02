@@ -1,5 +1,5 @@
-"""The `agent` kind's consult (AD-21, AD-22): the offer at a `blocked` stop, and the consult
-attempt that answers it.
+"""The `agent` kind's consult (AD-21, AD-22): the offer at a `blocked` or `protected_path`
+stop, and the consult attempt that answers it.
 
 **The offer** (`offer`) runs at the end of the agent's own tail. A `blocked` park on a row
 that declares `consult {on: [blocked]}`, has not consulted on that kind, and stopped on an
@@ -7,14 +7,19 @@ attempt that can be resumed (a recorded `session_id`, a harness with `resume`) c
 `error` plus `Consult{kind, question, snapshot}` instead of the park; `apply_step_result`
 records it and requeues the row. Every other result passes through unchanged.
 
+**A `protected_path` hit** (story 1-8) is offered on a row declaring that stop when no hit
+is a document; nothing is resumed, so no session is needed. The offer records the stopped
+attempt's spend first and carries the hits payload, which every fail-closed park carries
+again, with status `error`, so the Operator's diff view and `continue` work unchanged. Its
+consult writes the hits' diff beside the decision file, and only `accept` is delivered.
+
 **The consult attempt** (`run`) is the row's next attempt, opened with `role = consult` by
 `start_attempt`. Its order is fixed: kill the orphan a dead backend left; check the budget;
 look up the harness; write the folder's `.gitignore`; clear the decision path and copy the
 story baseline (`agent_consult_review`); fill the prompt; then `mark_started`
-(no start SHAs: a consult is outside every AD-17 range), `start` in a **new** session that is
-never resumed, the `pgid` update, `wait`, `mark_finished` and the spend, all inside the
-attempt span. Only then are the trees checked against the offer's snapshot and the decision
-read through the Workspace port (`rules/consult.py`).
+(no start SHAs: a consult is outside every AD-17 range) and the senior's own process
+(`agent_consult_senior`). Only then are the trees checked against the offer's snapshot and
+the decision read through the Workspace port (`rules/consult.py`).
 
 **A `verify_failed` consult** (story 1-6) is the same attempt on the redispatch target. It is
 offered by `use_cases/verify_consult.py`, not by `offer`; it runs on the block its entry
@@ -31,7 +36,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import structlog
@@ -39,6 +43,7 @@ import structlog
 from orchestrator.application.rules import budget, consult
 from orchestrator.application.steps import (
     agent_consult_review,
+    agent_consult_senior,
     agent_consult_tree,
     agent_env,
     agent_tail,
@@ -47,7 +52,6 @@ from orchestrator.application.steps import (
 from orchestrator.application.steps.context import (
     StepContext,
     committed,
-    log_path,
     require_env,
     require_harnesses,
     require_process,
@@ -57,25 +61,25 @@ from orchestrator.application.steps.context import (
 )
 from orchestrator.application.story_file import NO_EXIT_CODE
 from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY, STORY_ID_KEY
-from orchestrator.application.templates.rows import STALL_KEY
-from orchestrator.application.use_cases.spend import record_attempt_spend
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
-from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.git import GitError
-from orchestrator.domain.ports.harness import Harness, HarnessResult
-from orchestrator.domain.statuses import AttemptRole, ParkKind
+from orchestrator.domain.ports.harness import HarnessResult
+from orchestrator.domain.statuses import AttemptRole, ParkKind, StepStatus
 from orchestrator.domain.values import Consult, ConsultOutcome, Park, StepResult
 
 log = structlog.get_logger(__name__)
 
 CONSULT_ROLE: AttemptRole = "consult"
 BLOCKED: ParkKind = "blocked"
+PROTECTED_PATH: ParkKind = consult.PROTECTED_PATH
 HARNESS_KEY = "harness"
 
 #: The reasons a consult leaves on the row and the park. `{question}` is the stop's own.
 OFFERED = "consult: {question}"
 ANSWERED = "senior answered: {line}"
+ACCEPTED = "senior accepted: {files}"
+PATHS = ", "
 ESCALATED = "{question} · senior: {reason}"
 ANSWERED_OVER_BUDGET = "{question} · senior answered: {line}"
 FAILED = "{question} · consult failed: {why}"
@@ -91,24 +95,28 @@ TIMED_OUT = "senior timeout after {n} min"
 TREE_CHANGED = "tree changed: {files}"
 RAISED = "{name}: {message}"
 
-#: The stall limit when the row declared none — the `agent` kind's own default (FR-10).
-DEFAULT_STALL_MIN = 30
-
 CONSULT_FAILED = "consult failed"
 
 #: How much of the target's last agent log a `verify_failed` senior is handed.
 AGENT_LOG_LINES = 200
 
 
-def offer(ctx: StepContext, attempt: Attempt, final: StepResult) -> StepResult:
-    """`final`, or the offer it becomes when the stop qualifies (see the module docstring)."""
+def offer(
+    ctx: StepContext, attempt: Attempt, final: StepResult, result: HarnessResult | None = None
+) -> StepResult:
+    """`final`, or the offer it becomes when the stop qualifies (see the module docstring).
+    `result` is what the stopped dispatch reported, whose spend a `protected_path` offer
+    records first: the hit returns before the tail's own spend is recorded."""
     park = final.park
-    if final.status != BLOCKED or park is None or park.kind != BLOCKED:
+    if park is None or final.budget_park is not None:
         return final
-    if final.budget_park is not None or not _resumable(ctx, attempt):
+    if not _qualifies(ctx, attempt, final, park.kind):
         return final
-    if not consult.offered(ctx.with_resolved, ctx.row.consults, BLOCKED):
+    if not consult.offered(ctx.with_resolved, ctx.row.consults, park.kind):
         return final
+    review = park.kind == PROTECTED_PATH
+    if review and result is not None:
+        agent_tail.record_spend(ctx, attempt, result)
     try:
         snapshot = agent_consult_tree.sweep_and_snapshot(ctx, attempt.n)
     except GitError as error:
@@ -121,8 +129,20 @@ def offer(ctx: StepContext, attempt: Attempt, final: StepResult) -> StepResult:
         gate=final.gate,
         output_ref=final.output_ref,
         reason=OFFERED.format(question=park.reason),
-        consult=Consult(kind=BLOCKED, question=park.reason, snapshot=snapshot),
+        consult=Consult(
+            kind=park.kind,
+            question=park.reason,
+            snapshot=snapshot,
+            hits=dict(final.payload) if review else {},
+        ),
     )
+
+
+def _qualifies(ctx: StepContext, attempt: Attempt, final: StepResult, kind: str) -> bool:
+    """A `protected_path` hit on tests only, or a `blocked` stop the agent can resume."""
+    if kind == PROTECTED_PATH:
+        return agent_consult_review.qualifies(final.payload)
+    return final.status == BLOCKED and kind == BLOCKED and _resumable(ctx, attempt)
 
 
 def _resumable(ctx: StepContext, attempt: Attempt) -> bool:
@@ -200,12 +220,15 @@ def _consult(ctx: StepContext, stop: _Stop) -> StepResult:
     workspace.write(consult.IGNORE_FILE, consult.IGNORE_ALL)
     decision = consult.decision_path(ctx.row.seq, ctx.attempt.n)
     agent_consult_review.prepare(ctx, decision)
+    if stop.kind == PROTECTED_PATH:
+        agent_consult_review.write_diff(ctx, stop.entry)
     prompt = _prompt(ctx, block, stop, str(tree / decision))
     started = ctx.attempt.model_copy(
         update={"pgid": None, "harness": name, "model": str(block.get("model") or "") or None}
     )
     committed(ctx, lambda attempts: attempts.mark_started(started))
-    result, spent = _dispatch(ctx, _Senior(harness, started, prompt, tree, block))
+    senior = agent_consult_senior.Senior(harness, started, prompt, tree, block)
+    result, spent = agent_consult_senior.dispatch(ctx, senior)
     text = agent_consult_review.read_decision(workspace, decision)
     return _with_budget(ctx, stop, _outcome(ctx, stop, result, text), spent)
 
@@ -245,71 +268,6 @@ def _failure(ctx: StepContext, stop: _Stop) -> dict[str, str]:
     return {**facts, "command": failure.command, "code": code, "tail": "\n".join(failure.log_tail)}
 
 
-@dataclass(frozen=True)
-class _Senior:
-    """One senior dispatch, decided before the span opens: the calls share these facts."""
-
-    harness: Harness
-    started: Attempt
-    prompt: str
-    tree: Path
-    block: Mapping[str, Any]
-
-
-def _dispatch(ctx: StepContext, senior: _Senior) -> tuple[HarnessResult, Run | None]:
-    """The senior's process inside the attempt's span; an unwired tracer degrades to `""`."""
-    tracer = ctx.ports.tracer
-    if tracer is None:
-        return _senior(ctx, senior, "")
-    with tracer.attempt_span(require_run(ctx), ctx.row, senior.started) as span:
-        return _senior(ctx, senior, span.traceparent)
-
-
-def _senior(
-    ctx: StepContext, senior: _Senior, traceparent: str
-) -> tuple[HarnessResult, Run | None]:
-    """Start, commit the group, wait, record the finish and the spend (AD-8, AD-11, AD-14)."""
-    handle = senior.harness.start(
-        cwd=senior.tree,
-        prompt=senior.prompt,
-        env=agent_env.environment(ctx, senior.started, traceparent),
-        model=senior.started.model,
-        session_id=str(new_id()),
-        budget_usd_remaining=agent_env.remaining(require_run(ctx)),
-        timeout_min=senior.block.get("timeout_min"),
-        log_path=log_path(ctx),
-        stall_min=_stall_min(ctx),
-        add_dirs=agent_env.add_dirs(ctx, senior.tree),
-    )
-    running = senior.started.model_copy(
-        update={"pgid": handle.pgid, "session_id": handle.session_id}
-    )
-    try:
-        committed(ctx, lambda attempts: attempts.update(running))
-    except BaseException:
-        require_process(ctx).kill_group(handle.pgid)
-        raise
-    result = senior.harness.wait(handle)
-    finished = running.model_copy(
-        update={
-            "ended_at": ctx.ports.clock.now(),
-            "exit_code": result.exit_code,
-            "session_id": result.session_id,
-            "log_path": str(result.log_path),
-            **agent_tail.usage(result),
-        }
-    )
-    committed(ctx, lambda attempts: attempts.mark_finished(finished))
-    if ctx.ports.spend_writes is None:
-        return result, None
-    with ctx.ports.spend_writes() as spend_ports:
-        return result, record_attempt_spend(spend_ports, require_run(ctx), finished, result.usage)
-
-
-def _stall_min(ctx: StepContext) -> Any:
-    return ctx.with_resolved.get(STALL_KEY, DEFAULT_STALL_MIN)
-
-
 def _outcome(ctx: StepContext, stop: _Stop, result: HarnessResult, text: str | None) -> StepResult:
     """What the senior's exit, the trees and the decision file come to, in that order."""
     log_ref = str(result.log_path)
@@ -321,27 +279,31 @@ def _outcome(ctx: StepContext, stop: _Stop, result: HarnessResult, text: str | N
     if crashed is not None:
         return _parked(ctx, stop, FAILED, crashed, log_ref)
     decision = consult.parse(text)
-    outcome, said = consult.verdict(decision)
+    outcome, said = consult.verdict(decision, stop.kind)
     if outcome == consult.ESCALATE:
         template = ESCALATED if said else "{question}"
         return _parked(ctx, stop, template, said, log_ref, outcome="escalate")
     if outcome == consult.FAILED or decision is None:
         return _parked(ctx, stop, FAILED, NO_DECISION, log_ref)
-    answered = agent_consult_review.answered(ctx, stop.kind, stop.question, decision)
-    if isinstance(answered, str):
-        return _parked(ctx, stop, FAILED, answered, log_ref)
+    if outcome == consult.ACCEPT:
+        hits = stop.entry.get(consult.HITS_KEY) or {}
+        reviewed = agent_consult_review.accepted(stop.question, hits, decision)
+    else:
+        reviewed = agent_consult_review.answered(ctx, stop.kind, stop.question, decision)
+    if isinstance(reviewed, str):
+        return _parked(ctx, stop, FAILED, reviewed, log_ref)
+    if outcome == consult.ACCEPT:
+        line = ACCEPTED.format(files=PATHS.join(reviewed.approved_files))
+    else:
+        line = ANSWERED.format(line=_first_line(said))
     return StepResult(
-        status="error",
-        gate=ctx.row.gate,
-        output_ref=log_ref,
-        reason=ANSWERED.format(line=_first_line(said)),
-        consult=answered,
+        status="error", gate=ctx.row.gate, output_ref=log_ref, reason=line, consult=reviewed
     )
 
 
 def _crash(ctx: StepContext, result: HarnessResult, block: Mapping[str, Any]) -> str | None:
     if result.stalled:
-        return STALLED.format(n=_stall_min(ctx))
+        return STALLED.format(n=agent_consult_senior.stall_min(ctx))
     if result.timed_out:
         return TIMED_OUT.format(n=block.get("timeout_min"))
     if result.exit_code != 0:
@@ -358,6 +320,9 @@ def _with_budget(ctx: StepContext, stop: _Stop, outcome: StepResult, run: Run | 
         return outcome
     if outcome.park is not None:
         return outcome.model_copy(update={"budget_park": park})
+    if stop.kind == PROTECTED_PATH:
+        parked = _parked(ctx, stop, FAILED, NO_BUDGET, outcome.output_ref)
+        return parked.model_copy(update={"budget_park": park})
     line = _first_line(outcome.consult.answer if outcome.consult is not None else "")
     parked = _parked(ctx, stop, ANSWERED_OVER_BUDGET, line, outcome.output_ref, outcome="answer")
     return parked.model_copy(update={"budget_park": park})
@@ -375,16 +340,19 @@ def _parked(  # noqa: PLR0913 — the stop, the sentence, its one value, and wha
     """The original stop, parked, its reason carrying what the consult came to.
 
     A `verify_failed` stop parks on the verify row the offer named, and the target row it
-    consulted on goes back to `done`: its work was finished before the gate failed."""
+    consulted on goes back to `done`: its work was finished before the gate failed. A
+    `protected_path` stop parks `error` with the offer's hits payload, as the hit did."""
     reason = template.format(question=stop.question, why=value, reason=value, line=value)
-    verify = stop.kind == consult.VERIFY_FAILED
+    review = stop.kind == PROTECTED_PATH
+    status: StepStatus = "done" if stop.kind == consult.VERIFY_FAILED else "blocked"
     path = str(stop.entry.get(consult.PARK_PATH_KEY) or ctx.row.path)
     return StepResult(
-        status="done" if verify else "blocked",
+        status="error" if review else status,
         gate=ctx.row.gate,
         output_ref=output_ref,
         reason=reason,
         park=Park(kind=stop.kind, reason=reason, path=path),
+        payload=dict(stop.entry.get(consult.HITS_KEY) or {}) if review else {},
         consult=Consult(kind=stop.kind, question=stop.question, outcome=outcome),
     )
 

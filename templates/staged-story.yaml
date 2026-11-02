@@ -84,12 +84,12 @@ steps:
     consult:
       model: "{{senior_model}}"
       skill: senior-consult
-      on: [blocked]
+      on: [blocked, protected_path]
       timeout_min: 30
       prompts:
         dispatch: >-
           Run the skill {skill}. The agent on story {story_id} (spec folder {spec_folder})
-          stopped at this blocking condition: "{condition}". Write your decision to
+          stopped at this condition: "{condition}". Write your decision to
           {decision}.
         answer: 'Answer from the senior reviewer to the blocking condition "{condition}": {answer}'
     timeout_min: "{{plan_timeout_min}}"
@@ -136,12 +136,12 @@ steps:
     consult:
       model: "{{senior_model}}"
       skill: senior-consult
-      on: [blocked]
+      on: [blocked, protected_path]
       timeout_min: 30
       prompts:
         dispatch: >-
           Run the skill {skill}. The agent on story {story_id} (spec folder {spec_folder})
-          stopped at this blocking condition: "{condition}". Write your decision to
+          stopped at this condition: "{condition}". Write your decision to
           {decision}.
         answer: 'Answer from the senior reviewer to the blocking condition "{condition}": {answer}'
     timeout_min: "{{build_timeout_min}}"
@@ -205,12 +205,12 @@ steps:
     consult:
       model: "{{senior_model}}"
       skill: senior-consult
-      on: [blocked]
+      on: [blocked, protected_path]
       timeout_min: 30
       prompts:
         dispatch: >-
           Run the skill {skill}. The agent on story {story_id} (spec folder {spec_folder})
-          stopped at this blocking condition: "{condition}". Write your decision to
+          stopped at this condition: "{condition}". Write your decision to
           {decision}.
         answer: 'Answer from the senior reviewer to the blocking condition "{condition}": {answer}'
     timeout_min: "{{review_timeout_min}}"
