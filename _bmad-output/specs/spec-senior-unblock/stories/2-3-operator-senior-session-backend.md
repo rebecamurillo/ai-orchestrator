@@ -116,6 +116,14 @@ Built tests first at baseline `c4d212b`: the new test files failed on import bef
   - The busy re-check under the lock, closing a close-versus-message race.
 - KEEP: the matrix outcomes and the anchor rule.
 
+## Review Triage Log
+
+| Finding | Layer | Verdict | Route | Evidence and action |
+| --- | --- | --- | --- | --- |
+| `test_a_test_file_edit_is_not_an_anchor_edit` seeded no `frozen_test_files`, so reading the turns' frozen tests into the anchors would still pass and hard rule 1's exclusion was unpinned | verification | low | patch | The turn now records `frozen_test_files=("tests/test_app.py",)` and edits that file; the close still succeeds. This story's own new test, revised in the same story. |
+| The "reverted" close test was the no-edit test under another name | verification | low | patch | Turn 1 edits `stories.yaml` and turn 2 reverts it. The scripted diff holds nothing for the net range and the edit for any second range. The test asserts a single diff from the first start SHA to HEAD, a clean close, and `turns = 2`. |
+| `write_run_file` reads the Run unlocked and commits later, so a `session_start` (or `terminal_start`) committing in between lets an Operator file edit land inside the session | edge | low | patch | The status check now re-reads the Run through `get_for_update`, and the lock is held to the commit. A Run gone by that read is a 404. `test_session_lock.py` serves a stale unlocked read: the write is refused with nothing written, committed or recorded. The earlier `get` stays, so `test_run_files_write.py` is unchanged. |
+
 ## Verification
 
 **Commands:**

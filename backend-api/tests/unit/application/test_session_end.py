@@ -92,7 +92,7 @@ def test_a_turn_that_touched_no_anchor_ends_cleanly() -> None:
 def test_a_test_file_edit_is_not_an_anchor_edit() -> None:
     """AD-23: an Operator's test edit in conversation is declared under hard rule 1."""
     session = opened(edited(Change(path="tests/test_app.py", kind="modified")))
-    session.turn()
+    session.turn(frozen_test_files=("tests/test_app.py",))
 
     session.send("session_end")
 
@@ -100,12 +100,22 @@ def test_a_test_file_edit_is_not_an_anchor_edit() -> None:
 
 
 def test_a_reverted_anchor_no_longer_differs_and_is_not_listed() -> None:
-    session = opened(edited())
-    session.turn()
+    """Turn 1 edits `stories.yaml` and turn 2 reverts it. The net diff from the session's
+    first start SHA to HEAD holds nothing; turn 1's own range, read alone, would hold it."""
+    git = FakeGit(
+        diff_changes=[(), (Change(path=STORIES, kind="modified"),)],
+        statuses={WORKTREE: ""},
+        heads={WORKTREE: [HEAD_SHA]},
+    )
+    session = opened(git)
+    session.turn(n=1, start_sha=START_SHA, end_sha=ROOT_SHA)
+    session.turn(n=2, start_sha=ROOT_SHA, end_sha=HEAD_SHA)
 
     session.send("session_end")
 
     assert session.world.stored_run().senior_session is False
+    assert git.called("diff_changes") == [(Path(WORKTREE), START_SHA, HEAD_SHA)]
+    assert session.world.records()[-1].payload == {TURNS_KEY: 2}
 
 
 def test_a_session_with_no_start_sha_has_no_edits() -> None:

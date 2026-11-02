@@ -23,7 +23,7 @@ from orchestrator.application.use_cases.run_files import (
     write_run_file,
 )
 from orchestrator.application.use_cases.signal_run import signal_run
-from orchestrator.domain.errors import Conflict
+from orchestrator.domain.errors import Conflict, NotFound
 from orchestrator.domain.statuses import PARK_KINDS, SIGNAL_KINDS, SignalKind
 from orchestrator.domain.values import Signal
 from tests.unit.application.session_fixtures import (
@@ -239,3 +239,57 @@ def test_an_operator_file_edit_is_refused_while_the_session_is_open() -> None:
         write_run_file(ports, session.world.run.id, path, "after")
 
     assert str(raised.value) == PARKED_REQUIRED
+
+
+def test_a_file_edit_racing_a_session_start_is_refused_under_the_row_lock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The unlocked read still sees the stop as it was before `session_start` committed;
+    the read under the lock sees the flag, and nothing is written or committed."""
+    session = locked()
+    stale = session.world.stored_run().model_copy(update={"senior_session": False})
+    runs = session.world.ports.runs
+    monkeypatch.setattr(runs, "get", lambda _run_id: stale)
+    path = f"{SPEC_FOLDER}/stories/1-answer.md"
+    workspace = FakeWorkspace(WORKTREE, {path: "before"})
+    git = FakeGit()
+    uow = FakeUnitOfWork()
+    uow.__enter__()
+    ports = RunFilesWritePorts(
+        runs=runs,
+        workspace=lambda _root: workspace,
+        git=git,
+        records=session.world.ports.records,
+        clock=FakeClock(EPOCH),
+        uow=uow,
+    )
+    records = len(session.world.records())
+
+    with pytest.raises(Conflict) as raised:
+        write_run_file(ports, session.world.run.id, path, "after")
+
+    assert str(raised.value) == PARKED_REQUIRED
+    assert ("get_for_update", session.world.run.id) in runs.calls
+    assert workspace.read(path) == "before"
+    assert git.called("commit") == []
+    assert len(session.world.records()) == records
+
+
+def test_a_run_gone_by_the_locked_read_is_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = a_session_world()
+    runs = session.world.ports.runs
+    monkeypatch.setattr(runs, "get_for_update", lambda _run_id: None)
+    path = f"{SPEC_FOLDER}/stories/1-answer.md"
+    uow = FakeUnitOfWork()
+    uow.__enter__()
+    ports = RunFilesWritePorts(
+        runs=runs,
+        workspace=lambda _root: FakeWorkspace(WORKTREE, {path: "before"}),
+        git=FakeGit(),
+        records=session.world.ports.records,
+        clock=FakeClock(EPOCH),
+        uow=uow,
+    )
+
+    with pytest.raises(NotFound):
+        write_run_file(ports, session.world.run.id, path, "after")

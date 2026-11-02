@@ -206,6 +206,11 @@ def write_run_file(ports: RunFilesWritePorts, run_id: UUID, path: str, content: 
         raise Forbidden(OUTSIDE_SPEC_FOLDER.format(path=path))
     if path in run.plan_refs:
         raise Conflict(PLANNED_AT.format(sha=run.plan_refs[path]))
+    # Re-read under the row lock, held to the commit: a `session_start` or `terminal_start`
+    # committing after the read above would otherwise let this edit land inside the session.
+    run = ports.runs.get_for_update(run_id)
+    if run is None:
+        raise NotFound(f"no run {run_id}")
     if run.status != "needs_you" or run.terminal_session or run.senior_session:
         raise Conflict(PARKED_REQUIRED)
     workspace = ports.workspace(run.worktree_path)
