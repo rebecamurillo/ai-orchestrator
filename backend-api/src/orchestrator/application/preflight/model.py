@@ -37,6 +37,7 @@ CHECK_INSTALLED_SKILL = "installed skill"
 CHECK_METHOD_VERSION = "method version"
 CHECK_EXISTING_STORY_FILES = "existing story files"
 CHECK_CLONE_CHECK = "clone check"
+CHECK_TEST_GLOBS = "test globs"
 CHECK_WHAT_WILL_RUN = "what will run"
 CHECK_CONCURRENT_REPO = "concurrent branch"
 

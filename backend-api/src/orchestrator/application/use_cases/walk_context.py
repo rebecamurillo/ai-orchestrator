@@ -20,7 +20,7 @@ from dataclasses import replace
 from uuid import UUID
 
 from orchestrator.application.rules.consult import delivers, diagnosis
-from orchestrator.application.steps import StepContext, StepPorts
+from orchestrator.application.steps import WORKDIR_KEY, StepContext, StepPorts
 from orchestrator.application.steps.verify_failure import VerifyFailure
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY, REDISPATCH_TARGET_SEQ
 from orchestrator.application.templates.rows import COMMAND_KEY
@@ -65,12 +65,18 @@ def context(
         previous_attempt=next(reversed(agent_attempts(attempts[:-1])), None),
         attempt=attempts[-1],
         resume_signal=_resume_signal(writers, row, attempts, resume_event),
-        ports=_step_ports(writers, step, run, row, frame),
+        ports=_step_ports(writers, step, run, row, frame, attempts=attempts),
     )
 
 
-def _step_ports(
-    writers: WriterPorts, step: StepPorts, run: Run, row: StepRun, frame: WalkFrame
+def _step_ports(  # noqa: PLR0913 — the row, its frame and its attempts, each read once above
+    writers: WriterPorts,
+    step: StepPorts,
+    run: Run,
+    row: StepRun,
+    frame: WalkFrame,
+    *,
+    attempts: list[Attempt],
 ) -> StepPorts:
     """The executors' ports, plus whatever this row alone needs resolving (FR-10, AD-17).
 
@@ -86,15 +92,25 @@ def _step_ports(
     environment = step.run_env
     if environment is None:
         return step
-    failure = _verify_failure(writers, step, run.id, row)
-    if row.frame is None:
-        return replace(step, run_env=replace(environment, verify_failure=failure))
-    rule = frame_anchors(step.git, run, environment, frame, row)
-    return replace(
-        step,
-        run_env=replace(environment, anchors=rule.anchors, verify_failure=failure),
-        protected_paths=rule,
+    environment = replace(
+        environment,
+        verify_failure=_verify_failure(writers, step, run.id, row),
+        story_baseline_sha=_story_baseline_sha(row, attempts),
     )
+    if row.frame is None:
+        return replace(step, run_env=environment)
+    rule = frame_anchors(step.git, run, environment, frame, row)
+    return replace(step, run_env=replace(environment, anchors=rule.anchors), protected_paths=rule)
+
+
+def _story_baseline_sha(row: StepRun, attempts: list[Attempt]) -> str | None:
+    """The root-tree start SHA of the row's lowest-`n` `agent` attempt that recorded one."""
+    in_workdir = bool(row.with_resolved.get(WORKDIR_KEY))
+    for attempt in sorted(agent_attempts(attempts), key=lambda a: a.n):
+        sha = attempt.root_start_sha if in_workdir else attempt.start_sha
+        if sha is not None:
+            return sha
+    return None
 
 
 def _verify_failure(

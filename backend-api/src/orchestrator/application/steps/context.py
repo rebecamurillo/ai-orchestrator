@@ -144,6 +144,9 @@ class RunEnvironment:
     anchors: frozenset[str] = frozenset()
     #: Label of the run holding the same (repository, branch) slot, or `None` (story 5-1, AD-8).
     held_by_label: str | None = None
+    #: The root-tree SHA the row's first agent attempt started at, which a consult copies the
+    #: story file from (AD-22), or `None` before any agent attempt started.
+    story_baseline_sha: str | None = None
 
     def base_dir(self, work_dir: str) -> Path:
         """`{work_dir}/{project.slug}/{repository.slug}/base` — the one layout (AD-14)."""

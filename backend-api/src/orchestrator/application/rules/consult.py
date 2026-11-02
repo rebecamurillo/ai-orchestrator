@@ -10,9 +10,10 @@ the body is the answer. `.orchestrator/` holds a `.gitignore` of `*`, so neither
 and consulted on the redispatch target, whose entry carries the declared block. Its answer
 is a diagnosis for one further fresh redispatch (`diagnosis`), never a `delivers` record.
 
-**Everything but a usable answer or an escalation fails closed.** `accept` is a decision
-story 1-5 gives a meaning to; until then it is no readable decision, like an answer with an
-empty body.
+**Everything but a usable answer or an escalation fails closed.** `accept` at a `blocked`
+stop is no readable decision, like an answer with an empty body. An answer may name
+`approved_files` (AD-17's 2026-11-02 amendment); a value that is not a list of strings makes
+the whole file unreadable.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from orchestrator.application.templates.table import CONSULT_KEY
 from orchestrator.domain.entities.attempt import Attempt, agent_attempts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.statuses import ParkKind
+from orchestrator.domain.statuses import MachineEvent, ParkKind
 from orchestrator.domain.values import ConsultOutcome
 
 #: The entry keys `step_run.consults[kind]` is written with.
@@ -49,6 +50,7 @@ FAILED: ConsultOutcome = "failed"
 #: The gate events a consult writes, and the record payload key that names the stop kind.
 CONSULT_EVENT = "consult"
 SENIOR_ANSWER_EVENT = "senior_answer"
+ACCEPT_EVENT: MachineEvent = "senior_accept"
 KIND_KEY = "kind"
 TEXT_KEY = "text"
 VERIFY_FAILED: ParkKind = "verify_failed"
@@ -66,10 +68,14 @@ ANSWER_CLAUSE = "answer"
 IGNORE_FILE = ".orchestrator/.gitignore"
 IGNORE_ALL = "*\n"
 DECISION_FILE = ".orchestrator/consult/{seq:03d}-{n}.decision.md"
+#: The story file as it stood at the row's first agent start, written beside the decision
+#: file for the senior to judge an approval against: the agent can rewrite the live one.
+STORY_FILE = ".orchestrator/consult/{seq:03d}-{n}.story.md"
 
 #: What a decision file's frontmatter may say (`accept` is 1-5's).
 STATUS_KEY = "status"
 REASON_KEY = "reason"
+APPROVED_FILES_KEY = "approved_files"
 STATUSES = frozenset({ANSWER, "accept", ESCALATE})
 
 #: Every runtime token a consult clause may name; an unknown one stays literal prose.
@@ -85,6 +91,7 @@ class Decision:
     status: str
     reason: str
     body: str
+    approved_files: tuple[str, ...] = ()
 
 
 def declared(with_resolved: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -129,6 +136,11 @@ def decision_path(seq: int, n: int) -> str:
     return DECISION_FILE.format(seq=seq, n=n)
 
 
+def story_path(seq: int, n: int) -> str:
+    """The story baseline of attempt `n` of row `seq`, beside its decision file."""
+    return STORY_FILE.format(seq=seq, n=n)
+
+
 def parse(text: str | None) -> Decision | None:
     """The file as the walker reads it, or `None` for every way it can be unreadable."""
     head = frontmatter(text or "")
@@ -140,11 +152,15 @@ def parse(text: str | None) -> Decision | None:
     status = loaded.root.get(STATUS_KEY)
     if not isinstance(status, str) or status.strip() not in STATUSES:
         return None
+    approved = loaded.root.get(APPROVED_FILES_KEY, [])
+    if not isinstance(approved, list) or not all(isinstance(p, str) for p in approved):
+        return None
     reason = loaded.root.get(REASON_KEY)
     return Decision(
         status=status.strip(),
         reason=reason.strip() if isinstance(reason, str) else "",
         body=_body(text or ""),
+        approved_files=tuple(approved),
     )
 
 

@@ -8,6 +8,7 @@ carries, and a world standing on a `consult` attempt whose entry the offer left 
 from __future__ import annotations
 
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -114,7 +115,6 @@ def a_consult_world(  # noqa: PLR0913 — one keyword per fact of the consult, e
             usage=HarnessUsage(tokens_in=10, tokens_out=5, cost_usd=None),
         )
     )
-    files = {DECISION: decision} if decision is not None else {}
     resolved = with_resolved if with_resolved is not None else consulting()
     probe = a_world(with_resolved=resolved)
     previous = an_attempt(
@@ -128,7 +128,6 @@ def a_consult_world(  # noqa: PLR0913 — one keyword per fact of the consult, e
     )
     world = a_world(
         with_resolved=resolved,
-        files=files,
         harness=harness,
         harnesses=harnesses,
         previous=previous,
@@ -137,6 +136,13 @@ def a_consult_world(  # noqa: PLR0913 — one keyword per fact of the consult, e
         else FakeGit(heads={WORKTREE: [SNAP_HEAD]}, statuses={WORKTREE: ""}),
         **over,
     )
+    # Story 1-5, 2026-11-02: a file already at the decision path is removed before the
+    # senior is dispatched (the planted-file rule), so the senior writes its decision while
+    # it runs, in `on_wait`, on whichever harness the row's consult dispatches.
+    if decision is not None:
+        for senior in [harness, *(harnesses or {}).values()]:
+            if isinstance(senior, FakeHarness) and senior.on_wait is None:
+                senior.on_wait = partial(world.workspace.write, DECISION, decision)
     consult_attempt = world.attempt.model_copy(update={"role": "consult"})
     world.attempts.attempts[consult_attempt.id] = consult_attempt
     row = world.row.model_copy(

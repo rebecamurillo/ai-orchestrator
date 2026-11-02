@@ -87,6 +87,10 @@ class Consult(BaseModel):
     snapshot: dict[str, Any] = Field(default_factory=dict)
     outcome: ConsultOutcome | None = None
     answer: str = ""
+    #: Existing test files a `blocked` answer approves (AD-17's 2026-11-02 amendment), and the
+    #: decision's `reason`, which the acceptance record carries.
+    approved_files: tuple[str, ...] = ()
+    reason: str = ""
 
 
 class Worktree(BaseModel):

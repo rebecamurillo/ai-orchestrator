@@ -2,9 +2,9 @@
 title: 'Test-edit approval at a blocked stop'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
-baseline_commit: 'a11b1dfa1a010d9ca1abc5d58022474c20651d7d'
+baseline_commit: '2460a484df02e3db8e88834fef9153551b3d3515'
 review_loop_iteration: 0
 context: []
 ---
@@ -81,11 +81,11 @@ Paths are under `backend-api/src/orchestrator/application/` unless stated.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] Rebase on story 1-6, which edits the same consult modules.
-- [ ] `backend-api/tests/unit/application/test_consult_approval_*.py` (new): one test per matrix row, through the shared fakes and fixture YAML, each seen failing first.
-- [ ] `backend-api/tests/unit/test_gate_events.py`: revise the named assertion as decided. No other existing test is edited.
-- [ ] `backend-api/tests/unit/test_senior_consult_approval_skill.py` (new): asserts each addition to the skill.
-- [ ] Every module in the Code Map, at 400 lines or fewer, each new module with a test module.
+- [x] Rebase on story 1-6, which edits the same consult modules.
+- [x] `backend-api/tests/unit/application/test_consult_approval_*.py` (new): one test per matrix row, through the shared fakes and fixture YAML, each seen failing first.
+- [x] `backend-api/tests/unit/test_gate_events.py`: revise the named assertion as decided. No other existing test is edited.
+- [x] `backend-api/tests/unit/test_senior_consult_approval_skill.py` (new): asserts each addition to the skill.
+- [x] Every module in the Code Map, at 400 lines or fewer, each new module with a test module.
 
 **Acceptance Criteria:**
 - Given a fixture Run whose agent blocks on a question about frozen `tests/a.py`, whose senior answers with `approved_files: [tests/a.py]`, and whose resumed agent edits that file and ends `done`, when the walk finishes the row, then:
@@ -105,6 +105,15 @@ Paths are under `backend-api/src/orchestrator/application/` unless stated.
 - `make e2e`: passes.
 
 ## Implementation Notes
+
+- **Gates.** `make lint` passes. `make test` passes: 8657 backend tests (1 skipped) and 1711 web-client tests, with `domain` and `application` at 100% branch coverage. `make openapi` regenerated `contracts/openapi.json` and `schema.d.ts`, because `GateEvent` widened by `senior_accept`. Neither file has drift.
+- **Not run.** `make e2e` and `make e2e-ui` were out of scope by instruction.
+- **Rebased on 1-6.** The Code Map holds at HEAD. `agent_consult.py` was at 389 lines and is now 396. So the answer is built in `agent_consult_review.answered`, which returns the `Consult` or the refusal, next to `prepare` and `approval_error`. `_outcome` parses once and passes the `Decision` on.
+- **Decided: `Consult.reason`.** The acceptance record's payload carries the decision's `reason`, so `Consult` gains `reason: str = ""` beside `approved_files`. The text drops ` · {reason}` when the senior gave no reason.
+- **Decided: only a `blocked` answer approves.** A `verify_failed` answer (1-6) carries no files, and nothing is accepted. The diagnosis is still delivered.
+- **Decided: the planted baseline.** `prepare` removes any file at the `.story.md` path as well as at the decision path, so an agent cannot plant a baseline either.
+- **Message spelling.** The matrix's `…not a frozen test file: {p}` is written `approved file is not a frozen test file: {p}`. A path outside `{workdir}/` on a hub row reads the same.
+- **Tests revised (rule 1(b)).** `test_gate_events.py::test_the_machine_events_are_ad_9s_two_bounded_re_executions` now pins `senior_accept`, citing story 1-5, 2026-11-02 and the AD-17/AD-22 amendments. The shared fixture `consult_fixtures.a_consult_world` now writes the decision in `FakeHarness.on_wait`, while the senior runs, instead of seeding it before `run`. The coordinator approved this on 2026-11-02, because the planted-file rule removes a file that is already there. No assertion was changed, and all 36 callers in `test_consult_run.py` and `test_verify_consult_run.py` pass unchanged. The old shape is now pinned as the planted case in `test_consult_approval_run.py`. No other existing test was edited.
 
 ## Spec Change Log
 

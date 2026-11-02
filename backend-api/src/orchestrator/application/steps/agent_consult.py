@@ -9,7 +9,8 @@ records it and requeues the row. Every other result passes through unchanged.
 
 **The consult attempt** (`run`) is the row's next attempt, opened with `role = consult` by
 `start_attempt`. Its order is fixed: kill the orphan a dead backend left; check the budget;
-look up the harness; write the folder's `.gitignore`; fill the prompt; then `mark_started`
+look up the harness; write the folder's `.gitignore`; clear the decision path and copy the
+story baseline (`agent_consult_review`); fill the prompt; then `mark_started`
 (no start SHAs: a consult is outside every AD-17 range), `start` in a **new** session that is
 never resumed, the `pgid` update, `wait`, `mark_finished` and the spend, all inside the
 attempt span. Only then are the trees checked against the offer's snapshot and the decision
@@ -37,6 +38,7 @@ import structlog
 
 from orchestrator.application.rules import budget, consult
 from orchestrator.application.steps import (
+    agent_consult_review,
     agent_consult_tree,
     agent_env,
     agent_tail,
@@ -197,6 +199,7 @@ def _consult(ctx: StepContext, stop: _Stop) -> StepResult:
     workspace = require_workspace(ctx, str(tree))
     workspace.write(consult.IGNORE_FILE, consult.IGNORE_ALL)
     decision = consult.decision_path(ctx.row.seq, ctx.attempt.n)
+    agent_consult_review.prepare(ctx, decision)
     prompt = _prompt(ctx, block, stop, str(tree / decision))
     started = ctx.attempt.model_copy(
         update={"pgid": None, "harness": name, "model": str(block.get("model") or "") or None}
@@ -316,18 +319,22 @@ def _outcome(ctx: StepContext, stop: _Stop, result: HarnessResult, text: str | N
     crashed = _crash(ctx, result, stop.block)
     if crashed is not None:
         return _parked(ctx, stop, FAILED, crashed, log_ref)
-    outcome, said = consult.verdict(consult.parse(text))
+    decision = consult.parse(text)
+    outcome, said = consult.verdict(decision)
     if outcome == consult.ESCALATE:
         template = ESCALATED if said else "{question}"
         return _parked(ctx, stop, template, said, log_ref, outcome="escalate")
-    if outcome == consult.FAILED:
+    if outcome == consult.FAILED or decision is None:
         return _parked(ctx, stop, FAILED, NO_DECISION, log_ref)
+    answered = agent_consult_review.answered(ctx, stop.kind, stop.question, decision)
+    if isinstance(answered, str):
+        return _parked(ctx, stop, FAILED, answered, log_ref)
     return StepResult(
         status="error",
         gate=ctx.row.gate,
         output_ref=log_ref,
         reason=ANSWERED.format(line=_first_line(said)),
-        consult=Consult(kind=stop.kind, question=stop.question, outcome="answer", answer=said),
+        consult=answered,
     )
 
 

@@ -43,7 +43,15 @@ def test_the_machine_events_are_ad_9s_two_bounded_re_executions() -> None:
     # Story 1-4, 2026-11-02: `consult` and `senior_answer` join, as spine AD-22 and AD-8's
     # amendments (ratified 2026-11-01, senior unblock) declare — recorded without a Run
     # transition, like the two re-executions.
-    assert MACHINE_EVENTS == ("redispatch", "retry_auto", "consult", "senior_answer")
+    # Story 1-5, 2026-11-02: `senior_accept` joins, as AD-17's and AD-22's amendments
+    # (2026-11-01) declare — the senior's own acceptance record, not the Operator's `continue`.
+    assert MACHINE_EVENTS == (
+        "redispatch",
+        "retry_auto",
+        "consult",
+        "senior_answer",
+        "senior_accept",
+    )
 
 
 def test_the_whole_alphabet_is_ad_8s_three_plus_ad_9s_two() -> None:

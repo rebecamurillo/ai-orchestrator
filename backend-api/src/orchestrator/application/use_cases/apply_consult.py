@@ -10,6 +10,9 @@ any other routing reads it.
   answer is recorded as `senior_answer` (actor `senior`) with payload `{mode: session, text,
   kind}`, `text` being the consult's own `answer` clause, and the row is requeued. The next
   `agent` attempt finds that record as its `resume_signal` (`walk_context.py`).
+- **An answer approving test files** (AD-17's 2026-11-02 amendment) first extends
+  `run.accepted_paths`, without duplicates, and records `senior_accept` (actor `senior`), so
+  the stop records show who accepted. Run-wide, as the Operator's `continue` is.
 - **A `verify_failed` answer** is a diagnosis, not a message into a session (AD-10): it is
   recorded with no `mode`, and the requeue counts as one further redispatch on
   `redispatch_count`, so the next failure finds the bound still used up and parks.
@@ -23,7 +26,14 @@ from __future__ import annotations
 from typing import Any
 
 from orchestrator.application.rules import consult as rules
-from orchestrator.application.use_cases.writers import Entry, WriterPorts, record, set_row
+from orchestrator.application.rules.signals import FILES_KEY
+from orchestrator.application.use_cases.writers import (
+    Entry,
+    WriterPorts,
+    record,
+    set_row,
+    set_run,
+)
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -32,6 +42,9 @@ from orchestrator.domain.values import Consult, StepResult
 
 #: The session delivery a `senior_answer` asks for, in the shape `signal_run` writes.
 SESSION = "session"
+
+ACCEPTED = "accepted by the senior: {files}"
+REASON_KEY = "reason"
 
 
 def attempt_status(result: StepResult) -> StepStatus:
@@ -63,6 +76,8 @@ def apply_consult(
         set_row(ports, row, consults={**row.consults, found.kind: entry})
         return None
     entry[rules.ANSWERED_BY_KEY] = attempt_n
+    if found.approved_files:
+        run = _accept(ports, run, row, found, attempt_n)
     text = rules.answer_text(row.with_resolved, found.question, found.answer, entry)
     payload = {rules.TEXT_KEY: text, rules.KIND_KEY: found.kind}
     counted: dict[str, Any] = {}
@@ -84,6 +99,28 @@ def apply_consult(
     )
     _requeue(ports, row, {**row.consults, found.kind: entry}, counted)
     return run
+
+
+def _accept(
+    ports: WriterPorts, run: Run, row: StepRun, found: Consult, attempt_n: int | None
+) -> Run:
+    files = list(dict.fromkeys(found.approved_files))
+    added = tuple(path for path in files if path not in run.accepted_paths)
+    updated = set_run(ports, run, accepted_paths=(*run.accepted_paths, *added))
+    text = ACCEPTED.format(files=", ".join(files))
+    record(
+        ports,
+        updated,
+        Entry(
+            event=rules.ACCEPT_EVENT,
+            actor="senior",
+            path=row.path,
+            text=f"{text} · {found.reason}" if found.reason else text,
+            attempt_n=attempt_n,
+            payload={FILES_KEY: files, REASON_KEY: found.reason, rules.KIND_KEY: found.kind},
+        ),
+    )
+    return updated
 
 
 def _offered(

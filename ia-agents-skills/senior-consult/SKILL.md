@@ -82,6 +82,39 @@ An escalation's body is ignored; put everything a human needs into `reason`. Any
 status, a missing or unreadable file, or an answer with an empty body is treated as an
 escalation without your reason. Write the file last, then stop.
 
+## Approving test edits
+
+At a blocked stop the agent may be asking whether it may change an existing test. Those files
+are frozen: an edit to one stops the Run for a human unless it is approved first. You may
+approve it in your answer. Add `approved_files: [...]` to an answer's frontmatter
+only for existing test files that the story requires changing:
+
+```markdown
+---
+status: answer
+reason: <one sentence: which acceptance criterion changes the behaviour the test pins>
+approved_files: [tests/test_example.py]
+---
+
+<the answer, naming tests/test_example.py and what may change in it>
+```
+
+- "Required" means `SPEC.md`, `stories.yaml` or the `.story.md` baseline states the new
+  behaviour (its acceptance criteria, or its `## Do not touch`). The baseline is the story
+  file as it stood when the agent first started, written beside your decision file. The
+  revision touches only the assertions that pinned the old behaviour, asserts the new
+  behaviour as thoroughly, and names the story and the date.
+- A declaration that only the live story file carries counts as the agent's own claim, not
+  the story's, so escalate.
+- On a row that works in a `workdir`, spell each path `{workdir}/…`, as the run worktree
+  names it. Never name an anchor: `SPEC.md`, `stories.yaml`, `epics.yaml` or any
+  `AGENTS.md`.
+- Escalate a deletion, a skip, a relaxed assertion, an unrelated test, or anything unsure.
+- Name the files in the answer body too, so the agent knows what it may change.
+
+A file that is not a frozen test, or any anchor, fails the whole consult and nothing is
+approved. A file you do not name stays frozen.
+
 ## At a failed verification
 
 The dispatch sentence can name a second kind of stop: the repository's verify command failed

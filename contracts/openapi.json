@@ -1058,7 +1058,8 @@
                   "redispatch",
                   "retry_auto",
                   "consult",
-                  "senior_answer"
+                  "senior_answer",
+                  "senior_accept"
                 ],
                 "type": "string"
               },

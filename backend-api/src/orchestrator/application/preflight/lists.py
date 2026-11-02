@@ -20,6 +20,7 @@ from orchestrator.application.preflight.model import (
     CHECK_INSTALLED_SKILL,
     CHECK_SPEC_MD,
     CHECK_STORIES_YAML,
+    CHECK_TEST_GLOBS,
     Line,
 )
 from orchestrator.application.steps import AGENT_KIND
@@ -317,3 +318,14 @@ def concurrent_repo_lines(ctx: Context) -> list[Line]:
             continue
         lines.append(Line(CHECK_CONCURRENT_REPO, "warn", _concurrent_run_text(run)))
     return lines
+
+
+#: AD-17 freezes the tests `repository.test_globs` matches; with none, nothing is protected.
+NO_TEST_GLOBS = "no test_globs: no existing test is frozen"
+
+
+def test_globs_line(ctx: Context) -> Line | None:
+    """A `warn` when the chosen repository freezes no test, else nothing; never a refusal."""
+    if ctx.repository is None or ctx.repository.test_globs:
+        return None
+    return Line(check=CHECK_TEST_GLOBS, status="warn", text=NO_TEST_GLOBS)
