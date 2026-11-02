@@ -31,6 +31,11 @@ Run's `model`, `review_model`) and its own limit, each routed on a marker under
 `{spec_folder}/stories/.auto/`; the method lives in `ia-agents-skills/staged-*`. New workflow
 behaviour lands in the staged family.
 
+The staged epic tail routes its `retro` row on `{spec_folder}/stories/.auto/retro.md`, not on
+`RETROSPECTIVE.md`: `status: rejected` parks the Run `blocked` on that row with the marker's
+`## Auto Run Result` section as the reason, `accepted` and `accepted-with-open-items` carry on.
+The stop admits `answer`, `skip_step`, `skip_epic` and `cancel`, not `continue`.
+
 Editing one family: read the sibling's `# sibling … differs in` line first; a change to a
 shared row (the git rows, the epic tail) usually belongs in both. The menu is
 `ROOT_TEMPLATES` in the instance `.env`.
