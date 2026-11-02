@@ -10,14 +10,17 @@
 #      Regenerated, not preserved: `agent-home` is a volume, and a stale config written by
 #      an older image would otherwise survive a rebuild. A missing required variable stops
 #      the container here, before anything is served.
-#   3. the readiness fixture's bare origin is rebuilt (SPEC CAP-8, AD-16) — idempotent,
+#   3. the agent user's docker CLI is pointed at the optional `docker` service, or away from
+#      it, per VERIFY_DOCKER (`scripts/docker_context.sh`): a context under `agent-home`
+#      survives the container, so it is reconciled at every start in both directions.
+#   4. the readiness fixture's bare origin is rebuilt (SPEC CAP-8, AD-16) — idempotent,
 #      cheap, and must exist before `main.run_migrations` seeds the `readiness` Project's
 #      Repository and runs its clone check.
-#   4. `alembic upgrade head` — the schema reaches head before the process starts, so a
+#   5. `alembic upgrade head` — the schema reaches head before the process starts, so a
 #      database that cannot be migrated fails the container instead of a request (spine
 #      Operations). The application repeats this as its start-up step; the second call
 #      finds the schema already at head and applies nothing.
-#   5. the application replaces this shell, so PID 1 is uvicorn and SIGTERM reaches it.
+#   6. the application replaces this shell, so PID 1 is uvicorn and SIGTERM reaches it.
 #
 # No credential is read here. Everything comes from the process environment, which compose
 # fills from `.env`.
@@ -40,6 +43,8 @@ scripts/harness/ensure-all.sh
 for harness in claude codex opencode; do
   "scripts/harness/${harness}.sh" configure
 done
+
+scripts/docker_context.sh
 
 scripts/readiness_fixture.sh
 

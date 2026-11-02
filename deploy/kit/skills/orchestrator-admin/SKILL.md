@@ -100,7 +100,8 @@ has a ghcr.io entry at all (only a pull proves the credential still works); the 
 free or this stack's own; `/healthz`; whether `/api/v1/ping` accepts the token in `.env`;
 `/api/v1/version` against `IMAGE_TAG` and against `VERSION`, with the pinned BMAD and harness
 CLI versions; the llm-platform stack — configured, running, and pointed at; each harness's
-`enabled` and `failing_check`; disk on the docker data root; the retention and cron settings.
+`enabled` and `failing_check`; Docker for Runs (`dind`); disk on the docker data root; the
+retention and cron settings.
 
 How to read it:
 
@@ -120,6 +121,12 @@ How to read it:
 - **`warn` on `gateway`** — `llm-platform/` is installed but `LITELLM_BASE_URL` is blank,
   which is the gateway's off switch. `llm-platform/sync-env.sh <path-to>/.env` fills in the
   six connection values and mints the harness key.
+- **`dind`** — Docker for Runs. `ok … off` is the default: a repository whose commands run
+  `docker compose` fails those rows with `Cannot connect to the Docker daemon`.
+  `./install.sh start --with-docker` turns it on — a privileged sidecar, so put README.md
+  § Trust to the user first; it is their decision. `fail` while on names the case (not
+  running, unhealthy, left in an old network namespace after backend-api restarted), and
+  `./install.sh start` repairs each.
 
 ## Harness versions
 

@@ -16,6 +16,7 @@ from pathlib import Path
 from orchestrator.application.dto import ProjectSnapshot, RepositorySnapshot, RunInputs
 from orchestrator.application.preflight import checks, lists
 from orchestrator.application.preflight.checks import Context
+from orchestrator.application.preflight.docker import docker_line
 from orchestrator.application.preflight.model import (
     CHECK_CONCURRENT_REPO,
     Line,
@@ -69,6 +70,9 @@ class PreflightPorts:
     #: (`api/providers.py` builds one unconditionally) — a catalog that *cannot be read* is
     #: a `fail` line, not a `skip` (hub-Run operations, skills install fix, 2026-09-24).
     skill_catalog: SkillCatalog | None = None
+    #: `Settings.verify_docker`: whether the optional `docker` service runs beside the
+    #: backend. Read only by the `docker` line, which is `warn` while it is off.
+    verify_docker: bool = False
 
 
 @dataclass(frozen=True)
@@ -119,6 +123,9 @@ def preflight_and_plan(ports: PreflightPorts, req: PreflightRequest) -> Prefligh
         skill_catalog=ports.skill_catalog,
     )
     lines = _lines(ctx)
+    docker = docker_line(ctx, ports.verify_docker)
+    if docker is not None:
+        lines.append(docker)
     # The brief's formula ("no fail line and no plan_error") assumes a plan was built; a
     # request too incomplete to build one (AC5) has no fail line either, so `rows is not
     # None` is the third term that keeps "nothing to start" from reading as "start allowed".

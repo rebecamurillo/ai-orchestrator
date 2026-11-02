@@ -7,6 +7,7 @@
 #   GHCR_TOKEN=ghp_… ANTHROPIC_API_KEY=sk-ant-… ./install.sh --yes --with-platform
 #
 #   ./install.sh start | stop | status | logs     # day-2 operations on this stack
+#   ./install.sh start --with-docker              # add the Docker daemon for Runs (VERIFY_DOCKER)
 #   ./install.sh doctor                           # read-only checks; non-zero on any `fail`
 #   ./install.sh diagnose                         # a redacted report to attach to a bug report
 #   ./install.sh harness claude --subscription    # Claude Max/Pro auth instead of an API key
@@ -21,7 +22,8 @@
 #   1. checks docker, docker compose v2, curl and openssl are here, and the daemon answers
 #   2. logs the docker daemon in to ghcr.io with the token — the images are private
 #   3. writes `.env` from `.env.example` with generated secrets, once; never overwrites it
-#   4. optionally brings up llm-platform/ (LiteLLM + Langfuse) and points `.env` at it
+#   4. optionally brings up llm-platform/ (LiteLLM + Langfuse) and points `.env` at it;
+#      `--with-docker` also sets VERIFY_DOCKER=true, which starts the `docker` service
 #   5. pulls the two images pinned by IMAGE_TAG and starts the stack
 #   6. proves /healthz and the login token, then prints where to go
 #
@@ -48,6 +50,7 @@ platform_env="${platform_dir}/.env"
 
 yes=0
 with_platform=""     # "" ask, 1 yes, 0 no
+with_docker=""       # "" keep .env's VERIFY_DOCKER, 1 --with-docker, 0 --no-docker
 pull=1               # 0: the images are already on this machine (built from a checkout)
 tag_arg=""
 command=""
@@ -65,7 +68,7 @@ warn() { printf 'warning: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
-	sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+	sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 # ── arguments ────────────────────────────────────────────────────────────────
@@ -79,6 +82,8 @@ while [[ $# -gt 0 ]]; do
 		--no-pull) pull=0 ;;
 		--with-platform) with_platform=1 ;;
 		--no-platform) with_platform=0 ;;
+		--with-docker) with_docker=1 ;;
+		--no-docker) with_docker=0 ;;
 		--subscription) subscription=1 ;;
 		--api-key) subscription=0 ;;
 		--version|--version=*)
@@ -100,6 +105,8 @@ while [[ $# -gt 0 ]]; do
 	shift
 done
 command="${command:-install}"
+[[ -z "$with_docker" || "$command" == "install" || "$command" == "start" ]] ||
+	die "--with-docker / --no-docker are for install and start: ./install.sh start --with-docker"
 [[ "$version_given" -eq 0 || "$command" == "harness" ]] ||
 	die "--version is only for: ./install.sh harness <claude|codex|opencode> --version X"
 
@@ -163,6 +170,14 @@ version_older() {
 	[[ "$pa" < "$pb" ]]
 }
 
+# set_var, or append the line when an `.env` written by an older release lacks it — for an
+# optional variable only, whose absence already means its default.
+put_var() {
+	local file="$1" name="$2" value="$3"
+	if grep -q "^${name}=" "$file"; then set_var "$file" "$name" "$value"
+	else printf '%s=%s\n' "$name" "$value" >> "$file"; fi
+}
+
 is_placeholder() { case "$1" in ""|*change-me*) return 0 ;; *) return 1 ;; esac; }
 
 port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
@@ -191,7 +206,20 @@ confirm() {   # confirm "question" → 0 on yes; --yes answers yes
 	[[ "$answer" == "y" || "$answer" == "Y" || "$answer" == "yes" ]]
 }
 
-compose()      { docker compose --project-directory "$here" -f "$compose_file" "$@"; }
+# The `docker` service is in the compose profile `docker`, which `.env`'s VERIFY_DOCKER turns
+# on for every command here; `compose_all` names it regardless, for the commands that must
+# reach a sidecar left from when it was on (remove it, `down -v`).
+docker_enabled() {
+	case "$(get_var "$env_file" VERIFY_DOCKER | tr '[:upper:]' '[:lower:]')" in
+		true|1|yes|on) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+compose() {
+	if docker_enabled; then compose_all "$@"
+	else docker compose --project-directory "$here" -f "$compose_file" "$@"; fi
+}
+compose_all()  { docker compose --project-directory "$here" -f "$compose_file" --profile docker "$@"; }
 # The llm-platform stack runs as its own compose project, named after this stack's
 # COMPOSE_PROJECT_NAME (`aio` → `aio-host`), never as the host file's own `name:`: a
 # repository checkout's dev llm-platform stack is `ai-orchestrator-host`, and sharing that name would
@@ -373,6 +401,49 @@ platform_up() {
 	fi
 }
 
+# ── 4b. Docker for Runs (the optional `docker` service) ──────────────────────
+# `--with-docker` / `--no-docker` write VERIFY_DOCKER; `.env` is what every later command reads.
+docker_choice() {
+	[[ -n "$with_docker" ]] || return 0
+	if [[ "$with_docker" -eq 1 ]]; then
+		put_var "$env_file" VERIFY_DOCKER true
+		say "VERIFY_DOCKER=true: a privileged Docker-in-Docker sidecar gives Runs a Docker daemon (README.md § Trust)"
+	else
+		put_var "$env_file" VERIFY_DOCKER false
+		say "VERIFY_DOCKER=false"
+	fi
+}
+
+# The daemon version as the agent user's docker CLI sees it, through the context
+# `scripts/docker_context.sh` wrote — the path a Run's command takes. Empty on failure.
+docker_reachable() {
+	compose exec -T backend-api docker version --format '{{.Server.Version}}' 2>/dev/null
+}
+
+# On: backend-api must reach the daemon. A sidecar left in the network namespace of a
+# backend-api that has since restarted answers nothing there, so it is recreated once and
+# then the start refuses. Off: a sidecar left from when it was on is removed; `docker-data`
+# is kept.
+docker_reconcile() {
+	local version
+	if ! docker_enabled; then
+		if compose_all ps -a --services 2>/dev/null | grep -qx docker; then
+			say "VERIFY_DOCKER is off: removing the docker service's container (the docker-data volume is kept)"
+			compose_all rm -sf docker
+		fi
+		return 0
+	fi
+	if version="$(docker_reachable)" && [[ -n "$version" ]]; then
+		say "docker for Runs: daemon ${version} answers backend-api on tcp://127.0.0.1:2375"
+		return 0
+	fi
+	say "backend-api cannot reach the docker service — recreating it in backend-api's network namespace"
+	compose up -d --no-deps --force-recreate --wait --wait-timeout 300 docker
+	version="$(docker_reachable)" && [[ -n "$version" ]] ||
+		die "backend-api still cannot reach the docker service — ./install.sh logs, and read the docker service's dockerd lines"
+	say "docker for Runs: daemon ${version} answers backend-api on tcp://127.0.0.1:2375"
+}
+
 # ── 5. the stack ─────────────────────────────────────────────────────────────
 stack_up() {
 	step "ai-orchestrator ($(get_var "$env_file" IMAGE_TAG))"
@@ -382,6 +453,7 @@ stack_up() {
 	fi
 	if [[ "$pull" -eq 1 ]]; then compose pull; else say "--no-pull: using the images already on this machine"; fi
 	compose up -d --wait --wait-timeout 1800
+	docker_reconcile
 }
 
 # ── 6. proof, and where to go ────────────────────────────────────────────────
@@ -598,6 +670,40 @@ doctor_platform() {
 	fi
 }
 
+doctor_verify_docker() {
+	local running backend sidecar health b_started s_started
+	running="$(compose_all ps --status running --services 2>/dev/null || true)"
+	if ! docker_enabled; then
+		if printf '%s\n' "$running" | grep -qx docker; then
+			report warn dind "VERIFY_DOCKER is off but the docker service still runs — ./install.sh start removes it"
+		else
+			report ok dind "off — a repository whose commands run docker or docker compose fails its verify rows with 'Cannot connect to the Docker daemon'; ./install.sh start --with-docker adds the daemon (README.md § Trust first)"
+		fi
+		return 0
+	fi
+	if ! printf '%s\n' "$running" | grep -qx docker; then
+		report fail dind "VERIFY_DOCKER=true but the docker service is not running — ./install.sh start"
+		return 0
+	fi
+	sidecar="$(compose_all ps -q docker 2>/dev/null | head -1)"
+	backend="$(compose_all ps -q backend-api 2>/dev/null | head -1)"
+	health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$sidecar" 2>/dev/null || true)"
+	if [[ "$health" != "healthy" ]]; then
+		report fail dind "the docker service's daemon is ${health:-not answering} — ./install.sh logs, then ./install.sh start"
+		return 0
+	fi
+	# The sidecar joins backend-api's network namespace when it starts; a backend-api started
+	# after it has a new namespace, and Runs then reach nothing on 127.0.0.1:2375.
+	b_started="$(docker inspect --format '{{.State.StartedAt}}' "$backend" 2>/dev/null || true)"
+	s_started="$(docker inspect --format '{{.State.StartedAt}}' "$sidecar" 2>/dev/null || true)"
+	# whole seconds: RFC 3339 nanoseconds drop trailing zeros, which breaks a string compare
+	if [[ -n "$b_started" && -n "$s_started" && "${b_started:0:19}" > "${s_started:0:19}" ]]; then
+		report fail dind "backend-api restarted after the docker service, which is left in the old network namespace — ./install.sh start recreates it"
+		return 0
+	fi
+	report ok dind "VERIFY_DOCKER=true: the docker service is healthy in backend-api's network namespace (tcp://127.0.0.1:2375)"
+}
+
 doctor_disk() {
 	local summary root used avail
 	summary="$(docker system df --format '{{.Type}} {{.Size}} reclaimable {{.Reclaimable}}' 2>/dev/null | tr '\n' ';' | sed 's/;$//' || true)"
@@ -647,7 +753,7 @@ env_name_is_public() {
 		POSTGRES_USER|POSTGRES_DB|MAX_ACTIVE_RUNS|ORCH_TEST_MODE|AGENT_HOME) return 0 ;;
 		LITELLM_BASE_URL|LANGFUSE_BASE_URL|LANGFUSE_ENVIRONMENT|LITELLM_SPEND_MATCH) return 0 ;;
 		READINESS_BUDGET_USD|LOG_PROMPT_CONTENT_DEFAULT|CLAUDE_SUBSCRIPTION_AUTH) return 0 ;;
-		CLAUDE_ALLOWED_TOOLS) return 0 ;;
+		CLAUDE_ALLOWED_TOOLS|VERIFY_DOCKER) return 0 ;;
 		*) return 1 ;;
 	esac
 }
@@ -710,6 +816,7 @@ cmd_install() {
 
 	step "environment"
 	render_env "$tag"
+	docker_choice
 
 	if want_platform; then platform_up; fi
 
@@ -724,6 +831,7 @@ cmd_start() {
 	[[ -f "$env_file" ]] || die ".env is missing — run ./install.sh first"
 	# --no-platform always wins; otherwise an installed llm-platform stack (llm-platform/.env exists) comes up too
 	if [[ "$with_platform" != "0" && ( -f "$platform_env" || "$with_platform" == "1" ) ]]; then platform_up; fi
+	docker_choice
 	stack_up
 	verify
 	print_access
@@ -890,7 +998,7 @@ cmd_doctor() {
 			doctor_version
 			doctor_harnesses
 		fi
-		if [[ "$docker_ok" -eq 1 ]]; then doctor_platform; fi
+		if [[ "$docker_ok" -eq 1 ]]; then doctor_platform; doctor_verify_docker; fi
 		doctor_gc
 	fi
 	if [[ "$docker_ok" -eq 1 ]]; then doctor_disk; fi
@@ -967,7 +1075,10 @@ print_harness_row() {   # print_harness_row NAME → 0 enabled, 1 disabled, 2 no
 # Recreated, never `compose restart`: a restart keeps the environment the container was
 # created with, so a changed `.env` value would never reach it.
 recreate_backend() {   # recreate_backend WHAT → WHAT is what .env now holds, said on failure
-	compose up -d --no-deps --wait --wait-timeout 1800 backend-api && return 0
+	if compose up -d --no-deps --wait --wait-timeout 1800 backend-api; then
+		docker_reconcile
+		return 0
+	fi
 	say "$1 is written to .env; backend-api did not come back healthy with it."
 	warn "backend-api did not become healthy after the recreate — ./install.sh logs"
 	return 1
@@ -1111,7 +1222,7 @@ cmd_uninstall() {
 		read -r -p "Type 'delete' to confirm: " answer
 		[[ "$answer" == "delete" ]] || die "uninstall cancelled"
 	fi
-	compose down -v --remove-orphans
+	compose_all down -v --remove-orphans
 	if [[ -f "$platform_env" ]] && confirm "Also remove the llm-platform stack and its data (traces, spend logs)?"; then
 		platform_compose down -v --remove-orphans
 	fi

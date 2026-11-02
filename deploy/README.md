@@ -101,6 +101,7 @@ config, never by a container: the one credential a *process* in this stack holds
 ./install.sh stop                # stop, keeping every volume
 ./install.sh start               # start again (and the llm-platform stack, if it was installed)
 ./install.sh start --with-platform   # add the llm-platform stack to an existing install
+./install.sh start --with-docker     # add a Docker daemon for Runs' commands (§ Docker for Runs)
 ./install.sh upgrade --tag 1.0.0
 ./install.sh uninstall           # stop and DELETE the volumes, after typing `delete`
 ```
@@ -218,6 +219,55 @@ variables in `.env` by hand and skip the llm-platform stack.
 Every model named in `READINESS_MODELS` must exist in the gateway's `model_list`, or
 backend-api refuses to start.
 
+## Docker for Runs (optional, off by default)
+
+A Run executes the target repository's own commands — install, tests, quality gate — inside
+`backend-api`. The image carries the `docker` CLI with the compose and buildx plugins, but no
+daemon: a repository whose commands run `docker compose` (database integration tests, an
+end-to-end suite in compose) fails those rows with `Cannot connect to the Docker daemon`.
+
+```bash
+./install.sh start --with-docker     # sets VERIFY_DOCKER=true in .env, starts the sidecar
+./install.sh start --no-docker       # sets it false, removes the sidecar, keeps its image cache
+```
+
+`VERIFY_DOCKER=true` starts the `docker` service (compose profile `docker`): Docker-in-Docker
+(`docker:<version>-dind`, privileged), placed in backend-api's network namespace.
+
+- **Where the daemon is.** dockerd listens on `127.0.0.1:2375` inside that namespace only —
+  nothing is published on this machine. At each start backend-api writes a docker context
+  for the `agent` user (`$HOME/.docker`), so every `docker` a Run's command or a coding agent
+  types reaches it; no variable has to be passed to the Run.
+- **Ports.** A port a target's compose file publishes appears on backend-api's `localhost`,
+  which is where its scripts look (`localhost:5432`). It collides with backend-api's own
+  `BACKEND_API_PORT` (8000 by default) if a target publishes that one.
+- **Bind mounts.** The sidecar mounts the `work` volume at `WORK_DIR`, the path backend-api
+  uses, so a relative bind mount in a target's compose file (`./tests/fixtures:/fixtures`)
+  resolves to the worktree.
+- **Networks.** The daemon's bridge and its compose networks use `10.213.0.0/24` and
+  `10.214.0.0/16`, away from `172.16.0.0/12`, where compose and Docker Desktop put theirs.
+- **Image cache.** Pulled images and build cache live on the `docker-data` volume and survive
+  restarts; it is not backed up, and `docker volume rm <project>_docker-data` while the
+  sidecar is stopped empties it.
+- **Concurrency.** One daemon serves every Run. A target whose compose file fixes its
+  project name, container names or host ports collides with itself when two Runs on that
+  repository verify at once (`MAX_ACTIVE_RUNS` above 1); the second `up` fails or stops the
+  first one's containers. Keep such a repository to one Run at a time, or make its scripts
+  take the project name and ports from the environment.
+- **Cleanup.** Nothing removes what a target starts. A script that exits before its own
+  `docker compose down` leaves containers running in the sidecar until the next Run's
+  `down`, or until the sidecar is recreated (`./install.sh start --no-docker`, then
+  `--with-docker`).
+- **Restarts.** If backend-api restarts or is recreated on its own, the sidecar is left in the
+  old namespace and Runs reach nothing. `./install.sh doctor` reports it on its `dind` line;
+  `./install.sh start` (and every install.sh command that recreates backend-api) checks the
+  daemon from inside backend-api and recreates the sidecar when it does not answer.
+
+Pre-flight warns on the New-workflow screen (`docker` line) when VERIFY_DOCKER is off and the
+Run looks like it needs a daemon: a `shell` row naming `docker`, or a compose file at the
+repository root. It is a guess and never blocks a start. By hand, without install.sh:
+`VERIFY_DOCKER=true` in `.env`, then `docker compose --profile docker up -d --wait`.
+
 ## Agents in your projects
 
 The instance serves the skills that teach a project's agents to drive this API — create
@@ -276,6 +326,18 @@ without `cap_drop` — deliberately, so an agent can `apt-get install` what a ta
 repository's install script needs. A Run executes code from the repositories you
 register. Register only repositories you trust as much as this machine.
 
+`VERIFY_DOCKER=true` widens that. The `docker` sidecar is privileged, and anything that can
+reach its daemon — every Run's commands and every coding agent, by design — can start a
+privileged container or mount the host filesystem of the machine the daemon runs on: root
+in Docker Desktop's VM, root on a Linux host running Docker Engine. What it does not give is
+this stack's own daemon: the sidecar is a separate dockerd with its own containers, images
+and networks, so a Run cannot see, stop or read the orchestrator's containers, its database
+or its `.env` through it, and nothing it publishes leaves backend-api's network namespace.
+Containers it starts can still reach the network, and the rest of the compose network
+(`postgres`, `web-client`) can reach the ports they publish on backend-api. Turn it on only
+for repositories you would let run `docker` on that machine, and turn it off when none
+needs it.
+
 ## Upgrading — the two cautions
 
 - **`DBOS_APPLICATION_VERSION`** is pinned in `.env` and versions the engine's durable
@@ -311,13 +373,21 @@ register. Register only repositories you trust as much as this machine.
   existing test parks `protected_path` until then. And `CLAUDE_ALLOWED_TOOLS` in your `.env`
   still lists command families where the new default is `Bash` whole — replace the families
   with `Bash` unless you want the narrower list.
+- **`VERIFY_DOCKER` is absent from an `.env` written before Docker for Runs**, which means
+  off. If you added a `docker` sidecar to `docker-compose.yml` by hand, set
+  `VERIFY_DOCKER=true` before the upgrade (`./install.sh start --with-docker` appends it):
+  otherwise the first start after it removes that container. A volume named `docker-data`
+  is reused as the image cache. A hand-added service the new file no longer declares is left
+  as an orphan container — `docker compose up -d --remove-orphans` from this directory
+  removes it — and `docker volume rm` removes any volume only it used.
 
 ## Known limits of this package
 
 - No push channel to agents or the UI: they poll the API (the UI every 5 s while a Run is
   active, 30 s idle). The webhook above is the one outbound notification.
-- The backend image is large (~1.1 GB compressed): it carries Python, Node, three
-  harness CLIs, and Chromium system libraries for in-worktree browser tests.
+- The backend image is large (~1.2 GB compressed): it carries Python, Node, three
+  harness CLIs, Chromium system libraries for in-worktree browser tests, and the docker
+  CLI with its compose and buildx plugins.
 - The manual path still works: `cp .env.example .env`, fill in the REQUIRED section,
   `docker compose pull && docker compose up -d --wait`. The contract file is the reference;
   `install.sh` is that procedure with the secrets generated for you.
