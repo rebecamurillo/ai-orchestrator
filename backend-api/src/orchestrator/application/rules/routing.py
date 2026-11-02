@@ -92,7 +92,8 @@ def route(  # noqa: PLR0913, PLR0917 — the FR-16 table's own columns, in its o
     contract: the gate the planner recorded (AD-7) travels back out unchanged on every
     result, and `Park.path` names the row that stopped the Run. Everything else is what the
     dispatch left behind. `exit_reason` is what a failed attempt reports about itself (CAP-5);
-    it is the sentence for a non-zero exit in place of `harness exit {code}`, nothing more.
+    it is the sentence for a non-zero exit in place of `harness exit {code}` and of
+    `unexpected status`, nothing more.
     """
     live = _liveness(story_file, files, exit_code, exit_reason)
     if live is not None:
@@ -108,7 +109,9 @@ def route(  # noqa: PLR0913, PLR0917 — the FR-16 table's own columns, in its o
             park=Park(kind="checkpoint", reason=SPEC_CHECKPOINT, path=path),
         )
     if story_file.status not in contract.success:
-        reason = UNEXPECTED_STATUS.format(status=story_file.status)
+        reason = (exit_reason if exit_code else None) or UNEXPECTED_STATUS.format(
+            status=story_file.status
+        )
         return _retry(reason, retry, retry_count, gate=gate, path=path)
     if exit_code:
         # `None` and `0` are both "the harness reported no failure": only a timeout produces

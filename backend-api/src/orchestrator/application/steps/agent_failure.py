@@ -1,7 +1,7 @@
 """Reading why an `agent` attempt failed, for `agent_tail._route` (CAP-5).
 
-Split out of `agent_tail.py` at the 400-line cap. The classification is
-`rules/provider_failure.py`'s; this module only decides when to ask and where to look.
+The classification is `rules/provider_failure.py`'s; this module only decides when to ask
+and where to look.
 
 **An attempt that exited cleanly is never read**, so a `done` Story file with exit 0 and an
 agent that wrote about rate limits cost nothing here. The log is read through the `LogReader`

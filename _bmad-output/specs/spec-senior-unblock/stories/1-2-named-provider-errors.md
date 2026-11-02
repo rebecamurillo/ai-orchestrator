@@ -36,6 +36,7 @@ context: []
 | Clean exit | exit 0, `done` file, log mentions a rate limit | `done`; the log is not read | N/A |
 | Clean exit, no file | exit 0, no Story file | `no story file`, as today | N/A |
 | Agent prose about limits | `is_error` false, assistant text or a plain line without `error` | Not a provider error | N/A |
+| Half-written file | exit 1, provider failure, file status `in-progress` | `provider error: …`, not `unexpected status: in-progress` | N/A |
 | Blocked file | exit 1, `blocked` file | The agent's own question | N/A |
 | Never reached the model | `is_error`, zero output tokens | `gateway unreachable: …`, as today | N/A |
 | No log reader or log | `StepPorts.logs` unset, or log garbage-collected | The result object alone decides | N/A |
@@ -50,7 +51,7 @@ Under `backend-api/src/orchestrator/application/` unless stated.
 
 - `rules/provider_failure.py` -- new. `from_raw(raw)` and `from_log(lines)` return `provider error: {message}` or `None`; markers, scrub and bounds live here. Reuses `harness_failure.MAX_MESSAGE`.
 - `steps/agent_failure.py` -- new. `provider_reason(ctx, result)`: `None` unless the exit code is non-zero; the result object first, then `ctx.ports.logs.tail(log_path, LOG_LINES)` if `StepPorts.logs` is set.
-- `rules/routing.py::route` -- new keyword `exit_reason`, used in place of `harness exit {code}` at its two sites: the empty glob after a failed exit (`_liveness`) and a `done` file overruled by a failed exit.
+- `rules/routing.py::route` -- new keyword `exit_reason`, used for a failed exit in place of `harness exit {code}` (the empty glob in `_liveness`, and a `done` file overruled by the exit) and of `unexpected status` (review, 2026-11-02).
 - `steps/agent_tail.py::_route` -- passes `exit_reason=agent_failure.provider_reason(ctx, result)`. The module was at the 400-line cap; one narrating comment line was folded to make room.
 - `rules/harness_failure.py` -- unchanged.
 - `backend-api/AGENTS.md` and the spine -- not touched; AD-13's amendment already states the behaviour.
@@ -62,6 +63,7 @@ Under `backend-api/src/orchestrator/application/` unless stated.
 - [x] `backend-api/tests/unit/application/test_routing_exit_reason.py` -- new; the two sentences and the retry path.
 - [x] `backend-api/tests/unit/application/steps/test_agent_failure.py` -- new; through `AgentExecutor.execute` with the shared fakes and `FakeLogReader`.
 - [x] `rules/provider_failure.py`, `steps/agent_failure.py`, `rules/routing.py`, `steps/agent_tail.py` -- per Code Map.
+- [x] `test_provider_failure_review.py`, `test_routing_provider_status.py`, `steps/test_agent_failure_status.py` -- new; the review findings below, seen failing first.
 
 **Acceptance Criteria:**
 - Given a fixture attempt that exited 1 after output tokens, whose log holds a provider credit error and which wrote no Story file, when the row finishes, then the Run parks `misconfigured` with a reason beginning `provider error:` that names the 402, not `harness exit 1`, and no consult is requested.
@@ -71,13 +73,23 @@ Under `backend-api/src/orchestrator/application/` unless stated.
 
 The path was confirmed by reading, not by the past Run's log: with `tokens_out` non-zero `gateway_unreachable` returns `None`, `agent_tail._route` calls `routing.route`, and an empty glob with a non-zero exit is `_liveness`'s `harness exit {code}`; a `done` file with a non-zero exit is the same sentence from the overrule.
 
-Deliberately not widened: an `unexpected status` stop caused by an attempt that died mid-story keeps its own reason, because FR-16 says the file decides and AD-13 replaces only `harness exit {code}`. A 402 retried by a row's declared `retry` is wasted spend, but removing the retry would be a template decision, not this story's.
+Widened by the Operator's decision after review (2026-11-02): a failed exit with a provider failure also replaces `unexpected status: {status}`, so exit 1, a 402 and an `in-progress` file name the provider error. A clean exit never does. A 402 retried by a row's declared `retry` is wasted spend, but removing the retry would be a template decision, not this story's.
 
 Verified by `make lint` and `make test`. `make e2e` is the parent's gate.
 
 ## Spec Change Log
 
 ## Review Triage Log
+
+| Finding | Layer | Verdict | Route | Evidence and action |
+| --- | --- | --- | --- | --- |
+| Credentials reach a park reason: `Basic` scheme, quoted names, prefixed names (`LITELLM_API_KEY=`, `ANTHROPIC_AUTH_TOKEN=`) kept their value, and `raw_result` bypasses the log reader's scrub | independent review | high | patch | Hard rule 5. Redaction allows a name prefix, an optional quote and `Bearer` or `Basic`; tested through both sources. |
+| A retried event (`system/api_retry`, `error: "rate_limit"`) parked as a provider error | independent review | high | patch | `error` and `message` are read only on an `error` or `turn.failed` event. |
+| Marker too loose: `app.py:402`, `npm error code 402`, `credit card`, exporter `Too Many Requests`, JSON prose behind a warning | independent review | medium | patch | Status number must follow `status`, `http` or `error` within three separator characters; bare `credit` dropped; telemetry exporters excluded; prefixed JSON is an event only with a `type`. The OpenRouter 402 case is a test. |
+| Misses: `monthly spend limit`, `Quota exceeded`, `Budget has been exceeded`, `errors[]` | independent review | medium | patch | Wordings added; `errors` of a failed result read. |
+| `unexpected status` hid a provider failure after a failed exit | independent review | decision | patch | Operator decision 2026-11-02; guarded by a non-zero exit. Statement above revised. |
+| Surviving mutants: both `MAX_SCAN` uses, the `Bearer` alternative, a redundant `402\|429` prefix alternative | independent review | medium | patch | Boundary tests at the scan bound; standalone `Bearer` test; the redundant alternative removed. |
+| Narrating comments in `provider_failure.py` and `agent_failure.py` | independent review | low | patch | Reworded. |
 
 ## Verification
 
