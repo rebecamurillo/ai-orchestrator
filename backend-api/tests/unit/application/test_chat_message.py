@@ -2,6 +2,11 @@
 
 Pure functions over `StopFacts` and `AcceptFacts`. They pin the line order, the omissions,
 the untrusted-text rules, the caps and the cut order, the marker, and `metadata_only`.
+
+Each rule returns a `ChatPost`: the text an adapter neutralises, and the Run link as its
+trusted suffix (story 3-3 lead review of the build, 2026-11-02). The three local helpers
+below read a post as a plain channel shows it, text then suffix, so the line assertions
+are the ones the first build pinned.
 """
 
 from __future__ import annotations
@@ -24,16 +29,33 @@ from orchestrator.application.rules.chat_message import (
     SENIOR_VIEW_CAP,
     AcceptFacts,
     Answer,
+    ChatPost,
     StopFacts,
-    accept_line,
     action_line,
-    compose_stop,
     neutralise,
-    reminder_text,
+    plain_length,
     run_link,
 )
+from orchestrator.application.rules.chat_message import accept_line as accept_post
+from orchestrator.application.rules.chat_message import compose_stop as compose_post
+from orchestrator.application.rules.chat_message import reminder_text as reminder_post
 
 URL = "https://orch.example.com/workflows/r1"
+
+
+def compose_stop(facts: StopFacts, metadata_only: bool) -> str:
+    post = compose_post(facts, metadata_only)
+    return post.text + post.suffix
+
+
+def reminder_text(park_kind: str, park_seq: int, hours: int, run_url: str | None) -> str:
+    post = reminder_post(park_kind, park_seq, hours, run_url)
+    return post.text + post.suffix
+
+
+def accept_line(facts: AcceptFacts, metadata_only: bool) -> str:
+    post = accept_post(facts, metadata_only)
+    return post.text + post.suffix
 
 
 def facts(**overrides: object) -> StopFacts:
@@ -177,9 +199,11 @@ def test_hostile_text_never_starts_a_line_fence_heading_or_quote() -> None:
 
 
 def test_the_facts_this_system_wrote_are_cleaned_too() -> None:
+    # Revised: story 3-3 lead review of the build, 2026-11-02 — a single-line fact's newline
+    # collapses to a space before its cap, where it was continued on a new line.
     text = compose_stop(facts(project="Mixed\nSignals", row_label="build\x00"), metadata_only=False)
 
-    assert f"Mixed\n{CONTINUATION}Signals" in text
+    assert "Run needs you · Mixed Signals / orchestrator" in text
     assert "Row: build\n" in text
 
 
@@ -410,6 +434,100 @@ def test_the_accept_line_never_exceeds_the_limit_and_keeps_its_link() -> None:
 
     assert len(line) <= MAX_POST_CHARS
     assert line.endswith(f" · {URL}")
+
+
+# ── the review of the build (2026-11-02) ───────────────────────────────────────────────────
+
+
+def _escaped(post: ChatPost) -> int:
+    """Slack's rendering of a post: `&`, `<` and `>` become entities."""
+    message = post.text + post.suffix
+    return len(message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def test_the_run_link_is_the_posts_trusted_suffix_and_never_its_text() -> None:
+    post = compose_post(facts(), metadata_only=False)
+    bare = compose_post(facts(run_url=None), metadata_only=False)
+
+    assert post.suffix == f"\nRun: {URL}"
+    assert "Run: " not in post.text
+    assert post.text.endswith(REPLY_ACTION)
+    assert bare.suffix == ""
+    assert reminder_post("blocked", 3, 4, URL).suffix == f"\nRun: {URL}"
+    assert accept_post(accept(), metadata_only=False).suffix == f" · {URL}"
+    assert accept_post(accept(run_url=None), metadata_only=True).suffix == ""
+
+
+def test_the_plain_length_is_the_text_and_the_suffix() -> None:
+    assert plain_length(ChatPost("abc", "\nde")) == len("abc\nde")
+    assert plain_length(ChatPost("abc")) == len("abc")
+
+
+def test_the_budget_is_the_adapters_rendered_length_not_the_raw_text() -> None:
+    """A `<`- and `&`-heavy question at its cap renders at four or five times its length on
+    Slack; it is cut until the rendering fits, where the raw text alone would not be."""
+    heavy = facts(question="<&" * (QUESTION_CAP // 2))
+
+    raw = compose_post(heavy, metadata_only=False)
+    measured = compose_post(heavy, metadata_only=False, measure=_escaped)
+
+    assert CUT_MARKER not in raw.text
+    assert _escaped(raw) > MAX_POST_CHARS
+    assert _escaped(measured) <= MAX_POST_CHARS
+    assert CUT_MARKER in measured.text
+    assert measured.text.endswith(REPLY_ACTION)
+    assert measured.suffix == f"\nRun: {URL}"
+
+
+def test_a_measured_cut_that_must_empty_the_question_drops_its_line() -> None:
+    def measure(post: ChatPost) -> int:
+        return plain_length(post) + (MAX_POST_CHARS if "Question:" in post.text else 0)
+
+    post = compose_post(facts(), metadata_only=False, measure=measure)
+
+    assert "Question:" not in post.text
+    assert CUT_MARKER in post.text
+
+
+def test_newline_heavy_single_line_facts_collapse_and_stay_under_the_ceiling() -> None:
+    lines = "x\n" * (FIELD_CAP // 2)
+    text = compose_stop(
+        facts(
+            project=lines,
+            repository=lines,
+            folder=lines,
+            story_id=lines,
+            row_label=lines,
+            question="q\n" * (QUESTION_CAP // 2),
+            senior_view="v\n" * (SENIOR_VIEW_CAP // 2),
+            answers=_answers(3, ANSWER_CAP),
+        ),
+        metadata_only=False,
+    )
+
+    assert len(text) <= MAX_POST_CHARS
+    head = text.split("\n")[0]
+    assert head.startswith("Run needs you · x x x")
+    assert text.split("\n")[1].startswith("Initiative: x x")
+
+
+def test_an_accept_line_whose_link_leaves_no_room_drops_its_body() -> None:
+    link = "https://orch.example.com/" + "u" * MAX_POST_CHARS
+
+    line = accept_line(accept(run_url=link), metadata_only=False)
+
+    assert "tests/a.py" not in line
+    assert line.endswith(f" · {link}")
+    assert line.startswith("Mixed Signals / orchestrator · story 2-1 · ")
+
+
+def test_an_accept_line_is_cut_to_the_measured_ceiling() -> None:
+    files = tuple("tests/" + "&" * 300 + f"{n}.py" for n in range(10))
+
+    post = accept_post(accept(files=files), metadata_only=False, measure=_escaped)
+
+    assert _escaped(post) <= MAX_POST_CHARS
+    assert post.suffix == f" · {URL}"
 
 
 # ── the link ───────────────────────────────────────────────────────────────────────────────

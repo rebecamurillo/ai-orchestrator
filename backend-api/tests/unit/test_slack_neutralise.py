@@ -106,3 +106,40 @@ def test_text_past_the_limit_after_escaping_is_refused_and_not_sent(call: str) -
 
     assert caught.value.detail == f"text too long after escaping: {expected}"
     assert seen == []
+
+
+def test_rendered_length_measures_after_escaping_the_prefix_and_the_suffix() -> None:
+    """The length the application budgets with (story 3-3 lead review of the build)."""
+    channel, seen = a_channel()
+    text, suffix = "a < b & c", "\nRun: https://orch.example.com/workflows/r?x=1&y=2"
+
+    length = channel.rendered_length(text, [ALICE], suffix)
+    channel.post(text, [ALICE], suffix)
+
+    assert length == len(sent(seen[0])["text"])
+    assert sent(seen[0])["text"].endswith("/workflows/r?x=1&amp;y=2")
+    assert channel.rendered_length("<") == len("&lt;")
+
+
+def test_rendered_length_is_measured_without_a_refusal_or_a_request() -> None:
+    channel, seen = a_channel()
+
+    assert channel.rendered_length("<" * 1001) == len("&lt;") * 1001
+    assert seen == []
+
+
+def test_a_reply_carries_its_trusted_suffix_after_the_text() -> None:
+    channel, seen = a_channel()
+
+    channel.reply(ROOT, "Still waiting", [], "\nRun: http://[fd00::1]:4321/workflows/r1")
+
+    assert sent(seen[0])["text"] == "Still waiting\nRun: http://[fd00::1]:4321/workflows/r1"
+
+
+def test_the_suffix_counts_toward_the_refusal() -> None:
+    channel, seen = a_channel()
+
+    with pytest.raises(ChatError, match="text too long after escaping: 4001"):
+        channel.post("a" * MAX_TEXT_CHARS, [], "!")
+
+    assert seen == []

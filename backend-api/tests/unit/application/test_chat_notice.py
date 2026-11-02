@@ -13,7 +13,7 @@ from orchestrator.application.jobs.chat_notice import INTERNAL, post_notices
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.chat import ChatError
-from tests.unit.application.chat_fixtures import BASE_URL, TOKEN, World, a_row
+from tests.unit.fakes.chat_world import BASE_URL, TOKEN, World, a_row
 
 BUILD = "epics[1].stories[0].build"
 
@@ -53,6 +53,7 @@ def test_an_accept_posts_one_channel_line_with_no_mention() -> None:
     ]
     notice = world.notices.notices[record.id]
     assert (notice.run_id, notice.created_at, notice.error) == (run.id, world.clock.now(), None)
+    assert world.chat.suffixes == [f" · {BASE_URL}/workflows/{run.id}"]
     assert world.threads.threads == {}
 
 

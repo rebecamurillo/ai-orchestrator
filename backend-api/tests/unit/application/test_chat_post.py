@@ -20,7 +20,7 @@ from orchestrator.application.rules.chat_message import PAGE_ACTION, REPLY_ACTIO
 from orchestrator.domain.entities.chat_thread import ChatThread
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.chat import ChatError
-from tests.unit.application.chat_fixtures import ALICE, BASE_URL, BOB, TOKEN, World, a_row
+from tests.unit.fakes.chat_world import ALICE, BASE_URL, BOB, TOKEN, World, a_row
 
 
 def posting_row(world: World, run_id: Any, **overrides: Any) -> ChatThread:
@@ -65,6 +65,20 @@ def test_a_blocked_stop_posts_one_thread_naming_every_allowed_user() -> None:
     assert (thread.run_id, thread.park_seq, thread.park_kind) == (run.id, 3, "blocked")
     assert (thread.provider, thread.channel_id) == ("mattermost", "c1")
     assert thread.created_at == world.clock.now()
+
+
+def test_the_run_link_is_sent_as_the_trusted_suffix() -> None:
+    """Story 3-3 lead review of the build, 2026-11-02: the adapter leaves the system's own
+    link line alone, so an IPv6 literal stays a usable link."""
+    world = World()
+    world.public_base_url = "http://[fd00::1]:4321"
+    world.add_channel()
+    run = world.add_run()
+
+    world.poll()
+
+    assert world.chat.suffixes == [f"\nRun: http://[fd00::1]:4321/workflows/{run.id}"]
+    assert "Run: " not in world.chat.posts[0][0].removesuffix(world.chat.suffixes[0])
 
 
 @pytest.mark.parametrize("kind", ["checkpoint", "budget", "dependency"])

@@ -1,8 +1,9 @@
-"""One in-memory world for story 3-3's chat passes, built from the shared fakes only.
+"""One in-memory world for the chat passes, built from the shared fakes only (AD-18).
 
 `World` holds every fake a `ChatPollPorts` reaches: the Run repositories, one unit of work,
 the clock, the thread and notice fakes, the stored channels, Projects and Repositories, the
-crypto and the chat factory. `poll()` runs one fire of `run_chat_poll` against it.
+crypto and the chat factory. `poll()` runs one fire of `run_chat_poll` against it. Later
+chat stories extend this fake (4-3's `signal`, for one) rather than writing another.
 """
 
 from __future__ import annotations

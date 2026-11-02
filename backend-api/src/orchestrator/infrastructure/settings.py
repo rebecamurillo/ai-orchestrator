@@ -353,6 +353,15 @@ class Settings(BaseSettings):
             )
         return value
 
+    @field_validator("public_base_url")
+    @classmethod
+    def _no_at_sign(cls, value: str) -> str:
+        """The Run link is a chat post's trusted suffix, sent unneutralised, so it carries no
+        userinfo and no other `@` that a platform could read as a mention."""
+        if "@" in value:
+            raise ValueError("must not contain '@': no userinfo, and nothing a chat could ping")
+        return value
+
     @field_validator("chat_poll_seconds")
     @classmethod
     def _divides_a_minute(cls, value: int) -> int:

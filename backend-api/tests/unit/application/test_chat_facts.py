@@ -8,7 +8,7 @@ from datetime import timedelta
 
 from orchestrator.application.jobs.chat_facts import stop_facts
 from orchestrator.application.rules.chat_message import Answer
-from tests.unit.application.chat_fixtures import World, a_row
+from tests.unit.fakes.chat_world import World, a_row
 
 URL = "https://orch.example.com/workflows/r"
 STORY = "epics[1].stories[0]"

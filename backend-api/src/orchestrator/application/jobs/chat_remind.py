@@ -75,13 +75,13 @@ def _remind_one(
     if claimed is None or claimed.ref is None:
         return
     hours = (now - claimed.created_at) // HOUR
-    text = reminder_text(
+    post = reminder_text(
         claimed.park_kind,
         claimed.park_seq,
         hours,
         run_link(ports.public_base_url, claimed.run_id),
     )
-    chat.reply(ThreadRef(id=claimed.ref), text, mentions=channel.allowed_users)
+    chat.reply(ThreadRef(id=claimed.ref), post.text, channel.allowed_users, post.suffix)
     log.info(
         "chat reminder sent",
         run_id=str(claimed.run_id),

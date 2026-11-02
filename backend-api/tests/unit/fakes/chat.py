@@ -13,6 +13,8 @@ from orchestrator.domain.ports.chat import ChatError, ChatProvider, ChatUser, Re
 
 #: What `probe()` answers until a test scripts another handle.
 BOT_HANDLE = "bot"
+#: How the fake names a mention when it measures a message.
+FAKE_MENTION = "@{handle}"
 
 
 class FakeChatChannel:
@@ -23,6 +25,7 @@ class FakeChatChannel:
         self.posts: list[tuple[str, tuple[ChatUser, ...]]] = []
         self.replies: list[tuple[ThreadRef, str]] = []
         self.reply_mentions: list[tuple[ChatUser, ...]] = []
+        self.suffixes: list[str] = []
         self.on_send: Callable[[], None] | None = None
         self.reads: list[tuple[ThreadRef, str | None]] = []
         self.probes = 0
@@ -37,19 +40,33 @@ class FakeChatChannel:
         """Append `replies` to the thread, after any scripted before, as new posts arrive."""
         self._threads.setdefault(thread.id, []).extend(replies)
 
-    def post(self, text: str, mentions: Sequence[ChatUser]) -> ThreadRef:
+    def post(self, text: str, mentions: Sequence[ChatUser], trusted_suffix: str = "") -> ThreadRef:
         self._sending()
         self._raise_scripted()
-        self.posts.append((text, tuple(mentions)))
+        self.posts.append((text + trusted_suffix, tuple(mentions)))
+        self.suffixes.append(trusted_suffix)
         thread = ThreadRef(id=f"thread-{len(self.posts)}")
         self._threads.setdefault(thread.id, [])
         return thread
 
-    def reply(self, thread: ThreadRef, text: str, mentions: Sequence[ChatUser] = ()) -> None:
+    def reply(
+        self,
+        thread: ThreadRef,
+        text: str,
+        mentions: Sequence[ChatUser] = (),
+        trusted_suffix: str = "",
+    ) -> None:
         self._sending()
         self._raise_scripted()
-        self.replies.append((thread, text))
+        self.replies.append((thread, text + trusted_suffix))
         self.reply_mentions.append(tuple(mentions))
+        self.suffixes.append(trusted_suffix)
+
+    def rendered_length(
+        self, text: str, mentions: Sequence[ChatUser] = (), trusted_suffix: str = ""
+    ) -> int:
+        names = " ".join(FAKE_MENTION.format(handle=user.handle) for user in mentions)
+        return len(f"{names}\n" if names else "") + len(text) + len(trusted_suffix)
 
     def replies_since(self, thread: ThreadRef, cursor: str | None) -> list[Reply]:
         self._raise_scripted()

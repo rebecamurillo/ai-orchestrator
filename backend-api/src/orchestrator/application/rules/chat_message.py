@@ -10,16 +10,26 @@ control is dropped, then each continuation line is prefixed with `CONTINUATION`,
 text never opens a line, a fence, a heading or a quote. The facts this system wrote itself
 go through the same cleaning, since a label or a folder can echo a file an agent wrote.
 
-**Length** is counted in code points. Each field has its cap; the whole text is then held
-to `MAX_POST_CHARS` by cutting whole answer lines oldest first, then the senior's view from
-its end, then the question from its end. Whatever was cut, `CUT_MARKER` stands once on its
-own line before the action line, and the action line and the Run link always stay.
+A single-line fact (project, repository, folder, story id, label) has its newlines collapsed
+to spaces, so it never takes a continuation line.
+
+**Length** is counted in code points, as the adapter will render it: each rule takes a
+`measure`, which the passes bind to `ChatChannel.rendered_length` (escaping, neutralisation
+and the mention prefix included), so the rule stays pure. Each field has its cap; the whole
+post is then held to `MAX_POST_CHARS` by cutting whole answer lines oldest first, then the
+senior's view from its end, then the question from its end. Whatever was cut, `CUT_MARKER`
+stands once on its own line before the action line, and the action line and the Run link
+always stay.
+
+**The Run link is the post's trusted suffix**, never its text: it is this system's own line,
+so an adapter appends it as written rather than neutralising it, and an IPv6 literal stays a
+link (story 3-3 lead review of the build, 2026-11-02).
 """
 
 from __future__ import annotations
 
 import unicodedata
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Final
 from uuid import UUID
@@ -86,6 +96,24 @@ class AcceptFacts:
 
 
 @dataclass(frozen=True)
+class ChatPost:
+    """What a pass sends: `text`, which the adapter neutralises, and `suffix`, which it
+    appends as written."""
+
+    text: str
+    suffix: str = ""
+
+
+#: The length an adapter would send a post at (`ChatChannel.rendered_length`, bound).
+Measure = Callable[[ChatPost], int]
+
+
+def plain_length(post: ChatPost) -> int:
+    """A post's length with no escaping and no mentions: the default `measure`."""
+    return len(post.text) + len(post.suffix)
+
+
+@dataclass(frozen=True)
 class _Body:
     """The parts of a stop's post the total cut may shorten, already cleaned and capped."""
 
@@ -95,6 +123,7 @@ class _Body:
     cut: bool
     head: tuple[str, ...]
     tail: tuple[str, ...]
+    suffix: str
 
 
 def run_link(base_url: str, run_id: UUID) -> str | None:
@@ -112,9 +141,11 @@ def neutralise(text: str) -> str:
     return _continued(_clean(text))
 
 
-def compose_stop(facts: StopFacts, metadata_only: bool) -> str:
+def compose_stop(
+    facts: StopFacts, metadata_only: bool, measure: Measure = plain_length
+) -> ChatPost:
     """A stop's thread root: one fact per line, in the pinned order, within the limit."""
-    head = [_capped(value, FIELD_CAP) for value in _head_values(facts)]
+    head = [_capped(_one_line(value), FIELD_CAP) for value in _head_values(facts)]
     question, view, answers = ("", ""), ("", ""), []
     if not metadata_only:
         question = _capped(facts.question or "", QUESTION_CAP)
@@ -127,35 +158,48 @@ def compose_stop(facts: StopFacts, metadata_only: bool) -> str:
         answers=tuple(Answer(who, text[1]) for who, text in answers),
         cut=any(cleaned != capped for cleaned, capped in texts),
         head=_head_lines(facts, [capped for _, capped in head]),
-        tail=(action_line(facts.park_kind), *_link_line(facts.run_url)),
+        tail=(action_line(facts.park_kind),),
+        suffix=_link_suffix(facts.run_url),
     )
-    return _render(_fit(body))
+    fitted = _fit(body, measure)
+    return ChatPost(_render(fitted), fitted.suffix)
 
 
-def reminder_text(park_kind: str, park_seq: int, hours: int, run_url: str | None) -> str:
+def reminder_text(park_kind: str, park_seq: int, hours: int, run_url: str | None) -> ChatPost:
     """A reminder in the stop's thread; `park_kind` is the thread's, as it was at posting."""
     lines = [
         f"Still waiting · {park_kind} · stop {park_seq} · parked {hours} h",
         action_line(park_kind),
-        *_link_line(run_url),
     ]
-    return "\n".join(lines)
+    return ChatPost("\n".join(lines), _link_suffix(run_url))
 
 
-def accept_line(facts: AcceptFacts, metadata_only: bool) -> str:
+def accept_line(
+    facts: AcceptFacts, metadata_only: bool, measure: Measure = plain_length
+) -> ChatPost:
     """The one channel line for a `senior_accept`, within the limit, its link kept."""
     head = f"{_field(facts.project)} / {_field(facts.repository)}"
     if facts.story_id:
         head += f" · story {_field(facts.story_id)}"
     link = f" · {facts.run_url}" if facts.run_url else ""
     if metadata_only:
-        return f"{head} · the senior accepted test edits to {len(facts.files)} files{link}"
+        return ChatPost(
+            f"{head} · the senior accepted test edits to {len(facts.files)} files", link
+        )
     body = f"the senior accepted test edits: {_files(facts.files)}"
     reason = _clean(facts.reason)[:REASON_CAP]
     if reason:
         body += f" · {_continued(reason)}"
-    room = MAX_POST_CHARS - len(head) - len(" · ") - len(link)
-    return f"{head} · {body[:room]}{link}"
+    return ChatPost(_fitted_line(f"{head} · ", body, link, measure), link)
+
+
+def _fitted_line(prefix: str, body: str, suffix: str, measure: Measure) -> str:
+    """`prefix` and as much of `body` as fits; a suffix that leaves no room drops the body."""
+    overflow = measure(ChatPost(prefix + body, suffix)) - MAX_POST_CHARS
+    while overflow > 0 and body:
+        body = body[: max(len(body) - overflow, 0)]
+        overflow = measure(ChatPost(prefix + body, suffix)) - MAX_POST_CHARS
+    return prefix + body
 
 
 def _clean(text: str) -> str:
@@ -176,8 +220,12 @@ def _capped(text: str, cap: int) -> tuple[str, str]:
     return cleaned, cleaned[:cap]
 
 
+def _one_line(text: str) -> str:
+    return text.replace("\n", " ")
+
+
 def _field(text: str) -> str:
-    return _continued(_clean(text)[:FIELD_CAP])
+    return _one_line(_clean(text))[:FIELD_CAP]
 
 
 def _files(files: Sequence[str]) -> str:
@@ -197,7 +245,7 @@ def _head_values(facts: StopFacts) -> list[str]:
 
 
 def _head_lines(facts: StopFacts, values: list[str]) -> tuple[str, ...]:
-    project, repository, folder, story_id, label = (_continued(value) for value in values)
+    project, repository, folder, story_id, label = values
     lines = [
         f"Run needs you · {project} / {repository} · {facts.park_kind} · stop {facts.park_seq}"
     ]
@@ -212,8 +260,8 @@ def _head_lines(facts: StopFacts, values: list[str]) -> tuple[str, ...]:
     return tuple(lines)
 
 
-def _link_line(run_url: str | None) -> list[str]:
-    return [f"Run: {run_url}"] if run_url else []
+def _link_suffix(run_url: str | None) -> str:
+    return f"\nRun: {run_url}" if run_url else ""
 
 
 def _render(body: _Body) -> str:
@@ -230,22 +278,27 @@ def _render(body: _Body) -> str:
     return "\n".join([*lines, *body.tail])
 
 
-def _fit(body: _Body) -> _Body:
-    """The body cut, in the pinned order, until its text is within `MAX_POST_CHARS`."""
-    if len(_render(body)) <= MAX_POST_CHARS:
+def _overflow(body: _Body, measure: Measure) -> int:
+    return measure(ChatPost(_render(body), body.suffix)) - MAX_POST_CHARS
+
+
+def _fit(body: _Body, measure: Measure) -> _Body:
+    """The body cut, in the pinned order, until its rendering is within `MAX_POST_CHARS`."""
+    if _overflow(body, measure) <= 0:
         return body
     body = replace(body, cut=True)
-    while body.answers and len(_render(body)) > MAX_POST_CHARS:
+    while body.answers and _overflow(body, measure) > 0:
         body = replace(body, answers=body.answers[1:])
-    body = replace(body, view=_shortened(body, body.view))
-    body = replace(body, question=_shortened(body, body.question))
+    body = replace(body, view=_shortened(body, body.view, measure))
+    body = replace(body, question=_shortened(body, body.question, measure))
     return body
 
 
-def _shortened(body: _Body, text: str) -> str:
-    """`text` cut from its end by the overflow; a rendered line is never shorter than its raw
-    text, so one cut of the overflow is enough for that field."""
-    overflow = len(_render(body)) - MAX_POST_CHARS
+def _shortened(body: _Body, text: str, measure: Measure) -> str:
+    """`text` cut from its end by the overflow. Every character renders at one code point or
+    more, so removing `n` of them removes at least `n` from the rendering, and one cut of the
+    overflow is enough for that field."""
+    overflow = _overflow(body, measure)
     if overflow <= 0:
         return text
     return text[: max(len(text) - overflow, 0)]

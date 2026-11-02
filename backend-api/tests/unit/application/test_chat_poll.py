@@ -13,7 +13,7 @@ from orchestrator.application.jobs.chat_ports import ChatPollPorts, redacted
 from orchestrator.domain.entities.chat_thread import ChatThread
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.chat import ChatError
-from tests.unit.application.chat_fixtures import HOURS, TOKEN, World, a_row
+from tests.unit.fakes.chat_world import HOURS, TOKEN, World, a_row
 
 HOUR = 3600
 

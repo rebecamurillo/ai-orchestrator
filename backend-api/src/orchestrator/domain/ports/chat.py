@@ -63,12 +63,30 @@ class ChatChannel(Protocol):
     An adapter delivers text as one message or raises `ChatError`; it never splits.
     """
 
-    def post(self, text: str, mentions: Sequence[ChatUser]) -> ThreadRef:
-        """Start a thread naming `mentions`, each in the adapter's own syntax."""
+    def post(self, text: str, mentions: Sequence[ChatUser], trusted_suffix: str = "") -> ThreadRef:
+        """Start a thread naming `mentions`, each in the adapter's own syntax.
+
+        `text` is neutralised; `trusted_suffix`, the system's own Run link, is appended after
+        it as written, so a link the platform would break by escaping stays usable.
+        """
         ...
 
-    def reply(self, thread: ThreadRef, text: str, mentions: Sequence[ChatUser] = ()) -> None:
-        """Post `text` in `thread`, naming `mentions` as `post` names them."""
+    def reply(
+        self,
+        thread: ThreadRef,
+        text: str,
+        mentions: Sequence[ChatUser] = (),
+        trusted_suffix: str = "",
+    ) -> None:
+        """Post `text` in `thread`, naming `mentions` and appending `trusted_suffix` as
+        `post` does."""
+        ...
+
+    def rendered_length(
+        self, text: str, mentions: Sequence[ChatUser] = (), trusted_suffix: str = ""
+    ) -> int:
+        """The length the adapter would send, after its escaping and its mention prefix.
+        Pure: no network call. A refused mention raises `ChatError`, as `post` would."""
         ...
 
     def replies_since(self, thread: ThreadRef, cursor: str | None) -> list[Reply]:

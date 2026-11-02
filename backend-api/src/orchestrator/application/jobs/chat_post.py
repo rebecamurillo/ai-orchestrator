@@ -147,8 +147,13 @@ def _new_thread(
 
 def _send(opened: OpenedChannel, chat: ChatChannel, facts: StopFacts) -> _Outcome:
     try:
-        text = compose_stop(facts, opened.channel.metadata_only)
-        ref = chat.post(text, opened.channel.allowed_users)
+        users = opened.channel.allowed_users
+        post = compose_stop(
+            facts,
+            opened.channel.metadata_only,
+            measure=lambda draft: chat.rendered_length(draft.text, users, draft.suffix),
+        )
+        ref = chat.post(post.text, users, post.suffix)
     except ChatError as error:
         return _Outcome("failed", None, redacted(error.detail, opened.token), error_class(error))
     except Exception as error:

@@ -10,10 +10,12 @@ now" (`server/channels/api4/post.go::getPostThread`), and without `direction` th
 undefined. Each page is re-sorted by `(create_at, id)`, the store's own order
 (`sqlstore/post_store.go::Get`), rather than trusting `order` to be ascending.
 
-Outgoing text is neutralised (story 3-3, D1): `props.disable_group_highlight` does not
-suppress notifications, so `@channel` in an agent's question would ping everyone. Each `@`
-that could open a mention gets U+2060 after it, and `[`, `]` are escaped so no link renders
-under another text. Only the adapter's own prefix names people.
+Outgoing text is neutralised (story 3-3, D1, as the review of the build tightened it):
+`props.disable_group_highlight` does not suppress notifications, so `@channel` in an agent's
+question would ping everyone. Every `@` gets U+2060 after it, and `\\`, `[`, `]` and `&` are
+backslash-escaped, so no link renders under another text and no entity decodes to an `@`.
+Only the adapter's own prefix names people, and only the trusted suffix (the system's own
+Run link) is sent as written.
 """
 
 from __future__ import annotations
@@ -49,8 +51,8 @@ HANDLE_REFUSED = "a mention's handle is not a Mattermost username"
 GROUP_HANDLES = frozenset({"channel", "here", "all"})
 GROUP_REFUSED = "a mention's handle names a group: channel, here or all"
 WORD_JOINER = "\u2060"
-#: An `@` that could open a mention: not preceded by a word character, as in an address.
-_MENTION_START = re.compile(r"(?<!\w)@")
+#: Backslash-escaped in outgoing text, the backslash itself first (story 3-3 review).
+_ESCAPED = ("\\", "[", "]", "&")
 #: Bounds on one thread read, since `has_next` and a body are the server's to choose.
 MAX_PAGES = 50
 #: `props` flags marking a post someone made through an integration, under their own user id.
@@ -91,13 +93,24 @@ class MattermostChannel:
         self._client = client or new_client()
         self._me: ChatUser | None = None
 
-    def post(self, text: str, mentions: Sequence[ChatUser]) -> ThreadRef:
-        message = _message(text, mentions)
+    def post(self, text: str, mentions: Sequence[ChatUser], trusted_suffix: str = "") -> ThreadRef:
+        message = _message(text, mentions, trusted_suffix)
         return ThreadRef(id=self._create({"channel_id": self._channel_id, "message": message}))
 
-    def reply(self, thread: ThreadRef, text: str, mentions: Sequence[ChatUser] = ()) -> None:
-        message = _message(text, mentions)
+    def reply(
+        self,
+        thread: ThreadRef,
+        text: str,
+        mentions: Sequence[ChatUser] = (),
+        trusted_suffix: str = "",
+    ) -> None:
+        message = _message(text, mentions, trusted_suffix)
         self._create({"channel_id": self._channel_id, "message": message, "root_id": thread.id})
+
+    def rendered_length(
+        self, text: str, mentions: Sequence[ChatUser] = (), trusted_suffix: str = ""
+    ) -> int:
+        return len(_message(text, mentions, trusted_suffix))
 
     def replies_since(self, thread: ThreadRef, cursor: str | None) -> list[Reply]:
         after = _parse_cursor(cursor)
@@ -164,19 +177,21 @@ class MattermostChannel:
 
 
 def neutralise(text: str) -> str:
-    """`text` that can open no mention and no link: U+2060 after each `@` that could start
-    one, and `[`, `]` escaped. The adapter's own mention prefix is built apart."""
-    escaped = text.replace("[", "\\[").replace("]", "\\]")
-    return _MENTION_START.sub(f"@{WORD_JOINER}", escaped)
+    """`text` that can open no mention, no link and no entity: `\\` escaped first, so an
+    escape in the text cannot cancel one of ours, then `[`, `]` and `&`, and U+2060 after
+    every `@`. The adapter's own mention prefix is built apart."""
+    for character in _ESCAPED:
+        text = text.replace(character, f"\\{character}")
+    return text.replace("@", f"@{WORD_JOINER}")
 
 
-def _message(text: str, mentions: Sequence[ChatUser]) -> str:
+def _message(text: str, mentions: Sequence[ChatUser], trusted_suffix: str = "") -> str:
     if not all(_USERNAME.fullmatch(user.handle) for user in mentions):
         raise ChatError(HANDLE_REFUSED)
     if any(user.handle in GROUP_HANDLES for user in mentions):
         raise ChatError(GROUP_REFUSED)
     names = " ".join(f"@{user.handle}" for user in mentions)
-    body = neutralise(text)
+    body = neutralise(text) + trusted_suffix
     return f"{names}\n{body}" if names else body
 
 

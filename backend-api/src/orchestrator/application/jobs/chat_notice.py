@@ -53,7 +53,12 @@ def _notice_one(
     if facts is None:
         return
     try:
-        chat.post(accept_line(facts, channel.metadata_only), ())
+        post = accept_line(
+            facts,
+            channel.metadata_only,
+            measure=lambda draft: chat.rendered_length(draft.text, (), draft.suffix),
+        )
+        chat.post(post.text, (), post.suffix)
     except ChatError as error:
         _keep_error(ports, record, redacted(error.detail, token))
         _failed(record, error)

@@ -17,7 +17,7 @@ from orchestrator.domain.entities.chat_thread import ChatThread
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.chat import ChatError, ThreadRef
-from tests.unit.application.chat_fixtures import ALICE, BASE_URL, BOB, HOURS, World
+from tests.unit.fakes.chat_world import ALICE, BASE_URL, BOB, HOURS, World
 
 HOUR = 3600
 
@@ -260,6 +260,16 @@ def test_one_failing_thread_does_not_stop_the_next() -> None:
     world.poll()
 
     assert len(world.chat.replies) == 1
+
+
+def test_a_reminders_link_is_sent_as_the_trusted_suffix() -> None:
+    world = World()
+    run, _ = parked(world)
+    world.clock.advance(HOURS * HOUR)
+
+    world.poll()
+
+    assert world.chat.suffixes == [f"\nRun: {BASE_URL}/workflows/{run.id}"]
 
 
 def test_a_reminder_hours_count_is_whole_hours_since_posting() -> None:

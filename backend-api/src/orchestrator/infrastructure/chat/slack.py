@@ -85,13 +85,24 @@ class SlackChannel:
         self._client = client or new_client()
         self._me: ChatUser | None = None
 
-    def post(self, text: str, mentions: Sequence[ChatUser]) -> ThreadRef:
-        message = _message(text, mentions)
+    def post(self, text: str, mentions: Sequence[ChatUser], trusted_suffix: str = "") -> ThreadRef:
+        message = _message(text, mentions, trusted_suffix)
         return ThreadRef(id=self._post({"channel": self._channel_id, "text": message}))
 
-    def reply(self, thread: ThreadRef, text: str, mentions: Sequence[ChatUser] = ()) -> None:
-        message = _message(text, mentions)
+    def reply(
+        self,
+        thread: ThreadRef,
+        text: str,
+        mentions: Sequence[ChatUser] = (),
+        trusted_suffix: str = "",
+    ) -> None:
+        message = _message(text, mentions, trusted_suffix)
         self._post({"channel": self._channel_id, "text": message, "thread_ts": thread.id})
+
+    def rendered_length(
+        self, text: str, mentions: Sequence[ChatUser] = (), trusted_suffix: str = ""
+    ) -> int:
+        return len(_rendered(text, mentions, trusted_suffix))
 
     def replies_since(self, thread: ThreadRef, cursor: str | None) -> list[Reply]:
         after = _parse_cursor(cursor)
@@ -173,11 +184,18 @@ class SlackChannel:
         return ChatError(redact_token(detail, self._token))
 
 
-def _message(text: str, mentions: Sequence[ChatUser]) -> str:
+def _rendered(text: str, mentions: Sequence[ChatUser], trusted_suffix: str) -> str:
+    """The message as sent. The suffix is escaped too: Slack decodes `&amp;` in a link, and a
+    `<` or `>` could otherwise open markup."""
     if not all(_USER_ID.fullmatch(user.id) for user in mentions):
         raise ChatError(USER_ID_REFUSED)
     names = " ".join(f"<@{user.id}>" for user in mentions)
-    message = f"{names}\n{_escape(text)}" if names else _escape(text)
+    body = _escape(text + trusted_suffix)
+    return f"{names}\n{body}" if names else body
+
+
+def _message(text: str, mentions: Sequence[ChatUser], trusted_suffix: str = "") -> str:
+    message = _rendered(text, mentions, trusted_suffix)
     if len(message) > MAX_TEXT_CHARS:
         raise ChatError(TOO_LONG.format(n=len(message)))
     return message

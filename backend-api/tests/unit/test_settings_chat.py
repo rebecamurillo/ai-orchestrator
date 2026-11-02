@@ -61,6 +61,26 @@ def test_blank_values_are_the_defaults(
     assert (settings.chat_poll_seconds, settings.chat_reminder_hours) == (30, 4)
 
 
+@pytest.mark.parametrize(
+    "url",
+    ["https://user:pw@orch.example.com", "https://ops@orch.example.com", "https://h/@channel"],
+)
+def test_a_public_base_url_with_an_at_sign_refuses_start_up(
+    url: str, env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Run link is the chat post's trusted suffix, sent unneutralised, so it may carry
+    neither userinfo nor any other `@` (story 3-3 lead review of the build, 2026-11-02)."""
+    with pytest.raises(ValidationError, match="public_base_url"):
+        build(env, monkeypatch, PUBLIC_BASE_URL=url)
+
+
+@pytest.mark.parametrize("url", ["", "https://orch.example.com", "http://[fd00::1]:4321"])
+def test_a_public_base_url_without_one_is_accepted(
+    url: str, env: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert build(env, monkeypatch, PUBLIC_BASE_URL=url).public_base_url == url
+
+
 def test_a_reminder_period_under_an_hour_refuses_start_up(
     env: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
