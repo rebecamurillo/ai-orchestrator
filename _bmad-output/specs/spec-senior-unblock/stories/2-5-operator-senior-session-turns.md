@@ -2,7 +2,7 @@
 title: 'Operator senior session turns'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: '6edfcfaa46390b3c6fce9196ffeee259b0e71659'
 review_loop_iteration: 0

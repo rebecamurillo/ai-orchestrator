@@ -195,3 +195,7 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/specs/spec-senior-unblock/stories/4-1-reply-polling-and-routing-checks.md`
   summary: The Run page's terminal-session refusal still runs outside the Run lock, so a `terminal_start` and an `answer` sent together could both apply (medium).
   evidence: Found in the story 4-1 lead review, 2026-11-02. The chat path re-checks under the lock; the web and API path through `handle_signal::_refuse_early` does not. Settle by moving the refusal under `get_for_update` once story 2-3 lands the lock.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/2-5-operator-senior-session-turns.md`
+  summary: A `queued` session turn whose workflow ended in ERROR is only re-enqueued at startup, which DBOS treats as a no-op, so that turn stays open (low).
+  evidence: Story 2-5 review fixes, 2026-11-02. It needs both reads of the turn to fail. Settle by closing a queued turn whose workflow status is ERROR in the startup sweep.
