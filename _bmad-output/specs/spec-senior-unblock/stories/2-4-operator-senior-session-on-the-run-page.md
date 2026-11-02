@@ -2,7 +2,7 @@
 title: 'Operator senior session on the Run page'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'a7b5b9adf2c571febb8d226a731fa8bb21302d3d'
 review_loop_iteration: 0
