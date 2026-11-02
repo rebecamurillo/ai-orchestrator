@@ -2,9 +2,9 @@
 title: 'Chat port and Mattermost adapter'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
-baseline_commit: '8c2a6beb6278c1e5f853467e9d60d21840595291'
+baseline_commit: '5b4a8000b2cb460de14bca61bb85402cc3fe9366'
 review_loop_iteration: 0
 context: []
 ---
@@ -66,9 +66,9 @@ Under `backend-api/src/orchestrator/`.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend-api/tests/unit/fakes/chat.py` -- `FakeChatChannel`: records `posts` and `replies`, holds scripted replies per thread honouring `cursor`, a scripted `probe` result, and an optional `ChatError` raised by the next call. `FakeChatChannelFactory`: records each `open` and returns the fake. These are the shared fakes for 3-3, 3-4 and 4-1 (AD-18).
-- [ ] New tests, each seen failing first: `tests/unit/test_mattermost_adapter.py` (`httpx.MockTransport` as in `test_notify_webhook.py`: every matrix row, request paths and query, bearer, bodies, two-page paging, and no token in any `ChatError`), `test_chat_mentions.py`, `test_chat_factory.py`, and `test_chat_fake.py` (the fake honours the port).
-- [ ] Port, then mentions, then adapter, then factory.
+- [x] `backend-api/tests/unit/fakes/chat.py` -- `FakeChatChannel`: records `posts` and `replies`, holds scripted replies per thread honouring `cursor`, a scripted `probe` result, and an optional `ChatError` raised by the next call. `FakeChatChannelFactory`: records each `open` and returns the fake. These are the shared fakes for 3-3, 3-4 and 4-1 (AD-18).
+- [x] New tests, each seen failing first: `tests/unit/test_mattermost_adapter.py` (`httpx.MockTransport` as in `test_notify_webhook.py`: every matrix row, request paths and query, bearer, bodies, two-page paging, and no token in any `ChatError`), `test_chat_mentions.py`, `test_chat_factory.py`, and `test_chat_fake.py` (the fake honours the port).
+- [x] Port, then mentions, then adapter, then factory.
 
 **Acceptance Criteria:**
 - Given a token that appears in the error body, when any call fails, then `ChatError.detail` holds `***` and not the token.
@@ -107,3 +107,16 @@ API facts, verified 2026-11-02:
   - System, webhook, bot and plugin posts are now dropped. A webhook post carries its owner's `user_id`, which would let anyone holding an allowed person's webhook answer as them.
   - Proposed AD-25 text, for the Operator to ratify: "`Reply` gains `body`: `text` with every mention of the bot removed by the same match that sets `mentions_bot`. `replies_since` also excludes system posts and posts made through a webhook, a bot or a plugin."
   - KEEP: the `cursor` field and the paging rule.
+
+## Implementation Notes
+
+- **Built:** `domain/ports/chat.py`, `infrastructure/chat/{__init__,mattermost,mentions}.py`, `tests/unit/fakes/chat.py`, and four new test modules (79 tests). The four test modules failed at collection before the port existed. No existing file outside this spec was touched.
+- **Factory object.** `ChatChannelFactory` is a Protocol with `open`, and a bare function cannot satisfy it. `infrastructure/chat/__init__.py` therefore also exports `ChatChannels`, whose `open` delegates to `open_channel`. 3-3 wires `ChatChannels()`. An unknown provider string raises `ChatError("unknown chat provider '<x>'")`.
+- **Fake.** `FakeChatChannel` uses `script_replies(thread, *replies)` (appended, so later arrivals can be scripted), `fail_next(ChatError)`, `probe_handle`, and records `posts`, `replies`, `reads` and `probes`. A cursor the fake never issued raises `ChatError`. `FakeChatChannelFactory(channel=None)` records `opened` and raises its `error` when one is set.
+- **Ordering.** Each thread page is sorted by `(create_at, id)` before it is used, and the next page's cursor is the page's largest key. The adapter does not rely on `order` being ascending, which the cited source does not settle. If `has_next` is true but the page does not advance, the read fails with `unexpected response`, so it cannot loop forever. An empty page ends the read. A missing `has_next` counts as false.
+- **Redirects.** `follow_redirects=False` is set on every request as well as on the default client, so an injected client that follows redirects still does not.
+- **Integration flags.** `props.from_webhook`, `from_bot` and `from_plugin` count when they are `"true"` or JSON `true`. Accepting both fails closed.
+- **AC deviation, reported.** The criterion "250 replies, cursor at reply 100, two thread requests" cannot hold under the frozen `perPage=200` rule: the server returns only the 150 replies after the cursor, and they fit on one page. The tests assert the criterion's outcome (101 to 250, in order, with `fromCreateAt=2100&fromPost=p100`) in one request. Cursor-plus-paging is covered by 450 replies with the cursor at 100, which takes two requests. The two-page first read is covered by 250 replies with no cursor.
+- **Unverified against a live server** (per Decided, the Operator's checks at 3-3 and 4-2): whether the thread response includes the root on every page (it is dropped by id either way); the exact `order` direction; whether `props` flags arrive as strings or booleans.
+- **For 3-3.** Each `MattermostChannel` owns an `httpx.Client` that is never closed. Opening one per Project per fire leaves pooled connections to garbage collection.
+- **Gates:** `make lint` green. `make test` green: 9,264 backend passed, 1 skipped; 1,771 web-client passed; domain and application at 100% branch coverage; the new modules at 100% branch coverage. `make openapi` was not run because the API is unchanged.
