@@ -208,7 +208,7 @@ def _commit_trees(turn: Turn) -> dict[str, Any]:
 def _reply(turn: Turn) -> dict[str, Any]:
     """The reply file, decoded whatever bytes the senior wrote; a link is not followed."""
     workspace = require_workspace(turn.ctx, str(agent_workdir.tree(turn.ctx)))
-    text = None if workspace.is_link(REPLY) else workspace.read(REPLY, errors="replace")
+    text = None if workspace.is_link(REPLY) else workspace.read_lenient(REPLY)
     return {"reply": session.capped(text)}
 
 

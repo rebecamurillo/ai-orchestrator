@@ -31,11 +31,17 @@ class FsWorkspace:
     def __init__(self, root: str | None) -> None:
         self._root = Path(root) if root is not None else None
 
-    def read(self, path: str, *, errors: str = "strict") -> str | None:
+    def read(self, path: str) -> str | None:
         target = self._resolve(path)
         if not target.is_file():
             return None
-        return target.read_text(errors=errors)
+        return target.read_text()
+
+    def read_lenient(self, path: str) -> str | None:
+        target = self._resolve(path)
+        if not target.is_file():
+            return None
+        return target.read_text(errors="replace")
 
     def write(self, path: str, text: str) -> None:
         target = self._resolve(path)

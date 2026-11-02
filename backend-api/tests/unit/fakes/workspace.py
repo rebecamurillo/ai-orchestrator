@@ -45,10 +45,13 @@ class FakeWorkspace:
         #: plants one; `remove` deletes the link, as `FsWorkspace.remove` does.
         self.links: set[str] = set()
 
-    # Story 2-5 review (2026-11-02): the port's `errors`; text held here decodes already.
-    def read(self, path: str, *, errors: str = "strict") -> str | None:
+    def read(self, path: str) -> str | None:
         self._checked(path)
         return self._files.get(path)
+
+    # Story 2-5 review (2026-11-02): the port's lenient read; text held here decodes already.
+    def read_lenient(self, path: str) -> str | None:
+        return self.read(path)
 
     def write(self, path: str, text: str) -> None:
         self._checked(path)

@@ -156,10 +156,10 @@ def test_a_failing_reply_read_keeps_the_end_shas_and_the_done_status() -> None:
     world.run(turn.attempt_id)
     workspace = world.workspace()
 
-    def broken(path: str, **_kwargs: Any) -> str | None:
+    def broken(path: str) -> str | None:
         raise OSError("disk gone")
 
-    workspace.read = broken  # type: ignore[method-assign]
+    workspace.read_lenient = broken  # type: ignore[method-assign]
 
     world.commit(turn.attempt_id)
 

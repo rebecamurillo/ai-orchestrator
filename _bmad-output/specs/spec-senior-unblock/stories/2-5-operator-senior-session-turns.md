@@ -123,7 +123,7 @@ I wrote the tests first, at baseline `6edfcfa`. The new test files failed on imp
 
 **Gates.**
 - `make lint` is green.
-- `make test` (after review): 9166 backend passed (1 skipped) and 1729 web-client passed, with 100% branch coverage on `domain` and `application`.
+- `make test` (after review): 9170 backend passed (1 skipped) and 1729 web-client passed, with 100% branch coverage on `domain` and `application`.
 - `make openapi` shows no drift.
 - Not run: `make e2e`, `make e2e-ui`, `make durability` and the manual checks.
 - `session_start` returns 422 on the dev stack until the image is rebuilt with `ia-agents-skills/senior-session`.
@@ -137,7 +137,7 @@ I wrote the tests first, at baseline `6edfcfa`. The new test files failed on imp
 | Nothing tested that the turn workflow is registered before `start` | verification | verified | patch | `FakeDurableEngine` now records declarations in `calls` too (rule 1(b), the order this story declares). The launch-order test checks that every declaration comes before `start`, and a new test checks that `run_session_turn` precedes `start`. |
 | A `cancel` landing between the session check and the group commit kills nothing | edge | suspected | patch | The group is committed under `runs.get_for_update`. If that read finds the session closed, the turn kills its group, waits, and closes `error` `session closed`. |
 | A turn that never dispatched still gets the commit sweep | edge | suspected | patch | A new rule, `session.dispatched` (a `pgid` or a `start_sha`), gates the `session: turn {k}` commit. |
-| A failure late in the close drops the end SHAs and the reply, and turns a `done` turn into `error` | edge | suspected | patch | The close now runs in parts: the commit, then the end SHAs, then the reply. A failing part writes `output_ref` and changes no status; a git refusal still makes the turn `error`, as the spec says. The reply is read with `errors="replace"`, a new keyword on `Workspace.read`. The earlier test `test_an_unexpected_failure_still_closes_the_turn_naming_it`, which this story wrote, now asserts `done` along with the end SHA and the reply. |
+| A failure late in the close drops the end SHAs and the reply, and turns a `done` turn into `error` | edge | suspected | patch | The close now runs in parts: the commit, then the end SHAs, then the reply. A failing part writes `output_ref` and changes no status; a git refusal still makes the turn `error`, as the spec says. The reply alone is read through a new port method, `Workspace.read_lenient`, which replaces undecodable bytes. `read` stays strict for every other caller, so a file that is read and written back is never altered (`test_workspace_lenient_read.py`). The earlier test `test_an_unexpected_failure_still_closes_the_turn_naming_it`, which this story wrote, now asserts `done` along with the end SHA and the reply. |
 
 ## Verification
 
