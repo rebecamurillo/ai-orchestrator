@@ -199,3 +199,7 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/specs/spec-senior-unblock/stories/2-5-operator-senior-session-turns.md`
   summary: A `queued` session turn whose workflow ended in ERROR is only re-enqueued at startup, which DBOS treats as a no-op, so that turn stays open (low).
   evidence: Story 2-5 review fixes, 2026-11-02. It needs both reads of the turn to fail. Settle by closing a queued turn whose workflow status is ERROR in the startup sweep.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/3-1-channel-port-project-settings-and-mattermost-adapter.md`
+  summary: Two Mattermost reply-trust edges are unverified - slash-command response_url posts may appear under the invoking user without from_webhook, and a system admin can edit an allowed user's post before the poll reads it (suspected, medium if real).
+  evidence: Story 3-1 review, 2026-11-02, not reproduced. Settle at the 4-2 live check: post through a slash command and via an admin edit, and confirm neither is read as the allowed user's reply.

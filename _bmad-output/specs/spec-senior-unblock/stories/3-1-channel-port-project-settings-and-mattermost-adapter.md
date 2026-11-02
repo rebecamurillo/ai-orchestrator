@@ -2,7 +2,7 @@
 title: 'Chat port and Mattermost adapter'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: '5b4a8000b2cb460de14bca61bb85402cc3fe9366'
 review_loop_iteration: 0
