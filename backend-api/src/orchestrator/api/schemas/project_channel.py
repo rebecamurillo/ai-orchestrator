@@ -8,10 +8,20 @@ a channel and an allowed user; Slack's base URL is its Web API root (story 3-2).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Annotated, Literal, Self
 
-from pydantic import AfterValidator, BaseModel, Field, SecretStr, ValidationInfo, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    Field,
+    SecretStr,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+)
+from pydantic_core import InitErrorDetails, PydanticCustomError
 
 from orchestrator.api.schemas.common import StorableText
 from orchestrator.application.use_cases.project_channel import ChannelDraft, ChannelTest
@@ -35,8 +45,36 @@ TOKEN_REASON = "a token is printable ASCII with no whitespace"
 NO_USER_REASON = "a channel needs at least one allowed user"
 DUPLICATE_USER_REASON = "duplicate user id"
 REQUIRED_REASON = "required for a {provider} channel"
+SLACK_HTTPS_REASON = "a slack base URL must use https"
+SLACK_ID_REASON = "a slack user id is upper-case letters and digits"
+MATTERMOST_HANDLE_REASON = "a mattermost handle is lower-case letters, digits, '.', '_' or '-'"
 
 _PRINTABLE_ASCII = range(0x21, 0x7F)
+#: What each adapter can render as a mention: Slack `<@id>`, Mattermost `@handle`. A value
+#: outside these could close the markup and ping `<!channel>` or `@all` (story 3-2 review).
+_SLACK_USER_ID = re.compile(r"[A-Z0-9]+")
+_MATTERMOST_USERNAME = re.compile(r"[a-z0-9._-]+")
+
+
+def _renderable(users: list[ChatUserIn], provider: object) -> None:
+    """Every user the provider cannot mention, refused at its own `[i].id` or `[i].handle`."""
+    if provider == "slack":
+        field, rule, reason = "id", _SLACK_USER_ID, SLACK_ID_REASON
+    elif provider == "mattermost":
+        field, rule, reason = "handle", _MATTERMOST_USERNAME, MATTERMOST_HANDLE_REASON
+    else:
+        return
+    errors = [
+        InitErrorDetails(
+            type=PydanticCustomError("value_error", f"Value error, {reason}"),
+            loc=(index, field),
+            input=getattr(user, field),
+        )
+        for index, user in enumerate(users)
+        if not rule.fullmatch(getattr(user, field))
+    ]
+    if errors:
+        raise ValidationError.from_exception_data("ChannelIn", errors)
 
 
 def _checked(rule: Callable[[str], bool], reason: str) -> AfterValidator:
@@ -91,6 +129,9 @@ class ChannelIn(BaseModel):
         provider = info.data.get("provider")
         if value is None and provider in NEEDS_FIELDS:
             raise ValueError(REQUIRED_REASON.format(provider=provider))
+        is_url = info.field_name == "base_url" and value is not None
+        if is_url and provider == "slack" and not value.lower().startswith("https://"):
+            raise ValueError(SLACK_HTTPS_REASON)
         return value
 
     @field_validator("allowed_users")
@@ -103,6 +144,7 @@ class ChannelIn(BaseModel):
             if user.id in seen:
                 raise ValueError(f"{DUPLICATE_USER_REASON}: {user.id}")
             seen.add(user.id)
+        _renderable(users, info.data.get("provider"))
         return users
 
     def as_draft(self) -> ChannelDraft:

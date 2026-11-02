@@ -135,3 +135,12 @@ Review of 6eadca3, 2026-11-02. The tests are in `tests/unit/test_chat_adapter_re
 Revisions under rule 1(b), each citing "story 3-2 review, 2026-11-02":
 - the two exact-body assertions in `test_slack_adapter.py`, which now also expect the unfurl flags;
 - the `auth.test` fixtures in `test_slack_adapter_hardening.py`, `test_slack_plain_text.py` and `test_project_channel_slack.py`, which gain `bot_id`.
+
+**Refused at save** (lead decision, 2026-11-02). The API schema is the input boundary, so it holds the per-provider shape rules, and the use case stays free of them (AD-25). `ChannelIn` answers a `PUT` with 422 at the field path, with fixed text that never echoes the value:
+- a `slack` `allowed_users[i].id` that is not `^[A-Z0-9]+$` (`a slack user id is upper-case letters and digits`);
+- a `slack` `base_url` that is not https (`a slack base URL must use https`);
+- a `mattermost` `allowed_users[i].handle` that is not `^[a-z0-9._-]+$` (`a mattermost handle is lower-case letters, digits, '.', '_' or '-'`).
+
+Every bad user is named at its own index. The adapter checks (D3, D4) stay as defence in depth.
+
+**The Mattermost id rule is skipped.** The rule would require 26 characters of `[a-z0-9]`, but the 3-1 adapter treats ids as opaque, its spec states no id format, and its suites use ids such as `u1` and `bot-id`. So it does not match what 3-1 assumes, and the rule is not applied. The tests are in `tests/unit/test_project_channel_provider_shape.py`. No 3-4 or 3-5 sample (`alice`, `bob`, `a`, `b`, `u1`) became invalid, so no existing test was revised.
