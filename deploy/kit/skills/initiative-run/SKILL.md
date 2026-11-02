@@ -94,6 +94,8 @@ and by the alert's `park_kind`. Read it before sending any signal. Two rules hol
 level:
 
 - The signal kind comes from the Run's own `admitted_signals`, never from assumption.
+- `answer`, `retry` and `continue` carry `stop`: the payload's `park_seq`. A 409 means the
+  Run has moved on, so read it again before deciding.
 - `budget` and `checkpoint` never resolve without the human.
 
 A park that will recur on every story is not answered one story at a time. Name the cause

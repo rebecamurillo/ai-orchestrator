@@ -54,7 +54,12 @@ from orchestrator.application.rules.protected_paths import hit_paths, park_recor
 from orchestrator.application.rules.signals import accepted_files, row_at, validate
 from orchestrator.application.steps.context import RunEnvironment
 from orchestrator.application.use_cases.signal_effects import CancelPlan
-from orchestrator.application.use_cases.signal_run import SignalOutcome, SignalPorts, signal_run
+from orchestrator.application.use_cases.signal_run import (
+    SignalOutcome,
+    SignalPorts,
+    refuse_stale_stop,
+    signal_run,
+)
 from orchestrator.application.use_cases.writers import require_run
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.errors import Conflict
@@ -121,7 +126,9 @@ def handle_signal(ports: SignalEffectPorts, run_id: UUID, signal: Signal) -> Sig
 def _refuse_early(ports: SignalPorts, run_id: UUID, signal: Signal) -> None:
     """Everything that refuses a signal before a single row moves, in the order it applies.
 
-    `validate` first, so a genuine AD-13 mismatch keeps its own refusal text; then the
+    The stale stop first, so an answer written for another stop always hears which stop
+    the Run is at (AD-24). `validate` next, so a genuine AD-13 mismatch keeps its own
+    refusal text; then the
     terminal session, which holds every action but its own; then the Accept's own agreement
     with the hit list the park recorded. `signal_run` re-reads and re-validates everything it
     writes inside its own unit of work — this reads ahead of it rather than writing anything,
@@ -129,6 +136,7 @@ def _refuse_early(ports: SignalPorts, run_id: UUID, signal: Signal) -> None:
     """
     writers = ports.writers
     run = require_run(writers, run_id)
+    refuse_stale_stop(run, signal)
     rows = writers.steps.list_for_run(run_id)
     park_row = row_at(rows, run.park_path)
     validate(run, park_row, signal, rows)

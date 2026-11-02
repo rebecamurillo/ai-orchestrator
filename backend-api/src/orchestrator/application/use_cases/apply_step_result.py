@@ -349,16 +349,20 @@ def budget_second_record(ports: WriterPorts, run: Run, row: StepRun, result: Ste
     to `budget` on top of it.
 
     `set_run` rather than `park_run`: the first park already moved the Run to `needs_you`
-    (`_route` ran before this), and `RUN_TRANSITIONS` has no `(needs_you, "park")` pair —
-    a second `run_transition` call would raise. The three park fields are "written
-    together with the gate_record" every time (`domain/entities/run.py`'s own docstring),
-    which this still does; it is only the *status* transition that does not repeat.
+    (`_route` ran before this), and `RUN_TRANSITIONS` has no `(needs_you, "park")` pair.
     """
     park = result.budget_park
     if park is None:
         return
     path = park.path or row.path
-    updated = set_run(ports, run, park_kind=park.kind, park_path=path, park_reason=park.reason)
+    updated = set_run(
+        ports,
+        run,
+        park_kind=park.kind,
+        park_path=path,
+        park_reason=park.reason,
+        park_seq=run.park_seq + 1,
+    )
     record(ports, updated, Entry(event=park.kind, actor="machine", path=path, text=park.reason))
 
 

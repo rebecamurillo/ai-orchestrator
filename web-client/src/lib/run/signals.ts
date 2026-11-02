@@ -16,6 +16,14 @@ export function signalBody(kind: SignalKind): SignalIn {
   return { kind };
 }
 
+const ANSWERS_A_STOP: readonly SignalKind[] = ['answer', 'retry', 'continue'];
+
+/** The body with the stop it answers (AD-24), on the kinds that answer one. */
+export function withStop(body: SignalIn, parkSeq: number | undefined): SignalIn {
+  if (parkSeq === undefined || !ANSWERS_A_STOP.includes(body.kind)) return body;
+  return { ...body, stop: parkSeq };
+}
+
 /** The request path `FailedFetch`-shaped 409 readouts show. */
 export function signalsRequestPath(runId: string): string {
   return `/api/runs/${runId}/signals`;

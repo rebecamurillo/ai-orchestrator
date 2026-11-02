@@ -1958,6 +1958,8 @@ export interface components {
             last_opened_at?: string | null;
             /** Manual Estimate H */
             manual_estimate_h: string | null;
+            /** Park Seq */
+            park_seq?: number;
             /** Plan Ref */
             plan_ref: string | null;
             /**
@@ -2004,6 +2006,8 @@ export interface components {
             park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict") | null;
             /** Park Path */
             park_path: string | null;
+            /** Park Seq */
+            park_seq?: number;
             /**
              * Run Id
              * Format: uuid
@@ -2247,6 +2251,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Park Seq */
+            park_seq?: number;
             /** Plan Ref */
             plan_ref: string | null;
             /**
@@ -2293,6 +2299,8 @@ export interface components {
             payload?: {
                 [key: string]: unknown;
             };
+            /** Stop */
+            stop?: number | null;
         };
         /**
          * StepDetailOut

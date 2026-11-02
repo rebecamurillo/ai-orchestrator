@@ -54,6 +54,7 @@ import {
   retryBody,
   signalBody,
   signalsRequestPath,
+  withStop,
   type SignalIn,
   type SignalKind,
 } from '../lib/run/signals';
@@ -207,10 +208,12 @@ export default function RunDetail({ runId }: Props) {
     try {
       const { error } = await api.POST('/runs/{run_id}/signals', {
         params: { path: { run_id: runId } },
-        body: body ?? signalBody(kind),
+        body: withStop(body ?? signalBody(kind), detail?.run.park_seq),
       });
       if (error) {
         setSignalError(error);
+        // a refused signal may mean the Run has moved on: show the stop it is at now
+        if (error.status === 409) await fetchDetail();
         return;
       }
       setCancelOpen(false);
@@ -247,7 +250,9 @@ export default function RunDetail({ runId }: Props) {
       <Header detail={detail} token={token} now={Date.now()} />
       <Banner detail={detail} token={token} />
       <div className="wf-top-zone">
+        {/* keyed so a draft written for one stop can never be sent as the answer to the next */}
         <StopBody
+          key={detail.run.park_seq ?? 0}
           detail={detail}
           token={token}
           onSignal={(kind) => void sendSignal(kind)}

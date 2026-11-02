@@ -153,6 +153,8 @@ class Signal(BaseModel):
     #: A mapping rather than `None`, so no caller has to guard the empty case; built per
     #: instance, so two signals never share one.
     payload: dict[str, Any] = Field(default_factory=dict)
+    #: The `run.park_seq` this signal was written for, when the sender states one (AD-24).
+    stop: int | None = None
 
 
 class PlannedRow(BaseModel):

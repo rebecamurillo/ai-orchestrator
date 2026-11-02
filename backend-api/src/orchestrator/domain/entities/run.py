@@ -71,6 +71,9 @@ class Run(BaseModel):
     park_kind: ParkKind | None = None
     park_path: str | None = None
     park_reason: str | None = None
+    #: This stop's number (AD-24). Up by one at each new stop and never reset, so an answer
+    #: can say which stop it was written for.
+    park_seq: int = 0
     #: Files a `continue` on `protected_path` accepted; every later check in the same story
     #: frame excludes them (AD-9).
     accepted_paths: tuple[str, ...] = ()

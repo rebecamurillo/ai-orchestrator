@@ -3461,6 +3461,10 @@
             ],
             "title": "Manual Estimate H"
           },
+          "park_seq": {
+            "title": "Park Seq",
+            "type": "integer"
+          },
           "plan_ref": {
             "anyOf": [
               {
@@ -3637,6 +3641,10 @@
               }
             ],
             "title": "Park Path"
+          },
+          "park_seq": {
+            "title": "Park Seq",
+            "type": "integer"
           },
           "run_id": {
             "format": "uuid",
@@ -4203,6 +4211,10 @@
             "title": "Id",
             "type": "string"
           },
+          "park_seq": {
+            "title": "Park Seq",
+            "type": "integer"
+          },
           "plan_ref": {
             "anyOf": [
               {
@@ -4306,6 +4318,18 @@
             "additionalProperties": true,
             "title": "Payload",
             "type": "object"
+          },
+          "stop": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop"
           }
         },
         "required": [

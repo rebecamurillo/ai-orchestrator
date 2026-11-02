@@ -215,6 +215,7 @@ write_payload() {
 		"$run_id" "$status" "$park_kind" "$reason" > "$file"
 	printf '  "admitted_signals": [%s],\n  "spend_usd": "%s",\n  "budget_usd": "%s",\n' \
 		"$json" "$spend" "$budget" >> "$file"
+	printf '  "park_seq": %s,\n' "${park_seq:-0}" >> "$file"
 	printf '  "url": "%s",\n  "base_url": "%s",\n  "observed_at": "%s"\n}\n' \
 		"$deep_link" "$base_url" "$(now)" >> "$file"
 	say "payload  ${file}"
@@ -236,6 +237,7 @@ poll() {
 	budget="$(json_str "$summary" budget_usd)"
 	admitted="$(json_words "$summary" admitted_signals)"
 	admitted="${admitted% }"
+	park_seq="$(sed -n 's/.*"park_seq"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$summary")"
 }
 
 report_change() {

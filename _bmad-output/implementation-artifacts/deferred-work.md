@@ -156,3 +156,10 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/implementation-artifacts/spec-model-input-selectors.md`
   summary: `NewWorkflow.tsx` exceeds the 300-line component limit in `web-client/AGENTS.md`; the probe-result rules could move to a pure function in `lib/newwf/state.ts`.
   evidence: The island was already 365 lines at this spec's baseline and grew with it.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-1-stop-identity-and-stale-answers-refused.md`
+  summary: Two concurrent signals naming the same stop may both pass, and the extra engine message may be consumed at the next stop (medium, unverified).
+  evidence: `require_run` takes no row lock and nothing in `src/orchestrator` uses `with_for_update`. Settle by tracing a second send to the `human:{run_id}` topic. Story 4-1 adds a second sender, so settle it there at the latest.
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-1-stop-identity-and-stale-answers-refused.md`
+  summary: Add an e2e test for `park_seq` over the real repository and a raw insert omitting the column.
+  evidence: Unit tests cover the row mapping and a one-off script covered migrated rows, but no permanent Postgres-level test exists, and `make e2e` cannot run on this host until its registry credential is fixed.

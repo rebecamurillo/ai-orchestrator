@@ -88,6 +88,11 @@ def _no_attempt(_: UUID) -> Attempt | None:
     return None
 
 
+#: What a signal naming an earlier stop is told (AD-24).
+STALE_STOP = "this signal names stop {stop}, and the Run is at stop {current}{where}"
+STOP_WHERE = ": {kind}"
+STOP_AT = " at {path}"
+
 #: The signal that enqueues a saved Run on Operator request (story 5-3).
 START = "start"
 
@@ -139,6 +144,7 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
     writers = ports.writers
     with writers.uow:
         run = require_run(writers, run_id)
+        refuse_stale_stop(run, signal)
         rows = writers.steps.list_for_run(run_id)
         park_row = _park_row(rows, run.park_path)
         rule = validate(run, park_row, signal, rows)
@@ -258,6 +264,16 @@ def _preflight_req_from_run(run: Run) -> PreflightRequest:
     )
 
 
+def refuse_stale_stop(run: Run, signal: Signal) -> None:
+    """Refuse, before anything is written, a signal naming a stop other than the current one."""
+    if signal.stop is None or signal.stop == run.park_seq:
+        return
+    where = STOP_WHERE.format(kind=run.park_kind) if run.park_kind else ""
+    if run.park_path:
+        where += STOP_AT.format(path=run.park_path)
+    raise Conflict(STALE_STOP.format(stop=signal.stop, current=run.park_seq, where=where))
+
+
 def _continue_dependency_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcome:
     """Enqueue a dependency-parked Run on Operator `continue` (story 5-4).
 
@@ -269,6 +285,7 @@ def _continue_dependency_run(ports: SignalPorts, run_id: UUID, signal: Signal) -
     writers = ports.writers
     with writers.uow:
         run = require_run(writers, run_id)
+        refuse_stale_stop(run, signal)
         validate(run, None, signal)
         record(
             writers,
@@ -314,6 +331,7 @@ def _start_saved_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> Signal
     writers = ports.writers
     with writers.uow:
         run = require_run(writers, run_id)
+        refuse_stale_stop(run, signal)
         # Validate against the table: run_statuses={"queued"}, extra=_is_saved.
         # `validate` raises Conflict if the run is not queued or engine_ref is non-empty.
         # It runs BEFORE the preflight check so that a "start" sent to a non-queued Run

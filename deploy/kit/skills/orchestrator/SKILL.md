@@ -185,7 +185,10 @@ stop admits Retry and Cancel only).
 
 **Read `admitted_signals` off the Run and choose only from it — never hardcode which
 signal a state accepts.** A non-admitted signal answers 409. Then
-`POST /api/v1/runs/{id}/signals` with `{kind, payload}`:
+`POST /api/v1/runs/{id}/signals` with `{kind, payload}`, plus `stop` set to the `park_seq`
+you read on `answer`, `retry` and `continue`, so a Run that has moved on refuses it with
+409. On that 409, read the Run again and decide again. Omit `stop` only when no `park_seq`
+is present:
 
 - `answer` `{text}` — reply to a blocked agent or a spec checkpoint.
 - `continue` — approve a checkpoint; for a `protected_path` park, `{files: [...]}`

@@ -204,6 +204,7 @@ def park_run(
         park_kind=park.kind,
         park_path=park.path,
         park_reason=park.reason,
+        park_seq=run.park_seq + 1,
     )
     record(
         ports,
@@ -335,6 +336,7 @@ def _write_dependency_park(ports: WriterPorts, dep: Run, reason: str) -> None:
             "park_kind": "dependency",
             "park_path": None,
             "park_reason": reason,
+            "park_seq": dep.park_seq + 1,
         }
     )
     ports.runs.update(parked)

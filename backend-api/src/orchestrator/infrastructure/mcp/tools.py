@@ -86,14 +86,22 @@ def _dispatch_tools(api: InProcessApi) -> list[Tool]:
         """
         return await api.post("/runs", body)
 
-    async def send_signal(run_id: str, kind: str, payload: dict[str, Any] | None = None) -> Any:
+    async def send_signal(
+        run_id: str, kind: str, payload: dict[str, Any] | None = None, stop: int | None = None
+    ) -> Any:
         """Send one Signal to a parked Run.
 
         `kind` must be one of that Run's own `admitted_signals` — never a kind chosen from
         memory; anything else is refused with 409. A budget and a checkpoint are the operator's
         decisions and are never resolved on their behalf.
+
+        On `answer`, `retry` and `continue`, set `stop` to the `park_seq` you read with the
+        question: a Run that has moved to another stop refuses it with 409.
         """
-        return await api.post(f"/runs/{run_id}/signals", {"kind": kind, "payload": payload or {}})
+        body: dict[str, Any] = {"kind": kind, "payload": payload or {}}
+        if stop is not None:
+            body["stop"] = stop
+        return await api.post(f"/runs/{run_id}/signals", body)
 
     return [preflight_run, create_run, send_signal]
 

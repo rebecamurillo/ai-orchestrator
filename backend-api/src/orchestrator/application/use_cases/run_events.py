@@ -46,6 +46,7 @@ class RunEvent:
     budget_usd: Decimal | None
     park_kind: ParkKind | None
     park_path: str | None
+    park_seq: int = 0
 
 
 def run_event(ports: RunReadPorts, run_id: UUID) -> RunEvent:
@@ -66,5 +67,6 @@ def run_event(ports: RunReadPorts, run_id: UUID) -> RunEvent:
         spend_usd=run.spend_usd,
         budget_usd=run.budget_usd,
         park_kind=run.park_kind,
+        park_seq=run.park_seq,
         park_path=run.park_path,
     )
