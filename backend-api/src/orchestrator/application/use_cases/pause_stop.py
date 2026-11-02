@@ -1,20 +1,17 @@
 """The stop a `pause` signal lands as (AD-13, 2026-11-01 amendment).
 
 `signal_run` only records the request. The park is an execution write, so it is made by
-`apply_step_result` through `park_paused` at the moment it queues a successor: the row that
-was executing has ended, nothing is killed, and the Run waits on the row that would have
-run next. That row is already `queued`, so `continue` writes no row and the walker finds it.
+`apply_step_result` through `park_before_next` at the moment it queues a successor: the row
+that was executing has ended, nothing is killed, and the Run waits on the row that will run
+next. That row is already `queued`, so `continue` writes no row and the walker finds it.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from itertools import takewhile
-
-from orchestrator.application.use_cases.writers import WriterPorts, park_run
-from orchestrator.domain.entities.gate_record import GateRecord
+from orchestrator.application.use_cases.walk_context import redispatches_to
+from orchestrator.application.use_cases.writers import FINISHED, WriterPorts, park_run, queue_row
 from orchestrator.domain.entities.run import Run
-from orchestrator.domain.statuses import PARK_KINDS
+from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.values import Park
 
 #: What the Operator reads at the stop: where the Run will carry on.
@@ -28,16 +25,24 @@ def park_paused(ports: WriterPorts, run: Run, path: str) -> Run:
     )
 
 
-def resumed_a_pause(records: Sequence[GateRecord], resume: GateRecord) -> bool:
-    """Whether `resume` answered a `paused` stop, read off the Run's own gate records.
+def park_before_next(ports: WriterPorts, run: Run, successor: StepRun) -> Run:
+    """Park on the row the walker will run next, which is not always `successor`.
 
-    The stop a signal answers is the latest stop recorded before it. A `continue` that lifted
-    a pause is not the `continue` that approves a spec checkpoint or a stale plan, and the row
-    that runs next must not be told it is.
+    After a redispatch the row that just finished is the target, and the rows between it and
+    the verify row that failed are `done`. The walker's next row is that verify row
+    (`walk._sent_back`), so it is queued here and named, rather than a row that will not run.
     """
-    stops = [
-        line.event
-        for line in takewhile(lambda line: line.id != resume.id, records)
-        if line.event in PARK_KINDS
-    ]
-    return bool(stops) and stops[-1] == "paused"
+    rows = ports.steps.list_for_run(run.id)
+    next_up = next((row for row in rows if row.status == "queued"), None)
+    if next_up is None:
+        done = [row.seq for row in rows if row.status in FINISHED]
+        sender = next(
+            (
+                row
+                for row in rows
+                if row.status == "error" and any(redispatches_to(row, seq) for seq in done)
+            ),
+            None,
+        )
+        next_up = queue_row(ports, sender) if sender is not None else successor
+    return park_paused(ports, run, next_up.path)

@@ -24,7 +24,7 @@ from orchestrator.application.steps import WORKDIR_KEY, StepContext, StepPorts
 from orchestrator.application.steps.verify_failure import VerifyFailure
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY, REDISPATCH_TARGET_SEQ
 from orchestrator.application.templates.rows import COMMAND_KEY
-from orchestrator.application.use_cases.pause_stop import resumed_a_pause
+from orchestrator.application.use_cases.pause_resume import resumed_a_pause
 from orchestrator.application.use_cases.walk_frame import (
     WalkFrame,
     frame_anchors,

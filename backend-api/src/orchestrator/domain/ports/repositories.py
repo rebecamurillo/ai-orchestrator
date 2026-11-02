@@ -81,6 +81,14 @@ class RunRepository(Protocol):
         """The Run with this id, or `None`."""
         ...
 
+    def get_for_update(self, run_id: UUID) -> Run | None:
+        """`get`, under a row lock held until the unit of work ends.
+
+        Two writers that decide on a Run's status read it this way, so the second one sees
+        what the first committed instead of a snapshot taken before it.
+        """
+        ...
+
     def update(self, run: Run) -> None:
         """Replace the stored Run with this one, matched on its id."""
         ...

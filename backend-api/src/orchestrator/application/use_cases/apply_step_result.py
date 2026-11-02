@@ -60,7 +60,7 @@ from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
 from orchestrator.application.use_cases import apply_redispatch
 from orchestrator.application.use_cases.apply_consult import apply_consult, attempt_status
-from orchestrator.application.use_cases.pause_stop import park_paused
+from orchestrator.application.use_cases.pause_stop import park_before_next
 from orchestrator.application.use_cases.record_trajectory import record_trajectory
 from orchestrator.application.use_cases.writers import (
     FINISHED,
@@ -139,7 +139,7 @@ def apply_step_result(
 ) -> None:
     """Apply one executor result to the Attempt, the row, the successor and the Run."""
     with ports.uow:
-        run = require_run(ports, run_id)
+        run = require_run(ports, run_id, lock=True)
         if run.status != RUNNING:
             log.info(LATE_RESULT, run_id=str(run_id), seq=seq, status=run.status)
             return
@@ -311,7 +311,7 @@ def _advance(ports: WriterPorts, run: Run, row: StepRun) -> Run:
             continue
         if candidate.status == "planned":
             queue_row(ports, candidate)
-        return park_paused(ports, run, candidate.path) if run.pause_requested else run
+        return park_before_next(ports, run, candidate) if run.pause_requested else run
     return finish_run(ports, run)
 
 

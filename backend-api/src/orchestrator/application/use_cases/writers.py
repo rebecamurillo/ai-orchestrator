@@ -93,9 +93,9 @@ class WriterPorts:
     announcer: Announcer | None = None
 
 
-def require_run(ports: WriterPorts, run_id: UUID) -> Run:
-    """The stored Run, or `NotFound` (404) — no writer invents one."""
-    run = ports.runs.get(run_id)
+def require_run(ports: WriterPorts, run_id: UUID, *, lock: bool = False) -> Run:
+    """The stored Run, or `NotFound` (404); `lock` reads it under a row lock."""
+    run = ports.runs.get_for_update(run_id) if lock else ports.runs.get(run_id)
     if run is None:
         raise NotFound(f"no run {run_id}")
     return run

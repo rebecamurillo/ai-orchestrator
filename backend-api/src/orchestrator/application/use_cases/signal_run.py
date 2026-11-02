@@ -143,7 +143,7 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
             return _continue_dependency_run(ports, run_id, signal)
     writers = ports.writers
     with writers.uow:
-        run = require_run(writers, run_id)
+        run = require_run(writers, run_id, lock=True)
         refuse_stale_stop(run, signal)
         rows = writers.steps.list_for_run(run_id)
         park_row = _park_row(rows, run.park_path)
@@ -284,7 +284,7 @@ def _continue_dependency_run(ports: SignalPorts, run_id: UUID, signal: Signal) -
     """
     writers = ports.writers
     with writers.uow:
-        run = require_run(writers, run_id)
+        run = require_run(writers, run_id, lock=True)
         refuse_stale_stop(run, signal)
         validate(run, None, signal)
         record(
@@ -330,7 +330,7 @@ def _start_saved_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> Signal
     """
     writers = ports.writers
     with writers.uow:
-        run = require_run(writers, run_id)
+        run = require_run(writers, run_id, lock=True)
         refuse_stale_stop(run, signal)
         # Validate against the table: run_statuses={"queued"}, extra=_is_saved.
         # `validate` raises Conflict if the run is not queued or engine_ref is non-empty.

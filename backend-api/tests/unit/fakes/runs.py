@@ -44,6 +44,10 @@ class FakeRunRepository:
         self.calls.append(("get", run_id))
         return self.runs.get(run_id)
 
+    def get_for_update(self, run_id: UUID) -> Run | None:
+        self.calls.append(("get_for_update", run_id))
+        return self.runs.get(run_id)
+
     def update(self, run: Run) -> None:
         self.calls.append(("update", run.id))
         if run.id not in self.runs:

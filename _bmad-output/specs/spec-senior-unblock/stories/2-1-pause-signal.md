@@ -101,13 +101,19 @@ Implemented in one session, tests first: the four new backend test files were se
 
 **Revised tests (rule 1(b), AD-13 table, 2026-11-02):** `test_run_statuses.py` (both tuples, names now `thirteen`), `test_terminal_signals.py` (`REFUSED_WHILE_RUNNING`), `test_run_admitted_signals.py`, `test_run_events_use_case.py`, `test_run_events_router.py`, `test_signals_router.py` (a running Run admits `["pause", "cancel"]`), `test_signal_rules.py` (the every-park-kind loop for `skip_step` skips `paused`). Each revision names this story.
 
-**Open for 2-3 and the Operator.** `signal_run` reads the Run without a lock, and `RunRepository.update` writes the whole row, so a `pause` that interleaves with a step's own Run write can be lost for one row, and a `cancel` already has the same window. 2-3's `get_for_update` closes the signal side. Migration `0025` and 2-3's will need renumbering at merge. `session_start` is not in `paused`'s admitted list: its signal kind does not exist at this baseline.
+**The row lock, and story 2-3.** Review found that `signal_run` and `apply_step_result` read the Run without a lock while the adapter writes only the columns an entity changed. A `pause` committed between `apply_step_result`'s read and its park survived a Run that had since parked, finished or failed, and the Run then paused unasked one row after the Operator answered. `RunRepository.get_for_update` (`SELECT … FOR UPDATE` with `populate_existing`; the shared fake records the call and returns the Run) is added here, used by `require_run(..., lock=True)` in `signal_run`'s three units of work and in `apply_step_result`. **Story 2-3 plans the same method under the same name: it reuses this one and adds no second.** Migration `0025` will need renumbering against 2-3's. `session_start` is not in `paused`'s admitted list: its signal kind does not exist at this baseline.
 
 Not run here: `make e2e`, `make e2e-ui` (the new `run-detail-pause.spec.ts` is unrun) and `make durability`. `make lint` and `make test` pass: 8863 backend and 1729 web-client tests, 100% branch coverage on `domain` and `application`.
 
 ## Spec Change Log
 
 ## Review Triage Log
+
+| Finding | Layer | Verdict | Route | Evidence and action |
+| --- | --- | --- | --- | --- |
+| A `pause` committed after `apply_step_result` reads the Run leaves `pause_requested = true` on a Run that parked itself, finished or failed; `signal_run` validating a stale `running` read does the same | edge, verification | high | patch | Reproduced in `test_pause_race.py` with a repository that writes only changed columns. Both writers read under `get_for_update`; the port, adapter (FOR UPDATE, `populate_existing`, `test_run_lock_adapter.py`) and fake added. Story 2-3 reuses the method. |
+| A pause landing after a redispatch parks on a `done` row between the target and the failed verify row, naming a row that will not run | edge | medium | patch | Reproduced in `test_pause_redispatch.py`. `park_before_next` names the queued row, or queues and names the verify row `_sent_back` would run. |
+| "Nothing killed" test never checked the process runner or the cancel plan | verification | low | patch | `test_pause_kills_nothing.py` asserts no `kill_group`, `remove_worktree` or `delete_branch` call and no cancel plan. |
 
 ## Verification
 

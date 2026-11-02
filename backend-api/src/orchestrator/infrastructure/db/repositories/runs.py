@@ -184,6 +184,18 @@ class SQLAlchemyRunRepository:
         row = self._session.get(RunRow, run_id)
         return None if row is None else to_entity(row)
 
+    def get_for_update(self, run_id: UUID) -> Run | None:
+        # `populate_existing`: a row this session already holds would otherwise keep the
+        # values it was read with, which is the stale snapshot the lock is there to avoid
+        statement = (
+            select(RunRow)
+            .where(RunRow.id == run_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        row = self._session.scalars(statement).first()
+        return None if row is None else to_entity(row)
+
     def update(self, run: Run) -> None:
         row = self._session.get(RunRow, run.id)
         if row is None:
