@@ -61,10 +61,18 @@
   done_checkpoint: true
 # Epic 3: Channel and alerts
 - id: "3-1"
-  title: Channel port, Project settings and Mattermost adapter
+  title: Chat port and Mattermost adapter
   description: >-
-    Each Project chooses `off` or `mattermost` with its token, channel, allowed people and metadata-only option, and can test the connection (CAP-10). This sets the port the Slack adapter must fit.
+    Add the `ChatChannel` port, its shared fake and the Mattermost adapter (CAP-10, AD-25). This sets the port the Slack adapter must fit.
   spec_checkpoint: true
+- id: "3-4"
+  title: Project channel storage, API and connection test
+  description: >-
+    Each Project stores `off` or `mattermost` with an encrypted token, channel, allowed people and metadata-only option. A connection test probes the saved channel and reports the platform's answer (CAP-10).
+- id: "3-5"
+  title: Project channel form
+  description: >-
+    The Project edit page sets, replaces and turns off the channel. It runs the connection test and shows its result verbatim (CAP-10).
 - id: "3-2"
   title: Slack adapter
   description: >-

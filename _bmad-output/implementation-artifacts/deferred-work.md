@@ -187,3 +187,7 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/specs/spec-senior-unblock/stories/2-3-operator-senior-session-backend.md`
   summary: On a hub Run, an edit inside a submodule other than the parked row's `workdir` is neither committed by a session turn nor listed at `session_end`. Agents share the gap: nothing enumerates the other initialized submodules (`steps/agent_workdir.py`, "Whenever it is built").
   evidence: Lead review 2026-11-02. The root is staged with gitlinks excluded, and root status cannot tell an earlier epic's deliberate advance from a new edit. The `senior-session` skill confines edits to the two trees until a read-only submodule enumeration exists.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/4-1-reply-polling-and-routing-checks.md`
+  summary: A backend killed after `signal_run` commits but before `engine.signal` delivers leaves the Run marked running with a walker still waiting on its recv, whoever sent the signal (high, pre-existing).
+  evidence: Found while planning story 4-1, 2026-11-02. Settle with a durability-suite kill between the commit and the send; a fix is a startup sweep that re-sends the signal for a Run whose newest gate record is an unanswered signal.
