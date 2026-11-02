@@ -36,7 +36,7 @@ from uuid import UUID
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.repositories import RunRepository, StepRunRepository
-from orchestrator.domain.statuses import RunStatus
+from orchestrator.domain.statuses import CHK_PARK_KINDS, RunStatus
 
 #: How many Runs the Project screen shows, newest first (the brief's own bound).
 EMBED_LIMIT = 20
@@ -113,7 +113,7 @@ def _summaries(
 def _token(run: Run) -> Token:
     """The UI status token (spine "UI tokens"): stored status, or `park_kind` while parked."""
     if run.status == "needs_you":
-        return "CHK" if run.park_kind == "checkpoint" else "BLK"
+        return "CHK" if run.park_kind in CHK_PARK_KINDS else "BLK"
     return _TOKENS[run.status]
 
 

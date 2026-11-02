@@ -106,8 +106,9 @@ Create body (`RunIn`): required `template_name`, `template_version` (int), `proj
 
 Signal kinds: `answer` (`{text}`), `continue` (`{files[]}` for protected-path accepts),
 `retry`, `skip_story`, `skip_epic`, `budget_raise` (`{budget_usd}` above current spend),
-`cancel`, `start` (a saved Run), `terminal_start` / `terminal_release` /
-`terminal_resume` (human-in-terminal flow). Admission depends on status and `park_kind`
+`cancel`, `pause` (a running Run: it parks `paused` when the current step ends, nothing
+killed; `pause_requested` is present on the Run while one is pending), `start` (a saved
+Run), `terminal_start` / `terminal_release` / `terminal_resume` (human-in-terminal flow). Admission depends on status and `park_kind`
 — always read `admitted_signals` first; a non-admitted kind answers 409.
 
 Send `stop` on `answer`, `retry` and `continue`: the `park_seq` you read with the question,
@@ -161,7 +162,7 @@ snippets ship in the kit under `mcp/`; they are not installed automatically.
 - Step: `planned` `queued` `running` `done` `blocked` `checkpoint` `error` `skipped`.
 - Park kinds (`alert.park_kind`): `blocked` `checkpoint` `verify_failed` `budget`
   `timeout` `push_rejected` `protected_path` `misconfigured` `plan_stale` `internal`
-  `dependency` `merge_conflict`.
+  `dependency` `merge_conflict` `paused` (renders `CHK`; admits `continue` and `cancel`).
 - A parked Run waits up to the instance's `HUMAN_WAIT_SECONDS` (default 30 days), then
   fails.
 

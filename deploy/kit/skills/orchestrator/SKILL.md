@@ -181,7 +181,8 @@ checkpoint error skipped`.
 `budget`, `timeout`, `push_rejected`, `protected_path` (the diff touched a protected file;
 `payload.hits` lists them), `misconfigured`, `plan_stale`, `internal`, `dependency`,
 `merge_conflict` (a `git.merge` row conflicted; the merge is left in the worktree and the
-stop admits Retry and Cancel only).
+stop admits Retry and Cancel only), `paused` (the Operator asked for a pause; it admits
+Continue and Cancel, and only the Operator lifts it).
 
 **Read `admitted_signals` off the Run and choose only from it — never hardcode which
 signal a state accepts.** A non-admitted signal answers 409. Then

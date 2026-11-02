@@ -166,6 +166,8 @@ def set_run(ports: WriterPorts, run: Run, reason: str | None = None, **update: A
     which the cleared park fields no longer carry.
     """
     updated = run.model_copy(update=update)
+    if updated.status != "running":  # a Run that is not running has no pause pending
+        updated = updated.model_copy(update={"pause_requested": False})
     ports.runs.update(updated)
     if ports.announcer is not None:
         ports.announcer.transition(run, updated, reason)

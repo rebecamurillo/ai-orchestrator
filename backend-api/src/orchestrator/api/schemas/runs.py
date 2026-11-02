@@ -17,7 +17,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from orchestrator.api.errors import ProblemError
-from orchestrator.api.schemas.common import MAX_VERSION, MoneyStr, StopNumberOut, UtcTimestamp
+from orchestrator.api.schemas.common import MAX_VERSION, MoneyStr, RunStateOut, UtcTimestamp
 from orchestrator.application.rules.signals import run_admitted_signals
 from orchestrator.application.templates.plan_model import PlanError
 from orchestrator.application.use_cases.create_run import CreateRunRequest, CreateRunResult
@@ -95,7 +95,7 @@ class RunIn(BaseModel):
         )
 
 
-class RunSummaryOut(StopNumberOut):
+class RunSummaryOut(RunStateOut):
     """The minimal Run read model (4.12 replaces this with the full one)."""
 
     id: UUID
@@ -142,6 +142,7 @@ class RunSummaryOut(StopNumberOut):
             plan_ref=run.plan_ref,
             created_at=run.created_at,
             park_seq=run.park_seq,
+            pause_requested=run.pause_requested,
             admitted_signals=run_admitted_signals(
                 run, park_row_kind, park_row_status=park_row_status, rows=rows
             ),

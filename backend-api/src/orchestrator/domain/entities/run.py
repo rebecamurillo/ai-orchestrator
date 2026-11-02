@@ -74,6 +74,9 @@ class Run(BaseModel):
     #: This stop's number (AD-24). Up by one at each new stop and never reset, so an answer
     #: can say which stop it was written for.
     park_seq: int = 0
+    #: A `pause` is waiting for the row now executing to end (AD-13). `set_run` clears it on
+    #: any write that leaves `running`.
+    pause_requested: bool = False
     #: Files a `continue` on `protected_path` accepted; every later check in the same story
     #: frame excludes them (AD-9).
     accepted_paths: tuple[str, ...] = ()

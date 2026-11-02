@@ -148,6 +148,7 @@ def run_admitted_signals(
     detail asks a wider question — what does *this Run*, right now, offer the Operator —
     which also has to answer for a Run that is not parked at all: `[cancel]` while it runs
     (AD-13: `cancel` applies to every non-terminal status), and nothing once it is terminal.
+    A running Run also offers `pause` until one is requested.
     `park_row_kind` is the parked row's `kind`, or `None` when the caller has not looked it
     up (`RunSummaryOut`'s list view does not, and answers conservatively without it), and
     `park_row_status` is that row's `status` on the same terms. `rows` is every row of the
@@ -187,7 +188,11 @@ def run_admitted_signals(
     if run.status == "queued" and not run.engine_ref:
         return ("start", "cancel")
     if run.status != "needs_you":
-        return ("cancel",)
+        return (
+            ("pause", "cancel")
+            if run.status == "running" and not run.pause_requested
+            else ("cancel",)
+        )
     # Dependency parks have no park_path; skip_story / skip_epic don't apply. (story 5-4)
     if run.park_kind in (None, "dependency"):
         return ("continue", "cancel") if run.park_kind == "dependency" else ()

@@ -108,6 +108,7 @@ class RunRow(Base):
     park_path: Mapped[str | None] = mapped_column(Text(), nullable=True)
     park_reason: Mapped[str | None] = mapped_column(Text(), nullable=True)
     park_seq: Mapped[int] = mapped_column(Integer(), server_default="0")
+    pause_requested: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
     accepted_paths: Mapped[list[str]] = mapped_column(JSONB())
     worktree_path: Mapped[str | None] = mapped_column(Text(), nullable=True)
     worktrees: Mapped[list[dict[str, Any]]] = mapped_column(JSONB())

@@ -11,7 +11,7 @@ yours.
 | `blocked`, needs judgement | ask | ask | ask |
 | `verify_failed` | ask | diagnose, retry once, then ask | same |
 | `protected_path` | ask | ask | accept when within story scope |
-| `checkpoint`, `budget`, `merge_conflict`, `push_rejected` | ask | ask | ask |
+| `checkpoint`, `budget`, `merge_conflict`, `push_rejected`, `paused` | ask | ask | ask |
 
 Any park kind not in the table — `timeout`, `misconfigured`, `plan_stale`, `internal`,
 `dependency` — goes to the human at every level: each one says the instance or the spec is

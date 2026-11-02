@@ -44,6 +44,7 @@ from orchestrator.application.rules.frames import (
     story_frame,
     story_frames_after,
 )
+from orchestrator.application.rules.signals_table import PAUSED
 from orchestrator.application.steps import (
     AGENT_KIND,
     CHECKPOINT_KIND,
@@ -156,6 +157,8 @@ def _continue(
     ports: WriterPorts, run: Run, rows: Sequence[StepRun], park_row: StepRun | None, signal: Signal
 ) -> Effect:
     """A `checkpoint` row finishes; an `agent` row re-dispatches; an `error` row resumes."""
+    if run.park_kind == PAUSED:
+        return Effect()
     row = _parked(park_row)
     if row.status == "checkpoint":
         if row.kind == CHECKPOINT_KIND:
@@ -168,6 +171,13 @@ def _continue(
     if not accepted:
         return Effect()
     return Effect(run_update={"accepted_paths": run.accepted_paths + accepted})
+
+
+def _pause(
+    _p: WriterPorts, _run: Run, _rows: Sequence[StepRun], _row: StepRun | None, _s: Signal
+) -> Effect:
+    """The request is all `pause` writes; `apply_step_result` parks when the row ends."""
+    return Effect(run_update={"pause_requested": True}, resume=False)
 
 
 def _retry(
@@ -356,4 +366,5 @@ EFFECTS: dict[SignalKind, EffectFn] = {
     "terminal_start": _terminal_start,
     "terminal_release": _terminal_release,
     "terminal_resume": _terminal_resume,
+    "pause": _pause,
 }

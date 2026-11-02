@@ -59,8 +59,14 @@ ParkKind = Literal[
     #: A `git.merge` row whose merge conflicted (AD-13, ratified 2026-09-23). The merge is
     #: left in the worktree for the Operator; the stop admits `retry` and `cancel` only.
     "merge_conflict",
+    #: The Operator asked for a pause and the row then executing has ended (AD-13 `pause`,
+    #: 2026-11-01 amendment). Admits `continue` and `cancel`; nothing was killed.
+    "paused",
 ]
 PARK_KINDS: tuple[ParkKind, ...] = get_args(ParkKind)
+
+#: The stops whose Run renders the `CHK` token; every other stop renders `BLK`.
+CHK_PARK_KINDS: frozenset[ParkKind] = frozenset({"checkpoint", "paused"})
 
 #: What the Operator can send a parked Run (AD-13). `signal_run` owns every one of them.
 SignalKind = Literal[
@@ -76,6 +82,7 @@ SignalKind = Literal[
     "terminal_release",
     "terminal_resume",
     "start",
+    "pause",
 ]
 SIGNAL_KINDS: tuple[SignalKind, ...] = get_args(SignalKind)
 

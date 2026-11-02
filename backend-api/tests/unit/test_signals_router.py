@@ -114,7 +114,8 @@ async def test_retry_re_queues_the_errored_row_and_resumes(api: Api) -> None:
     assert response.status_code == HTTP_OK, response.text
     body = response.json()
     assert body["status"] == "running"
-    assert body["admitted_signals"] == ["cancel"]
+    # story 2-1, 2026-11-02: a running run also offers "pause" (AD-13).
+    assert body["admitted_signals"] == ["pause", "cancel"]
     assert api.world.status_of("push") == "queued"
 
 

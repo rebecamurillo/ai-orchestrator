@@ -73,7 +73,7 @@ from orchestrator.application.steps import (
 from orchestrator.application.templates.model import ForEach, ParsedTemplate, Step
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.statuses import StepStatus
+from orchestrator.domain.statuses import CHK_PARK_KINDS, StepStatus
 
 __all__ = [
     "AFTER_ITEM",
@@ -307,7 +307,7 @@ def _run_token(run: Run) -> str:
     project_runs.py::_token` states for the Board — duplicated rather than imported, that
     module's own established precedent for a handful of lines two readers both need."""
     if run.status == "needs_you":
-        return "CHK" if run.park_kind == "checkpoint" else "BLK"
+        return "CHK" if run.park_kind in CHK_PARK_KINDS else "BLK"
     return {
         "queued": "QUE",
         "running": "RUN",

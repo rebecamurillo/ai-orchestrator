@@ -79,6 +79,7 @@ def to_entity(row: RunRow) -> Run:
         park_reason=row.park_reason,
         # `None` until the row has been flushed, like `updated_at` below
         park_seq=row.park_seq or 0,
+        pause_requested=bool(row.pause_requested),
         accepted_paths=tuple(row.accepted_paths),
         worktree_path=row.worktree_path,
         worktrees=tuple(Worktree(**worktree) for worktree in row.worktrees),
@@ -136,6 +137,7 @@ def row_values(run: Run) -> dict[str, Any]:
         "park_path": run.park_path,
         "park_reason": run.park_reason,
         "park_seq": run.park_seq,
+        "pause_requested": run.pause_requested,
         "accepted_paths": list(run.accepted_paths),
         "worktree_path": run.worktree_path,
         "worktrees": worktrees_json(run),

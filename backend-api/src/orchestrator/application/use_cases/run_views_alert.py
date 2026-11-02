@@ -32,7 +32,7 @@ from orchestrator.domain.entities.attempt import Attempt, agent_attempts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.statuses import RunStatus
+from orchestrator.domain.statuses import CHK_PARK_KINDS, RunStatus
 
 #: The Run's own UI token (Consistency Conventions — Status tokens): `BLK`/`CHK` while
 #: parked, off `park_kind`, the fixed table otherwise. Duplicated from `application/
@@ -56,7 +56,7 @@ _TITLE_IN_MESSAGE = re.compile(r"^story\s+\S+:\s+(?P<title>.*)\s+\(orchestrator\
 
 def run_token(run: Run) -> str:
     if run.status == "needs_you":
-        return "CHK" if run.park_kind == "checkpoint" else "BLK"
+        return "CHK" if run.park_kind in CHK_PARK_KINDS else "BLK"
     return _RUN_TOKENS[run.status]
 
 

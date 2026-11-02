@@ -60,6 +60,7 @@ from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
 from orchestrator.application.use_cases import apply_redispatch
 from orchestrator.application.use_cases.apply_consult import apply_consult, attempt_status
+from orchestrator.application.use_cases.pause_stop import park_paused
 from orchestrator.application.use_cases.record_trajectory import record_trajectory
 from orchestrator.application.use_cases.writers import (
     FINISHED,
@@ -301,13 +302,16 @@ def _park(  # noqa: PLR0913 — the park, the attempt it happened on and what it
 
 
 def _advance(ports: WriterPorts, run: Run, row: StepRun) -> Run:
-    """Queue the successor of a finished row, or end the Run when it has none."""
+    """Queue the successor of a finished row, or end the Run when it has none.
+
+    A pause requested while the row ran lands here, on the successor (AD-13).
+    """
     for candidate in rows_after(ports.steps.list_for_run(run.id), row.seq):
         if candidate.status == "skipped":
             continue
         if candidate.status == "planned":
             queue_row(ports, candidate)
-        return run
+        return park_paused(ports, run, candidate.path) if run.pause_requested else run
     return finish_run(ports, run)
 
 

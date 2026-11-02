@@ -142,3 +142,23 @@ class StopNumberOut(BaseModel):
         if not self.park_seq:
             data.pop("park_seq", None)
         return data
+
+
+class RunStateOut(StopNumberOut):
+    """The Run read model: the stop number, and a pause waiting for the current row to end.
+
+    Both are absent until they mean something, so a client pinning the keys of a Run that has
+    neither stopped nor been asked to pause sees none of them.
+    """
+
+    pause_requested: bool = Field(default=False, json_schema_extra=drop_default)
+
+    @model_serializer(mode="wrap")
+    def _omit_unset_state(self, handler: Any):
+        # no return annotation: pydantic would read it as the JSON schema (see `RunDetailOut`)
+        data: dict[str, Any] = handler(self)
+        if not self.park_seq:
+            data.pop("park_seq", None)
+        if not self.pause_requested:
+            data.pop("pause_requested", None)
+        return data

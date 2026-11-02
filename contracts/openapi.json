@@ -66,7 +66,8 @@
                   "plan_stale",
                   "internal",
                   "dependency",
-                  "merge_conflict"
+                  "merge_conflict",
+                  "paused"
                 ],
                 "type": "string"
               },
@@ -559,7 +560,8 @@
                   "plan_stale",
                   "internal",
                   "dependency",
-                  "merge_conflict"
+                  "merge_conflict",
+                  "paused"
                 ],
                 "type": "string"
               },
@@ -1022,7 +1024,8 @@
                   "plan_stale",
                   "internal",
                   "dependency",
-                  "merge_conflict"
+                  "merge_conflict",
+                  "paused"
                 ],
                 "type": "string"
               },
@@ -1039,7 +1042,8 @@
                   "terminal_start",
                   "terminal_release",
                   "terminal_resume",
-                  "start"
+                  "start",
+                  "pause"
                 ],
                 "type": "string"
               },
@@ -3296,7 +3300,8 @@
                 "terminal_start",
                 "terminal_release",
                 "terminal_resume",
-                "start"
+                "start",
+                "pause"
               ],
               "type": "string"
             },
@@ -3407,7 +3412,8 @@
                 "terminal_start",
                 "terminal_release",
                 "terminal_resume",
-                "start"
+                "start",
+                "pause"
               ],
               "type": "string"
             },
@@ -3477,6 +3483,10 @@
           "park_seq": {
             "title": "Park Seq",
             "type": "integer"
+          },
+          "pause_requested": {
+            "title": "Pause Requested",
+            "type": "boolean"
           },
           "plan_ref": {
             "anyOf": [
@@ -3597,7 +3607,8 @@
                 "terminal_start",
                 "terminal_release",
                 "terminal_resume",
-                "start"
+                "start",
+                "pause"
               ],
               "type": "string"
             },
@@ -3634,7 +3645,8 @@
                   "plan_stale",
                   "internal",
                   "dependency",
-                  "merge_conflict"
+                  "merge_conflict",
+                  "paused"
                 ],
                 "type": "string"
               },
@@ -4193,7 +4205,8 @@
                 "terminal_start",
                 "terminal_release",
                 "terminal_resume",
-                "start"
+                "start",
+                "pause"
               ],
               "type": "string"
             },
@@ -4227,6 +4240,10 @@
           "park_seq": {
             "title": "Park Seq",
             "type": "integer"
+          },
+          "pause_requested": {
+            "title": "Pause Requested",
+            "type": "boolean"
           },
           "plan_ref": {
             "anyOf": [
@@ -4322,7 +4339,8 @@
               "terminal_start",
               "terminal_release",
               "terminal_resume",
-              "start"
+              "start",
+              "pause"
             ],
             "title": "Kind",
             "type": "string"
