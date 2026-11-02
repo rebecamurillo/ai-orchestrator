@@ -163,3 +163,7 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-1-stop-identity-and-stale-answers-refused.md`
   summary: Add an e2e test for `park_seq` over the real repository and a raw insert omitting the column.
   evidence: Unit tests cover the row mapping and a one-off script covered migrated rows, but no permanent Postgres-level test exists, and `make e2e` cannot run on this host until its registry credential is fixed.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-4-senior-consult-at-a-blocked-stop.md`
+  summary: A backend killed between a harness process starting and its pgid being committed leaves that process running with no way to kill it; agents and the new senior consult share this window (AD-14).
+  evidence: Story 1-4 review, 2026-11-02. Suspected, not reproduced; the pgid is written in its own unit of work right after start. Settle by killing the backend at that point in the durability suite.

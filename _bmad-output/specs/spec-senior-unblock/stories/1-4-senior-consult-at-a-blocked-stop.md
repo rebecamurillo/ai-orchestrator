@@ -2,7 +2,7 @@
 title: 'Senior consult at a blocked stop'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'da1c73d99d64d496add4d22ded209c1bf9d0784e'
 review_loop_iteration: 0
