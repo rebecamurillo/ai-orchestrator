@@ -11,6 +11,10 @@
   title: Test-impact search in staged planning
   description: >-
     `staged-plan` searches every test lane, including `test.fixme` e2e specs, and declares the tests the story changes (CAP-6).
+- id: "1-7"
+  title: Attempt roles
+  description: >-
+    Attempts carry a role (`agent`, `consult`, `session`), and every read that picks a session, numbers an archive, counts a retry or builds an AD-17 range sees `agent` attempts only (AD-21). The step's attempts table labels non-agent attempts, so 1-4's consults land on a table the Operator reads correctly.
 - id: "1-4"
   title: Senior consult at a blocked stop
   description: >-
