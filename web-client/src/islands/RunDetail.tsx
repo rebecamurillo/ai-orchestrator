@@ -310,7 +310,7 @@ export default function RunDetail({ runId }: Props) {
       <div className="wf-top-zone">
         {/* keyed so a draft written for one stop can never be sent as the answer to the next */}
         <StopBody
-          key={detail.run.park_seq ?? 0}
+          key={`stop-${detail.run.park_seq ?? 0}`}
           detail={detail}
           token={token}
           onSignal={(kind) => void sendSignal(kind)}
@@ -328,7 +328,7 @@ export default function RunDetail({ runId }: Props) {
         />
         {/* keyed like the stop: form choices and a draft belong to the stop they were made at */}
         <SessionPanel
-          key={detail.run.park_seq ?? 0}
+          key={`session-${detail.run.park_seq ?? 0}`}
           runId={runId}
           session={session}
           admitted={detail.admitted_signals}
