@@ -21,12 +21,15 @@
     A row that declares a consult gets a read-only senior session at a `blocked` stop, which resumes the original agent or parks for a human (CAP-1). This sets the consult design later stories reuse.
   spec_checkpoint: true
 - id: "1-5"
-  title: Test-edit approval and diff review
+  title: Test-file approval at a blocked stop
   description: >-
-    The senior approves named test files at a `blocked` stop and reviews the diff at a `protected_path` stop on tests (CAP-2). Preflight warns when the repository has empty `test_globs`.
+    At a `blocked` consult the senior may approve named existing test files the story requires changing, recorded as `senior_accept` (CAP-2). Preflight warns when the repository has empty `test_globs`.
   spec_checkpoint: true
-  invoke_dev_with: >-
-    Precondition: the Operator's amendment to hard rule 1 and AD-17 must already be in AGENTS.md. If it is not, report blocked and do not start.
+- id: "1-8"
+  title: Diff review at a protected_path stop
+  description: >-
+    A hit on test files only goes to a senior that reads the real diff and accepts or escalates (CAP-2). An accept adds the hits to `accepted_paths` and re-runs `re_check` with no dispatch; anything else parks for a human.
+  spec_checkpoint: true
 - id: "1-6"
   title: Senior consult at verify_failed
   description: >-
