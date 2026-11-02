@@ -244,6 +244,15 @@
             ],
             "title": "Retry Prompt"
           },
+          "role": {
+            "enum": [
+              "agent",
+              "consult",
+              "session"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
           "seconds": {
             "anyOf": [
               {

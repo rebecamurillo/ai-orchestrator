@@ -846,6 +846,11 @@ export interface components {
             resume_command?: string | null;
             /** Retry Prompt */
             retry_prompt: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role?: "agent" | "consult" | "session";
             /** Seconds */
             seconds: number | null;
             /** Session Id */

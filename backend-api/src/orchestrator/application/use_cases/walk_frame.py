@@ -29,7 +29,7 @@ from orchestrator.application.steps import WORKDIR_KEY
 from orchestrator.application.steps.context import RunEnvironment
 from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY
 from orchestrator.application.use_cases.writers import WriterPorts
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.attempt import Attempt, agent_attempts
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.git import Git
@@ -53,14 +53,19 @@ class WalkFrame:
 
 
 def read_frame(ports: WriterPorts, run_id: UUID, row: StepRun) -> WalkFrame:
-    """The row's frame, in plan order then attempt order; empty outside a frame (AD-9)."""
+    """The row's frame, in plan order then attempt order; empty outside a frame (AD-9).
+
+    Only `agent` attempts: a consult's or a session's range is never an AD-17 range (AD-21).
+    """
     if row.frame is None:
         return WalkFrame()
     rows = tuple(rows_in_frame(ports.steps.list_for_run(run_id), row.frame))
     return WalkFrame(
         rows=rows,
         attempts=tuple(
-            attempt for entry in rows for attempt in ports.attempts.list_for_row(entry.id)
+            agent_attempts(
+                attempt for entry in rows for attempt in ports.attempts.list_for_row(entry.id)
+            )
         ),
     )
 

@@ -162,11 +162,16 @@ class AttemptRepository(Protocol):
         """The highest-`n` attempt at this row, or `None` if it has never run."""
         ...
 
+    def get_latest_agent(self, step_run_id: UUID) -> Attempt | None:
+        """The highest-`n` `agent` attempt at this row, or `None` if it has none (AD-21)."""
+        ...
+
     def latest_for_run(self, run_id: UUID) -> Attempt | None:
-        """The most recently started Attempt for this Run across all rows, or `None`.
+        """The most recently started `agent` Attempt for this Run across all rows, or `None`.
 
         Used by `signal_run` to check reply_available: whether the run's harness supports
-        resume and whether the last attempt recorded a session_id (AD-10, story 3-3).
+        resume and whether the last attempt recorded a session_id (AD-10, story 3-3). A
+        consult's or an Operator session's attempt is never the one resumed (AD-21).
         """
         ...
 

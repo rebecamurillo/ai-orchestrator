@@ -20,8 +20,9 @@ are exported comes from `HARNESS_ENV_ALIASES` through the `AliasBuilder`
 `NAME="value"` in the order that array declares them, and nothing else.
 
 **Why a Run may have no terminal at all.** A `terminal: null` is the ordinary answer for
-every stop the escape hatch does not apply to, and there are six of them: a park row that is
-not an `agent` row, a Run with no worktree, an attempt that never got a session id, a harness
+every stop the escape hatch does not apply to, and there are seven of them: a park row that is
+not an `agent` row, a Run with no worktree, an attempt that is a consult's or an Operator
+session's rather than the agent's own (AD-21), an attempt that never got a session id, a harness
 the registry does not hold, a harness whose `capabilities.resume` is `False`, and a harness
 whose adapter answers no resume line at all. Each is asked in that
 order, and each answers `None` rather than raising: a read model that 500s because a Run
@@ -35,7 +36,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from orchestrator.application.steps import AGENT_KIND
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.attempt import AGENT_ROLE, Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.harness import Harness, TerminalEnv, TerminalEnvironment
@@ -140,7 +141,7 @@ def _resumable_harness(
     """The harness this attempt ran under, if a terminal can resume it at all."""
     if park_row is None or park_row.kind != AGENT_KIND:
         return None
-    if attempt is None or not attempt.session_id:
+    if attempt is None or attempt.role != AGENT_ROLE or not attempt.session_id:
         return None
     harness = ports.harnesses.get(attempt.harness or "")
     if harness is None or not harness.capabilities.resume:

@@ -66,7 +66,7 @@ from orchestrator.application.use_cases.run_views_summary import (
     summary,
 )
 from orchestrator.application.use_cases.terminal import Terminal, resume_command
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.attempt import Attempt, agent_attempts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import Repository
@@ -208,7 +208,9 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
         park_row_status=park_row.status if park_row is not None else None,
         rows=rows,
     )
-    park_attempts = attempts_by_row.get(park_row.id, ()) if park_row is not None else ()
+    park_attempts = agent_attempts(
+        attempts_by_row.get(park_row.id, ()) if park_row is not None else ()
+    )
     # Read once and shared: the detail publishes the whole gate record, and `_alert` needs
     # the park's own entry off the same list (6.6) rather than a second query for it.
     records = ports.gate_records.list_for_run(run.id)

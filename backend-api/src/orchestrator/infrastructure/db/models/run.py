@@ -41,6 +41,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from orchestrator.domain.entities.attempt import AGENT_ROLE
 from orchestrator.infrastructure.db.base import Base
 from orchestrator.infrastructure.db.models.project import ProjectRow
 from orchestrator.infrastructure.db.models.repository import RepositoryRow
@@ -178,6 +179,7 @@ class AttemptRow(Base):
     step_run_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey(f"{STEP_RUN_TABLE}.id"))
     n: Mapped[int] = mapped_column(Integer())
     status: Mapped[str] = mapped_column(Text())
+    role: Mapped[str] = mapped_column(Text(), server_default=AGENT_ROLE)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     engine_ref: Mapped[dict[str, Any]] = mapped_column(JSONB())

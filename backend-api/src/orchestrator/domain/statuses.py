@@ -38,6 +38,11 @@ StepStatus = Literal[
 ]
 STEP_STATUSES: tuple[StepStatus, ...] = get_args(StepStatus)
 
+#: Who an attempt ran for (AD-21). Only `agent` attempts are resumed, numbered, counted as a
+#: retry or read as an AD-17 range; spend, logs and traces read every role.
+AttemptRole = Literal["agent", "consult", "session"]
+ATTEMPT_ROLES: tuple[AttemptRole, ...] = get_args(AttemptRole)
+
 #: Why a Run stopped for the Operator. Written to `run.park_kind` with the `gate_record`.
 ParkKind = Literal[
     "blocked",

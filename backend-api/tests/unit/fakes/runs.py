@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from uuid import UUID
 
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.attempt import Attempt, agent_attempts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -159,9 +159,16 @@ class FakeAttemptRepository:
         stored = [a for a in self.attempts.values() if a.step_run_id == step_run_id]
         return max(stored, key=lambda attempt: attempt.n, default=None)
 
+    # Story 1-7 (spine AD-21, ratified 2026-11-01): `get_latest_agent` added, and
+    # `latest_for_run` reads `agent` attempts only, as the adapter does.
+    def get_latest_agent(self, step_run_id: UUID) -> Attempt | None:
+        self.calls.append(("get_latest_agent", step_run_id))
+        stored = agent_attempts(a for a in self.attempts.values() if a.step_run_id == step_run_id)
+        return max(stored, key=lambda attempt: attempt.n, default=None)
+
     def latest_for_run(self, run_id: UUID) -> Attempt | None:
         self.calls.append(("latest_for_run", run_id))
-        stored = [a for a in self.attempts.values() if a.run_id == run_id]
+        stored = agent_attempts(a for a in self.attempts.values() if a.run_id == run_id)
         if not stored:
             return None
         return max(stored, key=lambda attempt: attempt.n)

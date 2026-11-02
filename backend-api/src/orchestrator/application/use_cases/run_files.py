@@ -318,9 +318,8 @@ def diff_run_file(ports: RunFilesDiffPorts, run_id: UUID, path: str) -> RunFileD
 
 
 def _park_attempt(ports: RunFilesDiffPorts, run: Run) -> Attempt | None:
-    """The latest Attempt of the row the Run parked on, or `None` when it made none."""
+    """The latest `agent` Attempt of the row the Run parked on, or `None` when it made none."""
     row = row_at(ports.steps.list_for_run(run.id), run.park_path)
     if row is None:
         return None
-    attempts = ports.attempts.list_for_row(row.id)
-    return max(attempts, key=lambda attempt: attempt.n, default=None)
+    return ports.attempts.get_latest_agent(row.id)

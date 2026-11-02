@@ -59,10 +59,7 @@ import structlog
 
 from orchestrator.application.steps import StepContext, StepPorts, execute
 from orchestrator.application.steps.context import VerifyFailure
-from orchestrator.application.templates.plan_model import (
-    ON_FAIL_KEY,
-    REDISPATCH_TARGET_SEQ,
-)
+from orchestrator.application.templates.plan_model import ON_FAIL_KEY, REDISPATCH_TARGET_SEQ
 from orchestrator.application.templates.rows import COMMAND_KEY
 from orchestrator.application.use_cases.apply_step_result import (
     AfterRoute,
@@ -88,6 +85,7 @@ from orchestrator.application.use_cases.writers import (
     require_row,
     require_run,
 )
+from orchestrator.domain.entities.attempt import agent_attempts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -271,7 +269,7 @@ def _context(
         with_resolved=row.with_resolved,
         cwd=run.worktree_path,
         frame_start_sha=frame_start_sha(frame.attempts),
-        previous_attempt=attempts[-2] if len(attempts) > 1 else None,
+        previous_attempt=next(reversed(agent_attempts(attempts[:-1])), None),
         attempt=attempts[-1],
         resume_signal=_resume_signal(writers, run_id, resume_event),
         ports=_step_ports(ports, run, row, frame),
