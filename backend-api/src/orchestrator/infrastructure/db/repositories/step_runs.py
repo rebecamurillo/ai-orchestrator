@@ -101,6 +101,17 @@ class SQLAlchemyStepRunRepository:
         ).all()
         return [to_entity(row) for row in rows]
 
+    def list_for_run_current(self, run_id: UUID) -> list[StepRun]:
+        # `populate_existing`: a session kept across commits would otherwise return the rows
+        # it already holds, as they were when it first loaded them.
+        statement = (
+            select(StepRunRow)
+            .where(StepRunRow.run_id == run_id)
+            .order_by(StepRunRow.seq)
+            .execution_options(populate_existing=True)
+        )
+        return [to_entity(row) for row in self._session.scalars(statement).all()]
+
     def update(self, step: StepRun) -> None:
         row = self._session.get(StepRunRow, step.id)
         if row is None:

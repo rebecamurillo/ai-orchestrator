@@ -59,6 +59,10 @@ class ProjectChannelRepository(Protocol):
         """This Project's channel, or `None`."""
         ...
 
+    def get_current(self, project_id: UUID) -> ProjectChannel | None:
+        """This Project's channel as stored now, never a copy the session already holds."""
+        ...
+
     def list_all(self) -> list[ProjectChannel]:
         """Every stored channel, ordered by `project_id`."""
         ...
@@ -167,6 +171,10 @@ class StepRunRepository(Protocol):
 
     def list_for_run(self, run_id: UUID) -> list[StepRun]:
         """Every row of this Run, ordered by `seq`."""
+        ...
+
+    def list_for_run_current(self, run_id: UUID) -> list[StepRun]:
+        """`list_for_run` as stored now, never a copy the session already holds."""
         ...
 
     def update(self, step: StepRun) -> None:

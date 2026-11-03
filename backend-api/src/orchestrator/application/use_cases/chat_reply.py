@@ -16,6 +16,11 @@ batch, so a reply the table refuses is never re-checked.
 **The row lock closes the race with the Run page.** `park_seq` does not change on an
 answer, so a reply naming that stop would pass AD-24's check; whichever answer commits first
 moves the Run to `running`, and every later one fails `stale` under the lock.
+
+**Every read under the lock is fresh.** A fire's session outlives its commits with
+`expire_on_commit` off, so the channel and the step rows are read with `get_current` and
+`list_for_run_current`, as the two locks are; `apply_signal`'s own `list_for_run` then gets
+back the rows just refreshed in this session.
 """
 
 from __future__ import annotations
@@ -113,7 +118,7 @@ def _check_batch(
         locked = _lock(ports, read)
         if not isinstance(locked, _Locked):
             return _all(replies, locked), None
-        rows = writers.steps.list_for_run(locked.run.id)
+        rows = writers.steps.list_for_run_current(locked.run.id)
         park_row = row_at(rows, locked.run.park_path)
         results: Results = []
         for reply in replies:
@@ -161,7 +166,7 @@ def _lock(ports: ReplyPorts, read: ChatThread) -> _Locked | Outcome:
     why the batch is moot."""
     run = ports.signal.writers.runs.get_for_update(read.run_id)
     thread = ports.threads.get_for_update(read.id)
-    channel = ports.channels.get(run.project_id) if run is not None else None
+    channel = ports.channels.get_current(run.project_id) if run is not None else None
     moot = gate(thread, read.cursor, channel)
     if moot is not None or run is None or thread is None or channel is None:
         return moot or "superseded"

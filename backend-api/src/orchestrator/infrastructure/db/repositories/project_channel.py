@@ -66,6 +66,17 @@ class SQLAlchemyProjectChannelRepository:
         row = self._session.get(ProjectChannelRow, project_id)
         return None if row is None else to_entity(row)
 
+    def get_current(self, project_id: UUID) -> ProjectChannel | None:
+        # A chat fire's session keeps its identity map across commits (`expire_on_commit`
+        # is off), so `session.get` could return the channel an earlier batch loaded.
+        statement = (
+            select(ProjectChannelRow)
+            .where(ProjectChannelRow.project_id == project_id)
+            .execution_options(populate_existing=True)
+        )
+        row = self._session.scalars(statement).first()
+        return None if row is None else to_entity(row)
+
     def list_all(self) -> list[ProjectChannel]:
         statement = select(ProjectChannelRow).order_by(ProjectChannelRow.project_id)
         return [to_entity(row) for row in self._session.scalars(statement).all()]

@@ -122,6 +122,15 @@ class FakeStepRunRepository:
             key=lambda step: step.seq,
         )
 
+    # Story 4-1 review (2026-11-03): a fake holds no stale copy, so this is `list_for_run`,
+    # recorded under its own name.
+    def list_for_run_current(self, run_id: UUID) -> list[StepRun]:
+        self.calls.append(("list_for_run_current", run_id))
+        return sorted(
+            (s for s in self.steps.values() if s.run_id == run_id),
+            key=lambda step: step.seq,
+        )
+
     def update(self, step: StepRun) -> None:
         self.calls.append(("update", step.id))
         if step.id not in self.steps:

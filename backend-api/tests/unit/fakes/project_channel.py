@@ -18,10 +18,18 @@ class FakeProjectChannelRepository:
     def __init__(self, channels: list[ProjectChannel] | None = None) -> None:
         self.channels: dict[UUID, ProjectChannel] = {}
         self.deleted: list[UUID] = []
+        #: The reads, so a test can tell `get` from `get_current` (story 4-1 review).
+        self.calls: list[tuple[str, UUID]] = []
         for channel in channels or []:
             self.put(channel)
 
     def get(self, project_id: UUID) -> ProjectChannel | None:
+        self.calls.append(("get", project_id))
+        return self.channels.get(project_id)
+
+    def get_current(self, project_id: UUID) -> ProjectChannel | None:
+        """A fake holds no stale copy, so this is `get`, recorded under its own name."""
+        self.calls.append(("get_current", project_id))
         return self.channels.get(project_id)
 
     def list_all(self) -> list[ProjectChannel]:
