@@ -7,8 +7,8 @@ Every read sits inside a `with chat.writers.uow:` block that closes before any `
 
 `ChatPollPorts` is one fire's: the factory that opens a Project's channel, the crypto that
 opens its token, the clock every thread time comes from, and the process's own start, which
-is what makes a `posting` row from an earlier process stale. `chat_poll.py` re-exports it,
-since that is where 4-3 extends it.
+is what makes a `posting` row from an earlier process stale, and `signal`, on the same
+writers, through which the read pass sends an answer (4-3). `chat_poll.py` re-exports it.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+from orchestrator.application.use_cases.signal_apply import SignalPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.entities.project_channel import ProjectChannel
 from orchestrator.domain.ports.chat import ChatChannel, ChatChannelFactory
@@ -51,6 +52,8 @@ class ChatPollPorts:
     """One fire of `chat_poll`."""
 
     chat: ChatPorts
+    #: On `chat.writers`, with both mode callables, so an answer resumes the agent's session.
+    signal: SignalPorts
     factory: ChatChannelFactory
     crypto: Callable[[], Crypto]
     clock: Clock

@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -82,15 +83,20 @@ def test_a_chat_factory_registers_the_poll_on_its_seconds_cron(
     assert CHAT_POLL_NAME == "chat_poll"
 
 
+#: Story 4-3 (2026-11-03): the job builds `SignalPorts` on the chat ports' writers, so the
+#: stand-in the fake `open_chat_ports` yields carries writers, where it was a bare string.
+CHAT_PORTS = SimpleNamespace(writers=SimpleNamespace(attempts=SimpleNamespace(latest_for_run=None)))
+
+
 @pytest.fixture
 def recorded(monkeypatch: pytest.MonkeyPatch) -> list[ChatPollPorts]:
     seen: list[ChatPollPorts] = []
     opened: list[Any] = []
 
     @contextmanager
-    def fake_open(session_factory: Any, notifier: Any = None) -> Iterator[str]:
+    def fake_open(session_factory: Any, notifier: Any = None) -> Iterator[SimpleNamespace]:
         opened.append((session_factory, notifier))
-        yield "the chat ports"
+        yield CHAT_PORTS
 
     monkeypatch.setattr(terminal_jobs, "open_chat_ports", fake_open)
     monkeypatch.setattr(terminal_jobs, "run_chat_poll", seen.append)
@@ -129,7 +135,8 @@ def test_a_fire_while_serving_polls_through_the_slots_factory(
     job()
 
     (ports,) = recorded
-    assert ports.chat == "the chat ports"
+    assert ports.chat is CHAT_PORTS
+    assert ports.signal.writers is CHAT_PORTS.writers
     assert ports.factory is factory
     assert ports.public_base_url == "https://orch.example.com"
     assert (ports.reminder_hours, ports.factory) == (6, factory)

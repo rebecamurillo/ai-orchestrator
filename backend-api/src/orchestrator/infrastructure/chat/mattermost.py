@@ -27,7 +27,14 @@ from typing import Any
 
 import httpx
 
-from orchestrator.domain.ports.chat import ChatError, ChatUser, Reply, ThreadRef
+from orchestrator.domain.ports.chat import (
+    ChatError,
+    ChatRateLimited,
+    ChatThreadGone,
+    ChatUser,
+    Reply,
+    ThreadRef,
+)
 from orchestrator.infrastructure.chat.http import (
     ERROR_BODY_LIMIT,
     MAX_RESPONSE_BYTES,
@@ -60,6 +67,8 @@ INTEGRATION_FLAGS = ("from_webhook", "from_bot", "from_plugin")
 #: An integration can post under a person's id with another name or face; never a reply.
 OVERRIDE_PROPS = ("override_username", "override_icon_url")
 _UNSET_FLAGS = ("", "false")
+_NOT_FOUND = 404
+_TOO_MANY = 429
 
 __all__ = [
     "ERROR_BODY_LIMIT",
@@ -77,6 +86,11 @@ Position = tuple[int, str]
 
 class _Unexpected(Exception):
     """An answer that is not the JSON this adapter reads."""
+
+
+class _NotFound(ChatError):
+    """A 404: on the thread read, the root is gone (`ChatThreadGone`); elsewhere a plain
+    refusal."""
 
 
 class MattermostChannel:
@@ -122,7 +136,10 @@ class MattermostChannel:
             params: dict[str, str | int] = {"perPage": PER_PAGE, "direction": "down"}
             if position is not None:
                 params["fromCreateAt"], params["fromPost"] = position
-            page, has_next = self._read(path, params, _thread_page)
+            try:
+                page, has_next = self._read(path, params, _thread_page)
+            except _NotFound as error:
+                raise ChatThreadGone(error.detail) from None
             for key, post in page:
                 if (after is None or key > after) and _is_reply(post, thread, me):
                     found[post["id"]] = (key, _reply(post, key, me.handle))
@@ -133,6 +150,10 @@ class MattermostChannel:
                 raise self._error(f"unexpected response from {path}")
             position = last
         raise self._error(f"{path} has more than {MAX_PAGES} pages")
+
+    def follows(self, cursor: str, after: str | None) -> bool:
+        position, since = _parse_cursor(cursor), _parse_cursor(after)
+        return since is None or (position is not None and position > since)
 
     def probe(self) -> str:
         me = self._me or self._read(f"{API}/users/me", None, _user)
@@ -166,7 +187,14 @@ class MattermostChannel:
             self._client, method, url, self._token, path, params=params, json=body
         )
         if not httpx.codes.is_success(status):
-            raise self._error(f"{status} {_error_message(content, self._token)}".rstrip())
+            detail = redact_token(
+                f"{status} {_error_message(content, self._token)}".rstrip(), self._token
+            )
+            if status == _TOO_MANY:
+                raise ChatRateLimited(detail)
+            if status == _NOT_FOUND:
+                raise _NotFound(detail)
+            raise ChatError(detail)
         try:
             return parse(json.loads(content))
         except ValueError, KeyError, TypeError, _Unexpected:

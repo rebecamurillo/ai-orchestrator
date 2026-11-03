@@ -2,9 +2,9 @@
 title: 'Reply polling pass'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
-baseline_commit: '08d281ef1334e590787518bfd9ae560b4cfddb67'
+baseline_commit: '431ebf6a8a3911f3b890fba58ef20656cb85e778'
 review_loop_iteration: 0
 context: []
 ---
@@ -71,13 +71,34 @@ Under `backend-api/src/orchestrator/`.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend-api/tests/unit/application/test_chat_read.py`, `tests/unit/test_chat_poll_wiring.py`, `tests/unit/test_dbos_schedule_context.py` -- new. They cover every matrix row, and each is seen failing first. The context test sets the library's context variable, then asserts that `get_local_dbos_context()` is `None` inside the job.
-- [ ] Code Map in order.
+- [x] `backend-api/tests/unit/application/test_chat_read.py`, `tests/unit/test_chat_poll_wiring.py`, `tests/unit/test_dbos_schedule_context.py` -- new. They cover every matrix row, and each is seen failing first. The context test sets the library's context variable, then asserts that `get_local_dbos_context()` is `None` inside the job.
+- [x] Code Map in order.
 
 **Acceptance Criteria:**
 - Given a Project with three open threads where the second raises `ChatError`, when one fire runs, then the first and third are read, and exactly one line names the second.
 - Given the chat job's ports, when a thread's latest `agent` attempt has a `session_id` on a resuming harness, then the recorded `answer` carries `mode: session`.
 - Given a fire that raises anything, when the scheduler calls the job, then the job returns normally.
+
+## Design Notes
+
+**Implementation decisions (2026-11-03, dev):**
+- The pass is `jobs/chat_read.py::read_replies(ports, channel, chat, token) -> bool`, the shape of `post_notices`: `channel` names the Project, and `token` is what `redacted` masks. It returns `True` when any read in the fire failed (a `ChatError`, an out-of-order batch, or any exception from `replies_since`), for 4-2's watch pass. An exception from `apply_reply_batch` is not a read failure.
+- **Bounding 4-1's crash row.** Any exception that is not a `ChatError`, from the read or from `apply_reply_batch`, is stored as `internal: {Class}` (`chat_notice.INTERNAL`). It goes through the same write as a `ChatError` detail: Run lock, then thread lock, only while `open`, only when it changes, and logged only when written. The thread stays `open`, and the next thread is read. A write that itself fails is logged by class, with nothing stored.
+- **Clearing.** A successful read clears a stored `error` through the same write, and the pass only locks when the listed thread had one. When this fire's batch answered the stop, the clear also applies to the thread it just closed, so an answered thread does not show a stale read error.
+- **Thread gone, rate limit, order (port-level).** `domain/ports/chat.py` gains two `ChatError` subclasses, `ChatThreadGone` and `ChatRateLimited`, and a pure `ChatChannel.follows(cursor, after) -> bool`. The pass catches by class and parses no detail.
+  - Mattermost: a 404 on `/posts/{root}/thread` is `ChatThreadGone`. A 404 anywhere else stays a plain `ChatError`. A 429 on any call is `ChatRateLimited`.
+  - Slack: `thread_not_found` from `conversations.replies` is `ChatThreadGone`. An HTTP 429, or `ratelimited` from any method, is `ChatRateLimited`.
+  - A gone thread is `closed` with the redacted detail as `error`, under both locks, without touching `cursor`. A rate limit is stored like any `ChatError`, then the Project's pass stops for the fire.
+  - The matrix's `ChatError("429 …")` row is a plain `ChatError`, so the next thread is still read. Only the adapter's class stops the pass.
+  - `follows` compares `(create_at, id)` on Mattermost and the `ts` decimal on Slack. Each reply must follow the one before it, and the first must follow the thread's cursor. Otherwise the batch is the read failure `the replies came back out of order`, and nothing is applied.
+- **Wiring.** `ChatPollPorts.signal` holds `SignalPorts` on the fire's own writers. `terminal_jobs._chat_poll_job` builds `harness_is_resumable` from `build_harnesses(settings, RealProcessRunner())`, once per job build, and `latest_attempt_for_run` from `writers.attempts`, as `signal_effect_ports` does. The job body is wrapped, so a failure to open the session is logged as `chat poll failed` by class, and the scheduler always sees a normal return.
+- **Fresh context.** `RealEngine.schedule`'s wrapper calls `contextvars.Context().run(job)`. This covers every scheduled job.
+- **Shared fakes extended.** `FakeChatChannel` gains `follows`, `read_errors` (per-thread persistent failures) and `misordered`. `World.ports()` gains `signal`, with the settable `resumable` and `latest_attempt`.
+- **Existing tests revised (rule 1(b), story 4-3, 2026-11-03):**
+  - `test_chat_poll_registration.py`: the fake `open_chat_ports` yields a stand-in with `writers` instead of a string, since the job now builds `SignalPorts` on it. The assertion is now `is`, and it also pins `signal.writers`.
+  - `test_chat_slack_budget.py`: the mock transport also answers the read pass's `auth.test` and `conversations.replies`, because the read now runs in the same fire. Every assertion is unchanged.
+- **Proposed AD-25 line** (for the Operator to ratify): "`ChatError` has two port-level subclasses: `ChatThreadGone` (the thread's root no longer exists: Mattermost 404 on the thread read, Slack `thread_not_found`) and `ChatRateLimited` (HTTP 429, Slack `ratelimited`). `ChatChannel.follows(cursor, after)` orders an adapter's own opaque cursors. The read pass closes a gone thread with its detail, ends a Project's reads for the fire on a rate limit, refuses an out-of-order batch as a failed read, and stores every other failure, `internal: {Class}` included, on its thread only when it changes."
+- **Only a live check confirms:** Mattermost's actual status for a deleted root, Slack's code for a deleted parent, the Slack Tier 3 behaviour under one read per open thread per fire, and the fresh context under a real recovered DBOS scheduled workflow.
 
 ## Verification
 

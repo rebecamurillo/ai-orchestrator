@@ -27,7 +27,14 @@ from typing import Any
 
 import httpx
 
-from orchestrator.domain.ports.chat import ChatError, ChatUser, Reply, ThreadRef
+from orchestrator.domain.ports.chat import (
+    ChatError,
+    ChatRateLimited,
+    ChatThreadGone,
+    ChatUser,
+    Reply,
+    ThreadRef,
+)
 from orchestrator.infrastructure.chat.http import (
     TOKEN_REFUSED,
     Params,
@@ -61,6 +68,11 @@ _TS = re.compile(r"[0-9]+\.[0-9]+")
 _ESCAPES = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"))
 _RETRY_AFTER = re.compile(r"[0-9]+")
 _TOO_MANY = 429
+#: The refusal codes a caller tells apart by class (story 4-3): a rate limit on any method,
+#: and a deleted parent on the thread read.
+RATE_LIMITED = "ratelimited"
+THREAD_NOT_FOUND = "thread_not_found"
+REPLIES = "conversations.replies"
 
 Page = tuple[list[dict[str, Any]], str]
 
@@ -117,7 +129,7 @@ class SlackChannel:
         found: dict[str, Reply] = {}
         pages: set[str] = set()
         for _ in range(MAX_PAGES):
-            messages, next_cursor = self._call("GET", "conversations.replies", _page, params=params)
+            messages, next_cursor = self._call("GET", REPLIES, _page, params=params)
             for message in messages:
                 later = after is None or Decimal(message["ts"]) > after
                 if later and _is_reply(message, thread, me):
@@ -125,10 +137,14 @@ class SlackChannel:
             if not next_cursor:
                 return sorted(found.values(), key=lambda reply: Decimal(reply.cursor))
             if next_cursor in pages:
-                raise ChatError("unexpected response from conversations.replies")
+                raise ChatError(f"unexpected response from {REPLIES}")
             pages.add(next_cursor)
             params["cursor"] = next_cursor
-        raise ChatError(f"conversations.replies has more than {MAX_PAGES} pages")
+        raise ChatError(f"{REPLIES} has more than {MAX_PAGES} pages")
+
+    def follows(self, cursor: str, after: str | None) -> bool:
+        position, since = _parse_cursor(cursor), _parse_cursor(after)
+        return since is None or (position is not None and position > since)
 
     def probe(self) -> str:
         me = self._me or self._call("POST", "auth.test", _identity)
@@ -165,7 +181,7 @@ class SlackChannel:
             self._client, verb, url, self._token, method, params=params, json=body, headers=headers
         )
         if status == _TOO_MANY:
-            raise ChatError(f"{method}: 429 rate limited, {_retry_after(answer_headers)}")
+            raise ChatRateLimited(f"{method}: 429 rate limited, {_retry_after(answer_headers)}")
         if not httpx.codes.is_success(status):
             cut = excerpt(content.decode("utf-8", "replace"), self._token)
             raise self._error(f"{method}: {status} {cut}".rstrip())
@@ -174,7 +190,7 @@ class SlackChannel:
         except ValueError, _Unexpected:
             raise ChatError(f"unexpected response from {method}") from None
         if answer.get("ok") is not True:
-            raise self._error(f"{method}: {_refusal(answer, self._token)}")
+            raise self._refused(method, answer)
         try:
             return parse(answer)
         except KeyError, TypeError, ValueError, _Unexpected:
@@ -182,6 +198,15 @@ class SlackChannel:
 
     def _error(self, detail: str) -> ChatError:
         return ChatError(redact_token(detail, self._token))
+
+    def _refused(self, method: str, answer: dict[str, Any]) -> ChatError:
+        detail = redact_token(f"{method}: {_refusal(answer, self._token)}", self._token)
+        code = answer.get("error")
+        if code == RATE_LIMITED:
+            return ChatRateLimited(detail)
+        if code == THREAD_NOT_FOUND and method == REPLIES:
+            return ChatThreadGone(detail)
+        return ChatError(detail)
 
 
 def _rendered(text: str, mentions: Sequence[ChatUser], trusted_suffix: str) -> str:

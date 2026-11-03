@@ -20,6 +20,14 @@ from tests.unit.fakes.chat_world import BASE_URL, World
 SLACK = "https://slack.example.test/api"
 
 
+#: Story 4-3 (2026-11-03): the read pass now runs in the same fire, after the post, so the
+#: transport also answers its two calls, with the bot and an empty thread.
+READS = {
+    "auth.test": {"ok": True, "user_id": "UBOT", "user": "orchestrator", "bot_id": "B1"},
+    "conversations.replies": {"ok": True, "messages": []},
+}
+
+
 class SlackFactory:
     """Opens a real `SlackChannel` whose every `chat.postMessage` is recorded and accepted."""
 
@@ -30,6 +38,9 @@ class SlackFactory:
         self, provider: ChatProvider, base_url: str, channel_id: str, token: str
     ) -> ChatChannel:
         def respond(request: httpx.Request) -> httpx.Response:
+            read = READS.get(request.url.path.rsplit("/", 1)[-1])
+            if read is not None:
+                return httpx.Response(200, json=read)
             self.sent.append(json.loads(request.content)["text"])
             return httpx.Response(200, json={"ok": True, "ts": "1700000001.000000"})
 

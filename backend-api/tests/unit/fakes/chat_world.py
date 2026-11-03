@@ -5,7 +5,9 @@ the clock, the thread and notice fakes, the stored channels, Projects and Reposi
 crypto and the chat factory. `poll()` runs one fire of `run_chat_poll` against it. Later
 chat stories extend this fake (4-3's `signal`, for one) rather than writing another.
 
-`reply_ports()` is 4-1's `ReplyPorts` over the same fakes. The engine fake shares the world's
+`ports().signal` carries the world's two mode callables, `resumable` and `latest_attempt`,
+which a test sets so an answer resumes a session (4-3). `reply_ports()` is 4-1's
+`ReplyPorts` over the same fakes. The engine fake shares the world's
 unit of work, so a test sees whether the answer had committed when the engine was told.
 """
 
@@ -146,6 +148,8 @@ class World:
         self.public_base_url = BASE_URL
         self.started_at = START - timedelta(hours=1)
         self.crypto_error: Exception | None = None
+        self.resumable: Callable[[str], bool] = _never_resumable
+        self.latest_attempt: Callable[[UUID], Attempt | None] = _no_attempt
         self.project = self.add_project()
         self.repository = self.add_repository(self.project.id)
 
@@ -268,8 +272,15 @@ class World:
         )
 
     def ports(self) -> ChatPollPorts:
+        chat = self.chat_ports()
         return ChatPollPorts(
-            chat=self.chat_ports(),
+            chat=chat,
+            signal=SignalPorts(
+                writers=chat.writers,
+                engine=self.engine,
+                harness_is_resumable=self.resumable,
+                latest_attempt_for_run=self.latest_attempt,
+            ),
             factory=self.factory,
             crypto=self._crypto,
             clock=self.clock,

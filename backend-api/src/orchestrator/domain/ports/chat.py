@@ -56,6 +56,16 @@ class ChatError(Exception):
         self.detail = detail
 
 
+class ChatThreadGone(ChatError):
+    """The thread's root no longer exists (Mattermost 404 on the thread, Slack
+    `thread_not_found`): every later read of it fails the same way."""
+
+
+class ChatRateLimited(ChatError):
+    """The platform refused the call for its rate (HTTP 429, Slack `ratelimited`). Not waited
+    out: the next fire reads again."""
+
+
 @runtime_checkable
 class ChatChannel(Protocol):
     """Post, reply, read replies and check access in one channel. Every failure is `ChatError`.
@@ -95,6 +105,11 @@ class ChatChannel(Protocol):
         The root, the bot's own posts, system posts and posts made through a webhook, a bot
         or a plugin are not replies.
         """
+        ...
+
+    def follows(self, cursor: str, after: str | None) -> bool:
+        """Whether `cursor` is a position later than `after` (`None` = the start). Pure: no
+        network call. A cursor this adapter could not have issued raises `ChatError`."""
         ...
 
     def probe(self) -> str:
