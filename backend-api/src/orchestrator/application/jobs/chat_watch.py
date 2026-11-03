@@ -22,11 +22,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import timedelta
-from typing import Literal
+from typing import Final, Literal
 
 import structlog
 
-from orchestrator.application.jobs.chat_close import ids, record_notice
+from orchestrator.application.jobs.chat_close import guarded, ids, record_notice
 from orchestrator.application.jobs.chat_ports import ChatPollPorts, error_class
 from orchestrator.application.rules.chat_close import (
     WATCH_HOURS,
@@ -41,6 +41,7 @@ from orchestrator.domain.ports.chat import ChatChannel, ChatError, Reply, Thread
 log = structlog.get_logger(__name__)
 
 _Watch = Literal["ok", "stop"]
+WATCH_FAILED: Final = "chat watch failed"
 
 
 def watch_threads(ports: ChatPollPorts, channel: ProjectChannel, chat: ChatChannel) -> None:
@@ -57,7 +58,7 @@ def watch_threads(ports: ChatPollPorts, channel: ProjectChannel, chat: ChatChann
             )
     except Exception as error:
         log.warning(
-            "chat watch failed", project_id=str(channel.project_id), error_class=error_class(error)
+            WATCH_FAILED, project_id=str(channel.project_id), error_class=error_class(error)
         )
         return
     allowed = frozenset(user.id for user in channel.allowed_users)
@@ -66,7 +67,7 @@ def watch_threads(ports: ChatPollPorts, channel: ProjectChannel, chat: ChatChann
             if _watch_one(ports, chat, allowed, thread) == "stop":
                 break
         except Exception as error:
-            log.warning("chat watch failed", **ids(thread), error_class=error_class(error))
+            log.warning(WATCH_FAILED, **ids(thread), error_class=error_class(error))
 
 
 def _watch_one(
@@ -78,7 +79,7 @@ def _watch_one(
     try:
         replies = chat.replies_since(ThreadRef(id=thread.ref), start)
     except ChatError as error:
-        _fail_watch(ports, thread)
+        guarded(lambda: _fail_watch(ports, thread), WATCH_FAILED, thread)
         log.warning("chat watch read failed", **ids(thread), error_class=error_class(error))
         return "stop"
     counted = _first_counted(replies, allowed)
@@ -100,7 +101,12 @@ def _notify(ports: ChatPollPorts, chat: ChatChannel, thread: ChatThread, ref: st
     try:
         chat.reply(ThreadRef(id=ref), post.text, (), post.suffix)
     except ChatError as error:
-        record_notice(ports, thread, "mention_notice", "failed", error_class(error))
+        failure = error_class(error)
+        guarded(
+            lambda: record_notice(ports, thread, "mention_notice", "failed", failure),
+            "chat mention notice failed",
+            thread,
+        )
         return "stop"
     except Exception as error:
         record_notice(ports, thread, "mention_notice", "failed", error_class(error))

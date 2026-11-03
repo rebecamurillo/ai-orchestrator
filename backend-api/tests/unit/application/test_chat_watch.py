@@ -359,6 +359,61 @@ def test_no_unit_of_work_is_open_during_a_read_or_a_reply() -> None:
     assert seen == [False, False]
 
 
+class BreakOnce:
+    """`get_for_update` that raises once, the next time it is armed."""
+
+    def __init__(self, watched: Watched, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.armed = False
+        self.get = watched.world.threads.get_for_update
+        monkeypatch.setattr(watched.world.threads, "get_for_update", self)
+
+    def __call__(self, thread_id: Any) -> ChatThread | None:
+        if self.armed:
+            self.armed = False
+            raise RuntimeError("connection lost")
+        return self.get(thread_id)
+
+
+def test_a_failed_notice_ends_the_pass_even_when_its_outcome_write_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    watched = Watched()
+    watched.script(a_reply(1))
+    other = watched.add(closed_at=watched.world.clock.now() - timedelta(minutes=1))
+    watched.script(a_reply(1, id="r1b", cursor="c1b"), thread=other)
+    lock = BreakOnce(watched, monkeypatch)
+
+    def fail() -> None:
+        watched.world.chat.fail_next(ChatError("429"))
+        lock.armed = True
+
+    watched.world.chat.on_send = fail
+
+    logs = watched.watch()
+
+    assert [ref.id for ref, _ in watched.world.chat.reads] == [watched.thread.ref]
+    (line,) = lines(logs, "chat mention notice failed")
+    assert line["error_class"] == "RuntimeError"
+
+
+def test_a_failed_read_ends_the_pass_even_when_its_write_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    watched = Watched()
+    other = watched.add(closed_at=watched.world.clock.now() - timedelta(minutes=1))
+    watched.world.chat.read_errors[watched.ref(watched.thread).id] = ChatError("429")
+    lock = BreakOnce(watched, monkeypatch)
+    lock.armed = True
+
+    logs = watched.watch()
+
+    assert [ref.id for ref, _ in watched.world.chat.reads] == [watched.thread.ref]
+    assert watched.stored(other).mention_notice is None
+    assert len(lines(logs, "chat watch read failed")) == 1
+    (line,) = lines(logs, "chat watch failed")
+    assert line["error_class"] == "RuntimeError"
+
+
 def test_a_thread_noticed_between_the_read_and_the_claim_is_not_claimed() -> None:
     watched = Watched()
     watched.script(a_reply(1))

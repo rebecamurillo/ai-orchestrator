@@ -891,6 +891,40 @@ def test_a_reply_batch_for_a_thread_the_close_pass_closed_is_superseded() -> Non
     assert stop.stored().state == "closed"
 
 
+def test_a_chat_error_ends_the_pass_even_when_its_outcome_write_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stop = Stop()
+    stop.closed_due(stop.world.add_run(status="running"))
+    stop.world.clock.advance(1)
+    stop.closed_due(stop.world.add_run(status="running"))
+    get = stop.world.threads.get_for_update
+    broken: list[bool] = []
+    sends: list[bool] = []
+
+    def lock(thread_id: Any) -> ChatThread | None:
+        if broken and broken.pop():
+            raise RuntimeError("connection lost")
+        return get(thread_id)
+
+    def fail_first() -> None:
+        sends.append(True)
+        if len(sends) == 1:
+            stop.world.chat.fail_next(ChatError("429"))
+            broken.append(True)
+
+    monkeypatch.setattr(stop.world.threads, "get_for_update", lock)
+    stop.world.chat.on_send = fail_first
+
+    with capture_logs() as logs:
+        limited = post_close_notices(stop.world.ports(), stop.channel, stop.world.chat)
+
+    assert limited is True
+    assert len(sends) == 1
+    (line,) = lines(logs, "chat close notice failed")
+    assert line["error_class"] == "RuntimeError"
+
+
 def _ref(thread: ChatThread) -> ThreadRef:
     assert thread.ref is not None
     return ThreadRef(id=thread.ref)

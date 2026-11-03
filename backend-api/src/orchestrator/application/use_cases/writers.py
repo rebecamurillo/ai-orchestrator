@@ -36,6 +36,7 @@ from orchestrator.domain.ports.repositories import (
 from orchestrator.domain.ports.trajectories import TrajectoryRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.statuses import (
+    RUN_EXPIRED,
     Actor,
     GateEvent,
     StepEvent,
@@ -60,12 +61,6 @@ FINISHED: frozenset[StepStatus] = frozenset({"done", "skipped"})
 #: What the gate record says when a Run starts and when it ends of its own accord.
 RUN_STARTED = "run started"
 RUN_DONE = "every planned step is done or skipped"
-
-#: What the gate record says when the `recv` a parked Run waits in reaches its deadline.
-#: AD-13 applies the expiry as Run `failed`, and `failed` is the event the alphabet has:
-#: `expired` is not a `GateEvent` (`domain/statuses.py` says so in as many words), so the
-#: sentence carries the thirty days and the event stays the lifecycle one.
-RUN_EXPIRED = "parked 30 days"
 
 
 @dataclass(frozen=True)

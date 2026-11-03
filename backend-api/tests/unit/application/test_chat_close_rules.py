@@ -3,12 +3,15 @@ ended it, and the words of the closing and closed-thread notices. Records are fa
 
 from __future__ import annotations
 
+import ast
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 import pytest
 
+from orchestrator.application.rules import chat_close
 from orchestrator.application.rules.chat_close import (
     AUTHOR_CAP,
     WATCH_HOURS,
@@ -26,7 +29,9 @@ from orchestrator.application.rules.chat_message import (
     neutralise,
     plain_length,
 )
+from orchestrator.application.use_cases import writers
 from orchestrator.application.use_cases.writers import RUN_EXPIRED
+from orchestrator.domain import statuses
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.ids import new_id
 from tests.unit.fakes.chat_world import World
@@ -60,6 +65,14 @@ class Log:
 
     def how(self, run_seq: int = 3, thread_seq: int = 3) -> str:
         return how(ending_record(self.records, run_seq, thread_seq))
+
+
+def test_the_expiry_text_lives_in_the_domain_and_the_writers_path_still_works() -> None:
+    assert writers.RUN_EXPIRED is statuses.RUN_EXPIRED == "parked 30 days"
+    assert chat_close.RUN_EXPIRED is statuses.RUN_EXPIRED
+    tree = ast.parse(Path(chat_close.__file__).read_text(encoding="utf-8"))
+    imported = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+    assert not any(str(name).startswith("orchestrator.application.use_cases") for name in imported)
 
 
 def test_the_watch_constants() -> None:

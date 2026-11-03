@@ -13,14 +13,21 @@ writers, through which the read pass sends an answer (4-3). `chat_poll.py` re-ex
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
 from orchestrator.application.use_cases.signal_apply import SignalPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.entities.project_channel import ProjectChannel
-from orchestrator.domain.ports.chat import ChatChannel, ChatChannelFactory
+from orchestrator.domain.ports.chat import (
+    ChatChannel,
+    ChatChannelFactory,
+    ChatRateLimited,
+    ChatUser,
+    Reply,
+    ThreadRef,
+)
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.crypto import Crypto
 from orchestrator.domain.ports.repositories import (
@@ -73,6 +80,49 @@ class OpenedChannel:
     chat: ChatChannel | None
     token: str = ""
     error: str | None = None
+
+
+class RateLimitWatch:
+    """A Project's opened channel for one fire, recording whether any call was refused for
+    its rate (story 4-2 review, lead ruling 2026-11-03): once one was, no later pass for the
+    Project calls the platform in that fire. Every call is passed through unchanged."""
+
+    def __init__(self, chat: ChatChannel) -> None:
+        self._chat = chat
+        self.rate_limited = False
+
+    def post(self, text: str, mentions: Sequence[ChatUser], trusted_suffix: str = "") -> ThreadRef:
+        return self._watched(lambda: self._chat.post(text, mentions, trusted_suffix))
+
+    def reply(
+        self,
+        thread: ThreadRef,
+        text: str,
+        mentions: Sequence[ChatUser] = (),
+        trusted_suffix: str = "",
+    ) -> None:
+        self._watched(lambda: self._chat.reply(thread, text, mentions, trusted_suffix))
+
+    def rendered_length(
+        self, text: str, mentions: Sequence[ChatUser] = (), trusted_suffix: str = ""
+    ) -> int:
+        return self._chat.rendered_length(text, mentions, trusted_suffix)
+
+    def replies_since(self, thread: ThreadRef, cursor: str | None) -> list[Reply]:
+        return self._watched(lambda: self._chat.replies_since(thread, cursor))
+
+    def follows(self, cursor: str, after: str | None) -> bool:
+        return self._chat.follows(cursor, after)
+
+    def probe(self) -> str:
+        return self._watched(self._chat.probe)
+
+    def _watched[T](self, call: Callable[[], T]) -> T:
+        try:
+            return call()
+        except ChatRateLimited:
+            self.rate_limited = True
+            raise
 
 
 def redacted(detail: str, token: str) -> str:

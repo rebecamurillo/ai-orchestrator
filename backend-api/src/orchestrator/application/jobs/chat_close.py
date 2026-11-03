@@ -114,14 +114,15 @@ def _reply_ports(ports: ChatPollPorts) -> ReplyPorts:
 # ── closing notice ─────────────────────────────────────────────────────────────────────
 
 
-def post_close_notices(ports: ChatPollPorts, channel: ProjectChannel, chat: ChatChannel) -> None:
-    """Post the closing notices `due` on the channel's Project, oldest `closed_at` first."""
+def post_close_notices(ports: ChatPollPorts, channel: ProjectChannel, chat: ChatChannel) -> bool:
+    """Post the closing notices `due` on the channel's Project, oldest `closed_at` first;
+    `True` when a reply raised `ChatError`, which ends the pass and skips the watch."""
     try:
         with ports.chat.writers.uow:
             due = ports.chat.threads.list_notices_due(channel.project_id)
     except Exception as error:
         log.warning(FAILED, project_id=str(channel.project_id), error_class=error_class(error))
-        return
+        return False
     sent = 0
     for thread in due:
         if sent >= WATCH_READS_PER_FIRE:
@@ -132,8 +133,9 @@ def post_close_notices(ports: ChatPollPorts, channel: ProjectChannel, chat: Chat
             log.warning(FAILED, **ids(thread), error_class=error_class(error))
             continue
         if outcome == "rate_limited":
-            break
+            return True
         sent += outcome != "skipped"
+    return False
 
 
 def _notice_one(
@@ -146,13 +148,27 @@ def _notice_one(
     try:
         chat.reply(ThreadRef(id=ref), post.text, (), post.suffix)
     except ChatError as error:
-        record_notice(ports, thread, "close_notice", "failed", error_class(error))
+        failure = error_class(error)
+        guarded(
+            lambda: record_notice(ports, thread, "close_notice", "failed", failure),
+            FAILED,
+            thread,
+        )
         return "rate_limited"
     except Exception as error:
         record_notice(ports, thread, "close_notice", "failed", error_class(error))
         return "failed"
     record_notice(ports, thread, "close_notice", "posted", None)
     return "posted"
+
+
+def guarded(write: Callable[[], None], event: str, thread: ChatThread) -> None:
+    """Run an outcome write after a `ChatError`, logging its own failure, so the pass
+    still ends whatever the write does."""
+    try:
+        write()
+    except Exception as error:
+        log.warning(event, **ids(thread), error_class=error_class(error))
 
 
 def _claim_notice(

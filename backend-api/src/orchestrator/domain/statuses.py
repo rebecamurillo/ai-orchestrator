@@ -187,6 +187,12 @@ STEP_EVENTS: tuple[StepEvent, ...] = get_args(StepEvent)
 #: The Run statuses nothing leaves. No pair in `RUN_TRANSITIONS` starts at one of them.
 TERMINAL_RUN: frozenset[RunStatus] = frozenset({"done", "failed", "cancelled"})
 
+#: What the gate record says when the `recv` a parked Run waits in reaches its deadline.
+#: AD-13 applies the expiry as Run `failed`, and `failed` is the event the alphabet has:
+#: `expired` is not a `GateEvent`, so the sentence carries the thirty days and the event
+#: stays the lifecycle one. `use_cases/writers.py` re-exports it under its old path.
+RUN_EXPIRED = "parked 30 days"
+
 
 # ── the machines ─────────────────────────────────────────────────────────────
 

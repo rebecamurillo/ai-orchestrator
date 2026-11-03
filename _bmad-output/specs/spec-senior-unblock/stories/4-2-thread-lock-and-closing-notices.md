@@ -220,7 +220,11 @@ Under `backend-api/src/orchestrator/` unless stated.
   - The remaining misattribution is a resuming raise followed by a `cancel` while the Run runs, which reads `Run cancelled`. It is a stated limitation (lead decisions).
   - The count-back rests on one park-kind record per `park_seq` increment. `test_park_record_invariant.py` pins that, and fails when a new park writer appears. A `stop` column on `gate_record` was considered and not taken.
 - **Run page: unchanged.** `Alert.chat_thread` is the current stop's thread, and a closed thread's stop is never current. 3-3's `chatThreadText` already renders `closed`. A failed closing notice is logged only, because the stop it reports on is over.
-- **Load.** The watch and the closing notices each add at most `WATCH_READS_PER_FIRE` calls per fire per Project, which at 30 s is 10 a minute each. In each pass the first `ChatError` ends that pass for the Project in that fire, and a read-pass `ChatError` skips the watch. A 429 is therefore never repeated in the same fire. The Slack Tier 3 deferral on open-thread reads stays deferred (below).
+- **Load.** The watch and the closing notices each add at most `WATCH_READS_PER_FIRE` calls per fire per Project, which at 30 s is 10 a minute each. (Revised in the 4-2 review, lead ruling 2026-11-03.)
+  - The opened channel is wrapped in a `RateLimitWatch`. Once any call for the Project raises `ChatRateLimited`, every later pass for that Project is skipped in that fire: a 429 in the post pass skips remind, accept notice, read, closing notice and watch, and a read-pass 429 skips the closing notices and the watch.
+  - The first `ChatError` ends the read pass only when it is a rate limit (4-3), and ends the closing-notice and watch passes whatever it is. A failed read or a closing-notice `ChatError` also skips the watch.
+  - A 429 is therefore never carried into a later pass. Within 3-3's own post, remind and accept-notice passes, the items after a 429 are still tried in the same fire, each claimed once and never retried. That is 3-3's behaviour, unchanged here.
+  - The Slack Tier 3 deferral on open-thread reads stays deferred (below).
 - **Proposed AD-25 amendment**, for the Operator to ratify:
   > A thread's stop has ended when its Run is no longer `needs_you` at its `park_seq`; a `park_kind` rewrite at the same `park_seq` does not end it. `chat_poll` closes such a thread first in each fire, for every Project whatever its channel, and every close, by a reply or at the end of the stop, owes one closing notice in the thread, claimed in the database, posted once with no mention, never reposted, naming how the stop ended from the gate record and carrying no answer text. For 24 h after it closes, a closed thread whose closing notice was posted is read for its first allowed reply mentioning the bot, which gets one notice pointing to the Run page. No platform lets a bot lock a thread; "closed" is the orchestrator's refusal. `chat_thread` gains `closed_at`, `close_notice`, `close_notice_at`, `mention_notice`, `mention_notice_at` and `mention_cursor`.
 - **Why the budget thread stays open.** A `budget` stop rewritten to `blocked` at the same `park_seq` keeps its open, reminded thread (3-3). There is one thread per `park_seq` for good, so closing it would leave a chat-only team with no thread for the blocked question.
@@ -248,17 +252,19 @@ Under `backend-api/src/orchestrator/` unless stated.
 
 *Pass criteria:*
 1. Reply once as an allowed person, mentioning the bot. Within one poll the session resumes, the `answer` gate record's payload has `mode: session`, and one reply in the thread reads `Closed · stop {n} · answered by {handle} via {platform}`, then `Replies in this thread are no longer read.`, then the Run link. It mentions nobody. The row reads `closed`, `close_notice = posted`.
-2. Reply again as an allowed person, mentioning the bot. The Run, its records and its status do not change. Within one poll one reply appears: `This thread is closed. Act on the Run page: {link}`. The row reads `mention_notice = posted`.
-3. Restart the backend (`docker compose restart backend-api`, with the Operator's go-ahead, hard rule 9), then mention the bot a third time. After two polls no further reply appears.
-4. As the person not in `allowed_users`, mention the bot in the closed thread. After two polls no reply appears.
+2. As the person not in `allowed_users`, mention the bot in the closed thread. After two polls no reply appears, `mention_cursor` has moved to that reply, and `mention_notice` is still NULL. This step comes before step 3, so the outsider is seen while the watch is still open.
+3. Reply again as an allowed person, mentioning the bot. The Run, its records and its status do not change. Within one poll one reply appears: `This thread is closed. Act on the Run page: {link}`. The row reads `mention_notice = posted`.
+4. Restart the backend (`docker compose restart backend-api`, with the Operator's go-ahead, hard rule 9), then mention the bot a third time. After two polls no further reply appears.
 5. Bring the Run to a second `blocked` stop and answer it on the Run page. Within one poll its thread closes with `Closed · stop {n+1} · answered by the Operator (Run page or API)`. The first thread gets nothing new.
 
 A step fails when its reply is missing, appears twice, carries answer text or a mention, or the row does not read as stated.
 
 *Trust edges.* Observe each one and record the outcome in `deferred-work.md`. They are not pass criteria. A bad outcome opens an "Edited replies" follow-up and does not fail 4-2.
-- **Mattermost slash command.** Make a custom slash command whose endpoint returns `{"response_type":"in_channel","text":"@bot …"}`, and run it in an open thread as an allowed user. Record whether it is read as that user's reply.
+- **Mattermost slash command.** Make a custom slash command (Integrations › Slash Commands) whose endpoint returns `{"response_type":"in_channel","text":"@bot …"}`. As an allowed user, run it from the open thread's reply box, not the channel's message box, so its post lands in the thread. Record whether it is read as that user's reply.
+  - *Delayed-response variant.* Have the endpoint return an empty `200` and keep the `response_url` from the request. Then post through it: `curl -X POST '<response_url>' -H 'Content-Type: application/json' -d '{"response_type":"in_channel","text":"@bot …"}'`. Record the same thing.
 - **Mattermost admin edit.** A system admin edits an allowed user's non-answering post in an open thread to `@bot …` before the next poll. Record whether it is applied.
-- **Slack Connect.** A Slack Connect external user mentions the bot in an open thread. Record whether the log line shows `not_allowed` and whether the user's id differs from every allowed id.
+  - *Timing aid.* Set `CHAT_POLL_SECONDS=30`. As an allowed user, post a throwaway reply without a mention in the same thread, and run `docker compose logs -f backend-api`. When its `chat reply checked` line appears, a read has just happened, so make the edit straight away. That leaves about 30 s before the next read.
+- **Slack Connect.** Set up: share the Project's channel with a second workspace through Slack Connect (channel details › Share channel), and accept the invitation as a user of that workspace. That external user then mentions the bot in an open thread. Record whether the log line shows `not_allowed` and whether the user's id differs from every allowed id.
 
 ## Spec Change Log
 
@@ -312,3 +318,13 @@ A step fails when its reply is missing, appears twice, carries answer text or a 
     - `test_chat_repository_adapter.py`: the thread table's column and nullable sets, its CHECK set, and the 0029 migration's columns compared to the model's. Each now adds 4-2's six columns or four CHECKs. `test_chat_repository_close.py` pins them.
     - `test_chat_read.py::test_a_reply_from_an_allowed_person_answers_the_stop_and_is_logged`: the same fire now also has the watch's read from `c1`.
     - `test_chat_remind.py::test_a_run_that_moved_to_another_stop_is_not_reminded` and `::test_a_locked_or_moving_run_is_not_reminded[status running]`: the ended stop's thread now gets its closing notice, and still no reminder.
+  - **The five revisions are accepted** under rule 1(b): lead ruling, 2026-11-03; the frozen "No other existing test changes" line awaits the Operator's revision. They follow from 4-2's declared new passes running in the same fire, and from the schema.
+- 2026-11-03, review (changes required), fixed in one follow-up commit:
+  - **Rate limits within one fire (lead ruling).** Once any pass for a Project hits `ChatRateLimited` in a fire, no later pass for that Project calls the platform in that fire. `chat_poll` wraps the opened channel in `jobs/chat_ports.py::RateLimitWatch`, which records a rate limit on any call, and skips later passes by that flag. The pass order is unchanged.
+    - `post_close_notices` now returns `True` on a `ChatError`, which skips the watch.
+    - A read-pass `ChatRateLimited` skips the closing notices and the watch.
+    - Design Notes "Load" is rewritten to say what actually holds.
+    - The tests are in `test_chat_poll_rate_limit.py`.
+  - **Outcome writes after a `ChatError`.** The write in `_notice_one`'s `ChatError` branch, and the writes in the watch's read and notice `ChatError` branches, are guarded (`jobs/chat_close.py::guarded`). The pass still ends whatever the write does, and the write's own failure is logged by class.
+  - **Manual checks.** The outsider check is now step 2, before the allowed late mention, and it requires `mention_cursor` to advance while `mention_notice` stays NULL. The trust-edge recipes gain a `response_url` variant, running the command from the thread's reply box, a timing aid for the admin edit, and the Slack Connect setup.
+  - **`RUN_EXPIRED`** moved to `domain/statuses.py`. `use_cases/writers.py` re-exports it under the old path, and `rules/chat_close.py` no longer imports `use_cases`.

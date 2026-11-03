@@ -29,11 +29,10 @@ from orchestrator.application.rules.chat_message import (
     neutralise,
     plain_length,
 )
-from orchestrator.application.use_cases.writers import RUN_EXPIRED
 from orchestrator.domain.entities.chat_thread import ChatThread
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
-from orchestrator.domain.statuses import PARK_KINDS
+from orchestrator.domain.statuses import PARK_KINDS, RUN_EXPIRED
 
 WATCH_HOURS: Final = 24
 WATCH_READS_PER_FIRE: Final = 5

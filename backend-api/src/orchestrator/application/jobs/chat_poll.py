@@ -4,9 +4,13 @@ One fire: sweep the stale `posting` rows and the interrupted or stranded notices
 every open thread whose stop has ended, whatever its Project's channel (4-2), then, for each
 Project with a channel, decrypt its token, open the channel once through
 `ChatChannelFactory`, and run the passes in order: post, remind, accept notice, read (4-3),
-closing notice and watch (4-2). The watch is skipped for a Project whose read failed this
-fire. A channel that cannot be opened still claims its due stops, as `failed`, and skips the
-rest.
+closing notice and watch (4-2). A channel that cannot be opened still claims its due stops,
+as `failed`, and skips the rest.
+
+**Rate limits** (4-2 review, lead ruling 2026-11-03). The opened channel is wrapped in a
+`RateLimitWatch`: once any call for the Project is refused with `ChatRateLimited`, every
+later pass for it is skipped in this fire. The watch is also skipped after a failed read or
+a closing notice's `ChatError`. The order never changes; a pass is only skipped.
 
 **Isolation.** The sweep, the channel listing, each Project, and inside each pass each Run,
 thread or notice runs in its own `try`. An exception is logged with ids and `error_class`
@@ -18,6 +22,7 @@ under a lock or by a unique insert first.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Final
 
 import structlog
@@ -31,6 +36,7 @@ from orchestrator.application.jobs.chat_notice import post_notices
 from orchestrator.application.jobs.chat_ports import (
     ChatPollPorts,
     OpenedChannel,
+    RateLimitWatch,
     error_class,
     redacted,
 )
@@ -100,15 +106,19 @@ def open_project_channel(
 
 def _poll_project(ports: ChatPollPorts, crypto: Crypto, channel: ProjectChannel) -> None:
     opened = open_project_channel(ports, crypto, channel)
-    post_stops(ports, opened)
     if opened.chat is None:
+        post_stops(ports, opened)
         return
-    remind_threads(ports, channel, opened.chat)
-    post_notices(ports, channel, opened.chat, opened.token)
-    read_failed = read_replies(ports, channel, opened.chat, opened.token)
-    post_close_notices(ports, channel, opened.chat)
-    if not read_failed:
-        watch_threads(ports, channel, opened.chat)
+    chat = RateLimitWatch(opened.chat)
+    post_stops(ports, replace(opened, chat=chat))
+    if not chat.rate_limited:
+        remind_threads(ports, channel, chat)
+    if not chat.rate_limited:
+        post_notices(ports, channel, chat, opened.token)
+    read_failed = chat.rate_limited or read_replies(ports, channel, chat, opened.token)
+    notice_failed = chat.rate_limited or post_close_notices(ports, channel, chat)
+    if not (read_failed or notice_failed or chat.rate_limited):
+        watch_threads(ports, channel, chat)
 
 
 def _unopened(channel: ProjectChannel, error: Exception) -> None:
