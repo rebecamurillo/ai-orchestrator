@@ -63,7 +63,14 @@ class ChatThreadGone(ChatError):
 
 class ChatRateLimited(ChatError):
     """The platform refused the call for its rate (HTTP 429, Slack `ratelimited`). Not waited
-    out: the next fire reads again."""
+    out: the next fire reads again.
+
+    `detail` may name the wait the platform asked for, which changes from call to call;
+    `stable` is the same text without it, which is what a caller stores."""
+
+    def __init__(self, detail: str, stable: str | None = None) -> None:
+        super().__init__(detail)
+        self.stable = detail if stable is None else stable
 
 
 @runtime_checkable

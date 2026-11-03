@@ -104,10 +104,18 @@ def apply_reply_batch(ports: ReplyPorts, read: ChatThread, replies: Sequence[Rep
     return results
 
 
-def close_thread(ports: ReplyPorts, thread: ChatThread, cursor: str) -> None:
-    """The one write that closes a thread: `closed`, at `cursor`."""
+def close_thread(
+    ports: ReplyPorts, thread: ChatThread, cursor: str | None = None, *, error: str | None = None
+) -> None:
+    """The one write that closes a thread: `closed`, at `cursor` when one is given (an
+    answer), with `error` when one is given (a deleted root, 4-3). Each left out is kept."""
     now = ports.signal.writers.clock.now()
-    ports.threads.update(replace(thread, state="closed", cursor=cursor, updated_at=now))
+    closed = replace(thread, state="closed", updated_at=now)
+    if cursor is not None:
+        closed = replace(closed, cursor=cursor)
+    if error is not None:
+        closed = replace(closed, error=error)
+    ports.threads.update(closed)
 
 
 def _check_batch(

@@ -181,7 +181,8 @@ class SlackChannel:
             self._client, verb, url, self._token, method, params=params, json=body, headers=headers
         )
         if status == _TOO_MANY:
-            raise ChatRateLimited(f"{method}: 429 rate limited, {_retry_after(answer_headers)}")
+            stable = f"{method}: 429 rate limited"
+            raise ChatRateLimited(f"{stable}, {_retry_after(answer_headers)}", stable)
         if not httpx.codes.is_success(status):
             cut = excerpt(content.decode("utf-8", "replace"), self._token)
             raise self._error(f"{method}: {status} {cut}".rstrip())

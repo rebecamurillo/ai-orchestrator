@@ -13,11 +13,13 @@ thread, not one per fire. A later successful read clears it. Nothing is retried 
 - `ChatThreadGone` (the root was deleted) closes the thread with the detail, since every
   later read would fail the same way.
 - `ChatRateLimited` stops the pass for this Project; the threads after it wait for the next
-  fire.
+  fire. Its `stable` text is stored, without the wait the platform named, so a new wait is
+  no new write.
 - Anything that is not a `ChatError` is stored and logged as `internal: {class}`, never with
   its message: an SQL error's message carries its bound parameters, here reply text. An
   exception from `apply_reply_batch` writes nothing (4-1), so without this record the same
-  reply would fail on every fire unseen.
+  reply would fail on every fire unseen. One raised after the batch committed (the engine
+  call) finds the thread closed and cannot be stored, so it is logged anyway.
 
 Each checked reply is one line with its outcome, never its text, and never the id of a
 refused author. `read_replies` returns `True` when a read failed in this fire, which 4-2's
@@ -34,7 +36,11 @@ import structlog
 
 from orchestrator.application.jobs.chat_notice import INTERNAL
 from orchestrator.application.jobs.chat_ports import ChatPollPorts, error_class, redacted
-from orchestrator.application.use_cases.chat_reply import ReplyPorts, apply_reply_batch
+from orchestrator.application.use_cases.chat_reply import (
+    ReplyPorts,
+    apply_reply_batch,
+    close_thread,
+)
 from orchestrator.domain.entities.chat_thread import ChatThread
 from orchestrator.domain.entities.project_channel import ProjectChannel
 from orchestrator.domain.ports.chat import (
@@ -55,6 +61,9 @@ CHECKED: Final = "chat reply checked"
 __all__ = ["INTERNAL", "OUT_OF_ORDER", "read_replies"]
 
 _Read = Literal["ok", "failed", "rate_limited"]
+#: What an error write came to: stored, already the stored value, or the thread could not
+#: take it (gone, or no longer open).
+_Stored = Literal["written", "same", "moot"]
 
 
 def read_replies(
@@ -90,11 +99,14 @@ def _read_one(  # noqa: PLR0913, PLR0917 — one thread's read, and what it is r
         _in_order(chat, thread.cursor, replies)
     except ChatThreadGone as error:
         detail = redacted(error.detail, token)
-        _write(thread, detail, lambda: _close_gone(ports, thread, detail))
+        _write(thread, detail, lambda: _close_gone(ports, reply_ports, thread, detail))
         return "failed"
+    except ChatRateLimited as error:
+        _keep(ports, thread, redacted(error.stable, token))
+        return "rate_limited"
     except ChatError as error:
         _keep(ports, thread, redacted(error.detail, token))
-        return "rate_limited" if isinstance(error, ChatRateLimited) else "failed"
+        return "failed"
     except Exception as error:
         _keep(ports, thread, INTERNAL.format(name=error_class(error)))
         return "failed"
@@ -118,7 +130,7 @@ def _apply(
         try:
             results = apply_reply_batch(reply_ports, thread, replies)
         except Exception as error:
-            _keep(ports, thread, INTERNAL.format(name=error_class(error)))
+            _keep(ports, thread, INTERNAL.format(name=error_class(error)), unstored=True)
             return
         for reply_id, outcome in results:
             log.info(
@@ -134,52 +146,63 @@ def _apply(
         _write(thread, None, lambda: _set_error(ports, thread, None, closed_ok=answered))
 
 
-def _keep(ports: ChatPollPorts, thread: ChatThread, detail: str) -> None:
-    _write(thread, detail, lambda: _set_error(ports, thread, detail))
+def _keep(ports: ChatPollPorts, thread: ChatThread, detail: str, *, unstored: bool = False) -> None:
+    _write(thread, detail, lambda: _set_error(ports, thread, detail), unstored=unstored)
 
 
-def _write(thread: ChatThread, detail: str | None, write: Callable[[], bool]) -> None:
-    """Run one error write; log `detail` when it was written, or the write's own failure by
-    class when it could not be."""
+def _write(
+    thread: ChatThread,
+    detail: str | None,
+    write: Callable[[], _Stored],
+    *,
+    unstored: bool = False,
+) -> None:
+    """Run one error write. Log `detail` when it was written, and also, with `unstored`,
+    when the thread could not take it (closed by the very batch that raised); log the
+    write's own failure by class. A value already stored was logged when it was."""
     try:
-        written = write()
+        stored = write()
     except Exception as error:
         _failed(thread, INTERNAL.format(name=error_class(error)))
         return
-    if written and detail is not None:
+    if detail is not None and (stored == "written" or (unstored and stored == "moot")):
         _failed(thread, detail)
 
 
 def _set_error(
     ports: ChatPollPorts, thread: ChatThread, value: str | None, *, closed_ok: bool = False
-) -> bool:
-    """Store `value` as the thread's `error` if it is still `open` (or closed by this fire's
-    own answer) and the value changes. Whether it was written."""
+) -> _Stored:
+    """Store `value` as the thread's `error` if it is still `open` (or `closed` by this
+    fire's own answer, with `closed_ok`) and the value changes."""
     chat = ports.chat
     with chat.writers.uow:
         run = chat.writers.runs.get_for_update(thread.run_id)
         current = chat.threads.get_for_update(thread.id)
-        if run is None or current is None or current.error == value:
-            return False
-        if current.state != "open" and not closed_ok:
-            return False
+        if run is None or current is None:
+            return "moot"
+        if current.state != "open" and not (closed_ok and current.state == "closed"):
+            return "moot"
+        if current.error == value:
+            return "same"
         chat.threads.update(replace(current, error=value, updated_at=ports.clock.now()))
         chat.writers.uow.commit()
-    return True
+    return "written"
 
 
-def _close_gone(ports: ChatPollPorts, thread: ChatThread, detail: str) -> bool:
-    """Close a thread whose root is gone, with `detail` as its `error`. Whether it was."""
+def _close_gone(
+    ports: ChatPollPorts, reply_ports: ReplyPorts, thread: ChatThread, detail: str
+) -> _Stored:
+    """Close a thread whose root is gone through 4-1's `close_thread`, with `detail` as its
+    `error` and its cursor kept."""
     chat = ports.chat
     with chat.writers.uow:
         run = chat.writers.runs.get_for_update(thread.run_id)
         current = chat.threads.get_for_update(thread.id)
         if run is None or current is None or current.state != "open":
-            return False
-        now = ports.clock.now()
-        chat.threads.update(replace(current, state="closed", error=detail, updated_at=now))
+            return "moot"
+        close_thread(reply_ports, current, error=detail)
         chat.writers.uow.commit()
-    return True
+    return "written"
 
 
 def _failed(thread: ChatThread, detail: str) -> None:

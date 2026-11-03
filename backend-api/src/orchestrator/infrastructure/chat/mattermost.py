@@ -88,11 +88,6 @@ class _Unexpected(Exception):
     """An answer that is not the JSON this adapter reads."""
 
 
-class _NotFound(ChatError):
-    """A 404: on the thread read, the root is gone (`ChatThreadGone`); elsewhere a plain
-    refusal."""
-
-
 class MattermostChannel:
     """One Mattermost channel, as the bot whose token this is."""
 
@@ -136,10 +131,8 @@ class MattermostChannel:
             params: dict[str, str | int] = {"perPage": PER_PAGE, "direction": "down"}
             if position is not None:
                 params["fromCreateAt"], params["fromPost"] = position
-            try:
-                page, has_next = self._read(path, params, _thread_page)
-            except _NotFound as error:
-                raise ChatThreadGone(error.detail) from None
+            content = self._call("GET", path, params, None, ChatThreadGone)
+            page, has_next = _parsed(path, content, _thread_page, self._token)
             for key, post in page:
                 if (after is None or key > after) and _is_reply(post, thread, me):
                     found[post["id"]] = (key, _reply(post, key, me.handle))
@@ -182,26 +175,42 @@ class MattermostChannel:
         body: dict[str, str] | None,
         parse: Callable[[Any], T],
     ) -> T:
+        return _parsed(path, self._call(method, path, params, body), parse, self._token)
+
+    def _call(
+        self,
+        method: str,
+        path: str,
+        params: dict[str, str | int] | None,
+        body: dict[str, str] | None,
+        not_found: type[ChatError] = ChatError,
+    ) -> bytes:
+        """The answer's body, or the refusal: a 429 is `ChatRateLimited`, a 404 is
+        `not_found`, which only the thread read sets to `ChatThreadGone`."""
         url = f"{self._base}{path}"
         status, _, content = exchange(
             self._client, method, url, self._token, path, params=params, json=body
         )
-        if not httpx.codes.is_success(status):
-            detail = redact_token(
-                f"{status} {_error_message(content, self._token)}".rstrip(), self._token
-            )
-            if status == _TOO_MANY:
-                raise ChatRateLimited(detail)
-            if status == _NOT_FOUND:
-                raise _NotFound(detail)
-            raise ChatError(detail)
-        try:
-            return parse(json.loads(content))
-        except ValueError, KeyError, TypeError, _Unexpected:
-            raise self._error(f"unexpected response from {path}") from None
+        if httpx.codes.is_success(status):
+            return content
+        detail = redact_token(
+            f"{status} {_error_message(content, self._token)}".rstrip(), self._token
+        )
+        if status == _TOO_MANY:
+            raise ChatRateLimited(detail)
+        if status == _NOT_FOUND:
+            raise not_found(detail)
+        raise ChatError(detail)
 
     def _error(self, detail: str) -> ChatError:
         return ChatError(redact_token(detail, self._token))
+
+
+def _parsed[T](path: str, content: bytes, parse: Callable[[Any], T], token: str) -> T:
+    try:
+        return parse(json.loads(content))
+    except ValueError, KeyError, TypeError, _Unexpected:
+        raise ChatError(redact_token(f"unexpected response from {path}", token)) from None
 
 
 def neutralise(text: str) -> str:
