@@ -69,6 +69,25 @@ make durability  # kill the backend mid-Run, restart, prove the Run completes (o
 make openapi     # export contracts/openapi.json, then `pnpm gen:api` in web-client (fails on drift)
 ```
 
+## Releasing a new version
+
+A version is published only when the Operator asks for one. The checklist is `README.md` →
+"Publish a new version"; the rules an agent must not bend:
+
+- `VERSION` is the only place the number is chosen. The same change sets it in
+  `backend-api/pyproject.toml`, `web-client/package.json`, `deploy/kit/.claude-plugin/plugin.json`,
+  `deploy/kit/manifest.json`, `contracts/openapi.json` and the `orchestrator` entry of
+  `backend-api/uv.lock` (PEP 440 form, `1.0.0b3` for `1.0.0-beta.3`); `make lint` checks the
+  manifests.
+- The bump lands on `main` through a pull request with every CI job green. The tag is
+  `v<VERSION>` on that merge commit, pushed only after `ci.yml` succeeded for the merge
+  commit itself — `release.yml` refuses anything else, and a refused tag is deleted and
+  re-pushed, never worked around with `make push`.
+- Images come from `release.yml` alone (`ghcr.io/rebecamurillo/ai-orchestrator/*:<VERSION>`).
+  Publishing never upgrades a host; upgrading a running instance stops it, so hard rule 9
+  applies — the Operator's go-ahead in the current conversation, then `./install.sh upgrade
+  --tag <VERSION>` from the deploy package (`deploy/README.md` § Upgrading).
+
 ## Quality: how work is judged
 
 TDD is hard rule 6; these are the enforced numbers behind it. `orchestrator.domain` and `orchestrator.application` hold 100 % branch coverage (`make test` fails under it); `web-client/src/lib/**` and `src/stores/**` hold 90 % lines; changed lines are 90 % covered (`make coverage`). Every source module has a test module naming it or `make lint` fails (test pairs). Unit tests need no Postgres and no network; e2e runs happen in the disposable `aio-e2e` stack so their leftovers never touch the dev stack. Raise a number by writing a test — a lowered threshold, an excluded file, or a `pragma: no cover` is itself the failure.
