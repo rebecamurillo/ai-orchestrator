@@ -1247,7 +1247,8 @@
               "operator",
               "machine",
               "terminal",
-              "senior"
+              "senior",
+              "chat"
             ],
             "title": "Actor",
             "type": "string"

@@ -136,6 +136,11 @@ def action_line(park_kind: str) -> str:
     return REPLY_ACTION if park_kind == REPLY_STOP else PAGE_ACTION
 
 
+def chat_author(author: str, platform: str) -> str:
+    """Who an answer a thread reply gave is shown as: `{author} via {platform}` (4-1)."""
+    return f"{_field(author)} via {_field(platform)}"
+
+
 def neutralise(text: str) -> str:
     """`text` with its controls dropped and every continuation line prefixed."""
     return _continued(_clean(text))

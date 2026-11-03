@@ -8,7 +8,8 @@ reason is then `{question} · {view}` (`steps/agent_consult.py`'s `ESCALATED` an
 so the question is the entry's and the view is the rest. Otherwise the reason is the question.
 
 **Earlier answers** are the `answer` and `senior_answer` records inside the stop's Story
-frame, oldest first, the last `ANSWERS_SHOWN` of them. 4-1 adds the `chat` actor.
+frame, oldest first, the last `ANSWERS_SHOWN` of them. A `chat` answer is shown as
+`{author} via {platform}`, from its payload (4-1).
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from collections.abc import Sequence
 from typing import Final
 
 from orchestrator.application.jobs.chat_ports import ChatPorts
-from orchestrator.application.rules.chat_message import Answer, StopFacts
+from orchestrator.application.rules.chat_message import Answer, StopFacts, chat_author
 from orchestrator.application.rules.consult import PARK_PATH_KEY, QUESTION_KEY, STATE_KEY
 from orchestrator.application.rules.frames import epic_frame, in_frame, story_frame
 from orchestrator.domain.entities.gate_record import GateRecord
@@ -31,6 +32,8 @@ ANSWER_EVENT: Final = "answer"
 ANSWER_EVENTS: Final = frozenset({ANSWER_EVENT, "senior_answer"})
 #: Who an answer is shown as, by its record's actor.
 WHO: Final = {"operator": "Operator", "terminal": "Operator", "senior": "Senior"}
+#: A thread reply's answer, shown by its author and platform instead (4-1).
+CHAT_ACTOR: Final = "chat"
 REASON_SEPARATOR: Final = " · "
 
 
@@ -92,14 +95,21 @@ def _answers(records: Sequence[GateRecord], park_path: str) -> tuple[Answer, ...
     if frame is None:
         return ()
     picked = [
-        Answer(WHO[record.actor], _text(record))
+        Answer(_who(record), _text(record))
         for record in records
         if record.event in ANSWER_EVENTS
-        and record.actor in WHO
+        and (record.actor in WHO or record.actor == CHAT_ACTOR)
         and record.path is not None
         and in_frame(record.path, frame)
     ]
     return tuple(picked[-ANSWERS_SHOWN:])
+
+
+def _who(record: GateRecord) -> str:
+    if record.actor == CHAT_ACTOR:
+        payload = record.payload
+        return chat_author(str(payload.get("author") or ""), str(payload.get("platform") or ""))
+    return WHO[record.actor]
 
 
 def _text(record: GateRecord) -> str:

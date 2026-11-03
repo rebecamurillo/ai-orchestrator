@@ -1295,7 +1295,7 @@ export interface components {
              * Actor
              * @enum {string}
              */
-            actor: "operator" | "machine" | "terminal" | "senior";
+            actor: "operator" | "machine" | "terminal" | "senior" | "chat";
             /** At */
             at: string;
             /** Attempt N */

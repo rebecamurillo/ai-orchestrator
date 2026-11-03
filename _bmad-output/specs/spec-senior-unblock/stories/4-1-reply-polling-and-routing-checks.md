@@ -2,9 +2,9 @@
 title: 'Reply routing checks'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
-baseline_commit: '08d281ef1334e590787518bfd9ae560b4cfddb67'
+baseline_commit: 'ddb3673c53df8fb177102327b7142f5ee6d31f2a'
 review_loop_iteration: 0
 context: []
 ---
@@ -108,10 +108,10 @@ Under `backend-api/src/orchestrator/`.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend-api/tests/unit/application/test_chat_reply_rules.py`, `test_chat_reply_apply.py`, `test_signal_apply.py` -- new. They cover every matrix row through the shared fakes, including `mode: session` when the latest attempt can resume. Each is seen failing first.
-- [ ] `backend-api/tests/e2e/test_concurrent_answers.py` -- new. Two concurrent Run page `answer`s naming one stop give one 200, one 409 and one `answer` record. This settles 1-1's deferred race.
-- [ ] `backend-api/tests/unit/test_run_statuses.py` -- the `ACTORS` revision.
-- [ ] Code Map in order, then `make openapi`.
+- [x] `backend-api/tests/unit/application/test_chat_reply_rules.py`, `test_chat_reply_apply.py`, `test_signal_apply.py` -- new. They cover every matrix row through the shared fakes, including `mode: session` when the latest attempt can resume. Each is seen failing first.
+- [x] `backend-api/tests/e2e/test_concurrent_answers.py` -- new. Two concurrent Run page `answer`s naming one stop give one 200, one 409 and one `answer` record. This settles 1-1's deferred race.
+- [x] `backend-api/tests/unit/test_run_statuses.py` -- the `ACTORS` revision.
+- [x] Code Map in order, then `make openapi`.
 
 **Acceptance Criteria:**
 - Given a Run `blocked` at stop 3 with an open thread holding two allowed replies, when a Run page answer commits between the read and the check, then the gate record holds exactly one `answer`, and the engine one message.
@@ -123,6 +123,20 @@ Under `backend-api/src/orchestrator/`.
 - **The row lock closes the race.** `park_seq` does not change after an answer, so a stale reply naming that stop passes AD-24 and has to fail on status. Whichever answer commits first moves the Run to `running`, and the rest then fail `stale` under the lock.
 - **The terminal flag is re-read under the lock.** `handle_signal::_refuse_early` reads `terminal_session` outside the unit of work, so check 4 reads it again. The Run page path keeps that gap. It is reported, and 4-1 does not fix it.
 - **Resume, not restart.** `terminal_jobs` builds `SignalPorts(writers, engine)` without the two callables, so `_check_mode` would choose `restart`. `ReplyPorts.signal` must carry both callables, and 4-3 wires them.
+- **Proposed AD-8 amendment** (2026-11-03, implementation of 4-1), for the Operator to ratify:
+  > `signal_run` is lock, `apply_signal`, commit, `finish_signal` (`use_cases/signal_apply.py`). `apply_signal(ports, run, signal, actor=None)` is every write of a signal on a Run its caller holds under the row lock, with no unit of work and no engine call; `finish_signal` is the engine call and dependent enqueue after the commit. The chat reply calls both inside its own unit of work, so it is not a third writer: its status writes are `apply_signal`'s.
+- **Implementation decisions (2026-11-03, dev):**
+  - `apply_signal`, `finish_signal`, `Applied`, and the moved `SignalPorts`, `SignalOutcome`, `refuse_stale_stop`, `_check_mode` and engine call live in the new `use_cases/signal_apply.py`, which `test_signal_apply.py` pairs. `signal_run.py` re-exports every name, so no import changed, and stays under 400 lines.
+  - The signature is `apply_reply_batch(ports, read: ChatThread, replies)`. The batch's `read_cursor` is `read.cursor`, and `read.run_id` takes the Run lock before the thread with no unlocked pre-read.
+  - A moot gate gives every reply of the batch the gate outcome. Replies after the winner are not in the result. If the gate fails in the refused path's second unit of work, the whole batch gets that outcome too.
+  - A thread that no longer exists (gone with its Run) is `superseded`. A Project channel that was removed is `channel_changed`.
+  - `rules/chat_reply.py` also exposes `gate` and `answer_payload`. `check` keeps the spec's six arguments, under `noqa: PLR0911, PLR0913, PLR0917`, as `rules/routing.py::route` does. Check 5 calls `validate` with `Signal(kind="answer", stop=thread.park_seq)` and no payload.
+  - A lone surrogate passes NFC and is refused by the UTF-8 encode check (`bad_text`).
+  - `close_thread(ports, thread, cursor)` in `use_cases/chat_reply.py` is the one close write, which 4-2 extends.
+  - The `chat` branch for earlier answers sits in `jobs/chat_facts.py::_who`, where `WHO` lives. It renders through `rules/chat_message.py::chat_author`, which cleans `author` and `platform` as single-line fields.
+  - `World` (`tests/unit/fakes/chat_world.py`) gains `attempts`, `engine`, `add_thread`, `reply_ports` and the `a_reply` builder.
+  - Building `ReplyPorts` from `ChatPorts` is 4-3's, with the engine and the two mode callables.
+- **Only a live check confirms:** the `FOR UPDATE` ordering under real Postgres, the rollback undoing the gate record in the refused path (the fake unit of work does not roll data back), the reuse of `open_chat_ports`'s one session across the refused path's two units of work, and `test_concurrent_answers.py` on the disposable stack.
 
 ## Spec Change Log
 

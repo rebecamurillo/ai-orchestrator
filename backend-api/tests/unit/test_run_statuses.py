@@ -160,8 +160,10 @@ def test_the_domain_gate_carries_unvalidated_as_well() -> None:
 
 def test_the_actors_are_the_three_a_gate_record_can_name() -> None:
     # Story 1-4, 2026-11-02: `senior` joins, as spine AD-8's amendment (ratified 2026-11-01,
-    # senior unblock) declares; it is the actor of a consult's outcome. `chat` is story 4-1's.
-    assert ACTORS == ("operator", "machine", "terminal", "senior")
+    # senior unblock) declares; it is the actor of a consult's outcome.
+    # Story 4-1, 2026-11-02: `chat` joins, appended, under the same amendment; it is the
+    # actor of an answer a thread reply gave.
+    assert ACTORS == ("operator", "machine", "terminal", "senior", "chat")
 
 
 def test_a_gate_event_is_a_park_kind_a_signal_kind_or_a_lifecycle_event() -> None:

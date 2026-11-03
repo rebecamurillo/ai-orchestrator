@@ -93,8 +93,10 @@ Gate = Literal["liveness", "deterministic", "human", "unvalidated"]
 GATES: tuple[Gate, ...] = get_args(Gate)
 
 #: Who a `gate_record` says did the thing it records. `senior` is a consult's outcome,
-#: written by `apply_step_result` (AD-8 amendment, 2026-11-01).
-Actor = Literal["operator", "machine", "terminal", "senior"]
+#: written by `apply_step_result`; `chat` is an answer a thread reply gave, written through
+#: `signal_run`'s apply with `{platform, author_id, author}` in the payload (AD-8 amendment,
+#: 2026-11-01).
+Actor = Literal["operator", "machine", "terminal", "senior", "chat"]
 ACTORS: tuple[Actor, ...] = get_args(Actor)
 
 #: The four events that are neither a park nor a signal: the Run's own beginning and ends.

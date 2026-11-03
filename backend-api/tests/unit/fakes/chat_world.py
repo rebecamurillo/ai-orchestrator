@@ -4,10 +4,14 @@
 the clock, the thread and notice fakes, the stored channels, Projects and Repositories, the
 crypto and the chat factory. `poll()` runs one fire of `run_chat_poll` against it. Later
 chat stories extend this fake (4-3's `signal`, for one) rather than writing another.
+
+`reply_ports()` is 4-1's `ReplyPorts` over the same fakes. The engine fake shares the world's
+unit of work, so a test sees whether the answer had committed when the engine was told.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -15,7 +19,10 @@ from uuid import UUID
 
 from orchestrator.application.jobs.chat_poll import run_chat_poll
 from orchestrator.application.jobs.chat_ports import ChatPollPorts, ChatPorts
+from orchestrator.application.use_cases.chat_reply import ReplyPorts
+from orchestrator.application.use_cases.signal_run import SignalPorts
 from orchestrator.application.use_cases.writers import WriterPorts
+from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.chat_thread import ChatThread
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.project import Project
@@ -24,12 +31,13 @@ from orchestrator.domain.entities.repository import CloneCheck, Repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ids import new_id
-from orchestrator.domain.ports.chat import ChatUser
+from orchestrator.domain.ports.chat import ChatUser, Reply
 from tests.unit.fakes.chat import FakeChatChannel, FakeChatChannelFactory
 from tests.unit.fakes.chat_thread import FakeChatNoticeRepository, FakeChatThreadRepository
 from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.crypto import FakeCrypto
 from tests.unit.fakes.db import FakeUnitOfWork
+from tests.unit.fakes.engine import FakeWorkflowEngine
 from tests.unit.fakes.project_channel import FakeProjectChannelRepository
 from tests.unit.fakes.projects import FakeProjectRepository, FakeRepositoryRepository
 from tests.unit.fakes.runs import (
@@ -94,6 +102,28 @@ def a_row(run_id: UUID, seq: int, path: str, **overrides: Any) -> StepRun:
     return StepRun(**fields)
 
 
+def a_reply(n: int, body: str = "fix X", **overrides: Any) -> Reply:
+    """The `n`th reply of a thread: Alice's, mentioning the bot, its cursor just after it."""
+    fields: dict[str, Any] = {
+        "id": f"r{n}",
+        "author_id": ALICE.id,
+        "mentions_bot": True,
+        "text": f"@bot {body}",
+        "body": body,
+        "cursor": f"c{n}",
+    }
+    fields.update(overrides)
+    return Reply(**fields)
+
+
+def _never_resumable(_: str) -> bool:
+    return False
+
+
+def _no_attempt(_: UUID) -> Attempt | None:
+    return None
+
+
 class World:
     """The fakes behind one `ChatPollPorts`."""
 
@@ -103,6 +133,8 @@ class World:
         self.runs = FakeRunRepository()
         self.steps = FakeStepRunRepository()
         self.records = FakeGateRecordRepository()
+        self.attempts = FakeAttemptRepository()
+        self.engine = FakeWorkflowEngine(clock=self.clock, uow=self.uow)
         self.threads = FakeChatThreadRepository(self.runs)
         self.notices = FakeChatNoticeRepository(self.runs, self.records)
         self.channels = FakeProjectChannelRepository()
@@ -183,6 +215,28 @@ class World:
         self.records.add(record)
         return record
 
+    def add_thread(self, run: Run, **overrides: Any) -> ChatThread:
+        """An `open` thread at the Run's current stop, on the default channel."""
+        fields: dict[str, Any] = {
+            "id": new_id(),
+            "run_id": run.id,
+            "park_seq": run.park_seq,
+            "park_kind": run.park_kind,
+            "provider": "mattermost",
+            "channel_id": "c1",
+            "ref": f"root-{run.id}",
+            "cursor": None,
+            "state": "open",
+            "error": None,
+            "last_reminded_at": None,
+            "created_at": self.clock.now(),
+            "updated_at": self.clock.now(),
+        }
+        fields.update(overrides)
+        thread = ChatThread(**fields)
+        self.threads.add(thread)
+        return thread
+
     def update_run(self, run: Run, **changes: Any) -> Run:
         updated = run.model_copy(update=changes)
         self.runs.update(updated)
@@ -201,7 +255,7 @@ class World:
             writers=WriterPorts(
                 runs=self.runs,
                 steps=self.steps,
-                attempts=FakeAttemptRepository(),
+                attempts=self.attempts,
                 records=self.records,
                 uow=self.uow,
                 clock=self.clock,
@@ -222,6 +276,24 @@ class World:
             public_base_url=self.public_base_url,
             reminder_hours=HOURS,
             started_at=self.started_at,
+        )
+
+    def reply_ports(
+        self,
+        *,
+        harness_is_resumable: Callable[[str], bool] = _never_resumable,
+        latest_attempt_for_run: Callable[[UUID], Attempt | None] = _no_attempt,
+    ) -> ReplyPorts:
+        chat = self.chat_ports()
+        return ReplyPorts(
+            signal=SignalPorts(
+                writers=chat.writers,
+                engine=self.engine,
+                harness_is_resumable=harness_is_resumable,
+                latest_attempt_for_run=latest_attempt_for_run,
+            ),
+            threads=self.threads,
+            channels=self.channels,
         )
 
     def poll(self) -> None:
