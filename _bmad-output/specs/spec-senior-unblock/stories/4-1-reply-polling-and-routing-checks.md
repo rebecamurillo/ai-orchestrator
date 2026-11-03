@@ -2,7 +2,7 @@
 title: 'Reply routing checks'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: 'ddb3673c53df8fb177102327b7142f5ee6d31f2a'
 review_loop_iteration: 0
