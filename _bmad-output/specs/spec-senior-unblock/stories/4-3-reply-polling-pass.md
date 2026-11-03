@@ -2,7 +2,7 @@
 title: 'Reply polling pass'
 type: 'feature'
 created: '2026-11-02'
-status: 'in-review'
+status: 'done'
 route: 'dispatch'
 baseline_commit: '431ebf6a8a3911f3b890fba58ef20656cb85e778'
 review_loop_iteration: 0
