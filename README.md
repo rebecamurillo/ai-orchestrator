@@ -347,6 +347,12 @@ building and pushing. `DEPLOY.md` §4 holds the reasons, this is the checklist.
    gh run watch "$(gh run list -w release.yml -L1 --json databaseId -q '.[0].databaseId')"
    ```
 
+   A build job that fails with `denied: permission_denied` means the workflow cannot write
+   the GHCR packages (a package first created by a hand `make push` is not linked to the
+   repository). Once per package, in GitHub → the package → Package settings → *Manage
+   Actions access*, add `rebecamurillo/ai-orchestrator` with **Write**, then
+   `gh run rerun <run-id> --failed` — the tag stays where it is.
+
 4. **Check what landed.** `release.yml` pushes
    `ghcr.io/rebecamurillo/ai-orchestrator/{backend-api,web-client}:<VERSION>` (and
    `:sha-<commit>`, multi-arch, no `latest`) and creates the GitHub Release.
