@@ -11,15 +11,24 @@ rule, and rules live in `application/`.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.chat_thread import (
+    ChatNotice,
+    ChatThread,
+    ChatThreadState,
+    NoticeState,
+)
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.project import Project
+from orchestrator.domain.entities.project_channel import ProjectChannel
 from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
+from orchestrator.domain.ports.chat import ChatProvider
 from orchestrator.domain.statuses import RunStatus
 
 
@@ -45,6 +54,31 @@ class ProjectRepository(Protocol):
 
     def update(self, project: Project) -> None:
         """Replace the stored Project with this one, matched on its id."""
+        ...
+
+
+@runtime_checkable
+class ProjectChannelRepository(Protocol):
+    """Stored chat channels, at most one per Project. No row means `off` (AD-25)."""
+
+    def get(self, project_id: UUID) -> ProjectChannel | None:
+        """This Project's channel, or `None`."""
+        ...
+
+    def get_current(self, project_id: UUID) -> ProjectChannel | None:
+        """This Project's channel as stored now, never a copy the session already holds."""
+        ...
+
+    def list_all(self) -> list[ProjectChannel]:
+        """Every stored channel, ordered by `project_id`."""
+        ...
+
+    def put(self, channel: ProjectChannel) -> None:
+        """Store this Project's channel, replacing any stored one."""
+        ...
+
+    def delete(self, project_id: UUID) -> None:
+        """Remove this Project's channel; nothing stored is not an error."""
         ...
 
 
@@ -79,6 +113,14 @@ class RunRepository(Protocol):
 
     def get(self, run_id: UUID) -> Run | None:
         """The Run with this id, or `None`."""
+        ...
+
+    def get_for_update(self, run_id: UUID) -> Run | None:
+        """`get`, under a row lock held until the unit of work ends.
+
+        Two writers that decide on a Run's status read it this way, so the second one sees
+        what the first committed instead of a snapshot taken before it.
+        """
         ...
 
     def update(self, run: Run) -> None:
@@ -137,6 +179,10 @@ class StepRunRepository(Protocol):
         """Every row of this Run, ordered by `seq`."""
         ...
 
+    def list_for_run_current(self, run_id: UUID) -> list[StepRun]:
+        """`list_for_run` as stored now, never a copy the session already holds."""
+        ...
+
     def update(self, step: StepRun) -> None:
         """Replace the stored row with this one, matched on its id."""
         ...
@@ -162,11 +208,16 @@ class AttemptRepository(Protocol):
         """The highest-`n` attempt at this row, or `None` if it has never run."""
         ...
 
+    def get_latest_agent(self, step_run_id: UUID) -> Attempt | None:
+        """The highest-`n` `agent` attempt at this row, or `None` if it has none (AD-21)."""
+        ...
+
     def latest_for_run(self, run_id: UUID) -> Attempt | None:
-        """The most recently started Attempt for this Run across all rows, or `None`.
+        """The most recently started `agent` Attempt for this Run across all rows, or `None`.
 
         Used by `signal_run` to check reply_available: whether the run's harness supports
-        resume and whether the last attempt recorded a session_id (AD-10, story 3-3).
+        resume and whether the last attempt recorded a session_id (AD-10, story 3-3). A
+        consult's or an Operator session's attempt is never the one resumed (AD-21).
         """
         ...
 
@@ -194,6 +245,11 @@ class AttemptRepository(Protocol):
         """Replace the stored attempt with this one, matched on its id."""
         ...
 
+    def list_open_sessions(self) -> list[Attempt]:
+        """Every `session` attempt with no `ended_at`, oldest first: the turns a restart
+        re-enqueues or recovers (AD-23)."""
+        ...
+
 
 @runtime_checkable
 class GateRecordRepository(Protocol):
@@ -205,4 +261,78 @@ class GateRecordRepository(Protocol):
 
     def list_for_run(self, run_id: UUID) -> list[GateRecord]:
         """Every record of this Run, oldest first, `id` breaking a tie on `at`."""
+        ...
+
+
+@runtime_checkable
+class ChatThreadRepository(Protocol):
+    """Stored stop threads (AD-25). A write reads its row through `get_for_update` first,
+    after the Run's lock when it takes both."""
+
+    def add(self, thread: ChatThread) -> bool:
+        """Store a new thread; `False`, storing nothing, when its stop or `ref` is taken."""
+        ...
+
+    def get(self, thread_id: UUID) -> ChatThread | None:
+        """The thread with this id, or `None`."""
+        ...
+
+    def get_for_update(self, thread_id: UUID) -> ChatThread | None:
+        """The thread with this id under a row lock, or `None`."""
+        ...
+
+    def get_by_stop(self, run_id: UUID, park_seq: int) -> ChatThread | None:
+        """The thread of this Run's stop `park_seq`, or `None`."""
+        ...
+
+    def list_open_for_project(self, project_id: UUID) -> list[ChatThread]:
+        """Every `open` thread on this Project's Runs, oldest first."""
+        ...
+
+    def list_by_state(self, state: ChatThreadState) -> list[ChatThread]:
+        """Every thread in `state`, oldest first."""
+        ...
+
+    def list_notices_due(self, project_id: UUID) -> list[ChatThread]:
+        """Every thread on this Project's Runs whose closing notice is `due`, oldest
+        `closed_at` first (story 4-2)."""
+        ...
+
+    def list_notices_in(self, state: NoticeState) -> list[ChatThread]:
+        """Every thread, across Projects, with either notice field at `state`, oldest first."""
+        ...
+
+    def list_watched(
+        self,
+        project_id: UUID,
+        provider: ChatProvider,
+        channel_id: str,
+        closed_since: datetime,
+        limit: int,
+    ) -> list[ChatThread]:
+        """At most `limit` `closed` threads on this Project's Runs and this channel whose
+        closing notice is `posted`, with no mention notice, closed at or after
+        `closed_since`; newest `closed_at` first."""
+        ...
+
+    def update(self, thread: ChatThread) -> None:
+        """Replace the stored thread with this one, matched on its id."""
+        ...
+
+
+@runtime_checkable
+class ChatNoticeRepository(Protocol):
+    """Claims on posting `senior_accept` records to a Project's channel (AD-25)."""
+
+    def add(self, notice: ChatNotice) -> bool:
+        """Claim the record; `False`, storing nothing, when it is already claimed."""
+        ...
+
+    def unposted_accepts(self, project_id: UUID, since: datetime) -> list[GateRecord]:
+        """Every `senior_accept` on this Project's Runs at or after `since` with no claim,
+        oldest first, whatever the Run's status."""
+        ...
+
+    def set_error(self, gate_record_id: UUID, error: str) -> None:
+        """Keep why the claimed record's post failed."""
         ...

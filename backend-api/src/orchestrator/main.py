@@ -39,7 +39,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from functools import cache
 
 import structlog
 import uvicorn
@@ -50,6 +49,7 @@ from sqlalchemy.orm import Session
 from orchestrator.api.deps import require_bearer
 from orchestrator.api.errors import UNAUTHORIZED_RESPONSE, install_error_handlers
 from orchestrator.api.mcp_mount import install_mcp
+from orchestrator.api.providers_channel import CHAT
 from orchestrator.api.routers import (
     clone_check,
     graph,
@@ -60,6 +60,7 @@ from orchestrator.api.routers import (
     history,
     kit,
     ping,
+    project_channel,
     projects,
     queue,
     repositories,
@@ -71,6 +72,7 @@ from orchestrator.api.routers import (
     run_events,
     run_files,
     runs,
+    session,
     signals,
     step_detail,
     templates,
@@ -79,11 +81,12 @@ from orchestrator.api.routers import (
 )
 from orchestrator.api.routers.version import app_version
 from orchestrator.application.use_cases.templates import SeedResult, TemplatePorts, seed_shipped
-from orchestrator.domain.ports.crypto import Crypto
+from orchestrator.domain.ports.chat import ChatChannelFactory
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
+from orchestrator.infrastructure.chat import ChatChannels
 from orchestrator.infrastructure.clock import SystemClock
-from orchestrator.infrastructure.crypto import FernetCrypto
+from orchestrator.infrastructure.crypto.factory import CryptoFactory, crypto_factory
 from orchestrator.infrastructure.db import (
     SQLAlchemyTemplateVersionRepository,
     SQLAlchemyUnitOfWork,
@@ -92,10 +95,8 @@ from orchestrator.infrastructure.db import (
 )
 from orchestrator.infrastructure.db import migrations as db_migrations
 
-# the harness-table seed moved to `infrastructure/db/seed.py` for the reason the registry
-# below moved: this module is at its 400-line cap and that is one subject of its own. Both
-# names are re-exported here, where `run_migrations` names one collaborator and
-# `tests/unit/test_main_harness_registry.py` reads the pin table from `orchestrator.main`.
+# re-exported: `run_migrations` names one collaborator, and
+# `tests/unit/test_main_harness_registry.py` reads the pin table from `orchestrator.main`
 from orchestrator.infrastructure.db.seed import (  # noqa: F401
     HARNESS_VERSION_SETTINGS,
     seed_harness_table,
@@ -129,9 +130,8 @@ HTTP_UNAUTHORIZED = 401
 #: What FastAPI accepts as `lifespan`: a callable taking the app and yielding once.
 Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 
-#: How a request reaches a database session, and how it reaches the instance key.
+#: How a request reaches a database session.
 SessionFactory = Callable[[], Session]
-CryptoFactory = Callable[[], Crypto]
 
 
 class Health(BaseModel):
@@ -228,22 +228,6 @@ def migrating_lifespan(settings: Settings) -> Lifespan:
     return lifespan
 
 
-def crypto_factory(settings: Settings) -> CryptoFactory:
-    """A `Crypto` that is built on first use, and then once.
-
-    Constructing it here would refuse the `.env.example` placeholder at start-up, which is
-    the value `main()` is called with in two unit tests. The adapter still validates its
-    key strictly; the refusal simply moves from import time to the first request that needs
-    a Project port — any of the four, read or write — where it becomes a 500.
-    """
-
-    @cache
-    def build() -> Crypto:
-        return FernetCrypto(settings.orchestrator_secret_key.get_secret_value())
-
-    return build
-
-
 def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s own precedent
     settings: Settings,
     *,
@@ -252,6 +236,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
     crypto: CryptoFactory | None = None,
     git: Git | None = None,
     engine: WorkflowEngine | None = None,
+    chat: ChatChannelFactory | None = None,
 ) -> FastAPI:
     """Build the ASGI application. Adapters are constructed here and nowhere else.
 
@@ -272,6 +257,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
     app.state.crypto = crypto
     app.state.git = git
     app.state.engine = engine
+    setattr(app.state, CHAT, chat)
     install_error_handlers(app)
 
     @app.get("/healthz", tags=["health"], response_model=Health)
@@ -285,6 +271,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         version.router,
         kit.router,
         projects.router,
+        project_channel.router,
         repositories.router,
         clone_check.router,
     ):
@@ -322,6 +309,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         run_attempts.router,
         step_detail.router,
         signals.router,
+        session.router,
         run_files.router,
         harnesses.router,
         queue.router,
@@ -363,8 +351,13 @@ def main() -> None:
     # environments it builds itself, and puts it nowhere else (AD-5)
     git = SubprocessGit(settings.github_token.get_secret_value())
     engine = build_engine(settings, session_factory, git)
-    with serving(engine, session_factory, git):
-        _serve(settings, session_factory, git, engine)
+    # owns one pooled HTTP client for every Project's channel, so it is closed here
+    chat = ChatChannels()
+    try:
+        with serving(engine, session_factory, git, chat=chat):
+            _serve(settings, session_factory, git, engine, chat)
+    finally:
+        chat.close()
 
 
 def _serve(
@@ -372,6 +365,7 @@ def _serve(
     session_factory: SessionFactory,
     git: Git,
     engine: WorkflowEngine,
+    chat: ChatChannelFactory,
 ) -> None:
     """Hand uvicorn the application whose start-up step migrates, seeds and launches."""
     uvicorn.run(
@@ -386,6 +380,7 @@ def _serve(
             # the durable engine (AD-6): `POST /runs` enqueues through it, and the walker it
             # registered is what executes the Run
             engine=engine,
+            chat=chat,
         ),
         # binds every interface: reached from the compose network, not from the host
         host="0.0.0.0",

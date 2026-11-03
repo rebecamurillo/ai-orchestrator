@@ -29,6 +29,9 @@ from orchestrator.infrastructure.settings import Settings
 #: The one queue every Run is enqueued on (AD-12). Partitioned by `repository_id`.
 QUEUE_NAME = "runs"
 
+#: The queue every senior session turn is enqueued on (AD-23). Partitioned by Run.
+SESSION_QUEUE = "sessions"
+
 #: The topic a Run's single human wait listens on (AD-13).
 HUMAN_TOPIC = "human:{run_id}"
 

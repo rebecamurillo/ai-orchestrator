@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from uuid import UUID
 
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.attempt import Attempt, agent_attempts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -42,6 +42,10 @@ class FakeRunRepository:
 
     def get(self, run_id: UUID) -> Run | None:
         self.calls.append(("get", run_id))
+        return self.runs.get(run_id)
+
+    def get_for_update(self, run_id: UUID) -> Run | None:
+        self.calls.append(("get_for_update", run_id))
         return self.runs.get(run_id)
 
     def update(self, run: Run) -> None:
@@ -118,6 +122,15 @@ class FakeStepRunRepository:
             key=lambda step: step.seq,
         )
 
+    # Story 4-1 review (2026-11-03): a fake holds no stale copy, so this is `list_for_run`,
+    # recorded under its own name.
+    def list_for_run_current(self, run_id: UUID) -> list[StepRun]:
+        self.calls.append(("list_for_run_current", run_id))
+        return sorted(
+            (s for s in self.steps.values() if s.run_id == run_id),
+            key=lambda step: step.seq,
+        )
+
     def update(self, step: StepRun) -> None:
         self.calls.append(("update", step.id))
         if step.id not in self.steps:
@@ -159,9 +172,16 @@ class FakeAttemptRepository:
         stored = [a for a in self.attempts.values() if a.step_run_id == step_run_id]
         return max(stored, key=lambda attempt: attempt.n, default=None)
 
+    # Story 1-7 (spine AD-21, ratified 2026-11-01): `get_latest_agent` added, and
+    # `latest_for_run` reads `agent` attempts only, as the adapter does.
+    def get_latest_agent(self, step_run_id: UUID) -> Attempt | None:
+        self.calls.append(("get_latest_agent", step_run_id))
+        stored = agent_attempts(a for a in self.attempts.values() if a.step_run_id == step_run_id)
+        return max(stored, key=lambda attempt: attempt.n, default=None)
+
     def latest_for_run(self, run_id: UUID) -> Attempt | None:
         self.calls.append(("latest_for_run", run_id))
-        stored = [a for a in self.attempts.values() if a.run_id == run_id]
+        stored = agent_attempts(a for a in self.attempts.values() if a.run_id == run_id)
         if not stored:
             return None
         return max(stored, key=lambda attempt: attempt.n)
@@ -184,6 +204,15 @@ class FakeAttemptRepository:
     def update(self, attempt: Attempt) -> None:
         self.calls.append(("update", attempt.id))
         self._replace(attempt)
+
+    # Story 2-5 (spine AD-23, 2026-11-02): the start-up read of the session turns a crash
+    # left open, ordered as the adapter's `ORDER BY started_at` (nulls last).
+    def list_open_sessions(self) -> list[Attempt]:
+        self.calls.append(("list_open_sessions", None))
+        return sorted(
+            (a for a in self.attempts.values() if a.role == "session" and a.ended_at is None),
+            key=lambda attempt: (attempt.started_at is None, attempt.started_at, attempt.n),
+        )
 
     def _replace(self, attempt: Attempt) -> None:
         if attempt.id not in self.attempts:

@@ -16,6 +16,7 @@ import {
   storiesProgressText,
   summaryLine,
 } from '../../lib/run/detail';
+import ChatThreadLine from './ChatThreadLine';
 
 interface Props {
   detail: RunDetailOut;
@@ -32,16 +33,20 @@ export default function Banner({ detail, token }: Props) {
     // strip cell are the only amber elements a `blocked` detail shows) — this banner stays
     // neutral rather than adding a second one.
     const signal = detail.alert?.park_kind === 'blocked' ? 'neutral' : level;
+    const thread = detail.alert?.chat_thread;
     return (
-      <aside className="wf-alert" data-testid="wf-alert" data-signal={signal} role="status">
-        <span>
-          {token} · {bannerText(detail)}
-        </span>
-        <span className="wf-alert-side">
-          {progress ? `${progress} · ` : ''}
-          {moneyRatio(detail.cost)}
-        </span>
-      </aside>
+      <>
+        <aside className="wf-alert" data-testid="wf-alert" data-signal={signal} role="status">
+          <span>
+            {token} · {bannerText(detail)}
+          </span>
+          <span className="wf-alert-side">
+            {progress ? `${progress} · ` : ''}
+            {moneyRatio(detail.cost)}
+          </span>
+        </aside>
+        {thread ? <ChatThreadLine thread={thread} /> : null}
+      </>
     );
   }
 

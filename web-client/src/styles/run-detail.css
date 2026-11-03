@@ -100,6 +100,24 @@
   white-space: nowrap;
 }
 
+/* the stop's chat thread (story 3-3): neutral, the error kept whole and wrapped */
+.wf-chat-thread {
+  margin: 0;
+  padding: var(--space-3) var(--space-8);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+}
+
+.wf-chat-thread-error {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .wf-summary {
   padding: var(--space-5) var(--space-8);
   border-bottom: 1px solid var(--color-line);
@@ -1035,4 +1053,126 @@ div.wf-artifact-modal-body {
   font-family: var(--font-mono);
   font-size: var(--type-meta);
   margin-top: var(--space-3);
+}
+
+/* ── the senior session (story 2-4, CAP-7) ───────────────────────────────── */
+
+.wf-session {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-block-start: var(--space-8);
+}
+
+.wf-session-lock,
+.wf-session-note {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.wf-session-form,
+.wf-session-anchors {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-6);
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+}
+
+.wf-session-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.wf-session-label,
+.wf-session-meta {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  letter-spacing: var(--type-control-tracking);
+}
+
+.wf-session-field select,
+.wf-session-field input {
+  padding: var(--space-3);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+}
+
+.wf-session-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.wf-session-turns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wf-session-turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-inline-start: var(--space-6);
+  border-inline-start: 1px solid var(--color-line-strong);
+}
+
+.wf-session-message,
+.wf-session-reply {
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: var(--type-body-line);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wf-session-message {
+  color: var(--color-text-secondary);
+}
+
+.wf-session-anchor-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wf-session-anchor {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.wf-session-anchor-kind {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.wf-session-anchor-path {
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+  overflow-wrap: anywhere;
+}
+
+.wf-session-anchor .wf-signal[aria-pressed='true'] {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.wf-session-anchors:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
 }

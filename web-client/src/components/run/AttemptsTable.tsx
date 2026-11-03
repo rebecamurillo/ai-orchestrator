@@ -37,6 +37,8 @@ export interface AttemptDetail {
   command: string | null;
   resume_command?: string | null;
   session_lifetime_ends_at?: string | null;
+  /** Omitted by the API for an `agent` attempt (AD-21). */
+  role?: 'agent' | 'consult' | 'session';
 }
 
 interface Props {
@@ -44,6 +46,12 @@ interface Props {
   selectedN: number | null;
   onSelect: (n: number) => void;
   onDrawer: (n: number, content: DrawerContent) => void;
+}
+
+const ROLE_SUFFIX: Record<string, string> = { consult: ' · senior', session: ' · session' };
+
+function numberText(attempt: AttemptDetail): string {
+  return `${attempt.n}${ROLE_SUFFIX[attempt.role ?? 'agent'] ?? ''}`;
 }
 
 function durationText(seconds: number | null): string {
@@ -79,7 +87,7 @@ export default function AttemptsTable({ attempts, selectedN, onSelect, onDrawer 
               data-selected={attempt.n === selectedN}
               onClick={() => onSelect(attempt.n)}
             >
-              <td>{attempt.n}</td>
+              <td>{numberText(attempt)}</td>
               <td>
                 <span className="wf-step-token" data-signal={tokenSignal(attempt.token)}>
                   {attempt.token}

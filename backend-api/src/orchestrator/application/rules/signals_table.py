@@ -49,6 +49,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from orchestrator.application.rules import session
 from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -81,6 +82,10 @@ ANY_PARK: frozenset[ParkKind] = frozenset(PARK_KINDS)
 #: **only**, and a merge Run has neither a Story nor an epic frame for a skip to act on — so
 #: the exclusion is stated in the table rather than left to `_has_story_frame` to discover.
 MERGE_CONFLICT: ParkKind = "merge_conflict"
+
+#: The stop a pause leaves (AD-13, 2026-11-01 amendment). It admits `continue` and `cancel`
+#: only, so every `ANY_PARK` row that is not one of those subtracts it.
+PAUSED: ParkKind = "paused"
 
 #: The payload key a raised budget arrives under.
 BUDGET_KEY = "budget_usd"
@@ -217,21 +222,15 @@ def _accepted_text(payload: dict[str, Any]) -> str | None:
     return ACCEPTED.format(paths=ACCEPTED_SEPARATOR.join(files))
 
 
+def _no_pause_requested(
+    run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[StepRun]
+) -> bool:
+    return not run.pause_requested
+
+
 def _is_saved(run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[StepRun]) -> bool:
     """The run has not been enqueued yet — `engine_ref` is the empty dict (AD-6, story 5-3)."""
     return not run.engine_ref
-
-
-def _no_terminal_session(
-    run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[StepRun]
-) -> bool:
-    return not run.terminal_session
-
-
-def _in_terminal_session(
-    run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[StepRun]
-) -> bool:
-    return run.terminal_session
 
 
 def raised_budget(payload: dict[str, Any]) -> Decimal:
@@ -271,7 +270,7 @@ VALID: dict[SignalKind, Rule] = {
         text_key=ANSWER_KEY,
     ),
     "continue": Rule(
-        park_kinds=frozenset({"checkpoint", "protected_path", "plan_stale", "dependency"}),
+        park_kinds=frozenset({"checkpoint", "protected_path", "plan_stale", "dependency", PAUSED}),
         run_event="continue",
         text="continued by the operator",
         text_from=_accepted_text,
@@ -300,19 +299,20 @@ VALID: dict[SignalKind, Rule] = {
     # to the three statuses a parked row can be in — `dependency` (no park_row) and any park
     # whose row is `done` are both refused at `validate` by the row_statuses check.
     "skip_step": Rule(
-        park_kinds=ANY_PARK,
+        park_kinds=ANY_PARK - frozenset({PAUSED}),
         row_statuses=frozenset({"blocked", "checkpoint", "error"}),
         run_event="skip_step",
         text="step skipped by the operator",
     ),
     "skip_story": Rule(
-        park_kinds=ANY_PARK - frozenset({"budget", "plan_stale", "push_rejected", MERGE_CONFLICT}),
+        park_kinds=ANY_PARK
+        - frozenset({"budget", "plan_stale", "push_rejected", MERGE_CONFLICT, PAUSED}),
         extra=_has_story_frame,
         run_event="skip_story",
         text="story skipped by the operator",
     ),
     "skip_epic": Rule(
-        park_kinds=ANY_PARK - frozenset({"budget", "plan_stale", MERGE_CONFLICT}),
+        park_kinds=ANY_PARK - frozenset({"budget", "plan_stale", MERGE_CONFLICT, PAUSED}),
         extra=_has_epic_frame,
         run_event="skip_epic",
         text="epic skipped by the operator",
@@ -332,22 +332,22 @@ VALID: dict[SignalKind, Rule] = {
         text="cancelled by the operator",
     ),
     "terminal_start": Rule(
-        park_kinds=ANY_PARK,
-        extra=_no_terminal_session,
+        park_kinds=ANY_PARK - frozenset({PAUSED}),
+        extra=session.no_open_session,
         text="terminal session started",
         operator_action=False,
     ),
     "terminal_release": Rule(
         park_kinds=ANY_PARK,
         run_statuses=NON_TERMINAL,
-        extra=_in_terminal_session,
+        extra=session.in_terminal_session,
         text="terminal session released",
         operator_action=False,
     ),
     "terminal_resume": Rule(
         park_kinds=frozenset({"blocked"}),
         row_statuses=frozenset({"blocked"}),
-        extra=_in_terminal_session,
+        extra=session.in_terminal_session,
         run_event="terminal_resume",
         actor="terminal",
         # the brief's own sentence (6.7, FR-21), and it states the *evidence* rather than
@@ -367,6 +367,27 @@ VALID: dict[SignalKind, Rule] = {
         extra_refusal="run is already enqueued",
         operator_action=True,
         text="",
+    ),
+    # A request, not a transition: `apply_step_result` parks `paused` when the row now
+    # executing ends.
+    "pause": Rule(
+        park_kinds=frozenset(),
+        run_statuses=frozenset({"running"}),
+        extra=_no_pause_requested,
+        text="pause requested by the operator",
+    ),
+    "session_start": Rule(
+        park_kinds=ANY_PARK - frozenset({"dependency"}),
+        extra=session.can_start_session,
+        text="senior session started",
+        operator_action=False,
+    ),
+    "session_end": Rule(
+        park_kinds=ANY_PARK,
+        extra=session.in_senior_session,
+        text="senior session ended",
+        text_from=session.ended_text,
+        operator_action=False,
     ),
 }
 

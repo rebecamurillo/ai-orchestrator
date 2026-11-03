@@ -9,14 +9,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel
-
-from orchestrator.api.schemas.common import MoneyStr, UtcTimestamp
+from orchestrator.api.schemas.common import MoneyStr, StopNumberOut, UtcTimestamp
 from orchestrator.application.use_cases.run_events import RunEvent
 from orchestrator.domain.statuses import ParkKind, RunStatus, SignalKind
 
 
-class RunEventsOut(BaseModel):
+class RunEventsOut(StopNumberOut):
     """One Run's current state, and whether it moved while this request was held open."""
 
     run_id: UUID
@@ -45,4 +43,5 @@ class RunEventsOut(BaseModel):
             budget_usd=event.budget_usd,
             park_kind=event.park_kind,
             park_path=event.park_path,
+            park_seq=event.park_seq,
         )

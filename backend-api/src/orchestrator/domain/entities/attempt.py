@@ -20,6 +20,7 @@ the number is the harness's own estimate rather than LiteLLM's settled spend.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -27,7 +28,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from orchestrator.domain.statuses import StepStatus
+from orchestrator.domain.statuses import AttemptRole, StepStatus
+
+#: The role every attempt had before AD-21, and the only one a session is resumed from.
+AGENT_ROLE: AttemptRole = "agent"
 
 
 class Attempt(BaseModel):
@@ -41,6 +45,7 @@ class Attempt(BaseModel):
     #: 1-based within the row, unique with `step_run_id`.
     n: int
     status: StepStatus
+    role: AttemptRole = AGENT_ROLE
     started_at: datetime | None = None
     ended_at: datetime | None = None
     #: Opaque JSON the durable-engine adapter owns (AD-6).
@@ -75,3 +80,12 @@ class Attempt(BaseModel):
     cost_usd: Decimal | None = None
     #: True while `cost_usd` is the harness's estimate and not the gateway's settled spend.
     cost_provisional: bool = False
+    #: A `session` attempt's Operator message, written when it is queued (AD-23).
+    message: str = ""
+    #: The reply file a `session` turn left, read when the turn is committed (AD-23).
+    reply: str = ""
+
+
+def agent_attempts(attempts: Iterable[Attempt]) -> list[Attempt]:
+    """The `agent` attempts among these, in the order given (AD-21)."""
+    return [attempt for attempt in attempts if attempt.role == AGENT_ROLE]

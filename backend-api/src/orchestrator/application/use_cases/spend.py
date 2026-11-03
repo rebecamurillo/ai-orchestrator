@@ -55,13 +55,23 @@ class SpendPorts:
 
 
 def record_attempt_spend(
-    ports: SpendPorts, run: Run, attempt: Attempt, harness_usage: HarnessUsage | None
+    ports: SpendPorts,
+    run: Run,
+    attempt: Attempt,
+    harness_usage: HarnessUsage | None,
+    *,
+    locked: bool = False,
 ) -> Run:
     """Price one attempt from the Gateway (falling back to `harness_usage`), then
     recompute `run.spend_usd` from every attempt the Run has, and return the updated Run
     — the same `set_run` shape every other writer in this codebase returns, and what the
-    budget check (5.7's own caller) reads without a second repository round trip."""
+    budget check (5.7's own caller) reads without a second repository round trip.
+
+    `locked` re-reads the Run under its row lock inside this unit of work, for a writer
+    outside the walk whose copy may predate a `cancel` (AD-8 as amended for AD-23)."""
     with ports.uow:
+        if locked:
+            run = ports.runs.get_for_update(run.id) or run
         spend = ports.gateway.spend_for_attempt(run.id, attempt.id)
         priced = _priced_attempt(attempt, spend, harness_usage)
         if priced is not attempt:

@@ -38,9 +38,9 @@ from tests.unit.fakes.process import FakeProcessRunner
 BUILD = "stories[0].build"
 VERIFY = "stories[0].verify"
 NOT_AVAILABLE = "not available yet"
-#: Every kind but `cancel`, which AD-13 admits in every non-terminal status and so cannot
-#: illustrate a refusal on a `running` Run.
-REFUSED_WHILE_RUNNING = tuple(kind for kind in SIGNAL_KINDS if kind != "cancel")
+#: Every kind but `cancel`, which AD-13 admits in every non-terminal status, and `pause`, which
+#: it admits on a `running` Run (story 2-1, 2026-11-02); neither can illustrate a refusal there.
+REFUSED_WHILE_RUNNING = tuple(kind for kind in SIGNAL_KINDS if kind not in ("cancel", "pause"))
 
 
 def parked(park_kind: str, park_path: str, row_status: str, **over: object) -> World:

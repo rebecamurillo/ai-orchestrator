@@ -16,13 +16,16 @@ from typing import Any
 from uuid import UUID
 
 from orchestrator.application.use_cases.terminal import Terminal, TerminalPorts
+from orchestrator.domain.entities.chat_thread import ChatThreadState
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
+from orchestrator.domain.ports.chat import ChatProvider
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.logs import LogReader
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
+    ChatThreadRepository,
     GateRecordRepository,
     ProjectRepository,
     RepositoryRepository,
@@ -61,6 +64,8 @@ class RunViewPorts:
     #: the mode selector simply publishes `reply_available=False`, and every frozen
     #: `RunViewPorts(...)` construction predating this story keeps compiling unchanged.
     harness_is_resumable: Callable[[str], bool] | None = None
+    #: `None` degrades to `alert.chat_thread = None` (story 3-3).
+    chat_threads: ChatThreadRepository | None = None
 
 
 @dataclass(frozen=True)
@@ -185,6 +190,17 @@ class Alert:
     #: kept none. AD-17's hit list is what travels on one today, and the protected-path body
     #: renders each file's added/deleted/modified mark and diff link from these entries.
     payload: dict[str, Any] = field(default_factory=dict)
+    #: The stop's chat thread (story 3-3), whatever its state; `None` when it has none.
+    chat_thread: ChatThreadNote | None = None
+
+
+@dataclass(frozen=True)
+class ChatThreadNote:
+    """What the Run page says of a stop's thread: where, how far it got, and why it failed."""
+
+    provider: ChatProvider
+    state: ChatThreadState
+    error: str | None
 
 
 @dataclass(frozen=True)

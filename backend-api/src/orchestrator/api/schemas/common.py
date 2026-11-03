@@ -21,9 +21,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
 
-from pydantic import AfterValidator, BaseModel, PlainSerializer
+from pydantic import AfterValidator, BaseModel, Field, PlainSerializer, model_serializer
 
 #: The character a `text` column cannot hold, whatever the encoding.
 NUL = "\x00"
@@ -119,3 +119,51 @@ UtcTimestamp = Annotated[
     AfterValidator(_as_utc),
     PlainSerializer(_iso_z, return_type=str),
 ]
+
+
+def drop_default(schema: dict[str, Any]) -> None:
+    """Strip the JSON-schema `default` a defaulted field carries, so `openapi-typescript`
+    (`defaultNonNullable`) still emits it as optional."""
+    schema.pop("default", None)
+
+
+class StopNumberOut(BaseModel):
+    """A read model that can offer a signal: the number that signal names as `stop` (AD-24).
+
+    Absent until the Run has stopped, because a key-pinning client has nothing to send yet.
+    """
+
+    park_seq: int = Field(default=0, json_schema_extra=drop_default)
+
+    @model_serializer(mode="wrap")
+    def _omit_before_any_stop(self, handler: Any):
+        # no return annotation: pydantic would read it as the JSON schema (see `RunDetailOut`)
+        data: dict[str, Any] = handler(self)
+        if not self.park_seq:
+            data.pop("park_seq", None)
+        return data
+
+
+class RunStateOut(StopNumberOut):
+    """The Run read model: the stop number, a pause waiting for the current row to end, and an
+    open senior session.
+
+    Each is absent until it means something, so a client pinning the keys of a Run that has
+    not stopped, been asked to pause or opened a session sees none of them.
+    """
+
+    pause_requested: bool = Field(default=False, json_schema_extra=drop_default)
+    #: A senior session holds the Run (AD-23), so a client withholds what the lock refuses.
+    senior_session: bool = Field(default=False, json_schema_extra=drop_default)
+
+    @model_serializer(mode="wrap")
+    def _omit_unset_state(self, handler: Any):
+        # no return annotation: pydantic would read it as the JSON schema (see `RunDetailOut`)
+        data: dict[str, Any] = handler(self)
+        if not self.park_seq:
+            data.pop("park_seq", None)
+        if not self.pause_requested:
+            data.pop("pause_requested", None)
+        if not self.senior_session:
+            data.pop("senior_session", None)
+        return data

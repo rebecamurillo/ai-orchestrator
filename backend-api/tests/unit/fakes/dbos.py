@@ -45,12 +45,16 @@ class FakeDurableEngine:
         self._steps = list(steps or [])
         self._step_id = FIRST_STEP_ID
 
+    # Story 2-5 review (spine AD-23, 2026-11-02): declarations join `calls` too, so a test
+    # can assert a workflow is registered before `start` recovers it.
     def workflow(self, function: Any) -> Any:
         self.declared.append(("workflow", function.__name__))
+        self.calls.append(("workflow", function.__name__))
         return function
 
     def step(self, function: Any) -> Any:
         self.declared.append(("step", function.__name__))
+        self.calls.append(("step", function.__name__))
         return function
 
     def register_queue(self, name: str, *, concurrency: int) -> None:

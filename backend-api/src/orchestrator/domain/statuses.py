@@ -38,6 +38,11 @@ StepStatus = Literal[
 ]
 STEP_STATUSES: tuple[StepStatus, ...] = get_args(StepStatus)
 
+#: Who an attempt ran for (AD-21). Only `agent` attempts are resumed, numbered, counted as a
+#: retry or read as an AD-17 range; spend, logs and traces read every role.
+AttemptRole = Literal["agent", "consult", "session"]
+ATTEMPT_ROLES: tuple[AttemptRole, ...] = get_args(AttemptRole)
+
 #: Why a Run stopped for the Operator. Written to `run.park_kind` with the `gate_record`.
 ParkKind = Literal[
     "blocked",
@@ -54,8 +59,14 @@ ParkKind = Literal[
     #: A `git.merge` row whose merge conflicted (AD-13, ratified 2026-09-23). The merge is
     #: left in the worktree for the Operator; the stop admits `retry` and `cancel` only.
     "merge_conflict",
+    #: The Operator asked for a pause and the row then executing has ended (AD-13 `pause`,
+    #: 2026-11-01 amendment). Admits `continue` and `cancel`; nothing was killed.
+    "paused",
 ]
 PARK_KINDS: tuple[ParkKind, ...] = get_args(ParkKind)
+
+#: The stops whose Run renders the `CHK` token; every other stop renders `BLK`.
+CHK_PARK_KINDS: frozenset[ParkKind] = frozenset({"checkpoint", "paused"})
 
 #: What the Operator can send a parked Run (AD-13). `signal_run` owns every one of them.
 SignalKind = Literal[
@@ -71,6 +82,9 @@ SignalKind = Literal[
     "terminal_release",
     "terminal_resume",
     "start",
+    "pause",
+    "session_start",
+    "session_end",
 ]
 SIGNAL_KINDS: tuple[SignalKind, ...] = get_args(SignalKind)
 
@@ -78,8 +92,11 @@ SIGNAL_KINDS: tuple[SignalKind, ...] = get_args(SignalKind)
 Gate = Literal["liveness", "deterministic", "human", "unvalidated"]
 GATES: tuple[Gate, ...] = get_args(Gate)
 
-#: Who a `gate_record` says did the thing it records.
-Actor = Literal["operator", "machine", "terminal"]
+#: Who a `gate_record` says did the thing it records. `senior` is a consult's outcome,
+#: written by `apply_step_result`; `chat` is an answer a thread reply gave, written through
+#: `signal_run`'s apply with `{platform, author_id, author}` in the payload (AD-8 amendment,
+#: 2026-11-01).
+Actor = Literal["operator", "machine", "terminal", "senior", "chat"]
 ACTORS: tuple[Actor, ...] = get_args(Actor)
 
 #: The four events that are neither a park nor a signal: the Run's own beginning and ends.
@@ -91,10 +108,13 @@ LIFECYCLE_EVENTS: tuple[LifecycleEvent, ...] = get_args(LifecycleEvent)
 
 #: The bounded re-executions AD-9 records without a Run transition of their own:
 #: `redispatch` when a verify failure sends a Run back to an earlier row (4.5),
-#: `retry_auto` when a Template's own `retry {max, prompt}` fires (Epic 5). `expired` is
-#: not here: AD-13 applies the 30-day `recv` expiry as Run `failed`, which is a lifecycle
-#: event the Run already has.
-MachineEvent = Literal["redispatch", "retry_auto"]
+#: `retry_auto` when a Template's own `retry {max, prompt}` fires (Epic 5), and AD-22's
+#: `consult` (a stop sent to a senior) and `senior_answer` (the senior's answer, delivered
+#: to the row's next agent attempt), and `senior_accept` (test files the senior approved,
+#: AD-17). Not `continue`: that is the Operator's signal, and `signal_run` is its one writer
+#: (AD-8). `expired` is not here: AD-13 applies the 30-day `recv` expiry as Run `failed`,
+#: which is a lifecycle event the Run already has.
+MachineEvent = Literal["redispatch", "retry_auto", "consult", "senior_answer", "senior_accept"]
 MACHINE_EVENTS: tuple[MachineEvent, ...] = get_args(MachineEvent)
 
 #: AD-8's own three alphabets, concatenated: what a `gate_record.event` carries for a Run
@@ -166,6 +186,12 @@ STEP_EVENTS: tuple[StepEvent, ...] = get_args(StepEvent)
 
 #: The Run statuses nothing leaves. No pair in `RUN_TRANSITIONS` starts at one of them.
 TERMINAL_RUN: frozenset[RunStatus] = frozenset({"done", "failed", "cancelled"})
+
+#: What the gate record says when the `recv` a parked Run waits in reaches its deadline.
+#: AD-13 applies the expiry as Run `failed`, and `failed` is the event the alphabet has:
+#: `expired` is not a `GateEvent`, so the sentence carries the thirty days and the event
+#: stays the lifecycle one. `use_cases/writers.py` re-exports it under its old path.
+RUN_EXPIRED = "parked 30 days"
 
 
 # ── the machines ─────────────────────────────────────────────────────────────

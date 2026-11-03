@@ -33,13 +33,9 @@ inside it, so a backend killed mid-execution re-executes both after restart —
 `start_attempt` closes the row's never-ended Attempt and opens the next one (FR-12), where a
 split start would replay unchanged and leave the interrupted attempt silently uncounted.
 
-**A verify failure and a frame's anchors are resolved here for the same reason
-`frame_start_sha` is**: a row a `verify` step sent back needs facts about a *different* row
-(FR-10), AD-17's rule needs every row of the Story frame, and AD-9 closes `StepContext`'s
-field list. Read once, here — the only place holding both the rows and the repositories —
-and handed over as frozen values on `RunEnvironment`/`StepPorts` (AD-8). The frame half of
-that reading lives in `walk_frame.py`, which this module is at the 400-line cap without;
-the seam is exactly the sentence above, and nothing else moved with it.
+**The row's `StepContext` is `walk_context.py`'s**: the verify failure, the frame's
+anchors and the resume signal — an Operator's, or a senior's answer still owed (AD-22) —
+are read there, with the frame half of that reading in `walk_frame.py`.
 
 **`run_row` reads; the executor does the work**, in a unit of work closed *before* the
 executor runs — a process held for minutes (FR-10) cannot hold a session too.
@@ -50,32 +46,21 @@ executor runs — a process held for minutes (FR-10) cannot hold a session too.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 import structlog
 
-from orchestrator.application.steps import StepContext, StepPorts, execute
-from orchestrator.application.steps.context import VerifyFailure
-from orchestrator.application.templates.plan_model import (
-    ON_FAIL_KEY,
-    REDISPATCH_TARGET_SEQ,
-)
-from orchestrator.application.templates.rows import COMMAND_KEY
+from orchestrator.application.steps import StepPorts, execute
+from orchestrator.application.use_cases import walk_context
 from orchestrator.application.use_cases.apply_step_result import (
     AfterRoute,
     apply_step_result,
     budget_second_record,
 )
 from orchestrator.application.use_cases.start_attempt import start_attempt
-from orchestrator.application.use_cases.walk_frame import (
-    WalkFrame,
-    frame_anchors,
-    frame_start_sha,
-    read_frame,
-)
+from orchestrator.application.use_cases.walk_context import redispatches_to
 from orchestrator.application.use_cases.writers import (
     FINISHED,
     WriterPorts,
@@ -85,13 +70,9 @@ from orchestrator.application.use_cases.writers import (
     park_dependents,
     park_run,
     queue_row,
-    require_row,
     require_run,
 )
-from orchestrator.domain.entities.gate_record import GateRecord
-from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.errors import NotFound
 from orchestrator.domain.statuses import GateEvent, RunStatus
 from orchestrator.domain.values import Park, StepResult
 
@@ -134,9 +115,8 @@ ERROR = "error"
 #: The line a close that arrives after the Run already moved leaves, and nothing else.
 LATE_CLOSE = "close ignored"
 
-#: How much of a failed `verify` row's log the Story file is handed back (FR-10). Enough to
-#: show what failed, bounded so a prepare commit never carries a whole build log.
-VERIFY_LOG_LINES = 200
+#: How much of a failed `verify` row's log the Story file is handed back (FR-10).
+VERIFY_LOG_LINES = walk_context.VERIFY_LOG_LINES
 
 
 def next_row(ports: WalkPorts, run_id: UUID) -> int | None:
@@ -202,7 +182,7 @@ def _sent_back(ports: WriterPorts, run_id: UUID) -> StepRun | None:
     rows = ports.steps.list_for_run(run_id)
     done = [row.seq for row in rows if row.status in FINISHED]
     for row in rows:
-        if row.status == ERROR and any(_redispatches_to(row, seq) for seq in done):
+        if row.status == ERROR and any(redispatches_to(row, seq) for seq in done):
             return queue_row(ports, row)
     return None
 
@@ -244,108 +224,12 @@ def run_row(
     """
     with ports.writers.uow:
         run = require_run(ports.writers, run_id)
-        context = _context(ports, run, seq, resume_event)
+        context = walk_context.context(ports.writers, ports.step, run, seq, resume_event)
     tracer = context.ports.tracer
     if tracer is None:
         return execute(context)
     with tracer.step_span(run, context.row, context.attempt):
         return execute(context)
-
-
-def _context(
-    ports: WalkPorts,
-    run: Run,
-    seq: int,
-    resume_event: GateEvent | None,
-) -> StepContext:
-    """AD-9's own field list, read out of the Run the walker is standing in."""
-    writers = ports.writers
-    run_id = run.id
-    row = require_row(writers, run_id, seq)
-    attempts = writers.attempts.list_for_row(row.id)
-    if not attempts:
-        raise NotFound(f"no attempt on step {seq} of run {run_id}")
-    frame = read_frame(writers, run_id, row)
-    return StepContext(
-        row=row,
-        with_resolved=row.with_resolved,
-        cwd=run.worktree_path,
-        frame_start_sha=frame_start_sha(frame.attempts),
-        previous_attempt=attempts[-2] if len(attempts) > 1 else None,
-        attempt=attempts[-1],
-        resume_signal=_resume_signal(writers, run_id, resume_event),
-        ports=_step_ports(ports, run, row, frame),
-    )
-
-
-def _step_ports(ports: WalkPorts, run: Run, row: StepRun, frame: WalkFrame) -> StepPorts:
-    """The executors' ports, plus whatever this row alone needs resolving (FR-10, AD-17).
-
-    A walker that resolved no environment is handed over unchanged: there is nowhere to put a
-    frame's facts, and the executor refuses with the wiring error `require_env` names.
-
-    **Only a row inside a Story frame is given the rule.** AD-17 is frame-scoped: its frozen
-    test set is that frame's first attempt's, and outside a frame there is no agent range at
-    all — so all that would be left of the check is "anything staged whose basename is
-    `AGENTS.md`". A `bmad.install` row stages exactly that, written by the
-    orchestrator, and would park a Run on the system's own file.
-    """
-    environment = ports.step.run_env
-    if environment is None:
-        return ports.step
-    failure = _verify_failure(ports, run.id, row)
-    if row.frame is None:
-        return replace(ports.step, run_env=replace(environment, verify_failure=failure))
-    rule = frame_anchors(ports.step.git, run, environment, frame, row)
-    return replace(
-        ports.step,
-        run_env=replace(environment, anchors=rule.anchors, verify_failure=failure),
-        protected_paths=rule,
-    )
-
-
-def _verify_failure(ports: WalkPorts, run_id: UUID, row: StepRun) -> VerifyFailure | None:
-    """Why the `verify` row redispatched to this one failed, or `None` when none did.
-
-    The target is matched on `seq` rather than on a kind: `on_fail: {redispatch: …}` is the
-    only thing that sends a Run backwards (AD-9), and the planner already resolved it to
-    this row's number (`templates/plan_model.py`). A `verify` row that never recorded an
-    attempt still names its command — the Operator can read that even with no code to show.
-    """
-    if row.redispatch_count == 0:
-        return None
-    writers = ports.writers
-    sender = next(
-        (entry for entry in writers.steps.list_for_run(run_id) if _redispatches_to(entry, row.seq)),
-        None,
-    )
-    if sender is None:
-        return None
-    attempts = writers.attempts.list_for_row(sender.id)
-    latest = attempts[-1] if attempts else None
-    reader = ports.step.logs
-    tail = reader.tail(latest.log_path, VERIFY_LOG_LINES) if reader and latest else []
-    return VerifyFailure(
-        command=str(sender.with_resolved.get(COMMAND_KEY) or ""),
-        exit_code=latest.exit_code if latest is not None else None,
-        log_tail=tuple(tail),
-    )
-
-
-def _redispatches_to(row: StepRun, seq: int) -> bool:
-    """Whether this row's own `on_fail` is a redispatch aimed at `seq` (AD-9)."""
-    action = row.with_resolved.get(ON_FAIL_KEY)
-    return isinstance(action, Mapping) and action.get(REDISPATCH_TARGET_SEQ) == seq
-
-
-def _resume_signal(
-    ports: WriterPorts, run_id: UUID, resume_event: GateEvent | None
-) -> GateRecord | None:
-    """The record `signal_run` wrote for the signal that resumed this row (AD-9)."""
-    if resume_event is None:
-        return None
-    records = ports.records.list_for_run(run_id)
-    return next((line for line in reversed(records) if line.event == resume_event), None)
 
 
 def apply_result(ports: WalkPorts, run_id: UUID, seq: int, result: StepResult) -> RunStatus:

@@ -40,6 +40,7 @@ import CostBlock from '../components/run/CostBlock';
 import DiagramSection from '../components/run/DiagramSection';
 import GateRecord from '../components/run/GateRecord';
 import Header from '../components/run/Header';
+import SessionPanel from '../components/run/SessionPanel';
 import StepsTable from '../components/run/StepsTable';
 import StopBody from '../components/run/StopBody';
 import StoriesStrip from '../components/run/StoriesStrip';
@@ -54,9 +55,16 @@ import {
   retryBody,
   signalBody,
   signalsRequestPath,
+  withStop,
   type SignalIn,
   type SignalKind,
 } from '../lib/run/signals';
+import {
+  keepsFastPoll,
+  messageBody,
+  messagesRequestPath,
+  type SessionOut,
+} from '../lib/run/session';
 import { terminalBlock, TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
 import { startTracking, stopTracking } from '../stores/activity';
@@ -69,11 +77,22 @@ interface Props {
   runId: string;
 }
 
+function networkProblem(method: string, path: string): ProblemDetail {
+  return {
+    status: 0,
+    title: 'the request failed',
+    type: 'about:blank',
+    detail: `${method} ${path} → network error`,
+  };
+}
+
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'error'; status: number | null };
 
 export default function RunDetail({ runId }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [detail, setDetail] = useState<RunDetailOut | null>(null);
+  const [session, setSession] = useState<SessionOut | null>(null);
+  const [sending, setSending] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [posting, setPosting] = useState<SignalKind | null>(null);
   const [signalError, setSignalError] = useState<ProblemDetail | null>(null);
@@ -105,13 +124,29 @@ export default function RunDetail({ runId }: Props) {
         setPhase({ kind: 'error', status: response.status });
         return;
       }
+      // `scopes` is empty off a park and a terminal Run holds no session, so only a parked Run
+      // is asked; a failed read leaves the page without the offer rather than without the Run
+      const read = data.run.status === 'needs_you' ? await fetchSession() : null;
+      if (seq !== requestSeqRef.current) return;
       setDetail(data);
+      setSession(read);
       setPhase({ kind: 'ready' });
-      configurePolling(data.run.status === 'running');
+      configurePolling(keepsFastPoll(data.run.status, read));
     } catch {
       if (seq !== requestSeqRef.current) return;
       stopPolling();
       setPhase({ kind: 'error', status: null });
+    }
+  }
+
+  async function fetchSession(): Promise<SessionOut | null> {
+    try {
+      const { data } = await api.GET('/runs/{run_id}/session', {
+        params: { path: { run_id: runId } },
+      });
+      return data ?? null;
+    } catch {
+      return null;
     }
   }
 
@@ -201,29 +236,55 @@ export default function RunDetail({ runId }: Props) {
     }
   }, [detail]);
 
-  async function sendSignal(kind: SignalKind, body?: SignalIn): Promise<void> {
+  /** Posts one signal and returns the problem it was refused with, or `null` when it applied. */
+  async function sendSignal(kind: SignalKind, body?: SignalIn): Promise<ProblemDetail | null> {
     setPosting(kind);
     setSignalError(null);
     try {
       const { error } = await api.POST('/runs/{run_id}/signals', {
         params: { path: { run_id: runId } },
-        body: body ?? signalBody(kind),
+        body: withStop(body ?? signalBody(kind), detail?.run.park_seq),
       });
       if (error) {
         setSignalError(error);
-        return;
+        // a refused signal may mean the Run has moved on: show the stop it is at now
+        if (error.status === 409) await fetchDetail();
+        return error;
       }
       setCancelOpen(false);
       await fetchDetail();
+      return null;
     } catch {
-      setSignalError({
-        status: 0,
-        title: 'the request failed',
-        type: 'about:blank',
-        detail: `POST ${signalsRequestPath(runId)} → network error`,
-      });
+      const failed = networkProblem('POST', signalsRequestPath(runId));
+      setSignalError(failed);
+      return failed;
     } finally {
       setPosting(null);
+    }
+  }
+
+  /** One message to the open senior session (story 2-4); a refusal shows in the same readout. */
+  async function sendMessage(text: string): Promise<ProblemDetail | null> {
+    setSending(true);
+    setSignalError(null);
+    try {
+      const { error } = await api.POST('/runs/{run_id}/session/messages', {
+        params: { path: { run_id: runId } },
+        body: messageBody(text),
+      });
+      if (error) {
+        setSignalError(error);
+        if (error.status === 409) await fetchDetail();
+        return error;
+      }
+      await fetchDetail();
+      return null;
+    } catch {
+      const failed = networkProblem('POST', messagesRequestPath(runId));
+      setSignalError(failed);
+      return failed;
+    } finally {
+      setSending(false);
     }
   }
 
@@ -247,7 +308,9 @@ export default function RunDetail({ runId }: Props) {
       <Header detail={detail} token={token} now={Date.now()} />
       <Banner detail={detail} token={token} />
       <div className="wf-top-zone">
+        {/* keyed so a draft written for one stop can never be sent as the answer to the next */}
         <StopBody
+          key={`stop-${detail.run.park_seq ?? 0}`}
           detail={detail}
           token={token}
           onSignal={(kind) => void sendSignal(kind)}
@@ -262,6 +325,18 @@ export default function RunDetail({ runId }: Props) {
           onAccept={(paths) => void sendSignal('continue', acceptBody(paths))}
           runId={runId}
           plannedFile={plannedFile}
+        />
+        {/* keyed like the stop: form choices and a draft belong to the stop they were made at */}
+        <SessionPanel
+          key={`session-${detail.run.park_seq ?? 0}`}
+          runId={runId}
+          session={session}
+          admitted={detail.admitted_signals}
+          posting={posting}
+          sending={sending}
+          onStart={(body) => sendSignal('session_start', body)}
+          onEnd={(body) => sendSignal('session_end', body)}
+          onMessage={sendMessage}
         />
       </div>
       <div className="wf-diagram-row">

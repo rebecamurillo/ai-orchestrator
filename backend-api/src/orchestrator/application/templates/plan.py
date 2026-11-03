@@ -55,6 +55,7 @@ from orchestrator.application.templates.plan_model import (
     INSERTED_GATE,
     ON_FAIL_KEY,
     PLAN_PATH,
+    REDISPATCH_CONSULT,
     REDISPATCH_MAX,
     REDISPATCH_TARGET_NOT_PLANNED,
     REDISPATCH_TARGET_SEQ,
@@ -232,10 +233,10 @@ def _routed(row: PlannedRow, seqs: dict[str, int]) -> dict[str, Any]:
             line=route.line,
             item=route.target_path,
         )
-    return {
-        **row.with_resolved,
-        ON_FAIL_KEY: {REDISPATCH_TARGET_SEQ: target, REDISPATCH_MAX: route.max},
-    }
+    resolved: dict[str, Any] = {REDISPATCH_TARGET_SEQ: target, REDISPATCH_MAX: route.max}
+    if route.consult is not None:
+        resolved[REDISPATCH_CONSULT] = route.consult
+    return {**row.with_resolved, ON_FAIL_KEY: resolved}
 
 
 def plan_check_row(

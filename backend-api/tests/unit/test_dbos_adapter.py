@@ -84,7 +84,18 @@ def test_launching_configures_starts_and_then_declares_the_queue() -> None:
 
     a_launched_engine(fake)
 
-    assert [name for name, _ in fake.calls] == ["configure", "start", "register_queue"]
+    # Story 2-5, 2026-11-02 (AD-23): the session turns' own queue is declared after `runs`,
+    # and (review, same date) the fake records declarations, which all precede `start`.
+    assert [name for name, _ in fake.calls if name not in ("step", "workflow")] == [
+        "configure",
+        "start",
+        "register_queue",
+        "register_queue",
+    ]
+    names = [name for name, _ in fake.calls]
+    assert max(i for i, name in enumerate(names) if name in ("step", "workflow")) < names.index(
+        "start"
+    )
     assert fake.configured is not None
     assert fake.configured["name"] == APP_NAME
     assert fake.configured["application_version"] == "1"

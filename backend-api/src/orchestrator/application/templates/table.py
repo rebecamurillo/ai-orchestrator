@@ -34,7 +34,21 @@ WRITES_KEY = "writes"
 PROMPTS_KEY = "prompts"
 PROMPTS_KEYS = frozenset({"dispatch", "rendered", "answer", "halt", "redispatch"})
 
-AGENT_KEYS = frozenset({"expect", "retry", "escalate_when", "pause_when", WRITES_KEY, PROMPTS_KEY})
+#: AD-22's `consult {model, harness?, skill, on, timeout_min?, prompts {dispatch, answer}}`.
+#: `on` names the stops a senior may take instead of a person.
+CONSULT_KEY = "consult"
+CONSULT_KEYS = frozenset({"model", "harness", "skill", "on", "timeout_min", PROMPTS_KEY})
+CONSULT_REQUIRED = ("model", "skill", "on", PROMPTS_KEY)
+CONSULT_PROMPTS_KEYS = frozenset({"dispatch", "answer"})
+CONSULT_ON = frozenset({"blocked", "protected_path"})
+#: The same block under a `run` row's `on_fail {redispatch, max, consult}` (story 1-6): the
+#: stop is implied, so `on` is optional and may only name it.
+REDISPATCH_CONSULT_ON = frozenset({"verify_failed"})
+REDISPATCH_CONSULT_REQUIRED = ("model", "skill", PROMPTS_KEY)
+
+AGENT_KEYS = frozenset(
+    {"expect", "retry", "escalate_when", "pause_when", WRITES_KEY, PROMPTS_KEY, CONSULT_KEY}
+)
 FOR_EACH_KEYS = frozenset(
     {
         "id",
@@ -52,6 +66,7 @@ EXPECT_KEYS = frozenset(
 )
 RETRY_KEYS = frozenset({"max", "prompt", "resume_session"})
 REDISPATCH_KEYS = frozenset({"redispatch", "max"})
+REDISPATCH_OPTIONAL = frozenset({CONSULT_KEY})
 
 #: The input types a text default fits. `number` and `enum` have rules of their own;
 #: `project`, `repository` and `item` are bound at run time and fit no default at all.

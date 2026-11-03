@@ -108,6 +108,11 @@ ARCHIVED_NAME = "{story_id}-attempt-{n}.md"
 #: front and the newline at the end, so this is the block itself.
 HUMAN_ANSWER = "## Human Answer\n\n{at} · operator\n\n{answer}"
 
+#: A senior's answer (AD-22) archives the same way under its own heading, so the archive
+#: never claims a person said it. Its text is the consult's own filled `answer` clause.
+SENIOR_ANSWER_EVENT = "senior_answer"
+SENIOR_ANSWER = "## Senior Answer\n\n{at} · senior\n\n{answer}"
+
 #: What a resume with nothing to archive logs. A first dispatch is a valid outcome here —
 #: an agent that blocked before writing its Story file leaves the glob empty — so this is an
 #: `info` line naming the row, never a park. Its sibling below is the row whose contract
@@ -132,6 +137,15 @@ def answering(ctx: StepContext) -> GateRecord | None:
     return None
 
 
+def senior_answering(ctx: StepContext) -> GateRecord | None:
+    """The senior's answer that resumed this row, or `None`. Kept apart from `answering`:
+    the Operator's clause is built from that one, and a senior's carries its own."""
+    signal = ctx.resume_signal
+    if signal is not None and signal.event == SENIOR_ANSWER_EVENT:
+        return signal
+    return None
+
+
 def archive_with_answer(ctx: StepContext) -> tuple[str, ...]:
     """FR-18's move, with the Operator's words appended — both paths, or `()`.
 
@@ -144,7 +158,7 @@ def archive_with_answer(ctx: StepContext) -> tuple[str, ...]:
     `git add` to match once the move has happened — it exits 128 on the pathspec. The
     question is asked *before* the move, which is the only moment it can be answered.
     """
-    signal = answering(ctx)
+    signal = answering(ctx) or senior_answering(ctx)
     if signal is None:
         return ()
     matches = agent_tail.story_files(ctx) or ()
@@ -159,7 +173,8 @@ def archive_with_answer(ctx: StepContext) -> tuple[str, ...]:
     never_tracked = source in protected_paths.untracked(ctx.ports.git.status(require_cwd(ctx)))
     workspace = require_workspace(ctx, ctx.cwd)
     workspace.move(source, destination)
-    block = HUMAN_ANSWER.format(at=_iso(ctx.ports.clock.now()), answer=answer_text(signal))
+    heading = SENIOR_ANSWER if signal.event == SENIOR_ANSWER_EVENT else HUMAN_ANSWER
+    block = heading.format(at=_iso(ctx.ports.clock.now()), answer=answer_text(signal))
     workspace.write(destination, appended(workspace.read(destination) or "", block))
     return (destination,) if never_tracked else (source, destination)
 
@@ -257,7 +272,7 @@ def halts_after_planning(
     and halting again would park the Run on the stop it just left."""
     if not with_resolved.get(SPEC_CHECKPOINT_KEY):
         return False
-    return resume_signal is None or resume_signal.event == ANSWER_EVENT
+    return resume_signal is None or resume_signal.event in (ANSWER_EVENT, SENIOR_ANSWER_EVENT)
 
 
 def resolved_signal(ctx: StepContext) -> GateRecord | None:

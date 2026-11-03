@@ -58,7 +58,7 @@ from orchestrator.application.use_cases.run_view_types import (
     StoryCell,
     Summary,
 )
-from orchestrator.application.use_cases.run_views_alert import build_alert, run_token
+from orchestrator.application.use_cases.run_views_alert import build_alert, run_token, stop_thread
 from orchestrator.application.use_cases.run_views_summary import (
     bracket_index,
     progress,
@@ -66,7 +66,8 @@ from orchestrator.application.use_cases.run_views_summary import (
     summary,
 )
 from orchestrator.application.use_cases.terminal import Terminal, resume_command
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.attempt import Attempt, agent_attempts
+from orchestrator.domain.entities.chat_thread import ChatThread
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.repository import Repository
@@ -208,15 +209,20 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
         park_row_status=park_row.status if park_row is not None else None,
         rows=rows,
     )
-    park_attempts = attempts_by_row.get(park_row.id, ()) if park_row is not None else ()
+    park_attempts = agent_attempts(
+        attempts_by_row.get(park_row.id, ()) if park_row is not None else ()
+    )
     # Read once and shared: the detail publishes the whole gate record, and `_alert` needs
     # the park's own entry off the same list (6.6) rather than a second query for it.
     records = ports.gate_records.list_for_run(run.id)
     reply_available, resume_unavailable_reason = _reply_status(ports, run)
+    thread = stop_thread(ports.chat_threads, run)
     return RunDetailView(
         run=run,
         header=_header(run, project, repository),
-        alert=_alert(run, _latest_of(park_attempts), rows, park_row, attempts_by_row, records),
+        alert=_alert(
+            run, _latest_of(park_attempts), rows, park_row, attempts_by_row, records, thread
+        ),
         steps=[_step_row(ports, row, attempts_by_row[row.id]) for row in rows],
         stories=_story_cells(run, rows, attempts_by_row),
         cost=_cost(run, attempts_by_row, now=ports.clock.now(), tracer=ports.tracer),
@@ -296,6 +302,7 @@ def _alert(  # noqa: PLR0913, PLR0917 — the positional adapter 6.2's split lef
     park_row: StepRun | None,
     attempts_by_row: Mapping[UUID, Sequence[Attempt]],
     records: Sequence[GateRecord] = (),
+    thread: ChatThread | None = None,
 ) -> Alert | None:
     row_kind = park_row.kind if park_row is not None else None
     return build_alert(
@@ -306,6 +313,7 @@ def _alert(  # noqa: PLR0913, PLR0917 — the positional adapter 6.2's split lef
         park_row=park_row,
         attempts_by_row=attempts_by_row,
         records=records,
+        thread=thread,
     )
 
 
@@ -314,7 +322,8 @@ def _latest_of(attempts: Sequence[Attempt]) -> Attempt | None:
 
 
 def _step_row(ports: RunViewPorts, row: StepRun, attempts: Sequence[Attempt]) -> StepRowView:
-    latest = _latest_of(attempts)
+    agents = agent_attempts(attempts)
+    latest = _latest_of(agents)
     cost_usd = sum((attempt.cost_usd or Decimal("0") for attempt in attempts), Decimal("0"))
     retry_prompt = (
         row.with_resolved.get("retry", {}).get("prompt")
@@ -330,7 +339,7 @@ def _step_row(ports: RunViewPorts, row: StepRun, attempts: Sequence[Attempt]) ->
         status=row.status,
         token=STEP_TOKENS[row.status],
         reason=row.reason,
-        attempts=len(attempts),
+        attempts=len(agents),
         latest=_latest_attempt(ports, latest) if latest is not None else None,
         cost_usd=cost_usd,
         retry_prompt=retry_prompt if isinstance(retry_prompt, str) else None,

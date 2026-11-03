@@ -14,7 +14,7 @@ the only enumeration of kinds (AD-9) and `domain/` may not import `application/`
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -65,6 +65,35 @@ class Retry(BaseModel):
     max: int
     #: Whether the harness should continue the same session, where it can (AD-10).
     resume_session: bool = True
+
+
+#: What a consult attempt came to (AD-22): delivered, accepted (a `protected_path` hit,
+#: AD-17's 2026-11-02 amendment), sent to a person, or failed closed.
+ConsultOutcome = Literal["answer", "accept", "escalate", "failed"]
+
+
+class Consult(BaseModel):
+    """A stop sent to a senior instead of a person (AD-22).
+
+    An agent attempt's tail returns one with no `outcome` — the offer, carrying the clean
+    `snapshot` of both trees the consult is checked against. The consult attempt returns one
+    with its `outcome`, and `answer` is the decision file's body when that is `answer`.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: ParkKind
+    #: The stop's own reason, as the Operator would have read it.
+    question: str
+    snapshot: dict[str, Any] = Field(default_factory=dict)
+    outcome: ConsultOutcome | None = None
+    answer: str = ""
+    #: Existing test files a `blocked` answer approves (AD-17's 2026-11-02 amendment), and the
+    #: decision's `reason`, which the acceptance record carries.
+    approved_files: tuple[str, ...] = ()
+    reason: str = ""
+    #: A `protected_path` offer's hits payload, which every fail-closed park carries again.
+    hits: dict[str, Any] = Field(default_factory=dict)
 
 
 class Worktree(BaseModel):
@@ -141,6 +170,9 @@ class StepResult(BaseModel):
     #: the sentence. Written by `apply_step_result` alongside the park (AD-8); `{}` on every
     #: result that carries nothing, and built per instance so two results never share one.
     payload: dict[str, Any] = Field(default_factory=dict)
+    #: Set only by the `agent` kind at a stop the row declared a consult for, and by the
+    #: consult attempt that answers it (AD-22). `apply_step_result` reads it first.
+    consult: Consult | None = None
 
 
 class Signal(BaseModel):
@@ -153,6 +185,8 @@ class Signal(BaseModel):
     #: A mapping rather than `None`, so no caller has to guard the empty case; built per
     #: instance, so two signals never share one.
     payload: dict[str, Any] = Field(default_factory=dict)
+    #: The `run.park_seq` this signal was written for, when the sender states one (AD-24).
+    stop: int | None = None
 
 
 class PlannedRow(BaseModel):

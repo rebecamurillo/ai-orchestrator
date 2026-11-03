@@ -71,6 +71,12 @@ class Run(BaseModel):
     park_kind: ParkKind | None = None
     park_path: str | None = None
     park_reason: str | None = None
+    #: This stop's number (AD-24). Up by one at each new stop and never reset, so an answer
+    #: can say which stop it was written for.
+    park_seq: int = 0
+    #: A `pause` is waiting for the row now executing to end (AD-13). `set_run` clears it on
+    #: any write that leaves `running`.
+    pause_requested: bool = False
     #: Files a `continue` on `protected_path` accepted; every later check in the same story
     #: frame excludes them (AD-9).
     accepted_paths: tuple[str, ...] = ()
@@ -102,6 +108,9 @@ class Run(BaseModel):
     #: The Langfuse trace this Run's attempt spans hang under (AD-11).
     trace_id: str | None = None
     terminal_session: bool = False
+    #: The Operator's senior session holds the Run (AD-23): every signal but `session_end`
+    #: and `cancel` is refused until it is cleared.
+    senior_session: bool = False
     #: How many consecutive `terminal_poll` fires have found the Story file `done` and the
     #: tree clean (AD-13, AD-14, FR-21). Two is the threshold; anything unclean resets it to
     #: zero, and sending `terminal_resume` spends it back to zero, so a second terminal

@@ -23,6 +23,7 @@ the one a Template declares.
 
 from __future__ import annotations
 
+import contextvars
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -215,7 +216,10 @@ class RealEngine:
         """
 
         def scheduled(scheduled_at: datetime, actual_at: datetime) -> None:
-            job()
+            # A fresh context, so the job runs outside this workflow: a recovered fire replays
+            # a `send` by step number, not destination, and would skip another Run's message
+            # (story 4-3, AD-25). The database, not step replay, keeps the jobs idempotent.
+            contextvars.Context().run(job)
 
         entry: ScheduleInput = {
             "schedule_name": name,

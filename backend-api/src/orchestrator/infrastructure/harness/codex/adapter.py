@@ -238,18 +238,46 @@ class CodexHarness:
         `budget_usd_remaining` and `add_dirs` are accepted and not passed: where `-m` would
         go in the resume form is unverified, and a guessed flag is as wrong as a missing one.
         """
-        argv = [EXECUTABLE, EXEC, RESUME, session_id, JSON_FLAG, message]
-        self._record_prompt(log_path, message)
         return self.wait(
-            self._start(
-                argv,
+            self.start_resume(
                 cwd=cwd,
+                session_id=session_id,
+                message=message,
                 env=env,
                 timeout_min=timeout_min,
                 log_path=log_path,
-                session_id=session_id,
                 stall_min=stall_min,
+                model=model,
+                budget_usd_remaining=budget_usd_remaining,
+                add_dirs=add_dirs,
             )
+        )
+
+    def start_resume(  # noqa: PLR0913 — the port's own signature (AD-10)
+        self,
+        *,
+        cwd: Path,
+        session_id: str,
+        message: str,
+        env: Mapping[str, str],
+        timeout_min: float | None,
+        log_path: Path,
+        stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
+    ) -> HarnessHandle:
+        """Start `codex exec resume` and hand its group back before anything waits on it."""
+        argv = [EXECUTABLE, EXEC, RESUME, session_id, JSON_FLAG, message]
+        self._record_prompt(log_path, message)
+        return self._start(
+            argv,
+            cwd=cwd,
+            env=env,
+            timeout_min=timeout_min,
+            log_path=log_path,
+            session_id=session_id,
+            stall_min=stall_min,
         )
 
     def resume_command(self, cwd: str, session_id: str) -> str:

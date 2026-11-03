@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import base64
 
+from orchestrator.domain.ports.crypto import DecryptionError
+
 PREFIX = "fake-enc"
 
 
@@ -38,6 +40,6 @@ class FakeCrypto:
 
     def decrypt(self, token: str) -> str:
         if token not in self._issued:
-            raise ValueError(f"{PREFIX}: this instance never issued that token")
+            raise DecryptionError(f"{PREFIX}: this instance never issued that token")
         self.decrypted.append(token)
         return self._issued[token]

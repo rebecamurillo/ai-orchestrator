@@ -35,6 +35,9 @@ inputs:
   model:        { type: string,     required: false }
   plan_model:   { type: string,     required: false }
   review_model: { type: string,     required: false }
+  # The senior a blocked agent row consults before a person is asked (AD-22). Blank:
+  # no consult is planned, and every blocked stop parks for a person as before.
+  senior_model: { type: string,     required: false }
   # Limits bound from the Run's own inputs: the four stage limits go to `staged-hub-story`;
   # the epic's own long reads (`spec-gate`, `retro`, `gen-e2e`) take one shared wall clock
   # and the same value as their stall limit, because a read-heavy phase writes nothing and
@@ -114,6 +117,7 @@ steps:
             model: "{{model}}"
             plan_model: "{{plan_model}}"
             review_model: "{{review_model}}"
+            senior_model: "{{senior_model}}"
             plan_timeout_min: "{{plan_timeout_min}}"
             build_timeout_min: "{{build_timeout_min}}"
             build_stall_min: "{{build_stall_min}}"
@@ -160,6 +164,16 @@ steps:
       model: "{{plan_model}}"
       skill: bmad-retrospective
       args: { folder: "{{spec_folder}}" }
+      prompt_extra: >-
+        Run the skill headless (-H): this dispatch has no one to answer its questions.
+        When RETROSPECTIVE.md is final, write the verdict last to {{spec_folder}}/stories/.auto/retro.md,
+        overwriting whatever is there, and never in place of that document. Its frontmatter `status`
+        is exactly one of `accepted`, `accepted-with-open-items` or `rejected`, as recorded in
+        RETROSPECTIVE.md; a human decision that overrides the machine verdict is the verdict, and
+        RETROSPECTIVE.md's own `verdict` is updated to it first. Under the frontmatter write a
+        `## Auto Run Result` section with a `Status:` line. For `rejected`, add a
+        `Blocking condition:` line naming every finding that stands, each with its source,
+        separated by `; `, then the same findings as a bulleted list.
     prompts:
       dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
       rendered: >-
@@ -167,6 +181,16 @@ steps:
         fully and follow it; every step, status and halt this dispatch owes is defined
         there. Do not run render_skill.py yourself.
       answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    # The verdict is routed on its own marker, never on RETROSPECTIVE.md: an `answer` archives the
+    # row's first matched file, and that must not be the document.
+    expect:
+      files: ["{{spec_folder}}/stories/.auto/retro.md"]
+      success: [accepted, accepted-with-open-items]
+      blocked: [rejected]
+    retry:
+      max: 1
+      prompt: "The previous session left a retro marker whose status is not accepted, accepted-with-open-items or rejected. Write {{spec_folder}}/stories/.auto/retro.md last, with status set to the verdict recorded in RETROSPECTIVE.md, spelled exactly as one of those three."
+      resume_session: true
     timeout_min: "{{epic_timeout_min}}"
     stall_min: "{{epic_timeout_min}}"
     gate: liveness

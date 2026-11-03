@@ -82,3 +82,7 @@ class WorkflowEngine(Protocol):
     def schedule(self, name: str, cron: str, job: Callable[[], None]) -> None:
         """Register a recurring job (SPEC CAP-11: `clone_check` daily, `worktree_gc` at 7d)."""
         ...
+
+    def enqueue_session_turn(self, run_id: UUID, attempt_id: UUID) -> None:
+        """Run one senior session turn outside the walk, behind its Run (AD-6, AD-23)."""
+        ...

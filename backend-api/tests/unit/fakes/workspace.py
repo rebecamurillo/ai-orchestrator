@@ -41,10 +41,17 @@ class FakeWorkspace:
         #: Every pattern `glob` was asked, in order — "the row's own glob was the one
         #: asked" is an assertion about the call, not about what came back.
         self.globbed: list[str] = []
+        #: Paths that are symbolic links (story 1-5 review, 2026-11-02). Public, so a test
+        #: plants one; `remove` deletes the link, as `FsWorkspace.remove` does.
+        self.links: set[str] = set()
 
     def read(self, path: str) -> str | None:
         self._checked(path)
         return self._files.get(path)
+
+    # Story 2-5 review (2026-11-02): the port's lenient read; text held here decodes already.
+    def read_lenient(self, path: str) -> str | None:
+        return self.read(path)
 
     def write(self, path: str, text: str) -> None:
         self._checked(path)
@@ -105,8 +112,13 @@ class FakeWorkspace:
 
     def remove(self, path: str) -> None:
         self._checked(path)
+        self.links.discard(path)
         for stored in [p for p in self._files if p == path or p.startswith(f"{path}/")]:
             del self._files[stored]
+
+    def is_link(self, path: str) -> bool:
+        self._checked(path)
+        return any(path == link or path.startswith(f"{link}/") for link in self.links)
 
     def _checked(self, path: str) -> None:
         if not self._rooted:

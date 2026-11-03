@@ -163,7 +163,8 @@ async def test_without_a_wait_it_answers_the_current_state_at_once(env: dict[str
         "status": "running",
         "updated_at": "2026-10-01T09:05:00Z",
         "changed": False,
-        "admitted_signals": ["cancel"],
+        # story 2-1, 2026-11-02: a running run also offers "pause" (AD-13).
+        "admitted_signals": ["pause", "cancel"],
         "spend_usd": "0.250000",
         "budget_usd": "10.000000",
         "park_kind": None,

@@ -17,7 +17,9 @@ Nothing in this module logs, and no message it raises contains a key or a value.
 
 from __future__ import annotations
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
+
+from orchestrator.domain.ports.crypto import DecryptionError
 
 #: The one command that produces a valid value, quoted into the message that asks for one.
 KEY_COMMAND = (
@@ -35,6 +37,10 @@ KEY_REASON = (
 ENCODING = "utf-8"
 
 
+class FernetDecryptionError(DecryptionError, InvalidToken):
+    """The port's error, and still the `InvalidToken` every existing caller expects."""
+
+
 class FernetCrypto:
     """Reversible encryption of one value under the instance key."""
 
@@ -49,4 +55,7 @@ class FernetCrypto:
         return self._fernet.encrypt(plaintext.encode(ENCODING)).decode(ENCODING)
 
     def decrypt(self, token: str) -> str:
-        return self._fernet.decrypt(token.encode(ENCODING)).decode(ENCODING)
+        try:
+            return self._fernet.decrypt(token.encode(ENCODING)).decode(ENCODING)
+        except InvalidToken as error:
+            raise FernetDecryptionError("the token cannot be decrypted with this key") from error

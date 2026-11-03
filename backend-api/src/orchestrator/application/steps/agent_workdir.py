@@ -193,17 +193,17 @@ def wip_commit(ctx: StepContext) -> StepResult | None:
     """
     if ctx.previous_attempt is None:
         return None
+    story_id = resolved_text(ctx.with_resolved, STORY_ID_KEY)
     try:
-        _sweep(ctx)
+        sweep(ctx, WIP_MESSAGE.format(id=story_id, n=ctx.attempt.n))
     except GitError as error:
         return _git_park(ctx, WIP_FAILED, error)
     return None
 
 
-def _sweep(ctx: StepContext) -> None:
-    """The sweep itself — every git call it makes is inside `wip_commit`'s one `except`."""
+def sweep(ctx: StepContext, message: str) -> None:
+    """Commit whatever either tree holds under `message`; raises `GitError` for the caller."""
     git, root = ctx.ports.git, require_cwd(ctx)
-    message = WIP_MESSAGE.format(id=resolved_text(ctx.with_resolved, STORY_ID_KEY), n=ctx.attempt.n)
     workdir = declared(ctx)
     if not workdir:
         if git.status(root).strip():

@@ -107,6 +107,7 @@ def get_step_detail(
             AttemptDetailOut(
                 id=attempt.id,
                 n=attempt.n,
+                role=attempt.role,
                 status=attempt.status,
                 token=STEP_TOKENS.get(attempt.status, attempt.status[:3].upper()),
                 started_at=attempt.started_at,

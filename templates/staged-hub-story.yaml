@@ -4,7 +4,7 @@ description: >-
   staged: one story of a hub-Run initiative in three agent sessions — plan, implement,
   review — each on its own model, built inside the epic's member submodule
 # family: staged · role: story · method: plan / implement / verify / review, one session each
-# called by: staged-hub-epic · calls: — · skills: staged-plan, staged-implement, staged-review
+# called by: staged-hub-epic · calls: — · skills: staged-plan, staged-implement, staged-review, senior-consult
 # sibling: initiative-hub-story (auto) — differs in: the one `build` row (bmad-build-auto) is
 #          three agent rows on three models; each row routes on its own marker under
 #          `{{spec_folder}}/stories/.auto/` instead of the Story file; `verify` redispatches
@@ -26,6 +26,9 @@ inputs:
   model:        { type: string,     required: false }
   plan_model:   { type: string,     required: false }
   review_model: { type: string,     required: false }
+  # The senior a blocked agent row consults before a person is asked (AD-22). Blank:
+  # no consult is planned, and every blocked stop parks for a person as before.
+  senior_model: { type: string,     required: false }
   # Limits per stage, in minutes, bound by the caller from the Run's own inputs. The stall
   # limit is the liveness signal; a planning or review phase reads for long stretches, so
   # each gets the stage's wall clock as its stall limit too. Empty resolves to the kind's
@@ -85,6 +88,17 @@ steps:
       prompt: "The previous session left no readable plan marker for story {{story.id}} under stories/.auto/ in the spec folder named in the dispatch sentence. Finish the spec and write that marker last, with status done or status blocked."
       resume_session: true
     pause_when: "story.spec_checkpoint"
+    consult:
+      model: "{{senior_model}}"
+      skill: senior-consult
+      on: [blocked, protected_path]
+      timeout_min: 30
+      prompts:
+        dispatch: >-
+          Run the skill {skill}. The agent on story {story_id} (spec folder {spec_folder})
+          stopped at this condition: "{condition}". Write your decision to
+          {decision}.
+        answer: 'Answer from the senior reviewer to the blocking condition "{condition}": {answer}'
     timeout_min: "{{plan_timeout_min}}"
     stall_min: "{{plan_timeout_min}}"
     gate: liveness
@@ -127,6 +141,17 @@ steps:
       max: 1
       prompt: "The previous session left no readable implement marker for story {{story.id}} under stories/.auto/ in the spec folder named in the dispatch sentence. Finish the implementation, run the spec's Verification commands, and write that marker last, with status done or status blocked."
       resume_session: true
+    consult:
+      model: "{{senior_model}}"
+      skill: senior-consult
+      on: [blocked, protected_path]
+      timeout_min: 30
+      prompts:
+        dispatch: >-
+          Run the skill {skill}. The agent on story {story_id} (spec folder {spec_folder})
+          stopped at this condition: "{condition}". Write your decision to
+          {decision}.
+        answer: 'Answer from the senior reviewer to the blocking condition "{condition}": {answer}'
     timeout_min: "{{build_timeout_min}}"
     stall_min: "{{build_stall_min}}"
     gate: liveness
@@ -136,7 +161,28 @@ steps:
   # header): `shell` rows take no `workdir`, so the passed-down `{{test}}` scopes itself.
   - id: verify
     run: "{{test}}"
-    on_fail: { redispatch: implement, max: 2 }
+    on_fail:
+      redispatch: implement
+      max: 2
+      consult:
+        model: "{{senior_model}}"
+        skill: senior-consult
+        timeout_min: 30
+        prompts:
+          dispatch: |
+            Run the skill {skill}. The implementer on story {story_id} (spec folder {spec_folder})
+            reported done, and the member repository's verify command still fails after its
+            redispatches were used up:
+              Command:   {command}
+              Exit code: {code}
+              Output tail:
+            {tail}
+            The tail of the implementer's last session log:
+            {agent_log}
+            Diagnose the failure and write your decision to {decision}.
+          answer: |
+            The senior reviewer diagnosed the failing verification ({condition}):
+            {answer}
     timeout_min: 30
     gate: deterministic
 
@@ -167,6 +213,17 @@ steps:
       max: 1
       prompt: "The previous session left no readable review marker for story {{story.id}} under stories/.auto/ in the spec folder named in the dispatch sentence. Finish the review at the tier the spec names, re-run the spec's Verification commands, and write that marker last, with status done or status blocked."
       resume_session: true
+    consult:
+      model: "{{senior_model}}"
+      skill: senior-consult
+      on: [blocked, protected_path]
+      timeout_min: 30
+      prompts:
+        dispatch: >-
+          Run the skill {skill}. The agent on story {story_id} (spec folder {spec_folder})
+          stopped at this condition: "{condition}". Write your decision to
+          {decision}.
+        answer: 'Answer from the senior reviewer to the blocking condition "{condition}": {answer}'
     timeout_min: "{{review_timeout_min}}"
     stall_min: "{{review_timeout_min}}"
     gate: liveness

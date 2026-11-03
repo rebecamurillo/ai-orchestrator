@@ -66,3 +66,6 @@ class LocalWorkflowEngine:
 
     def schedule(self, name: str, cron: str, job: Callable[[], None]) -> None:
         """No scheduler runs in this process yet (CAP-11 is 4.11's)."""
+
+    def enqueue_session_turn(self, run_id: UUID, attempt_id: UUID) -> None:
+        """Nothing here runs a turn, as nothing here runs a walk."""

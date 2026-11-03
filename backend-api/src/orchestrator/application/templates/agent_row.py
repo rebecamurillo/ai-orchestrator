@@ -29,10 +29,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
+from orchestrator.application.templates.consult import plan_consult
 from orchestrator.application.templates.expressions import ITEM_TYPE
 from orchestrator.application.templates.model import AgentExtras
 from orchestrator.application.templates.substitute import paused, resolve
-from orchestrator.application.templates.table import WRITES_KEY
+from orchestrator.application.templates.table import CONSULT_KEY, WRITES_KEY
 
 if TYPE_CHECKING:  # a frame is the walker's; naming it here would be a second one
     from orchestrator.application.templates.rows import Frame
@@ -93,6 +94,9 @@ def agent_extras(agent: AgentExtras, frame: Frame) -> dict[str, Any]:
     clauses = _prompt_clauses(agent, frame)
     if clauses:
         extras[PROMPTS_KEY] = clauses
+    consult = plan_consult(agent.consult, frame.scope)
+    if consult is not None:
+        extras[CONSULT_KEY] = consult
     return extras
 
 

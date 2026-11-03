@@ -37,6 +37,7 @@ from orchestrator.application.templates.agent_row import (
     prompt_extra,
 )
 from orchestrator.application.templates.branches import BranchAllocator, frame_branch, fresh_params
+from orchestrator.application.templates.consult import plan_consult
 from orchestrator.application.templates.defaults import with_defaults
 from orchestrator.application.templates.lists import (
     EPICS_KIND,
@@ -383,6 +384,7 @@ def _routing(step: Step, frame: Frame) -> str | Redispatched | None:
         template=frame.template.name,
         version=frame.template.version,
         line=step.line,
+        consult=plan_consult(step.redispatch_consult, frame.scope),
     )
 
 

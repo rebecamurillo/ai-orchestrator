@@ -8,12 +8,15 @@ one from an admitted one, not this schema. The response is `RunSummaryOut`
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
 
 from orchestrator.domain.statuses import SignalKind
 from orchestrator.domain.values import Signal
+
+#: Strict, because lax coercion would let `true` match stop 1.
+StopNumber = Annotated[int, Field(ge=0, strict=True)]
 
 
 class SignalIn(BaseModel):
@@ -21,6 +24,8 @@ class SignalIn(BaseModel):
 
     kind: SignalKind
     payload: dict[str, Any] = Field(default_factory=dict)
+    #: The `park_seq` this signal was written for; a different current stop answers 409.
+    stop: StopNumber | None = None
 
     def as_signal(self) -> Signal:
-        return Signal(kind=self.kind, payload=self.payload)
+        return Signal(kind=self.kind, payload=self.payload, stop=self.stop)

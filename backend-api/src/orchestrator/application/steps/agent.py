@@ -27,8 +27,11 @@ middle write is the one thing a *resumed* session skips — `Harness.resume` is 
 which is the very case this guards — while `end_sha` is written only by the tail.
 
 **One resume reaches this module and dispatches nothing.** A `continue` carrying accepted
-files runs only the check and routing over the previous attempt — `agent_tail.re_check`
+files runs only the check and routing over the previous attempt — `agent_recheck.re_check`
 handles it before any new commits are placed in front of the range it reads.
+
+**A `consult` attempt runs none of this module's sequence** (AD-21, AD-22): it is a senior's
+new session that must leave the tree untouched, and `agent_consult.run` is the whole of it.
 
 **Three re-dispatches reach this module and are not the same dispatch** (AD-9, AD-13): the
 Template's own `retry`; a person's *Retry* from a stop; and a `verify` redispatch that
@@ -51,16 +54,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 import structlog
 
 from orchestrator.application.steps import (
     agent_answer,
+    agent_consult,
+    agent_env,
     agent_prepare,
     agent_prompt,
+    agent_recheck,
     agent_render,
     agent_skill,
     agent_tail,
@@ -72,9 +76,6 @@ from orchestrator.application.steps.context import (
     log_path,
     operator_retry,
     redispatched,
-    require_cwd,
-    require_env,
-    require_harness_env,
     require_harnesses,
     require_process,
     require_run,
@@ -83,11 +84,9 @@ from orchestrator.application.steps.context import (
     retrying,
 )
 from orchestrator.application.steps.registry import register
-from orchestrator.application.templates.agent_row import STORY_ID_KEY
 from orchestrator.application.templates.rows import STALL_KEY, TIMEOUT_KEY
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
-from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.harness import Harness
 from orchestrator.domain.values import Park, StepResult
@@ -140,7 +139,9 @@ class AgentExecutor:
     """Prepare the worktree, dispatch the harness, record the attempt. Decide nothing."""
 
     def execute(self, ctx: StepContext) -> StepResult:
-        accepted = agent_tail.re_check(ctx)
+        if ctx.attempt.role == agent_consult.CONSULT_ROLE:
+            return agent_consult.run(ctx)
+        accepted = agent_recheck.re_check(ctx)
         if accepted is not None:
             return accepted
         found = _harness(ctx)
@@ -286,13 +287,9 @@ def _planned(
         prompt_file_content=prompt_file_content,
         workflow_path=workflow,
     )
-    if redispatched(ctx) and (failure := require_env(ctx).verify_failure) is not None:
-        # what a fresh dispatch is told when a `verify` row has just sent the Story back
-        # (FR-10): once, on this attempt alone — a retry of it reads `redispatched(ctx)` as
-        # `False` (context.py's own "nothing is appended twice") and never repeats it.
-        clause = agent_prompt.redispatch_clause(scope, failure)
-        if clause:
-            prompt = f"{clause} {prompt}"
+    sent_back = _sent_back(ctx, scope)
+    if sent_back:
+        prompt = f"{sent_back} {prompt}"
     if retry is not None or (operator_retry(ctx) and operator_mode == "restart"):
         op = str(ctx.resume_signal.payload.get("text", "")) if ctx.resume_signal else ""
         hint = retry.prompt if retry else getattr(agent_tail.retry_of(ctx), "prompt", "")
@@ -303,6 +300,19 @@ def _planned(
     return _Dispatch(harness, attempt, prompt, session)
 
 
+def _sent_back(ctx: StepContext, scope: Mapping[str, Any]) -> str:
+    """What a fresh dispatch is told when a `verify` row has just sent the Story back
+    (FR-10): once, on this attempt alone — a retry of it reads `redispatched(ctx)` as
+    `False` (context.py's own "nothing is appended twice") and never repeats it. A senior's
+    diagnosis still owed (AD-22) is told in the same breath, so a dispatch a crash
+    interrupted before it came back says both again to the new session."""
+    environment = ctx.ports.run_env
+    failure = environment.verify_failure if environment is not None else None
+    if failure is None or not (redispatched(ctx) or failure.diagnosis):
+        return ""
+    return agent_prompt.redispatch_clause(scope, failure)
+
+
 def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
     """Start the harness, commit its group, then wait for it — AD-14's order, exactly. A
     resumed session skips the middle write: `Harness.resume` is one call, so no handle sits
@@ -310,11 +320,11 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
     run = require_run(ctx)
     timeout_min = ctx.with_resolved.get(TIMEOUT_KEY)
     stall_min = ctx.with_resolved.get(STALL_KEY, DEFAULT_STALL_MIN)
-    env = _environment(ctx, dispatch.attempt, traceparent)
+    env = agent_env.environment(ctx, dispatch.attempt, traceparent)
     # the member checkout on a `workdir` row, the worktree root otherwise: the process's own
     # folder, and therefore the one the stall detector watches (AD-9, AD-17, H4).
     dispatch_cwd = agent_workdir.tree(ctx)
-    add_dirs, model = _add_dirs(ctx, dispatch_cwd), (_text(ctx, MODEL_KEY) or None)
+    add_dirs, model = agent_env.add_dirs(ctx, dispatch_cwd), (_text(ctx, MODEL_KEY) or None)
     if dispatch.resume_id is not None:
         resumed = dispatch.harness.resume(
             cwd=dispatch_cwd,
@@ -325,7 +335,7 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
             log_path=log_path(ctx),
             stall_min=stall_min,
             model=model,
-            budget_usd_remaining=_remaining(run),
+            budget_usd_remaining=agent_env.remaining(run),
             add_dirs=add_dirs,
         )
         return agent_tail.finish(ctx, dispatch.attempt, resumed, timeout_min, stall_min)
@@ -335,7 +345,7 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
         env=env,
         model=model,
         session_id=dispatch.session_id,
-        budget_usd_remaining=_remaining(run),
+        budget_usd_remaining=agent_env.remaining(run),
         timeout_min=timeout_min,
         log_path=log_path(ctx),
         stall_min=stall_min,
@@ -352,31 +362,6 @@ def _run(ctx: StepContext, dispatch: _Dispatch, traceparent: str) -> StepResult:
         require_process(ctx).kill_group(handle.pgid)
         raise
     return agent_tail.finish(ctx, running, dispatch.harness.wait(handle), timeout_min, stall_min)
-
-
-def _environment(ctx: StepContext, attempt: Attempt, traceparent: str) -> dict[str, str]:
-    """Exactly what `HarnessEnv` builds for this attempt (AD-5, AD-10)."""
-    environment = require_env(ctx)
-    return require_harness_env(ctx)(
-        attempt,
-        run=require_run(ctx),
-        project_slug=environment.project_slug,
-        project_env=environment.project.env_vars,
-        log_content=environment.project.log_prompt_content,
-        story_id=_text(ctx, STORY_ID_KEY) or None,
-        traceparent=traceparent,
-    )
-
-
-def _remaining(run: Run) -> Decimal | None:
-    """What the Run may still spend, or `None` when it has no budget (FR-17)."""
-    return run.budget_usd - run.spend_usd if run.budget_usd is not None else None
-
-
-def _add_dirs(ctx: StepContext, dispatch_cwd: Path) -> tuple[Path, ...]:
-    """The hub root for a dispatch standing in a submodule: the specs and `git -C` live there."""
-    root = require_cwd(ctx)
-    return () if dispatch_cwd == root else (root,)
 
 
 def _text(ctx: StepContext, key: str) -> str:

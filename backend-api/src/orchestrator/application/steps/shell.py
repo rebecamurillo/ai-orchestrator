@@ -4,7 +4,9 @@
 already resolved it (`application/templates/rows.py::_routing`) into exactly the four forms
 `domain.values.Redispatch` and this module both speak: the plain words `fail` / `continue`,
 absent (the DSL default, `escalate`), or `{target_seq, max}` — which is `Redispatch`'s own
-field names, so `Redispatch(**action)` builds it directly, with nothing to translate.
+field names, so `Redispatch(**action)` builds it directly, with nothing to translate. A
+`consult` beside them is the senior `apply_step_result` offers once the bound is used up
+(`use_cases/verify_consult.py`); this module neither reads nor needs it.
 
 **A timeout and a non-zero exit are different failures.** `ProcessRunner.wait` already
 decided the process ran past `with_resolved["timeout_min"]`; that is always `error` with

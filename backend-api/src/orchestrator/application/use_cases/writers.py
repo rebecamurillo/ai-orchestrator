@@ -36,6 +36,7 @@ from orchestrator.domain.ports.repositories import (
 from orchestrator.domain.ports.trajectories import TrajectoryRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.statuses import (
+    RUN_EXPIRED,
     Actor,
     GateEvent,
     StepEvent,
@@ -60,12 +61,6 @@ FINISHED: frozenset[StepStatus] = frozenset({"done", "skipped"})
 #: What the gate record says when a Run starts and when it ends of its own accord.
 RUN_STARTED = "run started"
 RUN_DONE = "every planned step is done or skipped"
-
-#: What the gate record says when the `recv` a parked Run waits in reaches its deadline.
-#: AD-13 applies the expiry as Run `failed`, and `failed` is the event the alphabet has:
-#: `expired` is not a `GateEvent` (`domain/statuses.py` says so in as many words), so the
-#: sentence carries the thirty days and the event stays the lifecycle one.
-RUN_EXPIRED = "parked 30 days"
 
 
 @dataclass(frozen=True)
@@ -93,9 +88,9 @@ class WriterPorts:
     announcer: Announcer | None = None
 
 
-def require_run(ports: WriterPorts, run_id: UUID) -> Run:
-    """The stored Run, or `NotFound` (404) — no writer invents one."""
-    run = ports.runs.get(run_id)
+def require_run(ports: WriterPorts, run_id: UUID, *, lock: bool = False) -> Run:
+    """The stored Run, or `NotFound` (404); `lock` reads it under a row lock."""
+    run = ports.runs.get_for_update(run_id) if lock else ports.runs.get(run_id)
     if run is None:
         raise NotFound(f"no run {run_id}")
     return run
@@ -166,6 +161,8 @@ def set_run(ports: WriterPorts, run: Run, reason: str | None = None, **update: A
     which the cleared park fields no longer carry.
     """
     updated = run.model_copy(update=update)
+    if updated.status != "running":  # a Run that is not running has no pause pending
+        updated = updated.model_copy(update={"pause_requested": False})
     ports.runs.update(updated)
     if ports.announcer is not None:
         ports.announcer.transition(run, updated, reason)
@@ -204,6 +201,7 @@ def park_run(
         park_kind=park.kind,
         park_path=park.path,
         park_reason=park.reason,
+        park_seq=run.park_seq + 1,
     )
     record(
         ports,
@@ -335,6 +333,7 @@ def _write_dependency_park(ports: WriterPorts, dep: Run, reason: str) -> None:
             "park_kind": "dependency",
             "park_path": None,
             "park_reason": reason,
+            "park_seq": dep.park_seq + 1,
         }
     )
     ports.runs.update(parked)

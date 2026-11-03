@@ -30,7 +30,7 @@ from orchestrator.application.rules.frames import in_frame, rows_in_frame
 from orchestrator.application.steps import AGENT_KIND, COMMIT_KIND, SHELL_KIND
 from orchestrator.application.steps.git_commit import NO_CHANGES
 from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.attempt import Attempt, agent_attempts
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -107,6 +107,8 @@ def record_trajectory(  # noqa: PLR0913 — the seven ports the brief names, ver
     if build_row.status != DONE or verify_row.status not in (DONE, SKIPPED):
         return
     build_attempts = attempts.list_for_row(build_row.id)
+    # AD-19 records the Story's agent attempts; a senior's consult is billed, not listed
+    agent_only = agent_attempts(build_attempts)
     records = gate_records.list_for_run(run_id)
     end_sha = _head_sha(git, run)
     trajectories.add(
@@ -118,16 +120,16 @@ def record_trajectory(  # noqa: PLR0913 — the seven ports the brief names, ver
             story_id=build_row.story_id,
             epic_index=_epic_index(frame),
             frame=frame,
-            harness=_latest(a.harness for a in reversed(build_attempts)),
-            model=_latest(a.model for a in reversed(build_attempts)),
-            attempts=tuple(_attempt_record(a) for a in build_attempts),
+            harness=_latest(a.harness for a in reversed(agent_only)),
+            model=_latest(a.model for a in reversed(agent_only)),
+            attempts=tuple(_attempt_record(a) for a in agent_only),
             gate_results=_gate_results(build_row, verify_row, commit_row, frame, records, run),
             cost_usd=_sum_cost(build_attempts),
             tokens_in=_sum_tokens(build_attempts, "tokens_in"),
             tokens_out=_sum_tokens(build_attempts, "tokens_out"),
             wall_clock_seconds=_wall_clock(build_attempts),
             story_file=_story_file(git, run, build_row, end_sha),
-            start_sha=_latest(a.start_sha for a in build_attempts),
+            start_sha=_latest(a.start_sha for a in agent_only),
             end_sha=end_sha,
             human_actions=_human_actions(records, frame),
             recorded_at=clock.now(),

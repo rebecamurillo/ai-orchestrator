@@ -102,7 +102,9 @@ def test_the_step_status_tokens_are_the_ones_the_conventions_spell() -> None:
     )
 
 
-def test_the_park_kinds_are_the_twelve_the_brief_lists() -> None:
+def test_the_park_kinds_are_the_thirteen_the_brief_lists() -> None:
+    # story 2-1, 2026-11-02: "paused" added, as AD-13's 2026-11-01 amendment declares; it is
+    # the stop a pause request lands as.
     # operator revision 2026-09-18: "dependency" added as a new park kind (story 5-4);
     # anchor exception 4 granted 2026-09-18.
     # revised 2026-09-23 (multi-repository initiative, story S4): "merge_conflict" added —
@@ -121,10 +123,14 @@ def test_the_park_kinds_are_the_twelve_the_brief_lists() -> None:
         "internal",
         "dependency",
         "merge_conflict",
+        "paused",
     )
 
 
-def test_the_signal_kinds_are_the_twelve_ad_13_names() -> None:
+def test_the_signal_kinds_are_the_fifteen_ad_13_names() -> None:
+    # story 2-3, 2026-11-02: "session_start" and "session_end" added, as AD-13's 2026-11-01
+    # amendment declares; they open and close the Operator's senior session (AD-23).
+    # story 2-1, 2026-11-02: "pause" added, as AD-13's 2026-11-01 amendment declares.
     # operator revision 2026-09-18: "start" added for the deferred-start signal (story 5-3);
     # anchor exception 4 granted 2026-09-18T13:17:20Z.
     # story 1 (2026-09-25): "skip_step" added as the twelfth kind (SPEC-step-handling CAP-1).
@@ -141,6 +147,9 @@ def test_the_signal_kinds_are_the_twelve_ad_13_names() -> None:
         "terminal_release",
         "terminal_resume",
         "start",
+        "pause",
+        "session_start",
+        "session_end",
     )
 
 
@@ -150,7 +159,11 @@ def test_the_domain_gate_carries_unvalidated_as_well() -> None:
 
 
 def test_the_actors_are_the_three_a_gate_record_can_name() -> None:
-    assert ACTORS == ("operator", "machine", "terminal")
+    # Story 1-4, 2026-11-02: `senior` joins, as spine AD-8's amendment (ratified 2026-11-01,
+    # senior unblock) declares; it is the actor of a consult's outcome.
+    # Story 4-1, 2026-11-02: `chat` joins, appended, under the same amendment; it is the
+    # actor of an answer a thread reply gave.
+    assert ACTORS == ("operator", "machine", "terminal", "senior", "chat")
 
 
 def test_a_gate_event_is_a_park_kind_a_signal_kind_or_a_lifecycle_event() -> None:

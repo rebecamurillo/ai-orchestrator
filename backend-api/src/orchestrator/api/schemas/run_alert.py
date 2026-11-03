@@ -19,7 +19,10 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from orchestrator.api.schemas.common import MoneyStr, UtcTimestamp
+from orchestrator.application.use_cases.run_view_types import ChatThreadNote
 from orchestrator.application.use_cases.run_views import Alert, Attribution, CheckpointStory
+from orchestrator.domain.entities.chat_thread import ChatThreadState
+from orchestrator.domain.ports.chat import ChatProvider
 from orchestrator.domain.statuses import ParkKind
 
 
@@ -67,6 +70,19 @@ class CheckpointStoryOut(BaseModel):
         )
 
 
+class ChatThreadOut(BaseModel):
+    """The stop's chat thread (story 3-3): its platform, how far it got, and why it failed.
+    `error` is shown verbatim, whatever the state."""
+
+    provider: ChatProvider
+    state: ChatThreadState
+    error: str | None
+
+    @classmethod
+    def of(cls, note: ChatThreadNote) -> ChatThreadOut:
+        return cls(provider=note.provider, state=note.state, error=note.error)
+
+
 class AlertOut(BaseModel):
     token: str
     reason: str | None
@@ -85,13 +101,17 @@ class AlertOut(BaseModel):
     #: payload` itself carries: a typed model here would fix a shape the record deliberately
     #: leaves open ("whatever the event needs kept", its own docstring).
     payload: dict[str, Any] = Field(default_factory=dict, json_schema_extra=_drop_default)
+    #: The stop's thread, `None` when it has none (story 3-3).
+    chat_thread: ChatThreadOut | None = Field(default=None, json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, alert: Alert) -> AlertOut:
         attribution = None if alert.attribution is None else AttributionOut.of(alert.attribution)
         checkpoint_story = alert.checkpoint_story
         story = None if checkpoint_story is None else CheckpointStoryOut.of(checkpoint_story)
+        thread = None if alert.chat_thread is None else ChatThreadOut.of(alert.chat_thread)
         return cls(
+            chat_thread=thread,
             token=alert.token,
             reason=alert.reason,
             park_kind=alert.park_kind,

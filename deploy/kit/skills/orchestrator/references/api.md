@@ -96,7 +96,7 @@ empty freezes no file for the agent (Operator decision 2026-10-06).
 | GET | `/api/v1/runs/{id}/attempts/{attempt_id}/log` | Raw attempt log |
 | GET | `/api/v1/runs/{id}/files` | Parked worktree: no `path` → tree; `?path=` → file; `&diff=1` → diff |
 | PUT | `/api/v1/runs/{id}/files` | Commit one operator edit `{path, content}` while parked |
-| POST | `/api/v1/runs/{id}/signals` | `{kind, payload}` — see below |
+| POST | `/api/v1/runs/{id}/signals` | `{kind, payload, stop}` — see below |
 | GET | `/api/v1/runs/{id}/signals` | Same read as `GET /runs/{id}` |
 
 Create body (`RunIn`): required `template_name`, `template_version` (int), `project_id`,
@@ -106,15 +106,22 @@ Create body (`RunIn`): required `template_name`, `template_version` (int), `proj
 
 Signal kinds: `answer` (`{text}`), `continue` (`{files[]}` for protected-path accepts),
 `retry`, `skip_story`, `skip_epic`, `budget_raise` (`{budget_usd}` above current spend),
-`cancel`, `start` (a saved Run), `terminal_start` / `terminal_release` /
-`terminal_resume` (human-in-terminal flow). Admission depends on status and `park_kind`
+`cancel`, `pause` (a running Run: it parks `paused` when the current step ends, nothing
+killed; `pause_requested` is present on the Run while one is pending), `start` (a saved
+Run), `terminal_start` / `terminal_release` / `terminal_resume` (human-in-terminal flow). Admission depends on status and `park_kind`
 — always read `admitted_signals` first; a non-admitted kind answers 409.
+
+Send `stop` on `answer`, `retry` and `continue`: the `park_seq` you read with the question,
+from `GET /runs/{id}` or `/events`. If the Run has moved to another stop, the signal answers
+409, names the current stop and changes nothing. Read the Run again before answering. A
+signal without `stop` is not checked. `park_seq` is absent until a Run first stops. The MCP
+`send_signal` tool takes the same value as its `stop` argument.
 
 ### Waiting instead of polling
 
 `GET /api/v1/runs/{id}/events` answers
 `{run_id, status, updated_at, changed, admitted_signals, spend_usd, budget_usd, park_kind,
-park_path}` — a change signal, not a payload.
+park_path, park_seq}` — a change signal, not a payload.
 
 - No `wait` (or `wait=0`): the current state, `changed: false`.
 - `wait=1..30`: the connection is held that many seconds and answers the moment `status` or
@@ -155,7 +162,7 @@ snippets ship in the kit under `mcp/`; they are not installed automatically.
 - Step: `planned` `queued` `running` `done` `blocked` `checkpoint` `error` `skipped`.
 - Park kinds (`alert.park_kind`): `blocked` `checkpoint` `verify_failed` `budget`
   `timeout` `push_rejected` `protected_path` `misconfigured` `plan_stale` `internal`
-  `dependency` `merge_conflict`.
+  `dependency` `merge_conflict` `paused` (renders `CHK`; admits `continue` and `cancel`).
 - A parked Run waits up to the instance's `HUMAN_WAIT_SECONDS` (default 30 days), then
   fails.
 

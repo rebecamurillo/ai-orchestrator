@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
+from orchestrator.application.steps.verify_failure import VerifyFailure
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.entities.attempt import Attempt
@@ -103,24 +104,6 @@ class ProjectContext:
 
 
 @dataclass(frozen=True)
-class VerifyFailure:
-    """Why the `verify` row sent this Story back, as the walker read it (FR-10, AD-9).
-
-    A value and not a handle, for the reason every other field of `RunEnvironment` is one:
-    the row that failed is a different row, its attempt is a different attempt, and an
-    executor that could ask a repository for either would be reading state AD-8 says only
-    the walker holds. `walk._context` resolves it once, before the executor runs.
-    """
-
-    #: The `verify` row's own resolved command, as the Operator would re-run it.
-    command: str
-    #: What it exited with; `None` when it was sent back before an attempt recorded one.
-    exit_code: int | None
-    #: The last lines of its log, oldest first, as `LogReader.tail` answered them.
-    log_tail: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class RunEnvironment:
     """One Run's own facts, as the walker read them just before this row ran.
 
@@ -161,6 +144,9 @@ class RunEnvironment:
     anchors: frozenset[str] = frozenset()
     #: Label of the run holding the same (repository, branch) slot, or `None` (story 5-1, AD-8).
     held_by_label: str | None = None
+    #: The root-tree SHA the row's first agent attempt started at, which a consult copies the
+    #: story file from (AD-22), or `None` before any agent attempt started.
+    story_baseline_sha: str | None = None
 
     def base_dir(self, work_dir: str) -> Path:
         """`{work_dir}/{project.slug}/{repository.slug}/base` — the one layout (AD-14)."""

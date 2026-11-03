@@ -22,14 +22,17 @@ def test_a_terminal_run_admits_nothing() -> None:
         assert run_admitted_signals(run, None) == ()
 
 
-def test_a_queued_or_running_run_admits_only_cancel() -> None:
+def test_a_queued_run_admits_only_cancel_and_a_running_one_adds_pause() -> None:
     # operator revision 2026-09-18: a *saved* queued run (engine_ref={}) admits ("start",
     # "cancel"); a normal queued run (engine_ref non-empty) still admits only cancel (story
     # 5-3); anchor exception 4 granted 2026-09-18T13:17:20Z.
     # Running runs and normally-queued runs are unchanged.
-    for status in ("running",):
-        run = build_run(status=status)
-        assert run_admitted_signals(run, None) == ("cancel",)
+    # story 2-1, 2026-11-02: a running run also offers "pause" until one is requested (AD-13).
+    run = build_run(status="running")
+    assert run_admitted_signals(run, None) == ("pause", "cancel")
+    assert run_admitted_signals(build_run(status="running", pause_requested=True), None) == (
+        "cancel",
+    )
     # A normally queued run (engine_ref non-empty) also admits only cancel.
     run = build_run(status="queued", engine_ref={"ref": 1})
     assert run_admitted_signals(run, None) == ("cancel",)

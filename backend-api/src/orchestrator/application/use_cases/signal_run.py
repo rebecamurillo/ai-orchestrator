@@ -25,6 +25,10 @@ The shape is the same for all ten kinds and this module is that shape:
    status, so a Run that was already `running` would otherwise be woken by a signal that
    changed nothing about what it should execute.
 
+Steps 1 to 4 are `signal_apply.py::apply_signal`, inside the caller's unit of work, and
+step 5 is its `finish_signal`, after the commit (story 4-1); this module locks, applies,
+commits and finishes.
+
 The brief's prose lists "the `terminal_*` kinds" among those that do not resume, while its
 own table and AD-8's Run diagram both give `terminal_resume` `needs_you → running`, and
 AD-13 describes its effect as happening "in the resumed engine step". The spine binds: the
@@ -37,93 +41,55 @@ everything the caller needs and 4.9 acts on it.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import Any
 from uuid import UUID
 
 from orchestrator.application.preflight.model import PreflightRequest
-from orchestrator.application.rules.signals import Rule, record_text, validate
-from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
-from orchestrator.application.use_cases.signal_effects import EFFECTS, CancelPlan, Effect
-from orchestrator.application.use_cases.writers import (
-    Entry,
-    WriterPorts,
-    clear_park,
-    enqueue_dependents,
-    finish_run,
-    park_dependents,
-    record,
-    require_run,
-    set_run,
+from orchestrator.application.rules.signals import validate
+from orchestrator.application.use_cases.preflight import preflight_and_plan
+from orchestrator.application.use_cases.signal_apply import (
+    CANCEL,
+    RUNNING,
+    STALE_STOP,
+    STOP_AT,
+    STOP_WHERE,
+    Applied,
+    SignalOutcome,
+    SignalPorts,
+    _always_false,
+    _no_attempt,
+    apply_signal,
+    finish_signal,
+    refuse_stale_stop,
 )
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.application.use_cases.writers import Entry, record, require_run, set_run
 from orchestrator.domain.entities.run import Run
-from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.errors import Conflict, Invalid
-from orchestrator.domain.ports.engine import WorkflowEngine
-from orchestrator.domain.statuses import run_transition
+from orchestrator.domain.errors import Conflict
 from orchestrator.domain.values import Signal
 
-#: The status that means the Run carried on, and so that the engine has to be woken.
-RUNNING = "running"
-
-#: The kind whose engine call is `cancel` rather than `signal` (AD-13).
-CANCEL = "cancel"
-
-#: The two signal kinds that carry an optional `mode` key (story 3-3).
-_MODE_KINDS: frozenset[str] = frozenset({"answer", "retry"})
-#: The payload key and the two accepted values.
-_MODE_KEY = "mode"
-_MODE_SESSION = "session"
-_MODE_RESTART = "restart"
-_KNOWN_MODES: frozenset[str] = frozenset({_MODE_RESTART, _MODE_SESSION})
-
-
-def _always_false(_: str) -> bool:
-    return False
-
-
-def _no_attempt(_: UUID) -> Attempt | None:
-    return None
-
+__all__ = [
+    "CANCEL",
+    "DEPENDENCY",
+    "RUNNING",
+    "STALE_STOP",
+    "START",
+    "STOP_AT",
+    "STOP_WHERE",
+    "Applied",
+    "SignalOutcome",
+    "SignalPorts",
+    "_always_false",
+    "_no_attempt",
+    "apply_signal",
+    "finish_signal",
+    "refuse_stale_stop",
+    "signal_run",
+]
 
 #: The signal that enqueues a saved Run on Operator request (story 5-3).
 START = "start"
 
 #: The park kind that means the Run is waiting for a predecessor (story 5-4).
 DEPENDENCY = "dependency"
-
-
-@dataclass(frozen=True)
-class SignalPorts:
-    """What `signal_run` writes and talks through: the shared writer ports, and the engine.
-
-    `harness_is_resumable` and `latest_attempt_for_run` are the two callables that let
-    `_check_mode` validate `mode="session"` without importing infrastructure (AD-2).  They
-    default to `False`/`None` so callers that never send `mode="session"` need not wire them
-    — the mode check short-circuits on `mode="restart"` (the implicit default) and never
-    calls them.
-    """
-
-    writers: WriterPorts
-    engine: WorkflowEngine
-    harness_is_resumable: Callable[[str], bool] = field(default=_always_false)
-    latest_attempt_for_run: Callable[[UUID], Attempt | None] = field(default=_no_attempt)
-    #: Required when the `start` Signal may be sent (story 5-3). `None` degrades gracefully
-    #: for every existing call site that predates this field and never sends `start`.
-    preflight: PreflightPorts | None = None
-
-
-@dataclass(frozen=True)
-class SignalOutcome:
-    """What the router answers with: the Run as it now stands, and what the caller must do."""
-
-    run: Run
-    #: True when the Run left `needs_you` for `running` and the engine was told.
-    resumed: bool
-    #: Set by `cancel` only: the process groups to kill and the worktrees to remove (4.9).
-    cancel_plan: CancelPlan | None = None
 
 
 def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcome:
@@ -138,101 +104,10 @@ def signal_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> SignalOutcom
             return _continue_dependency_run(ports, run_id, signal)
     writers = ports.writers
     with writers.uow:
-        run = require_run(writers, run_id)
-        rows = writers.steps.list_for_run(run_id)
-        park_row = _park_row(rows, run.park_path)
-        rule = validate(run, park_row, signal, rows)
-        _check_mode(ports, run, signal)
-        record(
-            writers,
-            run,
-            Entry(
-                event=signal.kind,
-                actor=rule.actor,
-                path=run.park_path,
-                text=record_text(rule, signal.payload),
-                payload=signal.payload,
-            ),
-        )
-        effect = EFFECTS[signal.kind](writers, run, rows, park_row, signal)
-        run = _apply(writers, run, rule, effect)
-        # Park dependents in the same UoW when this run reaches `cancelled` (story 5-4).
-        if run.status == "cancelled":
-            park_dependents(writers, run)
+        run = require_run(writers, run_id, lock=True)
+        applied = apply_signal(ports, run, signal)
         writers.uow.commit()
-    resumed = effect.resume and rule.run_event is not None and run.status == RUNNING
-    _tell_the_engine(ports, run_id, signal, resumed=resumed, finished=effect.finished)
-    # Two-phase enqueue for done dependents after signal (e.g. skip-to-done, story 5-4).
-    if run.status == "done":
-        enqueue_dependents(writers, writers.engine, run)
-    return SignalOutcome(run=run, resumed=resumed, cancel_plan=effect.cancel_plan)
-
-
-def _check_mode(ports: SignalPorts, run: Run, signal: Signal) -> None:
-    """Refuse an unknown or unavailable `mode` before any gate record is written (story 3-3).
-
-    Runs only for `answer` and `retry` — the two kinds that carry `mode`. An absent `mode`
-    defaults to `"session"` when reply_available is True, else `"restart"` (story 4,
-    2026-09-25); the default is written into `signal.payload` so `_planned` reads it and the
-    gate record captures it. A present `"restart"` is always accepted. `"session"` is
-    accepted only when the run's harness supports resume *and* the latest attempt recorded a
-    session_id — the two facts that together define reply_available (AD-10).
-    """
-    if signal.kind not in _MODE_KINDS:
-        return
-    if _MODE_KEY not in signal.payload:
-        attempt = ports.latest_attempt_for_run(run.id)
-        reply_available = (
-            attempt is not None
-            and attempt.session_id is not None
-            and ports.harness_is_resumable(attempt.harness or "")
-        )
-        signal.payload[_MODE_KEY] = _MODE_SESSION if reply_available else _MODE_RESTART
-    mode = signal.payload[_MODE_KEY]
-    if mode not in _KNOWN_MODES:
-        raise Invalid(f"unknown mode: {mode}")
-    if mode != _MODE_SESSION:
-        return
-    attempt = ports.latest_attempt_for_run(run.id)
-    if attempt is None or attempt.session_id is None:
-        raise Invalid("mode 'session' not available: no session recorded")
-    if not ports.harness_is_resumable(attempt.harness or ""):
-        raise Invalid("mode 'session' not available: harness does not support resume")
-
-
-def _park_row(rows: list[StepRun], park_path: str | None) -> StepRun | None:
-    """The row `run.park_path` names, or `None` for a Run that is not parked on one."""
-    return next((row for row in rows if row.path == park_path), None)
-
-
-def _apply(writers: WriterPorts, run: Run, rule: Rule, effect: Effect) -> Run:
-    """The Run's own half of the signal: the status, the park fields, the listed extras."""
-    update: dict[str, Any] = dict(effect.run_update)
-    if effect.resume and rule.run_event is not None:
-        update["status"] = run_transition(run.status, rule.run_event)
-        update.update(clear_park())
-    moved = set_run(writers, run, **update)
-    if effect.finished:
-        return finish_run(writers, moved)
-    return moved
-
-
-def _tell_the_engine(
-    ports: SignalPorts, run_id: UUID, signal: Signal, *, resumed: bool, finished: bool
-) -> None:
-    """Wake the Run's `recv`, or stop its workflow — after the writes are durable.
-
-    `finished` is a signal that ended the Run itself (a Continue on the plan's final
-    checkpoint row — story 4-5's `done-checkpoint` is the shipped case, and a skip with
-    nothing left to run is another): nothing remains to walk, but the workflow parked in
-    `recv` would otherwise sleep out `HUMAN_WAIT_SECONDS` holding its queue slot (AD-12),
-    so it is stopped the same way a cancel stops one. A run that was never enqueued (a
-    dependency park) has no workflow; `engine.cancel` swallows that case by contract.
-    """
-    if signal.kind == CANCEL or finished:
-        ports.engine.cancel(run_id)
-    elif resumed:
-        ports.engine.signal(run_id, signal)
+    return finish_signal(ports, run_id, signal, applied)
 
 
 def _preflight_req_from_run(run: Run) -> PreflightRequest:
@@ -268,7 +143,8 @@ def _continue_dependency_run(ports: SignalPorts, run_id: UUID, signal: Signal) -
     """
     writers = ports.writers
     with writers.uow:
-        run = require_run(writers, run_id)
+        run = require_run(writers, run_id, lock=True)
+        refuse_stale_stop(run, signal)
         validate(run, None, signal)
         record(
             writers,
@@ -313,7 +189,8 @@ def _start_saved_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> Signal
     """
     writers = ports.writers
     with writers.uow:
-        run = require_run(writers, run_id)
+        run = require_run(writers, run_id, lock=True)
+        refuse_stale_stop(run, signal)
         # Validate against the table: run_statuses={"queued"}, extra=_is_saved.
         # `validate` raises Conflict if the run is not queued or engine_ref is non-empty.
         # It runs BEFORE the preflight check so that a "start" sent to a non-queued Run

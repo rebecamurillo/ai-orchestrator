@@ -11,7 +11,9 @@ the engine's. What it owns is the two decisions AD-6 and AD-12 name:
 - **One queue, `MAX_ACTIVE_RUNS` wide, one Run per Repository.** The partition key is the
   Repository id, so two Runs against one Repository serialise without a lock table, and the
   slot and the partition are held for the whole life of the walk — including the `recv` a
-  parked Run waits in (AD-12; PRD FR-13 states the trade-off).
+  parked Run waits in (AD-12; PRD FR-13 states the trade-off). A senior session turn runs
+  on a second queue of the same width, one turn per Run at a time, under its attempt id,
+  so a parked walk holding its slot never blocks the turn that would unblock it (AD-23).
 
 `launch` is not on the port. Starting the engine is the composition root's business and
 happens once, in the application's start-up step, after the migrations and the seeds
@@ -34,6 +36,7 @@ from orchestrator.domain.values import Signal
 from orchestrator.infrastructure.dbos.config import (
     HUMAN_TOPIC,
     QUEUE_NAME,
+    SESSION_QUEUE,
     STEP_ID,
     WORKFLOW_ID,
     EngineConfig,
@@ -45,6 +48,7 @@ from orchestrator.infrastructure.dbos.facade import (
     DurableEngine,
     QueuedWorkflow,
 )
+from orchestrator.infrastructure.dbos.session_walker import build_session_turn
 from orchestrator.infrastructure.dbos.walker import WalkerDeps, build_walk
 
 log = structlog.get_logger(__name__)
@@ -77,16 +81,21 @@ class DbosWorkflowEngine:
         self._engine = engine
         self._deps = deps
         self._walk: Callable[[str], None] | None = None
+        self._turn: Callable[[str], None] | None = None
 
     def launch(self) -> None:
         """Start the engine: from here it dequeues Runs and recovers interrupted ones."""
         self._engine.configure(dbos_config(self._config))
         self._walk = build_walk(self._engine, self._deps)
+        # before `start`, which recovers a turn a dead backend left running only once its
+        # workflow is registered (AD-23)
+        self._turn = build_session_turn(self._engine, self._deps)
         self._engine.start()
         # after `start`, and that is the library's order rather than a preference: declaring
         # the queue writes its concurrency to the system database, which does not exist until
         # the engine is started. The queue manager picks a queue up on its next poll.
         self._engine.register_queue(QUEUE_NAME, concurrency=self._config.max_active_runs)
+        self._engine.register_queue(SESSION_QUEUE, concurrency=self._config.max_active_runs)
         log.info(ENGINE_LAUNCHED, version=self._config.application_version)
 
     def enqueue(self, run_id: UUID, partition_key: str) -> dict[str, Any]:
@@ -110,10 +119,28 @@ class DbosWorkflowEngine:
             raise RuntimeError(NOT_LAUNCHED)
         return self._walk
 
+    def enqueue_session_turn(self, run_id: UUID, attempt_id: UUID) -> None:
+        """One turn on the session queue: its workflow id is the attempt id, so a repeated
+        enqueue finds the turn already there, and its partition is the Run (AD-23)."""
+        if self._turn is None:
+            raise RuntimeError(NOT_LAUNCHED)
+        self._engine.enqueue(SESSION_QUEUE, self._turn, str(attempt_id), partition_key=str(run_id))
+
+    @property
+    def walker_deps(self) -> WalkerDeps:
+        """What the walk and the turn workflow run on, for the start-up sweep's own turns."""
+        return self._deps
+
+    def held_session_turns(self) -> frozenset[UUID]:
+        """The turns the session queue holds, enqueued or running: the engine's to recover."""
+        return frozenset(UUID(entry.workflow_id) for entry in self._engine.queued(SESSION_QUEUE))
+
     def signal(self, run_id: UUID, signal: Signal) -> None:
         """Deliver one Operator signal (AD-13) to the Run's single `recv` wait."""
         self._engine.send(
-            str(run_id), signal.model_dump(mode="json"), HUMAN_TOPIC.format(run_id=run_id)
+            str(run_id),
+            signal.model_dump(mode="json", exclude={"stop"}),
+            HUMAN_TOPIC.format(run_id=run_id),
         )
 
     def cancel(self, run_id: UUID) -> None:

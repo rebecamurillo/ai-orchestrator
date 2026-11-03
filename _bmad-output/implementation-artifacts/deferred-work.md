@@ -156,3 +156,62 @@ The remaining ~40 Epic 4 deferrals live in the seventeen story specs' `deferred`
 - source_spec: `_bmad-output/implementation-artifacts/spec-model-input-selectors.md`
   summary: `NewWorkflow.tsx` exceeds the 300-line component limit in `web-client/AGENTS.md`; the probe-result rules could move to a pure function in `lib/newwf/state.ts`.
   evidence: The island was already 365 lines at this spec's baseline and grew with it.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-1-stop-identity-and-stale-answers-refused.md`
+  summary: Two concurrent signals naming the same stop may both pass, and the extra engine message may be consumed at the next stop (medium, unverified).
+  evidence: `require_run` takes no row lock and nothing in `src/orchestrator` uses `with_for_update`. Settle by tracing a second send to the `human:{run_id}` topic. Story 4-1 adds a second sender, so settle it there at the latest.
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-1-stop-identity-and-stale-answers-refused.md`
+  summary: Add an e2e test for `park_seq` over the real repository and a raw insert omitting the column.
+  evidence: Unit tests cover the row mapping and a one-off script covered migrated rows, but no permanent Postgres-level test exists, and `make e2e` cannot run on this host until its registry credential is fixed.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-4-senior-consult-at-a-blocked-stop.md`
+  summary: A backend killed between a harness process starting and its pgid being committed leaves that process running with no way to kill it; agents and the new senior consult share this window (AD-14).
+  evidence: Story 1-4 review, 2026-11-02. Suspected, not reproduced; the pgid is written in its own unit of work right after start. Settle by killing the backend at that point in the durability suite.
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-5-test-edit-approval-and-diff-review.md`
+  summary: `run.accepted_paths` excludes a file for the whole Run, but AD-17 excludes it only "in the same story frame"; this holds for the Operator's `continue` and, from stories 1-5 and 1-8, for the senior's approvals too.
+  evidence: Lead review 2026-11-02. `RunEnvironment.accepted_paths = run.accepted_paths` is never reset (`infrastructure/db/environment.py`), so a later story can edit an approved test with no stop. Fixing it changes the Operator's `continue` as well, so both writers belong in one story. 1-5 and 1-8 stay Run-wide, as SPEC CAP-2 says ("do not stop the Run again").
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-5-test-edit-approval-and-diff-review.md`
+  summary: An accept opens an empty `agent` attempt, but AD-9 says `re_check` runs "on the same attempt number — no new attempt". That empty attempt then becomes `previous_attempt` and the latest attempt for `reply_available`, and it has no `session_id`.
+  evidence: Lead review 2026-11-02. `continue_accept` moves the row `error → running`, and `start_attempt` opens attempt n+1 with no SHAs and no session. When the re-check routes to `blocked`, a senior's answer goes to a fresh dispatch instead of resuming the session, and an Operator's `answer {mode: session}` is refused 422. This happens today after the Operator's `continue`, and story 1-8's accept reaches it too. It needs the walker's attempt opening to change, so it was not fixed in 1-8.
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-5-test-edit-approval-and-diff-review.md`
+  summary: The senior's story baseline is the story file at the start of the row's first `agent` attempt, so a later row's senior still sees declarations an earlier row's agent added to the story file in the same frame.
+  evidence: Lead review 2026-11-02. In a staged frame the `plan` row writes the story file, so a frame-level baseline would show no story at all. Closing this needs a recorded "declared" point per frame, such as the spec checkpoint's commit.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/1-6-senior-consult-at-verify-failed.md`
+  summary: A backend killed after `apply_step_result` commits but before DBOS records the `apply_result` step replays it, hits `step_transition(error, "error")`, raises `InvalidTransition`, and leaves the Run stuck `running` (high, pre-existing, not introduced by this initiative).
+  evidence: Traced by the story 1-6 review, 2026-11-02, for every apply that does not park. Settle with a durability-suite kill at that point; the fix is an idempotent `apply_step_result` on replay.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/2-5-operator-senior-session-turns.md`
+  summary: A resumed `agent` attempt records no `pgid` (`steps/agent.py::_run` calls the blocking `Harness.resume`), so a backend killed during it leaves the harness running in the worktree while the next attempt dispatches, and `cancel` cannot kill it (AD-14).
+  evidence: Lead review 2026-11-02. Every 1-4 senior answer and every `mode: session` answer or retry takes this path. Story 2-5 adds `Harness.start_resume` and uses it for session turns only, so the fix is to route `_run`'s resume branch through `start_resume`, the `pgid` commit and `wait`, and revise the agent tests that pin `resume` calls under rule 1(b) in that story.
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/2-3-operator-senior-session-backend.md`
+  summary: On a hub Run, an edit inside a submodule other than the parked row's `workdir` is neither committed by a session turn nor listed at `session_end`. Agents share the gap: nothing enumerates the other initialized submodules (`steps/agent_workdir.py`, "Whenever it is built").
+  evidence: Lead review 2026-11-02. The root is staged with gitlinks excluded, and root status cannot tell an earlier epic's deliberate advance from a new edit. The `senior-session` skill confines edits to the two trees until a read-only submodule enumeration exists.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/4-1-reply-polling-and-routing-checks.md`
+  summary: A backend killed after `signal_run` commits but before `engine.signal` delivers leaves the Run marked running with a walker still waiting on its recv, whoever sent the signal (high, pre-existing).
+  evidence: Found while planning story 4-1, 2026-11-02. Settle with a durability-suite kill between the commit and the send; a fix is a startup sweep that re-sends the signal for a Run whose newest gate record is an unanswered signal.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/4-1-reply-polling-and-routing-checks.md`
+  summary: The Run page's terminal-session refusal still runs outside the Run lock, so a `terminal_start` and an `answer` sent together could both apply (medium).
+  evidence: Found in the story 4-1 lead review, 2026-11-02. The chat path re-checks under the lock; the web and API path through `handle_signal::_refuse_early` does not. Settle by moving the refusal under `get_for_update` once story 2-3 lands the lock.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/2-5-operator-senior-session-turns.md`
+  summary: A `queued` session turn whose workflow ended in ERROR is only re-enqueued at startup, which DBOS treats as a no-op, so that turn stays open (low).
+  evidence: Story 2-5 review fixes, 2026-11-02. It needs both reads of the turn to fail. Settle by closing a queued turn whose workflow status is ERROR in the startup sweep.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/3-1-channel-port-project-settings-and-mattermost-adapter.md`
+  summary: Two Mattermost reply-trust edges are unverified - slash-command response_url posts may appear under the invoking user without from_webhook, and a system admin can edit an allowed user's post before the poll reads it (suspected, medium if real).
+  evidence: Story 3-1 review, 2026-11-02, not reproduced. Settle at the 4-2 live check: post through a slash command and via an admin edit, and confirm neither is read as the allowed user's reply.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/3-4-project-channel-storage-api-and-connection-test.md`
+  summary: The connection test lets the browser drive a request from the backend to any base URL it can reach, and reads up to 300 characters of a non-2xx body back (low under the single-Operator trust model).
+  evidence: Story 3-4 lead review, 2026-11-02. Accepted for now. Settle if the instance ever has more than one login, by restricting base URLs to an allow-list setting.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/3-2-slack-adapter.md`
+  summary: Slack Tier 3 allows about 50 `conversations.replies` calls a minute per workspace, so polling every 30 s starts drawing 429s at about 25 open threads in one workspace (low).
+  evidence: Story 3-2 lead review, 2026-11-02. Settle in 4-3 or later: stop the read pass for that Project's fire on the first 429, or space the reads out.
+
+- source_spec: `_bmad-output/specs/spec-senior-unblock/stories/3-2-slack-adapter.md`
+  summary: Slack replies are not checked against the bot's own team, so in a Slack Connect channel only the allowed-user id list separates people from other workspaces (low, defence in depth).
+  evidence: Story 3-2 lead review, 2026-11-02, not reproduced. Settle at the 4-2 live check, by confirming that user ids are unique across connected workspaces.

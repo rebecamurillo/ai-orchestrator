@@ -191,7 +191,7 @@ def _record_end_sha(ports: TerminalPollPorts, run: Run, park_row: StepRun) -> No
     neither is worth failing a resume over if it ever became so.
     """
     writers = ports.signal.writers
-    attempt = writers.attempts.get_latest(park_row.id)
+    attempt = writers.attempts.get_latest_agent(park_row.id)
     if attempt is None or run.worktree_path is None:
         return
     head = ports.git.head_sha(Path(run.worktree_path))

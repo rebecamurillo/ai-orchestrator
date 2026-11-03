@@ -121,6 +121,10 @@ DISPATCH_PROMPT_REQUIRED = "dispatch prompt required"
 RENDERED_PROMPT_REQUIRED = "rendered prompt required"
 HALT_PROMPT_REQUIRED = "halt prompt required"
 
+#: A `consult.on` that is not a non-empty list of the stops a consult may take (AD-22): never
+#: `budget`, `checkpoint`, `misconfigured`, `plan_stale` or `dependency`.
+INVALID_CONSULT_ON = "invalid consult on"
+
 # --- the tree ---------------------------------------------------------------------------
 
 
@@ -135,6 +139,22 @@ class InputDecl(BaseModel):
     required: bool = False
     default: Scalar | None = None
     values: tuple[str, ...] = ()
+
+
+class ConsultDecl(BaseModel):
+    """An `agent` row's `consult` block, as the file wrote it (AD-22). `harness` is `None`
+    when the senior runs on the row's own harness."""
+
+    model_config = ConfigDict(frozen=True)
+
+    line: int
+    model: str
+    harness: str | None = None
+    skill: str
+    on: tuple[str, ...]
+    timeout_min: int | str | None = None
+    prompt_dispatch: str
+    prompt_answer: str
 
 
 class AgentExtras(BaseModel):
@@ -173,6 +193,7 @@ class AgentExtras(BaseModel):
     prompt_answer: str | None = None
     prompt_halt: str | None = None
     prompt_redispatch: str | None = None
+    consult: ConsultDecl | None = None
 
 
 class TemplateCall(BaseModel):
@@ -211,6 +232,8 @@ class Step(BaseModel):
     on_fail: OnFailAction | None = None
     redispatch: str | None = None
     redispatch_max: int | None = None
+    #: The senior a `run` row's redispatch consults once its bound is used up (story 1-6).
+    redispatch_consult: ConsultDecl | None = None
     agent: AgentExtras | None = None
     call: TemplateCall | None = None
 

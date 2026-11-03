@@ -7,7 +7,11 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_serializer
+
+from orchestrator.api.schemas.common import drop_default
+from orchestrator.domain.entities.attempt import AGENT_ROLE
+from orchestrator.domain.statuses import AttemptRole
 
 
 class AttemptDetailOut(BaseModel):
@@ -49,6 +53,17 @@ class AttemptDetailOut(BaseModel):
     #: When the harness stops being able to resume this session, or `None` when the harness
     #: states no lifetime, no session, or `RunViewPorts.terminal` is absent.
     session_lifetime_ends_at: datetime | None = None
+    #: Who the attempt ran for (AD-21). Omitted from the response when `agent`.
+    role: AttemptRole = Field(default=AGENT_ROLE, json_schema_extra=drop_default)
+
+    @model_serializer(mode="wrap")
+    def _omit_agent_role(self, handler: Any):
+        """Omit `role` when `agent`. No return annotation: pydantic would read it as the JSON
+        schema and collapse `AttemptDetailOut` to a bare object."""
+        data: dict[str, Any] = handler(self)
+        if self.role == AGENT_ROLE:
+            data.pop("role", None)
+        return data
 
 
 class StepDetailOut(BaseModel):

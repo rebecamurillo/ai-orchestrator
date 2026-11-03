@@ -37,6 +37,12 @@ class FsWorkspace:
             return None
         return target.read_text()
 
+    def read_lenient(self, path: str) -> str | None:
+        target = self._resolve(path)
+        if not target.is_file():
+            return None
+        return target.read_text(errors="replace")
+
     def write(self, path: str, text: str) -> None:
         target = self._resolve(path)
         if target.is_dir():
@@ -89,10 +95,20 @@ class FsWorkspace:
 
     def remove(self, path: str) -> None:
         target = self._resolve(path)
-        if target.is_dir():
+        # `is_dir` and `exists` follow links: a dangling link would answer neither, survive,
+        # and be read once its target is written.
+        if target.is_symlink():
+            target.unlink()
+        elif target.is_dir():
             shutil.rmtree(target)
         elif target.exists():
             target.unlink()
+
+    def is_link(self, path: str) -> bool:
+        target, root = self._resolve(path), self._root
+        assert root is not None  # `_resolve` above already refused `None`
+        below = [target, *target.parents][: len(target.relative_to(root).parts)]
+        return any(part.is_symlink() for part in below)
 
     def _resolve(self, path: str) -> Path:
         self._require_root()

@@ -31,12 +31,8 @@ fallback (`sessions.py`), which is why `HarnessHandle` carries the worktree — 
 that reads, and `start` is the half that was told the directory.
 
 **Resume** (AD-10 amended story 3, 2026-09-25): `opencode run --session {id}` continues a
-session at `OPENCODE_VERSION=1.18.26`. `capabilities.resume = True`. `resume()` builds the
-invocation via `_resume_argv` (no `-m` flag — the continued session retains its original model
-configuration). `resume_command` returns the operator's paste-able line
-(`cd {worktree} && opencode run --session {id}`) rather than `None`, so the Run detail shows
-the terminal block (FR-21, 6.7). A `session_not_found` exit-1 is a reported failure; the
-`session_id` in the result stays the tried id, never replaced by a fresh one (hard rule 7).
+session at `OPENCODE_VERSION=1.18.26`, with no `-m`. A `session_not_found` exit-1 is a reported
+failure; the result keeps the tried id, never a fresh one (hard rule 7).
 
 **Tracing is by identity, never by parent** (AD-11, `capabilities.native_tracing = False`).
 OpenCode honours no inbound `TRACEPARENT` — it still receives one, because the contract is exact
@@ -266,28 +262,46 @@ class LocalHarness:
         budget_usd_remaining: Decimal | None = None,
         add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
-        """Continue `session_id` with `message` via `opencode run --session {session_id}` (AD-10).
+        """Continue `session_id` with `message`: exactly `wait(start_resume(...))` (AD-10)."""
+        return self.wait(
+            self.start_resume(
+                cwd=cwd,
+                session_id=session_id,
+                message=message,
+                env=env,
+                timeout_min=timeout_min,
+                log_path=log_path,
+                stall_min=stall_min,
+            )
+        )
 
-        Exactly `wait(start_handle)` shaped as a single call: `_resume_argv` builds the argv
-        (no `-m` — the session retains its own model), `_record_prompt` writes the message
-        beside the log, and the handle carries the known `session_id` so `wait` falls back to
-        it when the stream reports none (story 3, 2026-09-25). `model` is not passed because the
-        session keeps its own; `budget_usd_remaining` and `add_dirs` are ignored as on `start`.
+    def start_resume(  # noqa: PLR0913 — the port's own signature (AD-10)
+        self,
+        *,
+        cwd: Path,
+        session_id: str,
+        message: str,
+        env: Mapping[str, str],
+        timeout_min: float | None,
+        log_path: Path,
+        stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
+    ) -> HarnessHandle:
+        """Start `opencode run --session {session_id}` and hand its group back unawaited.
+
+        No `-m`: the session keeps its own model. `budget_usd_remaining` and `add_dirs` are
+        ignored as on `start`. The handle carries the tried `session_id`, which `wait` falls
+        back to when the stream names none (story 3, 2026-09-25).
         """
         argv = self._resume_argv(cwd, session_id=session_id, message=message)
         self._record_prompt(log_path, message)
         handle = self.runner.start(
-            argv,
-            cwd=cwd,
-            env=env,
-            timeout_min=timeout_min,
-            log_path=log_path,
-            stall_min=stall_min,
+            argv, cwd=cwd, env=env, timeout_min=timeout_min, log_path=log_path, stall_min=stall_min
         )
-        return self.wait(
-            HarnessHandle(
-                session_id=session_id, log_path=log_path, pid=handle.pid, pgid=handle.pgid, cwd=cwd
-            )
+        return HarnessHandle(
+            session_id=session_id, log_path=log_path, pid=handle.pid, pgid=handle.pgid, cwd=cwd
         )
 
     def resume_command(self, cwd: str, session_id: str) -> str | None:
@@ -362,13 +376,8 @@ class LocalHarness:
         ]
 
     def _resume_argv(self, cwd: Path, *, session_id: str, message: str) -> list[str]:
-        """The resume command line (AD-10, story 3, 2026-09-25).
-
-        No `-m` flag: the continued session retains its original model configuration; forcing a
-        model on resume could conflict with what the session already has. `--dir` is kept for
-        correctness — it tells OpenCode which directory this is running in, the same rationale
-        as in `_argv`.
-        """
+        """The resume command line (AD-10, story 3, 2026-09-25). No `-m`: forcing a model could
+        conflict with the session's own. `--dir` is kept for `_argv`'s reason."""
         return [
             EXECUTABLE,
             RUN,

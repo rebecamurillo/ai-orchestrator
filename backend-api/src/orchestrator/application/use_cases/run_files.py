@@ -206,7 +206,12 @@ def write_run_file(ports: RunFilesWritePorts, run_id: UUID, path: str, content: 
         raise Forbidden(OUTSIDE_SPEC_FOLDER.format(path=path))
     if path in run.plan_refs:
         raise Conflict(PLANNED_AT.format(sha=run.plan_refs[path]))
-    if run.status != "needs_you" or run.terminal_session:
+    # Re-read under the row lock, held to the commit: a `session_start` or `terminal_start`
+    # committing after the read above would otherwise let this edit land inside the session.
+    run = ports.runs.get_for_update(run_id)
+    if run is None:
+        raise NotFound(f"no run {run_id}")
+    if run.status != "needs_you" or run.terminal_session or run.senior_session:
         raise Conflict(PARKED_REQUIRED)
     workspace = ports.workspace(run.worktree_path)
     try:
@@ -318,9 +323,8 @@ def diff_run_file(ports: RunFilesDiffPorts, run_id: UUID, path: str) -> RunFileD
 
 
 def _park_attempt(ports: RunFilesDiffPorts, run: Run) -> Attempt | None:
-    """The latest Attempt of the row the Run parked on, or `None` when it made none."""
+    """The latest `agent` Attempt of the row the Run parked on, or `None` when it made none."""
     row = row_at(ports.steps.list_for_run(run.id), run.park_path)
     if row is None:
         return None
-    attempts = ports.attempts.list_for_row(row.id)
-    return max(attempts, key=lambda attempt: attempt.n, default=None)
+    return ports.attempts.get_latest_agent(row.id)

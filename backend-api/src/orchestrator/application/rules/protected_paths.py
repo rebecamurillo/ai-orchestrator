@@ -93,6 +93,15 @@ def build(
     return frozenset(anchors)
 
 
+#: The anchors only the Operator changes, wherever they sit: a senior never approves one.
+DOCUMENTS = frozenset({SPEC_FILENAME, STORIES_FILENAME, EPICS_FILENAME, AGENTS_FILENAME})
+
+
+def is_document(path: str) -> bool:
+    """Whether `path` is one of the four documents, by basename."""
+    return PurePosixPath(path).name in DOCUMENTS
+
+
 def declared(with_resolved: Mapping[str, Any]) -> tuple[str, ...]:
     paths = with_resolved.get(WRITES_KEY)
     if not isinstance(paths, Sequence) or isinstance(paths, str):

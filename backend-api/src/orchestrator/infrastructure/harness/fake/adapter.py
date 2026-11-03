@@ -177,17 +177,41 @@ class FakeHarness:
         budget_usd_remaining: Decimal | None = None,
         add_dirs: Sequence[Path] = (),
     ) -> HarnessResult:
-        """The next scenario for the same story, under the session already opened."""
+        """The next scenario for the same story: exactly `wait(start_resume(...))`."""
         return self.wait(
-            self._dispatch(
+            self.start_resume(
                 cwd=cwd,
-                prompt=message,
-                env=env,
                 session_id=session_id,
+                message=message,
+                env=env,
                 timeout_min=timeout_min,
                 log_path=log_path,
-                recall_ok=True,
             )
+        )
+
+    def start_resume(  # noqa: PLR0913 — the port's own signature (AD-10)
+        self,
+        *,
+        cwd: Path,
+        session_id: str,
+        message: str,
+        env: Mapping[str, str],
+        timeout_min: float | None,
+        log_path: Path,
+        stall_min: float | None = None,
+        model: str | None = None,
+        budget_usd_remaining: Decimal | None = None,
+        add_dirs: Sequence[Path] = (),
+    ) -> HarnessHandle:
+        """Start the next scenario under the session already opened, unawaited."""
+        return self._dispatch(
+            cwd=cwd,
+            prompt=message,
+            env=env,
+            session_id=session_id,
+            timeout_min=timeout_min,
+            log_path=log_path,
+            recall_ok=True,
         )
 
     def wait(self, handle: HarnessHandle) -> HarnessResult:

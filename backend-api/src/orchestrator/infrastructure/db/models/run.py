@@ -41,6 +41,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from orchestrator.domain.entities.attempt import AGENT_ROLE
 from orchestrator.infrastructure.db.base import Base
 from orchestrator.infrastructure.db.models.project import ProjectRow
 from orchestrator.infrastructure.db.models.repository import RepositoryRow
@@ -106,12 +107,15 @@ class RunRow(Base):
     park_kind: Mapped[str | None] = mapped_column(Text(), nullable=True)
     park_path: Mapped[str | None] = mapped_column(Text(), nullable=True)
     park_reason: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    park_seq: Mapped[int] = mapped_column(Integer(), server_default="0")
+    pause_requested: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
     accepted_paths: Mapped[list[str]] = mapped_column(JSONB())
     worktree_path: Mapped[str | None] = mapped_column(Text(), nullable=True)
     worktrees: Mapped[list[dict[str, Any]]] = mapped_column(JSONB())
     compare_urls: Mapped[list[str]] = mapped_column(JSONB())
     trace_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
     terminal_session: Mapped[bool] = mapped_column(Boolean())
+    senior_session: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
     terminal_clean_polls: Mapped[int] = mapped_column(Integer())
     active_seconds: Mapped[int] = mapped_column(Integer())
     last_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -164,6 +168,7 @@ class StepRunRow(Base):
     redispatch_count: Mapped[int] = mapped_column(Integer())
     frame: Mapped[str | None] = mapped_column(Text(), nullable=True)
     story_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    consults: Mapped[dict[str, Any]] = mapped_column(JSONB(), server_default=text("'{}'::jsonb"))
 
 
 class AttemptRow(Base):
@@ -177,6 +182,7 @@ class AttemptRow(Base):
     step_run_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey(f"{STEP_RUN_TABLE}.id"))
     n: Mapped[int] = mapped_column(Integer())
     status: Mapped[str] = mapped_column(Text())
+    role: Mapped[str] = mapped_column(Text(), server_default=AGENT_ROLE)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     engine_ref: Mapped[dict[str, Any]] = mapped_column(JSONB())
@@ -198,6 +204,8 @@ class AttemptRow(Base):
     tokens_out: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     cost_usd: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     cost_provisional: Mapped[bool] = mapped_column(Boolean())
+    message: Mapped[str] = mapped_column(Text(), server_default="")
+    reply: Mapped[str] = mapped_column(Text(), server_default="")
 
 
 class GateRecordRow(Base):

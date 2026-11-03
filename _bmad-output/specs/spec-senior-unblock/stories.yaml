@@ -1,0 +1,99 @@
+# Epic 1: Senior consult
+- id: "1-1"
+  title: Stop identity and stale answers refused
+  description: >-
+    Give each stop an identity that answers must name, and refuse a stale one on the Run page and API (CAP-4).
+- id: "1-2"
+  title: Named provider errors
+  description: >-
+    A provider failure parks under its real cause instead of `harness exit 1`, and never consults (CAP-5).
+- id: "1-3"
+  title: Test-impact search in staged planning
+  description: >-
+    `staged-plan` searches every test lane, including `test.fixme` e2e specs, and declares the tests the story changes (CAP-6).
+- id: "1-7"
+  title: Attempt roles
+  description: >-
+    Attempts carry a role (`agent`, `consult`, `session`), and every read that picks a session, numbers an archive, counts a retry or builds an AD-17 range sees `agent` attempts only (AD-21). The step's attempts table labels non-agent attempts, so 1-4's consults land on a table the Operator reads correctly.
+- id: "1-4"
+  title: Senior consult at a blocked stop
+  description: >-
+    A row that declares a consult gets a read-only senior session at a `blocked` stop, which resumes the original agent or parks for a human (CAP-1). This sets the consult design later stories reuse.
+  spec_checkpoint: true
+- id: "1-5"
+  title: Test-file approval at a blocked stop
+  description: >-
+    At a `blocked` consult the senior may approve named existing test files the story requires changing, recorded as `senior_accept` (CAP-2). Preflight warns when the repository has empty `test_globs`.
+  spec_checkpoint: true
+- id: "1-8"
+  title: Diff review at a protected_path stop
+  description: >-
+    A hit on test files only goes to a senior that reads the real diff and accepts or escalates (CAP-2). An accept adds the hits to `accepted_paths` and re-runs `re_check` with no dispatch; anything else parks for a human.
+  spec_checkpoint: true
+- id: "1-6"
+  title: Senior consult at verify_failed
+  description: >-
+    Once the template's retries are used up, the senior's diagnosis goes into one further fresh redispatch, and the next stop parks for a human (CAP-3).
+  done_checkpoint: true
+# Epic 2: Operator control
+- id: "2-1"
+  title: Pause signal
+  description: >-
+    The Operator can pause a running Run, which parks when the current step ends with nothing killed (CAP-8).
+- id: "2-2"
+  title: Rejected retro parks the Run
+  description: >-
+    A `rejected` retrospective verdict parks the Run for a human before the next epic and names its findings (CAP-9).
+- id: "2-3"
+  title: "Operator senior session: lock and close"
+  description: >-
+    Open and close a senior session at any stop, scoped to story, epic or Run. The Run is locked while it is open, and close is refused until each anchor edit is confirmed or reverted (CAP-7).
+  spec_checkpoint: true
+- id: "2-5"
+  title: Operator senior session turns
+  description: >-
+    Each message runs one durable, billed turn outside the walker that resumes the session's context and commits its edits as `session: turn {n}`. A crash or cancel kills the turn's process and never re-dispatches it (CAP-7).
+  spec_checkpoint: true
+- id: "2-4"
+  title: Operator senior session on the Run page
+  description: >-
+    The Run page offers the session at any stop, with scope and model choice, the conversation, anchor confirmation and the closing signal (CAP-7).
+  done_checkpoint: true
+# Epic 3: Channel and alerts
+- id: "3-1"
+  title: Chat port and Mattermost adapter
+  description: >-
+    Add the `ChatChannel` port, its shared fake and the Mattermost adapter (CAP-10, AD-25). This sets the port the Slack adapter must fit.
+  spec_checkpoint: true
+- id: "3-4"
+  title: Project channel storage, API and connection test
+  description: >-
+    Each Project stores `off` or `mattermost` with an encrypted token, channel, allowed people and metadata-only option. A connection test probes the saved channel and reports the platform's answer (CAP-10).
+- id: "3-5"
+  title: Project channel form
+  description: >-
+    The Project edit page sets, replaces and turns off the channel. It runs the connection test and shows its result verbatim (CAP-10).
+- id: "3-2"
+  title: Slack adapter
+  description: >-
+    The same port and Project settings work with `slack` (CAP-10).
+- id: "3-3"
+  title: Escalation thread and reminders
+  description: >-
+    A stop that needs a human posts one new thread per question with composed context and mentions, plus a reminder every 4 hours while parked (CAP-11).
+  done_checkpoint: true
+# Epic 4: Thread replies
+- id: "4-1"
+  title: Reply routing checks
+  description: >-
+    A thread's new replies are checked in order under the Run and thread locks. The first allowed reply that mentions the bot at the Run's current `blocked` stop sends `answer` as `chat` and closes the thread in one commit (CAP-12).
+  spec_checkpoint: true
+- id: "4-3"
+  title: Reply polling pass
+  description: >-
+    `chat_poll` reads each open thread on its Project's current channel and hands new replies to 4-1's checks, resuming the original session. A read failure is stored on the thread and logged once, and no exception reaches the scheduler (CAP-12).
+- id: "4-2"
+  title: Thread lock and closing notices
+  description: >-
+    Any answer or end of the stop closes the thread for good and posts who answered, and a mention in a closed thread gets one notice (CAP-12).
+  done_checkpoint: true

@@ -60,6 +60,7 @@ import AcceptBox from './AcceptBox';
 import AnswerBox from './AnswerBox';
 import BudgetRaiseBox from './BudgetRaiseBox';
 import ConfirmAction from './ConfirmAction';
+import PauseControl from './PauseControl';
 import QuestionBlock from './QuestionBlock';
 import RejectBox from './RejectBox';
 import RetryBox from './RetryBox';
@@ -126,6 +127,12 @@ export default function StopBody({
     if (!detail.admitted_signals.includes('cancel')) return null;
     return (
       <div className="wf-stop-actions">
+        <PauseControl
+          run={detail.run}
+          admitted={detail.admitted_signals}
+          disabled={posting !== null}
+          onPause={() => onSignal('pause')}
+        />
         <button
           type="button"
           className="wf-signal wf-cancel"
@@ -135,6 +142,11 @@ export default function StopBody({
         >
           Cancel run
         </button>
+        {error ? (
+          <span className="wf-signal-error" data-testid="wf-signal-error">
+            {error.detail ?? error.title}
+          </span>
+        ) : null}
       </div>
     );
   }
@@ -237,7 +249,9 @@ export default function StopBody({
           posting={posting !== null}
         />
       ) : null}
-      {kind === 'checkpoint' ? <p className="wf-stop-reason">{bannerText(detail)}</p> : null}
+      {kind === 'checkpoint' || kind === 'paused' ? (
+        <p className="wf-stop-reason">{bannerText(detail)}</p>
+      ) : null}
       {isSpecCheckpoint(detail, kind) ? (
         <>
           {plannedFile ? (

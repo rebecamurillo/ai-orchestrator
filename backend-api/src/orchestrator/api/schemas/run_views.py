@@ -7,7 +7,7 @@ to `MoneyStr`/`UtcTimestamp` (`api/schemas/common.py`).
 
 `RunDetailSummaryOut` is `RunSummaryOut` (`api/schemas/runs.py`) plus the extra fields the
 Run detail's own `run` field carries — a subclass rather than a fifth restatement of
-`RunSummaryOut`'s eleven fields, since it *is* that shape with more on it.
+`RunSummaryOut`'s fields, since it *is* that shape with more on it.
 
 The Board's own shapes (`ProgressOut` through `BoardOut`) moved to `api/schemas/board_view.py`
 on line count alone (5.10) — imported back below so every existing import of `BoardOut`/
@@ -31,6 +31,7 @@ from orchestrator.api.schemas.board_view import (
     ProgressOut,
 )
 from orchestrator.api.schemas.common import MoneyStr, UtcTimestamp
+from orchestrator.api.schemas.common import drop_default as _drop_default
 from orchestrator.api.schemas.run_alert import AlertOut, AttributionOut, CheckpointStoryOut
 from orchestrator.api.schemas.runs import RunSummaryOut
 from orchestrator.application.use_cases.run_views import (
@@ -75,13 +76,6 @@ class WorktreeOut(BaseModel):
             created_branch=worktree.created_branch,
             pushed=worktree.pushed,
         )
-
-
-def _drop_default(schema: dict[str, Any]) -> None:
-    """Strip the JSON-schema `default` a defaulted field carries, so `openapi-typescript`
-    (`defaultNonNullable`) still emits it as optional — an existing web-client test fixture
-    predates `cost_usd` below and must keep compiling without it."""
-    schema.pop("default", None)
 
 
 # ── the Run detail (SPEC CAP-12, CAP-15) ──────────────────────────────────────────────────

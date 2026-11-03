@@ -175,6 +175,9 @@ def _lines(ctx: Context) -> list[Line]:
     lines += lists.installed_skill_lines(ctx)
     lines.append(lists.existing_story_files_line(ctx, ids_by_path))
     lines.append(checks.clone_check_line(ctx))
+    globs_line = lists.test_globs_line(ctx)
+    if globs_line is not None:
+        lines.append(globs_line)
     lines.append(checks.what_will_run_line(ctx))
     return lines
 

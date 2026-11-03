@@ -191,6 +191,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/channel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a Project's chat channel
+         * @description The stored channel, or `provider: off` when none is set. The token is never returned.
+         */
+        get: operations["get_channel_api_v1_projects__project_id__channel_get"];
+        /**
+         * Save or turn off a Project's chat channel
+         * @description Store the channel with its token encrypted, or delete it for `provider: off`.
+         *
+         *     Without `token`, the stored token is kept when the provider is unchanged.
+         */
+        put: operations["put_channel_api_v1_projects__project_id__channel_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/channel/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe a Project's saved chat channel
+         * @description One probe of the saved channel, with no retry. A refusal answers `ok: false` with the
+         *     platform's own text.
+         */
+        post: operations["test_channel_api_v1_projects__project_id__channel_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/repositories": {
         parameters: {
             query?: never;
@@ -540,6 +587,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the Operator's senior session on a Run */
+        get: operations["get_session_api_v1_runs__run_id__session_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/session/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send the senior session one message, queued as its next turn */
+        post: operations["post_session_message_api_v1_runs__run_id__session_messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/signals": {
         parameters: {
             query?: never;
@@ -794,9 +875,10 @@ export interface components {
         /** AlertOut */
         AlertOut: {
             attribution?: components["schemas"]["AttributionOut"] | null;
+            chat_thread?: components["schemas"]["ChatThreadOut"] | null;
             checkpoint_story?: components["schemas"]["CheckpointStoryOut"] | null;
             /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict") | null;
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | null;
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -807,6 +889,19 @@ export interface components {
             row_kind?: string | null;
             /** Token */
             token: string;
+        };
+        /**
+         * AnchorEditOut
+         * @description One anchor the session changed, spelled as AD-17 spells a hit.
+         */
+        AnchorEditOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "added" | "modified" | "deleted";
+            /** Path */
+            path: string;
         };
         /**
          * AttemptDetailOut
@@ -846,6 +941,11 @@ export interface components {
             resume_command?: string | null;
             /** Retry Prompt */
             retry_prompt: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role?: "agent" | "consult" | "session";
             /** Seconds */
             seconds: number | null;
             /** Session Id */
@@ -928,7 +1028,7 @@ export interface components {
             /** Needs You Since */
             needs_you_since: string | null;
             /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict") | null;
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | null;
             progress: components["schemas"]["ProgressOut"] | null;
             /** Project Name */
             project_name: string;
@@ -945,6 +1045,98 @@ export interface components {
             token: string;
             /** Version */
             version: number;
+        };
+        /**
+         * ChannelIn
+         * @description `PUT` body. Without `token`, the stored one is kept for the same provider; `off`
+         *     needs no other field and deletes the channel.
+         */
+        ChannelIn: {
+            /** Allowed Users */
+            allowed_users?: components["schemas"]["ChatUserIn"][];
+            /** Base Url */
+            base_url?: string | null;
+            /** Channel Id */
+            channel_id?: string | null;
+            /**
+             * Metadata Only
+             * @default false
+             */
+            metadata_only: boolean;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "off" | "mattermost" | "slack";
+            /** Token */
+            token?: string | null;
+        };
+        /**
+         * ChannelOut
+         * @description The channel as it leaves this API. The token is never returned, only `token_set`.
+         */
+        ChannelOut: {
+            /** Allowed Users */
+            allowed_users: components["schemas"]["ChatUserOut"][];
+            /** Base Url */
+            base_url: string | null;
+            /** Channel Id */
+            channel_id: string | null;
+            /** Metadata Only */
+            metadata_only: boolean;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "off" | "mattermost" | "slack";
+            /** Token Set */
+            token_set: boolean;
+        };
+        /**
+         * ChannelTestOut
+         * @description One probe of the saved channel: `ok`, and the platform's own words when it is not.
+         */
+        ChannelTestOut: {
+            /** Detail */
+            detail: string;
+            /** Ok */
+            ok: boolean;
+        };
+        /**
+         * ChatThreadOut
+         * @description The stop's chat thread (story 3-3): its platform, how far it got, and why it failed.
+         *     `error` is shown verbatim, whatever the state.
+         */
+        ChatThreadOut: {
+            /** Error */
+            error: string | null;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "mattermost" | "slack";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "posting" | "open" | "closed" | "failed";
+        };
+        /**
+         * ChatUserIn
+         * @description A person allowed to answer: the platform's user id and the handle people type.
+         */
+        ChatUserIn: {
+            /** Handle */
+            handle: string;
+            /** Id */
+            id: string;
+        };
+        /** ChatUserOut */
+        ChatUserOut: {
+            /** Handle */
+            handle: string;
+            /** Id */
+            id: string;
         };
         /**
          * CheckpointStoryOut
@@ -1103,13 +1295,13 @@ export interface components {
              * Actor
              * @enum {string}
              */
-            actor: "operator" | "machine" | "terminal";
+            actor: "operator" | "machine" | "terminal" | "senior" | "chat";
             /** At */
             at: string;
             /** Attempt N */
             attempt_n: number | null;
             /** Event */
-            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict") | ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start") | ("start" | "done" | "failed" | "cancelled" | "started_by_operator") | ("redispatch" | "retry_auto") | "spec_edit";
+            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end") | ("start" | "done" | "failed" | "cancelled" | "started_by_operator") | ("redispatch" | "retry_auto" | "consult" | "senior_answer" | "senior_accept") | "spec_edit";
             /**
              * Id
              * Format: uuid
@@ -1381,6 +1573,14 @@ export interface components {
             masked: string;
             /** Name */
             name: string;
+        };
+        /**
+         * MessageIn
+         * @description The Operator's message to the senior; blank text is refused by the use case.
+         */
+        MessageIn: {
+            /** Text */
+            text: string;
         };
         /**
          * NodeCallOut
@@ -1911,7 +2111,7 @@ export interface components {
          */
         RunDetailOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
             alert: components["schemas"]["AlertOut"] | null;
             cost: components["schemas"]["CostOut"];
             /** Gate Record */
@@ -1936,7 +2136,7 @@ export interface components {
             /** Accepted Paths */
             accepted_paths: string[];
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
             /** Branch */
             branch: string;
             /** Budget Usd */
@@ -1958,6 +2158,10 @@ export interface components {
             last_opened_at?: string | null;
             /** Manual Estimate H */
             manual_estimate_h: string | null;
+            /** Park Seq */
+            park_seq?: number;
+            /** Pause Requested */
+            pause_requested?: boolean;
             /** Plan Ref */
             plan_ref: string | null;
             /**
@@ -1970,6 +2174,8 @@ export interface components {
              * Format: uuid
              */
             repository: string;
+            /** Senior Session */
+            senior_session?: boolean;
             /** Spend Usd */
             spend_usd: string;
             /**
@@ -1995,15 +2201,17 @@ export interface components {
          */
         RunEventsOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
             /** Budget Usd */
             budget_usd: string | null;
             /** Changed */
             changed: boolean;
             /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict") | null;
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | null;
             /** Park Path */
             park_path: string | null;
+            /** Park Seq */
+            park_seq?: number;
             /**
              * Run Id
              * Format: uuid
@@ -2235,7 +2443,7 @@ export interface components {
          */
         RunSummaryOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
             /** Branch */
             branch: string;
             /** Budget Usd */
@@ -2247,6 +2455,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Park Seq */
+            park_seq?: number;
+            /** Pause Requested */
+            pause_requested?: boolean;
             /** Plan Ref */
             plan_ref: string | null;
             /**
@@ -2259,6 +2471,8 @@ export interface components {
              * Format: uuid
              */
             repository: string;
+            /** Senior Session */
+            senior_session?: boolean;
             /** Spend Usd */
             spend_usd: string;
             /**
@@ -2280,6 +2494,61 @@ export interface components {
             yaml: string;
         };
         /**
+         * SessionOut
+         * @description Whether a session holds the Run, whether one can start here, and what it changed.
+         */
+        SessionOut: {
+            /** Active */
+            active: boolean;
+            /** Anchor Edits */
+            anchor_edits: components["schemas"]["AnchorEditOut"][];
+            /** Available */
+            available: boolean;
+            /** Harness */
+            harness: string | null;
+            /** Model */
+            model: string | null;
+            /** Scope */
+            scope: ("story" | "epic" | "run") | null;
+            /** Scopes */
+            scopes: ("story" | "epic" | "run")[];
+            /** Turn Running */
+            turn_running: boolean;
+            /** Turns */
+            turns: components["schemas"]["SessionTurnOut"][];
+        };
+        /**
+         * SessionTurnOut
+         * @description One turn: the message, the reply file the senior left (`""` when it left none, and
+         *     the attempt's log is then the answer), and how the turn ended.
+         */
+        SessionTurnOut: {
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Cost Usd */
+            cost_usd: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /** Exit Code */
+            exit_code: number | null;
+            /** Message */
+            message: string;
+            /** Reply */
+            reply: string;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "queued" | "running" | "done" | "blocked" | "checkpoint" | "error" | "skipped";
+            /** Turn */
+            turn: number;
+        };
+        /**
          * SignalIn
          * @description `POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.
          */
@@ -2288,11 +2557,13 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start";
+            kind: "answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end";
             /** Payload */
             payload?: {
                 [key: string]: unknown;
             };
+            /** Stop */
+            stop?: number | null;
         };
         /**
          * StepDetailOut
@@ -3003,6 +3274,186 @@ export interface operations {
                 };
             };
             /** @description Another Project already holds that name. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_channel_api_v1_projects__project_id__channel_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    put_channel_api_v1_projects__project_id__channel_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChannelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The Project is built in and cannot be edited. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    test_channel_api_v1_projects__project_id__channel_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelTestOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The Project has no channel set. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4202,6 +4653,134 @@ export interface operations {
             };
             /** @description `run_id` does not parse as a UUID. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_session_api_v1_runs__run_id__session_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    post_session_message_api_v1_runs__run_id__session_messages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionTurnOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No senior session is open, a turn is running, or no budget remains. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The text is empty, or the body does not parse. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The turn could not be enqueued; it was closed `error`. */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

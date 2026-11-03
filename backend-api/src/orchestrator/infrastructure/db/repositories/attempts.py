@@ -8,9 +8,10 @@ interrupted attempt (FR-12) instead of losing it. Each method's constant below n
 the columns it writes; a value the entity carries for the *other* half never reaches the row.
 
 Otherwise it mirrors `tests/unit/fakes/runs.py::FakeAttemptRepository`: `get_latest` is the
-highest `n`, `list_for_row` is ordered by `n`, a miss is `None`, and writing an attempt the
-table does not hold is a `ValueError`. The `(step_run_id, n)` duplicate the fake refuses is
-refused here by the unique index.
+highest `n`, `get_latest_agent` the highest `n` among `agent` attempts, `list_for_row` is
+ordered by `n`, a miss is `None`, and writing an attempt the table does not hold is a
+`ValueError`. The `(step_run_id, n)` duplicate the fake refuses is refused here by the
+unique index.
 
 `add` flushes before it returns, for the reason `repositories/runs.py`'s docstring gives:
 this row carries foreign keys to both `run` and `step_run`, the three tables are written in
@@ -25,11 +26,14 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.attempt import AGENT_ROLE, Attempt
+from orchestrator.domain.statuses import AttemptRole
 from orchestrator.infrastructure.db.models.run import AttemptRow
 
 if TYPE_CHECKING:  # pragma: no cover — typing only
     from sqlalchemy.orm import Session
+
+SESSION_ROLE: AttemptRole = "session"
 
 #: What `mark_started` writes: the half a restart has to find (AD-8). `root_start_sha` joins
 #: `start_sha` rather than the finished half because it is recorded at the same moment — the
@@ -60,6 +64,7 @@ FINISHED_COLUMNS = (
     "tokens_out",
     "cost_usd",
     "cost_provisional",
+    "reply",
 )
 
 
@@ -71,6 +76,8 @@ def to_entity(row: AttemptRow) -> Attempt:
         step_run_id=row.step_run_id,
         n=row.n,
         status=row.status,
+        # an unflushed row has no server default yet, and every stored row reads `agent`
+        role=row.role or AGENT_ROLE,
         started_at=row.started_at,
         ended_at=row.ended_at,
         engine_ref=dict(row.engine_ref),
@@ -90,6 +97,9 @@ def to_entity(row: AttemptRow) -> Attempt:
         tokens_out=row.tokens_out,
         cost_usd=row.cost_usd,
         cost_provisional=row.cost_provisional,
+        # an unflushed row has no server default yet, and every stored row reads `''`
+        message=row.message or "",
+        reply=row.reply or "",
     )
 
 
@@ -101,6 +111,7 @@ def row_values(attempt: Attempt) -> dict[str, Any]:
         "step_run_id": attempt.step_run_id,
         "n": attempt.n,
         "status": attempt.status,
+        "role": attempt.role,
         "started_at": attempt.started_at,
         "ended_at": attempt.ended_at,
         "engine_ref": dict(attempt.engine_ref),
@@ -122,6 +133,8 @@ def row_values(attempt: Attempt) -> dict[str, Any]:
         "tokens_out": attempt.tokens_out,
         "cost_usd": attempt.cost_usd,
         "cost_provisional": attempt.cost_provisional,
+        "message": attempt.message,
+        "reply": attempt.reply,
     }
 
 
@@ -156,6 +169,14 @@ class SQLAlchemyAttemptRepository:
         ).first()
         return None if row is None else to_entity(row)
 
+    def get_latest_agent(self, step_run_id: UUID) -> Attempt | None:
+        row = self._session.scalars(
+            select(AttemptRow)
+            .where(AttemptRow.step_run_id == step_run_id, AttemptRow.role == AGENT_ROLE)
+            .order_by(AttemptRow.n.desc())
+        ).first()
+        return None if row is None else to_entity(row)
+
     def list_for_row(self, step_run_id: UUID) -> list[Attempt]:
         rows = self._session.scalars(
             select(AttemptRow).where(AttemptRow.step_run_id == step_run_id).order_by(AttemptRow.n)
@@ -173,14 +194,23 @@ class SQLAlchemyAttemptRepository:
         self._write(attempt, FINISHED_COLUMNS)
 
     def latest_for_run(self, run_id: UUID) -> Attempt | None:
-        """The most recently started Attempt for this Run across all rows, or `None`."""
+        """The most recently started `agent` Attempt for this Run across all rows, or `None`."""
         row = self._session.scalars(
             select(AttemptRow)
-            .where(AttemptRow.run_id == run_id)
+            .where(AttemptRow.run_id == run_id, AttemptRow.role == AGENT_ROLE)
             .order_by(AttemptRow.started_at.desc())
             .limit(1)
         ).first()
         return None if row is None else to_entity(row)
+
+    def list_open_sessions(self) -> list[Attempt]:
+        """Every `session` attempt not yet closed, oldest first (AD-23)."""
+        rows = self._session.scalars(
+            select(AttemptRow)
+            .where(AttemptRow.role == SESSION_ROLE, AttemptRow.ended_at.is_(None))
+            .order_by(AttemptRow.started_at)
+        ).all()
+        return [to_entity(row) for row in rows]
 
     def update(self, attempt: Attempt) -> None:
         self._write(attempt, MUTABLE_COLUMNS)

@@ -77,12 +77,16 @@ def to_entity(row: RunRow) -> Run:
         park_kind=row.park_kind,
         park_path=row.park_path,
         park_reason=row.park_reason,
+        # `None` until the row has been flushed, like `updated_at` below
+        park_seq=row.park_seq or 0,
+        pause_requested=bool(row.pause_requested),
         accepted_paths=tuple(row.accepted_paths),
         worktree_path=row.worktree_path,
         worktrees=tuple(Worktree(**worktree) for worktree in row.worktrees),
         compare_urls=tuple(row.compare_urls),
         trace_id=row.trace_id,
         terminal_session=row.terminal_session,
+        senior_session=bool(row.senior_session),
         terminal_clean_polls=row.terminal_clean_polls,
         active_seconds=row.active_seconds,
         last_opened_at=row.last_opened_at,
@@ -133,12 +137,15 @@ def row_values(run: Run) -> dict[str, Any]:
         "park_kind": run.park_kind,
         "park_path": run.park_path,
         "park_reason": run.park_reason,
+        "park_seq": run.park_seq,
+        "pause_requested": run.pause_requested,
         "accepted_paths": list(run.accepted_paths),
         "worktree_path": run.worktree_path,
         "worktrees": worktrees_json(run),
         "compare_urls": list(run.compare_urls),
         "trace_id": run.trace_id,
         "terminal_session": run.terminal_session,
+        "senior_session": run.senior_session,
         "terminal_clean_polls": run.terminal_clean_polls,
         "active_seconds": run.active_seconds,
         "last_opened_at": run.last_opened_at,
@@ -177,6 +184,18 @@ class SQLAlchemyRunRepository:
 
     def get(self, run_id: UUID) -> Run | None:
         row = self._session.get(RunRow, run_id)
+        return None if row is None else to_entity(row)
+
+    def get_for_update(self, run_id: UUID) -> Run | None:
+        # `populate_existing`: a row this session already holds would otherwise keep the
+        # values it was read with, which is the stale snapshot the lock is there to avoid
+        statement = (
+            select(RunRow)
+            .where(RunRow.id == run_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        row = self._session.scalars(statement).first()
         return None if row is None else to_entity(row)
 
     def update(self, run: Run) -> None:

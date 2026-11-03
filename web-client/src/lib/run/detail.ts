@@ -55,7 +55,9 @@ const LIFECYCLE_TOKENS: Record<Exclude<RunStatus, 'needs_you'>, Token> = {
  * _run_token`'s own rule, duplicated the way `RunCard.tsx` already duplicates `StatusToken.
  * astro`'s `SIGNALS` map (small, established local duplication across the API boundary). */
 export function runToken(run: RunDetailOut['run'], alert: AlertOut | null): Token {
-  if (run.status === 'needs_you') return alert?.park_kind === 'checkpoint' ? 'CHK' : 'BLK';
+  if (run.status === 'needs_you') {
+    return alert?.park_kind === 'checkpoint' || alert?.park_kind === 'paused' ? 'CHK' : 'BLK';
+  }
   return LIFECYCLE_TOKENS[run.status];
 }
 

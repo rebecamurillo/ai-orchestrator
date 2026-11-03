@@ -46,20 +46,17 @@ from orchestrator.application.templates.lines import (
 )
 from orchestrator.application.templates.model import (
     ALL_DIGIT_STEP_ID,
-    BAD_REDISPATCH,
     CALL_TIMING,
     DUPLICATE_STEP_ID,
     EMPTY_STEPS,
     INVALID_DISPATCH_FORM,
     INVALID_GATE,
-    INVALID_ON_FAIL,
     INVALID_SLUG,
     INVALID_SUBMODULE_FORM,
     INVALID_TIMEOUT,
     MISSING_KEY,
     NESTED_FOR_EACH,
     NON_LITERAL_VERSION,
-    ON_FAIL_ACTIONS,
     PARALLEL_RESERVED,
     SECOND_FOR_EACH,
     UNKNOWN_KEY,
@@ -67,11 +64,11 @@ from orchestrator.application.templates.model import (
     USES_AND_RUN,
     ValidationError,
 )
+from orchestrator.application.templates.on_fail import check_on_fail
 from orchestrator.application.templates.table import (
     AGENT_KEYS,
     CALL_TIMING_KEYS,
     FOR_EACH_KEYS,
-    REDISPATCH_KEYS,
     RUN_KEY,
     RUN_SUGAR_KIND,
     STEP_KEYS,
@@ -258,7 +255,7 @@ def _check_step(
     if kind == AGENT_KIND:
         errors += check_agent_extras(node)
     errors += _check_minutes(node, "timeout_min") + _check_minutes(node, "stall_min")
-    return errors + _check_on_fail(node, earlier_agents)
+    return errors + check_on_fail(node, earlier_agents, kind)
 
 
 def _kind_of(node: LinedMap) -> tuple[str | None, list[ValidationError]]:
@@ -374,21 +371,3 @@ def _check_minutes(node: LinedMap, key: str) -> list[ValidationError]:
     if key not in node or is_minutes(node[key]):
         return []
     return [problem(key_line(node, key, node.line), INVALID_TIMEOUT)]
-
-
-def _check_on_fail(node: LinedMap, earlier_agents: set[str]) -> list[ValidationError]:
-    """`escalate | fail | continue`, or a redispatch to an `agent` step written earlier."""
-    if "on_fail" not in node:
-        return []
-    line = key_line(node, "on_fail", node.line)
-    value = node["on_fail"]
-    if isinstance(value, str):
-        return [] if value in ON_FAIL_ACTIONS else [problem(line, INVALID_ON_FAIL)]
-    redispatch = as_map(value)
-    if redispatch is None or set(redispatch) != REDISPATCH_KEYS:
-        return [problem(line, INVALID_ON_FAIL)]
-    if not is_count(redispatch["max"]):
-        return [problem(line, INVALID_ON_FAIL)]
-    if redispatch["redispatch"] in earlier_agents:
-        return []
-    return [problem(line, BAD_REDISPATCH)]

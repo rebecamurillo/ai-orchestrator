@@ -38,8 +38,10 @@ from orchestrator.application.steps.agent_answer import (
     ANSWER_EVENT,
     ANSWER_KEY,
     CONDITION_KEY,
+    SENIOR_ANSWER_EVENT,
 )
-from orchestrator.application.steps.context import VerifyFailure, resolved_text
+from orchestrator.application.steps.context import resolved_text
+from orchestrator.application.steps.verify_failure import VerifyFailure
 from orchestrator.application.story_file import NO_EXIT_CODE
 from orchestrator.application.templates.agent_row import (
     PROMPT_EXTRA_KEY,
@@ -117,6 +119,9 @@ def compose_prompt(
     parts.append(resolved_text(with_resolved, PROMPT_EXTRA_KEY))
     if resume_signal is not None and resume_signal.event == ANSWER_EVENT:
         parts.append(_answer(clauses, resume_signal))
+    if resume_signal is not None and resume_signal.event == SENIOR_ANSWER_EVENT:
+        # already the consult's own `answer` clause, filled when it was recorded (AD-22)
+        parts.append(str(resume_signal.payload.get(agent_answer.TEXT_KEY, "")))
     if agent_answer.halts_after_planning(with_resolved, resume_signal):
         parts.append(str(clauses.get(HALT_CLAUSE, "")))
     return " ".join(part for part in parts if part)
@@ -137,15 +142,18 @@ def redispatch_clause(with_resolved: Mapping[str, Any], failure: VerifyFailure) 
     (FR-10): the row's own `redispatch` clause, with `{command}`, `{code}` and `{tail}`
     filled from `failure` — `steps/agent.py::_planned` is the one caller, and only for a
     fresh dispatch that followed a redispatch. An undeclared clause is `""`, the same as
-    every other clause a row does not carry."""
+    every other clause a row does not carry.
+
+    A senior's `diagnosis` of the same failure (AD-22, story 1-6) follows the clause as it
+    came, unfilled: it is the senior's prose, not the Template's, so no token in it is read.
+    A row with no clause is still told it."""
     declared = _clauses(with_resolved).get(REDISPATCH_CLAUSE)
-    if declared is None:
-        return ""
-    stated = NO_EXIT_CODE if failure.exit_code is None else str(failure.exit_code)
-    return _fill(
-        str(declared),
-        {"command": failure.command, "code": stated, "tail": "\n".join(failure.log_tail)},
-    )
+    parts = [failure.diagnosis]
+    if declared is not None:
+        stated = NO_EXIT_CODE if failure.exit_code is None else str(failure.exit_code)
+        filled = {"command": failure.command, "code": stated, "tail": "\n".join(failure.log_tail)}
+        parts.insert(0, _fill(str(declared), filled))
+    return " ".join(part for part in parts if part)
 
 
 def _clauses(with_resolved: Mapping[str, Any]) -> Mapping[str, Any]:

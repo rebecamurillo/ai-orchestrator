@@ -76,7 +76,8 @@ def test_a_running_run_reports_its_state_and_the_cancel_it_admits() -> None:
     assert event.spend_usd == Decimal("1.5")
     assert event.budget_usd == Decimal("10")
     assert event.park_kind is None and event.park_path is None
-    assert event.admitted_signals == ("cancel",)
+    # story 2-1, 2026-11-02: a running run also offers "pause" (AD-13).
+    assert event.admitted_signals == ("pause", "cancel")
 
 
 def test_a_parked_run_reports_the_park_and_the_signals_that_stop_admits() -> None:

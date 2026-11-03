@@ -41,6 +41,16 @@
               }
             ]
           },
+          "chat_thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatThreadOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "checkpoint_story": {
             "anyOf": [
               {
@@ -66,7 +76,8 @@
                   "plan_stale",
                   "internal",
                   "dependency",
-                  "merge_conflict"
+                  "merge_conflict",
+                  "paused"
                 ],
                 "type": "string"
               },
@@ -114,6 +125,30 @@
           "park_kind"
         ],
         "title": "AlertOut",
+        "type": "object"
+      },
+      "AnchorEditOut": {
+        "description": "One anchor the session changed, spelled as AD-17 spells a hit.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "added",
+              "modified",
+              "deleted"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "kind"
+        ],
+        "title": "AnchorEditOut",
         "type": "object"
       },
       "AttemptDetailOut": {
@@ -243,6 +278,15 @@
               }
             ],
             "title": "Retry Prompt"
+          },
+          "role": {
+            "enum": [
+              "agent",
+              "consult",
+              "session"
+            ],
+            "title": "Role",
+            "type": "string"
           },
           "seconds": {
             "anyOf": [
@@ -550,7 +594,8 @@
                   "plan_stale",
                   "internal",
                   "dependency",
-                  "merge_conflict"
+                  "merge_conflict",
+                  "paused"
                 ],
                 "type": "string"
               },
@@ -621,6 +666,230 @@
           "needs_you_since"
         ],
         "title": "CardOut",
+        "type": "object"
+      },
+      "ChannelIn": {
+        "description": "`PUT` body. Without `token`, the stored one is kept for the same provider; `off`\nneeds no other field and deletes the channel.",
+        "properties": {
+          "allowed_users": {
+            "items": {
+              "$ref": "#/components/schemas/ChatUserIn"
+            },
+            "title": "Allowed Users",
+            "type": "array"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "metadata_only": {
+            "default": false,
+            "title": "Metadata Only",
+            "type": "boolean"
+          },
+          "provider": {
+            "enum": [
+              "off",
+              "mattermost",
+              "slack"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ChannelIn",
+        "type": "object"
+      },
+      "ChannelOut": {
+        "description": "The channel as it leaves this API. The token is never returned, only `token_set`.",
+        "properties": {
+          "allowed_users": {
+            "items": {
+              "$ref": "#/components/schemas/ChatUserOut"
+            },
+            "title": "Allowed Users",
+            "type": "array"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "metadata_only": {
+            "title": "Metadata Only",
+            "type": "boolean"
+          },
+          "provider": {
+            "enum": [
+              "off",
+              "mattermost",
+              "slack"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "token_set": {
+            "title": "Token Set",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provider",
+          "base_url",
+          "channel_id",
+          "token_set",
+          "allowed_users",
+          "metadata_only"
+        ],
+        "title": "ChannelOut",
+        "type": "object"
+      },
+      "ChannelTestOut": {
+        "description": "One probe of the saved channel: `ok`, and the platform's own words when it is not.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "detail"
+        ],
+        "title": "ChannelTestOut",
+        "type": "object"
+      },
+      "ChatThreadOut": {
+        "description": "The stop's chat thread (story 3-3): its platform, how far it got, and why it failed.\n`error` is shown verbatim, whatever the state.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "provider": {
+            "enum": [
+              "mattermost",
+              "slack"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "posting",
+              "open",
+              "closed",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "state",
+          "error"
+        ],
+        "title": "ChatThreadOut",
+        "type": "object"
+      },
+      "ChatUserIn": {
+        "description": "A person allowed to answer: the platform's user id and the handle people type.",
+        "properties": {
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "handle"
+        ],
+        "title": "ChatUserIn",
+        "type": "object"
+      },
+      "ChatUserOut": {
+        "properties": {
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "handle"
+        ],
+        "title": "ChatUserOut",
         "type": "object"
       },
       "CheckpointStoryOut": {
@@ -977,7 +1246,9 @@
             "enum": [
               "operator",
               "machine",
-              "terminal"
+              "terminal",
+              "senior",
+              "chat"
             ],
             "title": "Actor",
             "type": "string"
@@ -1012,7 +1283,8 @@
                   "plan_stale",
                   "internal",
                   "dependency",
-                  "merge_conflict"
+                  "merge_conflict",
+                  "paused"
                 ],
                 "type": "string"
               },
@@ -1029,7 +1301,10 @@
                   "terminal_start",
                   "terminal_release",
                   "terminal_resume",
-                  "start"
+                  "start",
+                  "pause",
+                  "session_start",
+                  "session_end"
                 ],
                 "type": "string"
               },
@@ -1046,7 +1321,10 @@
               {
                 "enum": [
                   "redispatch",
-                  "retry_auto"
+                  "retry_auto",
+                  "consult",
+                  "senior_answer",
+                  "senior_accept"
                 ],
                 "type": "string"
               },
@@ -1852,6 +2130,20 @@
           "masked"
         ],
         "title": "MaskedEnvVarOut",
+        "type": "object"
+      },
+      "MessageIn": {
+        "description": "The Operator's message to the senior; blank text is refused by the use case.",
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "MessageIn",
         "type": "object"
       },
       "NodeCallOut": {
@@ -3283,7 +3575,10 @@
                 "terminal_start",
                 "terminal_release",
                 "terminal_resume",
-                "start"
+                "start",
+                "pause",
+                "session_start",
+                "session_end"
               ],
               "type": "string"
             },
@@ -3394,7 +3689,10 @@
                 "terminal_start",
                 "terminal_release",
                 "terminal_resume",
-                "start"
+                "start",
+                "pause",
+                "session_start",
+                "session_end"
               ],
               "type": "string"
             },
@@ -3461,6 +3759,14 @@
             ],
             "title": "Manual Estimate H"
           },
+          "park_seq": {
+            "title": "Park Seq",
+            "type": "integer"
+          },
+          "pause_requested": {
+            "title": "Pause Requested",
+            "type": "boolean"
+          },
           "plan_ref": {
             "anyOf": [
               {
@@ -3481,6 +3787,10 @@
             "format": "uuid",
             "title": "Repository",
             "type": "string"
+          },
+          "senior_session": {
+            "title": "Senior Session",
+            "type": "boolean"
           },
           "spend_usd": {
             "title": "Spend Usd",
@@ -3580,7 +3890,10 @@
                 "terminal_start",
                 "terminal_release",
                 "terminal_resume",
-                "start"
+                "start",
+                "pause",
+                "session_start",
+                "session_end"
               ],
               "type": "string"
             },
@@ -3617,7 +3930,8 @@
                   "plan_stale",
                   "internal",
                   "dependency",
-                  "merge_conflict"
+                  "merge_conflict",
+                  "paused"
                 ],
                 "type": "string"
               },
@@ -3637,6 +3951,10 @@
               }
             ],
             "title": "Park Path"
+          },
+          "park_seq": {
+            "title": "Park Seq",
+            "type": "integer"
           },
           "run_id": {
             "format": "uuid",
@@ -4172,7 +4490,10 @@
                 "terminal_start",
                 "terminal_release",
                 "terminal_resume",
-                "start"
+                "start",
+                "pause",
+                "session_start",
+                "session_end"
               ],
               "type": "string"
             },
@@ -4203,6 +4524,14 @@
             "title": "Id",
             "type": "string"
           },
+          "park_seq": {
+            "title": "Park Seq",
+            "type": "integer"
+          },
+          "pause_requested": {
+            "title": "Pause Requested",
+            "type": "boolean"
+          },
           "plan_ref": {
             "anyOf": [
               {
@@ -4223,6 +4552,10 @@
             "format": "uuid",
             "title": "Repository",
             "type": "string"
+          },
+          "senior_session": {
+            "title": "Senior Session",
+            "type": "boolean"
           },
           "spend_usd": {
             "title": "Spend Usd",
@@ -4281,6 +4614,193 @@
         "title": "SaveVersionIn",
         "type": "object"
       },
+      "SessionOut": {
+        "description": "Whether a session holds the Run, whether one can start here, and what it changed.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "anchor_edits": {
+            "items": {
+              "$ref": "#/components/schemas/AnchorEditOut"
+            },
+            "title": "Anchor Edits",
+            "type": "array"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "story",
+                  "epic",
+                  "run"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "scopes": {
+            "items": {
+              "enum": [
+                "story",
+                "epic",
+                "run"
+              ],
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "turn_running": {
+            "title": "Turn Running",
+            "type": "boolean"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/SessionTurnOut"
+            },
+            "title": "Turns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "active",
+          "available",
+          "scopes",
+          "scope",
+          "harness",
+          "model",
+          "anchor_edits",
+          "turn_running",
+          "turns"
+        ],
+        "title": "SessionOut",
+        "type": "object"
+      },
+      "SessionTurnOut": {
+        "description": "One turn: the message, the reply file the senior left (`\"\"` when it left none, and\nthe attempt's log is then the answer), and how the turn ended.",
+        "properties": {
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "queued",
+              "running",
+              "done",
+              "blocked",
+              "checkpoint",
+              "error",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "turn": {
+            "title": "Turn",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "turn",
+          "status",
+          "message",
+          "reply",
+          "started_at",
+          "ended_at",
+          "exit_code",
+          "cost_usd"
+        ],
+        "title": "SessionTurnOut",
+        "type": "object"
+      },
       "SignalIn": {
         "description": "`POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.",
         "properties": {
@@ -4297,7 +4817,10 @@
               "terminal_start",
               "terminal_release",
               "terminal_resume",
-              "start"
+              "start",
+              "pause",
+              "session_start",
+              "session_end"
             ],
             "title": "Kind",
             "type": "string"
@@ -4306,6 +4829,18 @@
             "additionalProperties": true,
             "title": "Payload",
             "type": "object"
+          },
+          "stop": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop"
           }
         },
         "required": [
@@ -5624,6 +6159,296 @@
           }
         ],
         "summary": "Update a Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/channel": {
+      "get": {
+        "description": "The stored channel, or `provider: off` when none is set. The token is never returned.",
+        "operationId": "get_channel_api_v1_projects__project_id__channel_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read a Project's chat channel",
+        "tags": [
+          "projects"
+        ]
+      },
+      "put": {
+        "description": "Store the channel with its token encrypted, or delete it for `provider: off`.\n\nWithout `token`, the stored token is kept when the provider is unchanged.",
+        "operationId": "put_channel_api_v1_projects__project_id__channel_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The Project is built in and cannot be edited."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Save or turn off a Project's chat channel",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/channel/test": {
+      "post": {
+        "description": "One probe of the saved channel, with no retry. A refusal answers `ok: false` with the\nplatform's own text.",
+        "operationId": "test_channel_api_v1_projects__project_id__channel_test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelTestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The Project has no channel set."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Probe a Project's saved chat channel",
         "tags": [
           "projects"
         ]
@@ -7653,6 +8478,212 @@
         "summary": "Read one Run's graph",
         "tags": [
           "templates"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/session": {
+      "get": {
+        "operationId": "get_session_api_v1_runs__run_id__session_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`run_id` does not parse as a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read the Operator's senior session on a Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/session/messages": {
+      "post": {
+        "operationId": "post_session_message_api_v1_runs__run_id__session_messages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionTurnOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No senior session is open, a turn is running, or no budget remains."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The text is empty, or the body does not parse."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The turn could not be enqueued; it was closed `error`."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Send the senior session one message, queued as its next turn",
+        "tags": [
+          "runs"
         ]
       }
     },

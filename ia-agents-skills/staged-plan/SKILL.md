@@ -46,6 +46,21 @@ Read the code the story touches: the files, the symbols, the tests that pin the 
 behaviour, the existing test doubles the implementer must reuse. Stop when you can name every
 file the implementer will create or edit. Do not survey the codebase.
 
+**Test-impact search** — before step 3, with `grep -rn` over the test lanes. This is a search
+for named terms, not a survey.
+
+- Lanes, every one this repository has: find them in its `AGENTS.md`, its test runner configs
+  (`pytest`, `vitest`, `jest`, `playwright`, `cypress` and the like) and its package scripts,
+  not by assuming a layout. Unit, integration and e2e lanes all count. Include specs marked
+  `test.fixme`, `test.skip` or `describe.skip`, and pytest `skip` or `xfail`: they never go
+  red by running, so they surface only when someone reaches them.
+- Terms, from what the story changes: labels and copy, identifiers, routes, exports, enum
+  values, and hidden or visible states (a menu entry, a button, a column).
+- Every existing test the story's behaviour contradicts goes under `## Do not touch`, with the
+  file, the assertion, and the behaviour change the story declares behind it.
+- End `## Do not touch` with one bullet recording the search, whatever it found:
+  `- Test-impact search: <lanes> for <terms>; <contradicted tests above, or "none found">`.
+
 ## 3. Write the spec
 
 Path: `{spec_folder}/stories/{story_id}-<kebab-slug-from-title>.md` (no `{story_id}` prefix

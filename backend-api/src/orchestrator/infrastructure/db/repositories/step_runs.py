@@ -45,6 +45,8 @@ def to_entity(row: StepRunRow) -> StepRun:
         redispatch_count=row.redispatch_count,
         frame=row.frame,
         story_id=row.story_id,
+        # the server default applies on insert only; a row built in memory carries none
+        consults=dict(row.consults or {}),
     )
 
 
@@ -65,6 +67,7 @@ def row_values(step: StepRun) -> dict[str, Any]:
         "redispatch_count": step.redispatch_count,
         "frame": step.frame,
         "story_id": step.story_id,
+        "consults": dict(step.consults),
     }
 
 
@@ -97,6 +100,17 @@ class SQLAlchemyStepRunRepository:
             select(StepRunRow).where(StepRunRow.run_id == run_id).order_by(StepRunRow.seq)
         ).all()
         return [to_entity(row) for row in rows]
+
+    def list_for_run_current(self, run_id: UUID) -> list[StepRun]:
+        # `populate_existing`: a session kept across commits would otherwise return the rows
+        # it already holds, as they were when it first loaded them.
+        statement = (
+            select(StepRunRow)
+            .where(StepRunRow.run_id == run_id)
+            .order_by(StepRunRow.seq)
+            .execution_options(populate_existing=True)
+        )
+        return [to_entity(row) for row in self._session.scalars(statement).all()]
 
     def update(self, step: StepRun) -> None:
         row = self._session.get(StepRunRow, step.id)

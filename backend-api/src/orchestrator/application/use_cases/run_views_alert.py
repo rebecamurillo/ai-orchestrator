@@ -27,12 +27,19 @@ from uuid import UUID
 from orchestrator.application.rules.frames import rows_in_frame, story_frame
 from orchestrator.application.rules.protected_paths import park_record_payload
 from orchestrator.application.steps import AGENT_KIND, COMMIT_KIND, COMMIT_MESSAGE_KEY, SHELL_KIND
-from orchestrator.application.use_cases.run_view_types import Alert, Attribution, CheckpointStory
-from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.application.use_cases.run_view_types import (
+    Alert,
+    Attribution,
+    ChatThreadNote,
+    CheckpointStory,
+)
+from orchestrator.domain.entities.attempt import Attempt, agent_attempts
+from orchestrator.domain.entities.chat_thread import ChatThread
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.statuses import RunStatus
+from orchestrator.domain.ports.repositories import ChatThreadRepository
+from orchestrator.domain.statuses import CHK_PARK_KINDS, RunStatus
 
 #: The Run's own UI token (Consistency Conventions — Status tokens): `BLK`/`CHK` while
 #: parked, off `park_kind`, the fixed table otherwise. Duplicated from `application/
@@ -56,7 +63,7 @@ _TITLE_IN_MESSAGE = re.compile(r"^story\s+\S+:\s+(?P<title>.*)\s+\(orchestrator\
 
 def run_token(run: Run) -> str:
     if run.status == "needs_you":
-        return "CHK" if run.park_kind == "checkpoint" else "BLK"
+        return "CHK" if run.park_kind in CHK_PARK_KINDS else "BLK"
     return _RUN_TOKENS[run.status]
 
 
@@ -69,6 +76,7 @@ def build_alert(  # noqa: PLR0913 — one keyword per fact `checkpoint_story` ne
     park_row: StepRun | None,
     attempts_by_row: Mapping[UUID, Sequence[Attempt]],
     records: Sequence[GateRecord] = (),
+    thread: ChatThread | None = None,
 ) -> Alert | None:
     if run.status != "needs_you":
         return None
@@ -84,7 +92,19 @@ def build_alert(  # noqa: PLR0913 — one keyword per fact `checkpoint_story` ne
         row_kind=row_kind,
         checkpoint_story=checkpoint_story,
         payload=park_record_payload(records, run),
+        chat_thread=None if thread is None else _note(thread),
     )
+
+
+def stop_thread(threads: ChatThreadRepository | None, run: Run) -> ChatThread | None:
+    """The thread of the Run's current stop, read only while the Run is parked (story 3-3)."""
+    if threads is None or run.status != "needs_you":
+        return None
+    return threads.get_by_stop(run.id, run.park_seq)
+
+
+def _note(thread: ChatThread) -> ChatThreadNote:
+    return ChatThreadNote(provider=thread.provider, state=thread.state, error=thread.error)
 
 
 def _attribution(attempt: Attempt) -> Attribution:
@@ -108,7 +128,9 @@ def _checkpoint_story(
     build_row = next((row for row in frame_rows if row.kind == AGENT_KIND), None)
     commit_row = next((row for row in frame_rows if row.kind == COMMIT_KIND), None)
     verify_row = next((row for row in frame_rows if row.kind == SHELL_KIND), None)
-    attempts = len(attempts_by_row.get(build_row.id, ())) if build_row is not None else 0
+    attempts = (
+        len(agent_attempts(attempts_by_row.get(build_row.id, ()))) if build_row is not None else 0
+    )
     cost = Decimal("0")
     for frame_row in frame_rows:
         for one in attempts_by_row.get(frame_row.id, ()):

@@ -1,0 +1,134 @@
+---
+title: 'Chat port and Mattermost adapter'
+type: 'feature'
+created: '2026-11-02'
+status: 'done'
+route: 'dispatch'
+baseline_commit: '5b4a8000b2cb460de14bca61bb85402cc3fe9366'
+review_loop_iteration: 0
+context: []
+---
+
+<frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
+
+## Intent
+
+**Problem:** Stories 3-2, 3-3, 3-4 and 4-1 need one chat port, a fake of it, and a working Mattermost adapter (CAP-10, AD-25).
+
+**Approach:** Add `domain/ports/chat.py`, the shared fake, and `infrastructure/chat/mattermost.py` over httpx with an `open_channel` factory. Nothing calls them yet. 3-4 stores the channel, 3-5 adds the form, 3-2 adds Slack.
+
+## Boundaries & Constraints
+
+**Always:** Only `infrastructure/chat/` calls a chat platform. The token is a constructor argument, sent only as `Authorization: Bearer` to the configured host. It is never logged, and every `ChatError` detail goes through `infrastructure/redact.py::redact(detail, token)`. Redirects are not followed, so a 3xx is a `ChatError` and the bearer never reaches another host. A failure raises `ChatError` with the platform's own text, with no retry (hard rule 7). The adapter logs nothing.
+
+**Never:** No table, migration, API, setting, job or UI (3-3, 3-4, 3-5, 4-1). No Slack (3-2). No edit to `main.py` or any existing test. No live Mattermost in any test.
+
+**Decided (lead review, 2026-11-02):**
+- **Thread read pages explicitly.** In the server source, `perPage=0` returns the whole thread "for now", with a comment that it will become `PerPageDefault` (60) after the next ESR (`server/channels/api4/post.go::getPostThread`). The adapter therefore sends `perPage=200` (the server's `PerPageMaximum`) and `direction=down`, plus `fromCreateAt` and `fromPost` when a cursor is held. It repeats while `has_next` is true. The store applies `CreateAt > from OR (CreateAt = from AND Id > fromPost)`, ordered `CreateAt, Id ASC` (`sqlstore/post_store.go::Get`). Without `direction` the order is undefined.
+- **`Reply` carries `cursor`.** It is the adapter's opaque position just after that reply: Mattermost `"{create_at}:{id}"`, Slack its `ts`. It is a position, not an id, so a deleted reply cannot strand a thread. AD-25 gains this field. The exact text is in the Spec Change Log.
+- **`Reply` carries `body`, and some posts are not replies** (lead review of 4-1, 2026-11-02).
+  - `body` is `text` with every bot mention removed, by the same match `mentions_bot` uses, and is otherwise unchanged. `application/` therefore never parses platform syntax.
+  - `replies_since` also drops system posts (`type` not empty) and posts whose `props` carry `from_webhook`, `from_bot` or `from_plugin` as `"true"`. Such a post carries its owner's `user_id` beside someone else's words, so anyone holding an allowed person's webhook could answer as them.
+- **`mentions` are `ChatUser{id, handle}`**, so each adapter renders its own syntax: Mattermost `@handle`, Slack `<@id>`.
+- **Live check:** none in this story. "Done" rests on mock-transport tests. The Operator runs the live check at the 3-3 and 4-2 done checkpoints (spine open item 8, amended).
+
+## I/O & Edge-Case Matrix
+
+| Scenario | Input / State | Expected | Error |
+|---|---|---|---|
+| Probe ok | `/users/me` 200, channel member 200 | returns `username` | N/A |
+| Probe refused | 401 / bot not in channel 403·404 | nothing cached | `ChatError("401 <AppError.message>")` |
+| Post | text, two users | `POST /posts {channel_id, message: "@a @b\n<text>"}` → `ThreadRef(id)` | non-2xx → `ChatError` |
+| Reply | thread, text | `POST /posts` with `root_id` | as above |
+| Replies, first read | cursor `None`, 2 pages | every reply oldest first, without the root or the bot's own posts | N/A |
+| Replies, not a person | a system post, a webhook post, a bot post | dropped | N/A |
+| Body | `@bot fix @botty and @Bot.`, bot `bot` | `body` is `" fix @botty and ."` | N/A |
+| Replies, after cursor | `"1700:abc"` | query carries `fromCreateAt=1700&fromPost=abc` | malformed cursor → `ChatError` |
+| Host down | `httpx.ConnectError` | N/A | `ChatError("ConnectError: …")` |
+| Not JSON / missing key | 200 with HTML | N/A | `ChatError("unexpected response from <path>")` |
+| Token echoed | the error body contains the token | N/A | detail shows `***` |
+| Redirect | 302 | not followed | `ChatError("302 …")` |
+
+</frozen-after-approval>
+
+## Code Map
+
+Under `backend-api/src/orchestrator/`.
+
+- `domain/ports/chat.py` (new):
+  - `ChatProvider = Literal["mattermost", "slack"]`, `ChatUser{id, handle}`, `ThreadRef{id}`, `Reply{id, author_id, mentions_bot, text, body, cursor}`, and `ChatError(Exception)` with `.detail`.
+  - `ChatChannel` Protocol: `post(text, mentions: Sequence[ChatUser]) -> ThreadRef`, `reply(thread, text) -> None`, `replies_since(thread, cursor: str | None) -> list[Reply]`, `probe() -> str` (the bot's handle, without `@`).
+  - `ChatChannelFactory` Protocol: `open(provider, base_url, channel_id, token) -> ChatChannel`.
+- `infrastructure/chat/mattermost.py` (new) -- `MattermostChannel(base_url, channel_id, token, client: httpx.Client | None = None)`. The base URL loses its trailing `/`. Timeout 10 s, `follow_redirects=False`, `client` injectable as in `notify/webhook.py`. `/users/me` is read once and cached for the bot's id and username. `probe` reads `GET /api/v4/users/me`, then `GET /api/v4/channels/{channel_id}/members/{me.id}`. `replies_since` reads `GET /api/v4/posts/{id}/thread` as Decided, walks `order`, and drops the root, the bot's posts, the posts that are not a person's (Decided) and anything at or before the cursor. It fills `body` through `strip_mentions`. Non-2xx gives `"<status> <AppError.message>"`, or the body cut to 300 characters when it is not an AppError. `httpx.HTTPError` gives `"<ErrorType>: <str>"`.
+- `infrastructure/chat/mentions.py` (new, pure) -- `mentions_bot(text, username)`: `@username`, case-insensitive. The next character must not be one of `[a-z0-9_-]`, and must not be a `.` followed by such a character, so `@bot.` at the end of a sentence counts and `@bot.ops` does not. `strip_mentions(text, username)` removes every such match and nothing else. 3-2 reuses the module for Slack's `<@id>` form.
+- `infrastructure/chat/__init__.py` (new) -- `open_channel(provider, base_url, channel_id, token) -> ChatChannel`, matching `ChatChannelFactory`. `"slack"` raises `ChatError("slack is not available yet")` until 3-2.
+
+## Tasks & Acceptance
+
+**Execution:**
+- [x] `backend-api/tests/unit/fakes/chat.py` -- `FakeChatChannel`: records `posts` and `replies`, holds scripted replies per thread honouring `cursor`, a scripted `probe` result, and an optional `ChatError` raised by the next call. `FakeChatChannelFactory`: records each `open` and returns the fake. These are the shared fakes for 3-3, 3-4 and 4-1 (AD-18).
+- [x] New tests, each seen failing first: `tests/unit/test_mattermost_adapter.py` (`httpx.MockTransport` as in `test_notify_webhook.py`: every matrix row, request paths and query, bearer, bodies, two-page paging, and no token in any `ChatError`), `test_chat_mentions.py`, `test_chat_factory.py`, and `test_chat_fake.py` (the fake honours the port).
+- [x] Port, then mentions, then adapter, then factory.
+
+**Acceptance Criteria:**
+- Given a token that appears in the error body, when any call fails, then `ChatError.detail` holds `***` and not the token.
+- Given a thread of 250 replies with the cursor at reply 100, when `replies_since` runs, then it makes two thread requests and returns replies 101 to 250 in order.
+- Given `"thanks @Bot."`, `"@bot.ops"` and `"@botty"` with bot `bot`, when `mentions_bot` runs, then only the first is true.
+- Given a thread holding a webhook post by an allowed user, when `replies_since` runs, then that post is not returned.
+
+## Design Notes
+
+API facts, verified 2026-11-02:
+- Bearer auth, with bot tokens used the same way: [intro](https://raw.githubusercontent.com/mattermost/mattermost/master/api/v4/source/introduction.yaml), [bot accounts](https://docs.mattermost.com/developers/integrate/reference/bot-accounts).
+- `POST /api/v4/posts {channel_id, message, root_id?}` answers 201: [posts.yaml](https://raw.githubusercontent.com/mattermost/mattermost/master/api/v4/source/posts.yaml).
+- The thread read answers `PostList{order, posts, has_next}` with `Post{id, create_at, user_id, root_id, message}`. Its paging is from the server source cited under Decided.
+- `GET /users/me` and `GET /channels/{id}/members/{user_id}` need `read_channel`: [users.yaml](https://raw.githubusercontent.com/mattermost/mattermost/master/api/v4/source/users.yaml), [channels.yaml](https://raw.githubusercontent.com/mattermost/mattermost/master/api/v4/source/channels.yaml).
+- Errors are `AppError{id, message, request_id, status_code}`. A username is 3 to 22 characters of `[a-z0-9._-]` and starts with a letter.
+
+## Verification
+
+**Commands:**
+- `make lint` -- green: import-linter, test pairs, 400-line cap.
+- `make test` -- green, with domain at 100% branch coverage.
+
+## Spec Change Log
+
+- 2026-11-02, lead review. The draft (port, storage, API and form) was split. The storage and API went to 3-4 and the form to 3-5. The draft's `include_router` into `projects.router` would have broken the frozen `test_projects_router.py::test_the_router_declares_four_operations_and_repeats_no_dependency`, and 3-4 now mounts in `main.py`. Defects fixed:
+  - Redaction of every `ChatError`.
+  - No redirects.
+  - Non-JSON answers mapped to `ChatError`.
+  - Explicit thread paging in place of `perPage=0`.
+  - Cursors as positions.
+  - `ChatUser` mentions, which Slack needs.
+- Proposed AD-25 text, for the Operator to ratify: "`Reply{id, author_id, mentions_bot, text, cursor}`, where `cursor` is the adapter's opaque position just after that reply; `replies_since(thread, cursor)` returns, oldest first, the replies after it (`None` = from the start), excluding the root and the bot's own posts; `post` takes `ChatUser{id, handle}` mentions so each adapter renders its own syntax."
+- KEEP: the AD-25 method set, httpx with an injectable client, and the cited API facts.
+- 2026-11-02, lead review of story 4-1, before 3-1 was built. Two changes:
+  - `Reply.body` and `strip_mentions` were added, so 4-1 never parses platform syntax.
+  - System, webhook, bot and plugin posts are now dropped. A webhook post carries its owner's `user_id`, which would let anyone holding an allowed person's webhook answer as them.
+  - Proposed AD-25 text, for the Operator to ratify: "`Reply` gains `body`: `text` with every mention of the bot removed by the same match that sets `mentions_bot`. `replies_since` also excludes system posts and posts made through a webhook, a bot or a plugin."
+  - KEEP: the `cursor` field and the paging rule.
+
+## Implementation Notes
+
+- **Built:** `domain/ports/chat.py`, `infrastructure/chat/{__init__,mattermost,mentions}.py`, `tests/unit/fakes/chat.py`, and four new test modules (79 tests). The four test modules failed at collection before the port existed. No existing file outside this spec was touched.
+- **Factory object.** `ChatChannelFactory` is a Protocol with `open`, and a bare function cannot satisfy it. `infrastructure/chat/__init__.py` therefore also exports `ChatChannels`, whose `open` delegates to `open_channel`. 3-4 wires `ChatChannels()`. An unknown provider string raises `ChatError("unknown chat provider '<x>'")`.
+- **Fake.** `FakeChatChannel` uses `script_replies(thread, *replies)` (appended, so later arrivals can be scripted), `fail_next(ChatError)`, `probe_handle`, and records `posts`, `replies`, `reads` and `probes`. A cursor the fake never issued raises `ChatError`. `FakeChatChannelFactory(channel=None)` records `opened` and raises its `error` when one is set.
+- **Ordering.** Each thread page is sorted by `(create_at, id)` before it is used, and the next page's cursor is the page's largest key. The adapter does not rely on `order` being ascending, which the cited source does not settle. If `has_next` is true but the page does not advance, the read fails with `unexpected response`, so it cannot loop forever. An empty page ends the read. A missing `has_next` counts as false.
+- **Redirects.** `follow_redirects=False` is set on every request as well as on the default client, so an injected client that follows redirects still does not.
+- **Integration flags** (review fix). Any value of `props.from_webhook`, `from_bot` or `from_plugin` other than missing, `False`, `""` or `"false"` (case-insensitive) marks an integration. A post whose `props` carry `override_username` or `override_icon_url` is dropped too.
+- **AC deviation, reported.** The criterion "250 replies, cursor at reply 100, two thread requests" cannot hold under the frozen `perPage=200` rule: the server returns only the 150 replies after the cursor, and they fit on one page. The tests assert the criterion's outcome (101 to 250, in order, with `fromCreateAt=2100&fromPost=p100`) in one request. Cursor-plus-paging is covered by 450 replies with the cursor at 100, which takes two requests. The two-page first read is covered by 250 replies with no cursor.
+- **Unverified against a live server** (per Decided, the Operator's checks at 3-3 and 4-2): whether the thread response includes the root on every page (it is dropped by id either way); the exact `order` direction; whether `props` flags arrive as strings or booleans.
+- **Close requirement (for 3-4).** `ChatChannels` owns one `httpx.Client` (10 s timeout, no redirects, a cookie jar that stores nothing), hands it to every channel it opens, and exposes `close()`. The composition root must call `close()` at shutdown, or the pooled connections stay open. `main.py` is untouched in this story. The jar stores nothing because one client now serves every Project's bot, and a cookie from one bot's host must never ride along with another bot's token.
+- **Review hardening.** A token that is empty, non-ASCII, non-printable or contains a space is refused in `MattermostChannel.__init__` with a fixed `ChatError` that never echoes it. `httpx.InvalidURL`, `ValueError` and `UnicodeError` raised while building or sending a request become `ChatError("<Class>: the request to <path> could not be built")`, with no exception message. Transport-error details are redacted against the raw, `repr`-escaped and bytes-`repr`-escaped token. A thread read stops after `MAX_PAGES` (50) pages, and any answer is streamed and refused past `MAX_RESPONSE_BYTES` (2 MiB, counted after decompression). The 10 s timeout still applies per read, not per call. Mentions now use `re.ASCII`, a `(?<![\w@.-])` lookbehind, and ignore fenced code, inline code and `>` quote lines. `body` keeps those regions unchanged.
+- **Gates** (after the review fixes): `make lint` green. `make test` green: 9,319 backend passed, 1 skipped; 1,771 web-client passed; domain and application at 100% branch coverage; the chat modules at 100% branch coverage. `make openapi` was not run because the API is unchanged.
+
+## Review Triage Log
+
+| Finding | Layer | Verdict | Route | Evidence and action |
+| --- | --- | --- | --- | --- |
+| A token ending in `\n` came back escaped inside `LocalProtocolError`, which `redact` did not match. A non-ASCII token raised `UnicodeEncodeError` with `Bearer <token>` in its repr, and `InvalidURL` escaped the contract | independent review | high | patch | The token is refused at construction without being echoed. Build errors are reported by class only. Details are redacted in raw and escaped forms. Tests: `test_mattermost_adapter_hardening.py`. |
+| Integration flags failed open: `"TRUE"`, `"True"` or `1`, and posts carrying only `override_username`, passed as a person | independent review | high | patch | Any value but missing, `False`, `""` or `"false"` counts. Override props drop the post. Tests: `test_mattermost_adapter_hardening.py`. |
+| Mentions counted inside code fences, inline code, quotes and after a word, and matched Unicode folds (long s, Kelvin sign) | independent review | medium | patch | `re.ASCII`, a lookbehind, and masking of code and quotes before matching. Tests: `test_chat_mentions_markdown.py`. |
+| No page cap and no response-size cap: a server that always said `has_next` was paged 1,001 times | independent review | medium | patch | `MAX_PAGES` = 50 and `MAX_RESPONSE_BYTES` = 2 MiB, each a `ChatError`. Tests: `test_mattermost_adapter_hardening.py`. |
+| Each channel opened its own `httpx.Client`, never closed | independent review | low | patch | `ChatChannels` owns one client and has `close()`. 3-4 wires it and calls `close()` at shutdown. Tests: `test_chat_factory_client.py`. |
+| A shared client would carry one host's cookies onto another bot's requests | implementer, from the client-sharing fix | low | patch | The default client's cookie jar stores nothing. Tests: `test_chat_factory_client.py`, `test_mattermost_adapter_hardening.py`. |
