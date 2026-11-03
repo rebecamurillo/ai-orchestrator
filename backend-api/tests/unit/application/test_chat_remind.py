@@ -20,6 +20,7 @@ from orchestrator.domain.ports.chat import ChatError, ThreadRef
 from tests.unit.fakes.chat_world import ALICE, BASE_URL, BOB, HOURS, World
 
 HOUR = 3600
+CLOSED_LINE = "Closed · stop 3 · the stop ended"
 
 
 def open_thread(world: World, run: Run, **overrides: Any) -> ChatThread:
@@ -109,7 +110,9 @@ def test_a_run_that_moved_to_another_stop_is_not_reminded() -> None:
 
     world.poll()
 
-    assert world.chat.replies == []
+    # Revised under hard rule 1(b), story 4-2, 2026-11-03: the ended stop's thread now gets
+    # its closing notice, and still no reminder.
+    assert [text.split("\n")[0] for _, text in world.chat.replies] == [CLOSED_LINE]
 
 
 @pytest.mark.parametrize(
@@ -123,7 +126,10 @@ def test_a_locked_or_moving_run_is_not_reminded(changes: dict[str, Any]) -> None
 
     world.poll()
 
-    assert world.chat.replies == []
+    # Revised under hard rule 1(b), story 4-2, 2026-11-03: a Run that left its stop gets the
+    # closing notice in the thread, and still no reminder.
+    closing = [CLOSED_LINE] if "status" in changes else []
+    assert [text.split("\n")[0] for _, text in world.chat.replies] == closing
 
 
 def test_a_failed_thread_is_not_reminded() -> None:

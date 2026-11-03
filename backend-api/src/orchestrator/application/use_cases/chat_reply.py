@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from typing import Literal
 
 from orchestrator.application.rules.chat_reply import (
     ANSWER,
@@ -106,16 +107,31 @@ def apply_reply_batch(ports: ReplyPorts, read: ChatThread, replies: Sequence[Rep
 
 def close_thread(
     ports: ReplyPorts, thread: ChatThread, cursor: str | None = None, *, error: str | None = None
-) -> None:
+) -> ChatThread:
     """The one write that closes a thread: `closed`, at `cursor` when one is given (an
-    answer), with `error` when one is given (a deleted root, 4-3). Each left out is kept."""
+    answer), with `error` when one is given (a deleted root, 4-3). Each left out is kept.
+
+    It also writes 4-2's marker: `closed_at`, and `close_notice` `due` when the thread is on
+    the Project's channel now. A thread on an old channel, of a Project with none, or whose
+    root is gone (`error`) owes no notice: there is nowhere to post it."""
     now = ports.signal.writers.clock.now()
-    closed = replace(thread, state="closed", updated_at=now)
+    notice = None if error is not None else _notice_owed(ports, thread)
+    closed = replace(thread, state="closed", closed_at=now, close_notice=notice, updated_at=now)
     if cursor is not None:
         closed = replace(closed, cursor=cursor)
     if error is not None:
         closed = replace(closed, error=error)
     ports.threads.update(closed)
+    return closed
+
+
+def _notice_owed(ports: ReplyPorts, thread: ChatThread) -> Literal["due"] | None:
+    run = ports.signal.writers.runs.get(thread.run_id)
+    channel = ports.channels.get_current(run.project_id) if run is not None else None
+    if channel is None:
+        return None
+    on_channel = (thread.provider, thread.channel_id) == (channel.provider, channel.channel_id)
+    return "due" if on_channel else None
 
 
 def _check_batch(

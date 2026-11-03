@@ -2,9 +2,9 @@
 title: 'Thread lock and closing notices'
 type: 'feature'
 created: '2026-11-02'
-status: 'ready-for-dev'
+status: 'in-review'
 route: 'dispatch'
-baseline_commit: 'TBD (set at dispatch)'
+baseline_commit: '184e896'
 review_loop_iteration: 0
 context: []
 ---
@@ -177,8 +177,8 @@ Under `backend-api/src/orchestrator/` unless stated.
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] Extend `tests/unit/fakes/chat_thread.py` with the three list methods. Each reads a thread's Project through `runs`, as `list_open_for_project` does, and applies every filter the adapter's query applies.
-- [ ] New tests, each seen failing first, covering every matrix row through the shared fakes, with `structlog.testing.capture_logs` for logs:
+- [x] Extend `tests/unit/fakes/chat_thread.py` with the three list methods. Each reads a thread's Project through `runs`, as `list_open_for_project` does, and applies every filter the adapter's query applies.
+- [x] New tests, each seen failing first, covering every matrix row through the shared fakes, with `structlog.testing.capture_logs` for logs:
   - `tests/unit/application/test_chat_close_rules.py`, including the defensive wordings on fabricated records
   - `tests/unit/application/test_chat_close.py`
   - `tests/unit/application/test_chat_watch.py`
@@ -193,8 +193,8 @@ Under `backend-api/src/orchestrator/` unless stated.
        - A `park_seq` keyword argument or dict key whose value is not a plain attribute read `<expr>.park_seq`. Read-model and log sites such as `run_events.py`'s `RunEvent(park_seq=run.park_seq)`, and 3-3's `ChatThread`, `StopFacts` and `reminder_text` calls, pass.
        - An `Entry(event=…)` whose value is a `PARK_KINDS` string literal or `park.kind`.
     3. **The alphabets.** `PARK_KINDS` shares no token with `SIGNAL_KINDS`, `LIFECYCLE_EVENTS`, `MACHINE_EVENTS` or `WRITE_EVENTS`.
-- [ ] 4-1's winner-close edit. A 4-1 test that pins the whole closed-thread row is revised under rule 1(b), citing "story 4-2, 2026-11-02", for the two new fields only (Decided).
-- [ ] Code Map in order.
+- [x] 4-1's winner-close edit. A 4-1 test that pins the whole closed-thread row is revised under rule 1(b), citing "story 4-2, 2026-11-02", for the two new fields only (Decided).
+- [x] Code Map in order.
 
 **Acceptance Criteria:**
 - Given a Run `blocked` at stop 3 with an open thread, when the Operator answers on the Run page and a fire runs, then the thread is `closed` and the fake channel holds exactly one reply in that thread, naming the Operator, with no mentions.
@@ -237,12 +237,23 @@ Under `backend-api/src/orchestrator/` unless stated.
 
 **Manual checks (done checkpoint).** The Operator runs these with real bot tokens on Mattermost and on Slack, using a fixture Run at a `blocked` stop. First, confirm the Slack bot is an internal app that is not distributed (3-2).
 
+*Setup, once per platform:*
+- The stack runs on this commit: `select * from alembic_version` reads `0030_chat_thread_close` (the `psql` line in `DEPLOY.md`).
+- `PUBLIC_BASE_URL` is set, so every notice ends with the Run link. `CHAT_POLL_SECONDS` is the period "one poll" means below (30 s by default).
+- The Project's channel is stored and its connection test passes (3-4). Two people are in `allowed_users`, and a third person who is in the channel is not.
+- The fixture Run is at a `blocked` stop with an agent attempt that can be resumed, and its root post is in the channel (3-3).
+- To read a thread's state, run through the same `psql` line:
+  `select park_seq, state, closed_at, close_notice, mention_notice, mention_cursor from chat_thread where run_id = '<run id>' order by park_seq;`
+- To read the answer record: `select actor, payload from gate_record where run_id = '<run id>' and event = 'answer' order by at;`
+
 *Pass criteria:*
-1. Reply once as an allowed person, mentioning the bot. The session resumes, the `answer` gate record's payload has `mode: session`, and the closing notice names `{handle} via {platform}`.
-2. Reply again as an allowed person, mentioning the bot. Nothing changes, and one closed-thread notice appears.
-3. Restart the backend, then mention the bot a third time. No further notice appears.
-4. As someone not in `allowed_users`, mention the bot in the closed thread. No notice is posted.
-5. Answer a second stop on the Run page. Its thread closes within one poll, with the Operator notice.
+1. Reply once as an allowed person, mentioning the bot. Within one poll the session resumes, the `answer` gate record's payload has `mode: session`, and one reply in the thread reads `Closed · stop {n} · answered by {handle} via {platform}`, then `Replies in this thread are no longer read.`, then the Run link. It mentions nobody. The row reads `closed`, `close_notice = posted`.
+2. Reply again as an allowed person, mentioning the bot. The Run, its records and its status do not change. Within one poll one reply appears: `This thread is closed. Act on the Run page: {link}`. The row reads `mention_notice = posted`.
+3. Restart the backend (`docker compose restart backend-api`, with the Operator's go-ahead, hard rule 9), then mention the bot a third time. After two polls no further reply appears.
+4. As the person not in `allowed_users`, mention the bot in the closed thread. After two polls no reply appears.
+5. Bring the Run to a second `blocked` stop and answer it on the Run page. Within one poll its thread closes with `Closed · stop {n+1} · answered by the Operator (Run page or API)`. The first thread gets nothing new.
+
+A step fails when its reply is missing, appears twice, carries answer text or a mention, or the row does not read as stated.
 
 *Trust edges.* Observe each one and record the outcome in `deferred-work.md`. They are not pass criteria. A bad outcome opens an "Edited replies" follow-up and does not fail 4-2.
 - **Mattermost slash command.** Make a custom slash command whose endpoint returns `{"response_type":"in_channel","text":"@bot …"}`, and run it in an open thread as an allowed user. Record whether it is read as that user's reply.
@@ -291,3 +302,13 @@ Under `backend-api/src/orchestrator/` unless stated.
     - The watch is skipped after a read-pass `ChatError`, through an additive `bool` return from 4-3's `read_replies`.
   - **Migration.** The named and cross-column CHECKs were added. Threads closed before the migration get no notice and no watch.
   - Item 13 skipped as instructed.
+- 2026-11-03, built at `184e896` (dispatch facts from the lead):
+  - **One close point.** 4-1's `close_thread` is now the only close write, used by 4-1's winner, 4-3's gone-thread close and this story's close pass. It writes `closed_at` and `close_notice` itself, so the "edit `apply_reply_batch`" task is done there. It is the same declared behaviour change. It now returns the closed thread.
+  - **A gone root owes no notice.** A close with `error` (4-3's deleted root) writes `close_notice` NULL. A reply to a deleted root always fails, and its `ChatError` would end the closing-notice pass for the Project in that fire.
+  - **The backlog cap** counts each notice that reached `reply`, posted or failed. A notice abandoned at the claim does not count.
+  - **A `ChatError` on a watch notice's reply** ends the watch pass for the Project in that fire, as on a read (Design Notes, Load).
+  - **Fakes.** `tests/unit/fakes/chat_thread.py` gained the three lists. No other fake changed.
+  - **Existing tests revised under rule 1(b), citing "story 4-2, 2026-11-03".** No 4-1 test pinned the whole closed-thread row. These five tests pinned what 4-2 declares changed:
+    - `test_chat_repository_adapter.py`: the thread table's column and nullable sets, its CHECK set, and the 0029 migration's columns compared to the model's. Each now adds 4-2's six columns or four CHECKs. `test_chat_repository_close.py` pins them.
+    - `test_chat_read.py::test_a_reply_from_an_allowed_person_answers_the_stop_and_is_logged`: the same fire now also has the watch's read from `c1`.
+    - `test_chat_remind.py::test_a_run_that_moved_to_another_stop_is_not_reminded` and `::test_a_locked_or_moving_run_is_not_reminded[status running]`: the ended stop's thread now gets its closing notice, and still no reminder.

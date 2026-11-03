@@ -6,6 +6,10 @@ They mirror what the `chat_thread` and `chat_notice` tables enforce. `add` is th
 `ref` or the same id is not stored, and `add` answers `False`. `get_for_update` returns `get`,
 since a fake has no lock to take. Both lists come back oldest first, by `(created_at, id)`.
 
+4-2's three notice lists apply every filter the adapter's query applies: `list_notices_due`
+is oldest `closed_at` first (a `NULL` last, as PostgreSQL sorts it), `list_notices_in` is
+oldest first across Projects, and `list_watched` is newest `closed_at` first, cut at `limit`.
+
 The Project a thread belongs to is its Run's, so the thread fake reads the Run fake, and the
 notice fake reads the gate records the way the anti-join does.
 """
@@ -17,8 +21,14 @@ from dataclasses import replace
 from datetime import datetime
 from uuid import UUID
 
-from orchestrator.domain.entities.chat_thread import ChatNotice, ChatThread, ChatThreadState
+from orchestrator.domain.entities.chat_thread import (
+    ChatNotice,
+    ChatThread,
+    ChatThreadState,
+    NoticeState,
+)
 from orchestrator.domain.entities.gate_record import GateRecord
+from orchestrator.domain.ports.chat import ChatProvider
 from tests.unit.fakes.runs import FakeGateRecordRepository, FakeRunRepository
 
 ACCEPT_EVENT = "senior_accept"
@@ -68,6 +78,45 @@ class FakeChatThreadRepository:
     def list_by_state(self, state: ChatThreadState) -> list[ChatThread]:
         self.calls.append(("list_by_state", state))
         return _oldest_first(thread for thread in self.threads.values() if thread.state == state)
+
+    def list_notices_due(self, project_id: UUID) -> list[ChatThread]:
+        self.calls.append(("list_notices_due", project_id))
+        due = [
+            thread
+            for thread in self.threads.values()
+            if thread.close_notice == "due" and self._project_of(thread) == project_id
+        ]
+        return sorted(due, key=_by_closed_at)
+
+    def list_notices_in(self, state: NoticeState) -> list[ChatThread]:
+        self.calls.append(("list_notices_in", state))
+        return _oldest_first(
+            thread
+            for thread in self.threads.values()
+            if state in (thread.close_notice, thread.mention_notice)
+        )
+
+    def list_watched(
+        self,
+        project_id: UUID,
+        provider: ChatProvider,
+        channel_id: str,
+        closed_since: datetime,
+        limit: int,
+    ) -> list[ChatThread]:
+        self.calls.append(("list_watched", (project_id, provider, channel_id, closed_since, limit)))
+        watched = [
+            thread
+            for thread in self.threads.values()
+            if thread.state == "closed"
+            and thread.close_notice == "posted"
+            and thread.mention_notice is None
+            and (thread.provider, thread.channel_id) == (provider, channel_id)
+            and thread.closed_at is not None
+            and thread.closed_at >= closed_since
+            and self._project_of(thread) == project_id
+        ]
+        return sorted(watched, key=_by_closed_at, reverse=True)[:limit]
 
     def update(self, thread: ChatThread) -> None:
         self.calls.append(("update", thread.id))
@@ -131,6 +180,10 @@ class FakeChatNoticeRepository:
     def _project_of(self, record: GateRecord) -> UUID | None:
         run = self.runs.runs.get(record.run_id)
         return None if run is None else run.project_id
+
+
+def _by_closed_at(thread: ChatThread) -> tuple[bool, datetime, UUID]:
+    return (thread.closed_at is None, thread.closed_at or thread.created_at, thread.id)
 
 
 def _oldest_first(threads: Iterable[ChatThread]) -> list[ChatThread]:

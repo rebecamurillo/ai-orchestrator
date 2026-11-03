@@ -6,6 +6,9 @@ record, writes nothing and answers `False` (`rowcount` is 1 only for a row writt
 what keeps two overlapping fires from both posting. `get_for_update` takes a row lock and
 re-reads the row, as `runs.py::get_for_update` does.
 
+4-2's three notice lists hold every filter in the query: `list_notices_due` and
+`list_watched` join the Run for its Project, and `list_watched` is cut at its `limit` there.
+
 `unposted_accepts` is an anti-join: every `senior_accept` on the Project's Runs at or after
 `since` with no `chat_notice` row, with no filter on the Run's status.
 """
@@ -16,10 +19,15 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
-from sqlalchemy import exists, select, update
+from sqlalchemy import exists, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 
-from orchestrator.domain.entities.chat_thread import ChatNotice, ChatThread, ChatThreadState
+from orchestrator.domain.entities.chat_thread import (
+    ChatNotice,
+    ChatThread,
+    ChatThreadState,
+    NoticeState,
+)
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.ports.chat import ChatProvider
 from orchestrator.domain.statuses import ParkKind
@@ -49,6 +57,12 @@ def thread_values(thread: ChatThread) -> dict[str, Any]:
         "last_reminded_at": thread.last_reminded_at,
         "created_at": thread.created_at,
         "updated_at": thread.updated_at,
+        "closed_at": thread.closed_at,
+        "close_notice": thread.close_notice,
+        "close_notice_at": thread.close_notice_at,
+        "mention_notice": thread.mention_notice,
+        "mention_notice_at": thread.mention_notice_at,
+        "mention_cursor": thread.mention_cursor,
     }
 
 
@@ -67,6 +81,12 @@ def to_thread(row: ChatThreadRow) -> ChatThread:
         last_reminded_at=row.last_reminded_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        closed_at=row.closed_at,
+        close_notice=cast("NoticeState | None", row.close_notice),
+        close_notice_at=row.close_notice_at,
+        mention_notice=cast("NoticeState | None", row.mention_notice),
+        mention_notice_at=row.mention_notice_at,
+        mention_cursor=row.mention_cursor,
     )
 
 
@@ -118,6 +138,48 @@ class SQLAlchemyChatThreadRepository:
             select(ChatThreadRow)
             .where(ChatThreadRow.state == state)
             .order_by(ChatThreadRow.created_at, ChatThreadRow.id)
+        )
+        return [to_thread(row) for row in self._session.scalars(statement).all()]
+
+    def list_notices_due(self, project_id: UUID) -> list[ChatThread]:
+        statement = (
+            select(ChatThreadRow)
+            .join(RunRow, RunRow.id == ChatThreadRow.run_id)
+            .where(RunRow.project_id == project_id, ChatThreadRow.close_notice == "due")
+            .order_by(ChatThreadRow.closed_at, ChatThreadRow.id)
+        )
+        return [to_thread(row) for row in self._session.scalars(statement).all()]
+
+    def list_notices_in(self, state: NoticeState) -> list[ChatThread]:
+        statement = (
+            select(ChatThreadRow)
+            .where(or_(ChatThreadRow.close_notice == state, ChatThreadRow.mention_notice == state))
+            .order_by(ChatThreadRow.created_at, ChatThreadRow.id)
+        )
+        return [to_thread(row) for row in self._session.scalars(statement).all()]
+
+    def list_watched(
+        self,
+        project_id: UUID,
+        provider: ChatProvider,
+        channel_id: str,
+        closed_since: datetime,
+        limit: int,
+    ) -> list[ChatThread]:
+        statement = (
+            select(ChatThreadRow)
+            .join(RunRow, RunRow.id == ChatThreadRow.run_id)
+            .where(
+                RunRow.project_id == project_id,
+                ChatThreadRow.state == "closed",
+                ChatThreadRow.close_notice == "posted",
+                ChatThreadRow.mention_notice.is_(None),
+                ChatThreadRow.provider == provider,
+                ChatThreadRow.channel_id == channel_id,
+                ChatThreadRow.closed_at >= closed_since,
+            )
+            .order_by(ChatThreadRow.closed_at.desc(), ChatThreadRow.id.desc())
+            .limit(limit)
         )
         return [to_thread(row) for row in self._session.scalars(statement).all()]
 

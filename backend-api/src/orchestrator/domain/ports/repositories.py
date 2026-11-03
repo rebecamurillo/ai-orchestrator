@@ -16,13 +16,19 @@ from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from orchestrator.domain.entities.attempt import Attempt
-from orchestrator.domain.entities.chat_thread import ChatNotice, ChatThread, ChatThreadState
+from orchestrator.domain.entities.chat_thread import (
+    ChatNotice,
+    ChatThread,
+    ChatThreadState,
+    NoticeState,
+)
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.project_channel import ProjectChannel
 from orchestrator.domain.entities.repository import Repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
+from orchestrator.domain.ports.chat import ChatProvider
 from orchestrator.domain.statuses import RunStatus
 
 
@@ -285,6 +291,28 @@ class ChatThreadRepository(Protocol):
 
     def list_by_state(self, state: ChatThreadState) -> list[ChatThread]:
         """Every thread in `state`, oldest first."""
+        ...
+
+    def list_notices_due(self, project_id: UUID) -> list[ChatThread]:
+        """Every thread on this Project's Runs whose closing notice is `due`, oldest
+        `closed_at` first (story 4-2)."""
+        ...
+
+    def list_notices_in(self, state: NoticeState) -> list[ChatThread]:
+        """Every thread, across Projects, with either notice field at `state`, oldest first."""
+        ...
+
+    def list_watched(
+        self,
+        project_id: UUID,
+        provider: ChatProvider,
+        channel_id: str,
+        closed_since: datetime,
+        limit: int,
+    ) -> list[ChatThread]:
+        """At most `limit` `closed` threads on this Project's Runs and this channel whose
+        closing notice is `posted`, with no mention notice, closed at or after
+        `closed_since`; newest `closed_at` first."""
         ...
 
     def update(self, thread: ChatThread) -> None:

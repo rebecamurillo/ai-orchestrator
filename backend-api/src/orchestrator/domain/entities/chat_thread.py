@@ -9,6 +9,11 @@ Nothing returns a `closed` or `failed` thread to `open`, and nothing reposts one
 Every time on a thread comes from the `Clock` port: one backend process, never the
 database's `now()`.
 
+A closed thread owes a closing notice when `close_notice` is set (story 4-2): `due` until a
+fire claims it as `sending`, then `posted` or `failed`. For 24 h after `closed_at`, a posted
+one is watched from `mention_cursor` for one late mention, whose notice is `mention_notice`,
+which never takes `due`. A thread closed before 4-2 keeps `closed_at` `None` and gets neither.
+
 A `ChatNotice` is a claim row: the `senior_accept` gate record it names is posted once to the
 channel, never as a thread, and a failed post keeps its `error`.
 """
@@ -25,6 +30,8 @@ from orchestrator.domain.statuses import ParkKind
 
 ChatThreadState = Literal["posting", "open", "closed", "failed"]
 CHAT_THREAD_STATES: Final[tuple[ChatThreadState, ...]] = get_args(ChatThreadState)
+NoticeState = Literal["due", "sending", "posted", "failed"]
+NOTICE_STATES: Final[tuple[NoticeState, ...]] = get_args(NoticeState)
 
 
 @dataclass(frozen=True)
@@ -44,6 +51,13 @@ class ChatThread:
     last_reminded_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    closed_at: datetime | None = None
+    close_notice: NoticeState | None = None
+    #: When `close_notice` was claimed as `sending` (or failed at the claim).
+    close_notice_at: datetime | None = None
+    mention_notice: NoticeState | None = None
+    mention_notice_at: datetime | None = None
+    mention_cursor: str | None = None
 
 
 @dataclass(frozen=True)

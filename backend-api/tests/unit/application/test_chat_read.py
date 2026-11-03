@@ -107,7 +107,10 @@ def test_a_reply_from_an_allowed_person_answers_the_stop_and_is_logged() -> None
 
     logs = project.poll()
 
-    assert project.world.chat.reads == [(project.ref(project.thread), None)]
+    # Revised under hard rule 1(b), story 4-2, 2026-11-03: the same fire posts the closing
+    # notice, and the watch then reads the closed thread from its cursor.
+    ref = project.ref(project.thread)
+    assert project.world.chat.reads == [(ref, None), (ref, "c1")]
     (answer,) = project.answers()
     assert (answer.actor, answer.text) == ("chat", "fix X")
     assert project.stored(project.thread).state == "closed"

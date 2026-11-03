@@ -46,6 +46,22 @@ AT = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
 THREADS = Base.metadata.tables["chat_thread"]
 NOTICES = Base.metadata.tables["chat_notice"]
 MIGRATION = REPO_ROOT / "backend-api" / "alembic" / "versions" / "0029_chat_thread.py"
+#: Revised under hard rule 1(b), story 4-2, 2026-11-03: 4-2 adds these six nullable columns
+#: and four CHECKs in migration 0030; `test_chat_repository_close.py` pins them.
+CLOSE_COLUMNS = {
+    "closed_at",
+    "close_notice",
+    "close_notice_at",
+    "mention_notice",
+    "mention_notice_at",
+    "mention_cursor",
+}
+CLOSE_CHECKS = {
+    "close_notice IN ('due', 'sending', 'posted', 'failed')",
+    "mention_notice IN ('sending', 'posted', 'failed')",
+    "close_notice IS NULL OR state = 'closed'",
+    "mention_notice IS NULL OR close_notice = 'posted'",
+}
 
 
 def a_thread(**overrides: Any) -> ChatThread:
@@ -111,8 +127,8 @@ def notices(session: RecordingSession) -> SQLAlchemyChatNoticeRepository:
 # ── the tables ───────────────────────────────────────────────────────────────
 
 
-def test_the_thread_table_carries_4_1s_columns_and_only_four_are_nullable() -> None:
-    assert set(THREADS.columns.keys()) == {
+def test_the_thread_table_carries_4_1s_and_4_2s_columns_and_only_ten_are_nullable() -> None:
+    assert set(THREADS.columns.keys()) == CLOSE_COLUMNS | {
         "id",
         "run_id",
         "park_seq",
@@ -128,7 +144,7 @@ def test_the_thread_table_carries_4_1s_columns_and_only_four_are_nullable() -> N
         "updated_at",
     }
     nullable = {name for name, column in THREADS.columns.items() if column.nullable}
-    assert nullable == {"ref", "cursor", "error", "last_reminded_at"}
+    assert nullable == CLOSE_COLUMNS | {"ref", "cursor", "error", "last_reminded_at"}
 
 
 @pytest.mark.parametrize(
@@ -170,7 +186,7 @@ def test_a_thread_is_unique_per_stop_and_per_ref() -> None:
 
 def test_the_thread_state_and_provider_are_checked() -> None:
     checks = {str(c.sqltext) for c in THREADS.constraints if isinstance(c, CheckConstraint)}
-    assert checks == {
+    assert checks == CLOSE_CHECKS | {
         "state IN ('posting', 'open', 'closed', 'failed')",
         "provider IN ('mattermost', 'slack')",
     }
@@ -231,7 +247,8 @@ def test_the_migration_creates_both_tables_as_the_models_declare_them(
     assert set(created) == {"chat_thread", "chat_notice"}
     for table, model in (("chat_thread", THREADS), ("chat_notice", NOTICES)):
         columns = {arg.name: arg for arg in created[table][1:] if hasattr(arg, "nullable")}
-        assert set(columns) == set(model.columns.keys())
+        later = CLOSE_COLUMNS if table == "chat_thread" else set()
+        assert set(columns) == set(model.columns.keys()) - later
         for name, column in columns.items():
             assert column.nullable is model.columns[name].nullable, (table, name)
         assert repr(created[table]).count("CASCADE") == (1 if table == "chat_thread" else 2)
