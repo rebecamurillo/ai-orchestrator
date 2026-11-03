@@ -441,11 +441,11 @@ Before opening a change: `make lint && make test && make coverage`, then `make e
 
 ## The BMAD method on a new machine
 
-The repository commits the method itself (`_bmad/`, version **6.11.0**); the skill stubs
+The repository commits the method itself (`_bmad/`, version **6.12.4**); the skill stubs
 and your personal install answers are per machine and git-ignored. Once per machine:
 
 ```bash
-npx --yes bmad-method@6.11.0 install --directory . --modules bmm --tools claude-code,codex --yes --user-name OptimAI-team
+npx --yes bmad-method@6.12.4 install --directory . --modules bmm --tools claude-code,codex --yes --user-name OptimAI-team
 git status                                   # must be clean
 ls .claude/skills | grep -c '^bmad-'         # 49 skills
 ```

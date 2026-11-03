@@ -8,7 +8,7 @@
 set -euo pipefail
 
 : "${AGENT_HOME:=/home/agent}"
-: "${BMAD_VERSION:=6.11.0}"
+: "${BMAD_VERSION:=6.12.4}"
 
 # `install` runs during `docker build`, where the Gateway and Langfuse values do not exist
 # and must never be baked into an image layer or passed as a build argument. Only the two

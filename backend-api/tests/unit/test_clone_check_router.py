@@ -45,7 +45,9 @@ REPOSITORIES = "/api/v1/repositories"
 UNKNOWN_ID = "01a06887-79ab-759b-97a0-71c32ad939c2"
 
 SHA = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
-MANIFEST = "installation:\n  version: 6.11.0\n"
+# Must equal the BMAD_VERSION default: the ok-path tests assert the manifest matches the
+# instance. Raised 6.11.0 → 6.12.4 with the pin (Operator, release 1.0.0-beta.3, 2026-11-03).
+MANIFEST = "installation:\n  version: 6.12.4\n"
 NOT_FOUND_OUTPUT = "remote: Repository not found."
 
 FOUR = 4

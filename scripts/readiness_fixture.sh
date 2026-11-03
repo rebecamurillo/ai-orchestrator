@@ -14,7 +14,7 @@
 set -euo pipefail
 
 : "${WORK_DIR:=/work}"
-: "${BMAD_VERSION:=6.11.0}"
+: "${BMAD_VERSION:=6.12.4}"
 
 FIXTURE_SRC="${READINESS_FIXTURE_SRC:-/app/fixtures/readiness-repo}"
 READINESS_DIR="${WORK_DIR}/readiness"
