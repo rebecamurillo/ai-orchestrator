@@ -323,6 +323,44 @@ To run the client package from images built here instead of pulled:
 and `cd ai-orchestrator && ./install.sh --no-pull` — no GitHub token is asked for and nothing
 is pulled.
 
+### Publish a new version
+
+A release is a version bump merged on `main`, then a `v<VERSION>` tag; `release.yml` does the
+building and pushing. `DEPLOY.md` §4 holds the reasons, this is the checklist.
+
+1. **Bump, on a branch** (`chore/release-<version>`). The version lives in seven places, and
+   `make lint` (`scripts/check_version.py`) fails when the first five disagree:
+   - `VERSION` — the number itself (`1.0.0-beta.3`, never a `v` prefix)
+   - `backend-api/pyproject.toml`, `web-client/package.json`,
+     `deploy/kit/.claude-plugin/plugin.json`, `deploy/kit/manifest.json`
+   - `contracts/openapi.json` (`info.version`; `make openapi` regenerates it)
+   - `backend-api/uv.lock` — the `orchestrator` package entry, in PEP 440 form
+     (`1.0.0b3`); `cd backend-api && uv lock --check` proves it
+2. **Pull request, CI green, merge.** The merge commit on `main` gets its own `ci.yml` run;
+   wait for it to succeed. `release.yml` refuses a tag on a commit with no successful
+   `ci.yml` run for that exact SHA.
+3. **Tag the merge commit and push the tag:**
+
+   ```bash
+   git switch main && git pull --ff-only
+   git tag -a "v$(cat VERSION)" -m "v$(cat VERSION)" && git push origin "v$(cat VERSION)"
+   gh run watch "$(gh run list -w release.yml -L1 --json databaseId -q '.[0].databaseId')"
+   ```
+
+4. **Check what landed.** `release.yml` pushes
+   `ghcr.io/rebecamurillo/ai-orchestrator/{backend-api,web-client}:<VERSION>` (and
+   `:sha-<commit>`, multi-arch, no `latest`) and creates the GitHub Release.
+   `docker buildx imagetools inspect ghcr.io/rebecamurillo/ai-orchestrator/backend-api:<VERSION>`
+   lists both platforms.
+5. **Upgrade a host** — a separate act, never automatic. From the deploy package directory:
+   refresh the package out of the new image
+   (`docker run --rm …/backend-api:<VERSION> kit bootstrap | tar x` from its parent), read the
+   cautions in `deploy/README.md` § Upgrading (a `DBOS_APPLICATION_VERSION` bump needs a drain;
+   hand-patched compose services), then `./install.sh upgrade --tag <VERSION>` and
+   `./install.sh doctor`.
+
+`make push` (above) stays for a pre-release that goes out before there is a tag.
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
