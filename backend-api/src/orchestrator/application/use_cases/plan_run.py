@@ -93,7 +93,7 @@ def _parsed(templates: TemplateVersionRepository, name: str, version: int | None
     stored = None if version is None else templates.get(name, version)
     if stored is None:
         raise _unresolved(name, version)
-    result = validate(stored.yaml, templates=templates)
+    result = validate(stored.yaml, templates=templates, root_version=stored.version)
     if result.template is None:
         raise _unresolved(name, version, result.errors[0].line)
     return result.template.model_copy(update={"version": stored.version})

@@ -82,15 +82,18 @@ class _Guarded:
             raise PortRaised(error) from error
 
 
-def judge_text(yaml_text: str, templates: TemplateVersionRepository) -> ValidationResult:
+def judge_text(
+    yaml_text: str, templates: TemplateVersionRepository, root_version: int | None = None
+) -> ValidationResult:
     """`validate()` over one text, where a fault in the text is a result and a fault of the
     repository is an error.
 
-    Any exception `validate()` raises that did not come from the repository is one
-    `invalid template` at line 1; the class name is logged, never put in the reason.
+    `root_version` is the stored number of a text that is already stored; `None` for a text
+    that is not. Any exception `validate()` raises that did not come from the repository is
+    one `invalid template` at line 1; the class name is logged, never put in the reason.
     """
     try:
-        return validate(yaml_text, templates=_Guarded(templates))
+        return validate(yaml_text, templates=_Guarded(templates), root_version=root_version)
     except PortRaised as raised:
         raise raised.error from None
     except Exception as error:

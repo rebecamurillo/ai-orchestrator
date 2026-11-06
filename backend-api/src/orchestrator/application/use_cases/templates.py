@@ -217,7 +217,7 @@ def get_version(ports: TemplatePorts, name: str, version: int) -> TemplateVersio
     stored = ports.templates.get(name, version)
     if stored is None:
         raise NotFound(f"no template {name!r} version {version}")
-    result = judge_text(stored.yaml, ports.templates)
+    result = judge_text(stored.yaml, ports.templates, version)
     inputs = result.template.inputs if result.template is not None else ()
     called_by = tuple(ports.templates.callers_of(name, version))
     pinned_by = ports.templates.pinned_by(name, version)
@@ -231,7 +231,7 @@ def template_graph(ports: TemplatePorts, name: str, version: int) -> Graph:
     stored = ports.templates.get(name, version)
     if stored is None:
         raise NotFound(f"no template {name!r} version {version}")
-    result = judge_text(stored.yaml, ports.templates)
+    result = judge_text(stored.yaml, ports.templates, version)
     if result.errors:
         raise StoredTemplateInvalid(name, version, result.errors)
     parsed = result.template
@@ -263,7 +263,7 @@ def validate_latest(ports: TemplatePorts, name: str) -> ValidationResult:
     """The latest stored version's YAML, re-validated. Unknown to this store is 404."""
     stored = ports.templates.get(name, latest_version(ports.templates, name))
     assert stored is not None  # `latest_version` came from `list_versions` on this store
-    return judge_text(stored.yaml, ports.templates)
+    return judge_text(stored.yaml, ports.templates, stored.version)
 
 
 def save_version(ports: TemplatePorts, name: str, yaml_text: str) -> TemplateVersion:

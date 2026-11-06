@@ -118,10 +118,10 @@ def test_the_guard_forwards_and_wraps_every_repository_method() -> None:
 def exploding(monkeypatch: pytest.MonkeyPatch) -> None:
     real = template_judge.validate
 
-    def validate(text: str, *, templates: object) -> object:
+    def validate(text: str, *, templates: object, root_version: int | None = None) -> object:
         if "name: marker" in text:
             raise KeyError("boom")
-        return real(text, templates=templates)  # type: ignore[arg-type]
+        return real(text, templates=templates, root_version=root_version)  # type: ignore[arg-type]
 
     monkeypatch.setattr(template_judge, "validate", validate)
 

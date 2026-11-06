@@ -145,7 +145,9 @@ steps:
   loop sees everything its outer loops declare.
 - `bind` (on a loop) maps scope names to values rendered once per item, so an inner step or
   loop can read them as plain names. The depth-2 example binds `spec_folder` per epic.
-- An input may carry an optional `description`; the Run form shows it under the field.
+- An input may carry an optional `description`; the API returns it with the version's inputs
+  (`GET /api/v1/templates/{name}/{version}`), where an agent or a human reads it. The Run form
+  does not show it.
 - `spec_folder`, stated plainly: it is the one name agent steps read implicitly from scope. With
   one loop it comes from the `spec_folder` input; with an epics loop it must be bound on that
   loop as in the example; without it agent rows plan with no story contract and no error.
@@ -194,7 +196,7 @@ When the folder holds a file named after a template, edit the file: a version sa
 
 A name is listed in `not_in_folder` only when the folder once stored a version of it; a file that never stored one (its content always equalled the latest version, or it was always refused) is not listed after removal.
 
-A shipped name listed in `not_in_folder` with `overrides_shipped: true` keeps running your last folder version. To go back to the shipped text, copy the image's `/app/templates/agent-smoke.yaml` (for that name) into the folder, or save it in the web UI.
+A shipped name listed in `not_in_folder` with `overrides_shipped: true` keeps running your last folder version. To go back to the shipped text, copy the image's `/app/templates/agent-smoke.yaml` (for that name) into the folder, or save it in the web UI. A copy in the folder then wins over every later shipped version of that name (the folder pass compares a file with the latest version only), so after an upgrade remove the copy or refresh it from the new image; a web save does not have that effect.
 
 ### Linked templates
 

@@ -219,6 +219,8 @@ a timeout, reword what agents are told. `references/workflows.md` is the guide â
 format, the step kinds, and the loop.
 
 When the folder holds a file named after a template, edit the file: a version saved on the instance is superseded by the file's content as the next version at the next reload or start-up, and stays listed. So first check whether the operator's template folder holds a file of that name:
+`in_folder` says so, per name on `GET /api/v1/templates` and on each version read
+(`GET /api/v1/templates/{name}/{version}`). If it does,
 edit the folder file and call `POST /api/v1/templates/reload`, then read `stored` and
 `refused` in the answer. Only a name with no folder file goes through the web-save steps:
 

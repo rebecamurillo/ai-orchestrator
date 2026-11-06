@@ -72,8 +72,15 @@ COMMAND_KEY = "command"
 RESUME_DEFAULT = True
 
 
-def validate(yaml_text: str, *, templates: TemplateVersionRepository) -> ValidationResult:
-    """Read one Template file: the parsed tree, or every problem in it, by line and reason."""
+def validate(
+    yaml_text: str, *, templates: TemplateVersionRepository, root_version: int | None = None
+) -> ValidationResult:
+    """Read one Template file: the parsed tree, or every problem in it, by line and reason.
+
+    `root_version` is the number the text is stored under, for a stored text; `None` reads
+    the text as the next version of its name (AD-15 amendment: the `version:` line is not
+    the identity).
+    """
     loaded = load_with_lines(yaml_text)
     if loaded.root is None:
         return ValidationResult(errors=(problem(loaded.line, INVALID_YAML),))
@@ -84,7 +91,7 @@ def validate(yaml_text: str, *, templates: TemplateVersionRepository) -> Validat
         return ValidationResult(errors=tuple(_stamped(record, root) for record in unstorable))
     found, unvalidated = check_keys(root)
     found += check_expressions(root)
-    found += check_calls(root, templates)
+    found += check_calls(root, templates, root_version)
     unique = _deduplicated(found)
     unique.sort(key=lambda record: record.line)
     errors = tuple(_stamped(record, root) for record in unique)

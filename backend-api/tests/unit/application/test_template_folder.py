@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from orchestrator.application.templates.model import CALL_CYCLE
 from orchestrator.application.use_cases.template_folder import (
     FolderEntry,
     NotInFolder,
@@ -99,6 +100,28 @@ def test_the_version_line_of_the_text_never_picks_the_stored_number() -> None:
     outcome, _ = run(templates, file("wf", plain("wf", "x").replace("version: 1", "version: 7")))
 
     assert [e.version for e in outcome.stored] == [THIRD]  # type: ignore[attr-defined]
+
+
+def test_a_file_calling_a_template_pinned_to_an_older_version_of_itself_is_stored() -> None:
+    """Retro F1 (AD-15 amendment): the file's `version:` line is not the root's identity, so
+    `a.yaml` saying `version: 1` and calling `b@1 -> a@1` is stored as `a@3`, the real tree
+    `a@3 -> b@1 -> a@1` having no cycle. The same file is refused when `b@1` follows `a`
+    unpinned, because once stored `a@3` is what `a` means."""
+    caller = (
+        "name: a\nversion: 1\nsteps:\n  - id: c\n    uses: template\n    with:\n      name: b\n"
+    )
+    pinned_b = stored("b", 1, plain("b"), calls=(TemplateCallRef(name="a", version=1),))
+    unpinned_b = stored("b", 1, plain("b"), calls=(TemplateCallRef(name="a", version=None),))
+    older = [stored("a", 1, plain("a", "one")), stored("a", 2, plain("a", "two"))]
+
+    fine, _ = run(FakeTemplateVersionRepository([*older, pinned_b]), file("a", caller))
+    cycle, _ = run(FakeTemplateVersionRepository([*older, unpinned_b]), file("a", caller))
+
+    assert [e.version for e in fine.stored] == [THIRD]  # type: ignore[attr-defined]
+    assert fine.refused == ()  # type: ignore[attr-defined]
+    assert cycle.stored == ()  # type: ignore[attr-defined]
+    refused = cycle.refused[0].errors  # type: ignore[attr-defined]
+    assert [e.reason for e in refused] == [CALL_CYCLE]
 
 
 def test_a_bad_file_is_refused_with_its_reason_and_the_good_one_is_stored() -> None:

@@ -36,7 +36,10 @@ REMOVED = (
 SHIPPED_OVERRIDE = (
     "A shipped name listed in `not_in_folder` with `overrides_shipped: true` keeps running your "
     "last folder version. To go back to the shipped text, copy the image's "
-    "`/app/templates/agent-smoke.yaml` (for that name) into the folder, or save it in the web UI."
+    "`/app/templates/agent-smoke.yaml` (for that name) into the folder, or save it in the web UI. "
+    "A copy in the folder then wins over every later shipped version of that name (the folder "
+    "pass compares a file with the latest version only), so after an upgrade remove the copy or "
+    "refresh it from the new image; a web save does not have that effect."
 )
 
 README = "templates/README.md"

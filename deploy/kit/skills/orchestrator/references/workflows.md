@@ -30,7 +30,9 @@ examples (depth 0, 1, 2): `templates/README.md` in the orchestrator repository.
 
 ## The edit loop
 
-When the folder holds a file named after a template, edit the file: a version saved on the instance is superseded by the file's content as the next version at the next reload or start-up, and stays listed. Check the folder first; if it holds the file, edit it and
+When the folder holds a file named after a template, edit the file: a version saved on the instance is superseded by the file's content as the next version at the next reload or start-up, and stays listed. Check the folder first: `in_folder`, per name on `GET /api/v1/templates` and
+on a version read (`GET /api/v1/templates/{name}/{version}`), is `true` when the file governs
+the name. If it does, edit the file and
 `POST /api/v1/templates/reload`, then read `stored` (the assigned `version`), `refused`
 (`file`, `errors`) and `not_in_folder` in the answer. The loop below is for a name with no
 folder file.

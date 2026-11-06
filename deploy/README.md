@@ -172,8 +172,11 @@ An upgrade that ships a changed template adds a new version of it on first boot 
 overwrites or removes the versions you saved. A changed shipped file lands as a new version,
 and a folder file of that name then wins again at the next reload or start-up.
 
-Upgrading from 1.0.0-beta.3: `./install.sh upgrade` only retags images, so add the folder by
-hand:
+Upgrading from 1.0.0-beta.3: the staged pieces `staged-hub-epic`, `staged-hub-story`,
+`staged-epic` and `staged-story` are no longer shipped or called — `staged-initiative-hub` and
+`staged-initiative-repo` are single files. A version you saved of one of those pieces stays
+listed but no Run reaches it any more; re-apply its change inside the single file, as a folder
+file or a web save. `./install.sh upgrade` only retags images, so add the folder by hand:
 
 1. In `docker-compose.yml`, add the backend-api volume `./templates:/app/operator-templates:ro`.
 2. In `.env`, add `OPERATOR_TEMPLATES_DIR=/app/operator-templates`, set
