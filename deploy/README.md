@@ -150,34 +150,39 @@ that moves this stack off it (`WEB_CLIENT_PORT`, `BACKEND_API_PORT` in `.env`;
 
 ## Editing the workflow templates
 
-The shipped templates are a starting point, not a fixed part of the product. Open
-`/templates`, pick a template and a version, edit the YAML in place, **Validate**, and
-**Save as v{n+1}**. A saved version never changes; the save is a new version beside it, and
-the versions column keeps every earlier one.
+The shipped templates are a starting point, not a fixed part of the product. Five single
+files ship — `staged-initiative-hub` and `staged-initiative-repo` (three agent sessions per
+story: plan, implement, review, each on its own model), `repo-init`, `agent-smoke` and the
+off-menu `harness-readiness` — and none calls another template. The format, with three
+working examples, is in `templates/README.md`.
 
-Two families ship, side by side and never sharing a callee: **staged** (`staged-initiative-hub`
-and `staged-initiative-repo` on the menu — three agent sessions per story, plan / implement /
-review, each on its own model: the Run's `model` implements, `plan_model` plans and
-`review_model` reviews) and **auto** (`initiative-hub` — one `bmad-build-auto` session per
-story, kept exactly as it shipped). The first segment of the name is the family; the header
-comment under each file's `description:` names its role, its callers and its sibling in the
-other family, and what differs. Edit the family you run; a change to a row both share usually
-belongs in both.
+Your own templates live in the folder `./templates` next to `docker-compose.yml`, mounted
+read-only into the backend at `/app/operator-templates` (`OPERATOR_TEMPLATES_DIR`). The
+folder is read at start-up and on `POST /api/v1/templates/reload`; the answer lists what was
+`stored`, `unchanged`, `refused` and `not_in_folder`. Editing at `/templates` in the web UI
+still works: open a template and a version, edit the YAML, **Validate**, and **Save as
+v{n+1}**. A saved version never changes.
 
-A template that calls another (`staged-initiative-hub` → `staged-hub-epic` →
-`staged-hub-story`) names the callee by `name` and omits `version`, so it resolves to the
-callee's latest saved version each time a Run is planned. Editing the story template is
-therefore one save: the next hub Run picks it up through the unchanged hub and epic files.
-The editor says so above the Save button — which callers *follow* this save and which are
-*pinned* to an integer version and will not — and every save `applies to Runs planned after
-this save`: a Run that is already planned, queued or running keeps the tree it was planned
-from. A save that would break a follower (an input renamed or removed) is refused and names
-that caller.
+When the folder holds a file named after a template, edit the file: a version saved on the instance is superseded by the file's content as the next version at the next reload or start-up, and stays listed.
+
+A save or a reload applies to Runs planned after it: a Run that is already planned, queued or
+running keeps the tree it was planned from.
 
 An upgrade that ships a changed template adds a new version of it on first boot and never
-overwrites or removes the versions you saved. The shipped version lands above yours, so it
-becomes the latest: after an upgrade, re-apply your edit as the next version of each template
-you customized.
+overwrites or removes the versions you saved. A changed shipped file lands as a new version,
+and a folder file of that name then wins again at the next reload or start-up.
+
+Upgrading from 1.0.0-beta.3: `./install.sh upgrade` only retags images, so add the folder by
+hand:
+
+1. In `docker-compose.yml`, add the backend-api volume `./templates:/app/operator-templates:ro`.
+2. In `.env`, add `OPERATOR_TEMPLATES_DIR=/app/operator-templates`, set
+   `READINESS_TEMPLATE=harness-readiness` and
+   `ROOT_TEMPLATES=staged-initiative-hub,staged-initiative-repo,repo-init,agent-smoke`.
+3. Create `./templates` and keep it and its files readable by uid 1000 (the backend runs as
+   `agent`), for example mode 755 on the folder and 644 on the files.
+4. Restart the stack (`docker compose up -d`), then run § Checking a release in
+   `templates/README.md`.
 
 What you can change — step kinds, inputs, loops, checkpoints, a model or a timeout per step,
 the prompts agents are sent — and the same edit loop over the API are in

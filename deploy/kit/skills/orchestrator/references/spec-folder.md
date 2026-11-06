@@ -15,8 +15,8 @@ fields**. Decide which one you are authoring for before writing the file:
 
 | Flavor | Launched via | Repos | Extra `epics.yaml` fields |
 | --- | --- | --- | --- |
-| **Hub run** (`initiative-hub@1`) — the current multi-repo path | `POST /runs` | one hub repo whose `repos/*` submodules are the members | `workdir`, `install`, `test`, `quality_gate` |
-| Single-repo (`initiative@1`) | `POST /runs` | one repo | none |
+| **Hub run** (`staged-initiative-hub`) — the current multi-repo path | `POST /runs` | one hub repo whose `repos/*` submodules are the members | `workdir`, `install`, `test`, `quality_gate` |
+| Single-repo (`staged-initiative-repo`) | `POST /runs` | one repo | none |
 
 A file written for one flavor does not run under another: a hub `epics.yaml` without
 `workdir` plans, but every epic's setup/verify rows come out `skipped · no command`.
@@ -33,8 +33,8 @@ A file written for one flavor does not run under another: a hub `epics.yaml` wit
       <id>-<slug>.md
 ```
 
-An `epic` Run takes `spec_folder` directly; the `initiative-hub` template takes the
-folder holding `epics.yaml` and joins each epic's `spec_folder` onto it
+A `staged-initiative-repo` Run and a `staged-initiative-hub` Run take the
+folder holding `epics.yaml` and join each epic's `spec_folder` onto it
 (`{initiative_folder}/{spec_folder}`) — so **`spec_folder` is a bare folder name relative
 to the initiative folder, never a repeated full path**. In a hub run the whole tree above
 lives at the hub; the members' code lives in the `repos/*` submodules and specs are never
@@ -60,7 +60,7 @@ Core fields, required in **every** flavor:
 Optional in every flavor: `done_checkpoint: true` — park the Run for the operator after
 the epic finishes.
 
-### Hub-run fields (`initiative-hub@1`)
+### Hub-run fields (`staged-initiative-hub`)
 
 Each entry also carries the member submodule and its **full** commands. The command
 strings are the entry's own data, `cd` included — the template never builds
@@ -75,7 +75,7 @@ strings are the entry's own data, `cd` included — the template never builds
 
 An entry that omits `install`/`test`/`quality_gate` plans that row `skipped · no command`
 — never a plan-time error, and never a green gate. The Run itself is launched with
-template `initiative-hub@1`: repository = **the hub**, plus inputs `base_branch`,
+template `staged-initiative-hub`: repository = **the hub**, plus inputs `base_branch`,
 `branch` (the initiative branch, shared by the hub and every submodule),
 `initiative_folder`, `harness`, `model`.
 
@@ -98,9 +98,10 @@ template `initiative-hub@1`: repository = **the hub**, plus inputs `base_branch`
   test: "cd repos/functions && npm test"
 ```
 
-### Single-repo (`initiative@1`)
+### Single-repo (`staged-initiative-repo`)
 
-Just the core fields; each epic runs and pushes on its own `branch`:
+Just the core fields; `branch` is required by the list contract but unused — every epic works
+on the Run's one `branch` input, and the repository's registered commands verify it:
 
 ```yaml
 - id: "1"

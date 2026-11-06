@@ -6,7 +6,9 @@ different verify command position, a longer timeout, another review step, a chec
 the team wants a human look, a different skill or model on one step.
 
 Templates live in the instance's database, not in the project repository and not in this
-skill. Read them from the instance every time; never edit from memory.
+skill; the operator's template folder (`OPERATOR_TEMPLATES_DIR`) feeds the same store. Read
+them from the instance every time; never edit from memory. Format, rules and three working
+examples (depth 0, 1, 2): `templates/README.md` in the orchestrator repository.
 
 ## What a save does
 
@@ -27,6 +29,11 @@ skill. Read them from the instance every time; never edit from memory.
   version.
 
 ## The edit loop
+
+When the folder holds a file named after a template, edit the file: a version saved on the instance is superseded by the file's content as the next version at the next reload or start-up, and stays listed. Check the folder first; if it holds the file, edit it and
+`POST /api/v1/templates/reload`, then read `stored` (the assigned `version`), `refused`
+(`file`, `errors`) and `not_in_folder` in the answer. The loop below is for a name with no
+folder file.
 
 In the web UI: `/templates` → pick the template and a version → edit the YAML → **Validate**
 → **Save as v{n+1}**. The editor shows which callers follow the save and which are pinned.
@@ -113,9 +120,13 @@ An `agent` step also takes, beside `with`:
 ### Loops and calls
 
 `for_each: "<path to a list file>"` with `as: <name>` and nested `steps` runs those steps
-once per entry. One loop per file, no nesting — a second level is a `uses: template` call
-inside the loop (call depth at most 3, no cycles). `pause_before_item_when` /
-`pause_after_item_when: "<name>.<field>"` plan a checkpoint around each item.
+once per entry. A template is one file; loops nest to a depth of two (an `epics` loop holding
+a `stories` loop). An outer loop's `bind: { spec_folder: "{{initiative_folder}}/{{epic.spec_folder}}" }`
+makes `spec_folder` readable by the steps inside it — agent steps read `spec_folder` from
+scope. An input may carry an optional `description`. `pause_before_item_when` /
+`pause_after_item_when: "<name>.<field>"` plan a checkpoint around each item. A call to
+another template (`uses: template`) still validates, but the shipped files make none.
+Three worked examples (depth 0, 1, 2) and the scope rules are in `templates/README.md`.
 
 ### Expressions
 
@@ -125,25 +136,22 @@ name. `repository` exposes `url`, `default_branch`, `install_command`,
 `quality_gate_command`, `unit_test_command`; `project` exposes `name`. Fields of an `item`
 are whatever the list file holds and are not checked: a missing one resolves empty.
 
-## The two shipped families
+## The shipped templates
 
-Shipped templates come in two families that never share a callee, told apart by the first
-segment of the name and by the header comment under each file's `description:` (family,
-role, callers, sibling, what differs):
+Five single files ship, none calling another; each carries a header comment under its
+`description:` (family, role, sibling):
 
-- **staged** — `staged-initiative-hub` / `staged-hub-epic` / `staged-hub-story` and
-  `staged-initiative-repo` / `staged-epic` / `staged-story`. Three agent sessions per story,
+- `staged-initiative-hub` and `staged-initiative-repo` — three agent sessions per story,
   each routed on its own marker under `{spec_folder}/stories/.auto/`: `plan` on
   `plan_model` (skill `staged-plan`, writes the spec), `implement` on `model` (skill
   `staged-implement`, tests first), a deterministic `verify` that sends a failure back to
   `implement`, `review` on `review_model` (skill `staged-review`, sized S / M / L from the
   diff). This is where new behaviour lands.
-- **auto** — `initiative-hub` / `initiative-hub-epic` / `initiative-hub-story` and the
-  readiness `epic` / `story`: one `bmad-build-auto` session per story. Kept as shipped;
-  fixes only.
+- `repo-init`, `agent-smoke` — bootstrap the BMAD method; a one-dispatch check of an install.
+- `harness-readiness` — the readiness diagnostic's flow, off the menu.
 
-Customize the family the project runs. A change to a row both families share (the git rows,
-the epic tail) usually belongs in both; the sibling line in the header says which file.
+The retired auto family (`initiative-hub` and its callees) is kept in `templates/drafts/` as
+a reference and is not seeded. Customize the file the project runs.
 
 ## Common customizations
 

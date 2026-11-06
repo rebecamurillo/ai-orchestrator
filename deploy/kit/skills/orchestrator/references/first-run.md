@@ -33,11 +33,11 @@ The template follows the repository, not the other way round:
 
 | The registered repository is… | Template | What the demo spec looks like |
 | --- | --- | --- |
-| a plain repository | `epic` at its latest version (one session per story); `staged-initiative-repo` for the three-session flow, with an `epics.yaml` of one entry | one spec folder: `SPEC.md` + `stories.yaml` |
-| a hub whose `repos/*` submodules are the members | `initiative-hub` at its latest version, or `staged-initiative-hub` for the three-session flow | an initiative folder: `epics.yaml` + one spec folder, the epic pointing at one member |
+| a plain repository | `staged-initiative-repo` at its latest version | an initiative folder: `epics.yaml` of one entry + one spec folder |
+| a hub whose `repos/*` submodules are the members | `staged-initiative-hub` at its latest version | an initiative folder: `epics.yaml` + one spec folder, the epic pointing at one member |
 
-`epic` is not on the web UI's **New workflow** menu (the operator's `ROOT_TEMPLATES` names
-what the menu offers) but it is a root template and `POST /api/v1/runs` accepts it. Read
+Both are on the web UI's **New workflow** menu when the operator's `ROOT_TEMPLATES` names
+them, and `POST /api/v1/runs` accepts either. Read
 its inputs from `GET /api/v1/templates/{name}/{version}` as for any template; the names
 used below are the ones shipped today and may have moved.
 
@@ -81,7 +81,8 @@ run this repository's own verify commands, and push the branch.
     pushes the branch itself in a later step.
 ```
 
-Hub shape only, `epics.yaml` beside the spec folder:
+`epics.yaml` beside the spec folder, in both shapes (`workdir`, `install` and `test` are hub
+only — a plain repository runs its registered commands):
 
 ```yaml
 - id: "1"
@@ -98,7 +99,7 @@ In the hub shape the story's `description` should say *at the root of the member
 repository* rather than *at the repository root*, since the agent is dispatched inside the
 submodule and the spec stays at the hub.
 
-**Verify commands are the repository's real ones, or none.** `epic` runs the repository's
+**Verify commands are the repository's real ones, or none.** `staged-initiative-repo` runs the repository's
 registered `install_command` / `unit_test_command` / `quality_gate_command`; the hub epic
 runs the `install` / `test` / `quality_gate` strings from `epics.yaml`. A command runs as
 `baseline` *before* the story as well as after it, so a check for the demo file itself
@@ -131,35 +132,36 @@ consent.
 The `orchestrator` skill's **Launching a Run** section applies in full. For the demo:
 
 1. `GET /api/v1/templates`, then the chosen template's latest version — its `inputs` are
-   the list to bind. Expect, for `epic`: `base_branch`, `branch`, `spec_folder`,
-   `harness`, `model`, `done_checkpoint`; for `initiative-hub`: `base_branch`, `branch`,
+   the list to bind. Expect, for `staged-initiative-repo` and `staged-initiative-hub`: `base_branch`, `branch`,
    `initiative_folder`, `harness`, `model`, and the three time limits `build_timeout_min`,
    `build_stall_min`, `epic_timeout_min` (minutes; leave them blank to take the template's
    defaults, 180 / 90 / 60). A `staged-*` root adds `plan_model` and `review_model`
-   (required) and the per-stage limits `plan_timeout_min`, `review_timeout_min`.
+   (required), the optional `senior_model`, and the per-stage limits `plan_timeout_min`,
+   `review_timeout_min`.
 2. `POST /api/v1/runs/preflight` with everything you will send. Every `lines[]` entry must
    be `pass` or `skip`; read `rows[]` and confirm it shows exactly one story frame. A
    `plan_error` here names the spec file line at fault.
 3. Ask the human for the three decisions the skill never makes alone: `harness`, `model`
    and `budget_usd`. One trivial story costs a small fraction of a real one; the number is
-   still theirs. Say `done_checkpoint: "true"` if they want to look before the Run closes.
+   still theirs. The `done_checkpoint: true` on the `epics.yaml` entry parks the Run after
+   the epic; drop it if they do not want to look before the Run closes.
 4. `POST /api/v1/runs` with exactly what was preflighted. Hand back the deep link
    `/workflows/{run_id}`.
 
 ## What you will see
 
-`GET /api/v1/runs/{id}/detail` shows the rows in order. For `epic`:
+`GET /api/v1/runs/{id}/detail` shows the rows in order. For `staged-initiative-repo` (the row names below are indicative; read the real ones from the response):
 
 | row | what proves what |
 | --- | --- |
 | `checkout` | the clone works and the branch was cut from `base_branch` |
 | `setup`, `baseline` | the registered commands run in the worktree, or are `skipped · no command` |
 | `spec-gate` | an agent was dispatched and read the spec; it writes `spec-gate-result.md` into the folder |
-| `stories/1/build` | the agent created the file; `verify` is the registered test command again |
+| `plan`, `implement`, `verify`, `review` (story 1) | three agent sessions planned, created and reviewed the file; `verify` is the registered test command again |
 | `gen-e2e`, `e2e`, `retro` | the epic tail: an agent generates tests for the capability and a retrospective into the spec folder — on a one-file story these are small, and they are part of what a real epic does |
 | `push` | the orchestrator pushed `branch` with its own credential |
 | `link` | `compare_urls` on the Run holds the GitHub compare page |
-| `done-checkpoint` | present only when you asked for it; `continue` closes the Run |
+| a `checkpoint` stop after the epic | present only when the entry says `done_checkpoint: true`; `continue` carries on |
 
 Supervise with `orchestrator-watch <run_id>` where it is installed (see
 `../../initiative-run/SKILL.md`), or poll at 5 s / 30 s. Expected stops, and what each means:
@@ -177,7 +179,7 @@ Supervise with `orchestrator-watch <run_id>` where it is installed (see
   command was never green on this branch (check `baseline`'s log) or the agent broke it.
 - **`misconfigured`.** Usually the repository is not BMAD-initialized, or the spec folder path is
   wrong. The alert names which.
-- **`checkpoint`.** The `done_checkpoint` you asked for. Look, then `continue`.
+- **`checkpoint`.** The entry's `done_checkpoint`. Look, then `continue`.
 
 ## Pipeline proven when
 
