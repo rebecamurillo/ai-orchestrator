@@ -31,6 +31,7 @@ from orchestrator.application.templates.lines import (
     BIND_KEY,
     FOR_EACH_KEY,
     LinedMap,
+    LinedSeq,
     as_map,
     as_seq,
     child_steps,
@@ -39,6 +40,7 @@ from orchestrator.application.templates.lines import (
     load_with_lines,
 )
 from orchestrator.application.templates.model import (
+    INVALID_VALUE,
     INVALID_YAML,
     AgentExtras,
     ForEach,
@@ -60,6 +62,9 @@ from orchestrator.application.templates.table import (
 )
 from orchestrator.domain.ports.templates import TemplateVersionRepository
 
+#: The byte a PostgreSQL `text` column cannot hold.
+NUL = "\x00"
+
 #: The `with` key a bare `run: <command>` desugars into.
 COMMAND_KEY = "command"
 
@@ -73,6 +78,10 @@ def validate(yaml_text: str, *, templates: TemplateVersionRepository) -> Validat
     if loaded.root is None:
         return ValidationResult(errors=(problem(loaded.line, INVALID_YAML),))
     root = loaded.root
+    unstorable = _deduplicated(_unstorable_text(root))
+    if unstorable:
+        unstorable.sort(key=lambda record: record.line)
+        return ValidationResult(errors=tuple(_stamped(record, root) for record in unstorable))
     found, unvalidated = check_keys(root)
     found += check_expressions(root)
     found += check_calls(root, templates)
@@ -82,6 +91,43 @@ def validate(yaml_text: str, *, templates: TemplateVersionRepository) -> Validat
     if errors:
         return ValidationResult(errors=errors, unvalidated=tuple(unvalidated))
     return ValidationResult(template=parse(root), unvalidated=tuple(unvalidated))
+
+
+def _unstorable_text(root: LinedMap) -> list[ValidationError]:
+    """`invalid value` for every string a stored `text` column cannot hold: one with a NUL, or
+    one that does not encode as UTF-8 (a lone surrogate). Keys are reported at their own line,
+    values at their key's. Iterative, and each shared (aliased) node is visited once."""
+    found: list[ValidationError] = []
+    seen: set[int] = set()
+    pending: list[tuple[object, int]] = [(root, root.line)]
+    while pending:
+        node, line = pending.pop()
+        if isinstance(node, str):
+            if not _storable(node):
+                found.append(problem(line, INVALID_VALUE))
+            continue
+        if not isinstance(node, LinedMap | LinedSeq) or id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, LinedSeq):
+            pending.extend((item, node.line) for item in node)
+            continue
+        key_at = {(type(key), key): at for key, at in node.key_order}
+        for key, value in node.items():
+            at = key_at.get((type(key), key), node.line)
+            pending.append((key, at))
+            pending.append((value, at))
+    return found
+
+
+def _storable(text: str) -> bool:
+    if NUL in text:
+        return False
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def _deduplicated(found: list[ValidationError]) -> list[ValidationError]:

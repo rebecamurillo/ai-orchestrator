@@ -119,6 +119,7 @@ from orchestrator.infrastructure.harness import build_harnesses  # noqa: F401
 from orchestrator.infrastructure.logging import configure_logging
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.skills_install import install_operator_skills
+from orchestrator.infrastructure.template_folder_seed import seed_folder_templates
 from orchestrator.infrastructure.templates_loader import load_shipped_templates
 
 log = structlog.get_logger(__name__)
@@ -193,6 +194,7 @@ def run_migrations(settings: Settings) -> str:
     # (re)installed on every boot, after the migration and before the launch (AD-16)
     install_operator_skills(settings)
     seed_shipped_templates(settings)
+    seed_folder_templates(settings)
     seed_harness_table(settings)
     # last, and inside this function: see `infrastructure/dbos/startup.py`. A process that
     # is not serving — every unit test — has no engine registered and launches nothing.

@@ -132,6 +132,10 @@ INVALID_CONSULT_ON = "invalid consult on"
 #: key of the same `bind` already holds (AD-15 amendment, 2026-11-06).
 LOOP_NAME_BOUND = "loop name already bound"
 
+#: What `judge_text` reports for a text whose validation raised something that is not a port
+#: error: a file fault becomes a refusal, never a crash (AD-26).
+INVALID_TEMPLATE = "invalid template"
+
 # --- the tree ---------------------------------------------------------------------------
 
 

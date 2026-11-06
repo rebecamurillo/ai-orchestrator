@@ -80,6 +80,8 @@ services:
       - agent-home:${AGENT_HOME:-/home/agent}
       # the harness CLIs' npm prefix, reconciled against the `*_VERSION` pins at each start
       - harness-bin:/opt/harness-cli
+      # the operator's own workflow files (`OPERATOR_TEMPLATES_DIR`), read-only
+      - ./templates:/app/operator-templates:ro
     # not hardened, deliberately (Operator decision, 2026-09-11): this container is the
     # sandbox real agents run in, and a harness may `sudo apt-get` what a target
     # repository's install script needs. README.md § Trust says what that implies.

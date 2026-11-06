@@ -175,7 +175,8 @@ def _error_line(error: yaml.YAMLError) -> int:
 def load_with_lines(text: str) -> LoadedYaml:
     """Load one YAML document, or report the line it could not be loaded at.
 
-    Never raises: a text that does not parse, an empty text, and a root that is not a
+    Never raises: a text that does not parse (including one whose scalars the loader cannot
+    construct, or that nests past the recursion limit), an empty text, and a root that is not a
     mapping are all "no document", which the caller reports as `invalid yaml`.
     """
     try:
@@ -183,6 +184,8 @@ def load_with_lines(text: str) -> LoadedYaml:
         document = yaml.load(text, Loader=LineLoader)
     except yaml.YAMLError as error:
         return LoadedYaml(None, _error_line(error))
+    except Exception:
+        return LoadedYaml(None, FIRST_LINE)
     if isinstance(document, LinedMap):
         return LoadedYaml(document, document.line)
     return LoadedYaml(None, FIRST_LINE)
@@ -212,7 +215,7 @@ def load_sequence(text: str) -> LinedSeq | None:
     try:
         # `LineLoader` subclasses `SafeLoader`: no arbitrary object is ever constructed.
         document = yaml.load(text, Loader=LineLoader)
-    except yaml.YAMLError:
+    except Exception:
         return None
     return as_seq(document)
 

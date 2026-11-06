@@ -38,7 +38,11 @@ def check_inputs(root: LinedMap) -> list[ValidationError]:
     if inputs is None:
         return [problem(line, MISSING_KEY)]
     errors: list[ValidationError] = []
+    key_lines = {(type(key), key): at for key, at in inputs.key_order}
     for name in inputs:
+        if not isinstance(name, str):
+            errors.append(problem(key_lines.get((type(name), name), inputs.line), INVALID_VALUE))
+            continue
         errors += _check_input(inputs, name)
     return errors
 
@@ -57,11 +61,11 @@ def declared_inputs(root: LinedMap) -> dict[str, tuple[str, bool]]:
         return found
     for name, decl in inputs.items():
         mapping = as_map(decl)
-        if mapping is None:
+        if mapping is None or not isinstance(name, str):
             continue
         declared = mapping.get("type")
         if isinstance(declared, str):
-            found[str(name)] = (declared, mapping.get("required") is True)
+            found[name] = (declared, mapping.get("required") is True)
     return found
 
 

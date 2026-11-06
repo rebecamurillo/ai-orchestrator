@@ -28,7 +28,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
+from sqlalchemy import distinct, func, select
+from sqlalchemy.exc import IntegrityError
 
 from orchestrator.domain.entities.template import (
     TemplateCaller,
@@ -36,6 +37,7 @@ from orchestrator.domain.entities.template import (
     TemplateVersion,
     call_ref,
 )
+from orchestrator.domain.errors import Conflict
 from orchestrator.infrastructure.db.models.run import RunRow
 from orchestrator.infrastructure.db.models.template import TemplateRow, TemplateVersionRow
 
@@ -57,6 +59,7 @@ def to_entity(row: TemplateVersionRow) -> TemplateVersion:
         hash=row.hash,
         calls=tuple(call_ref(call[CALL_NAME_KEY], call[CALL_VERSION_KEY]) for call in row.calls),
         created_at=row.created_at,
+        source=row.source,
     )
 
 
@@ -69,9 +72,21 @@ def calls_json(version: TemplateVersion) -> list[dict[str, object]]:
 NUL = "\x00"
 
 
+#: The `int4` range of the `version` column.
+INT4_MIN = -(2**31)
+INT4_MAX = 2**31 - 1
+
+
 def _storable(name: str) -> bool:
-    """Whether a stored `template_version.name` could equal this string at all."""
-    return NUL not in name
+    """Whether a stored `template_version.name` could equal this string at all: no NUL, and
+    it encodes as UTF-8 (a lone surrogate does not)."""
+    if NUL in name:
+        return False
+    try:
+        name.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 class SQLAlchemyTemplateVersionRepository:
@@ -81,7 +96,7 @@ class SQLAlchemyTemplateVersionRepository:
         self._session = session
 
     def get(self, name: str, version: int) -> TemplateVersion | None:
-        if not _storable(name):
+        if not _storable(name) or not INT4_MIN <= version <= INT4_MAX:
             return None
         row = self._session.scalars(
             select(TemplateVersionRow).where(
@@ -111,8 +126,22 @@ class SQLAlchemyTemplateVersionRepository:
                 hash=version.hash,
                 calls=calls_json(version),
                 created_at=version.created_at,
+                source=version.source,
             )
         )
+        try:
+            self._session.flush()
+        except IntegrityError as error:
+            raise Conflict(
+                f"template version {version.name}@{version.version} taken by a concurrent save;"
+                " nothing stored"
+            ) from error
+
+    def names_with_source(self, source: str) -> frozenset[str]:
+        rows = self._session.scalars(
+            select(distinct(TemplateVersionRow.name)).where(TemplateVersionRow.source == source)
+        ).all()
+        return frozenset(rows)
 
     def list(self) -> list[TemplateSummary]:
         version_rows = self._session.scalars(select(TemplateVersionRow)).all()

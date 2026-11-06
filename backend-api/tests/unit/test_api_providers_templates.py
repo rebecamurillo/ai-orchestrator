@@ -8,6 +8,8 @@ router test in `test_templates_router.py` replaces this dependency entirely thro
 
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Annotated, Any
 
 import httpx
@@ -15,7 +17,7 @@ import pytest
 from fastapi import Depends, FastAPI
 
 from orchestrator.api.errors import install_error_handlers
-from orchestrator.api.providers import SESSION_FACTORY, template_ports
+from orchestrator.api.providers import SESSION_FACTORY, SETTINGS, template_ports
 from orchestrator.application.use_cases.templates import TemplatePorts
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import SQLAlchemyTemplateVersionRepository
@@ -53,6 +55,12 @@ def probe_app(*, session_factory: Any) -> tuple[FastAPI, list[TemplatePorts]]:
     app = FastAPI()
     install_error_handlers(app)
     setattr(app.state, SESSION_FACTORY, session_factory)
+    # Story 4, 2026-11-06 (AD-26): `template_ports` reads the two template folders off settings
+    setattr(
+        app.state,
+        SETTINGS,
+        SimpleNamespace(templates_dir=Path("/shipped"), operator_templates_dir=None),
+    )
     captured: list[TemplatePorts] = []
 
     @app.get("/probe")

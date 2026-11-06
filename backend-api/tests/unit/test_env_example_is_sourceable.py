@@ -29,8 +29,14 @@ from tests.unit.conftest import ENV_EXAMPLE, REPO_ROOT
 
 BASH = shutil.which("bash")
 
-#: Contract lines whose blank value is the documented off switch (story O-8, 2026-10-12).
-BLANK_BY_DESIGN = {"NOTIFY_WEBHOOK_URL", "NOTIFY_WEBHOOK_SECRET", "PUBLIC_BASE_URL"}
+#: Contract lines whose blank value is the documented off switch (story O-8, 2026-10-12;
+#: `OPERATOR_TEMPLATES_DIR` added by story 4, 2026-11-06, AD-26: blank = no operator folder).
+BLANK_BY_DESIGN = {
+    "NOTIFY_WEBHOOK_URL",
+    "NOTIFY_WEBHOOK_SECRET",
+    "PUBLIC_BASE_URL",
+    "OPERATOR_TEMPLATES_DIR",
+}
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="bash not on PATH")
 

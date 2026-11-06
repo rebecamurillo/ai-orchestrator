@@ -41,7 +41,10 @@ Ten operations under eight rules, and each rule is exactly one rule:
   A file still failing once no file in a round made progress is a real error, not an
   ordering problem, and stops start-up (`ShippedTemplateInvalid`).
 
-`_calls_of` is why `TemplateVersion.calls` is trustworthy: it walks the tree `validate()`
+- **`seed_folder`** (`template_folder.py`) is the folder pass after it, and `judge_text`
+  (`template_judge.py`) is where a file's text meets `validate()`: AD-26.
+
+`calls_of` is why `TemplateVersion.calls` is trustworthy: it walks the tree `validate()`
 just built — not the raw YAML a second time — so a save can never pin a callee list that
 disagrees with what the file actually declares.
 """
@@ -63,6 +66,7 @@ from orchestrator.application.templates.model import (
     all_steps,
 )
 from orchestrator.application.templates.validate import validate
+from orchestrator.application.use_cases.template_judge import judge_text
 from orchestrator.domain.entities.template import (
     TemplateCaller,
     TemplateCallRef,
@@ -74,11 +78,16 @@ from orchestrator.domain.entities.template import (
 from orchestrator.domain.errors import Invalid, NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
+from orchestrator.domain.ports.template_folders import TemplateFolders
 from orchestrator.domain.ports.templates import TemplateVersionRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 
 #: The first version a Template's name ever gets.
 FIRST_VERSION = 1
+
+#: Where a stored version's text came from (`template_version.source`).
+SOURCE_SHIPPED = "shipped"
+SOURCE_SAVED = "saved"
 
 
 @dataclass(frozen=True)
@@ -88,6 +97,8 @@ class TemplatePorts:
     uow: UnitOfWork
     templates: TemplateVersionRepository
     clock: Clock
+    #: `None` = no folder pass: `seed_folder` answers an empty outcome.
+    folders: TemplateFolders | None = None
 
 
 @dataclass(frozen=True)
@@ -197,7 +208,7 @@ def get_version(ports: TemplatePorts, name: str, version: int) -> TemplateVersio
     stored = ports.templates.get(name, version)
     if stored is None:
         raise NotFound(f"no template {name!r} version {version}")
-    result = validate(stored.yaml, templates=ports.templates)
+    result = judge_text(stored.yaml, ports.templates)
     inputs = result.template.inputs if result.template is not None else ()
     called_by = tuple(ports.templates.callers_of(name, version))
     pinned_by = ports.templates.pinned_by(name, version)
@@ -211,7 +222,7 @@ def template_graph(ports: TemplatePorts, name: str, version: int) -> Graph:
     stored = ports.templates.get(name, version)
     if stored is None:
         raise NotFound(f"no template {name!r} version {version}")
-    result = validate(stored.yaml, templates=ports.templates)
+    result = judge_text(stored.yaml, ports.templates)
     if result.errors:
         raise StoredTemplateInvalid(name, version, result.errors)
     parsed = result.template
@@ -221,7 +232,7 @@ def template_graph(ports: TemplatePorts, name: str, version: int) -> Graph:
 
 def graph_text(ports: TemplatePorts, yaml_text: str) -> Graph:
     """The posted YAML's shape, validated but never stored. Invalid text has no graph."""
-    result = validate(yaml_text, templates=ports.templates)
+    result = judge_text(yaml_text, ports.templates)
     if result.errors:
         raise TemplateValidationFailed(result.errors)
     parsed = result.template
@@ -236,19 +247,19 @@ def graph_latest(ports: TemplatePorts, name: str) -> Graph:
 
 def validate_text(ports: TemplatePorts, yaml_text: str) -> ValidationResult:
     """The posted YAML, validated but never stored."""
-    return validate(yaml_text, templates=ports.templates)
+    return judge_text(yaml_text, ports.templates)
 
 
 def validate_latest(ports: TemplatePorts, name: str) -> ValidationResult:
     """The latest stored version's YAML, re-validated. Unknown to this store is 404."""
     stored = ports.templates.get(name, latest_version(ports.templates, name))
     assert stored is not None  # `latest_version` came from `list_versions` on this store
-    return validate(stored.yaml, templates=ports.templates)
+    return judge_text(stored.yaml, ports.templates)
 
 
 def save_version(ports: TemplatePorts, name: str, yaml_text: str) -> TemplateVersion:
     """Validate, check the path's `name` and the next version number, then store."""
-    result = validate(yaml_text, templates=ports.templates)
+    result = judge_text(yaml_text, ports.templates)
     if result.errors:
         raise TemplateValidationFailed(result.errors)
     parsed = result.template
@@ -258,7 +269,7 @@ def save_version(ports: TemplatePorts, name: str, yaml_text: str) -> TemplateVer
     next_version = _next_version(ports.templates, name)
     if parsed.version != next_version:
         raise Invalid(f"version must be {next_version}")
-    stranded = check_callers(name, yaml_text, _following_callers(ports.templates, name))
+    stranded = check_callers(name, yaml_text, following_callers(ports.templates, name))
     if stranded:
         raise TemplateValidationFailed(tuple(stranded))
     stored = TemplateVersion(
@@ -266,9 +277,10 @@ def save_version(ports: TemplatePorts, name: str, yaml_text: str) -> TemplateVer
         name=name,
         version=next_version,
         yaml=yaml_text,
-        hash=_hash(yaml_text),
-        calls=_calls_of(parsed),
+        hash=text_hash(yaml_text),
+        calls=calls_of(parsed),
         created_at=ports.clock.now(),
+        source=SOURCE_SAVED,
     )
     ports.templates.add_version(stored, description=parsed.description)
     ports.uow.commit()
@@ -310,7 +322,7 @@ def _seed_one_round(
 
 
 def _seed_file(ports: TemplatePorts, name: str, text: str, parsed: ParsedTemplate) -> SeedResult:
-    digest = _hash(text)
+    digest = text_hash(text)
     existing = ports.templates.list_versions(name)
     for number in existing:
         stored = ports.templates.get(name, number)
@@ -323,8 +335,9 @@ def _seed_file(ports: TemplatePorts, name: str, text: str, parsed: ParsedTemplat
         version=next_version,
         yaml=text,
         hash=digest,
-        calls=_calls_of(parsed),
+        calls=calls_of(parsed),
         created_at=ports.clock.now(),
+        source=SOURCE_SHIPPED,
     )
     ports.templates.add_version(version, description=parsed.description)
     return SeedResult(name=name, inserted_as=next_version)
@@ -339,12 +352,12 @@ def _next_version(templates: TemplateVersionRepository, name: str) -> int:
     return max(existing) + 1 if existing else FIRST_VERSION
 
 
-def _hash(yaml_text: str) -> str:
+def text_hash(yaml_text: str) -> str:
     """The digest a stored version carries — of the exact text saved, byte for byte."""
     return hashlib.sha256(yaml_text.encode()).hexdigest()
 
 
-def _following_callers(
+def following_callers(
     templates: TemplateVersionRepository, name: str
 ) -> list[tuple[TemplateRef, str]]:
     """Every stored version that calls `name` unpinned, with its text — the callers a new
@@ -359,7 +372,7 @@ def _following_callers(
     return found
 
 
-def _calls_of(parsed: ParsedTemplate) -> tuple[TemplateCallRef, ...]:
+def calls_of(parsed: ParsedTemplate) -> tuple[TemplateCallRef, ...]:
     """Every `uses: template` step's callee, in file order, at every loop depth.
 
     Walks the tree `validate()` already built, never the raw YAML: this is what keeps a

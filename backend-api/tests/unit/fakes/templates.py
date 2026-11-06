@@ -20,6 +20,7 @@ from orchestrator.domain.entities.template import (
     TemplateSummary,
     TemplateVersion,
 )
+from orchestrator.domain.errors import Conflict
 
 if TYPE_CHECKING:  # pragma: no cover — typing only
     from tests.unit.fakes.runs import FakeRunRepository
@@ -55,8 +56,16 @@ class FakeTemplateVersionRepository:
         return self.versions.get((name, version))
 
     def add_version(self, version: TemplateVersion, *, description: str | None) -> None:
+        if (version.name, version.version) in self.versions:
+            raise Conflict(
+                f"template version {version.name}@{version.version} taken by a concurrent save;"
+                " nothing stored"
+            )
         self.add(version)
         self.descriptions[version.name] = description
+
+    def names_with_source(self, source: str) -> frozenset[str]:
+        return frozenset(v.name for v in self.versions.values() if v.source == source)
 
     def list(self) -> list[TemplateSummary]:
         names = sorted({name for name, _ in self.versions}, key=lambda n: n + ".yaml")

@@ -53,3 +53,5 @@ class TemplateVersionRow(Base):
     hash: Mapped[str] = mapped_column(Text())
     calls: Mapped[list[dict[str, Any]]] = mapped_column(JSONB())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    #: `shipped`, `saved` or `folder`; `NULL` for a row written before AD-26.
+    source: Mapped[str | None] = mapped_column(Text(), nullable=True)

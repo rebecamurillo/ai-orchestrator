@@ -51,6 +51,10 @@ class TemplateVersionRepository(Protocol):
         """How many Runs, of any status, pin this Version — root or callee (AD-15, 4.4)."""
         ...
 
+    def names_with_source(self, source: str) -> frozenset[str]:
+        """Every Template name holding at least one version stored with this `source`."""
+        ...
+
     # Defined last: mypy resolves a bare `list[...]` written *after* this point in the class
     # body against the method below rather than the builtin (both are named `list`), so
     # every other method's `list[...]` return type is declared above it, never after.

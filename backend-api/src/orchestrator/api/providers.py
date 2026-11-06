@@ -82,6 +82,7 @@ from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
 from orchestrator.infrastructure.process.runner import RealProcessRunner
 from orchestrator.infrastructure.skill_catalog import FsSkillCatalog, manifest_path
+from orchestrator.infrastructure.templates_loader import FilesystemTemplateFolders
 from orchestrator.infrastructure.tracing import build_tracer
 
 #: Re-exports: the frozen router tests and `routers/run_files.py` import these names from
@@ -114,12 +115,14 @@ def project_ports(request: Request) -> Iterator[ProjectPorts]:
 
 def template_ports(request: Request) -> Iterator[TemplatePorts]:
     """The ports a Template use case runs on, inside one transaction."""
-    session_factory = from_state(request, SESSION_FACTORY)
-    with SQLAlchemyUnitOfWork(session_factory) as uow:
+    settings = from_state(request, SETTINGS)
+    folders = FilesystemTemplateFolders(settings.templates_dir, settings.operator_templates_dir)
+    with SQLAlchemyUnitOfWork(from_state(request, SESSION_FACTORY)) as uow:
         yield TemplatePorts(
             uow=uow,
             templates=SQLAlchemyTemplateVersionRepository(uow.session),
             clock=SystemClock(),
+            folders=folders,
         )
 
 

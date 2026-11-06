@@ -266,6 +266,9 @@ class Settings(BaseSettings):
     #: `../templates` in development, `/app/templates` in the image; never validated
     #: absolute like `work_dir`/`agent_home` because the development value is relative.
     templates_dir: Path = Path("/app/templates")
+    #: A host folder of the operator's own Template files, loaded after the shipped set and
+    #: winning over it (AD-26); blank = off.
+    operator_templates_dir: Path | None = None
     #: The client kit `GET /api/v1/kit/*` serves (`../deploy/kit` in development); same rule.
     kit_dir: Path = Path("/app/deploy/kit")
 
