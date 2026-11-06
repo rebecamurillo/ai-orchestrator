@@ -1,8 +1,10 @@
 """Reading, validating, saving and seeding Template Versions (SPEC CAP-3, FR-6, AD-15).
 
-Ten operations under eight rules, and each rule is exactly one rule:
+Eleven operations under eight rules, and each rule is exactly one rule:
 
 - **`list_templates`** answers `GET /templates` — a straight read, no rule of its own.
+- **`folder_stems`** is the names of the readable files in the operator's folder now, empty
+  without a `folders` port; the template reads mark `in_folder` from it (BR-17).
 - **`list_versions`** answers `GET /templates/{name}/versions`: a name nothing has ever
   stored is `NotFound`, because "no version" and "no such Template" read the same to an
   Operator who typed the name wrong.
@@ -174,6 +176,13 @@ class ShippedTemplateInvalid(RuntimeError):
 def list_templates(ports: TemplatePorts) -> list[TemplateSummary]:
     """Every stored Template name, its versions, and its latest description."""
     return ports.templates.list()
+
+
+def folder_stems(ports: TemplatePorts) -> frozenset[str]:
+    """Names of the readable `*.yaml` files in the operator's folder now; empty without one."""
+    if ports.folders is None:
+        return frozenset()
+    return ports.folders.operator_stems()
 
 
 def list_versions(ports: TemplatePorts, name: str) -> list[int]:

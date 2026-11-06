@@ -89,8 +89,15 @@ async def test_list_templates_answers_a_page(api: Harness) -> None:
     assert response.status_code == HTTP_OK
     body = response.json()
     assert body["next_cursor"] is None
+    # Story 6, BR-17, 2026-11-06: list items carry `in_folder` (False: no folder here).
     assert body["items"] == [
-        {"name": "leaf", "description": None, "latest_version": 1, "versions": [1]}
+        {
+            "name": "leaf",
+            "description": None,
+            "latest_version": 1,
+            "versions": [1],
+            "in_folder": False,
+        }
     ]
 
 

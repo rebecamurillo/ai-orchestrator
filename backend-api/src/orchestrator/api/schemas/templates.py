@@ -109,14 +109,23 @@ class TemplateSummaryOut(BaseModel):
     description: str | None
     latest_version: int
     versions: list[int]
+    in_folder: Annotated[
+        bool | None,
+        Field(
+            description=(
+                "A readable `*.yaml` of this name is in the operator's template folder now."
+            )
+        ),
+    ] = None
 
     @classmethod
-    def of(cls, summary: TemplateSummary) -> TemplateSummaryOut:
+    def of(cls, summary: TemplateSummary, *, in_folder: bool = False) -> TemplateSummaryOut:
         return cls(
             name=summary.name,
             description=summary.description,
             latest_version=summary.latest_version,
             versions=list(summary.versions),
+            in_folder=in_folder,
         )
 
 
@@ -162,9 +171,17 @@ class TemplateVersionOut(BaseModel):
     ]
     created_at: UtcTimestamp | None
     inputs: list[InputDeclOut]
+    in_folder: Annotated[
+        bool | None,
+        Field(
+            description=(
+                "A readable `*.yaml` of this name is in the operator's template folder now."
+            )
+        ),
+    ] = None
 
     @classmethod
-    def of(cls, detail: TemplateVersionDetail) -> TemplateVersionOut:
+    def of(cls, detail: TemplateVersionDetail, *, in_folder: bool = False) -> TemplateVersionOut:
         return cls(
             name=detail.template.name,
             version=detail.template.version,
@@ -175,6 +192,7 @@ class TemplateVersionOut(BaseModel):
             pinned_by=detail.pinned_by,
             created_at=detail.template.created_at,
             inputs=[InputDeclOut.of(decl) for decl in detail.inputs],
+            in_folder=in_folder,
         )
 
 

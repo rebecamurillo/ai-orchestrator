@@ -87,7 +87,11 @@ Ports = Annotated[TemplatePorts, Depends(template_ports)]
 @router.get("/templates", response_model=Page[TemplateSummaryOut], summary="List every Template")
 def list_templates(ports: Ports) -> Page[TemplateSummaryOut]:
     """Every stored Template name, its versions, and its latest description."""
-    items = [TemplateSummaryOut.of(summary) for summary in use_cases.list_templates(ports)]
+    stems = use_cases.folder_stems(ports)
+    items = [
+        TemplateSummaryOut.of(summary, in_folder=summary.name in stems)
+        for summary in use_cases.list_templates(ports)
+    ]
     return Page[TemplateSummaryOut](items=items, next_cursor=None)
 
 
@@ -132,7 +136,10 @@ def save_version(name: str, payload: SaveVersionIn, ports: Ports) -> TemplateVer
             detail=f"line {first.line}: {first.reason}",
             errors=as_problem_errors(failure.errors),
         ) from failure
-    return TemplateVersionOut.of(use_cases.get_version(ports, name, saved.version))
+    stems = use_cases.folder_stems(ports)
+    return TemplateVersionOut.of(
+        use_cases.get_version(ports, name, saved.version), in_folder=name in stems
+    )
 
 
 @router.get(
@@ -170,4 +177,7 @@ def get_version(
     name: str, version: Annotated[int, Path(gt=0, le=MAX_VERSION)], ports: Ports
 ) -> TemplateVersionOut:
     """`calls`, `called_by`, `inputs` and `pinned_by` (4.4) alongside the stored text."""
-    return TemplateVersionOut.of(use_cases.get_version(ports, name, version))
+    stems = use_cases.folder_stems(ports)
+    return TemplateVersionOut.of(
+        use_cases.get_version(ports, name, version), in_folder=name in stems
+    )

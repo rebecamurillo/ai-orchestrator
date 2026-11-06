@@ -2753,6 +2753,11 @@ export interface components {
         TemplateSummaryOut: {
             /** Description */
             description: string | null;
+            /**
+             * In Folder
+             * @description A readable `*.yaml` of this name is in the operator's template folder now.
+             */
+            in_folder?: boolean | null;
             /** Latest Version */
             latest_version: number;
             /** Name */
@@ -2776,6 +2781,11 @@ export interface components {
              * @description sha256 hex digest of `yaml`, byte for byte.
              */
             hash: string;
+            /**
+             * In Folder
+             * @description A readable `*.yaml` of this name is in the operator's template folder now.
+             */
+            in_folder?: boolean | null;
             /** Inputs */
             inputs: components["schemas"]["InputDeclOut"][];
             /** Name */

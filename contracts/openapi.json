@@ -5268,6 +5268,18 @@
             ],
             "title": "Description"
           },
+          "in_folder": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A readable `*.yaml` of this name is in the operator's template folder now.",
+            "title": "In Folder"
+          },
           "latest_version": {
             "title": "Latest Version",
             "type": "integer"
@@ -5325,6 +5337,18 @@
             "description": "sha256 hex digest of `yaml`, byte for byte.",
             "title": "Hash",
             "type": "string"
+          },
+          "in_folder": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A readable `*.yaml` of this name is in the operator's template folder now.",
+            "title": "In Folder"
           },
           "inputs": {
             "items": {
