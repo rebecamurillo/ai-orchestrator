@@ -1,0 +1,20 @@
+---
+import AlertBanner from '../AlertBanner.astro';
+
+interface Props {
+  name: string;
+  inFolder?: boolean | null;
+}
+
+const { name, inFolder } = Astro.props;
+const text =
+  `A file named ${name}.yaml is in the template folder. At the next reload or start-up, ` +
+  `if that file is valid, its content becomes the next version; versions saved here stay ` +
+  `listed. A refused file is listed with its errors in the reload answer.`;
+---
+
+{
+  inFolder === true && (
+    <AlertBanner level="needs-you" testId="templates-folder-notice" text={text} />
+  )
+}

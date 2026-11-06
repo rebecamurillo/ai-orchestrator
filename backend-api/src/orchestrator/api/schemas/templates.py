@@ -20,6 +20,12 @@ from orchestrator.api.errors import ProblemError
 from orchestrator.api.schemas.common import UtcTimestamp
 from orchestrator.application.templates.model import InputDecl, Scalar, ValidationError
 from orchestrator.application.templates.model import ValidationResult as AppValidationResult
+from orchestrator.application.use_cases.template_folder import (
+    FolderEntry,
+    FolderRefusal,
+    NotInFolder,
+)
+from orchestrator.application.use_cases.template_reload import FolderReload
 from orchestrator.application.use_cases.templates import TemplateVersionDetail
 from orchestrator.domain.entities.template import (
     TemplateCaller,
@@ -103,14 +109,23 @@ class TemplateSummaryOut(BaseModel):
     description: str | None
     latest_version: int
     versions: list[int]
+    in_folder: Annotated[
+        bool | None,
+        Field(
+            description=(
+                "A readable `*.yaml` of this name is in the operator's template folder now."
+            )
+        ),
+    ] = None
 
     @classmethod
-    def of(cls, summary: TemplateSummary) -> TemplateSummaryOut:
+    def of(cls, summary: TemplateSummary, *, in_folder: bool = False) -> TemplateSummaryOut:
         return cls(
             name=summary.name,
             description=summary.description,
             latest_version=summary.latest_version,
             versions=list(summary.versions),
+            in_folder=in_folder,
         )
 
 
@@ -122,6 +137,7 @@ class InputDeclOut(BaseModel):
     required: bool
     default: Scalar | None
     values: list[str]
+    description: str | None = None
 
     @classmethod
     def of(cls, decl: InputDecl) -> InputDeclOut:
@@ -131,6 +147,7 @@ class InputDeclOut(BaseModel):
             required=decl.required,
             default=decl.default,
             values=list(decl.values),
+            description=decl.description,
         )
 
 
@@ -154,9 +171,17 @@ class TemplateVersionOut(BaseModel):
     ]
     created_at: UtcTimestamp | None
     inputs: list[InputDeclOut]
+    in_folder: Annotated[
+        bool | None,
+        Field(
+            description=(
+                "A readable `*.yaml` of this name is in the operator's template folder now."
+            )
+        ),
+    ] = None
 
     @classmethod
-    def of(cls, detail: TemplateVersionDetail) -> TemplateVersionOut:
+    def of(cls, detail: TemplateVersionDetail, *, in_folder: bool = False) -> TemplateVersionOut:
         return cls(
             name=detail.template.name,
             version=detail.template.version,
@@ -167,6 +192,7 @@ class TemplateVersionOut(BaseModel):
             pinned_by=detail.pinned_by,
             created_at=detail.template.created_at,
             inputs=[InputDeclOut.of(decl) for decl in detail.inputs],
+            in_folder=in_folder,
         )
 
 
@@ -192,3 +218,66 @@ class ValidateOut(BaseModel):
 
 class SaveVersionIn(ValidateIn):
     """`POST /templates/{name}/versions`. Same one field; a distinct name for a distinct route."""
+
+
+class TemplateLoadedOut(BaseModel):
+    """A folder file that stored a version, or equals its name's latest one."""
+
+    name: str
+    version: int
+    file: str
+    overrides_shipped: Annotated[
+        bool, Field(description="Whether a shipped template of the same name exists.")
+    ]
+
+    @classmethod
+    def of(cls, entry: FolderEntry) -> TemplateLoadedOut:
+        return cls(
+            name=entry.name,
+            version=entry.version,
+            file=entry.file,
+            overrides_shipped=entry.overrides_shipped,
+        )
+
+
+class TemplateRefusedOut(BaseModel):
+    """A folder file that was not stored, with the problems that stopped it."""
+
+    file: str
+    errors: list[ProblemError]
+
+    @classmethod
+    def of(cls, refusal: FolderRefusal) -> TemplateRefusedOut:
+        return cls(file=refusal.file, errors=as_problem_errors(refusal.errors))
+
+
+class TemplateNotInFolderOut(BaseModel):
+    """A name the folder stored a version of that has no file now. Nothing is deleted."""
+
+    name: str
+    overrides_shipped: bool
+
+    @classmethod
+    def of(cls, gone: NotInFolder) -> TemplateNotInFolderOut:
+        return cls(name=gone.name, overrides_shipped=gone.overrides_shipped)
+
+
+class TemplateReloadOut(BaseModel):
+    """`200` from `POST /templates/reload`."""
+
+    folder: str
+    stored: list[TemplateLoadedOut]
+    unchanged: list[TemplateLoadedOut]
+    refused: list[TemplateRefusedOut]
+    not_in_folder: list[TemplateNotInFolderOut]
+
+    @classmethod
+    def of(cls, reload: FolderReload) -> TemplateReloadOut:
+        outcome = reload.outcome
+        return cls(
+            folder=reload.folder,
+            stored=[TemplateLoadedOut.of(e) for e in outcome.stored],
+            unchanged=[TemplateLoadedOut.of(e) for e in outcome.unchanged],
+            refused=[TemplateRefusedOut.of(r) for r in outcome.refused],
+            not_in_folder=[TemplateNotInFolderOut.of(g) for g in outcome.not_in_folder],
+        )

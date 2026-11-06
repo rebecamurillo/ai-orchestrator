@@ -6,7 +6,7 @@ description: Take a new idea through BMAD planning to an initiative folder an ai
 # Initiative spec — idea → ready-to-dev
 
 This skill produces one thing: an **initiative folder, committed on one initiative branch
-in the hub repository, that an `initiative-hub` Run reads without improvising** — and a
+in the hub repository, that a `staged-initiative-hub` Run reads without improvising** — and a
 PASS verdict from the instance's own preflight proving it. It plans; it never creates the
 Run. Launching and supervising is `initiative-run`.
 
@@ -191,7 +191,7 @@ The verdict is the instance's answer, not a checklist.
    adversarial, edge-case and verification-gap lenses at least, fanned out over subagents
    where supported. Resolve the findings or record them as open questions.
 2. **Discover the template.** `GET /api/v1/templates`, then
-   `GET /api/v1/templates/{name}/{version}` for `initiative-hub` at the version that read
+   `GET /api/v1/templates/{name}/{version}` for `staged-initiative-hub` at the version that read
    lists — `inputs` there is the authoritative input list. **Never hardcode a version**;
    the shipped templates evolve and a pinned version is how an upgraded instance breaks.
 3. **Preflight with the real inputs.** `POST /api/v1/runs/preflight` with

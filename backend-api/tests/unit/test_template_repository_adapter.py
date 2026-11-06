@@ -97,6 +97,9 @@ class RecordingSession:
     def add(self, row: Any) -> None:
         self.added.append(row)
 
+    def flush(self) -> None:
+        """Story 4, 2026-11-06 (AD-26): `add_version` flushes so a lost race is a `Conflict`."""
+
     def get(self, entity: type, key: Any) -> Any:
         self.gets.append((entity, key))
         if entity is TemplateRow:
@@ -130,6 +133,7 @@ def test_the_version_table_carries_exactly_the_columns_the_entity_needs() -> Non
         "hash",
         "calls",
         "created_at",
+        "source",
     }
 
 
@@ -158,12 +162,14 @@ def test_the_version_created_at_carries_its_zone() -> None:
 
 
 def test_the_description_column_alone_may_be_null() -> None:
+    """Story 4, 2026-11-06 (AD-26): `source` joins `description` as nullable (rows older than
+    migration 0031 have none); every other column stays `NOT NULL`."""
     assert TEMPLATE_TABLE.columns["description"].nullable is True
     for column in TEMPLATE_TABLE.columns:
         if column.name != "description":
             assert column.nullable is False, column.name
     for column in VERSION_TABLE.columns:
-        assert column.nullable is False, column.name
+        assert column.nullable is (column.name == "source"), column.name
 
 
 def test_the_version_table_is_keyed_by_id_and_indexed_on_name_and_version() -> None:

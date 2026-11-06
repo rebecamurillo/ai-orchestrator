@@ -1,0 +1,176 @@
+name: harness-readiness
+version: 1
+description: the harness-readiness fixture flow — one epic, its stories, verified end to end, pushed; the template the readiness Run plans
+inputs:
+  project:     { type: project,    required: true }
+  repository:  { type: repository, required: true }
+  base_branch: { type: string,     required: true }
+  branch:      { type: string,     required: true }
+  spec_folder: { type: path,       required: true }   # holds SPEC.md, stories.yaml, stories/
+  epic:        { type: item,       required: false }  # bound when called from initiative
+  harness:     { type: enum, values: [claude, codex, local], default: claude }
+  model:       { type: string,     required: false }
+  # No bool input type exists (S5, 2026-09-23): "true" checkpoints at the end, "" or unset
+  # skips it. Deliberately no `default: "true"` here: the planner binds a literal default
+  # when an input is left blank (2026-10-09), and a Run that leaves this blank should get no
+  # stop, not a default-on one.
+  done_checkpoint: { type: string, required: false }
+steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "{{branch}}" }
+    gate: deterministic
+  - id: setup
+    run: "{{repository.install_command}}"
+    timeout_min: 20
+    gate: deterministic
+  - id: baseline
+    run: "{{repository.unit_test_command}}"
+    on_fail: fail
+    gate: deterministic
+
+  - id: spec-gate
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: spec-gate
+      args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    expect:
+      files: ["{{spec_folder}}/spec-gate-result.md"]
+      success: [done]
+      blocked: [blocked]
+    timeout_min: 30
+    gate: liveness
+
+  - id: stories
+    for_each: "{{spec_folder}}/stories.yaml"
+    as: story
+    pause_after_item_when: "story.done_checkpoint"
+    steps:
+      - id: sync
+        uses: git.sync
+        gate: deterministic
+
+      - id: build
+        uses: agent
+        with:
+          harness: "{{harness}}"
+          model: "{{model}}"
+          skill: bmad-build-auto
+          args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
+          prompt_extra: "{{story.invoke_dev_with}}"
+        prompts:
+          dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+          rendered: >-
+            The workflow for skill {skill} is already rendered at {path}. Read that file
+            fully and follow it; every step, status and halt this dispatch owes is defined
+            there. Do not run render_skill.py yourself.
+          answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+          halt: "Halt after planning."
+        expect:
+          files: ["{{spec_folder}}/stories/{{story.id}}-*.md"]
+          success: [done]
+          blocked: [blocked]
+          checkpoint: [ready-for-dev]
+          misconfigured_when:
+            - no subagents
+            - no stories.yaml found
+            - story id not found in stories.yaml
+            - version-control metadata not writable
+            - no epic spec found
+            - unrecognized status in existing story file
+            - ambiguous story file match
+        retry:
+          max: 2
+          prompt: "No story file with a terminal status was found at {{spec_folder}}/stories/{{story.id}}-*.md. Finish the story and write that file, or set status: blocked with the reason."
+          resume_session: true
+        pause_when: "story.spec_checkpoint"
+        timeout_min: 90
+        gate: liveness
+
+      - id: verify
+        run: "{{repository.unit_test_command}}"
+        on_fail: { redispatch: build, max: 1 }
+        timeout_min: 30
+        gate: deterministic
+
+      - id: commit-guard
+        uses: git.commit
+        with: { message: "story {{story.id}}: {{story.title}} (orchestrator)" }
+        gate: deterministic
+
+  - id: gen-e2e
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: bmad-qa-generate-e2e-tests
+      args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    timeout_min: 30
+    gate: liveness
+
+  - id: commit-e2e
+    uses: git.commit
+    with: { message: "e2e: generated tests (orchestrator)" }
+    gate: deterministic
+
+  - id: e2e
+    run: "{{repository.quality_gate_command}}"
+    on_fail: { redispatch: gen-e2e, max: 2 }
+    timeout_min: 45
+    gate: deterministic
+
+  - id: retro
+    uses: agent
+    with:
+      harness: "{{harness}}"
+      model: "{{model}}"
+      skill: bmad-retrospective
+      args: { folder: "{{spec_folder}}" }
+    prompts:
+      dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+      rendered: >-
+        The workflow for skill {skill} is already rendered at {path}. Read that file
+        fully and follow it; every step, status and halt this dispatch owes is defined
+        there. Do not run render_skill.py yourself.
+      answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+    timeout_min: 30
+    gate: liveness
+
+  - id: commit-retro
+    uses: git.commit
+    with: { message: "retro: epic retrospective (orchestrator)" }
+    gate: deterministic
+
+  - id: push
+    uses: git.push
+    with: { branch: "{{branch}}" }
+    gate: deterministic
+
+  - id: link
+    uses: pr.link
+    with: { branch: "{{branch}}" }
+    gate: liveness
+
+  # `when` resolving falsy plans this row `skipped · no checkpoint` (AD-7, S5); it stays
+  # a live human gate whenever `done_checkpoint` is bound truthy — including dispatch
+  # (S6) passing "true" for an epic whose `epics.yaml` entry names a checkpoint.
+  - id: done-checkpoint
+    uses: checkpoint
+    with: { when: "{{done_checkpoint}}" }
+    gate: human

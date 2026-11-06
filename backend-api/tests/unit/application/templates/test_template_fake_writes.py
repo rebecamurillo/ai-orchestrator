@@ -13,6 +13,7 @@ from orchestrator.domain.entities.template import (
     TemplateRef,
     TemplateVersion,
 )
+from orchestrator.domain.errors import Conflict
 from orchestrator.domain.ports.templates import TemplateVersionRepository
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
 
@@ -43,9 +44,11 @@ def test_add_version_stores_the_version_like_add() -> None:
 
 
 def test_add_version_refuses_a_pair_already_stored() -> None:
+    """Story 4, 2026-11-06 (AD-26): the port reports a concurrent save as `Conflict`, as the
+    SQLAlchemy adapter does; `add()` keeps its `ValueError` (see `test_template_fake.py`)."""
     templates = FakeTemplateVersionRepository([a_version()])
 
-    with pytest.raises(ValueError, match="story@1"):
+    with pytest.raises(Conflict, match="story@1"):
         templates.add_version(a_version(), description=None)
 
 

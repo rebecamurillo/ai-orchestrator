@@ -12,6 +12,7 @@ import re
 
 from orchestrator.application.templates.lines import (
     AS_KEY,
+    BIND_KEY,
     FOR_EACH_KEY,
     STEPS_KEY,
     LinedMap,
@@ -23,7 +24,7 @@ from orchestrator.application.templates.model import UNKNOWN_KEY, ValidationErro
 SLUG = re.compile(r"^[a-z][a-z0-9-]*$")
 
 TEMPLATE_KEYS = frozenset({"name", "version", "description", "inputs", STEPS_KEY})
-INPUT_KEYS = frozenset({"type", "required", "default", "values"})
+INPUT_KEYS = frozenset({"type", "required", "default", "values", "description"})
 STEP_KEYS = frozenset({"id", "uses", "run", "with", "gate", "timeout_min", "stall_min", "on_fail"})
 WRITES_KEY = "writes"
 
@@ -59,6 +60,7 @@ FOR_EACH_KEYS = frozenset(
         "pause_after_item_when",
         "parallel",
         "only",
+        BIND_KEY,
     }
 )
 EXPECT_KEYS = frozenset(
@@ -84,6 +86,9 @@ SUB_MAPS = (("expect", EXPECT_KEYS), ("retry", RETRY_KEYS), (PROMPTS_KEY, PROMPT
 #: The lowest `on_fail.max`, `timeout_min` and `version` a Template may write.
 MIN_COUNT = 1
 
+#: The largest count a stored row's `int4` column holds (`version`, `timeout_min`, ...).
+MAX_COUNT = 2**31 - 1
+
 #: The two spellings of what a step does, and the map its kind is parameterised by.
 RUN_KEY = "run"
 WITH_KEY = "with"
@@ -102,8 +107,10 @@ def is_slug(value: object) -> bool:
 
 
 def is_count(value: object) -> bool:
-    """A positive integer literal. `True` is an `int` in Python and is not one here."""
-    return isinstance(value, int) and not isinstance(value, bool) and value >= MIN_COUNT
+    """A positive integer literal that fits a stored `int4`. `True` is not one here."""
+    return (
+        isinstance(value, int) and not isinstance(value, bool) and MIN_COUNT <= value <= MAX_COUNT
+    )
 
 
 def is_minutes(value: object) -> bool:

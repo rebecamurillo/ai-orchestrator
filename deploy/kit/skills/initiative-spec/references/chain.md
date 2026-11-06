@@ -249,7 +249,7 @@ or recorded as an open question — and an open question blocks the gate.
 
 ### 2. Discover the template
 
-`GET /api/v1/templates`, then `GET /api/v1/templates/{name}/{version}` for `initiative-hub`.
+`GET /api/v1/templates`, then `GET /api/v1/templates/{name}/{version}` for `staged-initiative-hub`.
 `inputs` on the version read is the authoritative input list. **Never hardcode a version.**
 
 ### 3. Preflight with the real inputs

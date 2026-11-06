@@ -44,3 +44,5 @@ test-results/
 playwright-report/
 # vitest coverage output; the backend's `.coverage`/`coverage.xml` are above
 coverage/
+# the operator's own workflow files live in deploy/templates/ on the host, never in git
+deploy/templates/*.yaml

@@ -181,7 +181,7 @@ class Settings(BaseSettings):
     init_template: Annotated[str, Field(min_length=1)] = "repo-init"
     #: Which stored Template `harness_readiness.start` plans every readiness Run from, on
     #: the same terms as `init_template`: a name, latest version resolved at dispatch.
-    readiness_template: Annotated[str, Field(min_length=1)] = "epic"
+    readiness_template: Annotated[str, Field(min_length=1)] = "harness-readiness"
 
     # ── Git (AD-5) — never handed to a harness process ───────────────────────
     github_token: SecretStr
@@ -266,6 +266,9 @@ class Settings(BaseSettings):
     #: `../templates` in development, `/app/templates` in the image; never validated
     #: absolute like `work_dir`/`agent_home` because the development value is relative.
     templates_dir: Path = Path("/app/templates")
+    #: A host folder of the operator's own Template files, loaded after the shipped set and
+    #: winning over it (AD-26); blank = off.
+    operator_templates_dir: Path | None = None
     #: The client kit `GET /api/v1/kit/*` serves (`../deploy/kit` in development); same rule.
     kit_dir: Path = Path("/app/deploy/kit")
 

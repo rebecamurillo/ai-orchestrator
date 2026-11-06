@@ -34,6 +34,7 @@
  * the empty graph, which draws an SVG with no node rather than taking the page down.
  */
 import EmptyState from '../../../components/EmptyState.astro';
+import FolderNotice from '../../../components/templates/FolderNotice.astro';
 import InputsTable from '../../../components/templates/InputsTable.astro';
 import VersionsList from '../../../components/templates/VersionsList.astro';
 import type { VersionRow } from '../../../components/templates/version-row';
@@ -156,6 +157,7 @@ if (detail) {
           <VersionsList rows={rows} />
         </div>
         <div class="col-editor">
+          <FolderNotice name={name} inFolder={detail.in_folder} />
           <TemplateEditor
             client:load
             name={name}

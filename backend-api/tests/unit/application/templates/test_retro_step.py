@@ -4,6 +4,9 @@ commit-retro step must precede push.
 story 4-7 (2026-09-17): retrospective step in the epic tail — a retro agent step (skill:
 bmad-retrospective) and a commit-retro step precede push; the skill name 'bmad-retrospective'
 is an architectural anchor and must be updated if the skill is renamed.
+
+Revised for story 7, 2026-11-06 (BR-8, BR-9, D11): the template looked up is `harness-readiness`,
+the single-file successor of `epic` (assertions unchanged).
 """
 
 from __future__ import annotations
@@ -45,8 +48,8 @@ def test_epic_has_retro_step_committed_before_push() -> None:
     templates = seeded()
 
     # (a) Load the latest shipped epic version.
-    latest_version = max(templates.list_versions("epic"))
-    stored = templates.versions[("epic", latest_version)]
+    latest_version = max(templates.list_versions("harness-readiness"))
+    stored = templates.versions[("harness-readiness", latest_version)]
     result = validate(stored.yaml, templates=templates)
 
     # (b) Validate the template.

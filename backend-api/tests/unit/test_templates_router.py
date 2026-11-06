@@ -89,8 +89,15 @@ async def test_list_templates_answers_a_page(api: Harness) -> None:
     assert response.status_code == HTTP_OK
     body = response.json()
     assert body["next_cursor"] is None
+    # Story 6, BR-17, 2026-11-06: list items carry `in_folder` (False: no folder here).
     assert body["items"] == [
-        {"name": "leaf", "description": None, "latest_version": 1, "versions": [1]}
+        {
+            "name": "leaf",
+            "description": None,
+            "latest_version": 1,
+            "versions": [1],
+            "in_folder": False,
+        }
     ]
 
 
@@ -298,6 +305,8 @@ def test_the_router_declares_every_path_with_a_get_beside_any_post() -> None:
         (["GET"], "/templates/{name}/validate"),
         (["GET"], "/templates/{name}/versions"),
         (["GET"], "/templates/{name}/{version}"),
+        # Story 5, 2026-11-06 (D3): reload is the one POST with no GET beside it.
+        (["POST"], "/templates/reload"),
         (["POST"], "/templates/{name}/validate"),
         (["POST"], "/templates/{name}/versions"),
     ]

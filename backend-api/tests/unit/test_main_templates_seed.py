@@ -82,6 +82,9 @@ def test_run_migrations_migrates_then_seeds_and_returns_the_head(
         recorder.order.append("seed")
         return []
 
+    def fake_folder_seed(settings: Settings) -> None:
+        recorder.order.append("folder")
+
     def fake_harness_seed(settings: Settings) -> list[Any]:
         recorder.order.append("harness")
         return []
@@ -89,11 +92,13 @@ def test_run_migrations_migrates_then_seeds_and_returns_the_head(
     monkeypatch.setattr(main_module.db_migrations, "run_migrations", fake_migrate)
     monkeypatch.setattr(main_module, "install_operator_skills", fake_skills)
     monkeypatch.setattr(main_module, "seed_shipped_templates", fake_seed)
+    monkeypatch.setattr(main_module, "seed_folder_templates", fake_folder_seed)
     monkeypatch.setattr(main_module, "seed_harness_table", fake_harness_seed)
 
     head = main_module.run_migrations(Settings())
 
-    assert recorder.order == ["migrate", "skills", "seed", "harness"]
+    # story 4, 2026-11-06 (AD-26): the folder pass runs right after the shipped pass
+    assert recorder.order == ["migrate", "skills", "seed", "folder", "harness"]
     assert head == "0004_template"
 
 

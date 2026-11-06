@@ -1,8 +1,11 @@
 """Epic tail order: a human gate must be reachable from the `push` step.
 
-Tests the behavioral invariant that `templates/epic.yaml` parks the operator
+Tests the behavioral invariant that `templates/harness-readiness.yaml` parks the operator
 *after* the branch has been pushed — not before. The BFS starts from the
 step id "push"; if that step is renamed the test must be updated accordingly.
+
+Revised for story 7, 2026-11-06 (BR-8, BR-9, D11): the template looked up is `harness-readiness`,
+the single-file successor of `epic` (assertions unchanged).
 """
 
 from __future__ import annotations
@@ -44,8 +47,8 @@ def test_epic_has_a_human_gate_reachable_from_push() -> None:
     """
     templates = seeded()
 
-    latest_version = max(templates.list_versions("epic"))
-    stored = templates.versions[("epic", latest_version)]
+    latest_version = max(templates.list_versions("harness-readiness"))
+    stored = templates.versions[("harness-readiness", latest_version)]
     result = validate(stored.yaml, templates=templates)
     assert result.template is not None, result.errors
 

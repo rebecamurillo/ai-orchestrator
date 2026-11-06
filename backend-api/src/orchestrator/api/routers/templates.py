@@ -1,6 +1,7 @@
 """`/api/v1/templates` — reading, validating, and extending Template Versions (SPEC CAP-3).
 
-Every path here publishes a `GET`: `test_bearer_auth.py` indexes every published path's
+Every path here publishes a `GET` except `POST /templates/reload` (story 5, 2026-11-06, D3,
+the one POST with no sibling): `test_bearer_auth.py` indexes every published path's
 `get` operation (see `api/routers/clone_check.py`'s docstring), so the two POST-only actions
 each carry a real, read-only sibling at the same path rather than a placeholder — `GET
 .../versions` lists the version numbers a Template holds, and `GET .../validate` re-runs
@@ -32,12 +33,14 @@ from orchestrator.api.providers import template_ports
 from orchestrator.api.schemas.common import MAX_VERSION, Page
 from orchestrator.api.schemas.templates import (
     SaveVersionIn,
+    TemplateReloadOut,
     TemplateSummaryOut,
     TemplateVersionOut,
     ValidateIn,
     ValidateOut,
     as_problem_errors,
 )
+from orchestrator.application.use_cases import template_reload
 from orchestrator.application.use_cases import templates as use_cases
 from orchestrator.application.use_cases.templates import TemplatePorts, TemplateValidationFailed
 
@@ -72,6 +75,10 @@ SAVE_REFUSALS = {
     HTTP_NOT_FOUND: NOT_FOUND_RESPONSE,
     HTTP_UNPROCESSABLE_CONTENT: VALIDATION_RESPONSE,
 }
+CONFLICT_RESPONSE = _refusal(
+    "The template folder is not configured, or its path does not exist, or a concurrent "
+    "save took a version number; nothing is stored."
+)
 VALIDATE_TEXT_REFUSALS = {HTTP_UNPROCESSABLE_CONTENT: VALIDATION_RESPONSE}
 
 Ports = Annotated[TemplatePorts, Depends(template_ports)]
@@ -80,8 +87,23 @@ Ports = Annotated[TemplatePorts, Depends(template_ports)]
 @router.get("/templates", response_model=Page[TemplateSummaryOut], summary="List every Template")
 def list_templates(ports: Ports) -> Page[TemplateSummaryOut]:
     """Every stored Template name, its versions, and its latest description."""
-    items = [TemplateSummaryOut.of(summary) for summary in use_cases.list_templates(ports)]
+    stems = use_cases.folder_stems(ports)
+    items = [
+        TemplateSummaryOut.of(summary, in_folder=summary.name in stems)
+        for summary in use_cases.list_templates(ports)
+    ]
     return Page[TemplateSummaryOut](items=items, next_cursor=None)
+
+
+@router.post(
+    "/templates/reload",
+    response_model=TemplateReloadOut,
+    summary="Reload the operator's template folder",
+    responses={http_status.HTTP_409_CONFLICT: CONFLICT_RESPONSE},
+)
+def reload_folder(ports: Ports) -> TemplateReloadOut:
+    """Re-reads the folder and stores each changed, valid file as the next version."""
+    return TemplateReloadOut.of(template_reload.reload_folder(ports))
 
 
 @router.get(
@@ -114,7 +136,10 @@ def save_version(name: str, payload: SaveVersionIn, ports: Ports) -> TemplateVer
             detail=f"line {first.line}: {first.reason}",
             errors=as_problem_errors(failure.errors),
         ) from failure
-    return TemplateVersionOut.of(use_cases.get_version(ports, name, saved.version))
+    stems = use_cases.folder_stems(ports)
+    return TemplateVersionOut.of(
+        use_cases.get_version(ports, name, saved.version), in_folder=name in stems
+    )
 
 
 @router.get(
@@ -152,4 +177,7 @@ def get_version(
     name: str, version: Annotated[int, Path(gt=0, le=MAX_VERSION)], ports: Ports
 ) -> TemplateVersionOut:
     """`calls`, `called_by`, `inputs` and `pinned_by` (4.4) alongside the stored text."""
-    return TemplateVersionOut.of(use_cases.get_version(ports, name, version))
+    stems = use_cases.folder_stems(ports)
+    return TemplateVersionOut.of(
+        use_cases.get_version(ports, name, version), in_folder=name in stems
+    )

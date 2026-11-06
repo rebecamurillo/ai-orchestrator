@@ -28,17 +28,19 @@ from orchestrator.application.templates.model import (
 
 #: Every reason string the story fixes: FR-5's thirteen, the brief's five, nine more, and
 #: `invalid value`, added after the fact so a malformed-but-present value stops being
-#: reported as `missing key`.
+#: reported as `missing key`; `loop name already bound` is story 2 (2026-11-06, AD-15 amendment);
+#: `invalid template` is story 4 (2026-11-06, AD-26): `judge_text`'s reason for a file whose
+#: validation raised something that is not a port error.
 REASONS = (
     "UNKNOWN_KEY UNBOUND_VARIABLE UNKNOWN_KIND USES_AND_RUN NESTED_FOR_EACH SECOND_FOR_EACH "
     "EXPRESSION_SYNTAX NON_LITERAL_VERSION CALL_CYCLE CALL_DEPTH CALLEE_INPUT_MISMATCH "
     "PARALLEL_RESERVED CALL_TIMING UNKNOWN_FIELD DUPLICATE_STEP_ID BAD_REDISPATCH "
     "INVALID_ON_FAIL INVALID_GATE INVALID_YAML CALLEE_NOT_FOUND MISSING_KEY INVALID_SLUG "
     "INVALID_INPUT_TYPE BAD_DEFAULT EMPTY_STEPS INVALID_TIMEOUT INVALID_STATUS_TOKEN "
-    "INVALID_VALUE"
+    "INVALID_VALUE LOOP_NAME_BOUND INVALID_TEMPLATE"
 ).split()
 
-EXPECTED_REASON_COUNT = 28
+EXPECTED_REASON_COUNT = 30
 
 
 def a_step(**overrides: object) -> Step:

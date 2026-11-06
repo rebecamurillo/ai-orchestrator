@@ -7,6 +7,10 @@ the `staged-*` family beside it. What a reader needs to keep the two maintainabl
 here: every shipped file is in `templates/README.md`'s table, every staged file carries the
 header block that names its family, caller and sibling, and opens its description with the
 family word.
+
+Revised for story 7, 2026-11-06 (BR-8, BR-9, D11): the staged family is the two single-file
+roots, so the header and description checks apply to those two, and the staged-callee check
+holds trivially because no shipped file calls another. Assertions unchanged.
 """
 
 from __future__ import annotations

@@ -101,8 +101,8 @@ Projects and repositories are reused across Runs — look before creating:
 Once the setup above is green, prove the pipeline before spending a real budget on it.
 `references/first-run.md` is the procedure: a disposable spec folder with one capability
 and one story — create `ORCHESTRATOR-DEMO.md` containing `hello` — committed on its own
-branch, launched on the `epic` template (plain repository) or `initiative-hub` (hub with
-submodules), and watched to `done`. It exercises the clone, the dispatch into the harness,
+branch, launched on the `staged-initiative-repo` template (plain repository) or
+`staged-initiative-hub` (hub with submodules), and watched to `done`. It exercises the clone, the dispatch into the harness,
 the agent's commit, the protected-path check, the registered verify commands, the push and
 the compare link, with no product change in the way.
 
@@ -120,13 +120,12 @@ Never guess a template's inputs and never skip preflight.
 
 1. **Discover templates** — `GET /api/v1/templates`, then
    `GET /api/v1/templates/{name}/{version}`: the response's `inputs` is the authoritative
-   list of what this template takes. Shipped templates come in two families — `staged-*`
-   (three agent sessions per story: plan, implement, review, each on its own model) and
-   the build-auto family (`initiative-hub` and its callees, one session per story), plus
-   `repo-init`, `agent-smoke`, and the single-repository `epic`/`story` kept for harness
-   readiness. They evolve; read them, don't memorize them.
+   list of what this template takes. Shipped templates are `staged-*`
+   (three agent sessions per story: plan, implement, review, each on its own model),
+   `staged-initiative-hub` and `staged-initiative-repo`, plus `repo-init` and `agent-smoke`
+   (`harness-readiness` is off the menu). Each is one file that calls no other. They evolve; read them, don't memorize them.
    - **Multi-repo initiative, hub style (the default)**: template `staged-initiative-hub`
-     (or `initiative-hub` for the one-session flow) with repository = the hub repo whose
+     with repository = the hub repo whose
      `repos/*` submodules are the members; inputs include `branch` (the one initiative
      branch shared by hub and submodules) and `initiative_folder`. The `epics.yaml` it
      reads needs per-epic `workdir` + full `install`/`test`/`quality_gate` commands — see
@@ -217,10 +216,16 @@ and the alert's `reason`; the web UI is built for exactly that review.
 The workflows are templates stored in the instance, and they are meant to be adapted to the
 project: add or move a verify command, add a checkpoint, give a step its own model, change
 a timeout, reword what agents are told. `references/workflows.md` is the guide — the file
-format, the step kinds, and the loop:
+format, the step kinds, and the loop.
+
+When the folder holds a file named after a template, edit the file: a version saved on the instance is superseded by the file's content as the next version at the next reload or start-up, and stays listed. So first check whether the operator's template folder holds a file of that name:
+`in_folder` says so, per name on `GET /api/v1/templates` and on each version read
+(`GET /api/v1/templates/{name}/{version}`). If it does,
+edit the folder file and call `POST /api/v1/templates/reload`, then read `stored` and
+`refused` in the answer. Only a name with no folder file goes through the web-save steps:
 
 1. Read the latest version from the instance (`GET /api/v1/templates/{name}/{version}`).
-2. Edit the YAML; set its `version:` to `max + 1`.
+2. Edit the YAML; set its `version:` to `max + 1` (a web save still has to say the next number).
 3. `POST /api/v1/templates/{name}/validate` until `errors` is empty.
 4. Show the human the diff and which callers follow it; save only on their go-ahead
    (`POST /api/v1/templates/{name}/versions`, or **Save as v{n+1}** at `/templates`).

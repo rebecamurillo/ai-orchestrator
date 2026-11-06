@@ -17,7 +17,7 @@ def test_the_two_template_names_default_to_the_shipped_exemplars(env: dict[str, 
     settings = Settings()  # type: ignore[call-arg]
 
     assert settings.init_template == "repo-init"
-    assert settings.readiness_template == "epic"
+    assert settings.readiness_template == "harness-readiness"  # story 7, 2026-11-06: was "epic"
 
 
 def test_an_instance_may_point_both_at_its_own_templates(
@@ -36,7 +36,7 @@ def test_an_instance_may_point_both_at_its_own_templates(
     ("name", "field", "default"),
     [
         ("INIT_TEMPLATE", "init_template", "repo-init"),
-        ("READINESS_TEMPLATE", "readiness_template", "epic"),
+        ("READINESS_TEMPLATE", "readiness_template", "harness-readiness"),
     ],
 )
 def test_a_blank_name_in_the_environment_means_the_default(

@@ -58,7 +58,8 @@ REJECTIONS = [
     ("unknown-field", UNKNOWN_FIELD, 11),
     ("expression-syntax", EXPRESSION_SYNTAX, 11),
     ("second-for-each", SECOND_FOR_EACH, 15),
-    ("nested-for-each", NESTED_FOR_EACH, 12),
+    # story 2, 2026-11-06 (AD-15 amendment): refused at the third loop, now at line 17
+    ("nested-for-each", NESTED_FOR_EACH, 17),
     ("parallel-is-reserved", PARALLEL_RESERVED, 11),
     ("timeout-min-on-a-template-call", CALL_TIMING, 6),
     ("on-fail-on-a-template-call", CALL_TIMING, 6),

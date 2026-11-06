@@ -100,6 +100,8 @@ class TemplateVersion(BaseModel):
     calls: tuple[TemplateCallRef, ...] = ()
     #: `None` only in a fixture; a real save always sets it (see the module docstring).
     created_at: datetime | None = None
+    #: `shipped`, `saved` or `folder` for a row written since AD-26; `None` for an older row.
+    source: str | None = None
 
     def ref(self) -> TemplateRef:
         """This version as a reference — what a caller's `calls` entry holds."""

@@ -16,9 +16,15 @@ things that go wrong with it are checked here and nowhere else:
 - **A cycle is measured along the current call path**, pushed and popped around each
   descent. A global visited set would call a diamond — two steps of one file calling the
   same callee — a cycle, which it is not.
+- **The root's identity is the number it is stored under, never its `version:` line**
+  (AD-15 amendment). A stored text is checked as its own version; a text not yet stored —
+  a folder file, a web save, a validate — is checked as the next version of its name, and
+  an unpinned call back to that name resolves to it, since that is what the name's latest
+  version becomes once the text is stored.
 - **A callee sees only what it is passed.** Every `required` input of the callee must be
   bound, an input it does not declare is a mismatch, and a `{{name}}` that is the whole
-  value binds by exact type equality: that is what makes a `number` bound to a `path` an
+  value binds by exact type equality (a loop's `bind` name is text, so it binds like a
+  literal): that is what makes a `number` bound to a `path` an
   error rather than a coercion at run time.
 
 Below the root, the traversal reads `TemplateVersion.calls` — the callee list pinned when
@@ -30,15 +36,18 @@ re-validated here.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from orchestrator.application.steps import TEMPLATE_CALL_KIND
-from orchestrator.application.templates.expressions import ITEM_TYPE, WHOLE_VARIABLE
+from orchestrator.application.templates.expressions import WHOLE_VARIABLE
 from orchestrator.application.templates.inputs import declared_inputs, declared_types
 from orchestrator.application.templates.lines import (
+    TEXT_TYPE,
     LinedMap,
+    Scope,
     as_map,
-    iter_steps,
+    iter_scoped_steps,
     key_line,
     load_with_lines,
 )
@@ -72,38 +81,61 @@ NUMBER_BINDABLE = "number"
 
 
 def resolve_callee(
-    templates: TemplateVersionRepository, name: str, version: int | None
+    templates: TemplateVersionRepository,
+    name: str,
+    version: int | None,
+    root: Ref | None = None,
 ) -> int | None:
-    """The version a call means: its pin, or the latest stored under `name`; `None` if none."""
+    """The version a call means: its pin, or the latest stored under `name`; `None` if none.
+
+    `root` is the identity of the text being checked; an unpinned call to its name resolves
+    to it when it is newer than anything stored, because storing the text makes it latest.
+    """
     if version is not None:
         return version
     stored = templates.list_versions(name)
+    if root is not None and root[0] == name:
+        stored = [*stored, root[1]]
     return max(stored) if stored else None
 
 
-def check_calls(root: LinedMap, templates: TemplateVersionRepository) -> list[ValidationError]:
-    """Every call offence in the file, each at the line of the calling step."""
+def check_calls(
+    root: LinedMap, templates: TemplateVersionRepository, root_version: int | None = None
+) -> list[ValidationError]:
+    """Every call offence in the file, each at the line of the calling step.
+
+    `root_version` is the number a stored text is checked as; `None` means the text is not
+    stored and is checked as the next version of its name.
+    """
     errors: list[ValidationError] = []
-    for node, item in iter_steps(root):
+    identity = _root_identity(root, templates, root_version)
+    for node, scope in iter_scoped_steps(root):
         if node.get("uses") != TEMPLATE_CALL_KIND:
             continue
-        errors += _check_call(node, root, templates, item)
+        errors += _check_call(node, root, templates, scope, identity)
     return errors
 
 
-def _root_ref(root: LinedMap) -> tuple[Ref, ...]:
-    """The root's own `(name, version)`, when the file gave both — else nothing to push."""
-    name, version = root.get("name"), root.get("version")
-    if isinstance(name, str) and isinstance(version, int) and is_count(version):
-        return ((name, version),)
-    return ()
+def _root_identity(
+    root: LinedMap, templates: TemplateVersionRepository, root_version: int | None
+) -> Ref | None:
+    """The `(name, version)` the text is checked as: its stored number, or the next one its
+    name would be assigned. A file with no readable `name` has none (already an error)."""
+    name = root.get("name")
+    if not isinstance(name, str):
+        return None
+    if root_version is None:
+        stored = templates.list_versions(name)
+        root_version = max(stored) + 1 if stored else 1
+    return (name, root_version)
 
 
 def _check_call(
     node: LinedMap,
     root: LinedMap,
     templates: TemplateVersionRepository,
-    item: str | None,
+    scope: Scope,
+    identity: Ref | None,
 ) -> list[ValidationError]:
     params = as_map(node.get("with"))
     if params is None:
@@ -111,47 +143,50 @@ def _check_call(
     name, written = params.get("name"), params.get("version")
     if not isinstance(name, str) or (written is not None and not is_count(written)):
         return []
-    version = resolve_callee(templates, name, written)
-    callee = templates.get(name, version) if version is not None else None
-    if callee is None or version is None:
+    version = resolve_callee(templates, name, written, identity)
+    if version is None:
         return [problem(node.line, CALLEE_NOT_FOUND)]
-    errors = _check_bindings(params, callee.yaml, root, item, node.line)
-    path = _root_ref(root)
+    path: tuple[Ref, ...] = () if identity is None else (identity,)
     if (name, version) in path:
-        return [*errors, problem(node.line, CALL_CYCLE)]
+        return [problem(node.line, CALL_CYCLE)]
+    callee = templates.get(name, version)
+    if callee is None:
+        return [problem(node.line, CALLEE_NOT_FOUND)]
+    errors = _check_bindings(params, callee.yaml, root, scope, node.line)
     path = (*path, (name, version))
+    walk = _Walk(templates, identity, node.line)
     for call in callee.calls:
-        errors += _descend(
-            (call.name, call.version), FIRST_CALLEE_DEPTH + 1, path, templates, node.line
-        )
+        errors += _descend((call.name, call.version), FIRST_CALLEE_DEPTH + 1, path, walk)
     return errors
 
 
-def _descend(
-    call: Call,
-    depth: int,
-    path: tuple[Ref, ...],
-    templates: TemplateVersionRepository,
-    line: int,
-) -> list[ValidationError]:
+@dataclass(frozen=True)
+class _Walk:
+    """What a descent from one root call site carries unchanged: the store, the root's
+    identity, and the line every finding is reported at."""
+
+    templates: TemplateVersionRepository
+    identity: Ref | None
+    line: int
+
+
+def _descend(call: Call, depth: int, path: tuple[Ref, ...], walk: _Walk) -> list[ValidationError]:
     """Walk one callee's recorded calls, reporting at the root call site that reached it."""
     name, written = call
-    number = resolve_callee(templates, name, written)
+    number = resolve_callee(walk.templates, name, written, walk.identity)
     if number is None:
-        return [problem(line, CALLEE_NOT_FOUND)]
+        return [problem(walk.line, CALLEE_NOT_FOUND)]
     ref: Ref = (name, number)
     if ref in path:
-        return [problem(line, CALL_CYCLE)]
+        return [problem(walk.line, CALL_CYCLE)]
     if depth > MAX_DEPTH:
-        return [problem(line, CALL_DEPTH)]
-    version = templates.get(name, number)
+        return [problem(walk.line, CALL_DEPTH)]
+    version = walk.templates.get(name, number)
     if version is None:
-        return [problem(line, CALLEE_NOT_FOUND)]
+        return [problem(walk.line, CALLEE_NOT_FOUND)]
     errors: list[ValidationError] = []
     for next_call in version.calls:
-        errors += _descend(
-            (next_call.name, next_call.version), depth + 1, (*path, ref), templates, line
-        )
+        errors += _descend((next_call.name, next_call.version), depth + 1, (*path, ref), walk)
     return errors
 
 
@@ -172,13 +207,13 @@ def check_callers(
         loaded = load_with_lines(text)
         if loaded.root is None:
             continue
-        for node, item in iter_steps(loaded.root):
+        for node, scope in iter_scoped_steps(loaded.root):
             params = as_map(node.get("with"))
             if node.get("uses") != TEMPLATE_CALL_KIND or params is None:
                 continue
             if params.get("name") != name or params.get("version") is not None:
                 continue
-            found = _check_bindings(params, callee_yaml, loaded.root, item, node.line)
+            found = _check_bindings(params, callee_yaml, loaded.root, scope, node.line)
             errors += [
                 error.model_copy(update={"template": ref.name, "version": ref.version})
                 for error in found
@@ -190,12 +225,10 @@ def check_callers(
 
 
 def _check_bindings(
-    params: LinedMap, callee_yaml: str, root: LinedMap, item: str | None, line: int
+    params: LinedMap, callee_yaml: str, root: LinedMap, scope: Scope, line: int
 ) -> list[ValidationError]:
     declared = _callee_inputs(callee_yaml)
-    caller = declared_types(root)
-    if item is not None:
-        caller[item] = ITEM_TYPE
+    caller = {**declared_types(root), **scope}
     bindings = as_map(params.get("inputs"))
     if bindings is None:
         return _check_required(declared, set(), line)
@@ -246,6 +279,8 @@ def _binds(value: Any, callee_type: str, caller: dict[str, str]) -> bool:
         if match is None:
             return callee_type in TEXT_BINDABLE
         declared = caller.get(match.group(1))
+        if declared == TEXT_TYPE:
+            return callee_type in TEXT_BINDABLE
         return declared is None or declared == callee_type
     if isinstance(value, int | float) and not isinstance(value, bool):
         return callee_type == NUMBER_BINDABLE

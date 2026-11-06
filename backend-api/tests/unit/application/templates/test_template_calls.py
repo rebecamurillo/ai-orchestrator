@@ -288,10 +288,20 @@ def test_a_root_that_never_named_itself_pushes_nothing_onto_the_call_path(
 def test_a_template_that_calls_itself_is_a_cycle(
     templates: FakeTemplateVersionRepository,
 ) -> None:
-    """The shortest cycle there is, and the one a pinned `calls` list never has to show."""
+    """The shortest cycle there is, and the one a pinned `calls` list never has to show.
+
+    Revised 2026-11-06 (retro F1, AD-15 amendment): the text's `version:` line is not its
+    identity. With `self@1` stored this text is checked as `self@2`, so an unpinned self-call
+    resolves to it and is the cycle; a call pinned to `self@1` is a call to an older version
+    (`test_a_template_calling_a_different_version_of_itself_is_not_a_cycle`).
+    """
     templates.add(version("self", 1, TRIVIAL))
 
-    assert check("name: self\nversion: 1\n" + call(name="self"), templates) == [CALL_CYCLE]
+    unpinned = check("name: self\nversion: 1\n" + call(name="self", number=None), templates)
+    pinned = check("name: self\nversion: 1\n" + call(name="self"), templates)
+
+    assert unpinned == [CALL_CYCLE]
+    assert pinned == []
 
 
 def test_a_template_calling_a_different_version_of_itself_is_not_a_cycle(

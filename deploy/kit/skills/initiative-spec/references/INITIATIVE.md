@@ -2,7 +2,7 @@
 initiative: stats-area
 phase: 6-projection
 branch: feat/initiative-stats
-flavor: initiative-hub@1
+flavor: staged-initiative-hub@1
 autonomy: assisted
 artifacts:
   context: CONTEXT.md

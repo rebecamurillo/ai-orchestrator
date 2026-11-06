@@ -4,6 +4,9 @@ redispatch.
 story 4-6 (2026-09-17): e2e generation gate — gen-e2e skill step precedes e2e with bounded
 redispatch; the skill name 'bmad-qa-generate-e2e-tests' is an architectural anchor and must
 be updated if the skill is renamed.
+
+Revised for story 7, 2026-11-06 (BR-8, BR-9, D11): the template looked up is `harness-readiness`,
+the single-file successor of `epic` (assertions unchanged).
 """
 
 from __future__ import annotations
@@ -43,8 +46,8 @@ def test_epic_has_e2e_generation_gate_with_bounded_redispatch() -> None:
     """
     templates = seeded()
 
-    latest_version = max(templates.list_versions("epic"))
-    stored = templates.versions[("epic", latest_version)]
+    latest_version = max(templates.list_versions("harness-readiness"))
+    stored = templates.versions[("harness-readiness", latest_version)]
     result = validate(stored.yaml, templates=templates)
     assert result.template is not None, result.errors
 

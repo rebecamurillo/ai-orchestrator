@@ -28,7 +28,7 @@ from pathlib import Path
 
 from orchestrator.application.dto import RunInputs
 from orchestrator.application.templates.calls import resolve_callee
-from orchestrator.application.templates.model import ForEach, ParsedTemplate
+from orchestrator.application.templates.model import ParsedTemplate, all_steps
 from orchestrator.application.templates.plan import plan_run
 from orchestrator.application.templates.plan_model import (
     CALLEE_NOT_RESOLVED,
@@ -60,12 +60,12 @@ def resolve_tree(templates: TemplateVersionRepository, ref: TemplateRef) -> Reso
     while pending:
         name, written = pending.pop(0)
         number = resolve_callee(templates, name, written)
+        if written is None and number is not None:
+            latest[name] = number
         if (name, number) in seen:
             continue
         parsed = _parsed(templates, name, number)
         seen.add((name, parsed.version))
-        if written is None:
-            latest[name] = parsed.version
         callees.append(parsed)
         pending += _calls(parsed)
     return ResolvedTree(root=root, callees=tuple(callees), latest=latest)
@@ -93,10 +93,10 @@ def _parsed(templates: TemplateVersionRepository, name: str, version: int | None
     stored = None if version is None else templates.get(name, version)
     if stored is None:
         raise _unresolved(name, version)
-    result = validate(stored.yaml, templates=templates)
+    result = validate(stored.yaml, templates=templates, root_version=stored.version)
     if result.template is None:
         raise _unresolved(name, version, result.errors[0].line)
-    return result.template
+    return result.template.model_copy(update={"version": stored.version})
 
 
 def _unresolved(name: str, version: int | None, line: int | None = None) -> PlanError:
@@ -110,10 +110,10 @@ def _unresolved(name: str, version: int | None, line: int | None = None) -> Plan
 
 
 def _calls(template: ParsedTemplate) -> list[tuple[str, int | None]]:
-    """Every `uses: template` step of one file, top level and inside its loop, in order, as
+    """Every `uses: template` step of one file, at every loop depth, in order, as
     `(name, version)` with `None` where the file pinned nothing."""
-    found: list[tuple[str, int | None]] = []
-    for entry in template.steps:
-        steps = entry.steps if isinstance(entry, ForEach) else (entry,)
-        found += [(step.call.name, step.call.version) for step in steps if step.call is not None]
-    return found
+    return [
+        (step.call.name, step.call.version)
+        for step in all_steps(template.steps)
+        if step.call is not None
+    ]
