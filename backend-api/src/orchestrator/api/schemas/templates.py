@@ -122,6 +122,7 @@ class InputDeclOut(BaseModel):
     required: bool
     default: Scalar | None
     values: list[str]
+    description: str | None = None
 
     @classmethod
     def of(cls, decl: InputDecl) -> InputDeclOut:
@@ -131,6 +132,7 @@ class InputDeclOut(BaseModel):
             required=decl.required,
             default=decl.default,
             values=list(decl.values),
+            description=decl.description,
         )
 
 

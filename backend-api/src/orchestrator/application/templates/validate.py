@@ -154,6 +154,7 @@ def _input(inputs: LinedMap, name: str) -> InputDecl:
         required=decl.get("required") is True,
         default=decl.get("default"),
         values=tuple(as_seq(decl.get("values")) or ()),
+        description=decl.get("description"),
     )
 
 

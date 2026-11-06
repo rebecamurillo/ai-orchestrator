@@ -1499,6 +1499,8 @@ export interface components {
         InputDeclOut: {
             /** Default */
             default: string | number | boolean | null;
+            /** Description */
+            description?: string | null;
             /** Name */
             name: string;
             /** Required */

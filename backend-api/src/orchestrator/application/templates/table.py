@@ -24,7 +24,7 @@ from orchestrator.application.templates.model import UNKNOWN_KEY, ValidationErro
 SLUG = re.compile(r"^[a-z][a-z0-9-]*$")
 
 TEMPLATE_KEYS = frozenset({"name", "version", "description", "inputs", STEPS_KEY})
-INPUT_KEYS = frozenset({"type", "required", "default", "values"})
+INPUT_KEYS = frozenset({"type", "required", "default", "values", "description"})
 STEP_KEYS = frozenset({"id", "uses", "run", "with", "gate", "timeout_min", "stall_min", "on_fail"})
 WRITES_KEY = "writes"
 

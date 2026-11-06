@@ -146,6 +146,7 @@ class InputDecl(BaseModel):
     required: bool = False
     default: Scalar | None = None
     values: tuple[str, ...] = ()
+    description: str | None = None
 
 
 class ConsultDecl(BaseModel):
