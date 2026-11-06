@@ -13,17 +13,23 @@ is what makes the reporting rule possible:
 Without `key_lines`, `version: "1"` on line 2 would be reported at the line the enclosing
 document opened on, which is not where the Operator has to look.
 
-Keys are recorded by their raw scalar text. Every key of DSL v1 is a string, so the raw
-text and the constructed key are the same; a non-string key has already been refused by the
-loader before this module records anything, because a key that is not hashable is not a key.
+`key_lines` records keys by their raw scalar text. Every key of DSL v1 is a string, so the
+raw text and the constructed key are the same; a key that is not hashable is refused by the
+loader, and a hashable non-string key (`5`, `~`, a date) is kept for the checkers to report.
 
-The readers below (`as_map`, `as_seq`, `child_steps`, `iter_steps`) all answer "nothing"
-rather than raising when the tree is not the shape asked for. That is what lets a checker
-skip a subtree it cannot read and still report every problem it can name in the same pass.
+`key_order` lists every constructed key with its own line, duplicates and non-string keys
+included, because the built dict keeps one of two equal keys and `key_lines` is keyed by raw
+text: a checker that must report a repeated or non-string key at its own line reads it there.
+
+The readers below (`as_map`, `as_seq`, `child_steps`, `iter_steps`, `iter_scoped_steps`) all
+answer "nothing" rather than raising when the tree is not the shape asked for. That is what
+lets a checker skip a subtree it cannot read and still report every problem it can name
+in the same pass.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Hashable, Iterator
 from dataclasses import dataclass
 from typing import Any
@@ -38,7 +44,20 @@ STEPS_KEY = "steps"
 FOR_EACH_KEY = "for_each"
 AS_KEY = "as"
 
+BIND_KEY = "bind"
+
 BOOL_TAG = "tag:yaml.org,2002:bool"
+
+#: What a variable name may be in an expression; `bind` keys follow the same grammar.
+NAME_PATTERN = r"[a-z_][a-z0-9_]*"
+_NAME = re.compile(NAME_PATTERN)
+
+#: What a loop-scoped name stands for: a list entry, or the text a `bind` produced.
+ITEM_TYPE = "item"
+TEXT_TYPE = "text"
+
+#: Visible loop names mapped to their type (`ITEM_TYPE` or `TEXT_TYPE`).
+Scope = dict[str, str]
 
 
 class LinedMap(dict[Any, Any]):
@@ -50,6 +69,8 @@ class LinedMap(dict[Any, Any]):
         self.line: int = FIRST_LINE
         #: 1-based line of each key's own scalar node.
         self.key_lines: dict[str, int] = {}
+        #: Every constructed key in document order with its key node's line, duplicates kept.
+        self.key_order: list[tuple[Any, int]] = []
 
 
 class LinedSeq(list[Any]):
@@ -76,6 +97,7 @@ class LineLoader(yaml.SafeLoader):
         # own reading; pairs are built one by one because two such keys would collide as bools.
         self.flatten_mapping(node)
         built: dict[Any, Any] = {}
+        key_order: list[tuple[Any, int]] = []
         for key_node, value_node in node.value:
             key = key_node.value if _bool_text(key_node) else self._deep(key_node)
             if not isinstance(key, Hashable):
@@ -86,7 +108,9 @@ class LineLoader(yaml.SafeLoader):
                     key_node.start_mark,
                 )
             built[key] = self._deep(value_node)
+            key_order.append((key, key_node.start_mark.line + 1))
         mapping = LinedMap(built)
+        mapping.key_order = key_order
         mapping.line = node.start_mark.line + 1
         mapping.key_lines = {key.value: key.start_mark.line + 1 for key, _ in node.value}
         return mapping
@@ -225,12 +249,48 @@ def iter_steps(root: LinedMap) -> Iterator[tuple[LinedMap, str | None]]:
     """Every step mapping in the file, paired with the item name in scope where it has one.
 
     A `for_each` construct is yielded like any other entry — the caller decides what its
-    keys mean — and its own `steps` follow it, carrying its `as` name.
+    keys mean — and its own `steps` follow it, at any depth, carrying the innermost `as`.
     """
-    for node in child_steps(root):
-        yield node, None
+    yield from _iter_steps(root, None)
+
+
+def _iter_steps(parent: LinedMap, item: str | None) -> Iterator[tuple[LinedMap, str | None]]:
+    for node in child_steps(parent):
+        yield node, item
         if is_for_each(node):
             declared = node.get(AS_KEY)
-            item = declared if isinstance(declared, str) else None
-            for nested in child_steps(node):
-                yield nested, item
+            yield from _iter_steps(node, declared if isinstance(declared, str) else None)
+
+
+def bind_names(node: LinedMap) -> list[str]:
+    """The names a loop's `bind` declares: its string keys that are variable names.
+
+    A `bind` that is not a map, and a key that is not a name, declare nothing; the key
+    table reports them.
+    """
+    bound = as_map(node.get(BIND_KEY))
+    if bound is None:
+        return []
+    return [key for key in bound if isinstance(key, str) and _NAME.fullmatch(key)]
+
+
+def iter_scoped_steps(root: LinedMap) -> Iterator[tuple[LinedMap, Scope]]:
+    """Every step mapping, paired with the loop names visible to it, each with its type.
+
+    A `for_each` construct is yielded with the names *around* it; its own steps get those
+    plus its `as` (`item`) and its `bind` names (`text`).
+    """
+    yield from _iter_scoped(root, {})
+
+
+def _iter_scoped(parent: LinedMap, scope: Scope) -> Iterator[tuple[LinedMap, Scope]]:
+    for node in child_steps(parent):
+        yield node, scope
+        if is_for_each(node):
+            inner = dict(scope)
+            declared = node.get(AS_KEY)
+            if isinstance(declared, str):
+                inner[declared] = ITEM_TYPE
+            for name in bind_names(node):
+                inner[name] = TEXT_TYPE
+            yield from _iter_scoped(node, inner)

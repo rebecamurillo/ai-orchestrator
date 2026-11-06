@@ -28,7 +28,7 @@ from pathlib import Path
 
 from orchestrator.application.dto import RunInputs
 from orchestrator.application.templates.calls import resolve_callee
-from orchestrator.application.templates.model import ForEach, ParsedTemplate
+from orchestrator.application.templates.model import ParsedTemplate, all_steps
 from orchestrator.application.templates.plan import plan_run
 from orchestrator.application.templates.plan_model import (
     CALLEE_NOT_RESOLVED,
@@ -110,10 +110,10 @@ def _unresolved(name: str, version: int | None, line: int | None = None) -> Plan
 
 
 def _calls(template: ParsedTemplate) -> list[tuple[str, int | None]]:
-    """Every `uses: template` step of one file, top level and inside its loop, in order, as
+    """Every `uses: template` step of one file, at every loop depth, in order, as
     `(name, version)` with `None` where the file pinned nothing."""
-    found: list[tuple[str, int | None]] = []
-    for entry in template.steps:
-        steps = entry.steps if isinstance(entry, ForEach) else (entry,)
-        found += [(step.call.name, step.call.version) for step in steps if step.call is not None]
-    return found
+    return [
+        (step.call.name, step.call.version)
+        for step in all_steps(template.steps)
+        if step.call is not None
+    ]

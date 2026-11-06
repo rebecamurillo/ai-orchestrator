@@ -1,0 +1,30 @@
+name: depth-2-pre-post
+version: 1
+inputs:
+  initiative_folder: { type: path, required: true }
+steps:
+  - id: epics
+    for_each: "{{initiative_folder}}/epics.yaml"
+    as: epic
+    bind: { spec_folder: "{{initiative_folder}}/{{epic.spec_folder}}" }
+    steps:
+      - id: pre
+        uses: git.sync
+        gate: deterministic
+      - id: stories
+        for_each: "{{spec_folder}}/stories.yaml"
+        as: story
+        pause_after_item_when: story.done_checkpoint
+        steps:
+          - id: build
+            uses: agent
+            with:
+              harness: claude
+              skill: bmad-build-auto
+            prompts:
+              dispatch: "Run the skill {skill}: spec folder {spec_folder}, story id {story_id}."
+              rendered: "The workflow for skill {skill} is rendered at {path}; read and follow it."
+            gate: liveness
+      - id: post
+        uses: git.sync
+        gate: deterministic

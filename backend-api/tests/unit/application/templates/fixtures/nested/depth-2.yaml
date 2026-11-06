@@ -1,0 +1,23 @@
+name: depth-2
+version: 1
+inputs:
+  initiative_folder: { type: path, required: true }
+steps:
+  - id: epics
+    for_each: "{{initiative_folder}}/epics.yaml"
+    as: epic
+    bind: { spec_folder: "{{initiative_folder}}/{{epic.spec_folder}}" }
+    steps:
+      - id: stories
+        for_each: "{{spec_folder}}/stories.yaml"
+        as: story
+        steps:
+          - id: build
+            uses: agent
+            with:
+              harness: claude
+              skill: bmad-build-auto
+            prompts:
+              dispatch: "Run the skill {skill}: spec folder {spec_folder}, story id {story_id}."
+              rendered: "The workflow for skill {skill} is rendered at {path}; read and follow it."
+            gate: liveness

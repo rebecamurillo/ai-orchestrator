@@ -19,6 +19,8 @@ Three rules shape every function below:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from orchestrator.application.steps import (
     AGENT_KIND,
     GATES,
@@ -32,9 +34,8 @@ from orchestrator.application.steps import (
     TEMPLATE_KINDS,
 )
 from orchestrator.application.templates.agent import check_agent_extras
-from orchestrator.application.templates.inputs import check_inputs
+from orchestrator.application.templates.inputs import check_inputs, declared_types
 from orchestrator.application.templates.lines import (
-    AS_KEY,
     STEPS_KEY,
     LinedMap,
     as_map,
@@ -44,6 +45,7 @@ from orchestrator.application.templates.lines import (
     key_line,
     line_of,
 )
+from orchestrator.application.templates.loops import check_for_each
 from orchestrator.application.templates.model import (
     ALL_DIGIT_STEP_ID,
     CALL_TIMING,
@@ -55,10 +57,7 @@ from orchestrator.application.templates.model import (
     INVALID_SUBMODULE_FORM,
     INVALID_TIMEOUT,
     MISSING_KEY,
-    NESTED_FOR_EACH,
     NON_LITERAL_VERSION,
-    PARALLEL_RESERVED,
-    SECOND_FOR_EACH,
     UNKNOWN_KEY,
     UNKNOWN_KIND,
     USES_AND_RUN,
@@ -68,7 +67,6 @@ from orchestrator.application.templates.on_fail import check_on_fail
 from orchestrator.application.templates.table import (
     AGENT_KEYS,
     CALL_TIMING_KEYS,
-    FOR_EACH_KEYS,
     RUN_KEY,
     RUN_SUGAR_KIND,
     STEP_KEYS,
@@ -114,30 +112,30 @@ def _id_of(node: LinedMap) -> str:
     return declared if isinstance(declared, str) else ""
 
 
-def _path(node: LinedMap, parent: LinedMap | None) -> str | None:
-    """A step's index-free path: its id, under the enclosing `for_each` id (AD-15).
+def _path(node: LinedMap, enclosing: Sequence[LinedMap]) -> str | None:
+    """A step's index-free path: its id under every enclosing `for_each` id (AD-15).
 
     `None` when any segment is not a name. These paths are the node ids 3.4 joins a graph
     to, so an empty segment would be a defect at that seam rather than a harmless blank —
     and the id itself is already reported as `invalid slug`.
     """
-    if not is_slug(node.get("id")):
+    segments = [*enclosing, node]
+    if not all(is_slug(segment.get("id")) for segment in segments):
         return None
-    if parent is None:
-        return _id_of(node)
-    if not is_slug(parent.get("id")):
-        return None
-    return f"{_id_of(parent)}.{_id_of(node)}"
+    return ".".join(_id_of(segment) for segment in segments)
 
 
-def _walk(root: LinedMap) -> list[tuple[LinedMap, LinedMap | None]]:
-    """Every step mapping in document order, with the `for_each` it sits inside."""
-    found: list[tuple[LinedMap, LinedMap | None]] = []
-    for node in child_steps(root):
-        found.append((node, None))
-        if is_for_each(node):
-            for nested in child_steps(node):
-                found.append((nested, node))
+def _walk(root: LinedMap) -> list[tuple[LinedMap, tuple[LinedMap, ...]]]:
+    """Every step mapping in document order, with the `for_each` loops it sits inside."""
+    found: list[tuple[LinedMap, tuple[LinedMap, ...]]] = []
+
+    def visit(parent: LinedMap, enclosing: tuple[LinedMap, ...]) -> None:
+        for node in child_steps(parent):
+            found.append((node, enclosing))
+            if is_for_each(node):
+                visit(node, (*enclosing, node))
+
+    visit(root, ())
     return found
 
 
@@ -157,25 +155,39 @@ def _check_steps(root: LinedMap, unvalidated: list[str]) -> list[ValidationError
     if not as_seq(root.get(STEPS_KEY)):
         return [problem(key_line(root, STEPS_KEY, root.line), EMPTY_STEPS)]
     walked = _walk(root)
-    errors = _entries_that_are_not_steps(root) + _check_ids(walked)
+    errors = _entries_that_are_not_steps(root) + _check_ids(root, walked)
+    input_names = set(declared_types(root))
     earlier_agents: set[str] = set()
-    seen_for_each = False
-    for node, parent in walked:
+    lists_with_loop: set[int] = set()
+    for node, enclosing in walked:
         if is_for_each(node):
-            errors += _check_for_each(node, parent, seen_for_each=seen_for_each)
-            seen_for_each = seen_for_each or parent is None
+            owner = id(enclosing[-1] if enclosing else root)
+            errors += check_for_each(
+                node,
+                enclosing,
+                seen_in_list=owner in lists_with_loop,
+                input_names=input_names,
+                non_steps=_entries_that_are_not_steps(node),
+            )
+            lists_with_loop.add(owner)
             continue
-        errors += _check_step(node, parent, earlier_agents, unvalidated)
+        errors += _check_step(node, enclosing, earlier_agents, unvalidated)
         if node.get("uses") == AGENT_KIND:
             earlier_agents.add(_id_of(node))
     return errors
 
 
-def _check_ids(walked: list[tuple[LinedMap, LinedMap | None]]) -> list[ValidationError]:
-    """An id is a slug, unique across the whole file — the loop construct's id included."""
+def _check_ids(
+    root: LinedMap, walked: list[tuple[LinedMap, tuple[LinedMap, ...]]]
+) -> list[ValidationError]:
+    """An id is a slug, unique within its own `steps` list — a loop's id included.
+
+    The same id may appear in the root list and inside a loop; the index-free path
+    (`epics.setup`) tells them apart.
+    """
     errors: list[ValidationError] = []
-    seen: set[str] = set()
-    for node, _ in walked:
+    seen: dict[int, set[str]] = {}
+    for node, enclosing in walked:
         if "id" not in node:
             errors.append(problem(node.line, MISSING_KEY))
             continue
@@ -186,53 +198,11 @@ def _check_ids(walked: list[tuple[LinedMap, LinedMap | None]]) -> list[Validatio
         if not is_slug(node["id"]):
             errors.append(problem(line, INVALID_SLUG))
             continue
-        if node["id"] in seen:
+        ids = seen.setdefault(id(enclosing[-1] if enclosing else root), set())
+        if node["id"] in ids:
             errors.append(problem(line, DUPLICATE_STEP_ID))
-        seen.add(node["id"])
+        ids.add(node["id"])
     return errors
-
-
-#: What each `for_each` pause key plans a checkpoint row at, as the row's last segment
-#: (AD-7: `…stories[n].before` / `…stories[n].after`). Declaring the key reserves the word.
-ITEM_CHECKPOINT_IDS: dict[str, str] = {
-    "pause_before_item_when": "before",
-    "pause_after_item_when": "after",
-}
-
-
-def _reserved_item_ids(node: LinedMap) -> list[ValidationError]:
-    """An inner step may not take the path a pause key already plans a row at.
-
-    `pause_after_item_when` plans `{loop}.after`, which is the path an inner step with id
-    `after` would also occupy — one path, two rows, and the graph's node ids stop being the
-    unique key `unvalidated` joins to (AD-15). That is exactly what two steps sharing an id
-    does, so it reports the same reason rather than minting a nineteenth.
-    """
-    reserved = {word for key, word in ITEM_CHECKPOINT_IDS.items() if key in node}
-    return [
-        problem(key_line(child, "id", child.line), DUPLICATE_STEP_ID)
-        for child in child_steps(node)
-        if child.get("id") in reserved
-    ]
-
-
-def _check_for_each(
-    node: LinedMap, parent: LinedMap | None, *, seen_for_each: bool
-) -> list[ValidationError]:
-    errors = unknown_keys(node, FOR_EACH_KEYS)
-    if "parallel" in node:
-        errors.append(problem(key_line(node, "parallel", node.line), PARALLEL_RESERVED))
-    if parent is not None:
-        errors.append(problem(node.line, NESTED_FOR_EACH))
-    elif seen_for_each:
-        errors.append(problem(node.line, SECOND_FOR_EACH))
-    if AS_KEY not in node:
-        errors.append(problem(node.line, MISSING_KEY))
-    elif not is_slug(node[AS_KEY]):
-        errors.append(problem(key_line(node, AS_KEY, node.line), INVALID_SLUG))
-    if not child_steps(node):
-        errors.append(problem(key_line(node, STEPS_KEY, node.line), EMPTY_STEPS))
-    return errors + _reserved_item_ids(node) + _entries_that_are_not_steps(node)
 
 
 # --- one step -----------------------------------------------------------------------------
@@ -240,7 +210,7 @@ def _check_for_each(
 
 def _check_step(
     node: LinedMap,
-    parent: LinedMap | None,
+    enclosing: tuple[LinedMap, ...],
     earlier_agents: set[str],
     unvalidated: list[str],
 ) -> list[ValidationError]:
@@ -249,7 +219,7 @@ def _check_step(
     if kind is None:
         return errors
     errors += _check_with(node, kind)
-    errors += _check_gate(node, parent, kind, unvalidated)
+    errors += _check_gate(node, enclosing, kind, unvalidated)
     if kind == TEMPLATE_CALL_KIND:
         return errors + _call_timing(node)
     if kind == AGENT_KIND:
@@ -347,10 +317,10 @@ def _check_call_with(params: LinedMap) -> list[ValidationError]:
 
 
 def _check_gate(
-    node: LinedMap, parent: LinedMap | None, kind: str, unvalidated: list[str]
+    node: LinedMap, enclosing: tuple[LinedMap, ...], kind: str, unvalidated: list[str]
 ) -> list[ValidationError]:
     if "gate" not in node:
-        path = _path(node, parent)
+        path = _path(node, enclosing)
         if kind != TEMPLATE_CALL_KIND and path is not None and path not in unvalidated:
             unvalidated.append(path)
         return []

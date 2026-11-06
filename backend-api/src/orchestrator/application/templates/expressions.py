@@ -8,8 +8,11 @@ says.
 Three scopes decide whether a name is bound:
 
 - the Template's own declared `inputs`, everywhere in the file;
-- the `for_each` `as` name, inside that loop's `steps` only — a callee sees only what its
-  caller passes, and a sibling step sees nothing of another loop (AD-15);
+- every enclosing `for_each`'s `as` name (an `item`) and `bind` names (`text`), inside that
+  loop's `steps` only — a callee sees only what its caller passes, and a sibling step sees
+  nothing of another loop (AD-15). A loop's own `for_each` and `only` see the *enclosing*
+  loops' names; its pause conditions and `bind` values also see its own `as`, never its own
+  `bind` names;
 - `output.status`, and only in `escalate_when`, whose whole grammar is
   `output.status == <token>`.
 
@@ -29,18 +32,25 @@ from typing import Any
 from orchestrator.application.templates.inputs import declared_types
 from orchestrator.application.templates.lines import (
     AS_KEY,
+    BIND_KEY,
     FOR_EACH_KEY,
+    ITEM_TYPE,
+    NAME_PATTERN,
+    TEXT_TYPE,
     LinedMap,
+    Scope,
     as_map,
     as_seq,
+    bind_names,
     is_for_each,
-    iter_steps,
+    iter_scoped_steps,
     key_line,
 )
 from orchestrator.application.templates.model import (
     EXPRESSION_SYNTAX,
     INVALID_STATUS_TOKEN,
     INVALID_TIMEOUT,
+    INVALID_VALUE,
     STATUS_TOKENS,
     UNBOUND_VARIABLE,
     UNKNOWN_FIELD,
@@ -50,7 +60,7 @@ from orchestrator.application.templates.table import problem
 
 #: What a `{{ }}` may hold, and nothing more.
 EXPRESSION = re.compile(r"\{\{(.*?)\}\}", re.DOTALL)
-NAME = r"[a-z_][a-z0-9_]*"
+NAME = NAME_PATTERN
 VARIABLE = re.compile(rf"^\s*({NAME})(?:\.({NAME}))?\s*$")
 BARE_FIELD = re.compile(rf"^({NAME})\.({NAME})$")
 #: A value that is one variable and nothing else — what a call binds by type.
@@ -65,15 +75,15 @@ ENTITY_FIELDS: dict[str, frozenset[str]] = {
     ),
 }
 
-#: The type whose fields come from a list file, so nothing here can know them.
-ITEM_TYPE = "item"
-
 #: The step key whose whole grammar is `output.status == <token>`.
 ESCALATE_KEY = "escalate_when"
 
+#: The types whose whole value is not text, so a `bind` may not take one.
+ENTITY_TYPES = frozenset({ITEM_TYPE, "project", "repository"})
+
 #: The step keys that take a count of minutes, and the input types an expression there may read.
 MINUTES_KEYS = ("timeout_min", "stall_min")
-MINUTES_TYPES = frozenset({"number", "string"})
+MINUTES_TYPES = frozenset({"number", "string", TEXT_TYPE})
 
 #: The braces themselves, for the leftovers an unbalanced pair leaves behind.
 OPEN = "{{"
@@ -92,11 +102,12 @@ def check_expressions(root: LinedMap) -> list[ValidationError]:
     """Every expression offence in the file, each at the line of the key that holds it."""
     types = declared_types(root)
     errors = _check_defaults(root, types)
-    for node, item in iter_steps(root):
+    for node, loops in iter_scoped_steps(root):
+        scope = {**types, **loops}
         if is_for_each(node):
-            errors += _check_for_each(node, types)
+            errors += _check_for_each(node, scope)
             continue
-        errors += _check_step(node, _scope(types, item))
+        errors += _check_step(node, scope)
     return errors
 
 
@@ -119,15 +130,12 @@ def _check_defaults(root: LinedMap, types: dict[str, str]) -> list[ValidationErr
     return errors
 
 
-def _scope(types: dict[str, str], item: str | None) -> dict[str, str]:
-    """The declared inputs, plus the loop's item name where one is in scope."""
-    if item is None:
-        return types
-    return {**types, item: ITEM_TYPE}
+def _check_for_each(node: LinedMap, outer: Scope) -> list[ValidationError]:
+    """`for_each` and `only` read the enclosing scope; pauses and `bind` values add the item.
 
-
-def _check_for_each(node: LinedMap, types: dict[str, str]) -> list[ValidationError]:
-    """The list expression reads the outer scope; the pause conditions read the item."""
+    `outer` is the inputs plus the names of the loops around this one. A loop's own `as`
+    is not visible to its own `for_each`, and its own `bind` names to nothing of its own.
+    """
     errors: list[ValidationError] = []
     source = node.get(FOR_EACH_KEY)
     at = key_line(node, FOR_EACH_KEY, node.line)
@@ -136,16 +144,32 @@ def _check_for_each(node: LinedMap, types: dict[str, str]) -> list[ValidationErr
     else:
         if "{{" not in source:
             errors.append(problem(at, EXPRESSION_SYNTAX))
-        errors += _scan_text(source, types, at)
-    # `only:` reads outer scope (the template's declared inputs), not the loop's item scope —
-    # this is what makes `only: "{{story_id}}"` work where `story_id` is an input, not a field.
+        errors += _scan_text(source, outer, at)
     if isinstance(only_val := node.get("only"), str):
-        errors += _scan_text(only_val, types, key_line(node, "only", node.line))
+        errors += _scan_text(only_val, outer, key_line(node, "only", node.line))
     declared = node.get(AS_KEY)
-    item = _scope(types, declared if isinstance(declared, str) else None)
+    inner = {**outer, declared: ITEM_TYPE} if isinstance(declared, str) else outer
     for key in CONDITION_KEYS:
         if key in node:
-            errors += _check_condition(node[key], item, key_line(node, key, node.line))
+            errors += _check_condition(node[key], inner, key_line(node, key, node.line))
+    return errors + _check_bind_values(node, inner)
+
+
+def _check_bind_values(node: LinedMap, scope: Scope) -> list[ValidationError]:
+    """Each `bind` value is text read against `scope`; a whole entity is not text."""
+    bound = as_map(node.get(BIND_KEY))
+    if bound is None:
+        return []
+    errors: list[ValidationError] = []
+    for name in bind_names(node):
+        value = bound[name]
+        if not isinstance(value, str):
+            continue
+        at = key_line(bound, name, node.line)
+        errors += _scan_text(value, scope, at)
+        whole = WHOLE_VARIABLE.match(value)
+        if whole is not None and scope.get(whole.group(1)) in ENTITY_TYPES:
+            errors.append(problem(at, INVALID_VALUE))
     return errors
 
 

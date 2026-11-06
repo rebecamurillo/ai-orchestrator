@@ -26,7 +26,7 @@ from orchestrator.application.preflight.model import (
 )
 from orchestrator.application.steps import AGENT_KIND, CHECKPOINT_KIND, WORKTREE_KIND
 from orchestrator.application.templates.lists import EPICS_KIND, list_kind
-from orchestrator.application.templates.model import ForEach
+from orchestrator.application.templates.model import all_loops, all_steps
 from orchestrator.application.templates.plan_model import (
     AFTER_LABEL,
     Plan,
@@ -99,8 +99,7 @@ class Context:
         return any(
             list_kind(loop.source) == EPICS_KIND
             for parsed in (self.tree.root, *self.tree.callees)
-            for loop in parsed.steps
-            if isinstance(loop, ForEach)
+            for loop in all_loops(parsed.steps)
         )
 
 
@@ -256,12 +255,11 @@ def queue_note(ctx: Context) -> str:
 
 def _has_agent_step(tree: ResolvedTree) -> bool:
     """Whether the resolved tree dispatches a harness anywhere (root or a callee)."""
-    for template in (tree.root, *tree.callees):
-        for entry in template.steps:
-            steps = entry.steps if isinstance(entry, ForEach) else (entry,)
-            if any(step.uses == AGENT_KIND for step in steps):
-                return True
-    return False
+    return any(
+        step.uses == AGENT_KIND
+        for template in (tree.root, *tree.callees)
+        for step in all_steps(template.steps)
+    )
 
 
 def harness_line(ctx: Context) -> Line:

@@ -55,12 +55,12 @@ from dataclasses import dataclass
 from orchestrator.application.graph import Graph, build_template_graph
 from orchestrator.application.templates.calls import check_callers
 from orchestrator.application.templates.model import (
-    ForEach,
     InputDecl,
     ParsedTemplate,
     Step,
     ValidationError,
     ValidationResult,
+    all_steps,
 )
 from orchestrator.application.templates.validate import validate
 from orchestrator.domain.entities.template import (
@@ -360,20 +360,13 @@ def _following_callers(
 
 
 def _calls_of(parsed: ParsedTemplate) -> tuple[TemplateCallRef, ...]:
-    """Every `uses: template` step's callee, in file order — root and one `for_each` deep.
+    """Every `uses: template` step's callee, in file order, at every loop depth.
 
     Walks the tree `validate()` already built, never the raw YAML: this is what keeps a
     saved `calls` list unable to disagree with what the file declares (AD-15).
     """
-    refs: list[TemplateCallRef] = []
-    for entry in parsed.steps:
-        if isinstance(entry, ForEach):
-            refs.extend(ref for ref in (_call_ref(step) for step in entry.steps) if ref)
-        else:
-            ref = _call_ref(entry)
-            if ref is not None:
-                refs.append(ref)
-    return tuple(refs)
+    refs = (_call_ref(step) for step in all_steps(parsed.steps))
+    return tuple(ref for ref in refs if ref is not None)
 
 
 def _call_ref(step: Step) -> TemplateCallRef | None:

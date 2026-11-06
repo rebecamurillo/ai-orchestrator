@@ -55,6 +55,14 @@ def resolve(value: Any, scope: Mapping[str, Any]) -> Any:
     return value
 
 
+def interpolate(value: str, scope: Mapping[str, Any]) -> str:
+    """The text with every `{{ }}` filled in, always a `str`: no whole-value pass-through.
+
+    A name that is not bound fills in as nothing.
+    """
+    return EXPRESSION.sub(lambda match: _filled(match, scope), value)
+
+
 def lookup(name: str, field: str | None, scope: Mapping[str, Any]) -> Any:
     """What `{{name}}` or `{{name.field}}` refers to, or `None` when it refers to nothing.
 
@@ -141,7 +149,7 @@ def _text(value: str, scope: Mapping[str, Any]) -> Any:
     whole = WHOLE_VARIABLE.match(value)
     if whole is not None and whole.group(1) in scope:
         return scope[whole.group(1)]
-    return EXPRESSION.sub(lambda match: _filled(match, scope), value)
+    return interpolate(value, scope)
 
 
 def _filled(match: Match[str], scope: Mapping[str, Any]) -> str:

@@ -268,3 +268,17 @@ def _refuse(frame: Frame, reason: str, item: str | None, line: int) -> PlanError
         line=line,
         item=item,
     )
+
+
+#: What one loop item is called in a label: the Story by its own id, the epic by its place.
+STORY_LABEL = "story"
+EPIC_LABEL = "epic"
+
+
+def item_label(kind: str | None, as_name: str, entry: Mapping[str, Any], index: int) -> str:
+    """`story {id}` names the Story an Operator knows; the rest count from one."""
+    if kind == STORIES_KIND:
+        return f"{STORY_LABEL} {entry[ID_KEY]}"
+    if kind == EPICS_KIND:
+        return f"{EPIC_LABEL} {index + 1}"
+    return f"{as_name} {index + 1}"

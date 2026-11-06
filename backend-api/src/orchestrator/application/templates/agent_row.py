@@ -30,7 +30,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from orchestrator.application.templates.consult import plan_consult
-from orchestrator.application.templates.expressions import ITEM_TYPE
+from orchestrator.application.templates.lines import ITEM_TYPE
 from orchestrator.application.templates.model import AgentExtras
 from orchestrator.application.templates.substitute import paused, resolve
 from orchestrator.application.templates.table import CONSULT_KEY, WRITES_KEY

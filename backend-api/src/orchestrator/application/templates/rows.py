@@ -40,11 +40,11 @@ from orchestrator.application.templates.branches import BranchAllocator, frame_b
 from orchestrator.application.templates.consult import plan_consult
 from orchestrator.application.templates.defaults import with_defaults
 from orchestrator.application.templates.lists import (
-    EPICS_KIND,
     ID_KEY,
     STORIES_KIND,
     check_entries,
     filter_only,
+    item_label,
     list_kind,
     read_list,
     stories_directory,
@@ -75,7 +75,7 @@ from orchestrator.application.templates.plan_model import (
 )
 from orchestrator.application.templates.reader import PlanReader
 from orchestrator.application.templates.skip_reason import empty_command_reason
-from orchestrator.application.templates.substitute import paused, resolve
+from orchestrator.application.templates.substitute import interpolate, paused, resolve
 from orchestrator.domain.statuses import StepStatus
 from orchestrator.domain.values import PlannedRow
 
@@ -91,10 +91,6 @@ COMMAND_KEY = "command"
 
 TIMEOUT_KEY = minutes.TIMEOUT_KEY
 STALL_KEY = minutes.STALL_KEY
-
-#: What one loop item is called in a label: the Story by its own id, the epic by its place.
-STORY_LABEL = "story"
-EPIC_LABEL = "epic"
 
 #: What a step id's `_` reads as in a label. No shipped id has one — a slug has no `_` —
 #: but the rule is the rule, and `commit-guard` keeps its hyphen either way.
@@ -291,12 +287,18 @@ def row_status(
 
 
 def _item_frame(item: _Item, frame: Frame, ctx: Context) -> Frame:
-    """The frame one element of a loop expands inside."""
+    """The frame one element of a loop expands inside.
+
+    Each `bind` value is text, filled in against the item and what the loop is inside — not
+    against its sibling `bind` names — so it is always a `str`.
+    """
+    base = {**frame.scope, item.loop.as_name: item.entry}
+    bound = {name: interpolate(value, base) for name, value in item.loop.bind}
     return replace(
         frame,
         prefix=_joined(frame.prefix, f"{item.loop.id}[{item.index}]"),
-        labels=(*frame.labels, _item_label(item)),
-        scope={**frame.scope, item.loop.as_name: item.entry},
+        labels=(*frame.labels, item_label(item.kind, item.loop.as_name, item.entry, item.index)),
+        scope={**base, **bound},
         item_name=item.loop.as_name,
         story_id=_story_id(item) or frame.story_id,
         skipped=frame.skipped or _already_done(item, frame, ctx),
@@ -313,15 +315,6 @@ def _item_rows(item: _Item, frame: Frame, ctx: Context) -> list[PlannedRow]:
     if paused(item.loop.pause_after_item_when, frame.scope):
         rows.append(checkpoint_row(frame, AFTER_ITEM))
     return rows
-
-
-def _item_label(item: _Item) -> str:
-    """`story {id}` names the Story an Operator knows; the rest count from one."""
-    if item.kind == STORIES_KIND:
-        return f"{STORY_LABEL} {item.entry[ID_KEY]}"
-    if item.kind == EPICS_KIND:
-        return f"{EPIC_LABEL} {item.index + 1}"
-    return f"{item.loop.as_name} {item.index + 1}"
 
 
 def _story_id(item: _Item) -> str | None:

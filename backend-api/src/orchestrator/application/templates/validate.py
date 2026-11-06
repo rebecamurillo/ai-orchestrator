@@ -28,6 +28,7 @@ from orchestrator.application.templates.expressions import check_expressions
 from orchestrator.application.templates.keys import check_keys
 from orchestrator.application.templates.lines import (
     AS_KEY,
+    BIND_KEY,
     FOR_EACH_KEY,
     LinedMap,
     as_map,
@@ -163,12 +164,18 @@ def _entry(node: LinedMap) -> Step | ForEach:
             id=node["id"],
             source=node[FOR_EACH_KEY],
             as_name=node[AS_KEY],
-            steps=tuple(_step(child) for child in child_steps(node)),
+            steps=tuple(_entry(child) for child in child_steps(node)),
+            bind=_bind(node),
             pause_before_item_when=_text(node.get("pause_before_item_when")),
             pause_after_item_when=_text(node.get("pause_after_item_when")),
             only=_text(node.get("only")),
         )
     return _step(node)
+
+
+def _bind(node: LinedMap) -> tuple[tuple[str, str], ...]:
+    bound = as_map(node.get(BIND_KEY)) or LinedMap()
+    return tuple((str(key), str(value)) for key, value in bound.items())
 
 
 def _step(node: LinedMap) -> Step:

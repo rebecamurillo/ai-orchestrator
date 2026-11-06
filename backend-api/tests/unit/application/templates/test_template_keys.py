@@ -613,11 +613,14 @@ def test_a_second_loop_at_the_top_level_is_refused() -> None:
 
 
 def test_a_loop_inside_another_loops_steps_is_refused() -> None:
+    # story 2, 2026-11-06 (AD-15 amendment): one loop may hold a loop; the third level is refused
     text = (
         HEAD
         + "steps:\n  - id: outer\n    for_each: '{{f}}'\n    as: one\n"
         + "    steps:\n      - id: inner\n        for_each: '{{g}}'\n        as: two\n"
-        + "        steps:\n          - id: sync\n            uses: git.sync\n"
+        + "        steps:\n          - id: deepest\n            for_each: '{{h}}'\n"
+        + "            as: three\n            steps:\n              - id: sync\n"
+        + "                uses: git.sync\n"
     )
 
     assert NESTED_FOR_EACH in check(text)[0]

@@ -12,6 +12,7 @@ import re
 
 from orchestrator.application.templates.lines import (
     AS_KEY,
+    BIND_KEY,
     FOR_EACH_KEY,
     STEPS_KEY,
     LinedMap,
@@ -59,6 +60,7 @@ FOR_EACH_KEYS = frozenset(
         "pause_after_item_when",
         "parallel",
         "only",
+        BIND_KEY,
     }
 )
 EXPECT_KEYS = frozenset(

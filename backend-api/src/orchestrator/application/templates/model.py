@@ -18,6 +18,7 @@ key that is genuinely absent.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict
@@ -52,7 +53,9 @@ UNKNOWN_KEY = "unknown key"
 UNBOUND_VARIABLE = "unbound variable"
 UNKNOWN_KIND = "unknown kind"
 USES_AND_RUN = "uses and run on the same step"
+#: A loop three deep (a loop may hold one loop; AD-15 amendment, 2026-11-06).
 NESTED_FOR_EACH = "nested for_each"
+#: A second loop in one `steps` list.
 SECOND_FOR_EACH = "second for_each"
 EXPRESSION_SYNTAX = "expression syntax"
 NON_LITERAL_VERSION = "non-literal version"
@@ -124,6 +127,10 @@ HALT_PROMPT_REQUIRED = "halt prompt required"
 #: A `consult.on` that is not a non-empty list of the stops a consult may take (AD-22): never
 #: `budget`, `checkpoint`, `misconfigured`, `plan_stale` or `dependency`.
 INVALID_CONSULT_ON = "invalid consult on"
+
+#: A loop's `as` or `bind` name that an enclosing loop, its own `as`, an input, or an earlier
+#: key of the same `bind` already holds (AD-15 amendment, 2026-11-06).
+LOOP_NAME_BOUND = "loop name already bound"
 
 # --- the tree ---------------------------------------------------------------------------
 
@@ -239,7 +246,11 @@ class Step(BaseModel):
 
 
 class ForEach(BaseModel):
-    """The one loop construct a Template may hold. Not a step: it is a path segment."""
+    """The loop construct: it may hold one loop among its `steps`. Not a step: a path segment.
+
+    `bind` is the names the loop adds per item, each value text interpolated against the
+    scope the loop's steps see minus the `bind` names themselves.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -247,7 +258,8 @@ class ForEach(BaseModel):
     id: str
     source: str
     as_name: str
-    steps: tuple[Step, ...] = ()
+    steps: tuple[Step | ForEach, ...] = ()
+    bind: tuple[tuple[str, str], ...] = ()
     pause_before_item_when: str | None = None
     pause_after_item_when: str | None = None
     only: str | None = None
@@ -293,3 +305,20 @@ class ValidationResult(BaseModel):
     template: ParsedTemplate | None = None
     errors: tuple[ValidationError, ...] = ()
     unvalidated: tuple[str, ...] = ()
+
+
+def all_steps(entries: Iterable[Step | ForEach]) -> Iterator[Step]:
+    """Every `Step` under these entries at every loop depth, in file order."""
+    for entry in entries:
+        if isinstance(entry, ForEach):
+            yield from all_steps(entry.steps)
+        else:
+            yield entry
+
+
+def all_loops(entries: Iterable[Step | ForEach]) -> Iterator[ForEach]:
+    """Every loop under these entries at every depth, outer first."""
+    for entry in entries:
+        if isinstance(entry, ForEach):
+            yield entry
+            yield from all_loops(entry.steps)
