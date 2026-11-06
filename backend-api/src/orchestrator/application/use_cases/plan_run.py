@@ -60,12 +60,12 @@ def resolve_tree(templates: TemplateVersionRepository, ref: TemplateRef) -> Reso
     while pending:
         name, written = pending.pop(0)
         number = resolve_callee(templates, name, written)
+        if written is None and number is not None:
+            latest[name] = number
         if (name, number) in seen:
             continue
         parsed = _parsed(templates, name, number)
         seen.add((name, parsed.version))
-        if written is None:
-            latest[name] = parsed.version
         callees.append(parsed)
         pending += _calls(parsed)
     return ResolvedTree(root=root, callees=tuple(callees), latest=latest)
@@ -96,7 +96,7 @@ def _parsed(templates: TemplateVersionRepository, name: str, version: int | None
     result = validate(stored.yaml, templates=templates)
     if result.template is None:
         raise _unresolved(name, version, result.errors[0].line)
-    return result.template
+    return result.template.model_copy(update={"version": stored.version})
 
 
 def _unresolved(name: str, version: int | None, line: int | None = None) -> PlanError:
