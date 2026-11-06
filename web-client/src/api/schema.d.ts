@@ -707,6 +707,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/templates/reload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reload the operator's template folder
+         * @description Re-reads the folder and stores each changed, valid file as the next version.
+         */
+        post: operations["reload_folder_api_v1_templates_reload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/templates/{name}/graph": {
         parameters: {
             query?: never;
@@ -2672,6 +2692,59 @@ export interface components {
             pinned: boolean;
             /** Version */
             version: number;
+        };
+        /**
+         * TemplateLoadedOut
+         * @description A folder file that stored a version, or equals its name's latest one.
+         */
+        TemplateLoadedOut: {
+            /** File */
+            file: string;
+            /** Name */
+            name: string;
+            /**
+             * Overrides Shipped
+             * @description Whether a shipped template of the same name exists.
+             */
+            overrides_shipped: boolean;
+            /** Version */
+            version: number;
+        };
+        /**
+         * TemplateNotInFolderOut
+         * @description A name the folder stored a version of that has no file now. Nothing is deleted.
+         */
+        TemplateNotInFolderOut: {
+            /** Name */
+            name: string;
+            /** Overrides Shipped */
+            overrides_shipped: boolean;
+        };
+        /**
+         * TemplateRefusedOut
+         * @description A folder file that was not stored, with the problems that stopped it.
+         */
+        TemplateRefusedOut: {
+            /** Errors */
+            errors: components["schemas"]["ProblemError"][];
+            /** File */
+            file: string;
+        };
+        /**
+         * TemplateReloadOut
+         * @description `200` from `POST /templates/reload`.
+         */
+        TemplateReloadOut: {
+            /** Folder */
+            folder: string;
+            /** Not In Folder */
+            not_in_folder: components["schemas"]["TemplateNotInFolderOut"][];
+            /** Refused */
+            refused: components["schemas"]["TemplateRefusedOut"][];
+            /** Stored */
+            stored: components["schemas"]["TemplateLoadedOut"][];
+            /** Unchanged */
+            unchanged: components["schemas"]["TemplateLoadedOut"][];
         };
         /**
          * TemplateSummaryOut
@@ -5032,6 +5105,46 @@ export interface operations {
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    reload_folder_api_v1_templates_reload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateReloadOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The template folder is not configured, or its path does not exist, or a concurrent save took a version number; nothing is stored. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

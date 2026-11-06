@@ -298,6 +298,8 @@ def test_the_router_declares_every_path_with_a_get_beside_any_post() -> None:
         (["GET"], "/templates/{name}/validate"),
         (["GET"], "/templates/{name}/versions"),
         (["GET"], "/templates/{name}/{version}"),
+        # Story 5, 2026-11-06 (D3): reload is the one POST with no GET beside it.
+        (["POST"], "/templates/reload"),
         (["POST"], "/templates/{name}/validate"),
         (["POST"], "/templates/{name}/versions"),
     ]

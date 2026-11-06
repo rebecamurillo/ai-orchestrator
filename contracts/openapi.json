@@ -5137,6 +5137,123 @@
         "title": "TemplateCallerOut",
         "type": "object"
       },
+      "TemplateLoadedOut": {
+        "description": "A folder file that stored a version, or equals its name's latest one.",
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "overrides_shipped": {
+            "description": "Whether a shipped template of the same name exists.",
+            "title": "Overrides Shipped",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "file",
+          "overrides_shipped"
+        ],
+        "title": "TemplateLoadedOut",
+        "type": "object"
+      },
+      "TemplateNotInFolderOut": {
+        "description": "A name the folder stored a version of that has no file now. Nothing is deleted.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "overrides_shipped": {
+            "title": "Overrides Shipped",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "overrides_shipped"
+        ],
+        "title": "TemplateNotInFolderOut",
+        "type": "object"
+      },
+      "TemplateRefusedOut": {
+        "description": "A folder file that was not stored, with the problems that stopped it.",
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ProblemError"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "file": {
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "errors"
+        ],
+        "title": "TemplateRefusedOut",
+        "type": "object"
+      },
+      "TemplateReloadOut": {
+        "description": "`200` from `POST /templates/reload`.",
+        "properties": {
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "not_in_folder": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateNotInFolderOut"
+            },
+            "title": "Not In Folder",
+            "type": "array"
+          },
+          "refused": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateRefusedOut"
+            },
+            "title": "Refused",
+            "type": "array"
+          },
+          "stored": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateLoadedOut"
+            },
+            "title": "Stored",
+            "type": "array"
+          },
+          "unchanged": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateLoadedOut"
+            },
+            "title": "Unchanged",
+            "type": "array"
+          }
+        },
+        "required": [
+          "folder",
+          "stored",
+          "unchanged",
+          "refused",
+          "not_in_folder"
+        ],
+        "title": "TemplateReloadOut",
+        "type": "object"
+      },
       "TemplateSummaryOut": {
         "description": "One row of `GET /templates`.",
         "properties": {
@@ -9160,6 +9277,63 @@
           }
         ],
         "summary": "List every Template",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/templates/reload": {
+      "post": {
+        "description": "Re-reads the folder and stores each changed, valid file as the next version.",
+        "operationId": "reload_folder_api_v1_templates_reload_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateReloadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The template folder is not configured, or its path does not exist, or a concurrent save took a version number; nothing is stored."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reload the operator's template folder",
         "tags": [
           "templates"
         ]
