@@ -41,8 +41,9 @@ const SPEC_FOLDER = 'specs/gates';
 /** The spec-folder-scoped gate, so story 3's own `verify` fails (see the fixture README). */
 const QUALITY_GATE = 'sh check-spec.sh';
 
-const EPIC_TEMPLATE = join(REPO_ROOT, 'templates', 'epic.yaml');
-const NAME_LINE = 'name: epic\n';
+/** Story 7, 2026-11-06 (BR-9, D11): the readiness flow ships as `harness-readiness`, one file. */
+const EPIC_TEMPLATE = join(REPO_ROOT, 'templates', 'harness-readiness.yaml');
+const NAME_LINE = 'name: harness-readiness\n';
 
 const POLL_MS = 1000;
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -152,7 +153,7 @@ export function makeGatesOrigin({ bmadVersion, workDir }: StackSettings): string
   return `file://${directory}/${name}.git`;
 }
 
-/** `templates/epic.yaml` under a name of this suite's own — `epic@1` must stay unpinned. */
+/** `templates/harness-readiness.yaml` under a name of this suite's own, so the shipped name stays unpinned. */
 export function epicTemplateAs(name: string): string {
   const yaml = readFileSync(EPIC_TEMPLATE, 'utf8');
   if (!yaml.includes(NAME_LINE)) throw new Error(`${EPIC_TEMPLATE} no longer opens with a name`);

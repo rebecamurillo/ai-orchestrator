@@ -4,12 +4,13 @@ description: >-
   staged: every epic of one initiative on one repository, in one Run, on one branch — each
   story built in three agent sessions (plan, implement, review), each on its own model
 # family: staged · role: root (on the menu) · method: attach checkout, epics loop
-# called by: — · calls: staged-epic · skills: —
+# called by: — · calls: — · skills: spec-gate (+ BMAD stubs)
 # sibling: staged-initiative-hub (same family, hub scope) — differs in: no `submodules` row,
 #          no `workdir`/`install`/`test`/`quality_gate` per epic (the repository record's own
-#          commands run instead), one checkout and one branch for the whole initiative. The
-#          auto family has no single-repository initiative root: its `epic` is one epic on
-#          its own branch and is kept for harness readiness only.
+#          commands run instead), one checkout and one branch for the whole initiative; one file, the epics loop
+#          holds the epic's steps and a stories loop holds the story's. The auto family has
+#          no single-repository initiative root: its `epic` is one epic on its own branch
+#          and lives in `templates/drafts/`; harness readiness uses `harness-readiness`.
 inputs:
   project:            { type: project,    required: true }
   repository:         { type: repository, required: true }
@@ -36,7 +37,7 @@ inputs:
   review_timeout_min: { type: number,     required: false, default: 60 }
   epic_timeout_min:   { type: number,     required: false, default: 60 }
 
-# --- the epics.yaml convention this Run's callee reads ----------------------------------------
+# --- the epics.yaml convention this Run's epics loop reads ----------------------------------------
 # One Run, one branch, every epic sequential, all in this one repository. Each entry carries
 # the list-file contract (`id`, `title`, `branch`, `spec_folder` — `lists.py::REQUIRED_FIELDS`;
 # `branch` is unused here, every epic works on this Run's one `branch` input) and may add
@@ -56,28 +57,324 @@ steps:
     for_each: "{{initiative_folder}}/epics.yaml"
     as: epic
     # The stop after one epic: read here, at the loop that owns it, never re-declared as a
-    # tail step inside the callee, so one epic costs one checkpoint row and not two.
+    # tail step inside the loop, so one epic costs one checkpoint row and not two.
     pause_after_item_when: "epic.done_checkpoint"
     # parallel: reserved; sequential, list order is the dependency
+    bind: { spec_folder: "{{initiative_folder}}/{{epic.spec_folder}}" }
     steps:
-      - id: epic
-        uses: template
+      # The repository's own commands, from its record: a repository with no command plans the
+      # row `skipped · no command` (AD-7).
+      - id: setup
+        run: "{{repository.install_command}}"
+        timeout_min: 20
+        gate: deterministic
+
+      - id: baseline
+        run: "{{repository.unit_test_command}}"
+        on_fail: fail
+        gate: deterministic
+
+      - id: spec-gate
+        uses: agent
         with:
-          name: staged-epic
-          inputs:
-            project: "{{project}}"
-            repository: "{{repository}}"
-            base_branch: "{{base_branch}}"
-            branch: "{{branch}}"
-            spec_folder: "{{initiative_folder}}/{{epic.spec_folder}}"
-            epic: "{{epic}}"
-            harness: "{{harness}}"
-            model: "{{model}}"
-            plan_model: "{{plan_model}}"
-            review_model: "{{review_model}}"
-            senior_model: "{{senior_model}}"
-            plan_timeout_min: "{{plan_timeout_min}}"
-            build_timeout_min: "{{build_timeout_min}}"
-            build_stall_min: "{{build_stall_min}}"
-            review_timeout_min: "{{review_timeout_min}}"
-            epic_timeout_min: "{{epic_timeout_min}}"
+          harness: "{{harness}}"
+          model: "{{plan_model}}"
+          skill: spec-gate
+          args: { folder: "{{spec_folder}}" }
+        prompts:
+          dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+          rendered: >-
+            The workflow for skill {skill} is already rendered at {path}. Read that file
+            fully and follow it; every step, status and halt this dispatch owes is defined
+            there. Do not run render_skill.py yourself.
+          answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+        expect:
+          files: ["{{spec_folder}}/spec-gate-result.md"]
+          success: [done]
+          blocked: [blocked]
+        timeout_min: "{{epic_timeout_min}}"
+        stall_min: "{{epic_timeout_min}}"
+        gate: liveness
+
+      - id: stories
+        for_each: "{{spec_folder}}/stories.yaml"
+        as: story
+        pause_after_item_when: "story.done_checkpoint"
+        steps:
+            # How an Operator's edit to `stories.yaml` or a Story file — or any commit origin's
+            # initiative branch received since the last story — reaches this frame. A merge, not a
+            # fast-forward: by the second story the local branch is ahead of origin; a conflict is the
+            # one stop a human has to resolve.
+            - id: sync
+              uses: git.merge
+              with: { from: "{{branch}}" }
+              gate: deterministic
+
+            # --- 1. plan ------------------------------------------------------------------------------
+            # The marker, not the Story file, is what routes the row: an `answer` archives the row's
+            # first matched file to `.answers/`, and that must never be the spec itself.
+            - id: plan
+              uses: agent
+              with:
+                harness: "{{harness}}"
+                model: "{{plan_model}}"
+                skill: staged-plan
+                args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
+                prompt_extra: "{{story.invoke_dev_with}}"
+              prompts:
+                dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+                rendered: >-
+                  The workflow for skill {skill} is already rendered at {path}. Read that file
+                  fully and follow it; every step, status and halt this dispatch owes is defined
+                  there. Do not run render_skill.py yourself.
+                answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+                halt: "Halt after planning."
+              expect:
+                files: ["{{spec_folder}}/stories/.auto/{{story.id}}-01-plan.md"]
+                success: [done]
+                blocked: [blocked]
+                checkpoint: [ready-for-dev]
+                misconfigured_when:
+                  - no stories.yaml found
+                  - story id not found in stories.yaml
+                  - no epic spec found
+                  - ambiguous story file match
+                  - missing spec_folder or story_id
+              retry:
+                max: 1
+                # No run-root-relative path here: a resumed session gets this prompt alone, with no
+                # dispatch sentence in front of it to absolutise `spec_folder`.
+                prompt: "The previous session left no readable plan marker for story {{story.id}} under stories/.auto/ in the spec folder named in the dispatch sentence. Finish the spec and write that marker last, with status done or status blocked."
+                resume_session: true
+              pause_when: "story.spec_checkpoint"
+              consult:
+                model: "{{senior_model}}"
+                skill: senior-consult
+                on: [blocked, protected_path]
+                timeout_min: 30
+                prompts:
+                  dispatch: >-
+                    Run the skill {skill}. The agent on story {story_id} (spec folder {spec_folder})
+                    stopped at this condition: "{condition}". Write your decision to
+                    {decision}.
+                  answer: 'Answer from the senior reviewer to the blocking condition "{condition}": {answer}'
+              timeout_min: "{{plan_timeout_min}}"
+              stall_min: "{{plan_timeout_min}}"
+              gate: liveness
+
+            # --- 2. implement -------------------------------------------------------------------------
+            - id: implement
+              uses: agent
+              with:
+                harness: "{{harness}}"
+                model: "{{model}}"
+                skill: staged-implement
+                args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
+              prompts:
+                dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+                rendered: >-
+                  The workflow for skill {skill} is already rendered at {path}. Read that file
+                  fully and follow it; every step, status and halt this dispatch owes is defined
+                  there. Do not run render_skill.py yourself.
+                answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+                # Sent in front of the dispatch sentence only on the fresh dispatch that follows a
+                # `verify` failure (FR-10); the skill's "Sent back" section is what acts on it.
+                redispatch: |
+                  YOU ARE BACK IN THIS STEP BECAUSE VERIFICATION FAILED. A previous session of this
+                  step implemented the story and reported done; the orchestrator then ran the
+                  repository's verify command and it failed:
+                    Command:   {command}
+                    Exit code: {code}
+                    Output tail:
+                  {tail}
+                  Follow the skill's "Sent back" section: that failure, nothing else.
+              expect:
+                files: ["{{spec_folder}}/stories/.auto/{{story.id}}-02-implement.md"]
+                success: [done]
+                blocked: [blocked]
+                misconfigured_when:
+                  - spec file missing or ambiguous
+                  - missing spec_folder or story_id
+              retry:
+                max: 1
+                prompt: "The previous session left no readable implement marker for story {{story.id}} under stories/.auto/ in the spec folder named in the dispatch sentence. Finish the implementation, run the spec's Verification commands, and write that marker last, with status done or status blocked."
+                resume_session: true
+              consult:
+                model: "{{senior_model}}"
+                skill: senior-consult
+                on: [blocked, protected_path]
+                timeout_min: 30
+                prompts:
+                  dispatch: >-
+                    Run the skill {skill}. The agent on story {story_id} (spec folder {spec_folder})
+                    stopped at this condition: "{condition}". Write your decision to
+                    {decision}.
+                  answer: 'Answer from the senior reviewer to the blocking condition "{condition}": {answer}'
+              timeout_min: "{{build_timeout_min}}"
+              stall_min: "{{build_stall_min}}"
+              gate: liveness
+
+            # --- 3. verify (deterministic; a failure sends the implementer back to its own breakage) --
+            - id: verify
+              run: "{{repository.unit_test_command}}"
+              on_fail:
+                redispatch: implement
+                max: 2
+                consult:
+                  model: "{{senior_model}}"
+                  skill: senior-consult
+                  timeout_min: 30
+                  prompts:
+                    dispatch: |
+                      Run the skill {skill}. The implementer on story {story_id} (spec folder {spec_folder})
+                      reported done, and the repository's verify command still fails after its redispatches
+                      were used up:
+                        Command:   {command}
+                        Exit code: {code}
+                        Output tail:
+                      {tail}
+                      The tail of the implementer's last session log:
+                      {agent_log}
+                      Diagnose the failure and write your decision to {decision}.
+                    answer: |
+                      The senior reviewer diagnosed the failing verification ({condition}):
+                      {answer}
+              timeout_min: 30
+              gate: deterministic
+
+            # --- 4. review ----------------------------------------------------------------------------
+            - id: review
+              uses: agent
+              with:
+                harness: "{{harness}}"
+                model: "{{review_model}}"
+                skill: staged-review
+                args: { spec_folder: "{{spec_folder}}", story_id: "{{story.id}}" }
+              prompts:
+                dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+                rendered: >-
+                  The workflow for skill {skill} is already rendered at {path}. Read that file
+                  fully and follow it; every step, status and halt this dispatch owes is defined
+                  there. Do not run render_skill.py yourself.
+                answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+              expect:
+                files: ["{{spec_folder}}/stories/.auto/{{story.id}}-03-review.md"]
+                success: [done]
+                blocked: [blocked]
+                misconfigured_when:
+                  - spec file missing or ambiguous
+                  - missing spec_folder or story_id
+              retry:
+                max: 1
+                prompt: "The previous session left no readable review marker for story {{story.id}} under stories/.auto/ in the spec folder named in the dispatch sentence. Finish the review at the tier the spec names, re-run the spec's Verification commands, and write that marker last, with status done or status blocked."
+                resume_session: true
+              consult:
+                model: "{{senior_model}}"
+                skill: senior-consult
+                on: [blocked, protected_path]
+                timeout_min: 30
+                prompts:
+                  dispatch: >-
+                    Run the skill {skill}. The agent on story {story_id} (spec folder {spec_folder})
+                    stopped at this condition: "{condition}". Write your decision to
+                    {decision}.
+                  answer: 'Answer from the senior reviewer to the blocking condition "{condition}": {answer}'
+              timeout_min: "{{review_timeout_min}}"
+              stall_min: "{{review_timeout_min}}"
+              gate: liveness
+
+            # One tree: the code, the Story file and the three markers are committed together, under
+            # the story's own title, after the protected-path check.
+            - id: commit-guard
+              uses: git.commit
+              with: { message: "story {{story.id}}: {{story.title}} (orchestrator)" }
+              gate: deterministic
+
+      - id: gen-e2e
+        uses: agent
+        with:
+          harness: "{{harness}}"
+          model: "{{plan_model}}"
+          skill: bmad-qa-generate-e2e-tests
+          args: { folder: "{{spec_folder}}" }
+        prompts:
+          dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+          rendered: >-
+            The workflow for skill {skill} is already rendered at {path}. Read that file
+            fully and follow it; every step, status and halt this dispatch owes is defined
+            there. Do not run render_skill.py yourself.
+          answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+        timeout_min: "{{epic_timeout_min}}"
+        stall_min: "{{epic_timeout_min}}"
+        gate: liveness
+
+      - id: commit-e2e
+        uses: git.commit
+        with: { message: "e2e: generated tests (orchestrator)" }
+        gate: deterministic
+
+      - id: e2e
+        run: "{{repository.quality_gate_command}}"
+        on_fail: { redispatch: gen-e2e, max: 2 }
+        timeout_min: 45
+        gate: deterministic
+
+      - id: retro
+        uses: agent
+        with:
+          harness: "{{harness}}"
+          model: "{{plan_model}}"
+          skill: bmad-retrospective
+          args: { folder: "{{spec_folder}}" }
+          prompt_extra: >-
+            Run the skill headless (-H): this dispatch has no one to answer its questions.
+            When RETROSPECTIVE.md is final, write the verdict last to {{spec_folder}}/stories/.auto/retro.md,
+            overwriting whatever is there, and never in place of that document. Its frontmatter `status`
+            is exactly one of `accepted`, `accepted-with-open-items` or `rejected`, as recorded in
+            RETROSPECTIVE.md; a human decision that overrides the machine verdict is the verdict, and
+            RETROSPECTIVE.md's own `verdict` is updated to it first. Under the frontmatter write a
+            `## Auto Run Result` section with a `Status:` line. For `rejected`, add a
+            `Blocking condition:` line naming every finding that stands, each with its source,
+            separated by `; `, then the same findings as a bulleted list.
+        prompts:
+          dispatch: "Run the skill {skill} in folder+id dispatch mode: spec folder {spec_folder}, story id {story_id}."
+          rendered: >-
+            The workflow for skill {skill} is already rendered at {path}. Read that file
+            fully and follow it; every step, status and halt this dispatch owes is defined
+            there. Do not run render_skill.py yourself.
+          answer: 'Answer from the operator to the blocking condition "{condition}": {answer}'
+        # The verdict is routed on its own marker, never on RETROSPECTIVE.md: an `answer` archives the
+        # row's first matched file, and that must not be the document.
+        expect:
+          files: ["{{spec_folder}}/stories/.auto/retro.md"]
+          success: [accepted, accepted-with-open-items]
+          blocked: [rejected]
+        retry:
+          max: 1
+          prompt: "The previous session left a retro marker whose status is not accepted, accepted-with-open-items or rejected. Write {{spec_folder}}/stories/.auto/retro.md last, with status set to the verdict recorded in RETROSPECTIVE.md, spelled exactly as one of those three."
+          resume_session: true
+        timeout_min: "{{epic_timeout_min}}"
+        stall_min: "{{epic_timeout_min}}"
+        gate: liveness
+
+      - id: commit-retro
+        uses: git.commit
+        with: { message: "retro: epic retrospective (orchestrator)" }
+        gate: deterministic
+
+      # Bring in whatever origin's initiative branch received during this epic before pushing;
+      # a conflict is the one stop a human has to resolve.
+      - id: merge
+        uses: git.merge
+        with: { from: "{{branch}}" }
+        gate: deterministic
+
+      - id: push
+        uses: git.push
+        with: { branch: "{{branch}}" }
+        gate: deterministic
+
+      - id: link
+        uses: pr.link
+        with: { branch: "{{branch}}" }
+        gate: liveness

@@ -29,12 +29,14 @@ from pathlib import Path
 import pytest
 
 from orchestrator.application.graph import Graph, build_template_graph
+from orchestrator.application.templates.plan import plan_run
 from orchestrator.application.templates.validate import validate
 from orchestrator.application.use_cases.plan_run import resolve_tree
-from orchestrator.application.use_cases.templates import TemplatePorts, seed_shipped
+from orchestrator.application.use_cases.templates import TemplatePorts, save_version, seed_shipped
 from orchestrator.domain.entities.template import TemplateRef, TemplateVersion
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.templates_loader import load_shipped_templates
+from tests.unit.application.templates import plan_fixtures
 from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
 from tests.unit.fakes.templates import FakeTemplateVersionRepository
@@ -146,28 +148,50 @@ def test_the_tree_of_every_shipped_root_resolves(
 # --- a shipped file whose content moved (S5, multi-repo initiative, 2026-09-23) -------------
 
 
-def test_every_pinned_call_of_every_shipped_version_is_found_by_the_resolver(
-    templates: FakeTemplateVersionRepository,
-) -> None:
-    """Revised 2026-09-30 (Operator decision: the mono-repo `initiative` and `story-run`
-    workflows are retired to `templates/drafts/`, so `initiative` is no longer a seeded
-    name). This replaces `test_initiatives_pinned_epic_call_resolves_against_the_freshly_
-    seeded_files`, which read `initiative@1` and checked its one `epic@1` call. The
-    invariant it protected — after a callee's content edit lands as a new version, a caller
-    pinned to the old number still finds exactly the version it pinned via
-    `ResolvedTree.callee()` — now holds for every call every shipped file records, in the
-    fresh-seed shape every environment this system runs in today has."""
+def test_every_pinned_call_of_every_exemplar_version_is_found_by_the_resolver() -> None:
+    """Revised 2026-09-30, and again for story 7, 2026-11-06 (BR-8, D11): no shipped file
+    calls another any more, so the invariant — after a callee's content edit lands as a new
+    version, a caller pinned to the old number still finds exactly the version it pinned via
+    `ResolvedTree.callee()` — is checked over the owned linked exemplars
+    (`fixtures/exemplars/`: initiative -> epic -> story), non-vacuously."""
+    exemplars = plan_fixtures.repository_of_versions()
     pinned = [
         (name, version, ref)
-        for (name, version), stored in templates.versions.items()
+        for (name, version), stored in exemplars.versions.items()
         for ref in stored.calls
     ]
-    assert pinned, "no shipped file calls another — the check would be vacuous"
+    assert pinned, "no exemplar calls another — the check would be vacuous"
 
     for name, version, ref in pinned:
-        tree = resolve_tree(templates, TemplateRef(name=name, version=version))
+        tree = resolve_tree(exemplars, TemplateRef(name=name, version=version))
 
         assert tree.callee(ref.name, ref.version) is not None, (name, version, ref)
+
+
+def test_a_new_version_of_the_linked_caller_saves_and_plans_its_callee_frames() -> None:
+    """Story 7, 2026-11-06 (AC-7 unit part): the linked-call mechanism keeps working on the
+    owned exemplars although nothing shipped uses it — a new version of the `initiative`
+    caller saves through `save_version`, and planning it expands the callees' frames."""
+    exemplars = plan_fixtures.repository_of_versions()
+    uow = FakeUnitOfWork()
+    uow.__enter__()
+    ports = TemplatePorts(uow=uow, templates=exemplars, clock=FakeClock(AT))
+    text = plan_fixtures.TEXTS["initiative"].replace("version: 1", "version: 2", 1)
+
+    saved = save_version(ports, "initiative", text)
+
+    assert saved.version == NEXT_VERSION
+    assert saved.calls
+    tree = resolve_tree(exemplars, TemplateRef(name="initiative", version=NEXT_VERSION))
+    planned = plan_run(
+        tree,
+        plan_fixtures.initiative_inputs(),
+        git=plan_fixtures.initiative_git(),
+        base_dir=plan_fixtures.BASE,
+        bmad_version=plan_fixtures.BMAD_VERSION,
+    )
+    assert any(row.story_id for row in planned.rows)
+    assert any(row.frame for row in planned.rows)
 
 
 def test_a_shipped_files_content_change_lands_as_a_new_version_and_old_callers_still_resolve() -> (
@@ -183,14 +207,19 @@ def test_a_shipped_files_content_change_lands_as_a_new_version_and_old_callers_s
     Revised 2026-09-30 (Operator decision: mono-repo `initiative` retired to
     `templates/drafts/`): the caller pinned to `epic@1` used to be the shipped
     `initiative.yaml`; it is now `PRIOR_CALLER`, a stored stand-in of this test's own, so the
-    check pins no shipped file at all."""
-    prior_epic = TemplateVersion(name="epic", version=1, yaml=PRIOR_EPIC, hash="prior-epic-sha")
+    check pins no shipped file at all.
+
+    Revised for story 7, 2026-11-06 (BR-9, D11): the stand-in occupies `harness-readiness@1`
+    instead of `epic@1`, the name the shipped single-file readiness flow now carries."""
+    prior_epic = TemplateVersion(
+        name="harness-readiness", version=1, yaml=PRIOR_EPIC, hash="prior-epic-sha"
+    )
     prior_caller = TemplateVersion(
         name="prior-caller",
         version=1,
         yaml=PRIOR_CALLER,
         hash="prior-caller-sha",
-        calls=(TemplateRef(name="epic", version=1),),
+        calls=(TemplateRef(name="harness-readiness", version=1),),
     )
     templates = FakeTemplateVersionRepository([prior_epic, prior_caller])
     uow = FakeUnitOfWork()
@@ -199,25 +228,25 @@ def test_a_shipped_files_content_change_lands_as_a_new_version_and_old_callers_s
 
     results = seed_shipped(ports, load_shipped_templates(SHIPPED_DIR))
 
-    epic_result = next(result for result in results if result.name == "epic")
-    assert epic_result.inserted_as == NEXT_VERSION
-    assert templates.list_versions("epic") == [1, NEXT_VERSION]
-    assert templates.get("epic", 1) is prior_epic
+    readiness_result = next(result for result in results if result.name == "harness-readiness")
+    assert readiness_result.inserted_as == NEXT_VERSION
+    assert templates.list_versions("harness-readiness") == [1, NEXT_VERSION]
+    assert templates.get("harness-readiness", 1) is prior_epic
 
     tree = resolve_tree(templates, TemplateRef(name="prior-caller", version=1))
-    callee = tree.callee("epic", 1)
+    callee = tree.callee("harness-readiness", 1)
 
     assert callee is not None
     # `prior_epic`'s one step id (`sync`) is what tells the old, frozen content apart from
-    # the current `templates/epic.yaml` (whose steps are `checkout`, `setup`, …).
+    # the current `templates/harness-readiness.yaml` (whose steps are `checkout`, `setup`, …).
     assert [entry.id for entry in callee.steps] == ["sync"]
 
 
 #: A minimal, self-consistent stand-in for "epic content before S5" — never the real
 #: shipped text (hard rule 6). Its only job is to occupy `epic@1` with a hash that differs
-#: from the current `templates/epic.yaml`.
+#: from the current `templates/harness-readiness.yaml`.
 PRIOR_EPIC = (
-    "name: epic\n"
+    "name: harness-readiness\n"
     "version: 1\n"
     "inputs:\n"
     # `PRIOR_CALLER`'s call binds this exact key set — a stand-in occupying `epic@1` must
@@ -258,7 +287,7 @@ PRIOR_CALLER = (
     "      - id: epic\n"
     "        uses: template\n"
     "        with:\n"
-    "          name: epic\n"
+    "          name: harness-readiness\n"
     "          version: 1\n"
     "          inputs:\n"
     '            project: "{{project}}"\n'

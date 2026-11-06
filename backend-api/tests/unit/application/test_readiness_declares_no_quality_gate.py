@@ -25,6 +25,9 @@ Run may plan. Row-by-row planner coverage lives with the frozen exemplars in
 Every fact here is read from the product: the Repository comes out of
 `seed_readiness_project`, its snapshot out of `preflight._run_inputs`, the Template out of
 the same `seed_shipped` start-up runs, and the rows out of `plan_run`. Nothing is retyped.
+
+Revised for story 7, 2026-11-06 (BR-8, BR-9, D11): the default `READINESS_TEMPLATE` is now
+`harness-readiness`; this module follows the default and no assertion changed.
 """
 
 from __future__ import annotations

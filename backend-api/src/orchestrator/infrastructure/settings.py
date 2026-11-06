@@ -181,7 +181,7 @@ class Settings(BaseSettings):
     init_template: Annotated[str, Field(min_length=1)] = "repo-init"
     #: Which stored Template `harness_readiness.start` plans every readiness Run from, on
     #: the same terms as `init_template`: a name, latest version resolved at dispatch.
-    readiness_template: Annotated[str, Field(min_length=1)] = "epic"
+    readiness_template: Annotated[str, Field(min_length=1)] = "harness-readiness"
 
     # ── Git (AD-5) — never handed to a harness process ───────────────────────
     github_token: SecretStr

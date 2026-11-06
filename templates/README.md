@@ -10,17 +10,9 @@ and headers only, never steps, ordering or counts (hard rule 6).
 
 | file | family | role | calls | on the menu | sibling in the other family |
 | --- | --- | --- | --- | --- | --- |
-| `staged-initiative-hub.yaml` | staged | root, hub scope | `staged-hub-epic` | yes | `initiative-hub` |
-| `staged-hub-epic.yaml` | staged | epic, hub | `staged-hub-story` | — | `initiative-hub-epic` |
-| `staged-hub-story.yaml` | staged | story, hub | — | — | `initiative-hub-story` |
-| `staged-initiative-repo.yaml` | staged | root, single repository | `staged-epic` | yes | — (the auto family has no single-repository initiative root) |
-| `staged-epic.yaml` | staged | epic, single repository | `staged-story` | — | `epic` |
-| `staged-story.yaml` | staged | story, single repository | — | — | `story` |
-| `initiative-hub.yaml` | auto | root, hub scope | `initiative-hub-epic` | yes | `staged-initiative-hub` |
-| `initiative-hub-epic.yaml` | auto | epic, hub | `initiative-hub-story` | — | `staged-hub-epic` |
-| `initiative-hub-story.yaml` | auto | story, hub | — | — | `staged-hub-story` |
-| `epic.yaml` | auto | root, one epic on its own branch (harness readiness fixture) | `story` | no | `staged-epic` |
-| `story.yaml` | auto | story, single repository | — | — | `staged-story` |
+| `staged-initiative-hub.yaml` | staged | root, hub scope | — | yes | `drafts/initiative-hub.yaml` |
+| `staged-initiative-repo.yaml` | staged | root, single repository | — | yes | — (the auto family has no single-repository initiative root) |
+| `harness-readiness.yaml` | — | root, harness readiness fixture flow | — | no | `drafts/epic.yaml` |
 | `repo-init.yaml` | — | root, bootstrap the BMAD method into a repository | — | yes | — |
 | `agent-smoke.yaml` | — | root, one-dispatch check of an install | — | yes | — |
 
