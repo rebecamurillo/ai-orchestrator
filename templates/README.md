@@ -40,16 +40,25 @@ A template is one YAML file: `name`, `version`, optional `inputs` and `descripti
 `steps`. A step is a call to a built-in (`uses: agent`, `git.sync`, `git.worktree`, …) or a
 loop (`for_each`). A loop reads a list file (`stories.yaml`, `epics.yaml`) from the repository
 at plan time and plans its `steps` once per entry; loops nest to a depth of two. Three working
-examples, each valid as written and the only `yaml` blocks in this file:
+examples, each valid as written and the only `yaml` blocks in this file. Each opens with a
+top-level `git.worktree` checkout — an agent step runs in the Run's worktree:
 
-Depth 0 — no loop, one agent step:
+Depth 0 — no loop, one agent step after the checkout:
 
 ```yaml
 name: example-depth-0
 version: 1
 inputs:
+  project: { type: project, required: true }
+  repository: { type: repository, required: true }
+  base_branch: { type: string, required: true }
+  branch: { type: string, required: true }
   spec_folder: { type: path, required: true, description: The folder holding SPEC.md and stories/ }
 steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "{{branch}}" }
+    gate: deterministic
   - id: build
     uses: agent
     with:
@@ -67,8 +76,16 @@ Depth 1 — a `stories` loop over `{{spec_folder}}/stories.yaml`:
 name: example-depth-1
 version: 1
 inputs:
+  project: { type: project, required: true }
+  repository: { type: repository, required: true }
+  base_branch: { type: string, required: true }
+  branch: { type: string, required: true }
   spec_folder: { type: path, required: true, description: The folder holding stories.yaml }
 steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "{{branch}}" }
+    gate: deterministic
   - id: stories
     for_each: "{{spec_folder}}/stories.yaml"
     as: story
@@ -90,8 +107,16 @@ Depth 2 — an `epics` loop holding a `stories` loop:
 name: example-depth-2
 version: 1
 inputs:
+  project: { type: project, required: true }
+  repository: { type: repository, required: true }
+  base_branch: { type: string, required: true }
+  branch: { type: string, required: true }
   initiative_folder: { type: path, required: true, description: The folder holding epics.yaml }
 steps:
+  - id: checkout
+    uses: git.worktree
+    with: { base: "{{base_branch}}", branch: "{{branch}}" }
+    gate: deterministic
   - id: epics
     for_each: "{{initiative_folder}}/epics.yaml"
     as: epic
@@ -195,7 +220,7 @@ Steps:
 1. Copy the three examples above into the folder, then `POST /api/v1/templates/reload`.
    Expected: `example-depth-0`, `example-depth-1`, `example-depth-2` in `stored` (in `unchanged` on a repeat).
 2. `POST /api/v1/runs/preflight` for each example.
-   Inputs: depth 0 and depth 1 on the Project and Repository registered from `fixtures/readiness-repo`, `spec_folder: specs/readiness`, `branch` a fresh name; depth 2 on the hub repository, `initiative_folder: initiatives/demo`, `branch` a fresh name.
+   Inputs: depth 0 and depth 1 on the Project and Repository registered from `fixtures/readiness-repo`, `base_branch: main`, `branch` a fresh name, `spec_folder: specs/readiness`; depth 2 on the Project and the hub Repository, `base_branch: main`, `branch` a fresh name, `initiative_folder: initiatives/demo`.
    Expected: zero `fail` lines and one frame per loop item.
 3. Start a Run on each example with the inputs of step 2.
    Expected: status `done`.

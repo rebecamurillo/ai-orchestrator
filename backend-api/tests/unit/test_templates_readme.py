@@ -28,6 +28,7 @@ READINESS_STORIES = "specs/readiness/stories.yaml"
 HUB_FOLDER = "initiatives/demo"
 EXAMPLE_COUNT = 3
 NAMES = ("example-depth-0", "example-depth-1", "example-depth-2")
+BRANCH = "example/check"
 
 
 def yaml_fences() -> list[str]:
@@ -97,7 +98,7 @@ def test_the_declared_inputs_loop_ids_and_bind() -> None:
     assert "spec_folder" in documents["example-depth-1"]["inputs"]
     deep = documents["example-depth-2"]
     assert "initiative_folder" in deep["inputs"]
-    outer = deep["steps"][0]
+    outer = next(step for step in deep["steps"] if "for_each" in step)
     assert outer["id"] == "epics"
     assert outer["steps"][0]["id"] == "stories"
     assert outer["bind"] == {"spec_folder": "{{initiative_folder}}/{{epic.spec_folder}}"}
@@ -107,7 +108,7 @@ def test_depth_zero_plans_its_agent_row_with_the_spec_folder() -> None:
     rows = agent_rows(
         "example-depth-0",
         remote({READINESS_STORIES: fixture_text(f"readiness-repo/{READINESS_STORIES}")}),
-        {"spec_folder": "specs/readiness"},
+        {"spec_folder": "specs/readiness", "branch": BRANCH},
     )
     assert rows
     assert all(row.with_resolved["spec_folder"] == "specs/readiness" for row in rows)
@@ -116,7 +117,9 @@ def test_depth_zero_plans_its_agent_row_with_the_spec_folder() -> None:
 def test_depth_one_plans_one_agent_row_per_story() -> None:
     text = fixture_text(f"readiness-repo/{READINESS_STORIES}")
     rows = agent_rows(
-        "example-depth-1", remote({READINESS_STORIES: text}), {"spec_folder": "specs/readiness"}
+        "example-depth-1",
+        remote({READINESS_STORIES: text}),
+        {"spec_folder": "specs/readiness", "branch": BRANCH},
     )
     stories = yaml.safe_load(text)
     assert [row.with_resolved["story_id"] for row in rows] == [str(s["id"]) for s in stories]
@@ -132,7 +135,9 @@ def test_depth_two_plans_one_agent_row_per_epic_story_pair() -> None:
         files[f"{folder}/stories.yaml"] = text
         expected += [(folder, str(story["id"])) for story in yaml.safe_load(text)]
 
-    rows = agent_rows("example-depth-2", remote(files), {"initiative_folder": HUB_FOLDER})
+    rows = agent_rows(
+        "example-depth-2", remote(files), {"initiative_folder": HUB_FOLDER, "branch": BRANCH}
+    )
 
     assert [
         (row.with_resolved["spec_folder"], row.with_resolved["story_id"]) for row in rows
