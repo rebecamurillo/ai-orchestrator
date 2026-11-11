@@ -81,6 +81,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instance/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the instance activity
+         * @description The working steps and the Runs the engine holds. Writes nothing.
+         */
+        get: operations["read_instance_activity_api_v1_instance_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kit/archive": {
         parameters: {
             query?: never;
@@ -1277,6 +1297,25 @@ export interface components {
             /** To */
             to: string;
         };
+        /** EngineRunOut */
+        EngineRunOut: {
+            /** Park Kind */
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | null;
+            /** Queue Reason */
+            queue_reason: string | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Run Label */
+            run_label: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
+        };
         /**
          * EnvVarCreate
          * @description One requested variable on a create, where there is nothing to keep.
@@ -1529,6 +1568,15 @@ export interface components {
             /** Trace Url */
             trace_url: string | null;
         };
+        /** HoldOut */
+        HoldOut: {
+            /** Expires At */
+            expires_at: string;
+            /** Held At */
+            held_at: string;
+            /** Reason */
+            reason: string;
+        };
         /**
          * InputDeclOut
          * @description One entry of the Template's `inputs:` map, for the screen's inputs table.
@@ -1546,6 +1594,16 @@ export interface components {
             type: string;
             /** Values */
             values: string[];
+        };
+        /** InstanceActivityOut */
+        InstanceActivityOut: {
+            /** Dbos Application Version */
+            dbos_application_version: string;
+            hold: components["schemas"]["HoldOut"] | null;
+            /** In Engine */
+            in_engine: components["schemas"]["EngineRunOut"][];
+            /** Working */
+            working: components["schemas"]["WorkingStepOut"][];
         };
         /** LatestAttemptOut */
         LatestAttemptOut: {
@@ -2878,6 +2936,22 @@ export interface components {
             /** Kit Version */
             kit_version: string | null;
         };
+        /** WorkingStepOut */
+        WorkingStepOut: {
+            /** Kind */
+            kind: string;
+            /** Path */
+            path: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Run Label */
+            run_label: string;
+            /** Started At */
+            started_at: string | null;
+        };
         /** WorktreeOut */
         WorktreeOut: {
             /** Branch */
@@ -3084,6 +3158,36 @@ export interface operations {
             };
             /** @description `name` does not match the shape below. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_instance_activity_api_v1_instance_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceActivityOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

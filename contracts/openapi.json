@@ -1172,6 +1172,77 @@
         "title": "EdgeOut",
         "type": "object"
       },
+      "EngineRunOut": {
+        "properties": {
+          "park_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "blocked",
+                  "checkpoint",
+                  "verify_failed",
+                  "budget",
+                  "timeout",
+                  "push_rejected",
+                  "protected_path",
+                  "misconfigured",
+                  "plan_stale",
+                  "internal",
+                  "dependency",
+                  "merge_conflict",
+                  "paused"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Kind"
+          },
+          "queue_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Reason"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_label": {
+            "title": "Run Label",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "needs_you",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "run_label",
+          "status",
+          "park_kind",
+          "queue_reason"
+        ],
+        "title": "EngineRunOut",
+        "type": "object"
+      },
       "EnvVarCreate": {
         "description": "One requested variable on a create, where there is nothing to keep.",
         "properties": {
@@ -1929,6 +2000,29 @@
         "title": "HistoryRowOut",
         "type": "object"
       },
+      "HoldOut": {
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "held_at": {
+            "title": "Held At",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "held_at",
+          "expires_at",
+          "reason"
+        ],
+        "title": "HoldOut",
+        "type": "object"
+      },
       "InputDeclOut": {
         "description": "One entry of the Template's `inputs:` map, for the screen's inputs table.",
         "properties": {
@@ -1991,6 +2085,46 @@
           "values"
         ],
         "title": "InputDeclOut",
+        "type": "object"
+      },
+      "InstanceActivityOut": {
+        "properties": {
+          "dbos_application_version": {
+            "title": "Dbos Application Version",
+            "type": "string"
+          },
+          "hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HoldOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "in_engine": {
+            "items": {
+              "$ref": "#/components/schemas/EngineRunOut"
+            },
+            "title": "In Engine",
+            "type": "array"
+          },
+          "working": {
+            "items": {
+              "$ref": "#/components/schemas/WorkingStepOut"
+            },
+            "title": "Working",
+            "type": "array"
+          }
+        },
+        "required": [
+          "working",
+          "in_engine",
+          "hold",
+          "dbos_application_version"
+        ],
+        "title": "InstanceActivityOut",
         "type": "object"
       },
       "LatestAttemptOut": {
@@ -5571,6 +5705,47 @@
         "title": "VersionOut",
         "type": "object"
       },
+      "WorkingStepOut": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_label": {
+            "title": "Run Label",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "run_id",
+          "run_label",
+          "path",
+          "kind",
+          "started_at"
+        ],
+        "title": "WorkingStepOut",
+        "type": "object"
+      },
       "WorktreeOut": {
         "properties": {
           "branch": {
@@ -5917,6 +6092,48 @@
         "summary": "Dispatch a readiness Run for one harness",
         "tags": [
           "harnesses"
+        ]
+      }
+    },
+    "/api/v1/instance/activity": {
+      "get": {
+        "description": "The working steps and the Runs the engine holds. Writes nothing.",
+        "operationId": "read_instance_activity_api_v1_instance_activity_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceActivityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read the instance activity",
+        "tags": [
+          "instance"
         ]
       }
     },
