@@ -2,7 +2,10 @@
 
 The upgrade script reads this before it stops anything. A step is *working* when its row is
 `running`, or when a `session` or `consult` attempt of it is open; a consult opens on a row
-`start_attempt` has already set `running`, so the two are one entry, never two. A Run is *in
+`start_attempt` has already set `running`, so the two are one entry, never two. A row or an
+attempt of a terminal Run (`done`, `failed`, `cancelled`) is never working: cancel kills the
+process group but leaves started rows `running` (AD-8 keeps that writer as it is), so the read
+skips them, including rows earlier cancellations already left behind. A Run is *in
 the engine* when it is non-terminal and holds an `engine_ref` — the same test
 `use_cases/queue.py::_saved_runs` uses to tell a saved Run from an enqueued one — and its
 `queue_reason` is `list_queue`'s own sentence, never re-derived here. The active hold is read
@@ -25,7 +28,7 @@ from orchestrator.domain.ports.repositories import (
     RunRepository,
     StepRunRepository,
 )
-from orchestrator.domain.statuses import ParkKind, RunStatus
+from orchestrator.domain.statuses import TERMINAL_RUN, ParkKind, RunStatus
 
 _ENGINE_STATUSES: tuple[RunStatus, ...] = ("queued", "running", "needs_you")
 
@@ -94,7 +97,7 @@ def working_steps(
     found: list[WorkingStep] = []
     for row in running:
         run = runs.get(row.run_id)
-        if run is None:
+        if run is None or run.status in TERMINAL_RUN:
             continue
         attempt = _latest_open(open_attempts, row)
         kind = attempt.role if attempt is not None and attempt.role != "agent" else row.kind
@@ -115,7 +118,7 @@ def working_steps(
             (r for r in steps.list_for_run(attempt.run_id) if r.id == attempt.step_run_id),
             None,
         )
-        if run is None or turn_row is None:
+        if run is None or run.status in TERMINAL_RUN or turn_row is None:
             continue
         found.append(
             WorkingStep(
