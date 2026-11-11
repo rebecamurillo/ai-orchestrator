@@ -16,6 +16,8 @@ from typing import Any
 from fastapi import Request
 
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.setup_record import SetupRecord
+from orchestrator.infrastructure.setup_record import FsSetupRecord
 
 #: The attributes `create_app` stores its adapters under.
 SESSION_FACTORY = "session_factory"
@@ -57,3 +59,8 @@ def required_git(request: Request, needed_by: str) -> Git:
             f"and {needed_by} needs a git port"
         )
     return git
+
+
+def setup_record(request: Request) -> SetupRecord:
+    """The read-only setup record under the agent home; routers and tests override this."""
+    return FsSetupRecord(from_state(request, SETTINGS).agent_home)

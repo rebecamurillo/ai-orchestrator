@@ -18,7 +18,9 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 import orchestrator
-from orchestrator.api.providers_base import SETTINGS, from_state
+from orchestrator.api.providers_base import SETTINGS, from_state, setup_record
+from orchestrator.application.setup_summary import bmad_installed
+from orchestrator.domain.ports.setup_record import SetupRecord
 from orchestrator.infrastructure import kit
 from orchestrator.infrastructure.settings import Settings
 
@@ -58,12 +60,14 @@ class VersionOut(BaseModel):
     """The `/api/v1/version` payload (AD-3).
 
     `kit_version` is what `GET /kit/archive` would hand out — `null` when this instance
-    ships no kit, which only a source-tree run does.
+    ships no kit, which only a source-tree run does. `bmad_installed` is what the last setup
+    run installed (`null` when none did), `bmad_version` the release pin.
     """
 
     app_version: str
     kit_version: str | None
     bmad_version: str
+    bmad_installed: str | None = None
     harness_versions: HarnessVersions
 
 
@@ -73,11 +77,15 @@ def instance_settings(request: Request) -> Settings:
 
 
 @router.get("/version", response_model=VersionOut, summary="What this instance is")
-def read_version(settings: Annotated[Settings, Depends(instance_settings)]) -> VersionOut:
+def read_version(
+    settings: Annotated[Settings, Depends(instance_settings)],
+    record: Annotated[SetupRecord, Depends(setup_record)],
+) -> VersionOut:
     return VersionOut(
         app_version=app_version(),
         kit_version=kit.kit_version(settings.kit_dir),
         bmad_version=settings.bmad_version,
+        bmad_installed=bmad_installed(record.read()),
         harness_versions=HarnessVersions(
             claude=settings.claude_code_version,
             codex=settings.codex_version,

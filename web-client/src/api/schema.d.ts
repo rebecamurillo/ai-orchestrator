@@ -1391,8 +1391,25 @@ export interface components {
             models?: string[];
             /** Name */
             name: string;
+            setup?: components["schemas"]["HarnessSetupOut"] | null;
             /** Version Pin */
             version_pin: string;
+        };
+        /**
+         * HarnessSetupOut
+         * @description What the last setup run did, for one harness.
+         */
+        HarnessSetupOut: {
+            /** At */
+            at: string;
+            /** Failures */
+            failures: components["schemas"]["SetupFailureOut"][];
+            /** Ok */
+            ok: boolean;
+            /** Skills */
+            skills: number;
+            /** Trigger */
+            trigger: string;
         };
         /**
          * HarnessVersions
@@ -2570,6 +2587,13 @@ export interface components {
             /** Turn */
             turn: number;
         };
+        /** SetupFailureOut */
+        SetupFailureOut: {
+            /** Reason */
+            reason: string;
+            /** Script */
+            script: string;
+        };
         /**
          * SignalIn
          * @description `POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.
@@ -2840,11 +2864,14 @@ export interface components {
          * @description The `/api/v1/version` payload (AD-3).
          *
          *     `kit_version` is what `GET /kit/archive` would hand out — `null` when this instance
-         *     ships no kit, which only a source-tree run does.
+         *     ships no kit, which only a source-tree run does. `bmad_installed` is what the last setup
+         *     run installed (`null` when none did), `bmad_version` the release pin.
          */
         VersionOut: {
             /** App Version */
             app_version: string;
+            /** Bmad Installed */
+            bmad_installed?: string | null;
             /** Bmad Version */
             bmad_version: string;
             harness_versions: components["schemas"]["HarnessVersions"];

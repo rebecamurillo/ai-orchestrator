@@ -1520,6 +1520,16 @@
             "title": "Name",
             "type": "string"
           },
+          "setup": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarnessSetupOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "version_pin": {
             "title": "Version Pin",
             "type": "string"
@@ -1533,6 +1543,43 @@
           "version_pin"
         ],
         "title": "HarnessOut",
+        "type": "object"
+      },
+      "HarnessSetupOut": {
+        "description": "What the last setup run did, for one harness.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/SetupFailureOut"
+            },
+            "title": "Failures",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "skills": {
+            "title": "Skills",
+            "type": "integer"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "trigger",
+          "ok",
+          "failures",
+          "skills"
+        ],
+        "title": "HarnessSetupOut",
         "type": "object"
       },
       "HarnessVersions": {
@@ -4812,6 +4859,24 @@
         "title": "SessionTurnOut",
         "type": "object"
       },
+      "SetupFailureOut": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "script": {
+            "title": "Script",
+            "type": "string"
+          }
+        },
+        "required": [
+          "script",
+          "reason"
+        ],
+        "title": "SetupFailureOut",
+        "type": "object"
+      },
       "SignalIn": {
         "description": "`POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.",
         "properties": {
@@ -5461,11 +5526,22 @@
         "type": "object"
       },
       "VersionOut": {
-        "description": "The `/api/v1/version` payload (AD-3).\n\n`kit_version` is what `GET /kit/archive` would hand out \u2014 `null` when this instance\nships no kit, which only a source-tree run does.",
+        "description": "The `/api/v1/version` payload (AD-3).\n\n`kit_version` is what `GET /kit/archive` would hand out \u2014 `null` when this instance\nships no kit, which only a source-tree run does. `bmad_installed` is what the last setup\nrun installed (`null` when none did), `bmad_version` the release pin.",
         "properties": {
           "app_version": {
             "title": "App Version",
             "type": "string"
+          },
+          "bmad_installed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bmad Installed"
           },
           "bmad_version": {
             "title": "Bmad Version",
