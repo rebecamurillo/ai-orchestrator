@@ -14,7 +14,7 @@
 #   ./install.sh harness claude --subscription    # Claude Max/Pro auth instead of an API key
 #   ./install.sh harness claude --api-key         # back to the gateway's own API key
 #   ./install.sh harness claude --version 2.1.260 # pin a harness CLI (claude|codex|opencode), recreate
-#   ./install.sh upgrade --tag v0.2.0             # login + pull, show pin changes, ask, backup, retag, restart
+#   ./install.sh upgrade --tag v0.2.0             # replace product files under the hold, run setup, restart (exit 3/4/5 = refused)
 #   ./install.sh uninstall                        # stop and DELETE the data, after confirmation
 #   ./install.sh env --tag v0.1.0                 # only write .env (what `install` does first)
 #   ./install.sh --no-pull                        # images built on this machine: no registry login, no pull
@@ -63,7 +63,42 @@ subscription=""      # "" neither flag, 1 --subscription, 0 --api-key
 version_arg=""       # the harness CLI version `harness --version` pins
 version_given=0      # 1 once --version appeared, so an empty value is refused rather than ignored
 scratch=""           # where an API answer is parked while it is read; removed on exit
-trap '[[ -z "$scratch" ]] || rm -rf "$scratch"' EXIT
+work=""              # .upgrade/{ts}: what an upgrade staged and what it replaced; a refusal removes it
+held=0               # 1 while this run holds the instance
+hold_code=""
+plan=""              # $scratch/plan: the lists an upgrade computes before it writes anything
+upgrade_stage=""     # the step an upgrade has reached once it replaced its first file
+upgrade_old=""
+upgrade_backup=""
+upgrade_new=""
+dump_partial=""      # a pg_dump being written; an exit before it completes removes it
+on_exit() {
+	local rc=$?
+	set +e
+	# A set -e failure or a signal before the first replaced file is a refusal too: the folder is
+	# left as found and the hold released.
+	if [[ "$rc" -ne 0 && -z "$upgrade_stage" && -n "$work" ]]; then
+		[[ "$held" -eq 0 ]] || release_hold 30
+		[[ -z "$dump_partial" ]] || rm -f "$dump_partial"
+		rm -rf "$work"
+		rmdir "${here}/.upgrade" 2>/dev/null
+	fi
+	[[ -z "$scratch" ]] || rm -rf "$scratch"
+	if [[ "$rc" -ne 0 && -n "$upgrade_stage" ]]; then
+		{
+			printf 'error: upgrade stopped at %s, after product files were replaced\n' "$upgrade_stage"
+			printf '  the previous copies are in .upgrade/%s/previous/\n' "${work##*/}"
+			[[ -z "$upgrade_backup" ]] || printf '  the database backup is %s\n' "$upgrade_backup"
+			printf '  roll back with ./install.sh upgrade --tag %s\n' "$upgrade_old"
+			# the old backend still answers until the start step, and an upgrade to the version
+			# that answers is refused — so before it, finishing is the way forward
+			[[ "$upgrade_stage" == "start" ]] ||
+				printf '  or, while the old release still runs, finish with ./install.sh upgrade --tag %s\n' "$upgrade_new"
+		} >&2
+		exit 1
+	fi
+}
+trap on_exit EXIT
 
 # ── output ───────────────────────────────────────────────────────────────────
 say()  { printf '%s\n' "$*"; }
@@ -283,6 +318,93 @@ json_items() {   # json_items FILE FIRSTKEY
 # single-valued within a row, so the greedy match cannot reach past the row it was given.
 item_string() { printf '%s' "$1" | sed -n 's/.*"'"$2"'" *: *"\([^"]*\)".*/\1/p' | head -1; }
 item_word()   { printf '%s' "$1" | sed -n 's/.*"'"$2"'" *: *\([A-Za-z0-9.]*\).*/\1/p' | head -1; }
+
+# The text inside `"KEY": [ … ]`. The rows are flat objects, so the first `]` outside a string
+# closes the array; one inside a string is a step path's (`epics[1].stories[3].build`). `working[]` and `in_engine[]` rows both begin with `run_id`: only the
+# array they sit in says which they are.
+json_array() {
+	json_flat "$1" | sed -n 's/.*"'"$2"'" *: *\[//p' | head -1 | awk '{
+		q = 0; e = 0
+		for (i = 1; i <= length($0); i++) {
+			c = substr($0, i, 1)
+			if (q) { if (e) e = 0; else if (c == "\\") e = 1; else if (c == "\"") q = 0 }
+			else if (c == "\"") q = 1
+			else if (c == "]") { print substr($0, 1, i - 1); exit }
+		}
+	}'
+}
+
+# One row per line of the array ARRAYKEY, split on each row's first key
+json_array_items() {   # json_array_items FILE ARRAYKEY FIRSTKEY
+	json_array "$1" "$2" | awk -v key="$3" '{ gsub("\\{ *\"" key "\" *: *\"", "\n&"); print }' |
+		grep "^{ *\"$3\"" || true
+}
+
+# openssl is a required host tool; sha256sum and shasum differ across Linux and macOS
+sha256_of() { openssl dgst -sha256 -r "$1" | cut -d' ' -f1; }
+
+# ── the product manifest ─────────────────────────────────────────────────────
+# manifest_table FILE → `path<TAB>sha256<TAB>role` per row, so a lookup is an exact match on the
+# whole path rather than a pattern over JSON text.
+manifest_table() {
+	local row
+	while IFS= read -r row; do
+		[[ -n "$row" ]] || continue
+		printf '%s\t%s\t%s\n' "$(item_string "$row" path)" "$(item_string "$row" sha256)" "$(item_string "$row" role)"
+	done <<EOF
+$(json_items "$1" path)
+EOF
+}
+
+# table_field TABLE PATH COLUMN (2 sha256, 3 role) → empty when the path is not in the table
+table_field() { WANT="$2" awk -F'\t' -v c="$3" '$1 == ENVIRON["WANT"] { print $c; exit }' "$1"; }
+
+# ── refusing, and the instance hold ──────────────────────────────────────────
+# Every refusal leaves the folder as it found it: the hold is released when this run took one,
+# and `.upgrade/{ts}` goes.
+refuse() {   # refuse CODE LINE…
+	local code="$1" line
+	shift
+	[[ "$held" -eq 0 ]] || release_hold 30
+	printf 'refused: nothing was changed\n' >&2
+	for line in "$@"; do printf '%s\n' "$line" >&2; done
+	if [[ -n "$work" ]]; then
+		rm -rf "$work"
+		rmdir "${here}/.upgrade" 2>/dev/null || true
+	fi
+	exit "$code"
+}
+
+# Sets hold_code to the answer; the body (a 409's `errors[]`) stays in $scratch/hold.json
+take_hold() {   # take_hold TTL REASON
+	hold_code="$(api_send POST /api/v1/instance/hold "${scratch}/hold.json" \
+		"{\"ttl_seconds\": ${1}, \"reason\": \"${2}\"}")"
+	case "$hold_code" in 2??) held=1 ;; esac
+}
+
+release_hold() {   # release_hold TTL_MINUTES
+	local code
+	code="$(api_send DELETE /api/v1/instance/hold "${scratch}/release.json")"
+	held=0
+	case "$code" in
+		2??) ;;
+		*) warn "the hold release answered ${code} — the hold expires on its own in ${1} minutes" ;;
+	esac
+}
+
+# One line per working step: the rows of ARRAYKEY in FILE (activity `working`, a 409's `errors`)
+working_lines() {   # working_lines FILE ARRAYKEY
+	local row since
+	while IFS= read -r row; do
+		[[ -n "$row" ]] || continue
+		since="$(item_string "$row" started_at)"
+		printf 'run %s (%s) step %s (%s) working since %s\n' "$(item_string "$row" run_id)" \
+			"$(item_string "$row" run_label)" "$(item_string "$row" path)" "$(item_string "$row" kind)" \
+			"${since:-an unknown time}"
+	done <<EOF
+$(json_array_items "$1" "$2" run_id)
+EOF
+}
 
 # ── 1. prerequisites ─────────────────────────────────────────────────────────
 check_tools() {
@@ -532,12 +654,11 @@ EOF
 	[[ "$bad" -eq 0 ]]
 }
 
-# The instance is held so no Run starts while the harness trees change, and released whatever
-# the run did; an unreleased hold only expires at its ttl. 0 when the run and the record are ok.
-run_setup() {   # run_setup TRIGGER
-	local trigger="$1" release pin code rc=0 rec=0 step
+# The setup service itself: its logs directory, the agent home, the BMAD pin, one `run --rm`.
+# Returns the run's exit code; the hold around it is the caller's.
+setup_service_run() {   # setup_service_run TRIGGER RELEASE
+	local pin rc=0
 	local -a pins=()
-	release="$(resolve_tag)"
 	pin="$(env_pin BMAD_VERSION)"
 	[[ -n "$pin" || ! -f "$release_file" ]] || pin="$(get_var "$release_file" BMAD_VERSION)"
 	# the service's `environment: - BMAD_VERSION` is filled from the shell only
@@ -546,13 +667,22 @@ run_setup() {   # run_setup TRIGGER
 	mkdir -p "${here}/logs/setup"
 	compose exec -T backend-api sh -c 'mkdir -p "${AGENT_HOME:-/home/agent}/.orchestrator"' ||
 		warn "could not create the agent home's .orchestrator directory in backend-api"
-	code="$(api_send POST /api/v1/instance/hold "${scratch}/hold.json" \
-		'{"ttl_seconds": 900, "reason": "install setup"}')"
-	case "$code" in
+	compose_setup run --rm -e "ORCH_SETUP_TRIGGER=${1}" -e "ORCH_RELEASE=${2}" \
+		${pins[@]+"${pins[@]}"} setup || rc=$?
+	return "$rc"
+}
+
+# The instance is held so no Run starts while the harness trees change, and released whatever
+# the run did; an unreleased hold only expires at its ttl. 0 when the run and the record are ok.
+run_setup() {   # run_setup TRIGGER
+	local trigger="$1" release rc=0 rec=0 step
+	release="$(resolve_tag)"
+	take_hold 900 "install setup"
+	case "$hold_code" in
 		2??) ;;
 		*)
-			say "setup not run: the hold answered ${code}"
-			if [[ "$code" == "409" ]]; then
+			say "setup not run: the hold answered ${hold_code}"
+			if [[ "$hold_code" == "409" ]]; then
 				while IFS= read -r step; do
 					[[ -n "$step" ]] || continue
 					say "  a Run is working: $(item_string "$step" run_label) · $(item_string "$step" path)"
@@ -562,13 +692,8 @@ EOF
 			fi
 			return 1 ;;
 	esac
-	compose_setup run --rm -e "ORCH_SETUP_TRIGGER=${trigger}" -e "ORCH_RELEASE=${release}" \
-		${pins[@]+"${pins[@]}"} setup || rc=$?
-	code="$(api_send DELETE /api/v1/instance/hold "${scratch}/release.json")"
-	case "$code" in
-		2??) ;;
-		*) warn "the hold release answered ${code} — the hold expires on its own in 15 minutes" ;;
-	esac
+	setup_service_run "$trigger" "$release" || rc=$?
+	release_hold 15
 	print_setup_record "$rc" || rec=1
 	[[ "$rc" -eq 0 && "$rec" -eq 0 ]]
 }
@@ -1032,97 +1157,276 @@ cmd_logs() {
 	compose logs -f --tail 200
 }
 
+count_lines() { awk 'END { print NR }' "$1"; }
+
+# The engine's Runs, one per line: `run {id} ({label}) {status}[ {park_kind}][ — {queue_reason}]`
+engine_lines() {   # engine_lines ACTIVITY_FILE
+	local row park reason
+	while IFS= read -r row; do
+		[[ -n "$row" ]] || continue
+		park="$(item_string "$row" park_kind)"
+		reason="$(item_string "$row" queue_reason)"
+		printf 'run %s (%s) %s%s%s\n' "$(item_string "$row" run_id)" "$(item_string "$row" run_label)" \
+			"$(item_string "$row" status)" "${park:+ ${park}}" "${reason:+ — ${reason}}"
+	done <<EOF
+$(json_array_items "$1" in_engine run_id)
+EOF
+}
+
+# place FROM TO — a new inode, never a write through the old one: `install.sh` is a product
+# path, and the bash running it reads the open file.
+place_file() {
+	local target="${here}/${1}"
+	mkdir -p "$(dirname "$target")"
+	cp -p "${work}/staged/${1}" "${target}.upgrade-new"
+	mv "${target}.upgrade-new" "$target"
+}
+
+keep_previous() {   # keep_previous PATH — the folder's copy moves under .upgrade/{ts}/previous/
+	mkdir -p "$(dirname "${work}/previous/${1}")"
+	mv "${here}/${1}" "${work}/previous/${1}"
+}
+
+# Everything below only reads: the lists land in $plan, the folder is untouched.
+plan_files() {   # plan_files OLD_TABLE NEW_TABLE
+	local p h r oh nm
+	: > "${plan}/replace"; : > "${plan}/add"; : > "${plan}/remove"; : > "${plan}/edited"
+	: > "${plan}/seed"; : > "${plan}/examples"
+	while IFS=$'\t' read -r p h r; do
+		[[ -n "$p" ]] || continue
+		unsafe_path "$p"
+		case "$r" in
+			product)
+				if [[ -e "${here}/${p}" ]]; then
+					printf '%s\n' "$p" >> "${plan}/replace"
+					oh="$(table_field "$1" "$p" 2)"
+					if [[ -z "$oh" || "$(sha256_of "${here}/${p}")" != "$oh" ]]; then
+						printf '%s\n' "$p" >> "${plan}/edited"
+					fi
+				else
+					printf '%s\n' "$p" >> "${plan}/add"
+				fi
+				case "$p" in
+					templates/shipped/*.yaml)
+						nm="${p#templates/shipped/}"; nm="${nm%.yaml}"
+						if [[ "$nm" == */* ]]; then :
+						elif [[ -z "$(table_field "$1" "$p" 3)" ]]; then
+							printf 'new: %s\n' "$p" >> "${plan}/examples"
+						elif [[ "$(table_field "$1" "$p" 2)" != "$h" && -e "${here}/templates/${nm}.yaml" ]]; then
+							printf 'improved: %s (your copy: templates/%s.yaml)\n' "$p" "$nm" >> "${plan}/examples"
+						fi ;;
+				esac ;;
+			seed)
+				[[ -e "${here}/${p}" ]] || printf '%s\n' "$p" >> "${plan}/seed" ;;
+		esac
+	done < "$2"
+	while IFS=$'\t' read -r p h r; do
+		[[ -n "$p" && "$r" == "product" ]] || continue
+		unsafe_path "$p"
+		[[ -z "$(table_field "$2" "$p" 3)" && -e "${here}/${p}" ]] || continue
+		printf '%s\n' "$p" >> "${plan}/remove"
+	done < "$1"
+}
+
+# A manifest names paths inside this folder and nowhere else
+unsafe_path() {
+	case "$1" in
+		/*|..|../*|*/..|*/../*) refuse 1 "product-files.json names ${1}, which is outside this folder" ;;
+	esac
+}
+
 cmd_upgrade() {
-	local old new backup running code
+	local old new running_version code image ts services api_up=0 staged new_dbos old_dbos line p backup
+	local working engine postgres_up=0 setup_rc=0 made_backups=0
+	local -a run_flags=(--rm)
 	check_tools
 	[[ -f "$env_file" ]] || die ".env is missing — run ./install.sh first"
 	[[ -n "$tag_arg" ]] || die "upgrade needs --tag vX.Y.Z"
+	new="$tag_arg"
+	[[ "$new" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || die "--tag ${new} is not a release tag"
 	old=""
 	if [[ -f "${here}/VERSION" ]]; then old="$(tr -d '[:space:]' < "${here}/VERSION")"; fi
-	new="$tag_arg"
 	step "upgrade ${old} → ${new}"
 	# What the instance answers is the version actually running; VERSION is only what this folder
 	# holds, and the two disagree whenever a refresh never reached a restart.
-	running="$old"
+	running_version="$old"
 	scratch="$(mktemp -d)"
 	code="$(api_get /api/v1/version "${scratch}/version.json")"
 	if [[ "$code" == "200" ]]; then
-		running="$(json_string "${scratch}/version.json" app_version)"
-		say "running ${running} → target ${new}"
+		running_version="$(json_string "${scratch}/version.json" app_version)"
+		say "running ${running_version} → target ${new}"
 	else
-		say "running ${running} (from VERSION; /api/v1/version answered ${code}) → target ${new}"
+		say "running ${running_version} (from VERSION; /api/v1/version answered ${code}) → target ${new}"
 	fi
-	[[ "$new" != "$running" ]] ||
+	[[ "$new" != "$running_version" ]] ||
 		die "${new} is already what is running — nothing to upgrade; pass the newer tag"
-	require_pin_declarations
-	resolve_token
-	ghcr_login
-	read_release_pins "$new"
-	plan_release_pins
-	say "Read the release notes first. A release that bumps DBOS_APPLICATION_VERSION makes"
-	say "every in-flight Run unrecoverable — drain or cancel Runs before such an upgrade."
-	say "Migrations run forward only; the backup below is what a rollback restores from."
-	confirm "Continue?" || die "upgrade cancelled"
-	mkdir -p "${here}/backups"
-	backup="${here}/backups/orchestrator-${old}-$(date -u +%Y%m%dT%H%M%SZ).dump"
-	if compose ps --status running --services 2>/dev/null | grep -q '^postgres$'; then
-		compose exec -T postgres pg_dump -U "$(get_var "$env_file" POSTGRES_USER)" -Fc \
-			"$(get_var "$env_file" POSTGRES_DB)" > "$backup"
+	upgrade_old="${old:-$running_version}"
+	upgrade_new="$new"
+	[[ -f "$manifest_file" ]] ||
+		refuse 5 "this folder has no product-files.json: it was installed before release manifests — follow \"Migrating an existing folder\" in README.md; never run an older install.sh upgrade across this release"
+
+	# ── stage the release: nothing in the folder changes until the replace step ──
+	image="$(backend_image)"
+	[[ -n "$image" ]] || die "no backend-api image in ${compose_file##*/} — nothing was changed"
+	image="${image}:${new}"
+	if [[ "$pull" -eq 1 ]]; then
+		resolve_token
+		ghcr_login
+	fi
+	ts="$(date -u +%Y%m%dT%H%M%SZ)"
+	work="${here}/.upgrade/${ts}"
+	staged="${work}/staged"
+	mkdir -p "$staged" "${work}/previous"
+	if [[ "$pull" -eq 1 ]]; then
+		docker pull "$image" > "${scratch}/pull.out" 2>&1 ||
+			refuse 1 "docker pull ${image} failed:" "$(cat "${scratch}/pull.out")"
+	else
+		run_flags+=(--pull never)
+	fi
+	docker run "${run_flags[@]}" "$image" kit bootstrap > "${work}/staged.tar" 2> "${scratch}/extract.err" ||
+		refuse 1 "cannot read ${image} (kit bootstrap):" "$(cat "${scratch}/extract.err")"
+	tar -x -C "$staged" --strip-components 1 -f "${work}/staged.tar" 2> "${scratch}/tar.err" ||
+		refuse 1 "cannot unpack ${image}:" "$(cat "${scratch}/tar.err")"
+	rm -f "${work}/staged.tar"
+	[[ -f "${staged}/product-files.json" && -f "${staged}/release.env" ]] ||
+		refuse 1 "${image} carries no product-files.json and release.env — a release before the manifest cannot be upgraded to; restore the backup by hand"
+
+	# ── plan: pure reads ──
+	plan="${scratch}/plan"
+	mkdir -p "$plan"
+	manifest_table "$manifest_file" > "${plan}/old.tsv"
+	manifest_table "${staged}/product-files.json" > "${plan}/new.tsv"
+	[[ -s "${plan}/new.tsv" ]] || refuse 1 "${image}'s product-files.json lists no file"
+	plan_files "${plan}/old.tsv" "${plan}/new.tsv"
+	plan_release_pins "${staged}/release.env" "$new"
+
+	# ── refusals ──
+	services="$(compose ps --status running --services 2>/dev/null || true)"
+	if printf '%s\n' "$services" | grep -qx backend-api; then api_up=1; fi
+	if printf '%s\n' "$services" | grep -qx postgres; then postgres_up=1; fi
+	new_dbos="$(env_pin DBOS_APPLICATION_VERSION)"
+	[[ -n "$new_dbos" ]] || new_dbos="$(get_var "${staged}/release.env" DBOS_APPLICATION_VERSION)"
+	if [[ "$api_up" -eq 1 ]]; then
+		local health activity
+		health="$(api_get /healthz "${scratch}/healthz.out")"
+		activity="$(api_get /api/v1/instance/activity "${scratch}/activity.json")"
+		if [[ "$health" != "200" || "$activity" != "200" ]]; then
+			refuse 1 "backend-api is running but its API did not answer (/healthz ${health}, /api/v1/instance/activity ${activity}) — ./install.sh logs"
+		fi
+		working="$(working_lines "${scratch}/activity.json" working)"
+		[[ -z "$working" ]] || refuse 3 "$working"
+		old_dbos="$(json_string "${scratch}/activity.json" dbos_application_version)"
+		engine="$(engine_lines "${scratch}/activity.json")"
+		if [[ "$old_dbos" != "$new_dbos" && -n "$engine" ]]; then
+			refuse 4 "release ${new} changes DBOS_APPLICATION_VERSION ${old_dbos} → ${new_dbos}; these Runs are in the engine and would not resume — finish or cancel them first:" "$engine"
+		fi
+	else
+		old_dbos="$(env_pin DBOS_APPLICATION_VERSION)"
+		[[ -n "$old_dbos" ]] || old_dbos="$(get_var "$release_file" DBOS_APPLICATION_VERSION)"
+		[[ "$old_dbos" == "$new_dbos" ]] ||
+			refuse 4 "release ${new} changes DBOS_APPLICATION_VERSION ${old_dbos} → ${new_dbos} and backend-api is stopped, so the Runs in the engine cannot be listed — ./install.sh start, then upgrade again"
+	fi
+
+	print_upgrade_plan "$new"
+	say "Read the release notes first. Migrations run forward only; the backup below is what a rollback"
+	say "restores from. A release that changes DBOS_APPLICATION_VERSION is refused while Runs are in the engine."
+	confirm "Continue?" || refuse 1 "upgrade cancelled"
+
+	# ── the hold, the backup ──
+	if [[ "$api_up" -eq 1 ]]; then
+		take_hold 1800 "upgrade to ${new}"
+		case "$hold_code" in
+			2??) ;;
+			409)
+				working="$(working_lines "${scratch}/hold.json" errors)"
+				refuse 3 "${working:-the instance hold answered 409: a step is working}" ;;
+			*) refuse 1 "the instance hold answered ${hold_code} — ./install.sh logs" ;;
+		esac
+	fi
+	backup=""
+	if [[ "$postgres_up" -eq 1 ]]; then
+		[[ -d "${here}/backups" ]] || made_backups=1
+		mkdir -p "${here}/backups"
+		backup="${here}/backups/orchestrator-${old}-${ts}.dump"
+		dump_partial="$backup"
+		if ! compose exec -T postgres pg_dump -U "$(get_var "$env_file" POSTGRES_USER)" -Fc \
+			"$(get_var "$env_file" POSTGRES_DB)" > "$backup"; then
+			rm -f "$backup"
+			[[ "$made_backups" -eq 0 ]] || rmdir "${here}/backups" 2>/dev/null || true
+			refuse 1 "database backup failed — ./install.sh logs"
+		fi
+		dump_partial=""
 		say "database backup: ${backup}"
 	else
 		warn "postgres is not running — no backup taken"
 	fi
-	write_release_pins
+	upgrade_backup="$backup"
+
+	# ── replace: the first write ──
+	upgrade_stage="replace"
+	# one file at a time, so an interruption leaves at most one product path absent
+	while IFS= read -r p; do keep_previous "$p"; place_file "$p"; done < "${plan}/replace"
+	while IFS= read -r p; do place_file "$p"; done < "${plan}/add"
+	while IFS= read -r p; do keep_previous "$p"; done < "${plan}/remove"
+	while IFS= read -r p; do place_file "$p"; say "wrote ${p}"; done < "${plan}/seed"
+	keep_previous product-files.json
+	place_file product-files.json
+
+	upgrade_stage="setup"
+	setup_service_run upgrade "$new" || setup_rc=$?
+	[[ "$setup_rc" -eq 0 ]] || warn "setup exited ${setup_rc} — the record below names what failed"
+
+	upgrade_stage="start"
 	stack_up
 	verify
+	upgrade_stage=""
+
+	print_upgrade_report "$old" "$new" "$ts" "$setup_rc"
 	print_access
 }
 
-HARNESS_PIN_VARIABLES=(CLAUDE_CODE_VERSION CODEX_VERSION OPENCODE_VERSION)
-release_pins=()   # empty: the release image carries no contract, and the pins stay as they are
-
-# Every pin is checked before anything is written, so `.env` is never left half-upgraded.
-require_pin_declarations() {
-	local name
-	for name in "${HARNESS_PIN_VARIABLES[@]}"; do
-		grep -q "^${name}=" "$env_file" ||
-			die ".env does not declare ${name} — add the line from .env.example; nothing was changed"
-	done
+# What the upgrade will do, from the lists plan_files and plan_release_pins wrote
+print_upgrade_plan() {
+	local line
+	say "replace $(count_lines "${plan}/replace") files, add $(count_lines "${plan}/add"), remove $(count_lines "${plan}/remove"); your files are not touched"
+	while IFS= read -r line; do say "  edited here, kept in .upgrade/${work##*/}/previous/: ${line}"; done < "${plan}/edited"
+	while IFS= read -r line; do say "  removed by this release: ${line}"; done < "${plan}/remove"
+	while IFS= read -r line; do say "  written (absent here): ${line}"; done < "${plan}/seed"
+	while IFS= read -r line; do say "  ${line}"; done < "${plan}/examples"
+	print_pin_lines
 }
 
-# The harness CLI pins a release ships, read from its own backend image: `harness-bin`
-# outlives the image, so a release's CLIs reach this host only through these pins.
-read_release_pins() {   # read_release_pins TAG → fills release_pins, or dies having written nothing
-	local tag="$1" image file errors name value rc=0
-	local -a run_flags=(--rm)
-	image="$(backend_image)"
-	[[ -n "$image" ]] || die "no backend-api image in ${compose_file##*/} — nothing was changed"
-	image="${image}:${tag}"
-	file="${scratch}/release.env.example"
-	if [[ "$pull" -eq 1 ]]; then
-		docker pull "$image" >/dev/null || die "docker pull ${image} failed"
+print_pin_lines() {
+	local line
+	if [[ -s "${plan}/pins" ]]; then
+		say "release pins this upgrade changes:"
+		while IFS= read -r line; do say "  ${line}"; done < "${plan}/pins"
 	else
-		run_flags+=(--pull never)
+		say "release pins: unchanged"
 	fi
-	errors="${scratch}/release.err"
-	docker run "${run_flags[@]}" --entrypoint cat "$image" /app/deploy/.env.example \
-		> "$file" 2> "$errors" || rc=$?
-	release_pins=()
-	if [[ "$rc" -ne 0 ]]; then
-		# only `cat`'s own answer means a release older than the pins' contract
-		if [[ "$rc" -lt 125 ]] && grep -q 'No such file' "$errors"; then
-			warn "${image} carries no /app/deploy/.env.example, so the harness pins in .env stay as they are."
-			warn "Set ${HARNESS_PIN_VARIABLES[*]} in .env to that release's values by hand."
-			return 0
-		fi
-		die "cannot read /app/deploy/.env.example from ${image} — nothing was changed:"$'\n'"$(cat "$errors")"
+	if [[ -s "${plan}/overrides" ]]; then
+		say ".env overrides of release.env, which keep their value:"
+		while IFS= read -r line; do say "  ${line}"; done < "${plan}/overrides"
+	else
+		say "no pin of release.env is overridden in .env"
 	fi
-	for name in "${HARNESS_PIN_VARIABLES[@]}"; do
-		value="$(get_var "$file" "$name")"
-		is_plain_version "$value" ||
-			die "${image} carries no usable ${name} in /app/deploy/.env.example — nothing was changed"
-		release_pins+=("$value")
-	done
+}
+
+print_upgrade_report() {   # print_upgrade_report OLD NEW TS SETUP_RC
+	local line rows
+	step "upgraded ${1} → ${2}"
+	say "replaced: $(count_lines "${plan}/replace") files"
+	while IFS= read -r line; do say "added: ${line}"; done < "${plan}/add"
+	while IFS= read -r line; do say "removed: ${line} (kept at .upgrade/${3}/previous/${line})"; done < "${plan}/remove"
+	while IFS= read -r line; do say "edited: ${line} (your copy: .upgrade/${3}/previous/${line})"; done < "${plan}/edited"
+	while IFS= read -r line; do say "seed written: ${line}"; done < "${plan}/seed"
+	while IFS= read -r line; do say "$line"; done < "${plan}/examples"
+	print_pin_lines
+	print_setup_record "$4" || say "the setup record above is not ok — ./install.sh logs"
+	say "Runs that continue:"
+	rows=""
+	[[ ! -f "${scratch}/activity.json" ]] || rows="$(engine_lines "${scratch}/activity.json")"
+	if [[ -n "$rows" ]]; then printf '%s\n' "$rows" | sed 's/^/  /'; else say "  none"; fi
 }
 
 # A harness pin from .env, a `#` comment after any whitespace dropped (get_var drops only `  #`).
@@ -1130,30 +1434,35 @@ env_pin() {
 	get_var "$env_file" "$1" | sed -E 's/[[:space:]]+#.*$//'
 }
 
-plan_release_pins() {
-	local i name old new note changed=0
-	[[ "${#release_pins[@]}" -gt 0 ]] || return 0
-	for i in "${!HARNESS_PIN_VARIABLES[@]}"; do
-		name="${HARNESS_PIN_VARIABLES[$i]}"; new="${release_pins[$i]}"
-		old="$(env_pin "$name")"
-		[[ "$old" != "$new" ]] || continue
-		[[ "$changed" -eq 1 ]] || say "harness CLI pins this upgrade writes to .env:"
-		changed=1
-		note=""
-		if is_plain_version "$old" && version_older "$new" "$old"; then note="   (downgrade)"; fi
-		say "  ${name} ${old:-unset} → ${new}${note}"
-	done
-	[[ "$changed" -eq 1 ]] || say "harness CLI pins: unchanged"
-}
+# The NAME=value lines of a release.env
+read_release_pins() { grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$1" || true; }
 
-write_release_pins() {
-	local i name
-	[[ "${#release_pins[@]}" -gt 0 ]] || return 0
-	for i in "${!HARNESS_PIN_VARIABLES[@]}"; do
-		name="${HARNESS_PIN_VARIABLES[$i]}"
-		[[ "$(env_pin "$name")" != "${release_pins[$i]}" ]] || continue
-		set_var "$env_file" "$name" "${release_pins[$i]}"
-	done
+# The release.env this folder holds against the release's: each changed pin as `NAME old → new`,
+# and each pin `.env` overrides with a different value. Writes $plan/pins and $plan/overrides.
+plan_release_pins() {   # plan_release_pins STAGED_RELEASE_ENV TARGET
+	local line name old new note pinned
+	: > "${plan}/pins"; : > "${plan}/overrides"
+	while IFS= read -r line; do
+		[[ -n "$line" ]] || continue
+		name="${line%%=*}"
+		new="$(get_var "$1" "$name")"
+		old="$(get_var "$release_file" "$name")"
+		if [[ "$old" != "$new" ]]; then
+			note=""
+			if is_plain_version "$old" && is_plain_version "$new" && version_older "$new" "$old"; then
+				note="   (downgrade)"
+			fi
+			printf '%s %s → %s%s\n' "$name" "${old:-unset}" "$new" "$note" >> "${plan}/pins"
+		fi
+		if env_sets "$env_file" "$name"; then
+			pinned="$(env_pin "$name")"
+			if [[ "$pinned" != "$new" ]]; then
+				printf '%s: .env sets %s, release %s pins %s\n' "$name" "$pinned" "$2" "$new" >> "${plan}/overrides"
+			fi
+		fi
+	done <<EOF
+$(read_release_pins "$1")
+EOF
 }
 
 backend_image() {
