@@ -1,8 +1,8 @@
-# Test Automation Summary — orchestrator-deploy-folder / epic-1-hold-catalog
+# Test Automation Summary — orchestrator-deploy-folder / epic-2-setup-runner
 
-Generated: 2026-11-11 (dispatch, story id `.`, covering the whole epic)
-Spec: `initiatives/orchestrator-deploy-folder/epic-1-hold-catalog/SPEC.md` (hub-relative)
-Stories: 1–4 (committed `1615aca`..`b298b27`)
+Generated: 2026-11-11 (dispatch, empty story id, covering the whole epic)
+Spec: `initiatives/orchestrator-deploy-folder/epic-2-setup-runner/SPEC.md` (hub-relative)
+Stories: 1–5 (committed `042e704`..`97cbb3d`; story 5 is the `wip … (consult)` commit)
 
 ---
 
@@ -10,45 +10,48 @@ Stories: 1–4 (committed `1615aca`..`b298b27`)
 
 ### Backend API E2E Tests
 
-- [x] `backend-api/tests/e2e/test_instance.py` is a new file with 14 httpx scenarios. Every Run it starts uses its own template name and its own Repository. Every hold it places is released in a `finally` fixture and has a 120 s TTL as backstop. It reads no `templates/*.yaml` (hard rule 6).
-  - Auth: `GET /instance/activity`, `POST /instance/hold` and `DELETE /instance/hold` all return 401 without the bearer.
-  - CAP-3: the activity read has exactly `working`, `in_engine`, `hold` and `dbos_application_version`, and the version equals the exported `DBOS_APPLICATION_VERSION`.
-  - CAP-3: a real running `shell` step (`sleep 30`) is listed under `working` with kind, path, label and `started_at`, and its Run is listed under `in_engine` as `running`. Once the Run is cancelled it is absent from both lists.
-  - CAP-4: `ttl_seconds` 0 and 3601 return 422 problem+json and nothing is held. A `reason` of 201 characters returns 422. `DELETE` returns 204 twice in a row with nothing held.
-  - CAP-4: a hold is placed (201, `expires_at = held_at + ttl` within 2 s), read back through the activity read, and replaced by a second POST (the expiry moves and the reason changes). After `DELETE` the hold is `null`.
-  - CAP-4: with a step working, `POST /instance/hold` returns 409 problem+json whose `errors[]` names the step (`run_id`, `run_label`, `path`, `kind`, `started_at`), and the activity read shows no hold.
-  - CAP-4 / D-4: a Run started under a hold keeps its step `queued` past several 5 s walker polls. The Run stays `running`, is not listed as working, and `GET /queue` gives it the reason `held for upgrade`. After `DELETE` the Run reaches `done`.
-  - CAP-2: every `GET /harnesses` item carries `setup: null` and `GET /version` carries `bmad_installed: null`, because no setup record exists in a fresh stack. `bmad_version` still equals the pinned setting.
+- None added. The epic changes no route, schema or contract: `git diff e5de22a HEAD -- backend-api/src web-client/src contracts` touches only `application/steps/bmad_install.py`, `application/steps/context.py` and `infrastructure/db/environment.py`, which together select `/opt/bmad/bin/bmad-method` over `npx`. Nothing new is reachable over HTTP.
+- `bmad.install` is already driven end to end by `tests/e2e/test_repo_init.py` and `test_repo_init_commit_scope.py`. A scenario asserting *which* installer ran cannot hold across both e2e topologies. In `make e2e` the backend runs from the image, which has `/opt/bmad`. In `ci.yml`'s e2e-api job it runs on the runner, which has no `/opt/bmad` and falls back to `npx`. `tests/unit/test_bmad_install_prefix.py` and `test_run_environment_bmad_bin.py` cover both branches.
+- What the image carries (`/opt/bmad`, no BMAD stub in a harness home, the `setup` service) is a deployment check. Under member AD-31 it belongs to `deploy-tests/stack/`, which is epic 4's work and a non-goal here. No such check was added to `tests/e2e`, because that would put a deployment test in a development gate.
 
 ### UI E2E Tests
 
-- None. The SPEC's non-goals exclude any web-client screen in this epic; only the regenerated types changed.
+- None. The SPEC's non-goals exclude any web-client change.
 
-## Coverage (new endpoints and fields, e2e)
+### Deployment tests (written by the stories, not run here)
 
-- `GET /api/v1/instance/activity`: covered (auth, shape, working, in_engine, terminal Run absent).
-- `POST /api/v1/instance/hold`: covered (auth, 201, replace, 409, 422 ×3).
-- `DELETE /api/v1/instance/hold`: covered (auth, 204 with and without a hold).
-- `GET /api/v1/queue` `held for upgrade`: covered.
-- `GET /api/v1/harnesses` `setup`, `GET /api/v1/version` `bmad_installed`: covered for the no-record case only. A record cannot be planted through the API, and the backend never writes it. The unit suite covers the failed-script, corrupt and installed cases.
-- CAP-1 (the per-harness catalog in pre-flight) has no e2e scenario: a manifest cannot be varied per harness through the API. It stays covered by the unit suite.
-- 5/5 new routes or fields reached; 3/4 capabilities exercised end to end.
+- `deploy-tests/unit/`: `test_guard.py` (10), `test_bmad_collision.py` (1), `test_setup_runner.py` (10), `test_bmad_script.py` (6), `test_release_files.py` (13), plus the three moved `install.sh` tests. `deploy-tests/stack/test_stack_guard.py` (1).
+- Checked against each story's acceptance criteria: every listed case has a test. The SPEC forbids the Run from executing them, so they were not run. They run in `deploy.yml` on the pull request.
+
+## Coverage
+
+| Story | CAP | Unit (`make test`) | Deployment (`deploy-tests/`) | Backend e2e | UI e2e |
+|-------|-----|--------------------|------------------------------|-------------|--------|
+| 1 — Deployment gate, production guard | CAP-1 | ✅ existing | ✅ existing (guard + 3 moved) | n/a (no route) | n/a |
+| 2 — BMAD leaves the image | CAP-2 | ✅ existing | ✅ existing (collision) | ✅ existing `test_repo_init` (image built and booted from the new Dockerfile) | n/a |
+| 3 — Setup runner | CAP-3 | n/a (script) | ✅ existing (10) | n/a (no route; setup never runs at boot) | n/a |
+| 4 — BMAD sample script | CAP-4 | n/a (script) | ✅ existing (6) | n/a | n/a |
+| 5 — Release pins, setup service | CAP-5 | ✅ existing (`test_env_contract_release_pins.py`, revised compose/env tests) | ✅ existing (13) | n/a (deploy compose is not the e2e stack) | n/a |
+
+- API endpoints added or changed by the epic: 0/0.
 
 ## Run Results
 
-The gate was `make e2e`, against the disposable `aio-e2e` stack, which was torn down after each run.
+The regression run was `make e2e`, against the disposable `aio-e2e` stack. A second pass ran without `--maxfail=3` to see the whole suite. Both stacks were torn down afterwards, and no other stack was touched.
 
-- `make lint`: exit 0 with the new file.
-- **11 of the 14 new scenarios pass**: the three 401s, the activity shape, both TTL 422s, the reason 422, DELETE, place/replace/release, harness `setup`, and version `bmad_installed`.
-- **3 have not been run to a result here**: the shell-step activity, the 409, and the hold-then-release Run. Their `repository_id` fixture fails at clone-check with `fatal: '/work/e2e-fixtures/…' does not appear to be a git repository`. In this sandbox the pytest process writes fixture repositories to the host's `/work`, and the backend runs in a docker-in-docker daemon that cannot see that path. The existing `test_answer_signal.py`, `test_run_creation.py` and every other Repository-backed module fail the same way here. They need a run on a host or CI runner where the stack shares `/work` with the test process.
+- **The image builds and boots** from the epic's Dockerfile (`/opt/bmad` install, `ASSET_DIRS`), and the backend reports healthy. To build it, `backend-api/.venv` was moved aside for the run and then restored (defect 2 below).
+- **152 passed, 13 failed, 117 errors** (11 deselected for durability).
+- **129 of the 130 failures and errors** come from the sandbox limit recorded in epic 1's summary. Clone-check fails with `fatal: '/work/e2e-fixtures/…' does not appear to be a git repository` because the pytest process writes fixture repositories to a `/work` that the docker daemon's backend container does not share. Every Repository-backed module fails this way, including `test_repo_init.py`. Whether those scenarios pass is not known from this run.
+- **1 failure is a real defect, already open:** `tests/e2e/test_harnesses.py::test_the_response_is_the_one_list_envelope`. Its closed key set lacks `setup` (epic 1, story 2). It is still waiting on the Operator's ruling, so the test was left untouched.
+- No failure points at an epic 2 change.
 
 ## Defects found (not fixed, reported to the Operator)
 
-1. **`tests/e2e/test_harnesses.py::test_the_response_is_the_one_list_envelope` fails after story 2.** Its closed key set has 8 names and the response now also carries `setup`. `api/schemas/harnesses.py`'s own docstring says story 2 took both equalities to nine, but only the unit one changed. The e2e file is not in story 2's list of tests it may change, so under hard rule 1 this needs the Operator's ruling before the assertion gains `"setup"`. The test was left untouched.
-2. **`.dockerignore` lists `.venv`, which matches only a root-level `.venv`.** When `backend-api/.venv` exists on the build host (it does after `make test` or `make lint`), `COPY backend-api/ ./` copies it into the image. The resulting image's backend exits 127 at start-up with `.venv/bin/alembic: cannot execute: required file not found`, because the shebang points to the host path. `**/.venv` (or `backend-api/.venv`) would fix it. That is an image change, which is outside this epic. For this run the host venv was moved aside during the build and then restored.
+1. **Still open from epic 1:** the e2e harness envelope test needs `"setup"` added to its key set. It needs an Operator ruling under hard rule 1.
+2. **Still open from epic 1:** `.dockerignore`'s `.venv` matches only the root. A host `backend-api/.venv` gets copied into the image and breaks start-up. Epic 2 edited the image but not `.dockerignore`, so the defect stands. `**/.venv` fixes it.
 
 ## Next Steps
 
-- Run `make e2e` on CI or a host that shares `/work` with the stack, to settle the 3 Repository-backed scenarios.
-- Operator ruling on defect 1, then a one-name revision of the e2e envelope test.
-- Fix `.dockerignore` (defect 2) in the epic that owns the image.
+- Run `make e2e` on CI or on a host that shares `/work` with the stack. This settles the Repository-backed scenarios, including `test_repo_init.py` on the image's `/opt/bmad` path.
+- Let `deploy.yml` run the epic's deployment tests on the pull request.
+- Epic 4: in `deploy-tests/stack/`, assert the image's `/opt/bmad` installer and the `setup` service against a real throwaway stack.
