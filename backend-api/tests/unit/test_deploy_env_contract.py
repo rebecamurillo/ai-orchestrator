@@ -80,7 +80,9 @@ def test_agreement_adds_nothing_to_stdout() -> None:
 
 
 def test_the_deploy_only_set_is_exactly_the_compose_cli_variables() -> None:
-    assert DEPLOY_ONLY_VARIABLES == {"IMAGE_TAG", "COMPOSE_PROJECT_NAME", "BIND_ADDRESS"}
+    # epic 3 story 2, 2026-11-11: IMAGE_TAG leaves the deploy contract
+    assert DEPLOY_ONLY_VARIABLES == {"COMPOSE_PROJECT_NAME", "BIND_ADDRESS"}
+    assert "IMAGE_TAG" not in env_example_variables(DEPLOY_ENV_EXAMPLE)
     assert DEPLOY_ONLY_VARIABLES <= env_example_variables(DEPLOY_ENV_EXAMPLE)
 
 
@@ -115,10 +117,13 @@ def test_the_deploy_only_variables_are_not_stray() -> None:
 
 
 def test_deleting_a_deploy_only_variable_is_caught() -> None:
-    """The consumer compose interpolates all three; losing one fails the stack at `up`."""
-    _lost, _stray, gone = compare_deploy(set(), set(DEPLOY_ONLY_VARIABLES) - {"IMAGE_TAG"})
+    """The consumer compose interpolates both; losing one fails the stack at `up`.
 
-    assert gone == ["IMAGE_TAG"]
+    epic 3 story 2, 2026-11-11: IMAGE_TAG leaves the deploy contract.
+    """
+    _lost, _stray, gone = compare_deploy(set(), set(DEPLOY_ONLY_VARIABLES) - {"BIND_ADDRESS"})
+
+    assert gone == ["BIND_ADDRESS"]
 
 
 def test_the_script_reports_a_lost_variable_and_exits_non_zero(tmp_path: Path) -> None:

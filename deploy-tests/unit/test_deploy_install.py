@@ -10,10 +10,9 @@ both are proved here, without it:
   generated rather than a placeholder, the two spellings of the database password agree,
   and the Fernet key is one `cryptography` accepts — the placeholder is not, and a wrong
   one answers 500 on every project write.
-- **The gateway and tracing start off.** The contract's example lines point at a host
-  stack with placeholder keys, which the settings module refuses at bind time; blank is the
-  documented off switch, and `install.sh` writes it without a trailing comment because
-  compose reads `NAME=  # text` as the value `# text`.
+- **The gateway and tracing start off.** Blank is the documented off switch, and `install.sh`
+  writes it without a trailing comment because compose reads `NAME=  # text` as the value
+  `# text`.
 - **It never overwrites.** A second run leaves the file byte for byte, so re-running
   `install.sh` after a failed pull cannot rotate the token a client already uses.
 - **The bundle is complete and carries no secret.** `install.sh` at the root beside
@@ -59,7 +58,6 @@ BUNDLE = REPO_ROOT / "scripts" / "bundle.sh"
 DEPLOY_ENV_EXAMPLE = DEPLOY_DIR / ".env.example"
 
 REQUIRED = (
-    "IMAGE_TAG",
     "ORCHESTRATOR_TOKEN",
     "ORCHESTRATOR_SESSION_SECRET",
     "ORCHESTRATOR_SECRET_KEY",
@@ -80,9 +78,18 @@ def _run(
     script: Path, *args: str, cwd: Path, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     """Run a script the way a client does — as a command, no shell."""
-    clean = {
-        k: v for k, v in os.environ.items() if k not in {"GHCR_TOKEN", "GITHUB_TOKEN", "IMAGE_TAG"}
+    dropped = {
+        "GHCR_TOKEN",
+        "GITHUB_TOKEN",
+        "IMAGE_TAG",
+        "LITELLM_BASE_URL",
+        "LITELLM_API_KEY",
+        "LITELLM_SPEND_KEY",
+        "LANGFUSE_BASE_URL",
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_SECRET_KEY",
     }
+    clean = {k: v for k, v in os.environ.items() if k not in dropped}
     return subprocess.run(  # fixed argv, no shell
         ["bash", str(script), *args],
         capture_output=True,
@@ -157,7 +164,8 @@ def test_env_renders_the_whole_contract_with_generated_secrets(bundle_dir: Path)
     contract = parse_env_example(DEPLOY_ENV_EXAMPLE)
 
     assert set(rendered) == set(contract), sorted(set(rendered) ^ set(contract))
-    assert rendered["IMAGE_TAG"] == "v9.9.9"
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
+    assert "IMAGE_TAG" not in rendered
     for name in REQUIRED:
         assert rendered[name], f"{name} is blank"
         assert "change-me" not in rendered[name], f"{name} is still the placeholder"
@@ -208,7 +216,8 @@ def test_the_bundle_version_file_names_the_release(bundle_dir: Path) -> None:
     result = _run(bundle_dir / "install.sh", "env", "--yes", cwd=bundle_dir)
 
     assert result.returncode == 0, result.stderr
-    assert parse_env_example(bundle_dir / ".env")["IMAGE_TAG"] == "v3.1.4"
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
+    assert "IMAGE_TAG" not in parse_env_example(bundle_dir / ".env")
 
 
 @needs_bash
@@ -297,13 +306,8 @@ def test_the_bundle_refuses_a_tag_that_is_not_a_release(tmp_path: Path) -> None:
 #
 # A `docker` shim on PATH records every invocation and answers success, so the script runs
 # its real control flow up to the first thing only a live stack can answer (the health
-# probe). Two things are pinned this way, both learned on 2026-09-30 when a dry run of the
-# bundle recreated the operator's running dev llm-platform stack: `--no-platform` must win over an
-# installed `llm-platform/.env`, and the llm-platform stack must run under its own project
-# name, never the
-# host file's `name:` (`ai-orchestrator-host`), which a repository checkout already uses.
-
-HOST_ENV_EXAMPLE = REPO_ROOT / "deploy" / "llm-platform" / ".env.example"
+# probe). epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install.
+# A client's own `llm-platform/` folder is never read, started or changed (hard rule 9).
 
 
 def _free_port() -> int:
@@ -324,10 +328,6 @@ def _rewrite(path: Path, **values: str) -> None:
 def shimmed(bundle_dir: Path) -> tuple[Path, Path, dict[str, str]]:
     """A bundle with a docker shim, an installed `.env` on free ports, and a compose file."""
     shutil.copy(DEPLOY_DIR / "docker-compose.yml", bundle_dir / "docker-compose.yml")
-    host = bundle_dir / "llm-platform"
-    host.mkdir()
-    for name in ("docker-compose.yml", "generate-env.sh", "sync-env.sh", ".env.example"):
-        shutil.copy(REPO_ROOT / "deploy" / "llm-platform" / name, host / name)
     log = bundle_dir / "docker.log"
     shim = bundle_dir / "bin"
     shim.mkdir()
@@ -349,17 +349,23 @@ def shimmed(bundle_dir: Path) -> tuple[Path, Path, dict[str, str]]:
 
 
 @needs_bash
-def test_no_host_wins_over_an_installed_host_env(
+def test_a_client_llm_platform_folder_is_never_touched(
     shimmed: tuple[Path, Path, dict[str, str]],
 ) -> None:
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
     bundle_dir, log, env = shimmed
-    shutil.copy(HOST_ENV_EXAMPLE, bundle_dir / "llm-platform" / ".env")
+    host = bundle_dir / "llm-platform"
+    host.mkdir()
+    (host / ".env").write_text("LITELLM_PORT=4000\n")
+    (host / "docker-compose.yml").write_text("services: {}\n")
+    before = {p.name: p.read_bytes() for p in host.iterdir()}
+    log.write_text("")
 
-    _run(bundle_dir / "install.sh", "start", "--no-platform", cwd=bundle_dir, env=env)
+    _run(bundle_dir / "install.sh", "start", cwd=bundle_dir, env=env)
+    _run(bundle_dir / "install.sh", "install", "--yes", "--no-pull", cwd=bundle_dir, env=env)
 
-    calls = log.read_text()
-    assert "pull" in calls, calls  # the orchestrator stack was driven …
-    assert "llm-platform/docker-compose.yml" not in calls, calls  # … the platform was not touched
+    assert "llm-platform" not in log.read_text()
+    assert {p.name: p.read_bytes() for p in host.iterdir()} == before
 
 
 @needs_bash
@@ -383,50 +389,23 @@ def test_no_pull_skips_the_registry_and_the_pull(
 
 
 @needs_bash
-def test_the_host_stack_runs_under_its_own_project_name(
-    shimmed: tuple[Path, Path, dict[str, str]],
-) -> None:
-    """Never the host file's `name:` — that is the checkout's dev stack (hard rule 9)."""
-    bundle_dir, log, env = shimmed
-    shutil.copy(HOST_ENV_EXAMPLE, bundle_dir / "llm-platform" / ".env")
-    _rewrite(
-        bundle_dir / "llm-platform" / ".env",
-        LANGFUSE_PORT=str(_free_port()),
-        LITELLM_PORT=str(_free_port()),
-        HOST_POSTGRES_PORT=str(_free_port()),
-        MINIO_API_PORT=str(_free_port()),
-        MINIO_CONSOLE_PORT=str(_free_port()),
-    )
-
-    _run(bundle_dir / "install.sh", "start", cwd=bundle_dir, env=env)
-
-    host_calls = [
-        line for line in log.read_text().splitlines() if "llm-platform/docker-compose.yml" in line
-    ]
-    assert host_calls, log.read_text()
-    for call in host_calls:
-        assert "--project-name aio-host" in call, call
-        assert "ai-orchestrator-host" not in call, call
-
-
-@needs_bash
-def test_a_taken_host_port_stops_the_script_before_any_docker_call(
+def test_a_taken_stack_port_stops_start_before_any_up(
     shimmed: tuple[Path, Path, dict[str, str]],
 ) -> None:
     """Something else is listening there; the script names the variable and never takes it over."""
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
     bundle_dir, log, env = shimmed
-    shutil.copy(HOST_ENV_EXAMPLE, bundle_dir / "llm-platform" / ".env")
     with socket.socket() as holder:
         holder.bind(("127.0.0.1", 0))
         holder.listen()
         taken = int(holder.getsockname()[1])
-        _rewrite(bundle_dir / "llm-platform" / ".env", LANGFUSE_PORT=str(taken))
+        _rewrite(bundle_dir / ".env", WEB_CLIENT_PORT=str(taken))
         log.write_text("")
 
         result = _run(bundle_dir / "install.sh", "start", cwd=bundle_dir, env=env)
 
     assert result.returncode != 0
-    assert "LANGFUSE_PORT" in result.stderr
+    assert "WEB_CLIENT_PORT" in result.stderr
     assert "up" not in [
         line.split()[1] for line in log.read_text().splitlines() if len(line.split()) > 1
     ]

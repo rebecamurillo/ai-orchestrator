@@ -57,7 +57,6 @@ COMPOSE_ONLY_VARIABLES = {
 # Read by `deploy/docker-compose.yml` alone; never by the application, never valid in the
 # root contract (adding one there would fail this check as a field-less variable).
 DEPLOY_ONLY_VARIABLES = {
-    "IMAGE_TAG",
     "COMPOSE_PROJECT_NAME",
     "BIND_ADDRESS",
 }

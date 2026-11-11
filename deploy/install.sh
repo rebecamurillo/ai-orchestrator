@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # install.sh — ai-orchestrator, from an empty machine to http://127.0.0.1:4321 in one command.
 #
-#   ./install.sh                                  # interactive: asks for the GitHub token,
-#                                                 #   offers the optional llm-platform stack
-#   GHCR_TOKEN=ghp_… ./install.sh --yes           # unattended, orchestrator only
-#   GHCR_TOKEN=ghp_… ANTHROPIC_API_KEY=sk-ant-… ./install.sh --yes --with-platform
+#   ./install.sh                                  # interactive: asks for the GitHub token and,
+#                                                 #   optionally, the gateway and tracing addresses
+#   GHCR_TOKEN=ghp_… ./install.sh --yes           # unattended; nothing optional is asked
+#   LITELLM_BASE_URL=… LANGFUSE_BASE_URL=… ./install.sh --yes   # gateway and tracing given
 #
 #   ./install.sh start | stop | status | logs     # day-2 operations on this stack
 #   ./install.sh start --with-docker              # add the Docker daemon for Runs (VERIFY_DOCKER)
+#   ./install.sh install --no-bmad                # skip the BMAD skills (setup/bmad.choice → removed)
 #   ./install.sh doctor                           # read-only checks; non-zero on any `fail`
 #   ./install.sh diagnose                         # a redacted report to attach to a bug report
 #   ./install.sh harness claude --subscription    # Claude Max/Pro auth instead of an API key
@@ -21,19 +22,23 @@
 # What `install` does, in order:
 #   1. checks docker, docker compose v2, curl and openssl are here, and the daemon answers
 #   2. logs the docker daemon in to ghcr.io with the token — the images are private
-#   3. writes `.env` from `.env.example` with generated secrets, once; never overwrites it
-#   4. optionally brings up llm-platform/ (LiteLLM + Langfuse) and points `.env` at it;
+#   3. writes `.env` from `.env.example` with generated secrets, once; never overwrites it. The
+#      six optional values LITELLM_BASE_URL, LITELLM_API_KEY, LITELLM_SPEND_KEY,
+#      LANGFUSE_BASE_URL, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY come from the environment or
+#      are asked; blank keeps the gateway or tracing off
+#   4. writes the seed files `product-files.json` names that are absent; a present file is never changed;
 #      `--with-docker` also sets VERIFY_DOCKER=true, which starts the `docker` service
-#   5. pulls the two images pinned by IMAGE_TAG and starts the stack
-#   6. proves /healthz and the login token, then prints where to go
+#   5. pulls the two images the compose file pins and starts the stack
+#   6. proves /healthz and the login token
+#   7. runs the setup service under the instance hold, then prints the setup record
 #
 # Inputs (environment, all optional unless the step needs them):
 #   GHCR_TOKEN          GitHub token that can read the packages; GITHUB_TOKEN is the fallback
 #   GITHUB_TOKEN        the git credential written to .env (clone/push of your repositories);
 #                       defaults to the token above, which is usually the same PAT
 #   GITHUB_USER         registry login name; resolved from the token when unset
-#   IMAGE_TAG           the release to run; `--tag` wins, then the VERSION file beside this script
-#   ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY   provider keys for the llm-platform stack
+#   LITELLM_BASE_URL, LITELLM_API_KEY, LITELLM_SPEND_KEY, LANGFUSE_BASE_URL,
+#   LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY   the gateway and tracing, written to a new .env
 #
 # Portable bash 3.2 (a stock macOS): no associative arrays, no `sed -i`, no `mapfile`.
 # Nothing here stops a service it did not start, and nothing rebinds a port that is taken:
@@ -44,12 +49,11 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 env_file="${here}/.env"
 example_file="${here}/.env.example"
 compose_file="${here}/docker-compose.yml"
-# llm-platform/ sits beside this script in the bundle and in the checkout alike (deploy/ is the client install, entire)
-platform_dir="${here}/llm-platform"
-platform_env="${platform_dir}/.env"
+release_file="${here}/release.env"
+manifest_file="${here}/product-files.json"
 
 yes=0
-with_platform=""     # "" ask, 1 yes, 0 no
+no_bmad=0            # 1: install writes `removed` into setup/bmad.choice when that file is absent
 with_docker=""       # "" keep .env's VERIFY_DOCKER, 1 --with-docker, 0 --no-docker
 pull=1               # 0: the images are already on this machine (built from a checkout)
 tag_arg=""
@@ -80,8 +84,7 @@ while [[ $# -gt 0 ]]; do
 		--tag=*) tag_arg="${1#--tag=}" ;;
 		--yes|-y) yes=1 ;;
 		--no-pull) pull=0 ;;
-		--with-platform) with_platform=1 ;;
-		--no-platform) with_platform=0 ;;
+		--no-bmad) no_bmad=1 ;;
 		--with-docker) with_docker=1 ;;
 		--no-docker) with_docker=0 ;;
 		--subscription) subscription=1 ;;
@@ -105,6 +108,8 @@ while [[ $# -gt 0 ]]; do
 	shift
 done
 command="${command:-install}"
+[[ "$no_bmad" -eq 0 || "$command" == "install" ]] ||
+	die "--no-bmad is for install: ./install.sh install --no-bmad"
 [[ -z "$with_docker" || "$command" == "install" || "$command" == "start" ]] ||
 	die "--with-docker / --no-docker are for install and start: ./install.sh start --with-docker"
 [[ "$version_given" -eq 0 || "$command" == "harness" ]] ||
@@ -116,7 +121,7 @@ need_cmd() { command -v "$1" >/dev/null 2>&1 || die "$1 is not installed — $2"
 # NAME=value from a dotenv file, minus a trailing `  # comment` and surrounding quotes
 get_var() {
 	local file="$1" name="$2" line value
-	# an absent llm-platform/.env answers from its contract, so the port check can run before it exists
+	# an absent file answers from its `.example`, so a check can run before `.env` exists
 	[[ -f "$file" ]] || file="${file}.example"
 	line="$(grep "^${name}=" "$file" 2>/dev/null | head -1 || true)"
 	value="${line#*=}"
@@ -126,6 +131,9 @@ get_var() {
 	value="${value#\"}"; value="${value%\"}"
 	printf '%s' "$value"
 }
+
+# 0 when FILE has an uncommented `NAME=` line
+env_sets() { grep -q "^${2}=" "$1" 2>/dev/null; }
 
 # Rewrite `NAME=…` in place, keeping the line's trailing comment when the new value is not
 # empty. An empty value drops the comment: compose reads `NAME=  # text` as the value `# text`.
@@ -220,16 +228,9 @@ compose() {
 	else docker compose --project-directory "$here" -f "$compose_file" "$@"; fi
 }
 compose_all()  { docker compose --project-directory "$here" -f "$compose_file" --profile docker "$@"; }
-# The llm-platform stack runs as its own compose project, named after this stack's
-# COMPOSE_PROJECT_NAME (`aio` → `aio-host`), never as the host file's own `name:`: a
-# repository checkout's dev llm-platform stack is `ai-orchestrator-host`, and sharing that name would
-# make `up` here recreate a stack this script did not start (hard rule 9 — learned the hard
-# way on 2026-09-30).
-platform_project() { printf '%s-host' "$( [[ -f "$env_file" ]] && get_var "$env_file" COMPOSE_PROJECT_NAME || true )"; }
-platform_compose() {
-	local project; project="$(platform_project)"; [[ "$project" != "-host" ]] || project="aio-host"
-	docker compose --project-name "$project" --project-directory "$platform_dir" -f "${platform_dir}/docker-compose.yml" --env-file "$platform_env" "$@"
-}
+# The tag the compose file pins for backend-api; the folder's own VERSION is what `resolve_tag` reads.
+compose_tag() { sed -n 's/^ *image: *.*\/backend-api:\(.*\)$/\1/p' "$compose_file" | head -1; }
+compose_setup() { compose --profile setup "$@"; }
 
 # ── reading the API, and reading JSON without jq ─────────────────────────────
 # A client machine has curl and nothing else; every answer below is parsed with sed over a
@@ -243,6 +244,16 @@ api_get() {   # api_get PATH OUTFILE → the status code, `000` when nothing ans
 	bearer="$(get_var "$env_file" ORCHESTRATOR_TOKEN)"
 	code="$(curl -sS -m 10 -H "Authorization: Bearer ${bearer}" -o "$2" -w '%{http_code}' \
 		"$(api_base)$1" 2>/dev/null || true)"
+	printf '%s' "${code:-000}"
+}
+
+api_send() {   # api_send METHOD PATH OUTFILE [JSON] → the status code, `000` when nothing answered
+	local code bearer
+	local -a body=()
+	bearer="$(get_var "$env_file" ORCHESTRATOR_TOKEN)"
+	if [[ $# -ge 4 ]]; then body=(-H 'Content-Type: application/json' -d "$4"); fi
+	code="$(curl -sS -m 30 -X "$1" -H "Authorization: Bearer ${bearer}" ${body[@]+"${body[@]}"} \
+		-o "$3" -w '%{http_code}' "$(api_base)$2" 2>/dev/null || true)"
 	printf '%s' "${code:-000}"
 }
 
@@ -288,9 +299,7 @@ check_tools() {
 resolve_tag() {
 	local tag=""
 	if [[ -n "$tag_arg" ]]; then tag="$tag_arg"
-	elif [[ -n "${IMAGE_TAG:-}" ]]; then tag="$IMAGE_TAG"
 	elif [[ -f "${here}/VERSION" ]]; then tag="$(tr -d '[:space:]' < "${here}/VERSION")"
-	elif [[ -f "$env_file" ]]; then tag="$(get_var "$env_file" IMAGE_TAG)"
 	fi
 	[[ -n "$tag" ]] || die "no release tag: pass --tag vX.Y.Z (a release bundle carries it in VERSION)"
 	printf '%s' "$tag"
@@ -322,8 +331,32 @@ ghcr_login() {
 }
 
 # ── 3. the environment file ──────────────────────────────────────────────────
+GATEWAY_NAMES="LITELLM_BASE_URL LITELLM_API_KEY LITELLM_SPEND_KEY LANGFUSE_BASE_URL LANGFUSE_PUBLIC_KEY LANGFUSE_SECRET_KEY"
+
+# Each of the six comes from the environment, else is asked (enter leaves it blank; a key is read
+# without echo). Blank is the off switch: a base URL with a placeholder key is refused at start-up.
+gateway_values() {
+	local name value kind what
+	for name in $GATEWAY_NAMES; do
+		value="${!name:-}"
+		if [[ -z "$value" ]]; then
+			kind=""; what="tracing"
+			case "$name" in *_KEY) kind=secret ;; esac
+			case "$name" in LITELLM_*) what="the gateway" ;; esac
+			prompt value "${name} (enter leaves it blank; ${what} stays off without it): " "$kind"
+		fi
+		set_var "$env_file" "$name" "$value"
+	done
+	if [[ -n "$(get_var "$env_file" LITELLM_BASE_URL)" && -z "$(get_var "$env_file" LITELLM_API_KEY)" ]]; then
+		warn "LITELLM_BASE_URL is set but LITELLM_API_KEY is blank — backend-api refuses to start; set the key in .env or blank the URL"
+	fi
+	if [[ -n "$(get_var "$env_file" LANGFUSE_BASE_URL)" && ( -z "$(get_var "$env_file" LANGFUSE_PUBLIC_KEY)" || -z "$(get_var "$env_file" LANGFUSE_SECRET_KEY)" ) ]]; then
+		warn "LANGFUSE_BASE_URL is set but a Langfuse key is blank — backend-api refuses to start; set both keys in .env or blank the URL"
+	fi
+}
+
 render_env() {
-	local tag="$1" password fernet
+	local password fernet
 	if [[ -f "$env_file" ]]; then
 		say ".env already exists — leaving it alone"
 		return 0
@@ -335,7 +368,6 @@ render_env() {
 	# a Fernet key is 32 random bytes in URL-safe base64 — the `+/` of standard base64 become `-_`
 	fernet="$(openssl rand -base64 32 | tr '+/' '-_')"
 
-	set_var "$env_file" IMAGE_TAG "$tag"
 	set_var "$env_file" ORCHESTRATOR_TOKEN "$(openssl rand -hex 32)"
 	set_var "$env_file" ORCHESTRATOR_SESSION_SECRET "$(openssl rand -base64 32 | tr -d '\n')"
 	set_var "$env_file" ORCHESTRATOR_SECRET_KEY "$fernet"
@@ -346,59 +378,45 @@ render_env() {
 	else
 		warn "GITHUB_TOKEN left as a placeholder in .env — fill it in before registering a repository"
 	fi
-	# the gateway and tracing are off until the llm-platform stack is chosen; a non-blank base URL
-	# with a placeholder key is refused at start-up, and blank is the documented off switch
-	set_var "$env_file" LITELLM_BASE_URL ""
-	set_var "$env_file" LANGFUSE_BASE_URL ""
-	say "wrote .env (mode 600): generated ORCHESTRATOR_TOKEN, session secret, Fernet key, database password; IMAGE_TAG=${tag}"
+	gateway_values
+	say "wrote .env (mode 600): generated ORCHESTRATOR_TOKEN, session secret, Fernet key, database password; gateway $(onoff LITELLM_BASE_URL), tracing $(onoff LANGFUSE_BASE_URL)"
 }
 
-# ── 4. the optional llm-platform stack ───────────────────────────────────────────────
-want_platform() {
-	if [[ -n "$with_platform" ]]; then [[ "$with_platform" -eq 1 ]]; return; fi
-	if [[ -f "$platform_env" ]]; then return 0; fi          # already set up on this machine
-	[[ "$yes" -eq 0 ]] || return 1
-	say
-	say "Optional: the llm-platform stack — LiteLLM (model gateway, spend tracking) and Langfuse (traces),"
-	say "seven more containers on ports 3000, 4000, 5433, 9000 and 9091. Without it each coding"
-	say "agent authenticates on its own and cost figures are provisional. It can be added later"
-	say "with: ./install.sh start --with-platform"
-	confirm "Install the llm-platform stack now?"
+onoff() { if [[ -n "$(get_var "$env_file" "$1")" ]]; then printf on; else printf off; fi; }
+
+# ── 3b. the files the product writes once ────────────────────────────────────
+seed_write() {   # seed_write PATH — only when absent; a present file is never opened for writing
+	local rel="$1" target="${here}/$1"
+	[[ ! -e "$target" ]] || return 0
+	case "$rel" in
+		compose.override.yml)
+			cat > "$target" <<'SEED_EOF'
+# This file is yours. The product writes it only when it is absent and never replaces it;
+# compose changes of your own go here.
+services: {}
+SEED_EOF
+			;;
+		setup/bmad.choice)
+			mkdir -p "${here}/setup"
+			if [[ "$no_bmad" -eq 1 ]]; then printf 'removed\n' > "$target"; else printf 'installed\n' > "$target"; fi
+			;;
+		*) warn "product-files.json names the seed ${rel}, which this installer does not know how to write — skipped"; return 0 ;;
+	esac
+	say "wrote ${rel}"
 }
 
-platform_up() {
-	[[ -f "${platform_dir}/docker-compose.yml" ]] || die "llm-platform/ is missing beside this script — the bundle is incomplete"
-	step "llm-platform stack (LiteLLM + Langfuse)"
-	# a port check whenever *this* host project is not already running — whatever is listening
-	# on 3000 or 4000 then belongs to something else, and this script never takes it over
-	if [[ ! -f "$platform_env" ]] || ! platform_compose ps --status running --services 2>/dev/null | grep -q .; then
-		ensure_ports_free "$(get_var "$platform_env" LANGFUSE_PORT || true) LANGFUSE_PORT llm-platform/.env" \
-			"$(get_var "$platform_env" LITELLM_PORT || true) LITELLM_PORT llm-platform/.env" \
-			"$(get_var "$platform_env" HOST_POSTGRES_PORT || true) HOST_POSTGRES_PORT llm-platform/.env" \
-			"$(get_var "$platform_env" MINIO_API_PORT || true) MINIO_API_PORT llm-platform/.env" \
-			"$(get_var "$platform_env" MINIO_CONSOLE_PORT || true) MINIO_CONSOLE_PORT llm-platform/.env"
+write_seeds() {
+	local row
+	if [[ -f "$manifest_file" ]]; then
+		while IFS= read -r row; do
+			[[ -n "$row" ]] || continue
+			[[ "$(item_string "$row" role)" == "seed" ]] || continue
+			seed_write "$(item_string "$row" path)"
+		done <<EOF
+$(json_items "$manifest_file" path)
+EOF
 	fi
-	if [[ ! -f "$platform_env" ]]; then
-		"${platform_dir}/generate-env.sh"
-		local name value
-		for name in ANTHROPIC_API_KEY OPENAI_API_KEY OPENROUTER_API_KEY; do
-			eval "value=\${${name}:-}"
-			if [[ -z "$value" && "$yes" -eq 0 ]]; then
-				prompt value "${name} for the gateway (enter to skip): " secret
-			fi
-			if [[ -n "$value" ]]; then set_var "$platform_env" "$name" "$value"; say "llm-platform/.env: ${name} set"; fi
-		done
-		if [[ "$(get_var "$platform_env" ANTHROPIC_API_KEY)" == "not-set" && "$(get_var "$platform_env" OPENAI_API_KEY)" == "not-set" ]]; then
-			warn "no provider key in llm-platform/.env — the gateway starts, but every model call answers 401 until one is set"
-		fi
-	fi
-	say "starting the llm-platform stack (the first start runs migrations; a few minutes)…"
-	platform_compose up -d --wait --wait-timeout 900
-	if [[ -z "$(get_var "$env_file" LITELLM_BASE_URL)" ]]; then
-		"${platform_dir}/sync-env.sh" "$env_file"
-	else
-		say ".env already points at a gateway — not re-minting the harness key"
-	fi
+	if [[ "$no_bmad" -eq 1 ]]; then seed_write setup/bmad.choice; fi
 }
 
 # ── 4b. Docker for Runs (the optional `docker` service) ──────────────────────
@@ -446,7 +464,7 @@ docker_reconcile() {
 
 # ── 5. the stack ─────────────────────────────────────────────────────────────
 stack_up() {
-	step "ai-orchestrator ($(get_var "$env_file" IMAGE_TAG))"
+	step "ai-orchestrator ($(compose_tag))"
 	if ! compose ps --status running --services 2>/dev/null | grep -q .; then
 		ensure_ports_free "$(get_var "$env_file" WEB_CLIENT_PORT) WEB_CLIENT_PORT .env" \
 			"$(get_var "$env_file" BACKEND_API_PORT) BACKEND_API_PORT .env"
@@ -454,6 +472,105 @@ stack_up() {
 	if [[ "$pull" -eq 1 ]]; then compose pull; else say "--no-pull: using the images already on this machine"; fi
 	compose up -d --wait --wait-timeout 1800
 	docker_reconcile
+}
+
+# ── 5b. setup, under the instance hold ───────────────────────────────────────
+# The text after a row's `"setup"` key: `null`, or the object whose own `ok` is the one to read —
+# the row's `lines[]` carry `ok` fields of their own.
+setup_part() { printf '%s' "$1" | sed -n 's/.*"setup" *: *//p'; }
+
+# Every failed script of a setup object, one `script (reason)` per line
+setup_failures() {
+	local part row
+	part="$(printf '%s' "$1" | awk '{ gsub("\\{ *\"script\" *: *\"", "\n&"); print }' | grep '^{ *"script"' || true)"
+	while IFS= read -r row; do
+		[[ -n "$row" ]] || continue
+		printf '%s (%s)\n' "$(item_string "$row" script)" "$(item_string "$row" reason)"
+	done <<EOF
+$part
+EOF
+}
+
+# One line per harness from the last setup record, one `failed:` line per failed script.
+# 0 when every harness has an ok record; $1 is the setup run's exit code, when there was one.
+print_setup_record() {
+	local rc="${1:-0}" body code row name setup bad=0 any="" named=0 failure
+	body="${scratch}/harnesses.json"
+	code="$(api_get /api/v1/harnesses "$body")"
+	if [[ "$code" != "200" ]]; then
+		say "setup record not read: /api/v1/harnesses answered ${code} — ./install.sh logs"
+		return 1
+	fi
+	while IFS= read -r row; do
+		[[ -n "$row" ]] || continue
+		any=1
+		name="$(item_string "$row" name)"
+		setup="$(setup_part "$row")"
+		case "$setup" in
+			null*|"") say "setup ${name}: no record"; bad=1 ;;
+			*)
+				if [[ "$(item_word "$setup" ok)" == "true" ]]; then
+					say "setup ${name}: ok · trigger $(item_string "$setup" trigger) · $(item_string "$setup" at) · $(item_word "$setup" skills) skills"
+				else
+					bad=1
+					say "setup ${name}: not ok · trigger $(item_string "$setup" trigger) · $(item_string "$setup" at)"
+				fi
+				while IFS= read -r failure; do
+					[[ -n "$failure" ]] || continue
+					named=1
+					say "  failed: ${failure}"
+				done <<EOF
+$(setup_failures "$setup")
+EOF
+				;;
+		esac
+	done <<EOF
+$(json_items "$body" name)
+EOF
+	[[ -n "$any" ]] || { say "setup record: /api/v1/harnesses returned no rows — ./install.sh logs"; bad=1; }
+	if [[ "$rc" -ne 0 && "$named" -eq 0 ]]; then say "setup exited ${rc}; logs in logs/setup/"; fi
+	[[ "$bad" -eq 0 ]]
+}
+
+# The instance is held so no Run starts while the harness trees change, and released whatever
+# the run did; an unreleased hold only expires at its ttl. 0 when the run and the record are ok.
+run_setup() {   # run_setup TRIGGER
+	local trigger="$1" release pin code rc=0 rec=0 step
+	local -a pins=()
+	release="$(resolve_tag)"
+	pin="$(env_pin BMAD_VERSION)"
+	[[ -n "$pin" || ! -f "$release_file" ]] || pin="$(get_var "$release_file" BMAD_VERSION)"
+	# the service's `environment: - BMAD_VERSION` is filled from the shell only
+	if [[ -n "$pin" ]]; then pins=(-e "BMAD_VERSION=${pin}"); fi
+	# a bind source the daemon creates is root-owned, and a volume subpath must exist before it is mounted
+	mkdir -p "${here}/logs/setup"
+	compose exec -T backend-api sh -c 'mkdir -p "${AGENT_HOME:-/home/agent}/.orchestrator"' ||
+		warn "could not create the agent home's .orchestrator directory in backend-api"
+	code="$(api_send POST /api/v1/instance/hold "${scratch}/hold.json" \
+		'{"ttl_seconds": 900, "reason": "install setup"}')"
+	case "$code" in
+		2??) ;;
+		*)
+			say "setup not run: the hold answered ${code}"
+			if [[ "$code" == "409" ]]; then
+				while IFS= read -r step; do
+					[[ -n "$step" ]] || continue
+					say "  a Run is working: $(item_string "$step" run_label) · $(item_string "$step" path)"
+				done <<EOF
+$(json_items "${scratch}/hold.json" run_id)
+EOF
+			fi
+			return 1 ;;
+	esac
+	compose_setup run --rm -e "ORCH_SETUP_TRIGGER=${trigger}" -e "ORCH_RELEASE=${release}" \
+		${pins[@]+"${pins[@]}"} setup || rc=$?
+	code="$(api_send DELETE /api/v1/instance/hold "${scratch}/release.json")"
+	case "$code" in
+		2??) ;;
+		*) warn "the hold release answered ${code} — the hold expires on its own in 15 minutes" ;;
+	esac
+	print_setup_record "$rc" || rec=1
+	[[ "$rc" -eq 0 && "$rec" -eq 0 ]]
 }
 
 # ── 6. proof, and where to go ────────────────────────────────────────────────
@@ -475,10 +592,8 @@ print_access() {
 	say "  API        ${api}   (Authorization: Bearer <token>)"
 	say "  Login      $(get_var "$env_file" ORCHESTRATOR_TOKEN)"
 	say "             (ORCHESTRATOR_TOKEN in ${env_file})"
-	if [[ -f "$platform_env" ]]; then
-		say "  Langfuse   http://127.0.0.1:$(get_var "$platform_env" LANGFUSE_PORT)   $(get_var "$platform_env" LANGFUSE_INIT_USER_EMAIL) / $(get_var "$platform_env" LANGFUSE_INIT_USER_PASSWORD)"
-		say "  LiteLLM    http://127.0.0.1:$(get_var "$platform_env" LITELLM_PORT)"
-	fi
+	say "  Gateway    $(get_var "$env_file" LITELLM_BASE_URL | sed 's/^$/off/')"
+	say "  Tracing    $(get_var "$env_file" LANGFUSE_BASE_URL | sed 's/^$/off/')"
 	say "──────────────────────────────────────────────────────────────"
 	say "  ./install.sh status | logs | stop | start | upgrade --tag vX.Y.Z"
 	say "  Next: log in, create a Project, register a Repository (README.md)."
@@ -505,6 +620,7 @@ file_mode() {   # GNU `stat -c` first; BSD rejects it and answers `-f %Lp` inste
 }
 
 doctor_docker() {
+	local engine major
 	if ! command -v docker >/dev/null 2>&1; then
 		report fail docker "not installed — https://docs.docker.com/get-docker/"
 		return 1
@@ -517,7 +633,14 @@ doctor_docker() {
 		report fail docker "the daemon is not answering — start Docker, then ./install.sh doctor"
 		return 1
 	fi
-	report ok docker "$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo '?'), compose $(docker compose version --short)"
+	engine="$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+	report ok docker "${engine:-?}, compose $(docker compose version --short)"
+	major="${engine%%.*}"
+	if [[ "$major" =~ ^[0-9]+$ && "$major" -lt 26 ]]; then
+		report fail "docker engine" "${engine} — the setup service's volume subpaths need Docker Engine 26 or later — upgrade Docker"
+	else
+		report ok "docker engine" "${engine:-unknown} (26 or later is needed for volume subpaths)"
+	fi
 }
 
 doctor_env() {
@@ -532,7 +655,7 @@ doctor_env() {
 	else
 		report warn env ".env is mode ${mode}; it holds every secret of this stack — chmod 600 ${env_file}"
 	fi
-	for name in IMAGE_TAG ORCHESTRATOR_TOKEN ORCHESTRATOR_SESSION_SECRET \
+	for name in ORCHESTRATOR_TOKEN ORCHESTRATOR_SESSION_SECRET \
 		ORCHESTRATOR_SECRET_KEY POSTGRES_PASSWORD DATABASE_URL GITHUB_TOKEN; do
 		if is_placeholder "$(get_var "$env_file" "$name")"; then missing="${missing}${name} "; fi
 	done
@@ -545,9 +668,9 @@ doctor_env() {
 
 doctor_images() {
 	local tag image missing="" config
-	tag="$(get_var "$env_file" IMAGE_TAG)"
+	tag="$(compose_tag)"
 	if is_placeholder "$tag"; then
-		report fail image "IMAGE_TAG is not set — put the release tag you mean to run in ${env_file}"
+		report fail image "no backend-api image tag in ${compose_file##*/} — the folder is incomplete; re-extract it"
 	else
 		for image in backend-api web-client; do
 			if ! docker image inspect "ghcr.io/rebecamurillo/ai-orchestrator/${image}:${tag}" \
@@ -604,7 +727,7 @@ doctor_api() {
 }
 
 doctor_version() {
-	local body code app tag shipped
+	local body code app shipped
 	body="${scratch}/version.json"
 	code="$(api_get /api/v1/version "$body")"
 	if [[ "$code" != "200" ]]; then
@@ -612,13 +735,9 @@ doctor_version() {
 		return 0
 	fi
 	app="$(json_string "$body" app_version)"
-	tag="$(get_var "$env_file" IMAGE_TAG)"
 	shipped="absent"
 	if [[ -f "${here}/VERSION" ]]; then shipped="$(tr -d '[:space:]' < "${here}/VERSION")"; fi
-	report ok version "running ${app:-unnamed}; IMAGE_TAG ${tag}; VERSION ${shipped}"
-	if [[ -n "$app" && "$app" != "$tag" ]]; then
-		report warn version "the instance runs ${app} but IMAGE_TAG says ${tag} — ./install.sh upgrade --tag ${tag}"
-	fi
+	report ok version "running ${app:-unnamed}; VERSION ${shipped}"
 	if [[ "$shipped" != "absent" && -n "$app" && "$shipped" != "$app" ]]; then
 		report warn version "these files are ${shipped} and the instance is ${app} — ./install.sh upgrade --tag ${shipped}, or re-extract the bundle for ${app}"
 	fi
@@ -650,24 +769,81 @@ EOF
 	[[ -n "$any" ]] || report warn harness "/api/v1/harnesses returned no rows — ./install.sh logs"
 }
 
-doctor_platform() {
-	local running gateway
-	if [[ ! -f "$platform_env" ]]; then
-		report ok platform "not configured — each agent authenticates on its own, cost figures are provisional, and the local harness is unavailable; ./install.sh start --with-platform adds it"
+doctor_image_tag() {
+	if env_sets "$env_file" IMAGE_TAG; then
+		report warn IMAGE_TAG ".env still sets IMAGE_TAG, which nothing reads now — delete the line from ${env_file}"
+	fi
+}
+
+doctor_pins() {
+	local line name n=0
+	if [[ ! -f "$release_file" ]]; then
+		report warn "release pins" "release.env missing beside this script — re-extract the folder"
 		return 0
 	fi
-	running="$(platform_compose ps --status running --services 2>/dev/null || true)"
-	if [[ -n "$running" ]]; then
-		report ok platform "configured and running: $(printf '%s' "$running" | tr '\n' ' ')"
-	else
-		report warn platform "configured but not running — ./install.sh start --with-platform"
+	while IFS= read -r line; do
+		case "$line" in ""|"#"*) continue ;; esac
+		name="${line%%=*}"
+		env_sets "$env_file" "$name" || continue
+		n=1
+		report warn "release pins" "${name}: .env sets $(env_pin "$name") but release.env pins $(get_var "$release_file" "$name") — delete the line from .env to follow the release"
+	done < "$release_file"
+	[[ "$n" -eq 1 ]] || report ok "release pins" "no pin of release.env is overridden in .env"
+}
+
+doctor_bmad() {
+	local choice="installed" pin installed body code
+	body="${scratch}/bmad-version.json"
+	if [[ -f "${here}/setup/bmad.choice" ]]; then choice="$(tr -d '[:space:]' < "${here}/setup/bmad.choice")"; fi
+	if [[ "$choice" == "removed" ]]; then
+		report ok bmad "removed by choice"
+		return 0
 	fi
-	gateway="$(get_var "$env_file" LITELLM_BASE_URL)"
-	if [[ -n "$gateway" ]]; then
-		report ok gateway ".env points at ${gateway}"
-	else
-		report warn gateway "llm-platform/ is installed but LITELLM_BASE_URL is blank, which is the gateway's off switch — llm-platform/sync-env.sh ${env_file} fills it in"
+	if [[ ! -f "$release_file" ]]; then
+		report warn bmad "release.env missing beside this script — the installed version cannot be compared"
+		return 0
 	fi
+	pin="$(get_var "$release_file" BMAD_VERSION)"
+	code="$(api_get /api/v1/version "$body")"
+	if [[ "$code" != "200" ]]; then
+		report warn bmad "/api/v1/version answered ${code} — ./install.sh logs"
+		return 0
+	fi
+	installed="$(json_string "$body" bmad_installed)"
+	if [[ "$installed" == "$pin" ]]; then
+		report ok bmad "installed ${installed}"
+	else
+		report fail bmad "installed ${installed:-none} but release.env pins ${pin} — ./install.sh install re-runs setup"
+	fi
+}
+
+doctor_setup() {
+	local body code row name setup failures any=""
+	body="${scratch}/setup-harnesses.json"
+	code="$(api_get /api/v1/harnesses "$body")"
+	if [[ "$code" != "200" ]]; then
+		report warn setup "/api/v1/harnesses answered ${code} — ./install.sh logs"
+		return 0
+	fi
+	while IFS= read -r row; do
+		[[ -n "$row" ]] || continue
+		any=1
+		name="$(item_string "$row" name)"
+		setup="$(setup_part "$row")"
+		case "$setup" in
+			null*|"") report fail setup "${name}: no setup record — ./install.sh install runs it" ;;
+			*)
+				if [[ "$(item_word "$setup" ok)" == "true" ]]; then
+					report ok setup "${name}: $(item_string "$setup" trigger) at $(item_string "$setup" at)"
+				else
+					failures="$(setup_failures "$setup" | tr '\n' ' ')"
+					report fail setup "${name}: failed ${failures:-with no script named }— ./install.sh install runs it again; logs/setup/ holds the output"
+				fi ;;
+		esac
+	done <<EOF
+$(json_items "$body" name)
+EOF
+	[[ -n "$any" ]] || report warn setup "/api/v1/harnesses returned no rows — ./install.sh logs"
 }
 
 doctor_verify_docker() {
@@ -796,9 +972,9 @@ redaction_script() {
 
 # ── commands ─────────────────────────────────────────────────────────────────
 cmd_env() {
-	local tag; tag="$(resolve_tag)"
+	resolve_tag >/dev/null
 	token="${GHCR_TOKEN:-${GITHUB_TOKEN:-}}"
-	render_env "$tag"
+	render_env
 }
 
 cmd_install() {
@@ -815,22 +991,24 @@ cmd_install() {
 	fi
 
 	step "environment"
-	render_env "$tag"
+	render_env
 	docker_choice
-
-	if want_platform; then platform_up; fi
+	write_seeds
 
 	stack_up
 	step "verifying"
 	verify
+
+	step "setup"
+	[[ -n "$scratch" ]] || scratch="$(mktemp -d)"
+	run_setup install ||
+		warn "setup did not finish cleanly — the instance is up; read the lines above, then re-run ./install.sh install"
 	print_access
 }
 
 cmd_start() {
 	check_tools
 	[[ -f "$env_file" ]] || die ".env is missing — run ./install.sh first"
-	# --no-platform always wins; otherwise an installed llm-platform stack (llm-platform/.env exists) comes up too
-	if [[ "$with_platform" != "0" && ( -f "$platform_env" || "$with_platform" == "1" ) ]]; then platform_up; fi
 	docker_choice
 	stack_up
 	verify
@@ -841,14 +1019,12 @@ cmd_stop() {
 	[[ -f "$env_file" ]] || die ".env is missing — nothing was installed here"
 	step "stopping ai-orchestrator (data kept)"
 	compose stop
-	if [[ -f "$platform_env" ]] && confirm "Also stop the llm-platform stack (LiteLLM + Langfuse)?"; then platform_compose stop; fi
 }
 
 cmd_status() {
 	[[ -f "$env_file" ]] || die ".env is missing — nothing was installed here"
-	say "ai-orchestrator ($(get_var "$env_file" IMAGE_TAG)):"
+	say "ai-orchestrator ($(compose_tag)):"
 	compose ps
-	if [[ -f "$platform_env" ]]; then say; say "llm-platform stack:"; platform_compose ps; fi
 }
 
 cmd_logs() {
@@ -861,10 +1037,12 @@ cmd_upgrade() {
 	check_tools
 	[[ -f "$env_file" ]] || die ".env is missing — run ./install.sh first"
 	[[ -n "$tag_arg" ]] || die "upgrade needs --tag vX.Y.Z"
-	old="$(get_var "$env_file" IMAGE_TAG)"; new="$tag_arg"
+	old=""
+	if [[ -f "${here}/VERSION" ]]; then old="$(tr -d '[:space:]' < "${here}/VERSION")"; fi
+	new="$tag_arg"
 	step "upgrade ${old} → ${new}"
-	# What the instance answers is the version actually running; IMAGE_TAG is only what it was
-	# last told to run, and the two disagree whenever a retag never reached a restart.
+	# What the instance answers is the version actually running; VERSION is only what this folder
+	# holds, and the two disagree whenever a refresh never reached a restart.
 	running="$old"
 	scratch="$(mktemp -d)"
 	code="$(api_get /api/v1/version "${scratch}/version.json")"
@@ -872,7 +1050,7 @@ cmd_upgrade() {
 		running="$(json_string "${scratch}/version.json" app_version)"
 		say "running ${running} → target ${new}"
 	else
-		say "running ${running} (from IMAGE_TAG; /api/v1/version answered ${code}) → target ${new}"
+		say "running ${running} (from VERSION; /api/v1/version answered ${code}) → target ${new}"
 	fi
 	[[ "$new" != "$running" ]] ||
 		die "${new} is already what is running — nothing to upgrade; pass the newer tag"
@@ -894,7 +1072,6 @@ cmd_upgrade() {
 	else
 		warn "postgres is not running — no backup taken"
 	fi
-	set_var "$env_file" IMAGE_TAG "$new"
 	write_release_pins
 	stack_up
 	verify
@@ -994,11 +1171,15 @@ cmd_doctor() {
 		doctor_ports
 	fi
 	if [[ "$env_ok" -eq 1 ]]; then
+		doctor_image_tag
+		doctor_pins
 		if doctor_api; then
 			doctor_version
 			doctor_harnesses
+			doctor_setup
+			doctor_bmad
 		fi
-		if [[ "$docker_ok" -eq 1 ]]; then doctor_platform; doctor_verify_docker; fi
+		if [[ "$docker_ok" -eq 1 ]]; then doctor_verify_docker; fi
 		doctor_gc
 	fi
 	if [[ "$docker_ok" -eq 1 ]]; then doctor_disk; fi
@@ -1021,7 +1202,7 @@ cmd_diagnose() {
 	{
 		printf '# ai-orchestrator diagnostics %s\n\n' "$stamp"
 		printf '## Versions\n\n```\n'
-		printf 'IMAGE_TAG  %s\n' "$(get_var "$env_file" IMAGE_TAG)"
+		printf 'compose    %s\n' "$(compose_tag)"
 		printf 'VERSION    %s\n' \
 			"$( [[ -f "${here}/VERSION" ]] && tr -d '[:space:]' < "${here}/VERSION" || printf absent )"
 		if [[ "$code" == "200" ]]; then
@@ -1145,7 +1326,7 @@ cmd_harness() {
 		return
 	fi
 	[[ "$harness_arg" == "claude" ]] ||
-		die "only claude has a subscription login; ${harness_arg} authenticates with an API key alone — set it in llm-platform/.env and restart the gateway"
+		die "only claude has a subscription login; ${harness_arg} authenticates with an API key alone — set it in your gateway's environment and restart the gateway"
 	[[ -n "$subscription" ]] || die "harness claude needs --subscription, --api-key or --version X"
 	scratch="$(mktemp -d)"
 
@@ -1157,7 +1338,7 @@ cmd_harness() {
 		say "virtual key into the x-litellm-api-key header instead."
 		say
 		say "One edit stays yours, because this script does not rewrite YAML. In"
-		say "${platform_dir}/litellm.config.yaml uncomment both:"
+		say "your gateway's litellm.config.yaml uncomment both:"
 		say
 		say "  general_settings:"
 		say "    forward_client_headers_to_llm_api: true   # EVERY route on this proxy, not"
@@ -1165,7 +1346,7 @@ cmd_harness() {
 		say "  model_list:"
 		say "    - model_name: claude-subscription        # the entry and its litellm_params"
 		say
-		say "Then restart the gateway (./install.sh start --with-platform) and bind the Run to"
+		say "Then restart your gateway and bind the Run to"
 		say "the model name claude-subscription: Claude Code's own default model is not in"
 		say "model_list, and a Run on it answers 400."
 	else
@@ -1174,8 +1355,8 @@ cmd_harness() {
 		say "CLAUDE_SUBSCRIPTION_AUTH is false in .env now: the virtual key reaches the harness"
 		say "as ANTHROPIC_AUTH_TOKEN again."
 		say "Comment forward_client_headers_to_llm_api back out in"
-		say "${platform_dir}/litellm.config.yaml, make sure ANTHROPIC_API_KEY is set in"
-		say "${platform_env}, and restart the gateway."
+		say "your gateway's litellm.config.yaml, make sure ANTHROPIC_API_KEY is set in"
+		say "your gateway's environment, and restart the gateway."
 	fi
 
 	if compose ps --status running --services 2>/dev/null | grep -q '^backend-api$'; then
@@ -1206,7 +1387,7 @@ cmd_harness() {
 	say
 	say "What is proven, and what is not: the container half is unit-tested; the gateway half"
 	say "above is written from LiteLLM's own guide and has never been run against a live"
-	say "subscription (deploy/llm-platform/README.md). A subscription is not metered per"
+	say "subscription (deploy/llm-platform/README.md of github.com/rebecamurillo/ai-orchestrator). A subscription is not metered per"
 	say "request, so the dollar figures a Run shows come from LiteLLM's price table rather"
 	say "than from anything you are billed — the budget still stops the Run."
 }
@@ -1223,10 +1404,7 @@ cmd_uninstall() {
 		[[ "$answer" == "delete" ]] || die "uninstall cancelled"
 	fi
 	compose_all down -v --remove-orphans
-	if [[ -f "$platform_env" ]] && confirm "Also remove the llm-platform stack and its data (traces, spend logs)?"; then
-		platform_compose down -v --remove-orphans
-	fi
-	say "removed. ${env_file} and ${platform_env} were kept."
+	say "removed. ${env_file} was kept."
 }
 
 case "$command" in
