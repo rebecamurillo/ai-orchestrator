@@ -1,8 +1,8 @@
-# Test Automation Summary — orchestrator-client-kit / epic-01-template-folder
+# Test Automation Summary — orchestrator-deploy-folder / epic-1-hold-catalog
 
-Generated: 2026-11-06 (dispatch, story id `.` — the whole epic)
-Spec: `initiatives/orchestrator-client-kit/epic-01-template-folder/SPEC.md` (hub-relative)
-Stories: 1–8 (committed `99fe66c`..`3f42e1c`)
+Generated: 2026-11-11 (dispatch, story id `.`, covering the whole epic)
+Spec: `initiatives/orchestrator-deploy-folder/epic-1-hold-catalog/SPEC.md` (hub-relative)
+Stories: 1–4 (committed `1615aca`..`b298b27`)
 
 ---
 
@@ -10,42 +10,45 @@ Stories: 1–8 (committed `99fe66c`..`3f42e1c`)
 
 ### Backend API E2E Tests
 
-- [x] `backend-api/tests/e2e/test_template_folder_epic.py`. 10 httpx scenarios over the suite's own templates. Every name is unique per run, and nothing reads `templates/*.yaml` (hard rule 6):
-  - CAP-5: `POST /templates/reload` without the bearer gets 401 problem+json. With the bearer it gets either the D3 report (`folder`, `stored`, `unchanged`, `refused`, `not_in_folder`, and a second reload stores nothing) or a 409 problem whose detail is `template folder not configured` / `template folder not found: …`. The test never skips.
-  - CAP-4/5: a saved name that has no file keeps exactly its saved versions after a reload, so nothing is deleted or added.
-  - CAP-3: an input `description` comes back through the real repository, an absent one comes back as `null`, and a non-string one gets `invalid value`.
-  - CAP-6: a fresh name has `in_folder: false` on save, on a version read and in the list.
-  - CAP-2: a depth-2 file with `bind:` saves, validates clean and graphs `epics.stories.build` with nested groups, where the outer group lists the inner node. The rejections `nested for_each`, `second for_each` and `loop name already bound` (bind name = input) each have a test.
+- [x] `backend-api/tests/e2e/test_instance.py` is a new file with 14 httpx scenarios. Every Run it starts uses its own template name and its own Repository. Every hold it places is released in a `finally` fixture and has a 120 s TTL as backstop. It reads no `templates/*.yaml` (hard rule 6).
+  - Auth: `GET /instance/activity`, `POST /instance/hold` and `DELETE /instance/hold` all return 401 without the bearer.
+  - CAP-3: the activity read has exactly `working`, `in_engine`, `hold` and `dbos_application_version`, and the version equals the exported `DBOS_APPLICATION_VERSION`.
+  - CAP-3: a real running `shell` step (`sleep 30`) is listed under `working` with kind, path, label and `started_at`, and its Run is listed under `in_engine` as `running`. Once the Run is cancelled it is absent from both lists.
+  - CAP-4: `ttl_seconds` 0 and 3601 return 422 problem+json and nothing is held. A `reason` of 201 characters returns 422. `DELETE` returns 204 twice in a row with nothing held.
+  - CAP-4: a hold is placed (201, `expires_at = held_at + ttl` within 2 s), read back through the activity read, and replaced by a second POST (the expiry moves and the reason changes). After `DELETE` the hold is `null`.
+  - CAP-4: with a step working, `POST /instance/hold` returns 409 problem+json whose `errors[]` names the step (`run_id`, `run_label`, `path`, `kind`, `started_at`), and the activity read shows no hold.
+  - CAP-4 / D-4: a Run started under a hold keeps its step `queued` past several 5 s walker polls. The Run stays `running`, is not listed as working, and `GET /queue` gives it the reason `held for upgrade`. After `DELETE` the Run reaches `done`.
+  - CAP-2: every `GET /harnesses` item carries `setup: null` and `GET /version` carries `bmad_installed: null`, because no setup record exists in a fresh stack. `bmad_version` still equals the pinned setting.
 
-### Playwright (UI) E2E Tests
+### UI E2E Tests
 
-- None added. CAP-6's notice is the only UI change. `web-client/tests/unit/template-folder-notice.test.ts` already covers it rendering and not rendering. The e2e stack runs with the folder off, so a Playwright spec could only show the notice absent.
+- None. The SPEC's non-goals exclude any web-client screen in this epic; only the regenerated types changed.
 
----
+## Coverage (new endpoints and fields, e2e)
 
-## Coverage
+- `GET /api/v1/instance/activity`: covered (auth, shape, working, in_engine, terminal Run absent).
+- `POST /api/v1/instance/hold`: covered (auth, 201, replace, 409, 422 ×3).
+- `DELETE /api/v1/instance/hold`: covered (auth, 204 with and without a hold).
+- `GET /api/v1/queue` `held for upgrade`: covered.
+- `GET /api/v1/harnesses` `setup`, `GET /api/v1/version` `bmad_installed`: covered for the no-record case only. A record cannot be planted through the API, and the backend never writes it. The unit suite covers the failed-script, corrupt and installed cases.
+- CAP-1 (the per-harness catalog in pre-flight) has no e2e scenario: a manifest cannot be varied per harness through the API. It stays covered by the unit suite.
+- 5/5 new routes or fields reached; 3/4 capabilities exercised end to end.
 
-| Story | CAP | Backend unit | Backend e2e | Frontend unit | Frontend e2e |
-|-------|-----|--------------|-------------|---------------|--------------|
-| 1 — Row number is the version | CAP-1 | ✅ existing | n/a (only folder files can disagree; the save API refuses a mismatched `version:`) | n/a | n/a |
-| 2 — Loops within loops, bind | CAP-2 | ✅ existing | ✅ new (4) | n/a | n/a |
-| 3 — Input description | CAP-3 | ✅ existing | ✅ new (2) | n/a | n/a |
-| 4 — Folder loaded at start-up | CAP-4 | ✅ existing | ✅ new (1, nothing deleted) | n/a | n/a |
-| 5 — Reload without restart | CAP-5 | ✅ existing | ✅ new (2) | n/a | n/a |
-| 6 — Folder notice | CAP-6 | ✅ existing | ✅ new (1) | ✅ existing | n/a (folder off in e2e) |
-| 7 — Five shipped templates | CAP-7 | ✅ existing | n/a (no e2e may pin shipped content) | n/a | n/a |
-| 8 — Documentation | CAP-8 | ✅ existing | n/a | n/a | n/a |
+## Run Results
 
-API endpoints touched by the epic that this file covers: 4/4 (`POST /templates/reload`, plus `in_folder` and `description` on `GET /templates`, `GET /templates/{name}/{version}` and `POST /templates/{name}/versions`).
+The gate was `make e2e`, against the disposable `aio-e2e` stack, which was torn down after each run.
 
----
+- `make lint`: exit 0 with the new file.
+- **11 of the 14 new scenarios pass**: the three 401s, the activity shape, both TTL 422s, the reason 422, DELETE, place/replace/release, harness `setup`, and version `bmad_installed`.
+- **3 have not been run to a result here**: the shell-step activity, the 409, and the hold-then-release Run. Their `repository_id` fixture fails at clone-check with `fatal: '/work/e2e-fixtures/…' does not appear to be a git repository`. In this sandbox the pytest process writes fixture repositories to the host's `/work`, and the backend runs in a docker-in-docker daemon that cannot see that path. The existing `test_answer_signal.py`, `test_run_creation.py` and every other Repository-backed module fail the same way here. They need a run on a host or CI runner where the stack shares `/work` with the test process.
 
-## Verification
+## Defects found (not fixed, reported to the Operator)
 
-- **Not run against a stack.** The epic SPEC forbids `make e2e*` and `docker compose` (Constraints: production is untouched). So `make e2e-api` was not run.
-- **In-process run instead.** A throwaway runner outside the repo (`/tmp/e2echeck/run_check.py`) ran all 10 test functions through `fastapi.testclient.TestClient` on `create_app`, with `template_ports` overridden onto the shared unit fakes. It ran them twice, once with the folder off and once with an empty ready folder. Result: **20/20 PASS**. This checks the routes, schemas, validator rules and graph shape. It does not check the real Postgres repository.
-- `ruff check`, `ruff format --check` and `pytest --collect-only` (10 collected) pass on the new file. `make lint` passes.
+1. **`tests/e2e/test_harnesses.py::test_the_response_is_the_one_list_envelope` fails after story 2.** Its closed key set has 8 names and the response now also carries `setup`. `api/schemas/harnesses.py`'s own docstring says story 2 took both equalities to nine, but only the unit one changed. The e2e file is not in story 2's list of tests it may change, so under hard rule 1 this needs the Operator's ruling before the assertion gains `"setup"`. The test was left untouched.
+2. **`.dockerignore` lists `.venv`, which matches only a root-level `.venv`.** When `backend-api/.venv` exists on the build host (it does after `make test` or `make lint`), `COPY backend-api/ ./` copies it into the image. The resulting image's backend exits 127 at start-up with `.venv/bin/alembic: cannot execute: required file not found`, because the shebang points to the host path. `**/.venv` (or `backend-api/.venv`) would fix it. That is an image change, which is outside this epic. For this run the host venv was moved aside during the build and then restored.
 
 ## Next Steps
 
-- Run `make e2e` (the disposable `aio-e2e` stack) once the Operator allows it, to run this file against real Postgres.
+- Run `make e2e` on CI or a host that shares `/work` with the stack, to settle the 3 Repository-backed scenarios.
+- Operator ruling on defect 1, then a one-name revision of the e2e envelope test.
+- Fix `.dockerignore` (defect 2) in the epic that owns the image.
