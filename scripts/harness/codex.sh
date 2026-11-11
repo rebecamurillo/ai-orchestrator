@@ -14,10 +14,11 @@ export CODEX_HOME="${CODEX_HOME:-${AGENT_HOME}/.codex}"
 # `skills` cannot drift; `skills-manifest.json` is written one level above it.
 SKILLS_DIR="${AGENT_HOME}/.agents/skills"
 
+ASSET_DIRS=(.agents/skills .codex/prompts)
+
 install() {
   require_plain_pin CODEX_VERSION "${CODEX_VERSION}"
   npm_install_cli "${HARNESS_IMAGE_PREFIX}" "${CODEX_PACKAGE}" "${CODEX_VERSION}"
-  bmad_install_global_skills codex "${SKILLS_DIR}"
   install_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
 }
 
@@ -34,6 +35,7 @@ ensure() {
 }
 
 configure() {
+  make_asset_dirs
   mkdir -p "${CODEX_HOME}"
   # Provider + auth cannot be overridden by a project .codex/config.toml, so they live here.
   # Sections are conditional: omitted entirely when the service is disabled so the file is
@@ -96,7 +98,7 @@ OTEL
 
 doctor() {
   codex --version
-  doctor_skill_present "${SKILLS_DIR}"
+  doctor_catalog_readable "${SKILLS_DIR}"
   doctor_gateway
 }
 
@@ -123,7 +125,8 @@ case "${1:-}" in
   ensure)                 ensure ;;
   # `skills` reads no Gateway or Langfuse value, exactly as `install` does not
   skills)                 skills ;;
+  asset-dirs)             printf '%s\n' "${ASSET_DIRS[@]}" ;;
   configure|doctor)       require_harness_env; "$1" ;;
   probe)                  require_harness_env; probe ;;
-  *)                      echo "usage: $0 install|ensure|skills|configure|doctor|probe" >&2; exit 2 ;;
+  *)                      echo "usage: $0 install|ensure|skills|asset-dirs|configure|doctor|probe" >&2; exit 2 ;;
 esac

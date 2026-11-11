@@ -24,10 +24,11 @@ CLAUDE_PACKAGE="@anthropic-ai/claude-code"
 # written one level above it.
 SKILLS_DIR="${AGENT_HOME}/.claude/skills"
 
+ASSET_DIRS=(.claude/skills .claude/agents .claude/commands)
+
 install() {
   require_plain_pin CLAUDE_CODE_VERSION "${CLAUDE_CODE_VERSION}"
   npm_install_cli "${HARNESS_IMAGE_PREFIX}" "${CLAUDE_PACKAGE}" "${CLAUDE_CODE_VERSION}"
-  bmad_install_global_skills claude-code "${SKILLS_DIR}"
   install_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
 }
 
@@ -45,6 +46,7 @@ ensure() {
 }
 
 configure() {
+  make_asset_dirs
   mkdir -p "${AGENT_HOME}/.claude"
   # Static settings only. Per-attempt values (TRACEPARENT, langfuse_session_id, tags, model, budget) are
   # injected by infrastructure/harness/claude/adapter.py env_for(attempt). Nothing here is per Run.
@@ -108,7 +110,7 @@ JSON
 
 doctor() {
   claude --version
-  doctor_skill_present "${SKILLS_DIR}"
+  doctor_catalog_readable "${SKILLS_DIR}"
   doctor_gateway
   doctor_claude_login
 }
@@ -186,7 +188,8 @@ case "${1:-}" in
   ensure)                 ensure ;;
   # `skills` reads no Gateway or Langfuse value, exactly as `install` does not
   skills)                 skills ;;
+  asset-dirs)             printf '%s\n' "${ASSET_DIRS[@]}" ;;
   configure|doctor)       require_harness_env; "$1" ;;
   probe)                  require_harness_env; probe ;;
-  *)                      echo "usage: $0 install|ensure|skills|configure|doctor|probe" >&2; exit 2 ;;
+  *)                      echo "usage: $0 install|ensure|skills|asset-dirs|configure|doctor|probe" >&2; exit 2 ;;
 esac

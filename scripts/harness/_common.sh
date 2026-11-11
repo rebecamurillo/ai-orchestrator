@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Shared helpers for scripts/harness/<name>.sh. Sourced, never executed.
 # Contract (AD-10, AD-20): each harness script implements
-#   install    — image build: install the CLI at the pinned version, copy BMAD skill stubs to the global dirs
+#   install    — image build: install the CLI at the pinned version and copy the operator skills (BMAD is the
+#                package `install_bmad_package` puts in /opt/bmad, never a harness-home folder)
+#   asset-dirs — print the folders (relative to AGENT_HOME) the harness reads skills, agents and commands from
 #   ensure     — container start, before configure: reinstall the CLI only when it is not at its pin
 #   configure  — container start: (re)generate the harness config from environment variables
 #   doctor     — readiness: print version, confirm skill discovery and gateway reachability; exit ≠ 0 on failure
@@ -9,6 +11,8 @@ set -euo pipefail
 
 : "${AGENT_HOME:=/home/agent}"
 : "${BMAD_VERSION:=6.12.4}"
+# Image-only prefix of the `bmad-method` package; never a mount point.
+: "${BMAD_PREFIX:=/opt/bmad}"
 
 # `install` runs during `docker build`, where the Gateway and Langfuse values do not exist
 # and must never be baked into an image layer or passed as a build argument. Only the two
@@ -73,6 +77,12 @@ npm_install_cli() {  # $1 prefix, $2 npm package, $3 version, $4 seconds allowed
   local bound=()
   if [ -n "${4:-}" ]; then bound=(timeout "$4"); fi
   ${bound[@]+"${bound[@]}"} npm install -g --prefix "$1" --fetch-retries=0 --fetch-timeout=60000 "$2@$3"
+}
+
+# The image's copy of the BMAD installer, run by the setup runner and the readiness fixture.
+install_bmad_package() {
+  require_plain_pin BMAD_VERSION "${BMAD_VERSION}"
+  npm_install_cli "${BMAD_PREFIX}" bmad-method "${BMAD_VERSION}"
 }
 
 # The first stdout line of `<executable> --version`, field $2 of it; empty when absent.
@@ -189,6 +199,7 @@ langfuse_otlp_endpoint() { printf '%s/api/public/otel' "${LANGFUSE_BASE_URL%/}";
 langfuse_basic_auth()    { printf '%s' "${LANGFUSE_PUBLIC_KEY}:${LANGFUSE_SECRET_KEY}" | base64 | tr -d '\n'; }
 
 # BMAD skill stubs: installed once into a scratch project, then copied to the global skill dirs.
+# No harness `install` calls this any more; the BMAD script of a later story does.
 # BMAD has no global mode (research/backend.md); the target repo still needs its own _bmad/ (AD-16).
 bmad_install_global_skills() {
   local tools="$1" dest="$2" tmp
@@ -301,8 +312,7 @@ sync_operator_skills() {
 
 # Operator skills: copy every subdirectory from $1 (ia-agents-skills source) into $2 (dest
 # skills dir), detect name collisions against already-installed stubs, and write a sorted
-# skills-manifest.json one level above $2. Called after bmad_install_global_skills so
-# stubs are already present when collision detection runs. AD-16. Build time only — a boot
+# skills-manifest.json one level above $2. AD-16. Build time only — a boot
 # runs `sync_operator_skills` above, which is idempotent where this one refuses.
 install_operator_skills() {
   local src="$1" dest="$2"
@@ -334,9 +344,20 @@ install_operator_skills() {
   write_skills_manifest "$dest"
 }
 
-doctor_skill_present() {  # $1 = skills dir
-  [ -f "$1/bmad-build-auto/SKILL.md" ] || { log "bmad-build-auto not found in $1"; return 1; }
-  log "bmad-build-auto discoverable in $1"
+# Create every ASSET_DIRS folder (declared in <harness>.sh) under AGENT_HOME.
+make_asset_dirs() {
+  local d
+  for d in "${ASSET_DIRS[@]}"; do mkdir -p "${AGENT_HOME}/${d}"; done
+}
+
+# The catalog sits one level above the skills dir (write_skills_manifest).
+doctor_catalog_readable() {  # $1 = skills dir
+  local manifest
+  manifest="$(dirname "$1")/skills-manifest.json"
+  [ -f "$manifest" ] || { log "skills manifest not found: $manifest"; return 1; }
+  python3 -c 'import json,sys; assert isinstance(json.load(open(sys.argv[1]))["skills"], list)' "$manifest" 2>/dev/null \
+    || { log "skills manifest unreadable: $manifest"; return 1; }
+  log "skills manifest readable: $manifest"
 }
 
 doctor_gateway() {

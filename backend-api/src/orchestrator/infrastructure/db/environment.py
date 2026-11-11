@@ -29,7 +29,9 @@ the three-positional call every git kind's test makes has always meant.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
+from pathlib import Path
 from uuid import UUID
 
 from orchestrator.application.steps.context import ProjectContext, RunEnvironment
@@ -46,6 +48,14 @@ from orchestrator.infrastructure.db.writers import SessionFactory
 #: The Run input a dev-loop Template binds its spec folder under. An initialisation plan
 #: declares none, and `None` is what `git.commit` reads as "stage everything".
 SPEC_FOLDER_INPUT = "spec_folder"
+
+#: The image's BMAD installer (`install_bmad_package` in `scripts/harness/_common.sh`).
+BMAD_BIN = Path("/opt/bmad/bin/bmad-method")
+
+
+def _executable(path: Path) -> bool:
+    """`[ -x ]`, as `scripts/readiness_fixture.sh` tests it: both paths pick the same installer."""
+    return path.is_file() and os.access(path, os.X_OK)
 
 
 def read_run_environment(
@@ -74,6 +84,7 @@ def read_run_environment(
             repository_url=repository.url,
             default_branch=repository.default_branch,
             bmad_version=bmad_version,
+            bmad_bin=str(BMAD_BIN) if _executable(BMAD_BIN) else None,
             spec_folder=str(spec_folder) if spec_folder else None,
             worktrees=run.worktrees,
             compare_urls=run.compare_urls,

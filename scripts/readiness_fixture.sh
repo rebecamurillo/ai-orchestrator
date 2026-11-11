@@ -2,8 +2,9 @@
 # Seed the readiness fixture's origin (SPEC CAP-8, AD-16): a bare git repository under
 # $WORK_DIR/readiness/origin.git, holding one `main` branch built from
 # fixtures/readiness-repo/ with _bmad/ installed at BMAD_VERSION — the same
-# `bmad-method@{version} install --yes --modules bmm --tools claude-code,codex,opencode`
-# command `application/steps/bmad_install.py::INSTALL_COMMAND` runs for a real Run, and the
+# `install --yes --modules bmm --tools claude-code,codex,opencode` command
+# `application/steps/bmad_install.py` runs for a real Run (the image's /opt/bmad copy, else
+# `npx --yes bmad-method@{version}`), and the
 # same three tool-folder lines its own `IGNORED` tuple appends afterwards.
 #
 # Idempotent and cheap: run at every container start (`docker-entrypoint.sh`), this script
@@ -15,6 +16,7 @@ set -euo pipefail
 
 : "${WORK_DIR:=/work}"
 : "${BMAD_VERSION:=6.12.4}"
+: "${BMAD_PREFIX:=/opt/bmad}"
 
 FIXTURE_SRC="${READINESS_FIXTURE_SRC:-/app/fixtures/readiness-repo}"
 READINESS_DIR="${WORK_DIR}/readiness"
@@ -40,7 +42,12 @@ git init -q -b main
 git config user.email "orchestrator@localhost"
 git config user.name "orchestrator"
 
-npx --yes "bmad-method@${BMAD_VERSION}" install --yes --modules bmm \
+if [ -x "${BMAD_PREFIX}/bin/bmad-method" ]; then
+  bmad=("${BMAD_PREFIX}/bin/bmad-method")
+else
+  bmad=(npx --yes "bmad-method@${BMAD_VERSION}")
+fi
+"${bmad[@]}" install --yes --modules bmm \
   --tools claude-code,codex,opencode --directory "${SCRATCH}"
 
 # the same three lines `application/steps/bmad_install.py::IGNORED` appends after every

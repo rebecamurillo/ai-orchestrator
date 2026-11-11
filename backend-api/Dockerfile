@@ -150,11 +150,11 @@ RUN set -eux; \
     useradd --create-home --home-dir "${AGENT_HOME}" --shell /bin/bash --uid 1000 agent; \
     echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent; \
     chmod 0440 /etc/sudoers.d/agent; \
-    mkdir -p "${WORK_DIR}" /opt/npm-global/bin /opt/harness-image /opt/harness-cli /app; \
+    mkdir -p "${WORK_DIR}" /opt/npm-global/bin /opt/harness-image /opt/harness-cli /opt/bmad /app; \
     corepack enable --install-directory /opt/npm-global/bin; \
     # Node's default global location is also agent-owned: `corepack enable` and any tool
     # that ignores NPM_CONFIG_PREFIX writes here, and the agent user must install freely.
-    chown -R agent:agent "${WORK_DIR}" "${AGENT_HOME}" /opt/npm-global /opt/harness-image /opt/harness-cli /app \
+    chown -R agent:agent "${WORK_DIR}" "${AGENT_HOME}" /opt/npm-global /opt/harness-image /opt/harness-cli /opt/bmad /app \
         /usr/local/bin /usr/local/lib/node_modules
 
 USER agent
@@ -189,9 +189,13 @@ COPY --chown=agent:agent ia-agents-skills /app/ia-agents-skills
 
 WORKDIR /app
 
-# Each harness installs its CLI at its pinned version and copies the BMAD skill stubs into
-# the global skill directory it reads (AD-16). Run as `agent`, so the stubs land under
-# AGENT_HOME owned by the user that will read them.
+# BMAD is carried as a package under /opt/bmad (never mounted), at `_common.sh`'s
+# BMAD_VERSION default; no BMAD skill reaches a harness home from the image — the setup runner
+# installs it. Before the harness ARGs, so a harness pin change does not re-run it.
+RUN bash -c 'source scripts/harness/_common.sh && install_bmad_package'
+
+# Each harness installs its CLI at its pinned version and the operator skills into the global
+# skill directory it reads (AD-16). Run as `agent`.
 #
 # The pins are valueless ARGs: compose passes `.env`'s value, and unset, the script default
 # installs. Declared here, not with the others, because a changed ARG busts the cache of
