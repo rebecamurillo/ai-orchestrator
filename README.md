@@ -326,14 +326,17 @@ is pulled.
 A release is a version bump merged on `main`, then a `v<VERSION>` tag; `release.yml` does the
 building and pushing. `DEPLOY.md` §4 holds the reasons, this is the checklist.
 
-1. **Bump, on a branch** (`chore/release-<version>`). The version lives in seven places, and
-   `make lint` (`scripts/check_version.py`) fails when the first five disagree:
+1. **Bump, on a branch** (`chore/release-<version>`). The version lives in seven places, nine with the compose
+   image tags; `make lint` (`scripts/check_version.py`) fails when the first five
+   disagree, and the compose tags' agreement is a deployment test (`make test-deploy`):
    - `VERSION` — the number itself (`1.0.0-beta.3`, never a `v` prefix)
    - `backend-api/pyproject.toml`, `web-client/package.json`,
      `deploy/kit/.claude-plugin/plugin.json`, `deploy/kit/manifest.json`
    - `contracts/openapi.json` (`info.version`; `make openapi` regenerates it)
    - `backend-api/uv.lock` — the `orchestrator` package entry, in PEP 440 form
      (`1.0.0b3`); `cd backend-api && uv lock --check` proves it
+   - the two `image:` tags in `deploy/docker-compose.yml`, set to `VERSION`
+   - `deploy/release.env` — its pins reviewed
 2. **Pull request, CI green, merge.** The merge commit on `main` gets its own `ci.yml` run;
    wait for it to succeed. `release.yml` refuses a tag on a commit with no successful
    `ci.yml` run for that exact SHA.

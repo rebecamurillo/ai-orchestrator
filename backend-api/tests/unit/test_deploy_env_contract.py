@@ -17,7 +17,9 @@ from pathlib import Path
 import pytest
 from check_env_contract import (
     DEPLOY_ONLY_VARIABLES,
+    commented_declarations,
     compare_deploy,
+    compare_release,
     env_example_variables,
     settings_variables,
 )
@@ -26,6 +28,7 @@ from tests.unit.conftest import ENV_EXAMPLE, REPO_ROOT, parse_env_example
 
 SCRIPT = REPO_ROOT / "scripts" / "check_env_contract.py"
 DEPLOY_ENV_EXAMPLE = REPO_ROOT / "deploy" / ".env.example"
+RELEASE_ENV = REPO_ROOT / "deploy" / "release.env"
 
 
 def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
@@ -45,13 +48,19 @@ def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_the_committed_deploy_copy_matches_the_contract() -> None:
-    lost, stray, gone = compare_deploy(
-        env_example_variables(), env_example_variables(DEPLOY_ENV_EXAMPLE)
-    )
+    """Story 5 (epic 2, orchestrator-deploy-folder), 2026-11-11: the six release pins moved
+    to `deploy/release.env`; the deploy copy declares them commented, and a pin counts as
+    declared when it is both commented there and set in `release.env`."""
+    release = set(parse_env_example(RELEASE_ENV))
+    commented = commented_declarations(DEPLOY_ENV_EXAMPLE)
+    uncommented = env_example_variables(DEPLOY_ENV_EXAMPLE)
+
+    lost, stray, gone = compare_deploy(env_example_variables(), uncommented | (release & commented))
 
     assert lost == []
     assert stray == []
     assert gone == []
+    assert compare_release(uncommented, commented, release) == ([], [], [], [])
 
 
 def test_the_check_still_passes_as_a_command_with_the_deploy_copy_in_scope() -> None:
@@ -162,7 +171,10 @@ def test_the_deploy_check_runs_only_after_the_root_check_passes(tmp_path: Path) 
 @pytest.mark.parametrize("variable", ["CLAUDE_CODE_VERSION", "CODEX_VERSION", "OPENCODE_VERSION"])
 def test_each_harness_pin_has_the_same_value_in_both_copies(variable: str) -> None:
     root = parse_env_example(ENV_EXAMPLE)
-    deploy = parse_env_example(DEPLOY_ENV_EXAMPLE)
+    # story 5 (epic 2, orchestrator-deploy-folder), 2026-11-11: the deploy value is
+    # `deploy/release.env`'s, and the deploy copy no longer assigns the pin
+    release = parse_env_example(RELEASE_ENV)
 
     assert root[variable]
-    assert deploy[variable] == root[variable]
+    assert release[variable] == root[variable]
+    assert variable not in parse_env_example(DEPLOY_ENV_EXAMPLE)

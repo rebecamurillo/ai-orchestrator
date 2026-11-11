@@ -9,9 +9,9 @@ What is asserted, and why each is worth a test rather than a review comment:
 
 - **`image:`, never `build:`.** The whole point of the file. A `build:` stanza would make
   `docker compose up` build from whatever directory the bundle was extracted into.
-- **The images are the GHCR names the release workflow pushes, pinned by `IMAGE_TAG`,
-  fail-closed.** A bare `${IMAGE_TAG}` interpolates empty and `docker compose pull` would
-  ask the registry for `backend-api:` — refused, but with a worse message than compose's.
+- **The images are the GHCR names the release workflow pushes, at a literal version tag.**
+  No `IMAGE_TAG` interpolation (story 5, epic 2, orchestrator-deploy-folder, 2026-11-11,
+  AD-20 amended); that the tag equals `VERSION` is a deployment test.
 - **AD-5 unchanged**: the web-client still receives exactly four variables; the backend
   still reads the whole contract, now `required: true` because there is no application
   fallback that names missing fields better than an absent file does.
@@ -94,10 +94,19 @@ def test_the_application_service_is_pulled_not_built(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", APP_SERVICES)
-def test_the_image_is_the_published_name_pinned_by_the_release_tag(name: str) -> None:
-    """The name the release workflow pushes, and `:?` so an unset tag refuses rather than
-    interpolating to an untagged pull."""
-    assert f"image: {IMAGE_NAMESPACE}/{name}:${{IMAGE_TAG:?" in service(name)
+def test_the_image_is_the_published_name_at_a_literal_version_tag(name: str) -> None:
+    """Story 5 (epic 2, orchestrator-deploy-folder), 2026-11-11: literal tags, AD-20 amended."""
+    line = next(line for line in service(name).splitlines() if line.strip().startswith("image:"))
+
+    assert "${" not in line
+    match = re.fullmatch(rf"\s*image: {re.escape(IMAGE_NAMESPACE)}/{name}:(\S+)", line)
+    assert match, line
+    assert re.fullmatch(r"\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?", match.group(1)), match.group(1)
+
+
+def test_the_consumer_stack_never_reads_image_tag() -> None:
+    """Story 5 (epic 2, orchestrator-deploy-folder), 2026-11-11: literal tags, AD-20 amended."""
+    assert "IMAGE_TAG" not in compose_text()
 
 
 def test_the_database_image_is_the_same_major_as_the_base_stack() -> None:
@@ -129,6 +138,10 @@ def test_the_backend_reads_the_whole_contract_and_requires_it() -> None:
     assert "env_file:" in body
     assert ".env" in body
     assert "required: true" in body
+    # story 5 (epic 2, orchestrator-deploy-folder), 2026-11-11: release.env, then .env
+    assert "- path: release.env" in body
+    assert body.index("- path: release.env") < body.index("- path: .env")
+    assert len(re.findall(r"required: true", body)) == len(("release.env", ".env"))
 
 
 def test_the_web_client_reads_no_env_file() -> None:
@@ -154,8 +167,8 @@ def test_the_application_port_binds_the_bind_address_defaulting_to_loopback(name
 # Operator decision 2026-09-20, two-tier configuration contract; reaffirmed 2026-09-30:
 # `${VAR:?}` is the secret tier's property. A consumer stack that refused to render because
 # nobody spelled `WORK_DIR=/work` is the crash-loop that decision removes; a consumer stack
-# that came up with a blank `ORCHESTRATOR_TOKEN` is the one it must not create. `IMAGE_TAG`
-# is required here and nowhere else: this file is the one that pulls rather than builds.
+# that came up with a blank `ORCHESTRATOR_TOKEN` is the one it must not create.
+# (Story 5, epic 2, orchestrator-deploy-folder, 2026-11-11: the image tag is a literal.)
 
 _DECLARATIONS = "\n".join(
     line for line in DEPLOY_COMPOSE.read_text().splitlines() if not line.strip().startswith("#")
@@ -166,16 +179,16 @@ DEFAULTS: dict[str, str] = dict(
     re.findall(r"(?<!\$)\$\{([A-Z][A-Z0-9_]*):-([^}]*)\}", _DECLARATIONS)
 )
 
-#: The base stack's three secrets, plus the release tag this file exists to pin.
+#: The base stack's three secrets.
 DEPLOY_REQUIRED = frozenset(
-    {"ORCHESTRATOR_TOKEN", "ORCHESTRATOR_SESSION_SECRET", "POSTGRES_PASSWORD", "IMAGE_TAG"}
+    {"ORCHESTRATOR_TOKEN", "ORCHESTRATOR_SESSION_SECRET", "POSTGRES_PASSWORD"}
 )
 
 #: `${ROOT_TEMPLATES:-}` is deliberately empty — the web-client's own default list.
 EMPTY_DEFAULT = frozenset({"ROOT_TEMPLATES"})
 
 
-def test_the_required_set_is_exactly_the_stack_secrets_and_the_image_tag() -> None:
+def test_the_required_set_is_exactly_the_stack_secrets() -> None:
     assert set(REQUIRED) == set(DEPLOY_REQUIRED)
 
 
