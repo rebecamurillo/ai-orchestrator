@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from orchestrator.application.dto import DEFAULT_HARNESS
 from orchestrator.application.preflight.checks import Context, list_error_target, run_label
 from orchestrator.application.preflight.model import (
     CHECK_CONCURRENT_REPO,
@@ -26,7 +27,7 @@ from orchestrator.application.preflight.model import (
 from orchestrator.application.steps import AGENT_KIND
 from orchestrator.application.templates.lines import load_sequence, load_with_lines
 from orchestrator.application.templates.lists import stories_directory
-from orchestrator.application.templates.plan_model import ON_FAIL_KEY
+from orchestrator.application.templates.plan_model import ON_FAIL_KEY, REDISPATCH_TARGET_SEQ
 from orchestrator.application.templates.table import CONSULT_KEY
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.values import PlannedRow
@@ -201,80 +202,102 @@ def _story_status(text: str) -> str | None:
     return None
 
 
+def skill_fix(skill: str, bmad_choice: str | None) -> str:
+    """The command that restores a missing skill: the BMAD installer for a `bmad-` skill the
+    operator removed, the setup otherwise."""
+    if skill.startswith("bmad-") and bmad_choice == "removed":
+        return "./install.sh bmad install"
+    return "./install.sh setup"
+
+
 def installed_skill_lines(ctx: Context) -> list[Line]:
-    """One line per missing skill, `ok` when all are present, `fail` when the catalog cannot
-    be read at all.
+    """One `fail` line per missing (skill, harness) pair and per harness whose catalog cannot
+    be read, a single `ok` line when every pair is present.
 
-    Returns an empty list when the plan is `None` or has no `skill:` agent steps — nothing
-    to check, and the only case an unreadable catalog stays quiet in.  Returns one `fail`
-    line per missing skill name when some are absent; returns a single `ok` line when every
-    named skill is installed.  Lives here rather than in `checks.py` on line count alone
-    (the 400-line module limit), like every plural-line check before it.  A planned
-    `consult` block's skill is a named skill too (AD-22): a senior handed one its harness
-    cannot resolve improvises exactly as an agent would.
+    Each skill is checked on the harness of the row that names it: the Run's for an agent
+    row, the consult's own `harness` when the consult declares one.  Returns an empty list
+    when the plan is `None` or names no skill.  Lives here rather than in `checks.py` on
+    line count alone (the 400-line module limit).  A planned `consult` block's skill is a
+    named skill too (AD-22).
 
-    **An unreadable catalog is a `fail`, naming every skill it could not verify** (hub-Run
-    operations, skills install fix, 2026-09-24).  It was a `skip` until then, and that made
-    this check inert for the life of an instance: the manifest lives under `${AGENT_HOME}`,
-    which the `agent-home` volume mounts over, so an instance whose volume predated the
-    manifest reported `skip · catalog unavailable` for every Run it ever planned — and a
-    harness handed a skill name it cannot resolve does not fail, it improvises.  The same fix
-    writes the manifest at every container start
-    (`infrastructure/skills_install.py`), so an unreadable catalog now means a broken
-    instance, and a Run that would dispatch a skill into one must not be created.
-
-    A `Context` carrying **no catalog port at all** is the one case that still `skip`s, and
-    it is a different fact: not "the manifest could not be read" but "this process wired
-    nothing to read it with", which only a unit test's context ever is.
+    An unreadable catalog is a `fail` naming every skill it could not verify: a harness
+    handed a skill name it cannot resolve does not fail, it improvises.  A `Context` with
+    no catalog port at all `skip`s — only a unit test's context is ever that.
     """
     if ctx.plan is None:
         return []
-    skill_names: list[str] = []
+    run_harness = ctx.req.harness or DEFAULT_HARNESS
+    by_seq = {row.seq: _row_harness(row, run_harness) for row in ctx.plan.rows}
+    pairs: list[tuple[str, str]] = []
     for plan_row in ctx.plan.rows:
-        for skill in _row_skills(plan_row):
-            if isinstance(skill, str) and skill and skill not in skill_names:
-                skill_names.append(skill)
-    if not skill_names:
+        for pair in _row_skills(plan_row, by_seq):
+            if pair not in pairs:
+                pairs.append(pair)
+    if not pairs:
         return []
     if ctx.skill_catalog is None:
-        # the one genuinely unknowable case: this *process* wired no catalog port at all,
-        # which the composition root never does (`api/providers.py::_preflight_ports` builds
-        # one unconditionally, and `test_preflight_installed_skill.py` pins that) — so it is
-        # a unit test's context, never an instance serving a request
         return [Line(CHECK_INSTALLED_SKILL, "skip", "no catalog configured")]
-    installed = ctx.skill_catalog.installed_skills()
-    if installed is None:
-        return [
-            Line(
-                CHECK_INSTALLED_SKILL,
-                "fail",
-                f"catalog unavailable: cannot verify {', '.join(skill_names)}",
-                fix="restart backend-api — it installs the operator skills at start-up",
-            )
-        ]
-    missing = [name for name in skill_names if name not in installed]
-    if missing:
-        return [
-            Line(
-                CHECK_INSTALLED_SKILL,
-                "fail",
-                f"not installed: {name}",
-                fix="rebuild the agent image",
-            )
-            for name in missing
-        ]
-    return [Line(CHECK_INSTALLED_SKILL, "ok", "ok")]
+    installed: dict[str, frozenset[str] | None] = {}
+    for _, harness in pairs:
+        if harness not in installed:
+            installed[harness] = ctx.skill_catalog.installed_skills(harness)
+    lines = _unreadable_lines(pairs, installed) + [
+        Line(
+            CHECK_INSTALLED_SKILL,
+            "fail",
+            f"not installed: {skill} on {harness}",
+            fix=skill_fix(skill, ctx.bmad_choice),
+        )
+        for skill, harness in pairs
+        if (names := installed[harness]) is not None and skill not in names
+    ]
+    return lines or [Line(CHECK_INSTALLED_SKILL, "ok", "ok")]
 
 
-def _row_skills(plan_row: PlannedRow) -> list[object]:
-    """The skills one planned row dispatches: an `agent` row's own and its consult's, and the
-    consult a `run` row's `on_fail` redispatch declares for `verify_failed` (story 1-6)."""
+def _unreadable_lines(
+    pairs: list[tuple[str, str]], installed: Mapping[str, frozenset[str] | None]
+) -> list[Line]:
+    """One `fail` per harness whose catalog could not be read, in first-seen order."""
+    return [
+        Line(
+            CHECK_INSTALLED_SKILL,
+            "fail",
+            "catalog unavailable on "
+            f"{harness}: cannot verify {', '.join(s for s, h in pairs if h == harness)}",
+            fix="./install.sh setup",
+        )
+        for harness, names in installed.items()
+        if names is None
+    ]
+
+
+def _row_harness(plan_row: PlannedRow, run_harness: str) -> str:
+    return str(plan_row.with_resolved.get("harness") or "").strip() or run_harness
+
+
+def _row_skills(plan_row: PlannedRow, by_seq: Mapping[int, str]) -> list[tuple[str, str]]:
+    """The (skill, harness) pairs one planned row dispatches: an `agent` row's own skill and
+    its consult's, and the consult a `run` row's `on_fail` redispatch declares for
+    `verify_failed` (story 1-6).  A consult runs on its own `harness`, else on the harness
+    of the row it runs in — for the `on_fail` consult that is the redispatch target, not the
+    `run` row (`steps/agent_consult.py::_consult` reads the dispatched row's)."""
     resolved = plan_row.with_resolved
-    own = [resolved.get("skill")] if plan_row.kind == AGENT_KIND else []
-    blocks = [resolved.get(CONSULT_KEY) if plan_row.kind == AGENT_KIND else None]
+    row_harness = by_seq[plan_row.seq]
+    found: list[tuple[object, str]] = []
+    if plan_row.kind == AGENT_KIND:
+        found.append((resolved.get("skill"), row_harness))
+        found.extend(_consult_skill(resolved.get(CONSULT_KEY), row_harness))
     route = resolved.get(ON_FAIL_KEY)
-    blocks.append(route.get(CONSULT_KEY) if isinstance(route, Mapping) else None)
-    return [*own, *(b.get("skill") for b in blocks if isinstance(b, Mapping))]
+    if isinstance(route, Mapping):
+        target = by_seq.get(int(route.get(REDISPATCH_TARGET_SEQ) or 0), row_harness)
+        found.extend(_consult_skill(route.get(CONSULT_KEY), target))
+    return [(skill, harness) for skill, harness in found if isinstance(skill, str) and skill]
+
+
+def _consult_skill(block: object, fallback: str) -> list[tuple[object, str]]:
+    if not isinstance(block, Mapping):
+        return []
+    return [(block.get("skill"), str(block.get("harness") or "").strip() or fallback)]
 
 
 def _new_partition_branch(ctx: Context) -> str | None:

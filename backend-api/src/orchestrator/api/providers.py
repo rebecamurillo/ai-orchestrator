@@ -81,7 +81,7 @@ from orchestrator.infrastructure.harness.registry import build_harnesses, build_
 from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
 from orchestrator.infrastructure.process.runner import RealProcessRunner
-from orchestrator.infrastructure.skill_catalog import FsSkillCatalog, manifest_path
+from orchestrator.infrastructure.skill_catalog import FsSkillCatalog
 from orchestrator.infrastructure.templates_loader import FilesystemTemplateFolders
 from orchestrator.infrastructure.tracing import build_tracer
 
@@ -168,7 +168,7 @@ def _preflight_ports(request: Request, uow: SQLAlchemyUnitOfWork, needed_by: str
         harnesses=SQLAlchemyHarnessRepository(uow.session),
         repositories=SQLAlchemyRepositoryRepository(uow.session),
         projects=SQLAlchemyProjectRepository(uow.session),
-        skill_catalog=FsSkillCatalog(manifest_path(settings.agent_home)),
+        skill_catalog=FsSkillCatalog(settings.agent_home),
         bmad_version=settings.bmad_version,
         max_active_runs=settings.max_active_runs,
         work_dir=settings.work_dir,

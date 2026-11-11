@@ -20,14 +20,14 @@ condition is where an unreadable catalog is answered.
 
 from __future__ import annotations
 
-from orchestrator.application.steps.context import StepContext
+from orchestrator.application.steps.context import StepContext, resolved_text
 from orchestrator.domain.values import Park, StepResult
 
 #: The `with` key `agent_row.py` writes the skill name on the row as.
 SKILL_KEY = "skill"
 
 #: The reason this row leaves, in `agent.py::UNKNOWN_HARNESS`'s own shape.
-UNKNOWN_SKILL = "skill misconfigured: {name} is not installed in this instance"
+UNKNOWN_SKILL = "skill misconfigured: {name} is not installed on {harness}"
 
 
 def verify(ctx: StepContext) -> StepResult | None:
@@ -38,10 +38,11 @@ def verify(ctx: StepContext) -> StepResult | None:
     name = ctx.with_resolved.get(SKILL_KEY)
     if not isinstance(name, str) or not name:
         return None
-    installed = catalog.installed_skills()
+    harness = resolved_text(ctx.with_resolved, "harness")
+    installed = catalog.installed_skills(harness)
     if installed is None or name in installed:
         return None
-    reason = UNKNOWN_SKILL.format(name=name)
+    reason = UNKNOWN_SKILL.format(name=name, harness=harness)
     return StepResult(
         status="error",
         gate=ctx.row.gate,

@@ -50,7 +50,7 @@ def test_missing_skill_produces_fail_line_and_would_block_start() -> None:
         tree=None,
         plan=plan,
         plan_error=None,
-        skill_catalog=FakeSkillCatalog(frozenset()),  # empty catalog → skill absent
+        skill_catalog=FakeSkillCatalog({"claude": frozenset()}),  # empty catalog → skill absent
     )
 
     lines = lists.installed_skill_lines(ctx)

@@ -3,8 +3,8 @@
 
 Every row of the I/O matrix in the story spec is covered here:
 
-(a) catalog unreadable (`FakeSkillCatalog(None)`) → single `fail` line naming every skill
-    it could not verify (hub-Run operations, skills install fix, 2026-09-24; it was a
+(a) catalog unreadable (`FakeSkillCatalog({"claude": None})`) → one `fail` line naming every
+    skill it could not verify (hub-Run operations, skills install fix, 2026-09-24; it was a
     `skip` line until then, and that is exactly what made the guard inert in production)
 (b) no skill steps in plan → empty list
 (c) skill present → single `ok` line
@@ -90,7 +90,7 @@ def _ctx(**overrides: object) -> Context:
 
 
 def test_installed_skill_lines_returns_empty_when_plan_is_none() -> None:
-    ctx = _ctx(skill_catalog=FakeSkillCatalog(frozenset({"bmad-build-auto"})))
+    ctx = _ctx(skill_catalog=FakeSkillCatalog({"claude": frozenset({"bmad-build-auto"})}))
 
     assert lists.installed_skill_lines(ctx) == []
 
@@ -102,20 +102,24 @@ def test_installed_skill_lines_returns_empty_when_plan_is_none() -> None:
 
 def test_installed_skill_lines_returns_empty_when_no_skill_steps() -> None:
     plan = _plan(_row(kind="git.worktree"))
-    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset({"bmad-build-auto"})))
+    ctx = _ctx(
+        plan=plan, skill_catalog=FakeSkillCatalog({"claude": frozenset({"bmad-build-auto"})})
+    )
 
     assert lists.installed_skill_lines(ctx) == []
 
 
 def test_installed_skill_lines_returns_empty_for_agent_step_without_skill_key() -> None:
     plan = _plan(_row(kind="agent"))  # no `skill` key in with_resolved
-    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset({"bmad-build-auto"})))
+    ctx = _ctx(
+        plan=plan, skill_catalog=FakeSkillCatalog({"claude": frozenset({"bmad-build-auto"})})
+    )
 
     assert lists.installed_skill_lines(ctx) == []
 
 
 # ---------------------------------------------------------------------------
-# (a) catalog unavailable: FakeSkillCatalog(None) → single fail line naming the skills
+# (a) catalog unavailable: FakeSkillCatalog({"claude": None}) → single fail line naming the skills
 #
 # Was a `skip` line until the hub-Run operations skills install fix, 2026-09-24. The
 # declared behaviour change: a degradation may not hide an unresolvable skill. In
@@ -130,7 +134,7 @@ def test_installed_skill_lines_returns_empty_for_agent_step_without_skill_key() 
 
 def test_installed_skill_lines_fails_when_installed_skills_returns_none() -> None:
     plan = _plan(_row(kind="agent", skill="bmad-build-auto"))
-    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(None))
+    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog({"claude": None}))
 
     result = lists.installed_skill_lines(ctx)
 
@@ -165,7 +169,7 @@ def test_the_composition_root_always_wires_a_catalog() -> None:
     ordering it pins (hub-Run operations, skills install fix, 2026-09-24)."""
     source = inspect.getsource(providers._preflight_ports)
 
-    assert "skill_catalog=FsSkillCatalog(manifest_path(settings.agent_home))" in source
+    assert "skill_catalog=FsSkillCatalog(settings.agent_home)" in source
     assert "skill_catalog=None" not in source
 
 
@@ -176,7 +180,7 @@ def test_installed_skill_lines_names_every_unverified_skill_when_unavailable() -
         _row(kind="agent", skill="bmad-x", seq=1),
         _row(kind="agent", skill="spec-gate", seq=2),
     )
-    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(None))
+    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog({"claude": None}))
 
     result = lists.installed_skill_lines(ctx)
 
@@ -190,7 +194,7 @@ def test_installed_skill_lines_stays_silent_when_unavailable_and_no_skill_is_nam
     """The one genuinely unknowable case that stays quiet: nothing to verify (hub-Run
     operations, skills install fix, 2026-09-24)."""
     plan = _plan(_row(kind="git.worktree"))
-    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(None))
+    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog({"claude": None}))
 
     assert lists.installed_skill_lines(ctx) == []
 
@@ -202,7 +206,9 @@ def test_installed_skill_lines_stays_silent_when_unavailable_and_no_skill_is_nam
 
 def test_installed_skill_lines_ok_when_skill_is_installed() -> None:
     plan = _plan(_row(kind="agent", skill="bmad-build-auto"))
-    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset({"bmad-build-auto"})))
+    ctx = _ctx(
+        plan=plan, skill_catalog=FakeSkillCatalog({"claude": frozenset({"bmad-build-auto"})})
+    )
 
     result = lists.installed_skill_lines(ctx)
 
@@ -218,7 +224,9 @@ def test_installed_skill_lines_ok_when_skill_is_installed() -> None:
 
 def test_installed_skill_lines_fails_when_skill_is_absent() -> None:
     plan = _plan(_row(kind="agent", skill="bmad-missing"))
-    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset({"bmad-build-auto"})))
+    ctx = _ctx(
+        plan=plan, skill_catalog=FakeSkillCatalog({"claude": frozenset({"bmad-build-auto"})})
+    )
 
     result = lists.installed_skill_lines(ctx)
 
@@ -239,7 +247,7 @@ def test_installed_skill_lines_emits_one_fail_per_missing_skill() -> None:
         _row(kind="agent", skill="bmad-x", seq=1),
         _row(kind="agent", skill="bmad-y", seq=2),
     )
-    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset()))
+    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog({"claude": frozenset()}))
 
     result = lists.installed_skill_lines(ctx)
 
@@ -257,7 +265,7 @@ def test_installed_skill_lines_deduplicates_repeated_skill_names() -> None:
         _row(kind="agent", skill="bmad-build-auto", seq=1),
         _row(kind="agent", skill="bmad-build-auto", seq=2),
     )
-    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog(frozenset()))
+    ctx = _ctx(plan=plan, skill_catalog=FakeSkillCatalog({"claude": frozenset()}))
 
     result = lists.installed_skill_lines(ctx)
 
@@ -270,43 +278,47 @@ def test_installed_skill_lines_deduplicates_repeated_skill_names() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _claude_manifest(home: Path) -> Path:
+    manifest = home / ".claude" / "skills-manifest.json"
+    manifest.parent.mkdir(parents=True)
+    return manifest
+
+
 def test_fs_skill_catalog_returns_skills_from_valid_manifest(tmp_path: Path) -> None:
-    manifest = tmp_path / "skills-manifest.json"
-    manifest.write_text(json.dumps({"skills": ["bmad-build-auto", "bmad-dev-story"]}))
+    _claude_manifest(tmp_path).write_text(
+        json.dumps({"skills": ["bmad-build-auto", "bmad-dev-story"]})
+    )
 
-    catalog = FsSkillCatalog(manifest)
+    catalog = FsSkillCatalog(tmp_path)
 
-    assert catalog.installed_skills() == frozenset({"bmad-build-auto", "bmad-dev-story"})
+    assert catalog.installed_skills("claude") == frozenset({"bmad-build-auto", "bmad-dev-story"})
 
 
 def test_fs_skill_catalog_returns_none_when_file_is_missing(tmp_path: Path) -> None:
-    catalog = FsSkillCatalog(tmp_path / "nonexistent.json")
+    catalog = FsSkillCatalog(tmp_path)
 
-    assert catalog.installed_skills() is None
+    assert catalog.installed_skills("claude") is None
 
 
 def test_fs_skill_catalog_returns_none_when_json_is_malformed(tmp_path: Path) -> None:
-    manifest = tmp_path / "skills-manifest.json"
-    manifest.write_text("not valid json {")
+    _claude_manifest(tmp_path).write_text("not valid json {")
 
-    catalog = FsSkillCatalog(manifest)
+    catalog = FsSkillCatalog(tmp_path)
 
-    assert catalog.installed_skills() is None
+    assert catalog.installed_skills("claude") is None
 
 
 def test_fs_skill_catalog_returns_none_when_skills_key_is_missing(tmp_path: Path) -> None:
-    manifest = tmp_path / "skills-manifest.json"
-    manifest.write_text(json.dumps({"other": ["bmad-build-auto"]}))
+    _claude_manifest(tmp_path).write_text(json.dumps({"other": ["bmad-build-auto"]}))
 
-    catalog = FsSkillCatalog(manifest)
+    catalog = FsSkillCatalog(tmp_path)
 
-    assert catalog.installed_skills() is None
+    assert catalog.installed_skills("claude") is None
 
 
 def test_fs_skill_catalog_returns_empty_frozenset_for_empty_skills_list(tmp_path: Path) -> None:
-    manifest = tmp_path / "skills-manifest.json"
-    manifest.write_text(json.dumps({"skills": []}))
+    _claude_manifest(tmp_path).write_text(json.dumps({"skills": []}))
 
-    catalog = FsSkillCatalog(manifest)
+    catalog = FsSkillCatalog(tmp_path)
 
-    assert catalog.installed_skills() == frozenset()
+    assert catalog.installed_skills("claude") == frozenset()

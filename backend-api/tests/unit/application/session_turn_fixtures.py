@@ -203,4 +203,4 @@ def a_turn_world(
 
 
 def skilled() -> FakeSkillCatalog:
-    return FakeSkillCatalog(frozenset({"senior-session"}))
+    return FakeSkillCatalog({"claude": frozenset({"senior-session"})})

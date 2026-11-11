@@ -59,7 +59,7 @@ def _resolved(**over: Any) -> dict[str, Any]:
 
 
 def test_verify_parks_misconfigured_when_the_catalog_does_not_list_the_skill() -> None:
-    ctx = _ctx(_resolved(skill="spec-gate"), FakeSkillCatalog(frozenset({SKILL})))
+    ctx = _ctx(_resolved(skill="spec-gate"), FakeSkillCatalog({"claude": frozenset({SKILL})}))
 
     result = agent_skill.verify(ctx)
 
@@ -72,7 +72,7 @@ def test_verify_parks_misconfigured_when_the_catalog_does_not_list_the_skill() -
 
 
 def test_verify_keeps_the_rows_own_gate() -> None:
-    ctx = _ctx(_resolved(skill="spec-gate"), FakeSkillCatalog(frozenset()))
+    ctx = _ctx(_resolved(skill="spec-gate"), FakeSkillCatalog({"claude": frozenset()}))
 
     result = agent_skill.verify(ctx)
 
@@ -84,7 +84,7 @@ def test_verify_keeps_the_rows_own_gate() -> None:
 
 
 def test_verify_passes_a_skill_the_catalog_lists() -> None:
-    ctx = _ctx(_resolved(), FakeSkillCatalog(frozenset({SKILL})))
+    ctx = _ctx(_resolved(), FakeSkillCatalog({"claude": frozenset({SKILL})}))
 
     assert agent_skill.verify(ctx) is None
 
@@ -93,19 +93,19 @@ def test_verify_passes_a_row_that_names_no_skill() -> None:
     """The `prompt:` and `intent:` dispatch forms carry no `skill` key."""
     resolved = _resolved()
     del resolved["skill"]
-    ctx = _ctx(resolved, FakeSkillCatalog(frozenset()))
+    ctx = _ctx(resolved, FakeSkillCatalog({"claude": frozenset()}))
 
     assert agent_skill.verify(ctx) is None
 
 
 def test_verify_passes_a_row_whose_skill_is_blank() -> None:
-    ctx = _ctx(_resolved(skill=""), FakeSkillCatalog(frozenset()))
+    ctx = _ctx(_resolved(skill=""), FakeSkillCatalog({"claude": frozenset()}))
 
     assert agent_skill.verify(ctx) is None
 
 
 def test_verify_passes_a_row_whose_skill_is_not_a_string() -> None:
-    ctx = _ctx(_resolved(skill=7), FakeSkillCatalog(frozenset()))
+    ctx = _ctx(_resolved(skill=7), FakeSkillCatalog({"claude": frozenset()}))
 
     assert agent_skill.verify(ctx) is None
 
@@ -121,9 +121,31 @@ def test_verify_passes_when_no_catalog_is_wired() -> None:
 def test_verify_passes_when_the_catalog_is_unavailable() -> None:
     """A manifest that cannot be read says nothing about the skill, and a row already
     planned and running must not be parked on no evidence."""
-    ctx = _ctx(_resolved(skill="spec-gate"), FakeSkillCatalog(None))
+    ctx = _ctx(_resolved(skill="spec-gate"), FakeSkillCatalog({"claude": None}))
 
     assert agent_skill.verify(ctx) is None
+
+
+def test_verify_asks_the_harness_of_the_row_story_1_2026_11_11() -> None:
+    """Story 1 (orchestrator-deploy-folder epic 1), 2026-11-11: a skill present for claude
+    only parks a codex row, naming the skill and `codex`."""
+    catalog = FakeSkillCatalog({"claude": frozenset({SKILL}), "codex": frozenset()})
+    ctx = _ctx(_resolved(harness="codex"), catalog)
+
+    result = agent_skill.verify(ctx)
+
+    assert result is not None
+    assert result.status == "error"
+    assert result.park is not None
+    assert result.park.kind == "misconfigured"
+    assert result.park.reason == f"skill misconfigured: {SKILL} is not installed on codex"
+    assert catalog.asked == ["codex"]
+
+
+def test_verify_passes_a_skill_present_on_the_rows_harness() -> None:
+    catalog = FakeSkillCatalog({"claude": frozenset(), "codex": frozenset({SKILL})})
+
+    assert agent_skill.verify(_ctx(_resolved(harness="codex"), catalog)) is None
 
 
 # ── through the executor: before any commit is made ───────────────────────────
@@ -132,7 +154,7 @@ def test_verify_passes_when_the_catalog_is_unavailable() -> None:
 def test_the_agent_kind_parks_before_it_commits_anything() -> None:
     """Beside the harness lookup and for its reason (AD-9): a row that cannot run must park
     without leaving a WIP commit, a prepare commit or an attempt behind."""
-    world = a_world(skill_catalog=FakeSkillCatalog(frozenset({"bmad-dev-story"})))
+    world = a_world(skill_catalog=FakeSkillCatalog({"claude": frozenset({"bmad-dev-story"})}))
 
     result = AgentExecutor().execute(world.ctx)
 
@@ -144,7 +166,7 @@ def test_the_agent_kind_parks_before_it_commits_anything() -> None:
 
 
 def test_the_agent_kind_dispatches_when_the_catalog_lists_the_skill() -> None:
-    world = a_world(skill_catalog=FakeSkillCatalog(frozenset({"bmad-build-auto"})))
+    world = a_world(skill_catalog=FakeSkillCatalog({"claude": frozenset({"bmad-build-auto"})}))
 
     result = AgentExecutor().execute(world.ctx)
 
