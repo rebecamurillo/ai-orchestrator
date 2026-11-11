@@ -216,7 +216,9 @@ RUN scripts/harness/claude.sh install \
 
 # The client install, entire (agent-delivery-kit plan §1): `docker run --rm <image> kit
 # bootstrap | tar x` hands a machine `install.sh`, the compose file, the env contract,
-# llm-platform/ and kit/ straight out of the image it will run, and `GET /api/v1/kit/*`
+# the product manifest, the shipped examples and kit/ straight out of the image it will run
+# (`llm-platform/` stays in the image for the repository's development; bootstrap leaves it
+# out), and `GET /api/v1/kit/*`
 # serves kit/ to project repositories (`KIT_DIR=/app/deploy/kit`). `.dockerignore` keeps
 # every filled `.env` and `llm-platform/backups/` out of the context (hard rule 5). `VERSION`
 # sits at /app as it sits at the repository root: `/api/v1/version` reads it there, and the
@@ -224,6 +226,9 @@ RUN scripts/harness/claude.sh install \
 # harness installs above: a kit edit must not re-run three `npm install`s.
 COPY --chown=agent:agent deploy /app/deploy
 COPY --chown=agent:agent VERSION /app/VERSION
+COPY --chown=agent:agent templates/*.yaml /app/deploy/templates/shipped/
+COPY --chown=agent:agent scripts/product_manifest.py /app/scripts/product_manifest.py
+RUN python3 /app/scripts/product_manifest.py /app/deploy /app/VERSION > /app/deploy/product-files.json
 
 # Informational: the published port comes from BACKEND_API_PORT in `.env`.
 EXPOSE 8000

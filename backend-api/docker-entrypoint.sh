@@ -29,9 +29,10 @@ set -euo pipefail
 # `docker run --rm <image> kit bootstrap | tar x` — the client install out of the image, before
 # anything that needs an environment or a database (agent-delivery-kit plan §1). The archive
 # extracts to `ai-orchestrator/`, the directory `deploy/README.md` tells a client to enter.
+# `deploy/llm-platform/` stays in the image for the repository's development and is left out.
 if [[ "${1:-}" == "kit" ]]; then
   case "${2:-}" in
-    bootstrap) exec tar -C /app --transform 's,^deploy,ai-orchestrator,;s,^VERSION,ai-orchestrator/VERSION,' -cf - deploy VERSION ;;
+    bootstrap) exec tar -C /app --exclude=deploy/llm-platform --transform 's,^deploy,ai-orchestrator,;s,^VERSION,ai-orchestrator/VERSION,' -cf - deploy VERSION ;;
     *) echo "usage: docker run --rm <image> kit bootstrap | tar x" >&2; exit 64 ;;
   esac
 fi

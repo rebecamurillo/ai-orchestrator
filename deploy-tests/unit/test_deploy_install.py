@@ -17,7 +17,7 @@ both are proved here, without it:
 - **It never overwrites.** A second run leaves the file byte for byte, so re-running
   `install.sh` after a failed pull cannot rotate the token a client already uses.
 - **The bundle is complete and carries no secret.** `install.sh` at the root beside
-  `VERSION`, `llm-platform/` and `kit/` inside; never a `.env`, whatever the working tree holds.
+  `VERSION`, `product-files.json`, `setup/` and `kit/` inside, no `llm-platform/`; never a `.env`, whatever the working tree holds.
 
 Shell is exercised through `bash`, skipped where there is none; the scripts are written for
 bash 3.2 because that is what a stock macOS ships.
@@ -37,6 +37,7 @@ absence, and that the release is still created.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -239,6 +240,8 @@ def test_a_trailing_comment_survives_a_non_empty_value(bundle_dir: Path) -> None
 @needs_bash
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
 def test_the_bundle_carries_the_installer_and_no_secret(tmp_path: Path) -> None:
+    # epic 3 story 1, 2026-11-11: the package drops llm-platform/ and gains the manifest,
+    # the shipped examples and the seeds.
     result = _run(BUNDLE, "v0.0.0", str(tmp_path), cwd=REPO_ROOT)
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -256,18 +259,30 @@ def test_the_bundle_carries_the_installer_and_no_secret(tmp_path: Path) -> None:
         "docker-compose.yml",
         ".env.example",
         "README.md",
-        "llm-platform/docker-compose.yml",
-        "llm-platform/generate-env.sh",
-        "llm-platform/sync-env.sh",
-        "llm-platform/.env.example",
-        "llm-platform/litellm.config.yaml",
+        "product-files.json",
+        ".gitignore",
+        "compose.override.yml",
+        "release.env",
+        "setup/bmad.choice",
+        "setup/README.md",
+        "setup/examples/copy-folder.sh",
+        "bmad/install.sh",
         "kit/install.sh",
         "kit/skills/orchestrator/SKILL.md",
     ):
         assert root + path in members, path
         assert members[root + path].mode & 0o111 if path.endswith(".sh") else True, path
-    for path in (".env", "llm-platform/.env", "llm-platform/backups/latest.dump"):
-        assert root + path not in members, f"{path} travelled in the bundle"
+    shipped = {
+        f"{root}templates/shipped/{t.name}" for t in (REPO_ROOT / "templates").glob("*.yaml")
+    }
+    assert shipped and shipped <= set(members)
+    assert not [n for n in members if n.startswith(root + "templates/shipped/drafts")]
+    assert not [n for n in members if n.startswith(root + "llm-platform")]
+    assert root + ".env" not in members, ".env travelled in the bundle"
+    with tarfile.open(archive) as tar:
+        manifest = tar.extractfile(members[root + "product-files.json"])
+        assert manifest is not None
+        assert json.loads(manifest.read())["release"] == "v0.0.0"
 
 
 @needs_bash
