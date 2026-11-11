@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 
 from tests.unit.conftest import REPO_ROOT, parse_env_example
-from tests.unit.test_install_admin import CURL_SHIM, HARNESS_BODY, VERSION_BODY
+from test_install_admin import CURL_SHIM, HARNESS_BODY, VERSION_BODY
 
 DEPLOY_DIR = REPO_ROOT / "deploy"
 PROFILE = "--profile docker"

@@ -1,0 +1,84 @@
+# ai-orchestrator — the deployment gate (AD-31): deploy-tests/ in its own workflow.
+#
+# It runs when deployment is touched and on demand before a release; `ci.yml` never runs it
+# and `release.yml` refuses a tag this workflow has not passed. Every job's gate is a `make`
+# target, as in `ci.yml`, and the workflow holds no credential.
+#
+# Actions are pinned to a commit: a tag can be moved under the pipeline, a commit cannot.
+name: deploy
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'deploy/**'
+      - '!deploy/llm-platform/**'
+      - 'deploy-tests/**'
+      - 'scripts/test-deploy.sh'
+      - 'scripts/setup/**'
+      - 'scripts/harness/**'
+      - 'scripts/readiness_fixture.sh'
+      - 'scripts/bundle.sh'
+      - 'backend-api/Dockerfile'
+      - 'backend-api/docker-entrypoint.sh'
+      - 'ia-agents-skills/**'
+      - 'VERSION'
+      - '.github/workflows/deploy.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/**'
+      - '!deploy/llm-platform/**'
+      - 'deploy-tests/**'
+      - 'scripts/test-deploy.sh'
+      - 'scripts/setup/**'
+      - 'scripts/harness/**'
+      - 'scripts/readiness_fixture.sh'
+      - 'scripts/bundle.sh'
+      - 'backend-api/Dockerfile'
+      - 'backend-api/docker-entrypoint.sh'
+      - 'ia-agents-skills/**'
+      - 'VERSION'
+      - '.github/workflows/deploy.yml'
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend-api/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Gate
+        run: make test-deploy-unit
+
+  stack:
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend-api/uv.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Gate
+        run: make test-deploy-stack

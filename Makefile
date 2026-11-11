@@ -225,3 +225,16 @@ platform-doctor:
 ## logs — follow every service's output
 logs:
 	docker compose logs -f
+
+.PHONY: test-deploy test-deploy-unit test-deploy-stack
+
+## test-deploy — the deployment gate (AD-31): deploy-tests/ in its own gate, never called by
+## lint, test, coverage, e2e, durability or ci.yml; `-unit` and `-stack` run one lane
+test-deploy:
+	./scripts/test-deploy.sh
+
+test-deploy-unit:
+	./scripts/test-deploy.sh unit
+
+test-deploy-stack:
+	./scripts/test-deploy.sh stack

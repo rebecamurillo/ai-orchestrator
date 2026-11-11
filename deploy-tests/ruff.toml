@@ -1,0 +1,6 @@
+extend = "../backend-api/pyproject.toml"
+
+[lint.isort]
+known-first-party = ["guard", "tests"]
+known-local-folder = ["test_install_admin"]
+no-lines-before = ["local-folder"]

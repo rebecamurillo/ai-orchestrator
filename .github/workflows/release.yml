@@ -86,6 +86,20 @@ jobs:
           fi
           echo "ci is green for ${{ github.sha }} ($runs successful run(s))"
 
+      - name: The deploy workflow succeeded for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          runs=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?head_sha=${{ github.sha }}" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')
+          if [ "$runs" -eq 0 ]; then
+            echo "no successful deploy run for ${{ github.sha }} — run the deploy workflow on this commit first" >&2
+            exit 1
+          fi
+          echo "deploy is green for ${{ github.sha }} ($runs successful run(s))"
+
   # One native build per (component, architecture). Native, never QEMU: the backend image
   # installs three npm CLIs and Chromium system libraries, and emulating that does not
   # finish inside a sane timeout. Each build pushes an arch-suffixed tag

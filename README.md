@@ -430,6 +430,12 @@ make images      # build both container images without starting anything
 calls no command the Makefile does not hold and carries no credential (it runs on the
 committed `.env.example` placeholders, generating only a Fernet key on the runner).
 
+`make test-deploy` (`-unit`, `-stack`) is the deployment gate: it runs `deploy-tests/` — the
+deploy folder, `install.sh`, the setup runner, the release files and throwaway stacks — and
+no other target and not `ci.yml` calls it. `.github/workflows/deploy.yml` runs it on pull
+requests and pushes to `main` that touch deployment, and on demand before a release;
+`release.yml` refuses a tag that workflow has not passed.
+
 Two rules are enforced rather than asked for:
 
 - **Coverage.** `orchestrator.domain` and `orchestrator.application` hold 100 % branch
