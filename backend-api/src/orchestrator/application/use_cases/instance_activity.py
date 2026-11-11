@@ -5,7 +5,8 @@ The upgrade script reads this before it stops anything. A step is *working* when
 `start_attempt` has already set `running`, so the two are one entry, never two. A Run is *in
 the engine* when it is non-terminal and holds an `engine_ref` — the same test
 `use_cases/queue.py::_saved_runs` uses to tell a saved Run from an enqueued one — and its
-`queue_reason` is `list_queue`'s own sentence, never re-derived here.
+`queue_reason` is `list_queue`'s own sentence, never re-derived here. The active hold is read
+here too, unlocked.
 """
 
 from __future__ import annotations
@@ -19,7 +20,11 @@ from orchestrator.application.use_cases.queue import QueuePorts, list_queue
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.ports.repositories import AttemptRepository
+from orchestrator.domain.ports.repositories import (
+    AttemptRepository,
+    RunRepository,
+    StepRunRepository,
+)
 from orchestrator.domain.statuses import ParkKind, RunStatus
 
 _ENGINE_STATUSES: tuple[RunStatus, ...] = ("queued", "running", "needs_you")
@@ -66,22 +71,29 @@ class ActivityPorts:
 
 
 def read_activity(ports: ActivityPorts) -> InstanceActivity:
-    """The working steps and the engine's Runs. Writes nothing."""
+    """The working steps, the engine's Runs and the active hold. Writes nothing."""
+    holds = ports.queue.holds
+    stored = None if holds is None else holds.get()
+    active = stored is not None and stored.active(ports.queue.clock.now())
     return InstanceActivity(
-        working=_working(ports),
+        working=working_steps(ports.queue.runs, ports.queue.steps, ports.attempts),
         in_engine=_in_engine(ports),
-        hold=None,
+        hold=HoldView(stored.held_at, stored.expires_at, stored.reason)
+        if stored is not None and active
+        else None,
         dbos_application_version=ports.dbos_application_version,
     )
 
 
-def _working(ports: ActivityPorts) -> list[WorkingStep]:
-    open_attempts = ports.attempts.list_open()
-    running = ports.queue.steps.list_running()
+def working_steps(
+    runs: RunRepository, steps: StepRunRepository, attempts: AttemptRepository
+) -> list[WorkingStep]:
+    open_attempts = attempts.list_open()
+    running = steps.list_running()
     running_ids = {row.id for row in running}
     found: list[WorkingStep] = []
     for row in running:
-        run = ports.queue.runs.get(row.run_id)
+        run = runs.get(row.run_id)
         if run is None:
             continue
         attempt = _latest_open(open_attempts, row)
@@ -98,13 +110,9 @@ def _working(ports: ActivityPorts) -> list[WorkingStep]:
     for attempt in open_attempts:
         if attempt.role == "agent" or attempt.step_run_id in running_ids:
             continue
-        run = ports.queue.runs.get(attempt.run_id)
+        run = runs.get(attempt.run_id)
         turn_row = next(
-            (
-                r
-                for r in ports.queue.steps.list_for_run(attempt.run_id)
-                if r.id == attempt.step_run_id
-            ),
+            (r for r in steps.list_for_run(attempt.run_id) if r.id == attempt.step_run_id),
             None,
         )
         if run is None or turn_row is None:

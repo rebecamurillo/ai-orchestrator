@@ -80,6 +80,14 @@ log = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
+class Held:
+    """`attempt_row`'s answer while the instance is held (AD-30): nothing was written."""
+
+
+HELD = Held()
+
+
+@dataclass(frozen=True)
 class WalkPorts:
     """What a walk reaches: the writers' four repositories, and the executors' own ports.
 
@@ -202,9 +210,12 @@ def attempt_row(
     seq: int,
     engine_ref: dict[str, Any],
     resume_event: GateEvent | None = None,
-) -> StepResult:
-    """Open the row's Attempt, then run it — the pair the durable step re-executes whole."""
-    start_attempt(ports.writers, run_id, seq, engine_ref=engine_ref)
+) -> StepResult | Held:
+    """Open the row's Attempt, then run it — the pair the durable step re-executes whole.
+
+    Held writes nothing; the walker waits and asks again."""
+    if start_attempt(ports.writers, run_id, seq, engine_ref=engine_ref) is None:
+        return HELD
     return run_row(ports, run_id, seq, resume_event)
 
 

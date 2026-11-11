@@ -37,6 +37,7 @@ rule.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
@@ -48,7 +49,7 @@ import structlog
 from orchestrator.application.steps import StepPorts
 from orchestrator.application.steps.context import RunEnvironment
 from orchestrator.application.use_cases import walk
-from orchestrator.application.use_cases.walk import WalkPorts
+from orchestrator.application.use_cases.walk import Held, WalkPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.statuses import GateEvent
 from orchestrator.domain.values import StepResult
@@ -103,6 +104,12 @@ RUN_FINISHED_HOOK_FAILED = "run finished hook failed"
 #: best-effort tolerance `RUN_FINISHED_HOOK_FAILED` states, for the second hook.
 ON_TERMINAL_HOOK_FAILED = "on terminal hook failed"
 
+#: How long an `attempt_row` step waits before it asks again while the instance is held (AD-30).
+HOLD_POLL_SECONDS = 5
+
+#: What the walker logs once when a step starts waiting on a hold.
+HELD_FOR_UPGRADE = "held for upgrade"
+
 
 @dataclass(frozen=True)
 class WalkerDeps:
@@ -125,6 +132,8 @@ class WalkerDeps:
     #: in every process that wires no such effect — every unit test among them, and any
     #: process built before this hook existed.
     on_terminal: Callable[[UUID], None] | None = None
+    #: How a step waits on a hold; a test replaces it.
+    sleep: Callable[[float], None] = time.sleep
 
 
 def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]:
@@ -211,11 +220,18 @@ def _attempt_row(
 ) -> Callable[[str, int, str | None], dict[str, Any]]:
     def attempt_row(run_id: str, seq: int, resume: str | None) -> dict[str, Any]:
         reference = {WORKFLOW_ID: run_id, STEP_ID: engine.step_id()}
-        with deps.open_ports() as ports:
-            result = walk.attempt_row(
-                _walk_ports(deps, ports, run_id), UUID(run_id), seq, reference, _event(resume)
-            )
-        return result.model_dump(mode="json")
+        waited = False
+        while True:
+            with deps.open_ports() as ports:
+                result = walk.attempt_row(
+                    _walk_ports(deps, ports, run_id), UUID(run_id), seq, reference, _event(resume)
+                )
+            if not isinstance(result, Held):
+                return result.model_dump(mode="json")
+            if not waited:
+                log.info(HELD_FOR_UPGRADE, run_id=run_id, seq=seq)
+                waited = True
+            deps.sleep(HOLD_POLL_SECONDS)
 
     return attempt_row
 

@@ -60,9 +60,14 @@ def api(env: dict[str, str]) -> Api:
 
 
 def test_the_router_declares_exactly_one_operation() -> None:
+    """Revised (story 4, 2026-11-11): the hold routes land in this router."""
     routes = [(sorted(route.methods), route.path) for route in router_module.router.routes]
 
-    assert routes == [(["GET"], "/instance/activity")]
+    assert routes == [
+        (["GET"], "/instance/activity"),
+        (["POST"], "/instance/hold"),
+        (["DELETE"], "/instance/hold"),
+    ]
 
 
 async def test_no_runs_answers_the_four_keys(api: Api) -> None:

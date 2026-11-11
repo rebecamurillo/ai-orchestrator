@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from orchestrator.api.schemas.common import UtcTimestamp
 from orchestrator.application.use_cases.instance_activity import (
@@ -64,6 +64,21 @@ class HoldOut(BaseModel):
     @classmethod
     def of(cls, hold: HoldView) -> HoldOut:
         return cls(held_at=hold.held_at, expires_at=hold.expires_at, reason=hold.reason)
+
+
+class HoldIn(BaseModel):
+    ttl_seconds: int = Field(ge=1, le=3600)
+    reason: str = Field(max_length=200)
+
+
+class HoldConflictOut(BaseModel):
+    """The 409 body: a problem document whose `errors` are the working steps."""
+
+    type: str
+    title: str
+    status: int
+    detail: str
+    errors: list[WorkingStepOut]
 
 
 class InstanceActivityOut(BaseModel):

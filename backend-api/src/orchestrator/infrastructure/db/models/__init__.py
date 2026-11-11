@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from orchestrator.infrastructure.db.models.chat import ChatNoticeRow, ChatThreadRow
 from orchestrator.infrastructure.db.models.harness import HarnessRow
+from orchestrator.infrastructure.db.models.instance_hold import InstanceHoldRow
 from orchestrator.infrastructure.db.models.project import ProjectRow
 from orchestrator.infrastructure.db.models.project_channel import ProjectChannelRow
 from orchestrator.infrastructure.db.models.repository import RepositoryRow
@@ -27,6 +28,7 @@ __all__ = [
     "ChatThreadRow",
     "GateRecordRow",
     "HarnessRow",
+    "InstanceHoldRow",
     "ProjectChannelRow",
     "ProjectRow",
     "RepositoryRow",

@@ -68,6 +68,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyGateRecordRepository,
     SQLAlchemyHarnessRepository,
     SQLAlchemyHistoryQuery,
+    SQLAlchemyInstanceHoldRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
     SQLAlchemyRunRepository,
@@ -306,6 +307,7 @@ def queue_ports(request: Request) -> Iterator[QueuePorts]:
             steps=SQLAlchemyStepRunRepository(uow.session),
             clock=SystemClock(),
             max_active_runs=settings.max_active_runs,
+            holds=SQLAlchemyInstanceHoldRepository(uow.session),
         )
 
 

@@ -47,6 +47,7 @@ from orchestrator.application.steps import plan_check as _plan_check  # noqa: F4
 from orchestrator.application.steps import pr_link as _pr_link  # noqa: F401
 from orchestrator.application.steps import shell as _shell  # noqa: F401
 from orchestrator.application.use_cases.dependency_sweep import sweep_dependency_waiting
+from orchestrator.application.use_cases.instance_hold import release_hold
 from orchestrator.application.use_cases.session_sweep import sweep_session_turns
 from orchestrator.application.use_cases.session_turn import TurnPorts
 from orchestrator.domain.ports.chat import ChatChannelFactory
@@ -55,9 +56,11 @@ from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db.environment import read_run_environment
 from orchestrator.infrastructure.db.harness_readiness import readiness_evaluate_hook
+from orchestrator.infrastructure.db.repositories import SQLAlchemyInstanceHoldRepository
 from orchestrator.infrastructure.db.run_finished import run_finished_hook
 from orchestrator.infrastructure.db.writers import (
     SessionFactory,
+    SessionUnitOfWork,
     open_spend_ports,
     open_writer_ports,
 )
@@ -231,8 +234,16 @@ def serving(
 
 
 def launch_engine() -> None:
-    """Launch the engine this process is serving with, if it is serving with one."""
-    for engine, _session_factory, _git in _SERVING:
+    """Launch the engine this process is serving with, if it is serving with one.
+
+    A hold outlives no start: every hold row is deleted before the engine can run a step."""
+    for engine, session_factory, _git in _SERVING:
+        if session_factory is not None:
+            session = session_factory()
+            try:
+                release_hold(SQLAlchemyInstanceHoldRepository(session), SessionUnitOfWork(session))
+            finally:
+                session.close()
         engine.launch()
 
 

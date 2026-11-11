@@ -2000,6 +2000,64 @@
         "title": "HistoryRowOut",
         "type": "object"
       },
+      "HoldConflictOut": {
+        "description": "The 409 body: a problem document whose `errors` are the working steps.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/WorkingStepOut"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "errors"
+        ],
+        "title": "HoldConflictOut",
+        "type": "object"
+      },
+      "HoldIn": {
+        "properties": {
+          "reason": {
+            "maxLength": 200,
+            "title": "Reason",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "maximum": 3600.0,
+            "minimum": 1.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ttl_seconds",
+          "reason"
+        ],
+        "title": "HoldIn",
+        "type": "object"
+      },
       "HoldOut": {
         "properties": {
           "expires_at": {
@@ -6132,6 +6190,121 @@
           }
         ],
         "summary": "Read the instance activity",
+        "tags": [
+          "instance"
+        ]
+      }
+    },
+    "/api/v1/instance/hold": {
+      "delete": {
+        "description": "Delete the hold, whether or not one exists.",
+        "operationId": "release_instance_hold_api_v1_instance_hold_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Release the instance hold",
+        "tags": [
+          "instance"
+        ]
+      },
+      "post": {
+        "description": "Hold the instance, or answer 409 naming each working step and write nothing.",
+        "operationId": "hold_instance_api_v1_instance_hold_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldConflictOut"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldConflictOut"
+                }
+              }
+            },
+            "description": "Working steps stand; `errors[]` names each one and nothing was held."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Hold the instance",
         "tags": [
           "instance"
         ]

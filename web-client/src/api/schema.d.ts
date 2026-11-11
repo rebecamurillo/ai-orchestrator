@@ -101,6 +101,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instance/hold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hold the instance
+         * @description Hold the instance, or answer 409 naming each working step and write nothing.
+         */
+        post: operations["hold_instance_api_v1_instance_hold_post"];
+        /**
+         * Release the instance hold
+         * @description Delete the hold, whether or not one exists.
+         */
+        delete: operations["release_instance_hold_api_v1_instance_hold_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kit/archive": {
         parameters: {
             query?: never;
@@ -1567,6 +1591,29 @@ export interface components {
             tokens_out: number | null;
             /** Trace Url */
             trace_url: string | null;
+        };
+        /**
+         * HoldConflictOut
+         * @description The 409 body: a problem document whose `errors` are the working steps.
+         */
+        HoldConflictOut: {
+            /** Detail */
+            detail: string;
+            /** Errors */
+            errors: components["schemas"]["WorkingStepOut"][];
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+        };
+        /** HoldIn */
+        HoldIn: {
+            /** Reason */
+            reason: string;
+            /** Ttl Seconds */
+            ttl_seconds: number;
         };
         /** HoldOut */
         HoldOut: {
@@ -3185,6 +3232,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["InstanceActivityOut"];
                 };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    hold_instance_api_v1_instance_hold_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HoldIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Working steps stand; `errors[]` names each one and nothing was held. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldConflictOut"];
+                    "application/problem+json": components["schemas"]["HoldConflictOut"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    release_instance_hold_api_v1_instance_hold_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
             401: {

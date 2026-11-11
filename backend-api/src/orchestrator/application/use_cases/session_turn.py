@@ -37,12 +37,14 @@ from orchestrator.application.steps.context import (
     require_workspace,
 )
 from orchestrator.application.use_cases import session_dispatch
+from orchestrator.application.use_cases.instance_hold import hold_active
 from orchestrator.application.use_cases.session_checks import NO_BUDGET
 from orchestrator.application.use_cases.session_dispatch import SESSION_CLOSED, Turn
 from orchestrator.application.use_cases.session_view import SessionTurn, turn_of
 from orchestrator.application.use_cases.signal_effects import TURN_RUNNING
 from orchestrator.application.use_cases.spend import record_attempt_spend
 from orchestrator.application.use_cases.start_attempt import INTERRUPTED
+from orchestrator.application.use_cases.walk import HELD, Held
 from orchestrator.application.use_cases.walk_context import context
 from orchestrator.application.use_cases.writers import WriterPorts, require_run
 from orchestrator.domain.entities.attempt import Attempt
@@ -143,25 +145,32 @@ def read_turn(ports: TurnPorts, attempt_id: UUID) -> Turn | None:
     return Turn(ctx=ctx, run=run, turns=turns, scope=scope)
 
 
-def run_turn(ports: TurnPorts, attempt_id: UUID) -> None:
-    """`session_turn`: dispatch a queued turn; interrupt one a crash left running."""
+def run_turn(ports: TurnPorts, attempt_id: UUID) -> Held | None:
+    """`session_turn`: dispatch a queued turn; interrupt one a crash left running.
+
+    `HELD` while the instance is held: nothing is written and the step asks again."""
     turn = read_turn(ports, attempt_id)
     if turn is None:
-        return
+        return None
     ctx = turn.ctx
     if ctx.attempt.status == "running":
         session_dispatch.interrupt(ctx, INTERRUPTED)
-        return
+        return None
     if ctx.attempt.status != "queued":
-        return
+        return None
+    with ports.writers.uow:
+        held = hold_active(ports.writers.holds, ports.writers.clock.now())
+    if held:
+        return HELD
     if not session.session_open(turn.run):
         session_dispatch.record(ctx, status="error", output_ref=SESSION_CLOSED)
-        return
+        return None
     try:
         session_dispatch.dispatch(turn)
     except Exception as error:
         log.exception(TURN_FAILED, run_id=str(turn.run.id), attempt=ctx.attempt.n)
         session_dispatch.record(ctx, status="error", output_ref=_raised(error))
+    return None
 
 
 def commit_turn(ports: TurnPorts, attempt_id: UUID) -> None:
