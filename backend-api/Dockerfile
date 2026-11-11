@@ -173,6 +173,7 @@ RUN uv sync --locked --no-dev
 COPY --chown=agent:agent scripts/harness /app/scripts/harness
 COPY --chown=agent:agent scripts/readiness_fixture.sh /app/scripts/readiness_fixture.sh
 COPY --chown=agent:agent scripts/docker_context.sh /app/scripts/docker_context.sh
+COPY --chown=agent:agent scripts/setup /app/scripts/setup
 COPY --chown=agent:agent backend-api/docker-entrypoint.sh /app/docker-entrypoint.sh
 
 # The shipped Templates (SPEC CAP-3): `seed_shipped` reads this path at start-up
