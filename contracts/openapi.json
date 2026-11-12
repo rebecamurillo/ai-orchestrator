@@ -2301,6 +2301,17 @@
             "title": "Check",
             "type": "string"
           },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
           "fix": {
             "anyOf": [
               {
@@ -2311,6 +2322,17 @@
               }
             ],
             "title": "Fix"
+          },
+          "guide": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide"
           },
           "status": {
             "enum": [
@@ -3039,6 +3061,17 @@
       "ProblemDetail": {
         "description": "The problem document itself. Members that do not apply are omitted, never `null`.",
         "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
           "detail": {
             "anyOf": [
               {
@@ -3063,6 +3096,17 @@
               }
             ],
             "title": "Errors"
+          },
+          "guide": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide"
           },
           "instance": {
             "anyOf": [
@@ -3099,6 +3143,28 @@
       "ProblemError": {
         "description": "One entry of `errors[]`.\n\n`reason` is always present; the rest name where the reason applies \u2014 a request field\n(`path`) or a place in a workflow template (`template`, `version`, `line`).",
         "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "guide": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide"
+          },
           "line": {
             "anyOf": [
               {

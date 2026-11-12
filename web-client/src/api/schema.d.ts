@@ -1682,8 +1682,12 @@ export interface components {
         LineOut: {
             /** Check */
             check: string;
+            /** Code */
+            code?: string | null;
             /** Fix */
             fix?: string | null;
+            /** Guide */
+            guide?: string | null;
             /**
              * Status
              * @enum {string}
@@ -1935,10 +1939,14 @@ export interface components {
          * @description The problem document itself. Members that do not apply are omitted, never `null`.
          */
         ProblemDetail: {
+            /** Code */
+            code?: string | null;
             /** Detail */
             detail?: string | null;
             /** Errors */
             errors?: components["schemas"]["ProblemError"][] | null;
+            /** Guide */
+            guide?: string | null;
             /** Instance */
             instance?: string | null;
             /** Status */
@@ -1959,6 +1967,10 @@ export interface components {
          *     (`path`) or a place in a workflow template (`template`, `version`, `line`).
          */
         ProblemError: {
+            /** Code */
+            code?: string | null;
+            /** Guide */
+            guide?: string | null;
             /** Line */
             line?: number | null;
             /** Path */

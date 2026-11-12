@@ -8,7 +8,9 @@ from fastapi import FastAPI
 
 from orchestrator.api.errors import Problem, ProblemDetail, ProblemError, finding_error
 from orchestrator.api.providers import template_ports
+from orchestrator.api.schemas.runs import plan_error_problems
 from orchestrator.application import findings
+from orchestrator.application.templates.plan_model import DUPLICATE_ENTRY_ID, PlanError
 from orchestrator.application.use_cases.templates import TemplatePorts
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.main import create_app
@@ -111,6 +113,21 @@ def test_problem_round_trips_code_and_guide() -> None:
 
     assert (detail.code, detail.guide) == ("spec-x", "errors/spec-x")
     assert Problem(status=422, title="t").as_detail().code is None
+
+
+def test_a_plan_error_problem_carries_its_code_and_guide() -> None:
+    coded = plan_error_problems(PlanError(reason=DUPLICATE_ENTRY_ID, item="e1", line=2))
+    uncoded = plan_error_problems(PlanError(reason="git said no"))
+
+    assert [(e.path, e.line, e.code, e.guide) for e in coded] == [
+        (
+            "e1",
+            2,
+            findings.SPEC_DUPLICATE_ENTRY_ID,
+            "errors/spec-duplicate-entry-id",
+        )
+    ]
+    assert [(e.code, e.guide) for e in uncoded] == [(None, None)]
 
 
 def test_a_problem_error_without_code_drops_it_from_the_body() -> None:
