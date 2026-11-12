@@ -116,11 +116,12 @@ def _instance_tools(api: InProcessApi) -> list[Tool]:
     """What this instance is and what it holds."""
 
     async def version() -> Any:
-        """What this instance is: its release, the kit it ships, and its BMAD and harness pins.
+        """What this instance is: its release, its bootstrap contract, where its guide is, and its
+        BMAD and harness pins.
 
-        Call this first. The kit installed in a project records the release it came from; when
-        the two disagree, stop and say so rather than using an endpoint this instance may not
-        have.
+        Call this first, then `read_guide` with no id. When `bootstrap_contract` is above the
+        one your bootstrap states, tell the user (code `refusal-bootstrap-contract`, page
+        `errors/refusal-bootstrap-contract`) and continue; never stop on a release difference.
         """
         return await api.get("/version")
 

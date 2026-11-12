@@ -1532,6 +1532,30 @@
         "title": "GroupOut",
         "type": "object"
       },
+      "GuideRefs": {
+        "description": "Where this instance's guide is (C1): the index, the page route and the MCP resource.",
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "string"
+          },
+          "page_url": {
+            "title": "Page Url",
+            "type": "string"
+          },
+          "resource": {
+            "title": "Resource",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "page_url",
+          "resource"
+        ],
+        "title": "GuideRefs",
+        "type": "object"
+      },
       "HarnessOut": {
         "description": "One row of `GET /harnesses`.",
         "properties": {
@@ -5902,7 +5926,7 @@
         "type": "object"
       },
       "VersionOut": {
-        "description": "The `/api/v1/version` payload (AD-3).\n\n`kit_version` is what `GET /kit/archive` would hand out \u2014 `null` when this instance\nships no kit, which only a source-tree run does. `bmad_installed` is what the last setup\nrun installed (`null` when none did), `bmad_version` the release pin.",
+        "description": "The `/api/v1/version` payload (AD-3).\n\n`bootstrap_contract` is the C1 contract number and `guide` the three guide addresses.\n`kit_version` is always `null`: the key stays so beta.4 kit skills still parse the answer\n(AD-33). `bmad_installed` is what the last setup run installed (`null` when none did),\n`bmad_version` the release pin.",
         "properties": {
           "app_version": {
             "title": "App Version",
@@ -5923,6 +5947,13 @@
             "title": "Bmad Version",
             "type": "string"
           },
+          "bootstrap_contract": {
+            "title": "Bootstrap Contract",
+            "type": "integer"
+          },
+          "guide": {
+            "$ref": "#/components/schemas/GuideRefs"
+          },
           "harness_versions": {
             "$ref": "#/components/schemas/HarnessVersions"
           },
@@ -5940,6 +5971,8 @@
         },
         "required": [
           "app_version",
+          "bootstrap_contract",
+          "guide",
           "kit_version",
           "bmad_version",
           "harness_versions"

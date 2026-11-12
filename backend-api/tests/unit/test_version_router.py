@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from fastapi.routing import APIRoute
 
 from orchestrator.api.routers import version as router_module
 from orchestrator.api.routers.version import SOURCE_VERSION, VersionOut, app_version, router
+from orchestrator.infrastructure.mcp import InProcessApi, build_tools
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.main import create_app
 from tests.unit.conftest import REPO_ROOT
@@ -74,9 +76,17 @@ async def test_the_payload_names_the_app_the_kit_bmad_and_every_harness(
 
     assert response.status_code == HTTP_OK
     # Story 2, orchestrator-deploy-folder epic 1, 2026-11-11: the payload gains `bmad_installed`.
+    # Story 1, orchestrator-instance-guide epic 3, 2026-11-11 (AD-33): kit_version is null and
+    # the answer gains bootstrap_contract and guide.
     assert response.json() == {
         "app_version": (REPO_ROOT / "VERSION").read_text().strip(),
-        "kit_version": "9.9.9",
+        "bootstrap_contract": 1,
+        "guide": {
+            "index": "/llms.txt",
+            "page_url": "/guide/{id}.md",
+            "resource": "guide://{id}",
+        },
+        "kit_version": None,
         "bmad_version": env["BMAD_VERSION"],
         "bmad_installed": None,
         "harness_versions": {
@@ -102,3 +112,28 @@ async def test_the_route_is_behind_the_bearer(env: dict[str, str]) -> None:
         response = await client.get(VERSION)
 
     assert response.status_code == HTTP_UNAUTHORIZED
+
+
+async def test_a_kit_manifest_never_fills_the_kit_version(
+    env: dict[str, str], tmp_path: Path
+) -> None:
+    (tmp_path / "manifest.json").write_text(json.dumps({"kit_version": "1.2.3"}))
+
+    async with _client(Settings(kit_dir=tmp_path), env["ORCHESTRATOR_TOKEN"]) as client:
+        response = await client.get(VERSION)
+
+    assert response.json()["kit_version"] is None
+
+
+def test_the_version_tool_says_to_report_a_contract_difference_and_continue() -> None:
+    tools = build_tools(InProcessApi(object(), lambda: "t"))
+    doc = next(t for t in tools if t.__name__ == "version").__doc__ or ""
+
+    assert not re.search(r"stop\b.*\b(mismatch|disagree)", doc, re.I | re.S)
+    for needle in (
+        "refusal-bootstrap-contract",
+        "errors/refusal-bootstrap-contract",
+        "read_guide",
+        "continue",
+    ):
+        assert needle in doc

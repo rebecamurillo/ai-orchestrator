@@ -21,10 +21,10 @@ are UUIDv7; times are ISO 8601 UTC with `Z`; money is a decimal string in USD.
 | --- | --- | --- |
 | GET | `/healthz` | Liveness, no auth: `{status, version}` |
 | GET | `/api/v1/ping` | Proves the bearer token is accepted |
-| GET | `/api/v1/version` | `{app_version, kit_version, bmad_version, harness_versions{claude, codex, opencode}}` — the handshake |
+| GET | `/api/v1/version` | `{app_version, bootstrap_contract, guide{index, page_url, resource}, kit_version, bmad_version, bmad_installed, harness_versions{claude, codex, opencode}}` — the handshake |
 
-`app_version` is the image tag the instance runs; `kit_version` is the skills built into it
-(the two are one number per release). 404 means an instance older than the route.
+`app_version` is the image tag the instance runs; `bootstrap_contract` is the C1 contract number and `guide` the three guide addresses
+(`/llms.txt`, `/guide/{id}.md`, `guide://{id}`); `kit_version` is always `null`. 404 means an instance older than the route.
 
 ## The kit
 

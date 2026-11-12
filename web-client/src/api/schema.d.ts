@@ -1524,6 +1524,18 @@ export interface components {
             members: string[];
         };
         /**
+         * GuideRefs
+         * @description Where this instance's guide is (C1): the index, the page route and the MCP resource.
+         */
+        GuideRefs: {
+            /** Index */
+            index: string;
+            /** Page Url */
+            page_url: string;
+            /** Resource */
+            resource: string;
+        };
+        /**
          * HarnessOut
          * @description One row of `GET /harnesses`.
          */
@@ -3122,9 +3134,10 @@ export interface components {
          * VersionOut
          * @description The `/api/v1/version` payload (AD-3).
          *
-         *     `kit_version` is what `GET /kit/archive` would hand out — `null` when this instance
-         *     ships no kit, which only a source-tree run does. `bmad_installed` is what the last setup
-         *     run installed (`null` when none did), `bmad_version` the release pin.
+         *     `bootstrap_contract` is the C1 contract number and `guide` the three guide addresses.
+         *     `kit_version` is always `null`: the key stays so beta.4 kit skills still parse the answer
+         *     (AD-33). `bmad_installed` is what the last setup run installed (`null` when none did),
+         *     `bmad_version` the release pin.
          */
         VersionOut: {
             /** App Version */
@@ -3133,6 +3146,9 @@ export interface components {
             bmad_installed?: string | null;
             /** Bmad Version */
             bmad_version: string;
+            /** Bootstrap Contract */
+            bootstrap_contract: number;
+            guide: components["schemas"]["GuideRefs"];
             harness_versions: components["schemas"]["HarnessVersions"];
             /** Kit Version */
             kit_version: string | null;

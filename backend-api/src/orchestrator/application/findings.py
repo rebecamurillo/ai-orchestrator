@@ -94,6 +94,7 @@ TEMPLATE_REDISPATCH_TARGET_IS_NOT_A_ROW_OF_THIS_FRAME = (
 TEMPLATE_DUPLICATE_ROW_PATH = "template-duplicate-row-path"
 REFUSAL_GUIDE_UNAVAILABLE = "refusal-guide-unavailable"
 REFUSAL_LOCAL_ONLY = "refusal-local-only"
+REFUSAL_BOOTSTRAP_CONTRACT = "refusal-bootstrap-contract"
 REFUSAL_TEMPLATE_IN_FOLDER = "refusal-template-in-folder"
 REFUSAL_SPEC_MD_MISSING = "refusal-spec-md-missing"
 REFUSAL_MODELS_UNLISTED = "refusal-models-unlisted"
@@ -181,6 +182,14 @@ REFUSALS: Mapping[str, CodeEntry] = {
         "this is done on the host only",
         "No instance tool or route upgrades, restarts or reconfigures the instance; the host "
         "agent or the user does it from the deploy folder, following the `host/*` pages.",
+        "agent",
+    ),
+    REFUSAL_BOOTSTRAP_CONTRACT: CodeEntry(
+        REFUSAL_BOOTSTRAP_CONTRACT,
+        "refusal",
+        "this instance serves a newer bootstrap contract",
+        "The installed bootstrap keeps working; re-run the bootstrap installer to move to the "
+        "newer contract when convenient.",
         "agent",
     ),
     REFUSAL_TEMPLATE_IN_FOLDER: CodeEntry(

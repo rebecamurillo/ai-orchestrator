@@ -47,9 +47,9 @@ Project, Repository, clone check and `repo-init` are `projects`.
 ## Handshake
 
 Do this before anything else, every session: call the `version` tool, or `GET /api/v1/version` →
-`{app_version, kit_version, bmad_version, harness_versions{}}`, first, then read `/llms.txt`. A 404
+`{app_version, bootstrap_contract, guide{index, page_url, resource}, kit_version, bmad_version, bmad_installed, harness_versions{}}`, first, then read `/llms.txt`. A 404
 means an instance older than the route: fall back to `GET /api/v1/ping`, say so, and treat the version
-as unknown.
+as unknown. `kit_version` is always `null`.
 
 When the release a project was set up for differs from the instance's `app_version`, tell the user
 exactly that and continue the work — a difference is reported, never a stop.
@@ -69,3 +69,11 @@ The guide is open: `/llms.txt` is the index, and `/guide/{id}.md` is one page. O
 `read_guide` reads it on every harness: with no id it returns the index, with a page id it returns
 that page. A harness that supports resources also lists each page as `guide://{id}`, and each
 procedure page is a prompt named by its id with `/` replaced by `.` (`runs/launch` is `runs.launch`).
+
+## Contract differences
+
+Compare the `version` answer's `bootstrap_contract` with the number the installed bootstrap states.
+When the answer's number is above it, tell the user, naming the code `refusal-bootstrap-contract`
+and the page `errors/refusal-bootstrap-contract`, and continue: the installed bootstrap keeps
+working, and re-running the installer moves it to the newer contract when convenient. A release
+difference is never a stop.

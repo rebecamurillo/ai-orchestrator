@@ -1,10 +1,8 @@
-"""`GET /api/v1/version` — what this instance is, for the handshake a client kit performs.
+"""`GET /api/v1/version` — what this instance is: the C1 version answer (AD-33).
 
-A project's installed kit records the version it came from; the skill's first call is this
-route, and a mismatch stops it before it uses an endpoint this instance does not have
-(plan agent-delivery-kit §3). The numbers come from two places only: the distribution's
-own version (the root `VERSION`, which `scripts/check_version.py` holds every manifest to)
-and the pinned tool versions `Settings` already carries (AD-16).
+The answer names the instance's release, its bootstrap contract and where its guide is, plus
+the pinned tool versions `Settings` already carries (AD-16). A release difference never stops a
+client; only `bootstrap_contract` above the one a bootstrap states is reported.
 """
 
 from __future__ import annotations
@@ -21,7 +19,6 @@ import orchestrator
 from orchestrator.api.providers_base import SETTINGS, from_state, setup_record
 from orchestrator.application.setup_summary import bmad_installed
 from orchestrator.domain.ports.setup_record import SetupRecord
-from orchestrator.infrastructure import kit
 from orchestrator.infrastructure.settings import Settings
 
 router = APIRouter(tags=["version"])
@@ -56,15 +53,30 @@ class HarnessVersions(BaseModel):
     opencode: str
 
 
+#: The frozen bootstrap contract number (AD-33, C1); raised only by a contract change.
+BOOTSTRAP_CONTRACT = 1
+
+
+class GuideRefs(BaseModel):
+    """Where this instance's guide is (C1): the index, the page route and the MCP resource."""
+
+    index: str
+    page_url: str
+    resource: str
+
+
 class VersionOut(BaseModel):
     """The `/api/v1/version` payload (AD-3).
 
-    `kit_version` is what `GET /kit/archive` would hand out — `null` when this instance
-    ships no kit, which only a source-tree run does. `bmad_installed` is what the last setup
-    run installed (`null` when none did), `bmad_version` the release pin.
+    `bootstrap_contract` is the C1 contract number and `guide` the three guide addresses.
+    `kit_version` is always `null`: the key stays so beta.4 kit skills still parse the answer
+    (AD-33). `bmad_installed` is what the last setup run installed (`null` when none did),
+    `bmad_version` the release pin.
     """
 
     app_version: str
+    bootstrap_contract: int
+    guide: GuideRefs
     kit_version: str | None
     bmad_version: str
     bmad_installed: str | None = None
@@ -83,7 +95,9 @@ def read_version(
 ) -> VersionOut:
     return VersionOut(
         app_version=app_version(),
-        kit_version=kit.kit_version(settings.kit_dir),
+        bootstrap_contract=BOOTSTRAP_CONTRACT,
+        guide=GuideRefs(index="/llms.txt", page_url="/guide/{id}.md", resource="guide://{id}"),
+        kit_version=None,
         bmad_version=settings.bmad_version,
         bmad_installed=bmad_installed(record.read()),
         harness_versions=HarnessVersions(

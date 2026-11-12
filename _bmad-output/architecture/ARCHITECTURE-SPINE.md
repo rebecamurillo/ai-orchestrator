@@ -393,6 +393,44 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
     - Nothing between markers is edited by hand.
   - **Copies for harnesses without MCP (BR-12).** All three supported harnesses ship an MCP configuration (§ 1), so the set of such harnesses is empty and no copy is generated in this release. The mechanism is deferred (§ 8).
 
+### AD-33 — the bootstrap is release-free, its contract is frozen and self-describing *(ratified 2026-11-11, initiative orchestrator-instance-guide)*
+
+- **Binds:** the bootstrap template and its installer in `deploy/kit/`, the MCP `version` and `read_guide` tools, `VersionOut`, `/llms.txt`, `/mcp`
+- **Prevents:**
+  - an upgrade that forces a reinstall or stops a connected agent (BR-8, AC-2);
+  - a secret in a project file;
+  - two epics owning the `version` answer.
+- **Rule:**
+  - **Template and copy.**
+    - `deploy/kit/` ships a bootstrap **template**. The installer renders it into a project, or into a harness home, as the **installed bootstrap**.
+    - The deploy folder's `kit/` (a product path, AD-27) holds only the template and the installer, so an upgrade refreshes them and never holds client values.
+    - The host agent's installed bootstrap is rendered from the same template (BR-10, AC-5).
+  - **What the installed bootstrap holds:**
+    - the instance address;
+    - the optional web address (BR-11);
+    - the **name** of the environment variable holding the token;
+    - the MCP client configuration for its harness (from `deploy/kit/mcp/`);
+    - the four rules of BR-13;
+    - the contract number it was written for, `bootstrap_contract: 1`;
+    - one instruction: call `version`, then read the guide index.
+  - **No token value is written.** The installer never writes a token value anywhere. Today's write of the token into the project's `.env` is removed. The token is read from the variable the owner sets.
+  - **No release string.** A test renders the template and fails if the result, or any file the installer writes, matches `\b\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?\b`.
+  - **The frozen contract, C1:**
+    - the `/mcp` path;
+    - the tool `version`, whose answer carries:
+      - `app_version`;
+      - `bootstrap_contract: int`;
+      - `guide: {index, page_url, resource}`, where `index` is the `/llms.txt` URL, `page_url` is the URL template `/guide/{id}.md` and `resource` is the URI template `guide://{id}`;
+    - the tool `read_guide(id?)`;
+    - `/llms.txt`.
+
+    No release removes or renames any of these. A changed shape is a new contract number, with the old one still served. A contract test pins the C1 names and keys.
+  - **How a contract difference is reported.** When `version`'s `bootstrap_contract` is above the installed one, the agent reports the difference, with its code and guide page, and continues.
+  - **`kit_version`.** `kit_version` stays in `VersionOut` as `null`, so the beta.4 skills that read it still parse the answer.
+  - **The one-time move.** A project on the beta.4 kit still stops at its first upgrade, because that kit's own skills hold the old version check. The connecting page gives that one reinstall. BR-8 holds for every upgrade after the bootstrap is installed.
+  - **Who owns `version`.** The bootstrap epic alone owns `VersionOut`, the `version` tool's code and its description. The description loses "stop on mismatch".
+  - **Retiring the kit skills.** The four kit skills leave `deploy/kit/skills/`; their content is guide pages (AC-6).
+
 ### AD-34 — the MCP surface is thin wrappers over the REST API; nothing reaches maintenance *(ratified 2026-11-11, initiative orchestrator-instance-guide)*
 
 - **Binds:** `infrastructure/mcp/tools.py`, `facade.py`, the routers they call
