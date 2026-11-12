@@ -340,6 +340,46 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
 - **Prevents:** deployment tests mixed into the code and feature gates; a Run executing install, upgrade or setup code; a release cut on an untested deployment
 - **Rule:** A **deployment test** is a test whose subject is the deploy folder (`deploy/` minus `deploy/llm-platform/`), `install.sh`, the setup runner (`scripts/setup/`), the BMAD sample script, the release files (`release.env`, the compose image tags, `product-files.json`, the `kit bootstrap` archive) or a stack started from them. Every deployment test lives in `deploy-tests/` — `deploy-tests/unit/` (no Docker: scripts on scratch folders, `install.sh` with stubbed `docker` and `curl`, file and archive checks) and `deploy-tests/stack/` (throwaway stacks, hub AD-5) — and runs only through `scripts/test-deploy.sh`, i.e. `make test-deploy` (`make test-deploy-unit`, `make test-deploy-stack` for one level). No other target calls it: not `make lint`, `make test`, `make openapi`, `make coverage`, `make e2e`, `make durability`, not `ci.yml`, and not any Run's `install`, `test` or `quality_gate`. No dispatched agent runs it either. `.github/workflows/deploy.yml` runs `make test-deploy` on `workflow_dispatch` (on demand, e.g. at the end of a development cycle before a release) and on pull requests and pushes to `main` that touch: `deploy/**` except `deploy/llm-platform/**`, `deploy-tests/**`, `scripts/test-deploy.sh`, `scripts/setup/**`, `scripts/harness/**`, `scripts/readiness_fixture.sh`, `scripts/bundle.sh`, `backend-api/Dockerfile`, `backend-api/docker-entrypoint.sh`, `ia-agents-skills/**`, `VERSION`, `.github/workflows/deploy.yml`. *(Amended 2026-11-11 after gate 7, T-1/T-2.)* Of the existing tests, the three that **execute** `install.sh` (`test_deploy_install.py`, `test_install_admin.py`, `test_install_verify_docker.py`) move to `deploy-tests/unit/` with their assertions unchanged; the one import line between them (`test_install_verify_docker.py` → `test_install_admin`) becomes `from test_install_admin import …`, which resolves because pytest's default import mode puts `deploy-tests/unit/` (no `__init__.py`) on the path, and the moved files keep importing `tests.unit.conftest` because `scripts/test-deploy.sh` runs `python -m pytest` from `backend-api/`. Existing tests that only **read** deployment files as text alongside the development stack and the image (`test_deploy_compose.py`, `test_deploy_env_contract.py`, `test_backend_image_docker.py`, `test_dockerfiles.py`, `test_compose_fails_closed.py`, `test_env_template_names.py`, `test_deploy_operator_templates.py` and the like) stay in `make test`, where other tests import their helpers; a story that changes what one of them pins revises it in place under member hard rule 1. Every **new** deployment test this initiative writes goes to `deploy-tests/`; none is added to `make test`. Tests of the image's start-up scripts (`scripts/harness/`, `docker-entrypoint.sh`, `readiness_fixture.sh`), of `deploy/kit/install.sh` (it installs the kit into a project, not the orchestrator) and of `deploy/llm-platform/` stay in `make test`. The env-contract check of AD-20 stays in `make lint`: it is the settings contract, not a deployment test. `release.yml` refuses a tag unless `deploy.yml` succeeded for that commit, as it already does for `ci.yml` (a release commit changes `VERSION`, so the workflow runs on it).
 
+### AD-32 — One guide source per release; every served or generated copy is built from it *(ratified 2026-11-11, initiative orchestrator-instance-guide)*
+
+- **Binds:** `guide/` (new, repository root), the backend image build, `/llms.txt`, `/guide/*`, MCP resources and prompts, `read_guide`, `deploy/README.md`'s shared sections, `make lint`
+- **Prevents:**
+  - a hand-made copy going stale (BR-3);
+  - the README and the guide saying the same thing twice (BR-5);
+  - a page claiming another release (AC-8);
+  - two epics addressing a page differently.
+- **Rule:**
+  - **The source.**
+    - The guide is Markdown under `guide/`.
+    - A **page id** is the page's path under `guide/` without `.md`: lowercase `[a-z0-9-]` segments joined by `/`, for example `connect` or `errors/template-unknown-key`.
+    - Each page opens with front matter:
+      - `title`;
+      - `kind: page | procedure`;
+      - `audience: any | host`;
+      - optional `readme: <section id>`.
+  - **How a page is addressed.** The page id is the only address:
+    - route `/guide/{id}.md`;
+    - MCP resource `guide://{id}`;
+    - `read_guide(id)`.
+
+    A procedure's MCP prompt name is the id with `/` replaced by `.`, mapped by one function. One test fetches every id from the index over HTTP, as a resource and through `read_guide`.
+  - **The build.**
+    - The image build builds `guide/` into `guide-build/` beside `VERSION`, `errors/` included.
+    - It writes the release from `VERSION` into each page's front matter as `release`.
+    - It writes `guide-index.json`: every id in order, with title, kind and audience. `/llms.txt` follows the llmstxt.org layout and is rendered from that index.
+  - **Pages the guide must hold:**
+    - every procedure of the four retired kit skills (AC-6);
+    - the connecting page, which states the one-token accepted risk (PRD § 7) and the one-time move from the beta.4 kit (AD-33);
+    - "would a new workflow do it?" (BR-21);
+    - the feature-request page (BR-22);
+    - the host pages.
+  - **Host pages.** Each page with `audience: host` carries the line "Local agent on the host or the user only" (BR-4, AC-9). A lint check enforces it.
+  - **README shared sections.**
+    - The README sections named by a page's `readme:` sit between `<!-- guide:{section id} -->` and `<!-- /guide -->` markers in `deploy/README.md`, and are generated from that page without its front matter.
+    - `make lint` regenerates them and fails on `git diff`, the same pattern as AD-3.
+    - Nothing between markers is edited by hand.
+  - **Copies for harnesses without MCP (BR-12).** All three supported harnesses ship an MCP configuration (§ 1), so the set of such harnesses is empty and no copy is generated in this release. The mechanism is deferred (§ 8).
+
 ## Consistency Conventions
 
 | Concern | Convention |

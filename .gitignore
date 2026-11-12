@@ -46,3 +46,6 @@ playwright-report/
 coverage/
 # the operator's own workflow files live in deploy/templates/ on the host, never in git
 deploy/templates/*.yaml
+
+# built by `make guide` and the image build; never committed
+guide-build/

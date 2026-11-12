@@ -1,0 +1,36 @@
+name: From a client agent
+description: A feature request drafted by a client's coding agent after no workflow could do the job.
+labels: [from-client-agent]
+body:
+  - type: textarea
+    id: wanted
+    attributes:
+      label: What the user wanted to do
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What the agent tried
+      description: The workflow it drafted and the findings it got.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why a workflow cannot do it
+    validations:
+      required: true
+  - type: input
+    id: app_version
+    attributes:
+      label: Instance release
+    validations:
+      required: true
+  - type: checkboxes
+    id: no_secrets
+    attributes:
+      label: Confirmation
+      options:
+        - label: No code, secret or private address is in this issue
+          required: true
