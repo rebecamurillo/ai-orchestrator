@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from collections.abc import Iterator
 from typing import Any
 from uuid import uuid4
@@ -118,7 +119,13 @@ def parked(api: httpx.Client, gates: GatesFixture, test_mode: None) -> Iterator[
     try:
         yield {"id": run_id, "detail": wait_for_park(api, run_id)}
     finally:
-        api.post(f"{RUNS}/{run_id}/signals", json={"kind": "cancel"})
+        # a later module's hold or slot must not find this Run still working (PR #19, 2026-11-12)
+        cancelled = api.post(f"{RUNS}/{run_id}/signals", json={"kind": "cancel"})
+        assert cancelled.status_code == HTTP_OK, cancelled.text
+        deadline = time.monotonic() + TIMEOUT_SECONDS
+        while detail_of(api, run_id)["run"]["status"] != "cancelled":
+            assert time.monotonic() < deadline, f"run {run_id} not cancelled"
+            time.sleep(0.5)
 
 
 @pytest.fixture(scope="module")
