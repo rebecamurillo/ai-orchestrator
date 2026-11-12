@@ -70,6 +70,7 @@ empty freezes no file for the agent (Operator decision 2026-10-06).
 | GET | `/api/v1/templates` | Names, version lists, latest description |
 | GET | `/api/v1/templates/{name}/versions` | Version numbers, ascending |
 | POST | `/api/v1/templates/{name}/versions` | Save the next version, body `{yaml}` (`version` must be max+1; versions are immutable) |
+| POST | `/api/v1/spec-folders/validate` | Check a spec folder before the push, body `{files: {path: text}}` — findings come back as data (200), limits give 422 |
 | GET/POST | `/api/v1/templates/{name}/validate` | Validate latest / posted `{yaml}` — problems come back as data, never 422 |
 | GET | `/api/v1/templates/{name}/{version}` | One version: yaml, `inputs`, `calls`, `called_by`, `pinned_by` |
 | GET | `/api/v1/templates/{name}/graph` · `/{version}/graph` | Text / structured step graph |
@@ -139,7 +140,7 @@ The same operations are also exposed as MCP tools at `$ORCHESTRATOR_BASE_URL/mcp
 `get_template`, `preflight_run`, `create_run`, `get_run`, `get_run_detail`,
 `wait_run_events`, `send_signal`, `list_queue`, `list_projects`, `create_project`,
 `update_project`, `add_repository`, `check_clone`, `init_repository`, `validate_template`,
-`save_template`, `reload_templates`. Each tool is one call to the
+`save_template`, `reload_templates`, `validate_spec_folder`. Each tool is one call to the
 route above it, so the rules in `rules` apply unchanged. Per-harness configuration
 snippets ship in the kit under `mcp/`; they are not installed automatically.
 

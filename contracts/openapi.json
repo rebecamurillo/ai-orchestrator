@@ -5195,6 +5195,40 @@
         "title": "SignalIn",
         "type": "object"
       },
+      "SpecFolderCheckOut": {
+        "description": "200: a defect is data. The findings equal what the launch check reports.",
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ProblemError"
+            },
+            "title": "Findings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "findings"
+        ],
+        "title": "SpecFolderCheckOut",
+        "type": "object"
+      },
+      "SpecFolderIn": {
+        "description": "`{files: {path: text}}`, paths relative to the initiative folder.",
+        "properties": {
+          "files": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "object"
+          }
+        },
+        "required": [
+          "files"
+        ],
+        "title": "SpecFolderIn",
+        "type": "object"
+      },
       "StepDetailOut": {
         "description": "One step's full detail, as returned by the step-run detail endpoint.\n\n`attempts` is newest first (highest `n` first), consistent with every other endpoint\nthat sorts attempts for display.",
         "properties": {
@@ -9664,6 +9698,72 @@
         "summary": "Read one step's full history and context",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/api/v1/spec-folders/validate": {
+      "post": {
+        "operationId": "validate_spec_folder_api_v1_spec_folders_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecFolderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecFolderCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "More files or bytes than the limits allow, or an unsafe path."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Validate Spec Folder",
+        "tags": [
+          "spec-folders"
         ]
       }
     },

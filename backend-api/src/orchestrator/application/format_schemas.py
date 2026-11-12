@@ -9,6 +9,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from orchestrator.application.spec_folder import (
+    EPICS_KIND,
+    REQUIRED_FIELDS,
+    STORIES_KIND,
+)
+from orchestrator.application.spec_folder import ID_KEY as LIST_ID_KEY
 from orchestrator.application.steps import (
     AGENT_KIND,
     GATES,
@@ -18,13 +24,7 @@ from orchestrator.application.steps import (
 )
 from orchestrator.application.templates import consult
 from orchestrator.application.templates.lines import AS_KEY, STEPS_KEY
-from orchestrator.application.templates.lists import (
-    EPICS_KIND,
-    OPTIONAL_FIELDS,
-    REQUIRED_FIELDS,
-    STORIES_KIND,
-)
-from orchestrator.application.templates.lists import ID_KEY as LIST_ID_KEY
+from orchestrator.application.templates.lists import OPTIONAL_FIELDS
 from orchestrator.application.templates.model import INPUT_TYPES, ON_FAIL_ACTIONS
 from orchestrator.application.templates.on_fail import ON_FAIL_KEY, RUN_KIND
 from orchestrator.application.templates.table import (

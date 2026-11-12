@@ -416,6 +416,28 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
     - The tool table is checked against an allow-list of REST `operationId`s.
     - A unit test fails on any tool outside the allow-list.
 
+### AD-35 — the model list names its source and never guesses; the spec-folder check is one pure function *(ratified 2026-11-11, initiative orchestrator-instance-guide)*
+
+- **Binds:** `infrastructure/harness/models.py`, a new read in `infrastructure/gateway/`, `GET /api/v1/harnesses/{name}/models` (new), `POST /api/v1/spec-folders/validate` (new), `plan_run`, pre-flight, `/schemas/*.json`
+- **Prevents:** a model list that silently falls back to a guess (BR-19); a pre-push check that disagrees with the launch check (AC-13); a format description that drifts from the checks (BR-3)
+- **Rule:**
+  - **The models answer, C4.** It reads `{harness, source: "litellm" | "configured" | "none", models[], note}`.
+    - When `LITELLM_BASE_URL` is set, the backend reads `GET /v1/models` with `LITELLM_API_KEY`, server side, through the gateway port, cached for 60 s. The answer is the list visible to that key, with `source: "litellm"`.
+    - `local` keeps `LOCAL_MODELS`, answered as `source: "configured"`.
+    - Otherwise the answer is `source: "none"` with a `note` and the code `refusal-models-unlisted`.
+    - A harness CLI becomes a source only after the **[experiment]** story shows that the pinned CLI lists its models.
+    - The answer never uses `LITELLM_SPEND_KEY` (AD-5).
+  - **The spec-folder check.**
+    - `application/` gains one pure function, `check_spec_folder(files: Mapping[path, text]) -> list[Finding]`. It holds every spec-folder rule pre-flight and `plan_run` apply today, duplicate story ids included.
+    - `plan_run` reads the files through the `Git` port at `origin/{branch}`, as AD-7 requires, and calls the function.
+    - `POST /api/v1/spec-folders/validate` passes the request body's files to the same function.
+    - A unit test runs one defective fixture both ways and compares the lists of codes.
+  - **The format descriptions.**
+    - `/schemas/workflow.json` is generated at build from the key tables `validate()` uses.
+    - `/schemas/spec-folder.json` is generated from the models `check_spec_folder` parses.
+    - Both are generated at build and never committed; a unit test in `make test` fails when a key of the tables is missing from the schema (`make lint` holds exactly five `uv` invocations, pinned by `test_makefile.py`).
+    - No schema is written by hand.
+
 ## Consistency Conventions
 
 | Concern | Convention |

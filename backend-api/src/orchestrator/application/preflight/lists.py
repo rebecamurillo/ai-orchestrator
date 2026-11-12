@@ -25,9 +25,9 @@ from orchestrator.application.preflight.model import (
     Line,
     finding_line,
 )
+from orchestrator.application.spec_folder import check_spec_md, stories_directory
 from orchestrator.application.steps import AGENT_KIND
 from orchestrator.application.templates.lines import load_sequence, load_with_lines
-from orchestrator.application.templates.lists import stories_directory
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY, REDISPATCH_TARGET_SEQ
 from orchestrator.application.templates.table import CONSULT_KEY
 from orchestrator.domain.entities.run import Run
@@ -142,15 +142,20 @@ def spec_md_lines(ctx: Context) -> list[Line]:
     """Line 7: one per spec folder the plan touches — `found` or `fail · missing`."""
     if ctx.plan is None:
         return []
-    lines: list[Line] = []
-    for folder in spec_folders(ctx):
+    folders = spec_folders(ctx)
+    found: dict[str, str] = {}
+    for folder in folders:
         path = f"{folder}{PATH_SEPARATOR}{SPEC_FILENAME}"
         text = ctx.git.read_file(ctx.base_dir, ctx.plan.plan_ref, path)
         if text is not None:
-            lines.append(Line(CHECK_SPEC_MD, "ok", f"{folder}: found"))
-        else:
-            lines.append(Line(CHECK_SPEC_MD, "fail", f"{folder}: missing"))
-    return lines
+            found[path] = text
+    missing = {finding.item for finding in check_spec_md(found, folders)}
+    return [
+        Line(CHECK_SPEC_MD, "fail", f"{folder}: missing")
+        if folder in missing
+        else Line(CHECK_SPEC_MD, "ok", f"{folder}: found")
+        for folder in folders
+    ]
 
 
 def existing_story_files_line(ctx: Context, ids_by_path: dict[str, tuple[str, ...]]) -> Line:

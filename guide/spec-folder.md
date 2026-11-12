@@ -7,7 +7,7 @@ audience: any
 
 The orchestrator does not invent requirements: initiative and epic Runs walk files that
 live in a **target repository**. This is their contract, extracted from the orchestrator's
-own planner rules (`application/templates/lists.py`, `application/preflight/lists.py`)
+own planner rules (`application/spec_folder.py`)
 and the `spec-gate` step that reviews a folder before any story runs. The BMAD skills that
 `repo-init` installs into a target repository (`bmad-spec`,
 `bmad-create-epics-and-stories`) generate these files in this shape — prefer generating
@@ -181,6 +181,20 @@ companions: []
 - **CAP-1** Failed charges retry with exponential backoff, at most 3 times.
   **success:** `pnpm test retry` exits 0.
 ```
+
+## Check before you push
+
+`validate_spec_folder(files)` over MCP, or `POST /api/v1/spec-folders/validate`, checks a
+folder before it is pushed. The body is `{files: {path: text}}`, each path relative to the
+initiative folder (`epics.yaml`, `<spec_folder>/stories.yaml`, `<spec_folder>/SPEC.md`,
+`<spec_folder>/stories/*.md`). Send every file of the folder.
+
+Limits: 500 files, 1 MiB each, 8 MiB in all; a path is relative and holds no `..`, no `\`
+and no leading `./`. A body over a limit is 422.
+
+The answer is `{findings: [...]}` with status 200: a defect is data. The findings equal what
+the launch check reports after the push, and each carries `code` and `guide` (read page
+`errors/{code}`). An empty list means the folder passes.
 
 ## What refusal looks like
 

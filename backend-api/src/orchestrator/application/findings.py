@@ -95,6 +95,7 @@ TEMPLATE_DUPLICATE_ROW_PATH = "template-duplicate-row-path"
 REFUSAL_GUIDE_UNAVAILABLE = "refusal-guide-unavailable"
 REFUSAL_LOCAL_ONLY = "refusal-local-only"
 REFUSAL_TEMPLATE_IN_FOLDER = "refusal-template-in-folder"
+REFUSAL_SPEC_MD_MISSING = "refusal-spec-md-missing"
 
 #: Reason text -> code, written out so a reworded reason is a visible change here.
 CODE_BY_REASON: Mapping[str, str] = {
@@ -187,6 +188,14 @@ REFUSALS: Mapping[str, CodeEntry] = {
         "The operator's template folder governs this name: a version saved here would be "
         "superseded by the file at the next reload or start-up. The file is edited on the host, "
         "then `reload_templates` (`POST /templates/reload`) stores it as the next version.",
+        "check",
+    ),
+    REFUSAL_SPEC_MD_MISSING: CodeEntry(
+        REFUSAL_SPEC_MD_MISSING,
+        "refusal",
+        "SPEC.md missing from a spec folder",
+        "Every spec folder a Run reads holds a `SPEC.md`, and pre-flight answers `fail · missing` "
+        "for a folder without one.",
         "check",
     ),
 }

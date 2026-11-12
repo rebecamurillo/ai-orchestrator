@@ -46,6 +46,7 @@ ALLOWED_OPERATION_IDS: frozenset[str] = frozenset(
         "validate_text_api_v1_templates__name__validate_post",
         "save_version_api_v1_templates__name__versions_post",
         "reload_folder_api_v1_templates_reload_post",
+        "validate_spec_folder_api_v1_spec_folders_validate_post",
         "preflight_api_v1_runs_preflight_post",
         "create_api_v1_runs_post",
         "post_signal_api_v1_runs__run_id__signals_post",
@@ -205,7 +206,17 @@ def _workflow_tools(api: InProcessApi) -> list[Tool]:
         """
         return await api.post("/templates/reload")
 
-    return [validate_template, save_template, reload_templates]
+    async def validate_spec_folder(files: dict[str, str]) -> Any:
+        """Check a spec folder before it is pushed.
+
+        Send every file of the folder, keyed by its path relative to the initiative folder
+        (`epics.yaml`, `<spec_folder>/stories.yaml`, `<spec_folder>/SPEC.md`,
+        `<spec_folder>/stories/*.md`). The answer equals what the launch check reports after
+        the push. Each finding carries `code` and `guide`: read page `errors/{code}`.
+        """
+        return await api.post("/spec-folders/validate", {"files": files})
+
+    return [validate_template, save_template, reload_templates, validate_spec_folder]
 
 
 def _dispatch_tools(api: InProcessApi) -> list[Tool]:

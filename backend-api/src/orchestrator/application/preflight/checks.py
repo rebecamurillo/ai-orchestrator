@@ -25,8 +25,8 @@ from orchestrator.application.preflight.model import (
     PreflightRequest,
     finding_line,
 )
+from orchestrator.application.spec_folder import EPICS_KIND, RULE_REASONS, list_kind
 from orchestrator.application.steps import AGENT_KIND, CHECKPOINT_KIND, WORKTREE_KIND
-from orchestrator.application.templates.lists import EPICS_KIND, list_kind
 from orchestrator.application.templates.model import all_loops, all_steps
 from orchestrator.application.templates.plan_model import (
     AFTER_LABEL,
@@ -46,18 +46,6 @@ from orchestrator.domain.values import PlannedRow
 
 #: What a git command can fail with, same convention as `use_cases/clone_check.py`.
 STEP_FAILURES = (GitError, OSError)
-
-#: The reasons a `PlanError` names a list file, wherever the loop that failed declared it.
-LIST_FILE_REASONS = frozenset(
-    {
-        "list file not found",
-        "list file is not a list",
-        "entry is missing a required field",
-        "duplicate entry id",
-        "entry ids are not prefix-free",
-        "ambiguous story file",
-    }
-)
 
 #: What a Run this harness/repository check has no readiness run to report says.
 NO_READINESS_RUN = "no readiness run"
@@ -367,6 +355,6 @@ def what_will_run_line(ctx: Context) -> Line:
 
 def list_error_target(ctx: Context) -> str | None:
     """Which list-file check line a `PlanError` about a list file belongs to, if any."""
-    if ctx.plan_error is None or ctx.plan_error.reason not in LIST_FILE_REASONS:
+    if ctx.plan_error is None or ctx.plan_error.reason not in RULE_REASONS:
         return None
     return CHECK_EPICS_YAML if ctx.reads_epics_list else CHECK_STORIES_YAML

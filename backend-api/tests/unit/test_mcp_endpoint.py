@@ -52,6 +52,7 @@ REPOSITORY_ID = UUID("01960000-0000-7000-9000-00000000a0f2")
 #: Story 1 of epic 2, 2026-11-12 (AD-34, owner 2026-11-11): five setup tools added —
 #: create_project, update_project, add_repository, check_clone, init_repository.
 #: Story 2 of epic 2, 2026-11-12 (AD-34): validate_template, save_template, reload_templates.
+#: Story 3 of epic 2, 2026-11-12 (AD-34): validate_spec_folder.
 EXPECTED_TOOLS = (
     "version",
     "list_templates",
@@ -66,6 +67,7 @@ EXPECTED_TOOLS = (
     "validate_template",
     "save_template",
     "reload_templates",
+    "validate_spec_folder",
     "preflight_run",
     "create_run",
     "send_signal",

@@ -14,13 +14,13 @@ applies. A loop over any other file is still a loop; it simply has no such rules
 from __future__ import annotations
 
 import pytest
+import yaml
 
 from orchestrator.application.templates.lines import load_sequence
 from orchestrator.application.templates.lists import (
     EPICS_KIND,
     REQUIRED_FIELDS,
     STORIES_KIND,
-    check_entries,
     list_kind,
     read_list,
     stories_directory,
@@ -186,6 +186,8 @@ def test_a_list_file_of_scalars_is_not_a_list_of_entries() -> None:
 
 
 # --- checking the entries -----------------------------------------------------------------------
+# Story 3 of epic 2, 2026-11-12 (AD-35): the entry rules moved to `check_spec_folder`; every
+# expected reason and item is unchanged, and the plan reaches them through `read_list`.
 
 
 def entries(*ids: str) -> tuple[dict[str, object], ...]:
@@ -194,30 +196,34 @@ def entries(*ids: str) -> tuple[dict[str, object], ...]:
     )
 
 
+def check(items: tuple[dict[str, object], ...], path: str = PATH) -> None:
+    """The entries as YAML in the list file `read_list` reads, so the plan's own path refuses."""
+    text = yaml.safe_dump(list(items), default_flow_style=False)
+    git = FakeGit(refs={}, files={(REF, path): text})
+    read_list(reader(git), frame(), path, line=LINE)
+
+
 def test_entries_that_state_every_required_field_pass() -> None:
-    check_entries(entries("4-1", "4-2"), STORIES_KIND, frame(), line=LINE)
+    check(entries("4-1", "4-2"))
 
 
 def test_a_loop_over_a_file_with_no_required_fields_checks_nothing() -> None:
-    check_entries(({"anything": 1},), None, frame(), line=LINE)
+    check(({"anything": 1},), "docs/other.yaml")
 
 
 def test_an_entry_missing_a_required_field_names_the_entry_by_its_id() -> None:
-    items = ({"id": "4-1", "title": "A story"},)
-
     with pytest.raises(PlanError) as raised:
-        check_entries(items, STORIES_KIND, frame(), line=LINE)
+        check(({"id": "4-1", "title": "A story"},))
 
     assert raised.value.reason == ENTRY_MISSING_FIELDS
     assert raised.value.item == "4-1"
+    assert raised.value.line == LINE
 
 
 def test_a_required_field_that_is_there_but_says_nothing_is_missing() -> None:
     """A blank title commits `story 4-1:  (orchestrator)`; absent and empty are one case."""
-    items = ({"id": "4-1", "title": "", "description": "d"},)
-
     with pytest.raises(PlanError) as raised:
-        check_entries(items, STORIES_KIND, frame(), line=LINE)
+        check(({"id": "4-1", "title": "", "description": "d"},))
 
     assert raised.value.reason == ENTRY_MISSING_FIELDS
     assert raised.value.item == "4-1"
@@ -225,42 +231,39 @@ def test_a_required_field_that_is_there_but_says_nothing_is_missing() -> None:
 
 def test_a_required_field_the_operator_left_blank_in_yaml_is_missing() -> None:
     """`title:` with nothing after it is `None`, which says as little as `""` does."""
-    items = ({"id": "4-1", "title": None, "description": "d"},)
-
     with pytest.raises(PlanError):
-        check_entries(items, STORIES_KIND, frame(), line=LINE)
+        check(({"id": "4-1", "title": None, "description": "d"},))
 
 
 def test_an_entry_missing_its_id_is_named_by_its_position() -> None:
     items = ({"id": "4-1", "title": "A", "description": "d"}, {"title": "B", "description": "d"})
 
     with pytest.raises(PlanError) as raised:
-        check_entries(items, STORIES_KIND, frame(), line=LINE)
+        check(items)
 
     assert raised.value.item == "entry 1"
 
 
 def test_an_epics_entry_without_a_branch_or_a_spec_folder_is_incomplete() -> None:
-    items = ({"id": "e1", "title": "An epic", "branch": "feat/x"},)
-
     with pytest.raises(PlanError) as raised:
-        check_entries(items, EPICS_KIND, frame(), line=LINE)
+        check(({"id": "e1", "title": "An epic", "branch": "feat/x"},), "docs/epics.yaml")
 
     assert raised.value.reason == ENTRY_MISSING_FIELDS
 
 
 def test_two_entries_with_the_same_id_are_a_duplicate() -> None:
     with pytest.raises(PlanError) as raised:
-        check_entries(entries("4-1", "4-1"), STORIES_KIND, frame(), line=LINE)
+        check(entries("4-1", "4-1"))
 
     assert raised.value.reason == DUPLICATE_ENTRY_ID
     assert raised.value.item == "4-1"
+    assert raised.value.file == PATH
 
 
 def test_ids_that_are_not_prefix_free_are_refused_naming_the_longer_one() -> None:
     """`4-1-a` would be matched by `4-1`'s own story-file glob, so neither can be trusted."""
     with pytest.raises(PlanError) as raised:
-        check_entries(entries("4-1", "4-1-a"), STORIES_KIND, frame(), line=LINE)
+        check(entries("4-1", "4-1-a"))
 
     assert raised.value.reason == ID_NOT_PREFIX_FREE
     assert raised.value.item == "4-1-a"
@@ -268,7 +271,7 @@ def test_ids_that_are_not_prefix_free_are_refused_naming_the_longer_one() -> Non
 
 def test_ids_that_merely_share_a_prefix_are_fine() -> None:
     """`4-10` is not `4-1-…`, so the rule must compare on the separator, not on the text."""
-    check_entries(entries("4-1", "4-10"), STORIES_KIND, frame(), line=LINE)
+    check(entries("4-1", "4-10"))
 
 
 # --- the already-done rule --------------------------------------------------------------------

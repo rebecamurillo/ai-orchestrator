@@ -256,7 +256,7 @@ class PlanError(Invalid):
     own — a base branch that is not on the remote is about the Run, not about a line.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 — every field is an independent, keyword-only position
         self,
         *,
         reason: str,
@@ -264,6 +264,7 @@ class PlanError(Invalid):
         version: int | None = None,
         line: int | None = None,
         item: str | None = None,
+        file: str | None = None,
     ) -> None:
         super().__init__(_sentence(reason, template, version, line, item))
         self.reason = reason
@@ -271,6 +272,8 @@ class PlanError(Invalid):
         self.version = version
         self.line = line
         self.item = item
+        #: The spec-folder file at fault; read by the check route, rendered by nothing else.
+        self.file = file
 
 
 def _sentence(

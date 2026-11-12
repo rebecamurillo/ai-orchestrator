@@ -711,6 +711,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spec-folders/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Spec Folder */
+        post: operations["validate_spec_folder_api_v1_spec_folders_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/steps": {
         parameters: {
             query?: never;
@@ -2783,6 +2800,24 @@ export interface components {
             };
             /** Stop */
             stop?: number | null;
+        };
+        /**
+         * SpecFolderCheckOut
+         * @description 200: a defect is data. The findings equal what the launch check reports.
+         */
+        SpecFolderCheckOut: {
+            /** Findings */
+            findings: components["schemas"]["ProblemError"][];
+        };
+        /**
+         * SpecFolderIn
+         * @description `{files: {path: text}}`, paths relative to the initiative folder.
+         */
+        SpecFolderIn: {
+            /** Files */
+            files: {
+                [key: string]: string;
+            };
         };
         /**
          * StepDetailOut
@@ -5364,6 +5399,50 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    validate_spec_folder_api_v1_spec_folders_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecFolderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecFolderCheckOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description More files or bytes than the limits allow, or an unsafe path. */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -24,7 +24,8 @@ HOSTILE = "../instance/hold?x="
 FORBIDDEN_FAMILIES = ("/api/v1/instance", "/api/v1/kit")
 FORBIDDEN_FRAGMENTS = ("/readiness", "/probe")
 #: Story 2 of epic 2, 2026-11-12 (AD-34): validate_template, save_template, reload_templates join.
-NINETEEN = 19
+#: Story 3 of epic 2, 2026-11-12 (AD-34): validate_spec_folder joins.
+TWENTY = 20
 
 PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "version": {},
@@ -40,6 +41,7 @@ PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "validate_template": {"name": "fixture", "yaml": ""},
     "save_template": {"name": "fixture", "yaml": ""},
     "reload_templates": {},
+    "validate_spec_folder": {"files": {}},
     "preflight_run": {"body": {}},
     "create_run": {"body": {}},
     "send_signal": {"run_id": ID, "kind": "continue"},
@@ -137,7 +139,7 @@ def test_every_tool_has_placeholders() -> None:
 
 async def test_every_tool_makes_one_call_to_an_allowed_operation(paths: dict[str, Any]) -> None:
     assert await violations(_tools, ALLOWED_OPERATION_IDS, paths) == []
-    assert len(ALLOWED_OPERATION_IDS) == NINETEEN
+    assert len(ALLOWED_OPERATION_IDS) == TWENTY
 
 
 async def test_a_tool_calling_an_unlisted_operation_is_reported(paths: dict[str, Any]) -> None:
