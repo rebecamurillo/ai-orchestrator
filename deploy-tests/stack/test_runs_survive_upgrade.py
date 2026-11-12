@@ -47,15 +47,11 @@ AGENT_TEMPLATE = (
     "    uses: agent\n"
     "    with:\n"
     "      harness: fake\n"
-    "      skill: staged-implement\n"
-    '      args: {{ spec_folder: specs/s, story_id: "1" }}\n'
+    # Own-text form, no `skill`: the scripted `fake` harness has no skill catalog, so a named
+    # skill fails pre-flight (409). AC-9/AC-9a need a Run blocked across the upgrade; the
+    # skill is incidental (retro F2, Operator 2026-11-12).
+    '      prompt: "Write story 1 of specs/s and stop at its blocking question."\n'
     "    prompts:\n"
-    '      dispatch: "Run the skill {{skill}} in folder+id dispatch mode: spec folder'
-    ' {{spec_folder}}, story id {{story_id}}."\n'
-    "      rendered: >-\n"
-    "        The workflow for skill {{skill}} is already rendered at {{path}}. Read that file\n"
-    "        fully and follow it; every step, status and halt this dispatch owes is defined\n"
-    "        there. Do not run render_skill.py yourself.\n"
     "      answer: 'Answer from the operator to the blocking condition"
     ' "{{condition}}": {{answer}}\'\n'
     '      halt: "Halt after planning."\n'

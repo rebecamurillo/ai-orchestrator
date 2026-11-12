@@ -386,6 +386,10 @@ def install_stack(
         "ORCHESTRATOR_SECRET_KEY": base64.urlsafe_b64encode(os.urandom(32)).decode(),
         "POSTGRES_PASSWORD": password,
         "DATABASE_URL": f"postgresql+psycopg://orchestrator:{password}@postgres:5432/orchestrator",
+        # A fixed dummy, never a real token and never read from the host: doctor only refuses
+        # a blank or `change-me` value (deploy/install.sh doctor_env), and `.env.example`'s
+        # placeholder would fail AC-1's doctor (retro F1, Operator 2026-11-12).
+        "GITHUB_TOKEN": "aio-deploy-test-token",
         "VERIFY_DOCKER": "false",
         "LITELLM_BASE_URL": "",
         "LITELLM_API_KEY": "",
