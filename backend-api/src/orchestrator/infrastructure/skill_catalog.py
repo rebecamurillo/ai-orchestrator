@@ -7,9 +7,12 @@ from pathlib import Path
 
 #: Where `scripts/harness/_common.sh::write_skills_manifest` leaves each harness's catalog,
 #: relative to `AGENT_HOME`. The harnesses resolve skills from different directories, so a
-#: skill present for one is not present for another; `local` runs on opencode.
+#: skill present for one is not present for another; `local` runs on opencode. `fake` (test
+#: mode only) speaks Claude's envelope and reads Claude's catalog, as every harness did before
+#: the split; without it no e2e Run passes pre-flight (PR #19 review, 2026-11-12).
 MANIFESTS: dict[str, Path] = {
     "claude": Path(".claude") / "skills-manifest.json",
+    "fake": Path(".claude") / "skills-manifest.json",
     "codex": Path(".agents") / "skills-manifest.json",
     "opencode": Path(".config") / "opencode" / "skills-manifest.json",
     "local": Path(".config") / "opencode" / "skills-manifest.json",

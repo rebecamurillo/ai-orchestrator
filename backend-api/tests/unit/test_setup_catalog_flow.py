@@ -140,7 +140,10 @@ def test_prepare_run_and_install_name_the_same_harnesses() -> None:
     assert loop in PREPARE.read_text()
     assert "HARNESSES=(claude codex opencode)" in RUN_SH.read_text()
     assert loop in _setup_service_run()
-    assert {name for name in MANIFESTS if name != "local"} == set(HARNESSES)
+    # `local` and the test-mode `fake` read another harness's manifest; neither has a setup
+    # folder of its own (PR #19 review, 2026-11-12: `fake` reads Claude's catalog)
+    assert {name for name in MANIFESTS if name not in ("local", "fake")} == set(HARNESSES)
+    assert MANIFESTS["fake"] == MANIFESTS["claude"]
 
 
 def test_install_calls_catalog_and_prepare_at_paths_the_image_ships() -> None:
