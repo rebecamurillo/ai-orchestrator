@@ -56,4 +56,6 @@ def test_the_response_is_the_one_list_envelope(authenticated: httpx.Client) -> N
             "last_readiness_run_id",
             "lines",
             "models",
+            # orchestrator-deploy-folder epic 2 story 2 (962afbb, 2026-11-11): the setup record
+            "setup",
         }

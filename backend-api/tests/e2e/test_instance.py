@@ -171,6 +171,12 @@ def working_entry(api: httpx.Client, run_id: str) -> dict[str, Any] | None:
     return next((w for w in activity(api)["working"] if w["run_id"] == run_id), None)
 
 
+def working_on(api: httpx.Client, run_id: str, step: str) -> bool:
+    # row 1 (`plan.check`) is working first; wait for the named step (PR #19, 2026-11-12: race)
+    entry = working_entry(api, run_id)
+    return entry is not None and str(entry["path"]).split("/")[-1] == step
+
+
 # ── the bearer guards every new route ───────────────────────────────────────────────────
 
 
@@ -206,7 +212,9 @@ def test_a_running_shell_step_is_working_and_its_run_is_in_the_engine(
 ) -> None:
     run_id = start_shell_run(api, repository_id, SLOW_STEP, SLOW_COMMAND)
     try:
-        wait_until(f"run {run_id} listed as working", lambda: working_entry(api, run_id))
+        wait_until(
+            f"run {run_id} working on {SLOW_STEP}", lambda: working_on(api, run_id, SLOW_STEP)
+        )
 
         entry = working_entry(api, run_id)
         assert entry is not None
@@ -282,7 +290,9 @@ def test_a_hold_is_refused_409_naming_the_working_step_and_nothing_is_held(
 ) -> None:
     run_id = start_shell_run(api, repository_id, SLOW_STEP, SLOW_COMMAND)
     try:
-        wait_until(f"run {run_id} listed as working", lambda: working_entry(api, run_id))
+        wait_until(
+            f"run {run_id} working on {SLOW_STEP}", lambda: working_on(api, run_id, SLOW_STEP)
+        )
 
         refused = api.post(HOLD, json={"ttl_seconds": HOLD_TTL_SECONDS, "reason": "e2e"})
 
