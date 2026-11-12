@@ -9,6 +9,9 @@
 #   ./install.sh start | stop | status | logs     # day-2 operations on this stack
 #   ./install.sh start --with-docker              # add the Docker daemon for Runs (VERIFY_DOCKER)
 #   ./install.sh install --no-bmad                # skip the BMAD skills (setup/bmad.choice → removed)
+#   ./install.sh setup [--reset]                  # run setup/*.sh and BMAD under the hold; --reset first empties the harness asset folders (logins kept)
+#   ./install.sh bmad remove                      # setup/bmad.choice → removed, then setup (BMAD's skills deleted)
+#   ./install.sh bmad install                     # setup/bmad.choice → installed, then setup
 #   ./install.sh doctor                           # read-only checks; non-zero on any `fail`
 #   ./install.sh diagnose                         # a redacted report to attach to a bug report
 #   ./install.sh harness claude --subscription    # Claude Max/Pro auth instead of an API key
@@ -59,6 +62,8 @@ pull=1               # 0: the images are already on this machine (built from a c
 tag_arg=""
 command=""
 harness_arg=""       # the harness `harness` acts on
+reset=0              # 1: `setup --reset`
+bmad_arg=""          # install|remove, the word after `bmad`
 subscription=""      # "" neither flag, 1 --subscription, 0 --api-key
 version_arg=""       # the harness CLI version `harness --version` pins
 version_given=0      # 1 once --version appeared, so an empty value is refused rather than ignored
@@ -83,6 +88,8 @@ on_exit() {
 		rm -rf "$work"
 		rmdir "${here}/.upgrade" 2>/dev/null
 	fi
+	# a hold taken by setup, bmad or install's setup run, still held at a set -e or signal exit
+	[[ "$held" -eq 0 || -n "$work" ]] || release_hold 15
 	[[ -z "$scratch" ]] || rm -rf "$scratch"
 	if [[ "$rc" -ne 0 && -n "$upgrade_stage" ]]; then
 		{
@@ -107,14 +114,19 @@ warn() { printf 'warning: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
-	sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+	sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 # ── arguments ────────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
+	# `bmad install` is not the `install` command
+	if [[ "$command" == "bmad" && -z "$bmad_arg" && ( "$1" == "install" || "$1" == "remove" ) ]]; then
+		bmad_arg="$1"; shift; continue
+	fi
 	case "$1" in
 		install|start|stop|status|logs|upgrade|uninstall|env) command="$1" ;;
-		doctor|diagnose|harness) command="$1" ;;
+		doctor|diagnose|harness|setup|bmad) command="$1" ;;
+		--reset) reset=1 ;;
 		--tag) [[ $# -ge 2 ]] || die "--tag needs a value"; tag_arg="$2"; shift ;;
 		--tag=*) tag_arg="${1#--tag=}" ;;
 		--yes|-y) yes=1 ;;
@@ -137,12 +149,21 @@ while [[ $# -gt 0 ]]; do
 			fi ;;
 		-h|--help) usage; exit 0 ;;
 		# `harness` takes the harness name as a bare word; nothing else here does
-		*) [[ "$command" == "harness" && -z "$harness_arg" ]] || die "unknown argument: $1 (try --help)"
+		*) [[ "$command" != "bmad" || -n "$bmad_arg" ]] ||
+		   	die "bmad needs install or remove, not $1: ./install.sh bmad remove | ./install.sh bmad install"
+		   [[ "$command" == "harness" && -z "$harness_arg" ]] || die "unknown argument: $1 (try --help)"
 		   harness_arg="$1" ;;
 	esac
 	shift
 done
 command="${command:-install}"
+[[ "$reset" -eq 0 || "$command" == "setup" ]] ||
+	die "--reset is for setup: ./install.sh setup --reset"
+[[ "$command" != "bmad" || -n "$bmad_arg" ]] ||
+	die "bmad needs install or remove: ./install.sh bmad remove | ./install.sh bmad install"
+# `bmad remove install` would otherwise run the install command
+[[ -z "$bmad_arg" || "$command" == "bmad" ]] ||
+	die "bmad takes one word and no other command: ./install.sh bmad remove | ./install.sh bmad install"
 [[ "$no_bmad" -eq 0 || "$command" == "install" ]] ||
 	die "--no-bmad is for install: ./install.sh install --no-bmad"
 [[ -z "$with_docker" || "$command" == "install" || "$command" == "start" ]] ||
@@ -656,8 +677,9 @@ EOF
 
 # The setup service itself: its logs directory, the agent home, the BMAD pin, one `run --rm`.
 # Returns the run's exit code; the hold around it is the caller's.
-setup_service_run() {   # setup_service_run TRIGGER RELEASE
-	local pin rc=0
+setup_service_run() {   # setup_service_run TRIGGER RELEASE [RUNNER_ARG…]
+	local pin rc=0 trigger="$1" release="$2"
+	shift 2
 	local -a pins=()
 	pin="$(env_pin BMAD_VERSION)"
 	[[ -n "$pin" || ! -f "$release_file" ]] || pin="$(get_var "$release_file" BMAD_VERSION)"
@@ -667,8 +689,8 @@ setup_service_run() {   # setup_service_run TRIGGER RELEASE
 	mkdir -p "${here}/logs/setup"
 	compose exec -T backend-api sh -c 'mkdir -p "${AGENT_HOME:-/home/agent}/.orchestrator"' ||
 		warn "could not create the agent home's .orchestrator directory in backend-api"
-	compose_setup run --rm -e "ORCH_SETUP_TRIGGER=${1}" -e "ORCH_RELEASE=${2}" \
-		${pins[@]+"${pins[@]}"} setup || rc=$?
+	compose_setup run --rm -e "ORCH_SETUP_TRIGGER=${trigger}" -e "ORCH_RELEASE=${release}" \
+		${pins[@]+"${pins[@]}"} setup ${1+"$@"} || rc=$?
 	return "$rc"
 }
 
@@ -1235,6 +1257,63 @@ unsafe_path() {
 	esac
 }
 
+# Refuses (exit 1 or 3) before anything is written when backend-api runs but cannot be asked, or a
+# step is working. Sets api_up.
+setup_preflight() {
+	local services health activity working
+	api_up=0
+	services="$(compose ps --status running --services 2>/dev/null || true)"
+	if printf '%s\n' "$services" | grep -qx backend-api; then api_up=1; fi
+	[[ "$api_up" -eq 1 ]] || return 0
+	health="$(api_get /healthz "${scratch}/healthz.out")"
+	activity="$(api_get /api/v1/instance/activity "${scratch}/activity.json")"
+	if [[ "$health" != "200" || "$activity" != "200" ]]; then
+		refuse 1 "backend-api is running but its API did not answer (/healthz ${health}, /api/v1/instance/activity ${activity}) — ./install.sh logs"
+	fi
+	working="$(working_lines "${scratch}/activity.json" working)"
+	[[ -z "$working" ]] || refuse 3 "$working"
+}
+
+# `setup`, `setup --reset`, `bmad remove`, `bmad install`: one setup run under the hold; no restart.
+cmd_setup() {
+	local release trigger word working rc=0 rec=0 api_up=0
+	local -a runner_args=()
+	check_tools
+	[[ -f "$env_file" ]] || die ".env is missing — run ./install.sh first"
+	scratch="$(mktemp -d)"
+	release="$(resolve_tag)"
+	setup_preflight
+	if [[ "$api_up" -eq 1 ]]; then
+		take_hold 900 setup
+		case "$hold_code" in
+			2??) ;;
+			409)
+				working="$(working_lines "${scratch}/hold.json" errors)"
+				refuse 3 "${working:-the instance hold answered 409: a step is working}" ;;
+			*) refuse 1 "the instance hold answered ${hold_code} — ./install.sh logs" ;;
+		esac
+	fi
+	if [[ "$command" == "bmad" ]]; then
+		word="installed"
+		[[ "$bmad_arg" != "remove" ]] || word="removed"
+		mkdir -p "${here}/setup"
+		printf '%s\n' "$word" > "${here}/setup/bmad.choice.tmp"
+		mv "${here}/setup/bmad.choice.tmp" "${here}/setup/bmad.choice"
+		say "setup/bmad.choice: ${word}"
+	fi
+	trigger="on-demand"
+	if [[ "$reset" -eq 1 ]]; then trigger="reset"; runner_args=(--reset); fi
+	step "setup (${trigger})"
+	setup_service_run "$trigger" "$release" ${runner_args[@]+"${runner_args[@]}"} || rc=$?
+	[[ "$held" -eq 0 ]] || release_hold 15
+	if [[ "$api_up" -eq 1 ]]; then
+		print_setup_record "$rc" || rec=1
+	else
+		say "setup record not read: backend-api is not running — ./install.sh start, then ./install.sh doctor"
+	fi
+	[[ "$rc" -eq 0 && "$rec" -eq 0 ]] || exit 2
+}
+
 cmd_upgrade() {
 	local old new running_version code image ts services api_up=0 staged new_dbos old_dbos line p backup
 	local working engine postgres_up=0 setup_rc=0 made_backups=0
@@ -1728,4 +1807,5 @@ case "$command" in
 	doctor)    cmd_doctor ;;
 	diagnose)  cmd_diagnose ;;
 	harness)   cmd_harness ;;
+	setup|bmad) cmd_setup ;;
 esac
