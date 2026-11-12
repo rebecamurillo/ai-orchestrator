@@ -2699,10 +2699,9 @@ export interface components {
         SaveVersionIn: {
             /**
              * Refuse If In Folder
-             * @description Refuse with 409 `refusal-template-in-folder` instead of saving when the operator's template folder holds this name; the web editor never sends it.
-             * @default false
+             * @description Refuse with 409 `refusal-template-in-folder` instead of saving when the operator's template folder holds this name; the web editor never sends it. Absent or null means false.
              */
-            refuse_if_in_folder: boolean;
+            refuse_if_in_folder?: boolean | null;
             /** Yaml */
             yaml: string;
         };
@@ -5796,7 +5795,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description `refuse_if_in_folder` was set and the operator's template folder holds this name (`refusal-template-in-folder`); nothing is stored. */
+            /** @description `refuse_if_in_folder` was set and the operator's template folder holds this name (`refusal-template-in-folder`), or a concurrent save took this version number (`conflict`); nothing is stored. */
             409: {
                 headers: {
                     [name: string]: unknown;

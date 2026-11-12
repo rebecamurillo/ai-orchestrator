@@ -78,7 +78,8 @@ SAVE_REFUSALS = {
     HTTP_NOT_FOUND: NOT_FOUND_RESPONSE,
     http_status.HTTP_409_CONFLICT: _refusal(
         "`refuse_if_in_folder` was set and the operator's template folder holds this name "
-        "(`refusal-template-in-folder`); nothing is stored."
+        "(`refusal-template-in-folder`), or a concurrent save took this version number "
+        "(`conflict`); nothing is stored."
     ),
     HTTP_UNPROCESSABLE_CONTENT: VALIDATION_RESPONSE,
 }
@@ -147,7 +148,7 @@ def _held_in_folder(name: str, ports: TemplatePorts) -> Problem:
 )
 def save_version(name: str, payload: SaveVersionIn, ports: Ports) -> TemplateVersionOut:
     """`version` must be `max(existing) + 1`; a saved version can never be changed (AD-15)."""
-    if payload.refuse_if_in_folder and name in use_cases.folder_stems(ports):
+    if payload.refuse_if_in_folder is True and name in use_cases.folder_stems(ports):
         raise _held_in_folder(name, ports)
     try:
         saved = use_cases.save_version(ports, name, payload.yaml)

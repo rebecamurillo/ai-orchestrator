@@ -75,8 +75,8 @@ def test_the_contract_declares_the_409_and_the_flag(env: dict[str, str]) -> None
     assert "application/problem+json" in operation["responses"]["409"]["content"]
     schema = document["components"]["schemas"]["SaveVersionIn"]
     flag = schema["properties"]["refuse_if_in_folder"]
-    assert flag["type"] == "boolean"
-    assert flag["default"] is False
+    assert {"type": "boolean"} in flag["anyOf"]
+    assert flag.get("default") is None
     assert "refuse_if_in_folder" not in schema["required"]
 
 
@@ -89,3 +89,16 @@ async def test_a_flagged_or_unflagged_invalid_body_on_a_free_name_is_still_a_422
     response = await post(api, {"yaml": "name: plain\n", "refuse_if_in_folder": flag}, "plain")
 
     assert response.status_code == HTTP_UNPROCESSABLE
+
+
+async def test_an_absent_or_null_flag_on_a_folder_held_name_saves_with_the_warning(
+    env: dict[str, str],
+) -> None:
+    api = held(env)
+
+    absent = await post(api, {"yaml": v2()})
+    null = await post(api, {"yaml": BODY.format(n=SMOKE, v=3), "refuse_if_in_folder": None})
+
+    assert [absent.status_code, null.status_code] == [HTTP_CREATED, HTTP_CREATED]
+    assert absent.json()["in_folder"] is True
+    assert api.templates.list_versions(SMOKE) == [1, 2, 3]
