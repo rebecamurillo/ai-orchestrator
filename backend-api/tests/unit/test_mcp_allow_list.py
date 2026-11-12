@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from typing import Any, cast
+from urllib.parse import quote
 
 import pytest
 
@@ -216,6 +217,75 @@ async def test_a_path_id_that_is_not_a_uuid_is_refused_before_any_call(name: str
         await tool(**{argument: HOSTILE}, **extra)
 
     assert recorder.calls == []
+
+
+#: Epic 2 retro R1/R2, operator ruling park 6, 2026-11-12: every path tool, hostile arguments,
+#: asserted on what the transport receives after httpx normalises the URL.
+PATH_TOOLS: dict[str, tuple[str, dict[str, Any], str, str]] = {
+    "get_template": ("name", {"version": 2}, "/api/v1/templates/{}/2", "repo-init"),
+    "send_signal": ("run_id", {"kind": "continue"}, "/api/v1/runs/{}/signals", ID),
+    "get_run": ("run_id", {}, "/api/v1/runs/{}", ID),
+    "get_run_detail": ("run_id", {}, "/api/v1/runs/{}/detail", ID),
+    "wait_run_events": ("run_id", {"wait": 0}, "/api/v1/runs/{}/events", ID),
+    "update_project": ("project_id", {"body": {}}, "/api/v1/projects/{}", ID),
+    "add_repository": ("project_id", {"body": {}}, "/api/v1/projects/{}/repositories", ID),
+    "check_clone": ("repository_id", {}, "/api/v1/repositories/{}/clone-check", ID),
+    "init_repository": ("repository_id", {}, "/api/v1/repositories/{}/init", ID),
+}
+HOSTILE_SEGMENTS = (
+    "..",
+    "../health",
+    "a/../../instance/activity",
+    "%2e%2e",
+    "a/b",
+    "a\\b",
+    "a?x=1",
+    "a#f",
+    "",
+)
+
+
+class TransportRecorder:
+    """An ASGI app behind the real `InProcessApi`: records the path the transport delivers."""
+
+    def __init__(self) -> None:
+        self.received: list[tuple[str, bytes]] = []
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        self.received.append((scope["path"], scope["raw_path"]))
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"{}"})
+
+
+def _path_tool(recorder: TransportRecorder, name: str) -> Tool:
+    tools = build_tools(InProcessApi(recorder, lambda: "tok"))
+    return next(t for t in tools if t.__name__ == name)
+
+
+@pytest.mark.parametrize("value", HOSTILE_SEGMENTS)
+@pytest.mark.parametrize("name", sorted(PATH_TOOLS))
+async def test_a_hostile_path_argument_never_leaves_its_one_segment(name: str, value: str) -> None:
+    argument, extra, template, _ = PATH_TOOLS[name]
+    recorder = TransportRecorder()
+
+    try:
+        await _path_tool(recorder, name)(**{argument: value}, **extra)
+    except ToolFailure:
+        assert recorder.received == []
+        return
+
+    encoded = quote(value, safe="")
+    assert recorder.received == [(template.format(value), template.format(encoded).encode())]
+
+
+@pytest.mark.parametrize("name", sorted(PATH_TOOLS))
+async def test_a_valid_path_argument_reaches_its_template(name: str) -> None:
+    argument, extra, template, valid = PATH_TOOLS[name]
+    recorder = TransportRecorder()
+
+    await _path_tool(recorder, name)(**{argument: valid}, **extra)
+
+    assert recorder.received == [(template.format(valid), template.format(valid).encode())]
 
 
 async def test_read_guide_without_an_id_reads_the_index(paths: dict[str, Any]) -> None:

@@ -72,21 +72,32 @@ _UUID = re.compile(r"^[0-9a-fA-F-]{36}$")
 _HARNESS = re.compile(r"^[a-z0-9-]+$")
 
 
+_SEGMENT_BREAKERS = ("/", "\\", "%", "?", "#", "..")
+_SEGMENT_MAX = 200
+_CONTROL = frozenset(map(chr, [*range(0x20), 0x7F]))
+
+
+def _path_segment(value: str, name: str = "path argument") -> str:
+    """The one gate for a value that goes into a URL path: exactly one segment, or refused.
+
+    httpx resolves `..` and moves anything after `?` into the query, so an unchecked value
+    can reach an operation outside `ALLOWED_OPERATION_IDS` (epic 2 retro R1, AD-34).
+    """
+    if (
+        value in ("", ".")
+        or len(value) > _SEGMENT_MAX
+        or any(breaker in value for breaker in _SEGMENT_BREAKERS)
+        or any(char in _CONTROL for char in value)
+    ):
+        raise ToolFailure(f"{name} must be one path segment: not empty or ., no .. / \\ % ? #")
+    return quote(value, safe="")
+
+
 def _path_id(name: str, value: str) -> str:
     """An id that goes into a path: UUID-shaped or refused, so it cannot add a segment."""
     if not _UUID.fullmatch(value):
         raise ToolFailure(f"{name} must be a UUID")
-    return quote(value, safe="")
-
-
-_SLUG_BREAKERS = ("/", "?", "#", "%", "..")
-
-
-def _path_name(value: str) -> str:
-    """A template name that goes into a path: free of path-breaking characters or refused."""
-    if any(breaker in value for breaker in _SLUG_BREAKERS):
-        raise ToolFailure("name must not contain / ? # % or ..")
-    return quote(value, safe="")
+    return _path_segment(value, name)
 
 
 def build_tools(api: InProcessApi) -> list[Tool]:
@@ -126,7 +137,8 @@ def _instance_tools(api: InProcessApi) -> list[Tool]:
         What a Run may be given is what the Template declares here; an input it does not
         declare is not passed.
         """
-        return await api.get(f"/templates/{name}/{version}")
+        number = _path_segment(str(int(version)), "version")
+        return await api.get(f"/templates/{_path_segment(name, 'name')}/{number}")
 
     async def list_projects() -> Any:
         """Every Project and the Repositories under it — where a Run's targeting comes from."""
@@ -146,7 +158,7 @@ def _instance_tools(api: InProcessApi) -> list[Tool]:
         """
         if not _HARNESS.fullmatch(harness):
             raise ToolFailure("harness must match ^[a-z0-9-]+$")
-        return await api.get(f"/harnesses/{quote(harness, safe='')}/models")
+        return await api.get(f"/harnesses/{_path_segment(harness, 'harness')}/models")
 
     return [version, list_templates, get_template, list_projects, list_queue, list_models]
 
@@ -164,7 +176,8 @@ def _guide_tools(api: InProcessApi) -> list[Tool]:
             return await api.get_open("/llms.txt")
         if not PAGE_ID.fullmatch(id):
             raise ToolFailure(f"not a page id: {id!r}")
-        return await api.get_open(f"/guide/{quote(id, safe='/')}.md")
+        page = "/".join(_path_segment(part, "id") for part in id.split("/"))
+        return await api.get_open(f"/guide/{page}.md")
 
     return [read_guide]
 
@@ -230,7 +243,7 @@ def _workflow_tools(api: InProcessApi) -> list[Tool]:
         Each finding carries `line`, `code` and `guide`: read the page `errors/{code}`. The
         `name:` key must equal `name`.
         """
-        return await api.post(f"/templates/{_path_name(name)}/validate", {"yaml": yaml})
+        return await api.post(f"/templates/{_path_segment(name, 'name')}/validate", {"yaml": yaml})
 
     async def save_template(name: str, yaml: str) -> Any:
         """Save workflow YAML as the next version of `name`; `version:` is `max + 1`.
@@ -241,7 +254,7 @@ def _workflow_tools(api: InProcessApi) -> list[Tool]:
         `reload_templates`. A saved version never changes.
         """
         body = {"yaml": yaml, "refuse_if_in_folder": True}
-        return await api.post(f"/templates/{_path_name(name)}/versions", body)
+        return await api.post(f"/templates/{_path_segment(name, 'name')}/versions", body)
 
     async def reload_templates() -> Any:
         """Re-read the operator's template folder and store each changed, valid file.
@@ -297,7 +310,7 @@ def _dispatch_tools(api: InProcessApi) -> list[Tool]:
         body: dict[str, Any] = {"kind": kind, "payload": payload or {}}
         if stop is not None:
             body["stop"] = stop
-        return await api.post(f"/runs/{run_id}/signals", body)
+        return await api.post(f"/runs/{_path_segment(run_id, 'run_id')}/signals", body)
 
     return [preflight_run, create_run, send_signal]
 
@@ -307,7 +320,7 @@ def _watch_tools(api: InProcessApi) -> list[Tool]:
 
     async def get_run(run_id: str) -> Any:
         """One Run's state: status, spend, and the Signals it admits right now."""
-        return await api.get(f"/runs/{run_id}")
+        return await api.get(f"/runs/{_path_segment(run_id, 'run_id')}")
 
     async def get_run_detail(run_id: str) -> Any:
         """Everything the Run screen shows: every step, the park, its attempts and its cost.
@@ -315,7 +328,7 @@ def _watch_tools(api: InProcessApi) -> list[Tool]:
         This is what to read once a Run parks — the park payload is here, not in the events
         endpoint.
         """
-        return await api.get(f"/runs/{run_id}/detail")
+        return await api.get(f"/runs/{_path_segment(run_id, 'run_id')}/detail")
 
     async def wait_run_events(run_id: str, wait: int = 30, since: str | None = None) -> Any:
         """Wait up to `wait` seconds (0..30) for this Run to move, instead of polling.
@@ -324,6 +337,7 @@ def _watch_tools(api: InProcessApi) -> list[Tool]:
         ran out. Pass the `updated_at` of the previous answer as `since`, or a change made
         between two calls is missed. Then read `get_run_detail` to learn what happened.
         """
-        return await api.get(f"/runs/{run_id}/events", {"wait": wait, "since": since})
+        rid = _path_segment(run_id, "run_id")
+        return await api.get(f"/runs/{rid}/events", {"wait": wait, "since": since})
 
     return [get_run, get_run_detail, wait_run_events]
