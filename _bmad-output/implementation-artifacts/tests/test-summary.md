@@ -1,58 +1,71 @@
-# Test Automation Summary — orchestrator-deploy-folder / run-2 / epic-5-catalog-and-gate
+# Test Automation Summary — orchestrator-instance-guide / epic-1-guide
 
 Generated: 2026-11-12 (dispatch, empty story id, covering the whole epic)
-Spec: `initiatives/orchestrator-deploy-folder/run-2/epic-5-catalog-and-gate/SPEC.md` (hub-relative)
-Stories: 1–3 (committed `2ccf3af`..`c9031cc`)
+Spec: `initiatives/orchestrator-instance-guide/epic-1-guide/SPEC.md` (hub-relative)
+Stories: 1–6 (committed `7edcbb8`..`6612f9b`)
 
----
+Framework: the project's own — pytest + httpx in `backend-api/tests/e2e` (`make e2e-api`),
+with `jsonschema` and `pyyaml` from `uv.lock`. No UI changed in this epic (SPEC § Non-goals), so
+no Playwright test was added.
 
 ## Generated Tests
 
-### Unit gate (run by `make test`)
+### API (e2e) tests — `make e2e-api` gate
 
-- [x] `backend-api/tests/unit/test_setup_catalog_flow.py` (15 tests). It covers the chain the epic builds, from a setup run to the catalog pre-flight reads. The stories tested each link on its own. This module runs the links in sequence on one temporary agent home.
-  - **The chain** (real scripts, real reader). `scripts/setup/prepare.sh` runs first. Skill folders are then added and removed, the way `bmad install|remove` does it, and `<h>.sh catalog` runs after each change. `FsSkillCatalog` (the adapter pre-flight uses) then reads the result.
-    - A fresh home gives an *empty* catalog, not an *unavailable* one.
-    - Installed skills reach the reader. A removed skill drops out on the same reader instance, so no restart is needed (CAP-2).
-    - Stray files are not listed.
-    - The opencode catalog is the one the `local` harness reads.
-    - `catalog` for one harness does not write another harness's manifest.
-  - **The names the chain depends on agree** (static reads; `install.sh` is read as text, never run).
-    - Each harness's declared `skills` asset folder sits beside the manifest `MANIFESTS` reads.
-    - `prepare.sh`, `run.sh` and `setup_service_run` name the same three harnesses.
-    - The paths `install.sh` calls (`/app/scripts/harness/${h}.sh catalog`, `--entrypoint /app/scripts/setup/prepare.sh`) are shipped by the Dockerfile's `COPY` lines, and each harness script has a `catalog)` case.
-    - In `setup_service_run`, prepare.sh comes before the setup service, which comes before `catalog`. The function contains no `restart`, `stop` or `down`.
-    - `run.sh` phase 4 counts folders and makes no `write_skills_manifest` call.
-  - **Why this matters:** suppose one harness's skills folder were renamed in its script, or a harness were added to the reader but not to the `install.sh` loop. Every per-link test would still pass. Pre-flight would refuse installed skills, which is the B1 failure this epic fixes, and only the `deploy.yml` stack job would notice.
+- [x] `backend-api/tests/e2e/test_guide.py` (10 tests). The unit suite tests the routes against
+  guides built in `tmp_path`. This module tests what only the running image can show: the
+  Dockerfile's `build_guide` step wrote the guide where the routes read it, the open routes answer
+  with no bearer while `/api/v1/*` still refuses requests without one, and a finding from the real
+  validator names a page the real build wrote.
+  - `/llms.txt` without a bearer: 200, `text/plain; charset=utf-8`, the llmstxt layout (title, blank
+    line, release blockquote), sections in the order Guide → Host → Errors, and `errors/` pages only
+    under Errors (CAP-3).
+  - Every page the index lists is served open as `text/markdown; charset=utf-8`. Its front matter
+    `release` equals `GET /api/v1/version`'s `app_version` (AC-8). `title`, `kind` and `audience`
+    follow C2, `audience: host` matches the Host section, and every host page holds the local-only
+    line (CAP-6).
+  - No open response sets a cookie or an `access-control-*` header, even with an `Origin` header
+    present (AD-1 amended).
+  - `/api/v1/projects` and `/api/v1/templates` without a bearer still answer 401.
+  - These requests answer 404 `application/problem+json` with `code: refusal-guide-unavailable` and
+    `guide: errors/refusal-guide-unavailable`: an unknown page, an unknown schema, and a schema
+    name with an upper-case letter. `/guide/%2e%2e/VERSION.md` answers 404.
+  - The refusal's own guide page is served, so the code resolves on the instance (CAP-1 + CAP-2).
+  - `/schemas/workflow.json` and `/schemas/spec-folder.json`: 200, `application/schema+json`, the
+    right `$schema`/`$id`, and both pass as draft 2020-12 schemas (CAP-4).
+  - AC-12, HTTP half. One workflow fixture owned by the test is accepted by the served schema and by
+    `POST /api/v1/templates/{name}/validate`. The same fixture with an unknown top-level key is
+    refused by both. The validator's finding carries `code: template-unknown-key`,
+    `guide: errors/template-unknown-key` and an integer `line`, and that guide page is served.
+  - The spec-folder schema's `epics` and `stories` definitions refuse an entry that lacks its
+    required fields and accept one that has them.
 
-### Backend API E2E tests (`backend-api/tests/e2e`)
+No test reads page prose or pins which pages ship (member hard rule 6). Every assertion checks
+structure: the layout, media types, front matter, the host line, codes and ids.
 
-- None added. Epic 5 changes no API route, schema or contract.
+## Verification
 
-### UI E2E tests
-
-- None. Epic 5 does not touch the web client.
-
-### Deployment tests (written by the stories, not run here)
-
-- `deploy-tests/unit/test_setup_commands.py`, `test_install_folder.py`, `test_upgrade.py`, `test_setup_runner.py`, `test_bmad_script.py` and the other edits in `deploy-tests/unit/` (stories 1–3).
-- The SPEC forbids the Run from executing them, so none was run. They run in `deploy.yml` (`unit` job). `make lint` now runs `ruff` over `deploy-tests/`, and it is clean.
+- The SPEC forbids running `make e2e*` or starting a stack inside the Run, so the module was not run
+  against a stack. It was run in-process from a scratch harness outside the repository (since
+  deleted). That harness used `create_app(Settings())` with `guide_dir` overridden to a guide built by
+  `build_guide` from the real `guide/` and `VERSION`, and with the shared unit fakes behind
+  `template_ports`. Result: **10 passed**.
+- `make lint`: exit 0. `make test`: exit 0 (backend 11005 passed, 1 skipped; web-client 1868 passed).
 
 ## Coverage
 
-| Story | CAP | Unit (`make test`) | Deployment (`deploy-tests/`) | Backend e2e | UI e2e |
-|-------|-----|--------------------|------------------------------|-------------|--------|
-| 1 — Mounts exist, log folder writable | CAP-1 | ✅ existing `test_setup_prepare_script.py`; **new** prepare → catalog chain, prepare entrypoint shipped in the image | ✅ existing | n/a | n/a |
-| 2 — Catalog written by backend-api only | CAP-2 | ✅ existing `catalog` tests in `test_harness_scripts.py`; **new** catalog → `FsSkillCatalog` install/remove, folder/manifest agreement, harness lists, call order, no restart | ✅ existing | n/a | n/a |
-| 3 — Deployment gate lint + unit lane | CAP-3 | ✅ `make lint` lints `deploy-tests/` (exit 0) | ✅ existing (read, not run) | n/a | n/a |
-
-## Run Results
-
-- Targeted: `uv run pytest tests/unit/test_setup_catalog_flow.py` → 15 passed.
-- `make lint`: exit 0 (this includes ruff over `deploy-tests/`).
-- `make test`: exit 0. Backend: 10855 passed, 1 skipped, and the coverage thresholds held. Web client: 1868 passed.
-- Deployment tests, `install.sh`, `docker` and any stack were not run, as the SPEC requires.
+- Open routes (CAP-3): 3/3 routes (`/llms.txt`, `/guide/{id}.md`, `/schemas/{name}.json`), happy
+  path and refusal.
+- Finding codes leaving the API (CAP-1): template validate is covered. Pre-flight lines with codes
+  are not covered at e2e: they would need a real cloned repository with a bad `epics.yaml`, and the
+  unit suite already covers them over the fake `Git`.
+- Format descriptions (CAP-4): 2/2 schemas.
+- Host pages (CAP-6): host-line rule on every served host page. The README blocks are checked by
+  `make lint` (`scripts/check_guide.py`), not over HTTP.
 
 ## Next Steps
 
-- Let `deploy.yml` run on the pull request. The `unit` job is expected green. The `stack` job's catalog assertions (epic 4 A6: AC-11, AC-12, AC-14, AC-18) are expected to pass.
+- Run `make e2e` (the disposable `aio-e2e` stack) outside the Run so the module runs against the
+  built image.
+- Schemathesis (`test_schemathesis.py`) now also reaches the three open routes through
+  `/openapi.json`. Watch its first run for a generated `page_id` the 404 path does not handle.
