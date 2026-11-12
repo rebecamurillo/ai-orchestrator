@@ -56,24 +56,28 @@ class InProcessApi:
         self._token = token
 
     async def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        return await self._call("GET", path, params=_present(params))
+        return _payload(await self._call("GET", f"{API_PREFIX}{path}", params=_present(params)))
 
     async def post(self, path: str, body: Any = None) -> Any:
-        return await self._call("POST", path, json=body)
+        return _payload(await self._call("POST", f"{API_PREFIX}{path}", json=body))
 
     async def put(self, path: str, body: Any = None) -> Any:
-        return await self._call("PUT", path, json=body)
+        return _payload(await self._call("PUT", f"{API_PREFIX}{path}", json=body))
 
-    async def _call(self, method: str, path: str, **sent: Any) -> Any:
+    async def get_open(self, path: str) -> str:
+        """A GET on one of the application's own open routes, which carry no `/api/v1` prefix."""
+        return (await self._call("GET", path)).text
+
+    async def _call(self, method: str, url: str, **sent: Any) -> httpx.Response:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=self._app),
             base_url=LOCAL_BASE_URL,
             headers={"Authorization": f"Bearer {self._token()}"},
             timeout=REQUEST_TIMEOUT_S,
         ) as client:
-            response = await client.request(method, f"{API_PREFIX}{path}", **sent)
+            response = await client.request(method, url, **sent)
         if response.is_success:
-            return _payload(response)
+            return response
         raise ApiRefusal(response.status_code, _payload(response))
 
 

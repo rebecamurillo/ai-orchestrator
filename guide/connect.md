@@ -62,3 +62,10 @@ another version, or none, may render a different workflow than the one you autho
 For the instance's host agent, a release difference is often the problem it was called about: report
 it as the finding and reconcile it with `./install.sh upgrade` (`host/upgrade`). `./install.sh doctor`
 needs no handshake and is the first move when the API does not answer (`host/day-2`).
+
+## Reading the guide
+
+The guide is open: `/llms.txt` is the index, and `/guide/{id}.md` is one page. Over MCP, the tool
+`read_guide` reads it on every harness: with no id it returns the index, with a page id it returns
+that page. A harness that supports resources also lists each page as `guide://{id}`, and each
+procedure page is a prompt named by its id with `/` replaced by `.` (`runs/launch` is `runs.launch`).

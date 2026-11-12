@@ -26,11 +26,13 @@ FORBIDDEN_FRAGMENTS = ("/readiness", "/probe")
 #: Story 2 of epic 2, 2026-11-12 (AD-34): validate_template, save_template, reload_templates join.
 #: Story 3 of epic 2, 2026-11-12 (AD-34): validate_spec_folder joins.
 #: Story 4 of epic 2, 2026-11-12 (AD-34): list_models joins.
-TWENTY_ONE = 21
+#: Story 5 of epic 2, 2026-11-12 (AD-34): read_guide joins (index and page).
+TWENTY_THREE = 23
 
 PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "version": {},
     "list_models": {"harness": "claude"},
+    "read_guide": {"id": "connect"},
     "list_templates": {},
     "get_template": {"name": "repo-init", "version": 2},
     "list_projects": {},
@@ -69,6 +71,10 @@ class RecordingApi:
     async def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         self.calls.append(("GET", API_PREFIX + path))
         return {}
+
+    async def get_open(self, path: str) -> str:
+        self.calls.append(("GET", path))
+        return ""
 
     async def post(self, path: str, body: Any = None) -> Any:
         self.calls.append(("POST", API_PREFIX + path))
@@ -141,7 +147,7 @@ def test_every_tool_has_placeholders() -> None:
 
 async def test_every_tool_makes_one_call_to_an_allowed_operation(paths: dict[str, Any]) -> None:
     assert await violations(_tools, ALLOWED_OPERATION_IDS, paths) == []
-    assert len(ALLOWED_OPERATION_IDS) == TWENTY_ONE
+    assert len(ALLOWED_OPERATION_IDS) == TWENTY_THREE
 
 
 async def test_a_tool_calling_an_unlisted_operation_is_reported(paths: dict[str, Any]) -> None:
@@ -210,3 +216,14 @@ async def test_a_path_id_that_is_not_a_uuid_is_refused_before_any_call(name: str
         await tool(**{argument: HOSTILE}, **extra)
 
     assert recorder.calls == []
+
+
+async def test_read_guide_without_an_id_reads_the_index(paths: dict[str, Any]) -> None:
+    recorder = RecordingApi()
+    tool = next(t for t in _tools(recorder) if t.__name__ == "read_guide")
+
+    await tool()
+
+    assert recorder.calls == [("GET", "/llms.txt")]
+    assert operation_id(paths, "GET", "/llms.txt") == "read_index_llms_txt_get"
+    assert "read_index_llms_txt_get" in ALLOWED_OPERATION_IDS

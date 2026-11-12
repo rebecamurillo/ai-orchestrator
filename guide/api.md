@@ -141,7 +141,8 @@ The same operations are also exposed as MCP tools at `$ORCHESTRATOR_BASE_URL/mcp
 `wait_run_events`, `send_signal`, `list_queue`, `list_projects`, `create_project`,
 `update_project`, `add_repository`, `check_clone`, `init_repository`, `validate_template`,
 `save_template`, `reload_templates`, `validate_spec_folder`, `list_models`. Each tool is one call to the
-route above it, so the rules in `rules` apply unchanged. Per-harness configuration
+route above it, so the rules in `rules` apply unchanged. `read_guide` reads this guide: with no
+id it returns `/llms.txt`, with a page id it returns `/guide/{id}.md`; resources and prompts are described in `connect`. Per-harness configuration
 snippets ship in the kit under `mcp/`; they are not installed automatically.
 
 ## Fleet and harnesses

@@ -54,8 +54,19 @@ ALLOWED_OPERATION_IDS: frozenset[str] = frozenset(
         "detail_api_v1_runs__run_id__detail_get",
         "events_api_v1_runs__run_id__events_get",
         "list_models_api_v1_harnesses__name__models_get",
+        "read_index_llms_txt_get",
+        "read_page_guide__page_id__md_get",
     }
 )
+
+#: A guide page id (C2): lowercase segments joined by `/`. Nothing else may become a path.
+PAGE_ID = re.compile(r"^[a-z0-9-]+(/[a-z0-9-]+)*$")
+
+
+def prompt_name(page_id: str) -> str:
+    """The MCP prompt a procedure page is published as: its id with `/` written `.`."""
+    return page_id.replace("/", ".")
+
 
 _UUID = re.compile(r"^[0-9a-fA-F-]{36}$")
 _HARNESS = re.compile(r"^[a-z0-9-]+$")
@@ -82,6 +93,7 @@ def build_tools(api: InProcessApi) -> list[Tool]:
     """The whole tool set, bound to one in-process API client."""
     return [
         *_instance_tools(api),
+        *_guide_tools(api),
         *_setup_tools(api),
         *_workflow_tools(api),
         *_dispatch_tools(api),
@@ -137,6 +149,24 @@ def _instance_tools(api: InProcessApi) -> list[Tool]:
         return await api.get(f"/harnesses/{quote(harness, safe='')}/models")
 
     return [version, list_templates, get_template, list_projects, list_queue, list_models]
+
+
+def _guide_tools(api: InProcessApi) -> list[Tool]:
+    """The guide, for a harness that speaks tools only."""
+
+    async def read_guide(id: str | None = None) -> Any:
+        """Read the guide: call with no id for the index, then with a page id from it.
+
+        Pages under `host/` are for the host agent only. An `errors/{code}` page explains the
+        `code` of a problem document.
+        """
+        if id is None:
+            return await api.get_open("/llms.txt")
+        if not PAGE_ID.fullmatch(id):
+            raise ToolFailure(f"not a page id: {id!r}")
+        return await api.get_open(f"/guide/{quote(id, safe='/')}.md")
+
+    return [read_guide]
 
 
 def _setup_tools(api: InProcessApi) -> list[Tool]:
