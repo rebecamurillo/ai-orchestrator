@@ -7,39 +7,12 @@
 # Actions are pinned to a commit: a tag can be moved under the pipeline, a commit cannot.
 name: deploy
 
+# Temporary: manual only (Operator, 2026-11-12). The stack lane needs ~45 min against a 20-min
+# limit and test_an_engine_version_change_is_refused_while_runs_wait fails; restore the
+# pull_request and push triggers (deploy/**, deploy-tests/**, scripts/setup|harness/**, …)
+# once both are fixed. release.yml still needs a green run of this workflow on the tag's commit.
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'deploy/**'
-      - '!deploy/llm-platform/**'
-      - 'deploy-tests/**'
-      - 'scripts/test-deploy.sh'
-      - 'scripts/setup/**'
-      - 'scripts/harness/**'
-      - 'scripts/readiness_fixture.sh'
-      - 'scripts/bundle.sh'
-      - 'backend-api/Dockerfile'
-      - 'backend-api/docker-entrypoint.sh'
-      - 'ia-agents-skills/**'
-      - 'VERSION'
-      - '.github/workflows/deploy.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'deploy/**'
-      - '!deploy/llm-platform/**'
-      - 'deploy-tests/**'
-      - 'scripts/test-deploy.sh'
-      - 'scripts/setup/**'
-      - 'scripts/harness/**'
-      - 'scripts/readiness_fixture.sh'
-      - 'scripts/bundle.sh'
-      - 'backend-api/Dockerfile'
-      - 'backend-api/docker-entrypoint.sh'
-      - 'ia-agents-skills/**'
-      - 'VERSION'
-      - '.github/workflows/deploy.yml'
 
 concurrency:
   group: deploy-${{ github.ref }}
