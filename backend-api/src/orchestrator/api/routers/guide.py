@@ -123,7 +123,8 @@ def read_index(root: Annotated[Path, Depends(guide_dir)]) -> PlainTextResponse:
 )
 def read_page(page_id: str, root: Annotated[Path, Depends(guide_dir)]) -> Response:
     pages = _index(root)["pages"]
-    if page_id not in {p.get("id") for p in pages if isinstance(p, dict)}:
+    ids = {p["id"] for p in pages if isinstance(p, dict) and isinstance(p.get("id"), str)}
+    if page_id not in ids:
         _unavailable()
     text = _file(root, f"{page_id}.md").read_text(encoding="utf-8")
     return Response(text, media_type=MARKDOWN)

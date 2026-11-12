@@ -64,7 +64,7 @@ graph LR
 
 - **Binds:** all
 - **Prevents:** islands calling backend-api directly, CORS, cookies on the API, two auth surfaces
-- **Rule:** The deployables are `web-client` and `backend-api` (the orchestrator process and the harness CLIs share the backend-api container). The browser talks only to web-client. web-client's server side is the only caller of backend-api and always sends `Authorization: Bearer $ORCHESTRATOR_TOKEN`; `src/api/server.ts` (server-only, reads `astro:env/server`) and `src/api/client.ts` (browser, base `/api/`) are the only modules that call `fetch`; the proxy route `src/pages/api/[...path].ts` and Actions import `server.ts`. 
+- **Rule:** The deployables are `web-client` and `backend-api` (the orchestrator process and the harness CLIs share the backend-api container). The browser talks only to web-client. web-client's server side is the only caller of backend-api and always sends `Authorization: Bearer $ORCHESTRATOR_TOKEN`; `src/api/server.ts` (server-only, reads `astro:env/server`) and `src/api/client.ts` (browser, base `/api/`) are the only modules that call `fetch`; the proxy route `src/pages/api/[...path].ts` and Actions import `server.ts`.
   - **What backend-api exposes:**
     - `/api/v1/*`;
     - `/mcp`;

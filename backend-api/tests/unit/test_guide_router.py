@@ -206,7 +206,10 @@ async def test_a_missing_build_directory_is_the_problem(app: FastAPI, tmp_path: 
             assert_refused(await http.get(path))
 
 
-@pytest.mark.parametrize("content", ["{not json", '{"pages": "nope"}', "[]"])
+@pytest.mark.parametrize(
+    "content",
+    ["{not json", '{"pages": "nope"}', "[]", '{"pages": [{"id": ["a"]}], "release": "x"}'],
+)
 async def test_an_unreadable_index_is_the_problem(app: FastAPI, build: Path, content: str) -> None:
     (build / "guide-index.json").write_text(content)
     async with client(app) as http:

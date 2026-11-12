@@ -165,14 +165,17 @@ def test_every_check_code_is_mapped_or_referenced() -> None:
     assert unreferenced_check_entries(REGISTRY, CODE_BY_REASON, constant_name, referenced) == []
 
 
+# Declared revision for story 1.3, Operator ruling park 4 (2026-11-12): the constant map covers
+# every code of REGISTRY (reason-derived and refusal entries alike), so a registry that grows
+# does not change what this test pins: exactly the planted code is reported.
 def test_a_planted_unreferenced_check_entry_is_caught() -> None:
     planted = CodeEntry("template-planted", "template", "planted", "x", "check")
     registry = {**REGISTRY, planted.code: planted}
-    referenced = referenced_names(SRC, "findings.py")
+    constants = {code: "REFERENCED_ELSEWHERE" for code in REGISTRY}
+    constants[planted.code] = "TEMPLATE_PLANTED"
+    referenced = referenced_names(SRC, "findings.py") | {"REFERENCED_ELSEWHERE"}
 
-    found = unreferenced_check_entries(
-        registry, CODE_BY_REASON, lambda code: "TEMPLATE_PLANTED", referenced
-    )
+    found = unreferenced_check_entries(registry, {}, constants.__getitem__, referenced)
 
     assert found == ["template-planted"]
 
