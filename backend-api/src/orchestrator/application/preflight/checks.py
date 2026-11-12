@@ -23,6 +23,7 @@ from orchestrator.application.preflight.model import (
     QUEUE_FREE,
     Line,
     PreflightRequest,
+    finding_line,
 )
 from orchestrator.application.steps import AGENT_KIND, CHECKPOINT_KIND, WORKTREE_KIND
 from orchestrator.application.templates.lists import EPICS_KIND, list_kind
@@ -360,7 +361,7 @@ def what_will_run_line(ctx: Context) -> Line:
     if ctx.plan is not None:
         return Line(CHECK_WHAT_WILL_RUN, "ok", f"{len(ctx.plan.rows)} rows")
     if ctx.plan_error is not None:
-        return Line(CHECK_WHAT_WILL_RUN, "fail", str(ctx.plan_error))
+        return finding_line(CHECK_WHAT_WILL_RUN, ctx.plan_error)
     return Line(CHECK_WHAT_WILL_RUN, "skip", "missing required fields")
 
 

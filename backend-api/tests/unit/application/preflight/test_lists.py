@@ -96,7 +96,14 @@ def test_epics_yaml_line_fails_with_the_plan_error() -> None:
     error = PlanError(reason=ID_NOT_PREFIX_FREE, item="e1-a")
     line = lists.epics_yaml_line(ctx(tree=fixtures.tree("initiative"), plan_error=error))
 
-    assert line == Line(CHECK_EPICS_YAML, "fail", str(error))
+    # Story 1, 2026-11-11 (AD-15 amended): a finding line carries its code and guide.
+    assert line == Line(
+        CHECK_EPICS_YAML,
+        "fail",
+        str(error),
+        code="spec-entry-ids-are-not-prefix-free",
+        guide="errors/spec-entry-ids-are-not-prefix-free",
+    )
 
 
 def test_epics_yaml_line_is_none_when_no_epics_yaml_was_read() -> None:
@@ -169,7 +176,16 @@ def test_stories_yaml_lines_fail_with_the_plan_error() -> None:
 
     lines, ids = lists.stories_yaml_lines(ctx(tree=fixtures.tree("epic"), plan_error=error))
 
-    assert lines == [Line(CHECK_STORIES_YAML, "fail", str(error))]
+    # Story 1, 2026-11-11 (AD-15 amended): a finding line carries its code and guide.
+    assert lines == [
+        Line(
+            CHECK_STORIES_YAML,
+            "fail",
+            str(error),
+            code="spec-entry-ids-are-not-prefix-free",
+            guide="errors/spec-entry-ids-are-not-prefix-free",
+        )
+    ]
     assert ids == {}
 
 

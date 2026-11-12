@@ -16,7 +16,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from orchestrator.api.errors import ProblemError
+from orchestrator.api.errors import ProblemError, finding_error
 from orchestrator.api.schemas.common import UtcTimestamp
 from orchestrator.application.templates.model import InputDecl, Scalar, ValidationError
 from orchestrator.application.templates.model import ValidationResult as AppValidationResult
@@ -47,7 +47,7 @@ TemplateYaml = Annotated[str, Field(max_length=MAX_TEMPLATE_YAML_LENGTH)]
 def as_problem_errors(errors: Sequence[ValidationError]) -> list[ProblemError]:
     """`ValidationError.version` (`int | None`) rendered as `ProblemError.version` (`str`)."""
     return [
-        ProblemError(
+        finding_error(
             template=error.template,
             version=str(error.version) if error.version is not None else None,
             line=error.line,

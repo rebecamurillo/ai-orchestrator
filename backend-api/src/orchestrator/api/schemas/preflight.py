@@ -63,10 +63,19 @@ class LineOut(BaseModel):
     status: LineStatus
     text: str
     fix: str | None = None
+    code: str | None = None
+    guide: str | None = None
 
     @classmethod
     def of(cls, line: Line) -> LineOut:
-        return cls(check=line.check, status=line.status, text=line.text, fix=line.fix)
+        return cls(
+            check=line.check,
+            status=line.status,
+            text=line.text,
+            fix=line.fix,
+            code=line.code,
+            guide=line.guide,
+        )
 
 
 class PlannedRowOut(BaseModel):

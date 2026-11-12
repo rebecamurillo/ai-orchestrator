@@ -23,6 +23,7 @@ from orchestrator.application.preflight.model import (
     CHECK_STORIES_YAML,
     CHECK_TEST_GLOBS,
     Line,
+    finding_line,
 )
 from orchestrator.application.steps import AGENT_KIND
 from orchestrator.application.templates.lines import load_sequence, load_with_lines
@@ -87,7 +88,7 @@ def epics_yaml_line(ctx: Context) -> Line | None:
         return None
     if list_error_target(ctx) == CHECK_EPICS_YAML:
         assert ctx.plan_error is not None  # `list_error_target` only names this when set
-        return Line(CHECK_EPICS_YAML, "fail", str(ctx.plan_error))
+        return finding_line(CHECK_EPICS_YAML, ctx.plan_error)
     entries = epics_entries(ctx)
     if not entries:
         return None
@@ -106,7 +107,7 @@ def stories_yaml_lines(ctx: Context) -> tuple[list[Line], dict[str, tuple[str, .
     """Line 5, one per `stories.yaml` the plan read; and each file's ids, for line 10."""
     if list_error_target(ctx) == CHECK_STORIES_YAML:
         assert ctx.plan_error is not None
-        return [Line(CHECK_STORIES_YAML, "fail", str(ctx.plan_error))], {}
+        return [finding_line(CHECK_STORIES_YAML, ctx.plan_error)], {}
     lines: list[Line] = []
     ids_by_path: dict[str, tuple[str, ...]] = {}
     for path in _list_paths(ctx, STORIES_FILENAME):

@@ -18,6 +18,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
+from orchestrator.application import findings
 from orchestrator.application.templates.plan_model import PlanError
 from orchestrator.domain.values import PlannedRow
 
@@ -53,6 +54,16 @@ class Line:
     status: LineStatus
     text: str
     fix: str | None = None
+    code: str | None = None
+    guide: str | None = None
+
+
+def finding_line(check: str, error: PlanError) -> Line:
+    """A failed line built from a refusal; `code` and `guide` stay `None` for a reason the
+    registry does not hold."""
+    code = findings.code_for(error.reason)
+    guide = None if code is None else findings.guide_id(code)
+    return Line(check, "fail", str(error), code=code, guide=guide)
 
 
 @dataclass(frozen=True)
