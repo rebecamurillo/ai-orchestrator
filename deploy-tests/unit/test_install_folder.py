@@ -37,10 +37,19 @@ BMAD_PIN = next(
     if line.startswith("BMAD_VERSION=")
 )
 
+PREPARE_CALL = (
+    "run --rm --no-deps --user agent "
+    "--entrypoint /app/scripts/setup/prepare.sh backend-api"
+)
+
 needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not on PATH")
 
 DOCKER_SHIM = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$SHIM_DOCKER_LOG"
+mode() {
+	d="$(dirname "$SHIM_DOCKER_LOG")/logs/setup"
+	printf 'MODE %s\\n' "$(stat -c %a "$d" 2>/dev/null || stat -f %Lp "$d")" >> "$SHIM_DOCKER_LOG"
+}
 case "$*" in
 \t"compose version") echo v2.99.0; exit 0 ;;
 \t"compose version --short") echo 2.99.0; exit 0 ;;
@@ -51,7 +60,8 @@ case "$*" in
 \t"system df"*) echo "Images 1.1GB reclaimable 0B"; exit 0 ;;
 esac
 case "$*" in
-\t*" run --rm "*" setup") exit "${SHIM_SETUP_RC:-0}" ;;
+\t*" run --rm --no-deps --user agent "*"prepare.sh backend-api") exit "${SHIM_PREPARE_RC:-0}" ;;
+\t*" run --rm "*" setup") mode; exit "${SHIM_SETUP_RC:-0}" ;;
 \t*"ps --status running --services"*) printf '%s\\n' ${SHIM_RUNNING:-}; exit 0 ;;
 \t*" ps") echo "NAME STATUS"; exit 0 ;;
 esac
@@ -333,12 +343,33 @@ def test_setup_runs_between_the_hold_and_its_release(folder: tuple[Path, dict[st
     assert kinds[-1] == "GET harnesses"
     post = next(c for c in calls if c.startswith("POST"))
     assert json.loads(post.split(" ", 2)[2]) == {"ttl_seconds": 900, "reason": "install setup"}
-    runs = [c for c in _log(path, "docker.log").splitlines() if " run --rm " in c]
+    docker = _log(path, "docker.log").splitlines()
+    runs = [c for c in docker if " run --rm " in c and c.endswith(" setup")]
     assert len(runs) == 1
     assert "--profile setup" in runs[0]
     assert f"-e ORCH_SETUP_TRIGGER=install -e ORCH_RELEASE={TAG}" in runs[0]
     assert runs[0].endswith(" setup")
     assert "claude" in result.stdout and "install" in result.stdout and "7" in result.stdout
+
+
+@needs_bash
+def test_prepare_runs_as_agent_before_setup_and_logs_setup_is_1777(
+    folder: tuple[Path, dict[str, str]],
+) -> None:
+    """epic 5 story 1, 2026-11-11 AD-28 amendment."""
+    path, _ = folder
+
+    result = _install(folder)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    log = _log(path, "docker.log").splitlines()
+    prepare = next(i for i, c in enumerate(log) if "/app/scripts/setup/prepare.sh" in c)
+    setup = next(i for i, c in enumerate(log) if " run --rm " in c and c.endswith(" setup"))
+    assert prepare < setup
+    assert PREPARE_CALL in log[prepare]
+    assert " -e " not in log[prepare]
+    assert log[setup + 1] == "MODE 1777"
+    assert not [c for c in log if "exec -T backend-api" in c]
 
 
 @needs_bash
@@ -366,6 +397,7 @@ def test_a_refused_hold_means_no_setup_run(folder: tuple[Path, dict[str, str]]) 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "409" in result.stdout + result.stderr
     assert " run --rm " not in _log(path, "docker.log")
+    assert "prepare.sh" not in _log(path, "docker.log")
 
 
 # ── AC7: no platform surface ─────────────────────────────────────────────────

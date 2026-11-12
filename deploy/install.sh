@@ -675,7 +675,8 @@ EOF
 	[[ "$bad" -eq 0 ]]
 }
 
-# The setup service itself: its logs directory, the agent home, the BMAD pin, one `run --rm`.
+# The setup service itself: its logs directory, a one-shot prepare.sh that creates the mounted agent-home
+# folders (no running backend-api needed), the BMAD pin, one `run --rm`.
 # Returns the run's exit code; the hold around it is the caller's.
 setup_service_run() {   # setup_service_run TRIGGER RELEASE [RUNNER_ARG…]
 	local pin rc=0 trigger="$1" release="$2"
@@ -685,10 +686,13 @@ setup_service_run() {   # setup_service_run TRIGGER RELEASE [RUNNER_ARG…]
 	[[ -n "$pin" || ! -f "$release_file" ]] || pin="$(get_var "$release_file" BMAD_VERSION)"
 	# the service's `environment: - BMAD_VERSION` is filled from the shell only
 	if [[ -n "$pin" ]]; then pins=(-e "BMAD_VERSION=${pin}"); fi
-	# a bind source the daemon creates is root-owned, and a volume subpath must exist before it is mounted
+	# a bind source the daemon creates is root-owned, and a volume subpath must exist before it is mounted;
+	# 1777 lets uid 1000 in the setup container write the folder whoever owns it on the host
 	mkdir -p "${here}/logs/setup"
-	compose exec -T backend-api sh -c 'mkdir -p "${AGENT_HOME:-/home/agent}/.orchestrator"' ||
-		warn "could not create the agent home's .orchestrator directory in backend-api"
+	chmod 1777 "${here}/logs/setup" ||
+		warn "logs/setup: could not chmod 1777 (owned by another user) — run: sudo chmod 1777 logs/setup"
+	compose run --rm --no-deps --user agent --entrypoint /app/scripts/setup/prepare.sh backend-api ||
+		warn "scripts/setup/prepare.sh failed — the agent home's folders may be missing"
 	compose_setup run --rm -e "ORCH_SETUP_TRIGGER=${trigger}" -e "ORCH_RELEASE=${release}" \
 		${pins[@]+"${pins[@]}"} setup ${1+"$@"} || rc=$?
 	return "$rc"

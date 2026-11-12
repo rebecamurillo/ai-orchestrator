@@ -47,6 +47,11 @@ BRACKETED = "templates/shipped/a+b[1].yaml"
 RUN_ID = "0192f3a0-0000-7000-8000-000000000001"
 PARKED_ID = "0192f3a0-0000-7000-8000-000000000002"
 
+PREPARE_CALL = (
+    "run --rm --no-deps --user agent "
+    "--entrypoint /app/scripts/setup/prepare.sh backend-api"
+)
+
 needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not on PATH")
 
 DOCKER_SHIM = """#!/usr/bin/env bash
@@ -72,6 +77,7 @@ case "$*" in
 \t\texit 0 ;;
 esac
 case "$*" in
+\t*" run --rm --no-deps --user agent "*"prepare.sh backend-api") exit "${SHIM_PREPARE_RC:-0}" ;;
 \t*" run --rm "*" setup") state; exit "${SHIM_SETUP_RC:-0}" ;;
 \t*"exec -T postgres pg_dump"*) state; echo dump; exit "${SHIM_DUMP_RC:-0}" ;;
 \t*" up -d "*) exit "${SHIM_UP_RC:-0}" ;;
@@ -809,6 +815,22 @@ def test_a_failed_setup_run_is_reported_and_the_stack_still_starts(folder: Folde
 
 def _index(calls: list[str], needle: str) -> int:
     return next(i for i, c in enumerate(calls) if needle in c)
+
+
+@needs_bash
+def test_prepare_runs_between_the_dump_and_the_setup_service_without_exec(folder: Folder) -> None:
+    """epic 5 story 1, 2026-11-11 AD-28 amendment."""
+    result = _upgrade(folder, SHIM_RUNNING="postgres")
+
+    assert result.returncode == 0, _out(result)
+    calls = _calls(folder)
+    order = [
+        _index(calls, "pg_dump"),
+        _index(calls, PREPARE_CALL),
+        _index(calls, "-e ORCH_SETUP_TRIGGER=upgrade"),
+    ]
+    assert order == sorted(order), calls
+    assert not [c for c in calls if "exec -T backend-api" in c]
 
 
 @needs_bash

@@ -20,17 +20,27 @@ from tests.unit.conftest import REPO_ROOT
 DEPLOY_DIR = REPO_ROOT / "deploy"
 TAG = "1.0.0-test"
 
+PREPARE_CALL = (
+    "run --rm --no-deps --user agent "
+    "--entrypoint /app/scripts/setup/prepare.sh backend-api"
+)
+
 needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not on PATH")
 
 DOCKER_SHIM = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$SHIM_DOCKER_LOG"
+mode() {
+	d="$(dirname "$SHIM_DOCKER_LOG")/logs/setup"
+	printf 'MODE %s\\n' "$(stat -c %a "$d" 2>/dev/null || stat -f %Lp "$d")" >> "$SHIM_DOCKER_LOG"
+}
 case "$*" in
 \t"compose version") echo v2.99.0; exit 0 ;;
 \t"compose version --short") echo 2.99.0; exit 0 ;;
 \tinfo) exit 0 ;;
 esac
 case "$*" in
-\t*" run --rm "*" setup"|*" run --rm "*" setup --reset") exit "${SHIM_SETUP_RC:-0}" ;;
+\t*" run --rm --no-deps --user agent "*"prepare.sh backend-api") exit "${SHIM_PREPARE_RC:-0}" ;;
+\t*" run --rm "*" setup"|*" run --rm "*" setup --reset") mode; exit "${SHIM_SETUP_RC:-0}" ;;
 \t*"ps --status running --services"*) printf '%s\\n' ${SHIM_RUNNING:-}; exit 0 ;;
 esac
 exit 0
@@ -147,7 +157,15 @@ def _log(path: Path, name: str) -> list[str]:
 
 
 def _runs(path: Path) -> list[str]:
-    return [ln for ln in _log(path, "docker.log") if " run --rm " in ln]
+    return [
+        ln
+        for ln in _log(path, "docker.log")
+        if " run --rm " in ln and (ln.endswith(" setup") or ln.endswith(" setup --reset"))
+    ]
+
+
+def _prepares(path: Path) -> list[str]:
+    return [ln for ln in _log(path, "docker.log") if "/app/scripts/setup/prepare.sh" in ln]
 
 
 def _hold_calls(path: Path) -> list[str]:
@@ -385,3 +403,54 @@ def test_bad_usage_names_the_right_form_and_calls_nothing(
     assert usage in result.stderr
     assert _log(path, "docker.log") == []
     assert _hashes(path) == before
+
+
+# ── epic 5 story 1, 2026-11-11 AD-28 amendment: prepare.sh before the setup service ──────────
+
+
+def _setup_index(log: list[str]) -> int:
+    setups = (" setup", " setup --reset")
+    return next(i for i, ln in enumerate(log) if " run --rm " in ln and ln.endswith(setups))
+
+
+@needs_bash
+@pytest.mark.parametrize("running", ["postgres backend-api web-client", "postgres"])
+@pytest.mark.parametrize(
+    "args", [("setup",), ("setup", "--reset"), ("bmad", "install"), ("bmad", "remove")]
+)
+def test_prepare_runs_as_agent_before_the_setup_service_and_nothing_is_exec(
+    folder: Folder, args: tuple[str, ...], running: str
+) -> None:
+    path, _ = folder
+
+    result = _run(folder, *args, SHIM_RUNNING=running)
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    log = _log(path, "docker.log")
+    (prepare,) = _prepares(path)
+    assert PREPARE_CALL in prepare
+    assert " -e " not in prepare
+    assert log.index(prepare) < _setup_index(log)
+    assert not [ln for ln in log if "exec -T backend-api" in ln]
+
+
+@needs_bash
+def test_logs_setup_is_mode_1777_when_the_setup_service_runs(folder: Folder) -> None:
+    path, _ = folder
+
+    result = _run(folder, "setup")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    log = _log(path, "docker.log")
+    assert log[_setup_index(log) + 1] == "MODE 1777"
+
+
+@needs_bash
+def test_a_failed_prepare_warns_naming_it_and_the_setup_service_still_runs(folder: Folder) -> None:
+    path, _ = folder
+
+    result = _run(folder, "setup", SHIM_PREPARE_RC="1")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "prepare.sh" in result.stdout + result.stderr
+    assert len(_runs(path)) == 1
