@@ -692,7 +692,7 @@ setup_service_run() {   # setup_service_run TRIGGER RELEASE [RUNNER_ARG…]
 	mkdir -p "${here}/logs/setup"
 	chmod 1777 "${here}/logs/setup" ||
 		warn "logs/setup: could not chmod 1777 (owned by another user) — run: sudo chmod 1777 logs/setup"
-	compose run --rm --no-deps --user agent --entrypoint /app/scripts/setup/prepare.sh backend-api ||
+	compose run --rm --no-deps --user agent --entrypoint /app/scripts/setup/prepare.sh backend-api </dev/null ||
 		warn "scripts/setup/prepare.sh failed — the agent home's folders may be missing"
 	compose_setup run --rm -e "ORCH_SETUP_TRIGGER=${trigger}" -e "ORCH_RELEASE=${release}" \
 		${pins[@]+"${pins[@]}"} setup ${1+"$@"} || rc=$?
