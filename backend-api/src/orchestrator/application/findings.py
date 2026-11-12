@@ -96,6 +96,8 @@ REFUSAL_GUIDE_UNAVAILABLE = "refusal-guide-unavailable"
 REFUSAL_LOCAL_ONLY = "refusal-local-only"
 REFUSAL_TEMPLATE_IN_FOLDER = "refusal-template-in-folder"
 REFUSAL_SPEC_MD_MISSING = "refusal-spec-md-missing"
+REFUSAL_MODELS_UNLISTED = "refusal-models-unlisted"
+REFUSAL_MODELS_GATEWAY_UNREACHABLE = "refusal-models-gateway-unreachable"
 
 #: Reason text -> code, written out so a reworded reason is a visible change here.
 CODE_BY_REASON: Mapping[str, str] = {
@@ -196,6 +198,24 @@ REFUSALS: Mapping[str, CodeEntry] = {
         "SPEC.md missing from a spec folder",
         "Every spec folder a Run reads holds a `SPEC.md`, and pre-flight answers `fail · missing` "
         "for a folder without one.",
+        "check",
+    ),
+    REFUSAL_MODELS_UNLISTED: CodeEntry(
+        REFUSAL_MODELS_UNLISTED,
+        "refusal",
+        "this harness cannot list its models here",
+        "No LiteLLM gateway is configured on this instance, so there is no list to read for "
+        "this harness: pass a model name the harness accepts, and ask the user for it rather "
+        "than guessing one.",
+        "check",
+    ),
+    REFUSAL_MODELS_GATEWAY_UNREACHABLE: CodeEntry(
+        REFUSAL_MODELS_GATEWAY_UNREACHABLE,
+        "refusal",
+        "the LiteLLM gateway could not be read",
+        "A gateway is configured but `GET /v1/models` failed or answered a body that is not a "
+        "model list, so the list is unknown; nothing is guessed in its place. Try again, or "
+        "check the gateway from the host.",
         "check",
     ),
 }

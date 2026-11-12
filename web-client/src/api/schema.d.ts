@@ -31,6 +31,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/harnesses/{name}/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The models a harness can use, with their source
+         * @description The list names its `source`; `none` carries a `code` and `guide` and an empty list.
+         */
+        get: operations["list_models_api_v1_harnesses__name__models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/harnesses/{name}/probe": {
         parameters: {
             query?: never;
@@ -1799,6 +1819,37 @@ export interface components {
             text: string;
         };
         /**
+         * ModelsOut
+         * @description The models a harness can use, and where that list comes from.
+         */
+        ModelsOut: {
+            /**
+             * Code
+             * @description Finding code when `source` is `none`.
+             */
+            code: string | null;
+            /**
+             * Guide
+             * @description Guide page that explains `code`.
+             */
+            guide: string | null;
+            /** Harness */
+            harness: string;
+            /** Models */
+            models: string[];
+            /**
+             * Note
+             * @description What the list is, or why there is none.
+             */
+            note: string | null;
+            /**
+             * Source
+             * @description `litellm`: the instance's LiteLLM key's model list; `configured`: `LOCAL_MODELS`; `none`: no list is available, ask the user for a model name.
+             * @enum {string}
+             */
+            source: "litellm" | "configured" | "none";
+        };
+        /**
          * NodeCallOut
          * @description The callee a collapsed `uses: template` node names.
          */
@@ -3142,6 +3193,68 @@ export interface operations {
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_models_api_v1_harnesses__name__models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelsOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No harness has that name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `name` does not match the shape below. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The LiteLLM gateway is configured but its model list could not be read. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

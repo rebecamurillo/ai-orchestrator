@@ -25,10 +25,12 @@ FORBIDDEN_FAMILIES = ("/api/v1/instance", "/api/v1/kit")
 FORBIDDEN_FRAGMENTS = ("/readiness", "/probe")
 #: Story 2 of epic 2, 2026-11-12 (AD-34): validate_template, save_template, reload_templates join.
 #: Story 3 of epic 2, 2026-11-12 (AD-34): validate_spec_folder joins.
-TWENTY = 20
+#: Story 4 of epic 2, 2026-11-12 (AD-34): list_models joins.
+TWENTY_ONE = 21
 
 PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "version": {},
+    "list_models": {"harness": "claude"},
     "list_templates": {},
     "get_template": {"name": "repo-init", "version": 2},
     "list_projects": {},
@@ -139,7 +141,7 @@ def test_every_tool_has_placeholders() -> None:
 
 async def test_every_tool_makes_one_call_to_an_allowed_operation(paths: dict[str, Any]) -> None:
     assert await violations(_tools, ALLOWED_OPERATION_IDS, paths) == []
-    assert len(ALLOWED_OPERATION_IDS) == TWENTY
+    assert len(ALLOWED_OPERATION_IDS) == TWENTY_ONE
 
 
 async def test_a_tool_calling_an_unlisted_operation_is_reported(paths: dict[str, Any]) -> None:

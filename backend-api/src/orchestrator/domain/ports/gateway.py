@@ -19,6 +19,8 @@ from decimal import Decimal
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
+from orchestrator.domain.errors import DomainError
+
 
 @dataclass(frozen=True)
 class ModelSpend:
@@ -59,4 +61,17 @@ class Gateway(Protocol):
         Never raises: every failure this port's adapters can hit answers a provisional
         zero instead (this port's docstring, and the real adapter's own).
         """
+        ...
+
+
+class GatewayUnreachable(DomainError):
+    """The gateway's model list could not be read (non-2xx, transport fault, unusable body)."""
+
+
+@runtime_checkable
+class GatewayModels(Protocol):
+    """The models the instance's LiteLLM key may use, as `GET /v1/models` answers."""
+
+    def models(self) -> tuple[str, ...]:
+        """The model ids, sorted. Raises `GatewayUnreachable` when the gateway cannot be read."""
         ...

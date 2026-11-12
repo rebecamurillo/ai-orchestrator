@@ -22,12 +22,14 @@ test_the_response_is_the_one_list_envelope`. Neither ruling weakened them; each 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from orchestrator.api.schemas.common import UtcTimestamp
 from orchestrator.application.setup_summary import HarnessSetup
+from orchestrator.application.use_cases.harness_models import ModelsAnswer
 from orchestrator.domain.entities.harness import EvaluationLine, Harness
 
 
@@ -42,6 +44,31 @@ class ProbeResultOut(BaseModel):
     failing_reason: str | None
     version: str
     models: list[str]
+
+
+class ModelsOut(BaseModel):
+    """The models a harness can use, and where that list comes from."""
+
+    harness: str
+    source: Literal["litellm", "configured", "none"] = Field(
+        description="`litellm`: the instance's LiteLLM key's model list; `configured`: "
+        "`LOCAL_MODELS`; `none`: no list is available, ask the user for a model name."
+    )
+    models: list[str]
+    note: str | None = Field(description="What the list is, or why there is none.")
+    code: str | None = Field(description="Finding code when `source` is `none`.")
+    guide: str | None = Field(description="Guide page that explains `code`.")
+
+    @classmethod
+    def of(cls, answer: ModelsAnswer) -> ModelsOut:
+        return cls(
+            harness=answer.harness,
+            source=answer.source,
+            models=list(answer.models),
+            note=answer.note,
+            code=answer.code,
+            guide=answer.guide,
+        )
 
 
 class EvaluationLineOut(BaseModel):

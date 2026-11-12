@@ -140,7 +140,7 @@ The same operations are also exposed as MCP tools at `$ORCHESTRATOR_BASE_URL/mcp
 `get_template`, `preflight_run`, `create_run`, `get_run`, `get_run_detail`,
 `wait_run_events`, `send_signal`, `list_queue`, `list_projects`, `create_project`,
 `update_project`, `add_repository`, `check_clone`, `init_repository`, `validate_template`,
-`save_template`, `reload_templates`, `validate_spec_folder`. Each tool is one call to the
+`save_template`, `reload_templates`, `validate_spec_folder`, `list_models`. Each tool is one call to the
 route above it, so the rules in `rules` apply unchanged. Per-harness configuration
 snippets ship in the kit under `mcp/`; they are not installed automatically.
 
@@ -151,6 +151,7 @@ snippets ship in the kit under `mcp/`; they are not installed automatically.
 | GET | `/api/v1/queue` | Every Run the engine holds and why it waits |
 | GET | `/api/v1/steps` | Attempt history; filters `project_id`, `status`, `harness` |
 | GET | `/api/v1/harnesses` | Installed harnesses |
+| GET | `/api/v1/harnesses/{name}/models` | The models a harness can use, with their source (`models`) |
 | GET | `/api/v1/harnesses/{name}/probe` | Live CLI/config probe |
 | POST/GET | `/api/v1/harnesses/{name}/readiness` | Run / read the end-to-end readiness diagnostic |
 

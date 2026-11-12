@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import httpx
 
-from orchestrator.domain.ports.gateway import Gateway
+from orchestrator.domain.ports.gateway import Gateway, GatewayModels
 from orchestrator.infrastructure.gateway.disabled import DisabledGateway
+from orchestrator.infrastructure.gateway.litellm_models import LiteLLMModels
 from orchestrator.infrastructure.gateway.litellm_spend import LiteLLMSpend
 from orchestrator.infrastructure.settings import Settings
 
@@ -29,4 +30,17 @@ def build_gateway(settings: Settings, http: httpx.Client) -> Gateway:
     return DisabledGateway()
 
 
-__all__ = ["DisabledGateway", "LiteLLMSpend", "build_gateway"]
+def build_gateway_models(settings: Settings) -> GatewayModels | None:
+    """`None` when no gateway is configured, else the model list read with the API key only."""
+    if not settings.gateway_enabled:
+        return None
+    return LiteLLMModels(settings.litellm_base_url, settings.litellm_api_key.get_secret_value())
+
+
+__all__ = [
+    "DisabledGateway",
+    "LiteLLMModels",
+    "LiteLLMSpend",
+    "build_gateway",
+    "build_gateway_models",
+]

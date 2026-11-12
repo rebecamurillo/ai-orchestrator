@@ -2418,6 +2418,78 @@
         "title": "MessageIn",
         "type": "object"
       },
+      "ModelsOut": {
+        "description": "The models a harness can use, and where that list comes from.",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Finding code when `source` is `none`.",
+            "title": "Code"
+          },
+          "guide": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Guide page that explains `code`.",
+            "title": "Guide"
+          },
+          "harness": {
+            "title": "Harness",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the list is, or why there is none.",
+            "title": "Note"
+          },
+          "source": {
+            "description": "`litellm`: the instance's LiteLLM key's model list; `configured`: `LOCAL_MODELS`; `none`: no list is available, ask the user for a model name.",
+            "enum": [
+              "litellm",
+              "configured",
+              "none"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness",
+          "source",
+          "models",
+          "note",
+          "code",
+          "guide"
+        ],
+        "title": "ModelsOut",
+        "type": "object"
+      },
       "NodeCallOut": {
         "description": "The callee a collapsed `uses: template` node names.",
         "properties": {
@@ -5996,6 +6068,105 @@
           }
         ],
         "summary": "List every harness",
+        "tags": [
+          "harnesses"
+        ]
+      }
+    },
+    "/api/v1/harnesses/{name}/models": {
+      "get": {
+        "description": "The list names its `source`; `none` carries a `code` and `guide` and an empty list.",
+        "operationId": "list_models_api_v1_harnesses__name__models_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9-]{0,31}$",
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No harness has that name."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`name` does not match the shape below."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The LiteLLM gateway is configured but its model list could not be read."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The models a harness can use, with their source",
         "tags": [
           "harnesses"
         ]

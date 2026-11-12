@@ -53,10 +53,12 @@ ALLOWED_OPERATION_IDS: frozenset[str] = frozenset(
         "get_api_v1_runs__run_id__get",
         "detail_api_v1_runs__run_id__detail_get",
         "events_api_v1_runs__run_id__events_get",
+        "list_models_api_v1_harnesses__name__models_get",
     }
 )
 
 _UUID = re.compile(r"^[0-9a-fA-F-]{36}$")
+_HARNESS = re.compile(r"^[a-z0-9-]+$")
 
 
 def _path_id(name: str, value: str) -> str:
@@ -122,7 +124,19 @@ def _instance_tools(api: InProcessApi) -> list[Tool]:
         """What is running, what is waiting, and why each waiting Run is waiting."""
         return await api.get("/queue")
 
-    return [version, list_templates, get_template, list_projects, list_queue]
+    async def list_models(harness: str) -> Any:
+        """The models a harness can use, and where the list comes from.
+
+        The answer names its `source`: `litellm` (the instance's LiteLLM key may use exactly
+        these), `configured` (`LOCAL_MODELS`, for the local harness) or `none` (nothing can be
+        listed here). With `source: none`, ask the user for the model name; never invent one.
+        A `code` carries a `guide` page.
+        """
+        if not _HARNESS.fullmatch(harness):
+            raise ToolFailure("harness must match ^[a-z0-9-]+$")
+        return await api.get(f"/harnesses/{quote(harness, safe='')}/models")
+
+    return [version, list_templates, get_template, list_projects, list_queue, list_models]
 
 
 def _setup_tools(api: InProcessApi) -> list[Tool]:

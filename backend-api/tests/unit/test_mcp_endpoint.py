@@ -53,12 +53,14 @@ REPOSITORY_ID = UUID("01960000-0000-7000-9000-00000000a0f2")
 #: create_project, update_project, add_repository, check_clone, init_repository.
 #: Story 2 of epic 2, 2026-11-12 (AD-34): validate_template, save_template, reload_templates.
 #: Story 3 of epic 2, 2026-11-12 (AD-34): validate_spec_folder.
+#: Story 4 of epic 2, 2026-11-12 (AD-34): list_models.
 EXPECTED_TOOLS = (
     "version",
     "list_templates",
     "get_template",
     "list_projects",
     "list_queue",
+    "list_models",
     "create_project",
     "update_project",
     "add_repository",
@@ -353,6 +355,7 @@ ONE_CALL = [
     ),
     ("list_projects", {}, ("GET", "/api/v1/projects", "")),
     ("list_queue", {}, ("GET", "/api/v1/queue", "")),
+    ("list_models", {"harness": "claude"}, ("GET", "/api/v1/harnesses/claude/models", "")),
     (
         "preflight_run",
         {"body": {"template_name": "repo-init"}},
