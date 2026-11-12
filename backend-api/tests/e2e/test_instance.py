@@ -328,7 +328,7 @@ def test_a_run_started_under_a_hold_waits_queued_then_finishes_after_release(
         rows = sorted(detail_of(api, run_id)["steps"], key=lambda row: row["seq"])
         assert rows[0]["status"] == "queued", rows
         assert all(row["status"] in {"planned", "queued"} for row in rows), rows
-        assert status_of(api, run_id) == "running"
+        assert status_of(api, run_id) == "queued", "no attempt started, so the Run never ran"
         assert working_entry(api, run_id) is None
 
         queued = api.get(QUEUE)
