@@ -38,8 +38,8 @@
 # Inputs (environment, all optional unless the step needs them):
 #   GHCR_TOKEN          GitHub token that can read the packages; GITHUB_TOKEN is the fallback
 #   GITHUB_TOKEN        the git credential written to .env (clone/push of your repositories);
-#                       defaults to the token above when images are pulled; --no-pull resolves
-#                       no token and leaves it as the placeholder for you to set in .env
+#                       defaults to the token above when images are pulled; --no-pull skips that
+#                       fallback, so .env gets only a GITHUB_TOKEN set here, else the placeholder
 #   GITHUB_USER         registry login name; resolved from the token when unset
 #   LITELLM_BASE_URL, LITELLM_API_KEY, LITELLM_SPEND_KEY, LANGFUSE_BASE_URL,
 #   LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY   the gateway and tracing, written to a new .env
