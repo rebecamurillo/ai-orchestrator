@@ -63,6 +63,27 @@ REQUIRED_FIELDS: dict[str | None, tuple[str, ...]] = {
     EPICS_KIND: ("id", "title", "branch", "spec_folder"),
 }
 
+#: The fields a Template may be written against beyond the required ones. The entry is handed
+#: whole to the Template and read there (`{{story.invoke_dev_with}}`, `{{epic.workdir}}`), so no
+#: Python reads these by name; this is where the vocabulary is held.
+DONE_CHECKPOINT_FIELD = "done_checkpoint"
+SPEC_CHECKPOINT_FIELD = "spec_checkpoint"
+INVOKE_DEV_WITH_FIELD = "invoke_dev_with"
+WORKDIR_FIELD = "workdir"
+INSTALL_FIELD = "install"
+TEST_FIELD = "test"
+QUALITY_GATE_FIELD = "quality_gate"
+OPTIONAL_FIELDS: dict[str, tuple[str, ...]] = {
+    STORIES_KIND: (DONE_CHECKPOINT_FIELD, SPEC_CHECKPOINT_FIELD, INVOKE_DEV_WITH_FIELD),
+    EPICS_KIND: (
+        DONE_CHECKPOINT_FIELD,
+        WORKDIR_FIELD,
+        INSTALL_FIELD,
+        TEST_FIELD,
+        QUALITY_GATE_FIELD,
+    ),
+}
+
 #: The key every entry is identified by, in both lists.
 ID_KEY = "id"
 

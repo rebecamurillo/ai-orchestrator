@@ -2,7 +2,8 @@
 
 Run by the image build (`--out /app/guide-build`) and by `make guide`. Source pages are copied
 with `release: <VERSION>` stamped as the last front-matter key, one `errors/{code}.md` page is
-generated per finding code, and `guide-index.json` lists every page. Files only, no network.
+generated per finding code, and `guide-index.json` lists every page. The format schemas are
+written under `schemas/` from `application/format_schemas.py` (AD-35). Files only, no network.
 
 Every check runs before `--out` is touched: `--out` is deleted and recreated, so one that is or
 contains the source would destroy the guide it builds from, and one inside it would be read back
@@ -20,9 +21,11 @@ from pathlib import Path
 
 from orchestrator.api.routers.version import VERSION_FILE
 from orchestrator.application.findings import REGISTRY
+from orchestrator.application.format_schemas import spec_folder_schema, workflow_schema
 
 ID_PATTERN = re.compile(r"^[a-z0-9-]+(/[a-z0-9-]+)*$")
 REQUIRED = ("title", "kind", "audience")
+SCHEMAS = (("workflow.json", workflow_schema), ("spec-folder.json", spec_folder_schema))
 
 
 class _Refused(Exception):
@@ -80,6 +83,10 @@ def build(source: Path, out: Path, version_file: Path) -> None:
         _write(out / "errors" / f"{code}.md", front, f"# {entry.message}\n\n{entry.explanation}\n")
         index.append({"id": f"errors/{code}", "title": code, "kind": "page", "audience": "any"})
     document = {"release": release, "pages": index}
+    for name, make in SCHEMAS:
+        path = out / "schemas" / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(make(), indent=2, sort_keys=True) + "\n")
     (out / "guide-index.json").write_text(json.dumps(document, indent=2) + "\n")
 
 

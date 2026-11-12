@@ -72,7 +72,8 @@ def build(tmp_path: Path) -> Path:
         ["--source", str(source), "--out", str(out), "--version-file", str(version.VERSION_FILE)]
     )
     assert code == 0
-    (out / "schemas").mkdir()
+    # story 4 (2026-11-12): the build now writes schemas/ itself.
+    (out / "schemas").mkdir(exist_ok=True)
     (out / "schemas" / "x.json").write_text('{"type": "object"}')
     (tmp_path / "x.md").write_text("outside the build directory")
     return out
