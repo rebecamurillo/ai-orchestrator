@@ -107,9 +107,21 @@ TDD is hard rule 6; these are the enforced numbers behind it. `orchestrator.doma
 - Conventional commits; the orchestrator's own commits read `story {id}: {title} (orchestrator)`.
 - Product copy states facts and mechanisms; it never congratulates or apologises (PRD NFR-8).
 
-## Trajectory capture
+## Data capture
 
-Every Story that reaches `done` with a green or skipped verify step writes one append-only `trajectory` row (AD-19). Do not add other data-collection paths.
+Two append-only paths record what Runs did, and no others exist.
+
+1. **Trajectory.** Every Story that reaches `done` with a green or skipped verify step writes
+   one append-only `trajectory` row (AD-19).
+2. **Run metrics.** Each attempt writes its facts once, when it ends (usage per source, model,
+   conversation and token class; activity per conversation and tool); each gateway read is a
+   row; each calculation of a Run writes a new result version of metric values and code-analysis
+   results, every value carrying its metric id, method version and origin. Fact rows, gateway
+   reads and result versions are never updated or deleted. No status, route, retry or park reads
+   them, except the budget gate, which reads the two cost figures.
+
+Do not add other data-collection paths: a new measure is a new catalogue entry and method on
+path 2, not a new table, file or export.
 
 ## Operator setup and diagnostics
 
