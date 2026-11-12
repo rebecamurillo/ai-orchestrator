@@ -37,7 +37,6 @@ for h in "${HARNESSES[@]}"; do
     exit 2
   fi
 done
-for d in "${ALL_DIRS[@]}"; do mkdir -p "$AGENT_HOME/$d"; done
 
 BIN="$BMAD_PREFIX/bin/bmad-method"
 if [ ! -x "$BIN" ]; then
@@ -97,6 +96,9 @@ for h in "${HARNESSES[@]}"; do
   fi
   NEW[$h]="$(cd "$src" && LC_ALL=C ls -1)"
 done
+
+# only after every refusal above: a refused run leaves the home exactly as it found it
+for d in "${ALL_DIRS[@]}"; do mkdir -p "$AGENT_HOME/$d"; done
 
 if $HAS_RECORD; then
   while IFS=$'\t' read -r h name; do
