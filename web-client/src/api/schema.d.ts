@@ -2694,9 +2694,15 @@ export interface components {
         };
         /**
          * SaveVersionIn
-         * @description `POST /templates/{name}/versions`. Same one field; a distinct name for a distinct route.
+         * @description `POST /templates/{name}/versions`: the YAML, and whether the folder may refuse it.
          */
         SaveVersionIn: {
+            /**
+             * Refuse If In Folder
+             * @description Refuse with 409 `refusal-template-in-folder` instead of saving when the operator's template folder holds this name; the web editor never sends it.
+             * @default false
+             */
+            refuse_if_in_folder: boolean;
             /** Yaml */
             yaml: string;
         };
@@ -5782,6 +5788,16 @@ export interface operations {
             };
             /** @description No Template has that name, or no version has that number. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `refuse_if_in_folder` was set and the operator's template folder holds this name (`refusal-template-in-folder`); nothing is stored. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

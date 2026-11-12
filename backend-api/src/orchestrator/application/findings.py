@@ -94,6 +94,7 @@ TEMPLATE_REDISPATCH_TARGET_IS_NOT_A_ROW_OF_THIS_FRAME = (
 TEMPLATE_DUPLICATE_ROW_PATH = "template-duplicate-row-path"
 REFUSAL_GUIDE_UNAVAILABLE = "refusal-guide-unavailable"
 REFUSAL_LOCAL_ONLY = "refusal-local-only"
+REFUSAL_TEMPLATE_IN_FOLDER = "refusal-template-in-folder"
 
 #: Reason text -> code, written out so a reworded reason is a visible change here.
 CODE_BY_REASON: Mapping[str, str] = {
@@ -178,6 +179,15 @@ REFUSALS: Mapping[str, CodeEntry] = {
         "No instance tool or route upgrades, restarts or reconfigures the instance; the host "
         "agent or the user does it from the deploy folder, following the `host/*` pages.",
         "agent",
+    ),
+    REFUSAL_TEMPLATE_IN_FOLDER: CodeEntry(
+        REFUSAL_TEMPLATE_IN_FOLDER,
+        "refusal",
+        "template held in the operator folder",
+        "The operator's template folder governs this name: a version saved here would be "
+        "superseded by the file at the next reload or start-up. The file is edited on the host, "
+        "then `reload_templates` (`POST /templates/reload`) stores it as the next version.",
+        "check",
     ),
 }
 

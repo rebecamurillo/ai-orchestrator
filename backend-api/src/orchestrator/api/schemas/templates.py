@@ -217,7 +217,17 @@ class ValidateOut(BaseModel):
 
 
 class SaveVersionIn(ValidateIn):
-    """`POST /templates/{name}/versions`. Same one field; a distinct name for a distinct route."""
+    """`POST /templates/{name}/versions`: the YAML, and whether the folder may refuse it."""
+
+    refuse_if_in_folder: Annotated[
+        bool,
+        Field(
+            description=(
+                "Refuse with 409 `refusal-template-in-folder` instead of saving when the "
+                "operator's template folder holds this name; the web editor never sends it."
+            )
+        ),
+    ] = False
 
 
 class TemplateLoadedOut(BaseModel):

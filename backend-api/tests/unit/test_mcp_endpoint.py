@@ -51,6 +51,7 @@ REPOSITORY_ID = UUID("01960000-0000-7000-9000-00000000a0f2")
 #: The tool set §4 declares. A tool added or renamed is a kit-configuration change.
 #: Story 1 of epic 2, 2026-11-12 (AD-34, owner 2026-11-11): five setup tools added —
 #: create_project, update_project, add_repository, check_clone, init_repository.
+#: Story 2 of epic 2, 2026-11-12 (AD-34): validate_template, save_template, reload_templates.
 EXPECTED_TOOLS = (
     "version",
     "list_templates",
@@ -62,6 +63,9 @@ EXPECTED_TOOLS = (
     "add_repository",
     "check_clone",
     "init_repository",
+    "validate_template",
+    "save_template",
+    "reload_templates",
     "preflight_run",
     "create_run",
     "send_signal",

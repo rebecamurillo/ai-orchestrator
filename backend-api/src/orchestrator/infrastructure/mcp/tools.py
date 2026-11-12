@@ -8,10 +8,10 @@ these rules in prose, and nothing here is a second source of truth for *how* the
 
 Thin by construction: a tool parses nothing, decides nothing and writes no status (AD-8).
 
-Four builders rather than one, in the order a session uses them — what this instance holds,
-what sets a target up, what starts and steers a Run, what watches one. The split is also what
-keeps each function under the complexity limit `backend-api/AGENTS.md` sets, since a nested
-definition counts.
+Five builders rather than one, in the order a session uses them — what this instance holds,
+what sets a target up, what checks and saves a workflow, what starts and steers a Run, what
+watches one. The split is also what keeps each function under the complexity limit
+`backend-api/AGENTS.md` sets, since a nested definition counts.
 """
 
 from __future__ import annotations
@@ -43,6 +43,9 @@ ALLOWED_OPERATION_IDS: frozenset[str] = frozenset(
         "add_repository_api_v1_projects__project_id__repositories_post",
         "run_clone_check_api_v1_repositories__repository_id__clone_check_post",
         "init_api_v1_repositories__repository_id__init_post",
+        "validate_text_api_v1_templates__name__validate_post",
+        "save_version_api_v1_templates__name__versions_post",
+        "reload_folder_api_v1_templates_reload_post",
         "preflight_api_v1_runs_preflight_post",
         "create_api_v1_runs_post",
         "post_signal_api_v1_runs__run_id__signals_post",
@@ -62,11 +65,22 @@ def _path_id(name: str, value: str) -> str:
     return quote(value, safe="")
 
 
+_SLUG_BREAKERS = ("/", "?", "#", "%", "..")
+
+
+def _path_name(value: str) -> str:
+    """A template name that goes into a path: free of path-breaking characters or refused."""
+    if any(breaker in value for breaker in _SLUG_BREAKERS):
+        raise ToolFailure("name must not contain / ? # % or ..")
+    return quote(value, safe="")
+
+
 def build_tools(api: InProcessApi) -> list[Tool]:
     """The whole tool set, bound to one in-process API client."""
     return [
         *_instance_tools(api),
         *_setup_tools(api),
+        *_workflow_tools(api),
         *_dispatch_tools(api),
         *_watch_tools(api),
     ]
@@ -160,6 +174,38 @@ def _setup_tools(api: InProcessApi) -> list[Tool]:
         return await api.post(f"/repositories/{rid}/init", body)
 
     return [create_project, update_project, add_repository, check_clone, init_repository]
+
+
+def _workflow_tools(api: InProcessApi) -> list[Tool]:
+    """What checks a workflow, saves it, and reloads the operator's template folder."""
+
+    async def validate_template(name: str, yaml: str) -> Any:
+        """Check workflow YAML without storing it; every problem is a finding in `errors`.
+
+        Each finding carries `line`, `code` and `guide`: read the page `errors/{code}`. The
+        `name:` key must equal `name`.
+        """
+        return await api.post(f"/templates/{_path_name(name)}/validate", {"yaml": yaml})
+
+    async def save_template(name: str, yaml: str) -> Any:
+        """Save workflow YAML as the next version of `name`; `version:` is `max + 1`.
+
+        Invalid YAML answers 422 with findings (`code`, `guide`: read `errors/{code}`). A
+        workflow held in the operator's template folder is refused with 409
+        `refusal-template-in-folder`: the file is edited on the host, then call
+        `reload_templates`. A saved version never changes.
+        """
+        body = {"yaml": yaml, "refuse_if_in_folder": True}
+        return await api.post(f"/templates/{_path_name(name)}/versions", body)
+
+    async def reload_templates() -> Any:
+        """Re-read the operator's template folder and store each changed, valid file.
+
+        Answers `stored`, `unchanged`, `refused` (with findings) and `not_in_folder`.
+        """
+        return await api.post("/templates/reload")
+
+    return [validate_template, save_template, reload_templates]
 
 
 def _dispatch_tools(api: InProcessApi) -> list[Tool]:

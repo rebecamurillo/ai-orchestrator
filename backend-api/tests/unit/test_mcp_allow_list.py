@@ -23,7 +23,8 @@ ID = "01a06887-79ab-759b-97a0-71c32ad939c2"
 HOSTILE = "../instance/hold?x="
 FORBIDDEN_FAMILIES = ("/api/v1/instance", "/api/v1/kit")
 FORBIDDEN_FRAGMENTS = ("/readiness", "/probe")
-SIXTEEN = 16
+#: Story 2 of epic 2, 2026-11-12 (AD-34): validate_template, save_template, reload_templates join.
+NINETEEN = 19
 
 PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "version": {},
@@ -36,6 +37,9 @@ PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "add_repository": {"project_id": ID, "body": {}},
     "check_clone": {"repository_id": ID},
     "init_repository": {"repository_id": ID},
+    "validate_template": {"name": "fixture", "yaml": ""},
+    "save_template": {"name": "fixture", "yaml": ""},
+    "reload_templates": {},
     "preflight_run": {"body": {}},
     "create_run": {"body": {}},
     "send_signal": {"run_id": ID, "kind": "continue"},
@@ -133,7 +137,7 @@ def test_every_tool_has_placeholders() -> None:
 
 async def test_every_tool_makes_one_call_to_an_allowed_operation(paths: dict[str, Any]) -> None:
     assert await violations(_tools, ALLOWED_OPERATION_IDS, paths) == []
-    assert len(ALLOWED_OPERATION_IDS) == SIXTEEN
+    assert len(ALLOWED_OPERATION_IDS) == NINETEEN
 
 
 async def test_a_tool_calling_an_unlisted_operation_is_reported(paths: dict[str, Any]) -> None:

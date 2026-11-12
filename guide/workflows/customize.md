@@ -217,6 +217,17 @@ a reference and is not seeded. Customize the file the project runs.
   orchestrator's, whatever the template says.
 - **A Run already planned.** See *What a save does*.
 
+### Over MCP
+
+- `validate_template(name, yaml)` checks the YAML without storing it. Every finding carries
+  `line`, `code` and `guide`; the page `errors/{code}` explains it.
+- `save_template(name, yaml)` stores the YAML as the next version. It always asks to be
+  refused when the operator's template folder holds the name: the answer is 409
+  `refusal-template-in-folder`, naming the file and the folder path. The file is then edited
+  on the host and `reload_templates` stores it. A saved version never changes.
+- `reload_templates()` re-reads the folder and answers `stored`, `unchanged`, `refused` and
+  `not_in_folder`.
+
 ### Validation reasons
 
 Each validation finding carries a `code` and a `guide` page id; the page `errors/{code}` explains it. The format description is `/schemas/workflow.json`. Whether a workflow can do the job at all is `workflows/would-a-workflow-do-it`.
