@@ -1669,10 +1669,21 @@ recreate_backend() {   # recreate_backend WHAT → WHAT is what .env now holds, 
 # `harness <name> --version X`: the pin is `.env`'s, and the container's entrypoint (`ensure`)
 # installs it at the next start onto the `harness-bin` volume — no new image needed.
 cmd_harness_version() {
-	local variable="$1" since lines
-	if [[ "$(env_pin "$variable")" == "$version_arg" ]]; then
+	local variable="$1" since lines current tmp
+	current="$(env_pin "$variable")"
+	[[ -n "$current" || ! -f "$release_file" ]] || current="$(get_var "$release_file" "$variable")"
+	if [[ "$current" == "$version_arg" ]]; then
 		say "${harness_arg} is already pinned at ${version_arg} — nothing to do."
 		return 0
+	fi
+	# the pin is release.env's; .env holds only a commented `# NAME=` override line until one is set
+	if ! env_sets "$env_file" "$variable"; then
+		tmp="$(mktemp)"
+		awk -v name="$variable" '!done && index($0, "# " name "=") == 1 { print name "="; done = 1; next } { print }' \
+			"$env_file" > "$tmp"
+		cat "$tmp" > "$env_file"
+		rm -f "$tmp"
+		env_sets "$env_file" "$variable" || printf '%s=\n' "$variable" >> "$env_file"
 	fi
 	set_var "$env_file" "$variable" "$version_arg"
 	step "${harness_arg} → ${version_arg}"

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -707,14 +708,20 @@ def test_harness_version_prints_the_harness_row(installed: tuple[Path, dict[str,
 
 @needs_bash
 def test_harness_version_keeps_the_trailing_comment(installed: tuple[Path, dict[str, str]]) -> None:
+    # epic 3 product/client split, 2026-11-11: the pin is release.env's; an operator override is
+    # the uncommented `.env` line (PR #19 review, 2026-11-12)
     path, env = installed
     dotenv = path / ".env"
-    pin = parse_env_example(dotenv)["CLAUDE_CODE_VERSION"]
+    pin = parse_env_example(path / "release.env")["CLAUDE_CODE_VERSION"]
     dotenv.write_text(
-        dotenv.read_text().replace(
-            f"CLAUDE_CODE_VERSION={pin}", f"CLAUDE_CODE_VERSION={pin}  # bumped for a fix"
+        re.sub(
+            r"^# CLAUDE_CODE_VERSION=.*$",
+            f"CLAUDE_CODE_VERSION={pin}  # bumped for a fix",
+            dotenv.read_text(),
+            flags=re.M,
         )
     )
+    assert f"CLAUDE_CODE_VERSION={pin}  # bumped for a fix" in dotenv.read_text().splitlines()
 
     result = _run("harness", "claude", "--version", "2.1.260", "--yes", cwd=path, env=env)
 
@@ -882,8 +889,10 @@ def test_harness_version_says_the_row_reads_disabled_until_readiness_reruns(
 def test_harness_version_at_the_current_pin_recreates_nothing(
     installed: tuple[Path, dict[str, str]],
 ) -> None:
+    # epic 3 product/client split, 2026-11-11: with no `.env` override the current pin is
+    # release.env's (PR #19 review, 2026-11-12)
     path, env = installed
-    pin = parse_env_example(path / ".env")["CLAUDE_CODE_VERSION"]
+    pin = parse_env_example(path / "release.env")["CLAUDE_CODE_VERSION"]
 
     result = _run("harness", "claude", "--version", pin, "--yes", cwd=path, env=env)
 
