@@ -63,6 +63,9 @@ case "$*" in
 \t*" run --rm --no-deps --user agent "*"prepare.sh backend-api") exit "${SHIM_PREPARE_RC:-0}" ;;
 \t*" run --rm "*" setup") mode; exit "${SHIM_SETUP_RC:-0}" ;;
 \t*"ps --status running --services"*) printf '%s\\n' ${SHIM_RUNNING:-}; exit 0 ;;
+\t*"exec -T backend-api /app/scripts/harness/"*".sh catalog")
+\t\tcase "$*" in *"/${SHIM_CATALOG_FAIL:-none}.sh catalog") exit 1 ;; esac
+\t\texit 0 ;;
 \t*" ps") echo "NAME STATUS"; exit 0 ;;
 esac
 exit 0
@@ -369,7 +372,30 @@ def test_prepare_runs_as_agent_before_setup_and_logs_setup_is_1777(
     assert PREPARE_CALL in log[prepare]
     assert " -e " not in log[prepare]
     assert log[setup + 1] == "MODE 1777"
-    assert not [c for c in log if "exec -T backend-api" in c]
+    # epic 5 story 2, 2026-11-11 AD-16/AD-28 amendment: no exec before the setup call
+    assert not [c for c in log[:setup] if "exec -T backend-api" in c]
+
+
+@needs_bash
+def test_the_catalog_is_rewritten_in_backend_api_after_the_setup_service(
+    folder: tuple[Path, dict[str, str]],
+) -> None:
+    """epic 5 story 2, 2026-11-11 AD-16/AD-28 amendment."""
+    path, _ = folder
+
+    result = _install(folder)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    log = _log(path, "docker.log").splitlines()
+    setup = next(i for i, c in enumerate(log) if " run --rm " in c and c.endswith(" setup"))
+    suffixes = [
+        f"exec -T backend-api /app/scripts/harness/{h}.sh catalog"
+        for h in ("claude", "codex", "opencode")
+    ]
+    found = [i for i, c in enumerate(log) if c.endswith(tuple(suffixes))]
+    ends = [log[i].endswith(s) for i, s in zip(found, suffixes, strict=True)]
+    assert ends == [True] * len(suffixes)
+    assert len(found) == len(suffixes) and min(found) > setup
 
 
 @needs_bash
@@ -398,6 +424,7 @@ def test_a_refused_hold_means_no_setup_run(folder: tuple[Path, dict[str, str]]) 
     assert "409" in result.stdout + result.stderr
     assert " run --rm " not in _log(path, "docker.log")
     assert "prepare.sh" not in _log(path, "docker.log")
+    assert "catalog" not in _log(path, "docker.log")
 
 
 # ── AC7: no platform surface ─────────────────────────────────────────────────

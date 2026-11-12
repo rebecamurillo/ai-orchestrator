@@ -24,6 +24,7 @@ the contract and the defaults cannot drift apart silently.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -731,3 +732,61 @@ def test_ensure_all_continues_past_a_refused_harness_and_exits_zero(
     for name in HARNESSES:
         if name != failing:
             assert f"[harness:{name}] refused" not in result.stderr
+
+
+# ── `catalog` (epic 5 story 2, 2026-11-11 AD-16/AD-28 amendment: backend-api writes the catalog) ──
+
+SKILLS_FOLDER = {
+    "claude": ".claude/skills",
+    "codex": ".agents/skills",
+    "opencode": ".config/opencode/skills",
+}
+
+
+def _catalog(name: str, home: Path) -> subprocess.CompletedProcess[str]:
+    env = {"PATH": os.environ["PATH"], "HOME": str(home), "AGENT_HOME": str(home)}
+    return _run("bash", str(script(name)), "catalog", env=env)
+
+
+@pytest.mark.parametrize("name", HARNESSES)
+def test_catalog_rewrites_the_manifest_from_the_skills_folder(name: str, tmp_path: Path) -> None:
+    skills = tmp_path / SKILLS_FOLDER[name]
+    (skills / "a").mkdir(parents=True)
+    (skills / "b").mkdir()
+    (skills / "c.txt").write_text("stray")
+
+    result = _catalog(name, tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    manifest = skills.parent / "skills-manifest.json"
+    assert json.loads(manifest.read_text()) == {"skills": ["a", "b"]}
+
+
+@pytest.mark.parametrize("name", HARNESSES)
+def test_catalog_drops_a_removed_skill(name: str, tmp_path: Path) -> None:
+    skills = tmp_path / SKILLS_FOLDER[name]
+    (skills / "x").mkdir(parents=True)
+    assert _catalog(name, tmp_path).returncode == 0
+    (skills / "x").rmdir()
+    (skills / "y").mkdir()
+
+    result = _catalog(name, tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    manifest = skills.parent / "skills-manifest.json"
+    assert json.loads(manifest.read_text()) == {"skills": ["y"]}
+
+
+@pytest.mark.parametrize("name", HARNESSES)
+def test_the_usage_line_names_catalog(name: str) -> None:
+    result = _run("bash", str(script(name)), "nonsense", env={"PATH": os.environ["PATH"]})
+
+    assert "catalog" in result.stderr
+
+
+@pytest.mark.parametrize("name", HARNESSES)
+def test_the_catalog_dispatch_reads_no_gateway_environment(name: str) -> None:
+    lines = [ln for ln in code(name).splitlines() if ln.strip().startswith("catalog)")]
+
+    assert len(lines) == 1
+    assert "require_harness_env" not in lines[0]

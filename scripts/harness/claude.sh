@@ -188,8 +188,10 @@ case "${1:-}" in
   ensure)                 ensure ;;
   # `skills` reads no Gateway or Langfuse value, exactly as `install` does not
   skills)                 skills ;;
+  # `catalog` reads no Gateway or Langfuse value either; backend-api runs it after a setup run
+  catalog)                write_skills_manifest "${SKILLS_DIR}" ;;
   asset-dirs)             printf '%s\n' "${ASSET_DIRS[@]}" ;;
   configure|doctor)       require_harness_env; "$1" ;;
   probe)                  require_harness_env; probe ;;
-  *)                      echo "usage: $0 install|ensure|skills|asset-dirs|configure|doctor|probe" >&2; exit 2 ;;
+  *)                      echo "usage: $0 install|ensure|skills|catalog|asset-dirs|configure|doctor|probe" >&2; exit 2 ;;
 esac

@@ -241,5 +241,6 @@ def test_the_runner_records_the_installed_version(tmp_path: Path) -> None:
     record = json.loads((s.home / ".orchestrator" / "setup-run.json").read_text())
     assert record["bmad"] == {"choice": "installed", "version": "B", "ok": True}
     for harness in HARNESSES:
-        manifest = json.loads((s.skills(harness).parent / "skills-manifest.json").read_text())
-        assert {"bmad-b1", "bmad-common"} <= set(manifest["skills"])
+        # epic 5 story 2, 2026-11-11 AD-16/AD-28 amendment: the folders, not a run.sh manifest
+        folders = {p.name for p in s.skills(harness).iterdir() if p.is_dir()}
+        assert {"bmad-b1", "bmad-common"} <= folders

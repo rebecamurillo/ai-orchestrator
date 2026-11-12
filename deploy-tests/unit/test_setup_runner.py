@@ -94,10 +94,9 @@ class Scratch:
     def record(self) -> dict:
         return json.loads((self.home / ".orchestrator" / "setup-run.json").read_text())
 
-    def manifest(self, harness: str = "claude") -> list[str]:
-        return json.loads((self.skills(harness).parent / "skills-manifest.json").read_text())[
-            "skills"
-        ]
+    def skill_dirs(self, harness: str = "claude") -> list[str]:
+        """Epic 5 story 2, 2026-11-11 AD-16/AD-28 amendment: the folder is counted."""
+        return sorted(p.name for p in self.skills(harness).iterdir() if p.is_dir())
 
 
 def _asset_line(harness: str) -> str:
@@ -142,20 +141,27 @@ def test_all_succeed_writes_a_valid_record(tmp_path: Path) -> None:
         "/10-ok.sh.log"
     )
     for harness in HARNESSES:
-        assert getattr(record.catalog, harness) == len(s.manifest(harness))
+        assert getattr(record.catalog, harness) == len(s.skill_dirs(harness))
     assert list((s.home / ".orchestrator").glob("*.tmp*")) == []
 
 
-def test_client_skill_reaches_the_manifest(tmp_path: Path) -> None:
+def test_client_skill_is_counted_in_the_catalog(tmp_path: Path) -> None:
     s = _scratch(tmp_path)
     s.script(
         "10-skill.sh",
         'mkdir -p "$HOME/.claude/skills/s" && echo x > "$HOME/.claude/skills/s/SKILL.md"',
     )
     assert s.run().returncode == 0
-    assert "s" in s.manifest("claude")
+    assert "s" in s.skill_dirs("claude")
+    assert s.record()["catalog"]["claude"] == len(s.skill_dirs("claude"))
     entry = s.record()["scripts"][0]
     assert (entry["ok"], entry["exit"], entry["clashes"]) == (True, 0, [])
+
+
+def test_phase_4_writes_no_manifest() -> None:
+    """Epic 5 story 2, 2026-11-11 AD-16/AD-28 amendment: backend-api alone writes the catalog."""
+    lines = [ln for ln in RUNNER.read_text().splitlines() if not ln.strip().startswith("#")]
+    assert [ln for ln in lines if "write_skills_manifest" in ln] == []
 
 
 def test_failing_script_does_not_stop_the_next(tmp_path: Path) -> None:

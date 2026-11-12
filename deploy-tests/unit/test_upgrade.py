@@ -834,6 +834,15 @@ def test_prepare_runs_between_the_dump_and_the_setup_service_without_exec(folder
 
 
 @needs_bash
+def test_an_upgrade_makes_no_catalog_call(folder: Folder) -> None:
+    """epic 5 story 2, 2026-11-11 AD-16/AD-28 amendment: stack_up rewrites the manifests."""
+    result = _upgrade(folder, SHIM_RUNNING="postgres backend-api")
+
+    assert result.returncode == 0, _out(result)
+    assert not [c for c in _calls(folder) if c.endswith(".sh catalog")]
+
+
+@needs_bash
 def test_the_calls_come_in_the_documented_order(folder: Folder) -> None:
     result = _upgrade(folder)
 

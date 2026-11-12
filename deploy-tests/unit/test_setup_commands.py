@@ -42,6 +42,9 @@ case "$*" in
 \t*" run --rm --no-deps --user agent "*"prepare.sh backend-api") exit "${SHIM_PREPARE_RC:-0}" ;;
 \t*" run --rm "*" setup"|*" run --rm "*" setup --reset") mode; exit "${SHIM_SETUP_RC:-0}" ;;
 \t*"ps --status running --services"*) printf '%s\\n' ${SHIM_RUNNING:-}; exit 0 ;;
+\t*"exec -T backend-api /app/scripts/harness/"*".sh catalog")
+\t\tcase "$*" in *"/${SHIM_CATALOG_FAIL:-none}.sh catalog") exit 1 ;; esac
+\t\texit 0 ;;
 esac
 exit 0
 """
@@ -166,6 +169,18 @@ def _runs(path: Path) -> list[str]:
 
 def _prepares(path: Path) -> list[str]:
     return [ln for ln in _log(path, "docker.log") if "/app/scripts/setup/prepare.sh" in ln]
+
+
+HARNESS_COUNT = 3
+SETUP_FAILED_EXIT = 2
+CATALOG_SUFFIXES = tuple(
+    f"exec -T backend-api /app/scripts/harness/{h}.sh catalog"
+    for h in ("claude", "codex", "opencode")
+)
+
+
+def _catalogs(path: Path) -> list[str]:
+    return [ln for ln in _log(path, "docker.log") if ln.endswith(CATALOG_SUFFIXES)]
 
 
 def _hold_calls(path: Path) -> list[str]:
@@ -431,7 +446,8 @@ def test_prepare_runs_as_agent_before_the_setup_service_and_nothing_is_exec(
     assert PREPARE_CALL in prepare
     assert " -e " not in prepare
     assert log.index(prepare) < _setup_index(log)
-    assert not [ln for ln in log if "exec -T backend-api" in ln]
+    # epic 5 story 2, 2026-11-11 AD-16/AD-28 amendment: no exec before the setup call
+    assert not [ln for ln in log[: _setup_index(log)] if "exec -T backend-api" in ln]
 
 
 @needs_bash
@@ -453,4 +469,67 @@ def test_a_failed_prepare_warns_naming_it_and_the_setup_service_still_runs(folde
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert "prepare.sh" in result.stdout + result.stderr
+    assert len(_runs(path)) == 1
+
+
+# ── epic 5 story 2 (2026-11-11 AD-16/AD-28 amendment): backend-api writes the catalog ───────
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    "args", [("setup",), ("setup", "--reset"), ("bmad", "install"), ("bmad", "remove")]
+)
+def test_catalog_runs_in_backend_api_after_the_setup_service_and_nothing_restarts(
+    folder: Folder, args: tuple[str, ...]
+) -> None:
+    path, _ = folder
+
+    result = _run(folder, *args)
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    log = _log(path, "docker.log")
+    calls = _catalogs(path)
+    ends = [ln.endswith(s) for ln, s in zip(calls, CATALOG_SUFFIXES, strict=True)]
+    assert ends == [True] * HARNESS_COUNT
+    setup = _setup_index(log)
+    assert all(log.index(ln) > setup for ln in calls)
+    assert len(_runs(path)) == 1
+    forbidden = {"restart", "stop", "down", "up"}
+    assert not [ln for ln in log if forbidden & set(ln.split())]
+
+
+@needs_bash
+def test_catalog_still_runs_and_the_exit_code_is_kept_when_the_setup_service_fails(
+    folder: Folder,
+) -> None:
+    path, _ = folder
+    served = _serve(path, "bad.json", _harnesses(ok=False, failures=["10-x.sh"]))
+
+    result = _run(folder, "setup", SHIM_SETUP_RC="2", SHIM_HARNESS_FILE=served)
+
+    assert len(_catalogs(path)) == HARNESS_COUNT
+    assert result.returncode == SETUP_FAILED_EXIT
+
+
+@needs_bash
+def test_a_failed_catalog_call_warns_naming_the_harness_and_the_others_still_run(
+    folder: Folder,
+) -> None:
+    path, _ = folder
+
+    result = _run(folder, "setup", SHIM_CATALOG_FAIL="codex")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "codex.sh" in result.stdout + result.stderr
+    assert len(_catalogs(path)) == HARNESS_COUNT
+
+
+@needs_bash
+def test_no_exec_is_made_when_backend_api_is_not_running(folder: Folder) -> None:
+    path, _ = folder
+
+    result = _run(folder, "setup", SHIM_RUNNING="postgres")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not [ln for ln in _log(path, "docker.log") if " exec " in ln]
     assert len(_runs(path)) == 1

@@ -679,7 +679,7 @@ EOF
 # folders (no running backend-api needed), the BMAD pin, one `run --rm`.
 # Returns the run's exit code; the hold around it is the caller's.
 setup_service_run() {   # setup_service_run TRIGGER RELEASE [RUNNER_ARG…]
-	local pin rc=0 trigger="$1" release="$2"
+	local pin h rc=0 trigger="$1" release="$2"
 	shift 2
 	local -a pins=()
 	pin="$(env_pin BMAD_VERSION)"
@@ -695,6 +695,14 @@ setup_service_run() {   # setup_service_run TRIGGER RELEASE [RUNNER_ARG…]
 		warn "scripts/setup/prepare.sh failed — the agent home's folders may be missing"
 	compose_setup run --rm -e "ORCH_SETUP_TRIGGER=${trigger}" -e "ORCH_RELEASE=${release}" \
 		${pins[@]+"${pins[@]}"} setup ${1+"$@"} || rc=$?
+	# backend-api writes the skill catalog; a failed run can still have changed the folders. An upgrade's
+	# stack_up recreates backend-api, and a stopped backend-api writes it at its next start.
+	if [[ "$trigger" != upgrade ]] && compose ps --status running --services 2>/dev/null | grep -q '^backend-api$'; then
+		for h in claude codex opencode; do
+			compose exec -T backend-api "/app/scripts/harness/${h}.sh" catalog </dev/null ||
+				warn "catalog: ${h}.sh catalog failed in backend-api — pre-flight reads the previous catalog until the next start"
+		done
+	fi
 	return "$rc"
 }
 

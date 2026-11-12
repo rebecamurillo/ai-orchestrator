@@ -255,13 +255,12 @@ $operator_ok || overall_ok=false
 declare -A COUNT=()
 for h in "${HARNESSES[@]}"; do
   COUNT[$h]=0
-  if bash -euo pipefail -c 'source "$1"; write_skills_manifest "$2"' _ "$COMMON" "${SKILLS_DIR[$h]}" >>"$LOG/catalog.log" 2>&1; then
-    if n="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["skills"]))' "$(dirname "${SKILLS_DIR[$h]}")/skills-manifest.json" 2>/dev/null)"; then
-      COUNT[$h]="$n"
-    else
-      overall_ok=false
-    fi
+  [ -d "${SKILLS_DIR[$h]}" ] || { echo "$h: no skills folder" >>"$LOG/catalog.log"; continue; }
+  if n="$(find "${SKILLS_DIR[$h]}" -mindepth 1 -maxdepth 1 -type d 2>>"$LOG/catalog.log" | wc -l)"; then
+    COUNT[$h]=$((n))
+    echo "$h: ${COUNT[$h]} skills" >>"$LOG/catalog.log"
   else
+    echo "$h: skills folder unreadable" >>"$LOG/catalog.log"
     overall_ok=false
   fi
 done
