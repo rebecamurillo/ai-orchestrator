@@ -13,5 +13,5 @@ cd backend-api
 uv run --locked ruff check ../deploy-tests
 uv run --locked ruff format --check ../deploy-tests
 for l in "${lanes[@]}"; do
-  uv run --locked python -m pytest "../deploy-tests/$l" -q -p no:cacheprovider
+  uv run --locked python -m pytest "../deploy-tests/$l" -v --durations=0 -p no:cacheprovider
 done
