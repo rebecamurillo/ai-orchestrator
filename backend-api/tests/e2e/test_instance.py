@@ -324,8 +324,10 @@ def test_a_run_started_under_a_hold_waits_queued_then_finishes_after_release(
     try:
         time.sleep(HELD_OBSERVATION_SECONDS)
 
-        row = step_of(api, run_id, FAST_STEP)
-        assert row["status"] == "queued", row
+        # row 1 (`plan.check`) is the one held; FAST_STEP stays `planned` (PR #19, 2026-11-12)
+        rows = sorted(detail_of(api, run_id)["steps"], key=lambda row: row["seq"])
+        assert rows[0]["status"] == "queued", rows
+        assert all(row["status"] in {"planned", "queued"} for row in rows), rows
         assert status_of(api, run_id) == "running"
         assert working_entry(api, run_id) is None
 
