@@ -19,11 +19,13 @@ OPENCODE_CONFIG_DIR="${AGENT_HOME}/.config/opencode"
 # `skills-manifest.json` is written one level above it.
 SKILLS_DIR="${OPENCODE_CONFIG_DIR}/skills"
 
+# Folders OpenCode reads skills, agents and commands from, checked against
+# opencode.ai/docs/skills, /docs/agents and /docs/commands for OPENCODE_VERSION 1.19.5.
+ASSET_DIRS=(.config/opencode/skills .config/opencode/agents .config/opencode/commands)
+
 install() {
   require_plain_pin OPENCODE_VERSION "${OPENCODE_VERSION}"
   npm_install_cli "${HARNESS_IMAGE_PREFIX}" "${OPENCODE_PACKAGE}" "${OPENCODE_VERSION}"
-  # OpenCode reads ~/.claude/skills and ~/.agents/skills too; the codex.sh stubs suffice. Install its own dir anyway so it stands alone.
-  bmad_install_global_skills opencode "${SKILLS_DIR}"
   install_operator_skills "${OPERATOR_SKILLS_SRC}" "${SKILLS_DIR}"
 }
 
@@ -40,6 +42,7 @@ ensure() {
 }
 
 configure() {
+  make_asset_dirs
   mkdir -p "${OPENCODE_CONFIG_DIR}"
   # Build top-level JSON entries conditionally so the file is valid JSON for every service
   # combination. Entries are joined with ",\n" — no leading or trailing comma.
@@ -126,7 +129,7 @@ config_parses() {
 
 doctor() {
   opencode --version
-  doctor_skill_present "${SKILLS_DIR}"
+  doctor_catalog_readable "${SKILLS_DIR}"
   config_parses \
     && log "config parses: ${OPENCODE_CONFIG_DIR}/opencode.json" \
     || { log "config unparseable: ${OPENCODE_CONFIG_DIR}/opencode.json"; return 1; }
@@ -159,7 +162,10 @@ case "${1:-}" in
   ensure)                 ensure ;;
   # `skills` reads no Gateway or Langfuse value, exactly as `install` does not
   skills)                 skills ;;
+  # `catalog` reads no Gateway or Langfuse value either; backend-api runs it after a setup run
+  catalog)                write_skills_manifest "${SKILLS_DIR}" ;;
+  asset-dirs)             printf '%s\n' "${ASSET_DIRS[@]}" ;;
   configure|doctor)       require_harness_env; "$1" ;;
   probe)                  require_harness_env; probe ;;
-  *)                      echo "usage: $0 install|ensure|skills|configure|doctor|probe" >&2; exit 2 ;;
+  *)                      echo "usage: $0 install|ensure|skills|catalog|asset-dirs|configure|doctor|probe" >&2; exit 2 ;;
 esac

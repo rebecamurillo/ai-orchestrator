@@ -27,6 +27,10 @@ transition AD-8 does not have — the open Attempt is closed `error`, and the ne
 numbered after it. That is what makes the interrupted row's second run *Attempt 2* rather
 than a silent continuation of Attempt 1.
 
+**The instance hold is read here** (AD-30), first, under the shared lock and in this unit
+of work: while one is active nothing is written, the block exits uncommitted, and the result
+is `None`.
+
 `engine_ref` is opaque JSON the engine adapter owns (AD-6): it is passed through to the
 Attempt and never read here.
 """
@@ -39,6 +43,7 @@ from uuid import UUID
 import structlog
 
 from orchestrator.application.rules import consult
+from orchestrator.application.use_cases.instance_hold import hold_active
 from orchestrator.application.use_cases.writers import (
     RUN_STARTED,
     Entry,
@@ -74,9 +79,11 @@ def start_attempt(
     seq: int,
     *,
     engine_ref: dict[str, Any] | None = None,
-) -> Attempt:
-    """Move one row `queued → running` and store the Attempt that is running it."""
+) -> Attempt | None:
+    """Move one row `queued → running` and store its Attempt; `None` while the instance is held."""
     with ports.uow:
+        if hold_active(ports.holds, ports.clock.now()):
+            return None
         run = require_run(ports, run_id)
         row = require_row(ports, run_id, seq)
         _start_run(ports, run)

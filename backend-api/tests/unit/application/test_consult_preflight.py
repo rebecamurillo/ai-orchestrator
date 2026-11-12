@@ -28,7 +28,9 @@ def a_row(with_resolved: dict[str, Any]) -> PlannedRow:
 
 
 def lines_for(installed: frozenset[str], with_resolved: dict[str, Any]) -> list[tuple[str, str]]:
-    ctx = _ctx(plan=_plan(a_row(with_resolved)), skill_catalog=FakeSkillCatalog(installed))
+    ctx = _ctx(
+        plan=_plan(a_row(with_resolved)), skill_catalog=FakeSkillCatalog({"claude": installed})
+    )
     return [(line.status, line.text) for line in lists.installed_skill_lines(ctx)]
 
 
@@ -36,7 +38,7 @@ def test_a_missing_consult_skill_fails_preflight() -> None:
     resolved = {"skill": "staged-plan", "consult": {"skill": "senior-consult"}}
 
     assert lines_for(frozenset({"staged-plan"}), resolved) == [
-        ("fail", "not installed: senior-consult")
+        ("fail", "not installed: senior-consult on claude")
     ]
 
 
@@ -49,7 +51,7 @@ def test_an_installed_consult_skill_passes() -> None:
 def test_a_consult_on_a_row_with_its_own_prompt_is_still_checked() -> None:
     resolved = {"prompt": "do it", "consult": {"skill": "senior-consult"}}
 
-    assert lines_for(frozenset(), resolved) == [("fail", "not installed: senior-consult")]
+    assert lines_for(frozenset(), resolved) == [("fail", "not installed: senior-consult on claude")]
 
 
 def test_a_consult_block_without_a_skill_adds_nothing() -> None:

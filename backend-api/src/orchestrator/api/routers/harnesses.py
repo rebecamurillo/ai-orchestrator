@@ -11,10 +11,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from orchestrator.api.providers import harness_models, harness_ports
+from orchestrator.api.providers_base import setup_record
 from orchestrator.api.schemas.common import Page
 from orchestrator.api.schemas.harnesses import HarnessOut
+from orchestrator.application.setup_summary import harness_setup
 from orchestrator.application.use_cases import harnesses as use_cases
 from orchestrator.application.use_cases.harnesses import HarnessPorts
+from orchestrator.domain.ports.setup_record import SetupRecord
 
 router = APIRouter(tags=["harnesses"])
 
@@ -23,7 +26,9 @@ Models = Annotated[dict[str, tuple[str, ...]], Depends(harness_models)]
 
 
 @router.get("/harnesses", response_model=Page[HarnessOut], summary="List every harness")
-def list_harnesses(ports: Ports, models: Models) -> Page[HarnessOut]:
+def list_harnesses(
+    ports: Ports, models: Models, record: Annotated[SetupRecord, Depends(setup_record)]
+) -> Page[HarnessOut]:
     """The three seeded rows, whatever Epic 5's readiness use case has written onto them, and
     the models this instance offers for each (7.3).
 
@@ -31,8 +36,9 @@ def list_harnesses(ports: Ports, models: Models) -> Page[HarnessOut]:
     a harness with no entry answers `()`, which the schema renders as the empty list that says
     "this harness takes a free-text model name".
     """
+    run = record.read()
     items = [
-        HarnessOut.of(harness, models.get(harness.name, ()))
+        HarnessOut.of(harness, models.get(harness.name, ()), harness_setup(run, harness.name))
         for harness in use_cases.list_harnesses(ports)
     ]
     return Page[HarnessOut](items=items, next_cursor=None)

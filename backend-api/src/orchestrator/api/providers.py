@@ -38,6 +38,7 @@ from orchestrator.api.providers_base import (
     git_adapter,
     required_git,
 )
+from orchestrator.api.providers_harness_models import harness_models
 from orchestrator.api.providers_run_files import (
     run_files_diff_ports,
     run_files_ports,
@@ -67,6 +68,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyGateRecordRepository,
     SQLAlchemyHarnessRepository,
     SQLAlchemyHistoryQuery,
+    SQLAlchemyInstanceHoldRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
     SQLAlchemyRunRepository,
@@ -76,12 +78,12 @@ from orchestrator.infrastructure.db import (
     open_writer_ports,
 )
 from orchestrator.infrastructure.db.environment import read_run_environment
-from orchestrator.infrastructure.harness.models import model_table
 from orchestrator.infrastructure.harness.registry import build_harnesses, build_terminal_env
 from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
 from orchestrator.infrastructure.process.runner import RealProcessRunner
-from orchestrator.infrastructure.skill_catalog import FsSkillCatalog, manifest_path
+from orchestrator.infrastructure.setup_record import FsSetupRecord
+from orchestrator.infrastructure.skill_catalog import FsSkillCatalog
 from orchestrator.infrastructure.templates_loader import FilesystemTemplateFolders
 from orchestrator.infrastructure.tracing import build_tracer
 
@@ -89,6 +91,7 @@ from orchestrator.infrastructure.tracing import build_tracer
 #: here; the wiring itself lives in the capped-module siblings named in the docstring.
 __all__ = [
     "GIT",
+    "harness_models",
     "run_files_diff_ports",
     "run_files_ports",
     "run_files_write_ports",
@@ -146,17 +149,6 @@ def harness_probe_ports(request: Request) -> HarnessProbePorts:
     return HarnessProbePorts(harnesses=harnesses)
 
 
-def harness_models(request: Request) -> dict[str, tuple[str, ...]]:
-    """The models this instance offers per harness (7.3) — configuration, not a port.
-
-    Its own dependency rather than a field on `HarnessPorts`: nothing here opens a
-    transaction, no use case reads it, and it is composed from `Settings` on every request
-    precisely so an Operator's `.env` edit reaches the New workflow's select at the next
-    restart without a migration (`infrastructure/harness/models.py`).
-    """
-    return model_table(from_state(request, SETTINGS))
-
-
 def _preflight_ports(request: Request, uow: SQLAlchemyUnitOfWork, needed_by: str) -> PreflightPorts:
     """The `PreflightPorts` pre-flight and `create_run` (4.4) both run on, over one session
     — `create_run` reuses pre-flight's own resolution rather than building a second one."""
@@ -168,7 +160,8 @@ def _preflight_ports(request: Request, uow: SQLAlchemyUnitOfWork, needed_by: str
         harnesses=SQLAlchemyHarnessRepository(uow.session),
         repositories=SQLAlchemyRepositoryRepository(uow.session),
         projects=SQLAlchemyProjectRepository(uow.session),
-        skill_catalog=FsSkillCatalog(manifest_path(settings.agent_home)),
+        skill_catalog=FsSkillCatalog(settings.agent_home),
+        setup_record=FsSetupRecord(settings.agent_home),
         bmad_version=settings.bmad_version,
         max_active_runs=settings.max_active_runs,
         work_dir=settings.work_dir,
@@ -314,6 +307,7 @@ def queue_ports(request: Request) -> Iterator[QueuePorts]:
             steps=SQLAlchemyStepRunRepository(uow.session),
             clock=SystemClock(),
             max_active_runs=settings.max_active_runs,
+            holds=SQLAlchemyInstanceHoldRepository(uow.session),
         )
 
 

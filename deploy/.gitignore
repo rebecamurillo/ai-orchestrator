@@ -1,0 +1,5 @@
+.env
+/backups/
+/logs/
+/diagnostics/
+/.upgrade/

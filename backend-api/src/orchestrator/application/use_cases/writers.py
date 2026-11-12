@@ -27,6 +27,7 @@ from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.instance_hold import InstanceHoldRepository
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
     GateRecordRepository,
@@ -86,6 +87,8 @@ class WriterPorts:
     engine: WorkflowEngine | None = None
     #: Tells the outside world a Run needs the Operator or has ended; `None` announces nothing.
     announcer: Announcer | None = None
+    #: `None` reads no hold, so every construction that predates it behaves as before.
+    holds: InstanceHoldRepository | None = None
 
 
 def require_run(ports: WriterPorts, run_id: UUID, *, lock: bool = False) -> Run:

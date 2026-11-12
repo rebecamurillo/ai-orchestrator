@@ -137,6 +137,13 @@ class FakeStepRunRepository:
             raise ValueError(f"no step run with id {step.id} is stored")
         self.steps[step.id] = step
 
+    def list_running(self) -> list[StepRun]:
+        self.calls.append(("list_running", None))
+        return sorted(
+            (s for s in self.steps.values() if s.status == "running"),
+            key=lambda step: (step.run_id, step.seq),
+        )
+
     def first_queued(self, run_id: UUID) -> StepRun | None:
         self.calls.append(("first_queued", run_id))
         queued = [s for s in self.steps.values() if s.run_id == run_id and s.status == "queued"]
@@ -212,6 +219,13 @@ class FakeAttemptRepository:
         return sorted(
             (a for a in self.attempts.values() if a.role == "session" and a.ended_at is None),
             key=lambda attempt: (attempt.started_at is None, attempt.started_at, attempt.n),
+        )
+
+    def list_open(self) -> list[Attempt]:
+        self.calls.append(("list_open", None))
+        return sorted(
+            (a for a in self.attempts.values() if a.ended_at is None),
+            key=lambda attempt: (attempt.started_at is None, attempt.started_at, str(attempt.id)),
         )
 
     def _replace(self, attempt: Attempt) -> None:

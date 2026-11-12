@@ -147,6 +147,8 @@ class RunEnvironment:
     #: The root-tree SHA the row's first agent attempt started at, which a consult copies the
     #: story file from (AD-22), or `None` before any agent attempt started.
     story_baseline_sha: str | None = None
+    #: The image's BMAD installer when it exists, else `None` and `npx` is the fallback (AD-16).
+    bmad_bin: str | None = None
 
     def base_dir(self, work_dir: str) -> Path:
         """`{work_dir}/{project.slug}/{repository.slug}/base` — the one layout (AD-14)."""

@@ -83,6 +83,9 @@ class Context:
     #: `installed_skill_lines` `skip`s that, and `fail`s a catalog it cannot read (hub-Run
     #: operations, skills install fix, 2026-09-24).
     skill_catalog: SkillCatalog | None = None
+    #: The setup record's BMAD choice; `None` until it is read. Picks the fix text of a
+    #: missing `bmad-` skill.
+    bmad_choice: str | None = None
 
     @property
     def reads_epics_list(self) -> bool:

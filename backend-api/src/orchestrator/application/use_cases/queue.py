@@ -21,6 +21,9 @@ words this endpoint promises rather than that one's prose.
 `waiting for your answer` last — a parked Run holds its slot but is not advancing, so it
 reads behind every Run that is — and the enqueued rows in between sort by the engine's own
 position, ascending.
+
+**A hold relabels `running`.** While an upgrade holds the instance (AD-30) a `pending` Run
+that is not parked reads `held for upgrade` and sorts where `running` does.
 """
 
 from __future__ import annotations
@@ -35,10 +38,13 @@ from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.engine import QueueEntry, WorkflowEngine
+from orchestrator.domain.ports.instance_hold import InstanceHoldRepository
 from orchestrator.domain.ports.repositories import RunRepository, StepRunRepository
 
 #: The fixed reasons (SPEC CAP-11, AD-12). A queue row states one of these, verbatim.
 REASON_RUNNING = "running"
+#: A `running` Run while an upgrade holds the instance (AD-30).
+REASON_HELD = "held for upgrade"
 REASON_WAITING_ANSWER = "waiting for your answer"
 # operator revision 2026-09-15: partition by (repository, branch)
 REASON_BRANCH_HELD = "branch held by {run}"
@@ -83,16 +89,20 @@ class QueuePorts:
     steps: StepRunRepository
     clock: Clock
     max_active_runs: int
+    holds: InstanceHoldRepository | None = None
 
 
 def list_queue(ports: QueuePorts) -> QueueView:
     """Every Run the engine is holding, joined with its rows for the reason it waits."""
     engine_entries = list(ports.engine.list_queue())
+    held = _held(ports)
     # IDs already in the engine queue — they must not also appear as saved rows.
     engine_run_ids: frozenset[UUID] = frozenset(entry.run_id for entry in engine_entries)
     # One query shared by both saved and dependency-waiting helpers (P5).
     all_queued = ports.runs.list_by_status("queued")
-    rows = [row for row in (_row(ports, entry) for entry in engine_entries) if row is not None]
+    rows = [
+        row for row in (_row(ports, entry, held) for entry in engine_entries) if row is not None
+    ]
     rows += [_saved_row(ports, r) for r in _saved_runs(all_queued, engine_run_ids)]
     rows += [
         _dependency_row(ports, r) for r in _dependency_waiting_runs(all_queued, engine_run_ids)
@@ -100,9 +110,14 @@ def list_queue(ports: QueuePorts) -> QueueView:
     return QueueView(items=sorted(rows, key=_order_key), max_active_runs=ports.max_active_runs)
 
 
+def _held(ports: QueuePorts) -> bool:
+    hold = None if ports.holds is None else ports.holds.get()
+    return hold is not None and hold.active(ports.clock.now())
+
+
 def _order_key(row: QueueRow) -> tuple[int, int]:
     """Active first, then queued by position; parked last; saved after that; dependency last."""
-    if row.reason == REASON_RUNNING:
+    if row.reason in (REASON_RUNNING, REASON_HELD):
         return (0, 0)
     if row.position is not None:
         return (1, row.position)
@@ -157,13 +172,13 @@ def _saved_row(ports: QueuePorts, run: Run) -> QueueRow:
     )
 
 
-def _row(ports: QueuePorts, entry: QueueEntry) -> QueueRow | None:
+def _row(ports: QueuePorts, entry: QueueEntry, held: bool) -> QueueRow | None:
     """One engine entry, joined — `None` for a Run the engine still names but is gone."""
     run = ports.runs.get(entry.run_id)
     if run is None:
         return None
     steps = ports.steps.list_for_run(run.id)
-    reason, position = _reason(ports, run, entry)
+    reason, position = _reason(ports, run, entry, held)
     return QueueRow(
         position=position,
         run=run,
@@ -174,12 +189,12 @@ def _row(ports: QueuePorts, entry: QueueEntry) -> QueueRow | None:
     )
 
 
-def _reason(ports: QueuePorts, run: Run, entry: QueueEntry) -> tuple[str, int | None]:
+def _reason(ports: QueuePorts, run: Run, entry: QueueEntry, held: bool) -> tuple[str, int | None]:
     """The fixed sentence this row states, and the position it keeps beside it."""
     if run.status == "needs_you":
         return REASON_WAITING_ANSWER, None
     if entry.engine_state == PENDING:
-        return REASON_RUNNING, None
+        return (REASON_HELD if held else REASON_RUNNING), None
     holder = _holding_run(ports.runs, run)
     if holder is not None:
         return REASON_BRANCH_HELD.format(run=run_label(holder)), entry.position

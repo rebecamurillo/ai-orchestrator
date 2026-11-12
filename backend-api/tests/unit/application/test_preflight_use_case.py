@@ -223,7 +223,9 @@ def own_skill_ports(git: FakeGit, *, installed: frozenset[str]) -> PreflightPort
     templates = FakeTemplateVersionRepository(
         [TemplateVersion(name="own-skill", version=1, yaml=OWN_SKILL_YAML, hash="sha", calls=())]
     )
-    return ports(git=git, templates=templates, skill_catalog=FakeSkillCatalog(installed))
+    return ports(
+        git=git, templates=templates, skill_catalog=FakeSkillCatalog({"claude": installed})
+    )
 
 
 def own_skill_request() -> PreflightRequest:

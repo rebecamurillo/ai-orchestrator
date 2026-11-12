@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 
 from tests.unit.conftest import REPO_ROOT, parse_env_example
-from tests.unit.test_install_admin import CURL_SHIM, HARNESS_BODY, VERSION_BODY
+from test_install_admin import CURL_SHIM, HARNESS_BODY, VERSION_BODY
 
 DEPLOY_DIR = REPO_ROOT / "deploy"
 PROFILE = "--profile docker"
@@ -74,7 +74,21 @@ exit 0
 
 
 def _run(*args: str, cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    dropped = {"GHCR_TOKEN", "GITHUB_TOKEN", "IMAGE_TAG", "DOCKER_CONFIG", "VERIFY_DOCKER"}
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no
+    # longer written; setup after install
+    dropped = {
+        "GHCR_TOKEN",
+        "GITHUB_TOKEN",
+        "IMAGE_TAG",
+        "DOCKER_CONFIG",
+        "VERIFY_DOCKER",
+        "LITELLM_BASE_URL",
+        "LITELLM_API_KEY",
+        "LITELLM_SPEND_KEY",
+        "LANGFUSE_BASE_URL",
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_SECRET_KEY",
+    }
     clean = {k: v for k, v in os.environ.items() if k not in dropped}
     return subprocess.run(  # fixed argv, no shell
         ["bash", str(cwd / "install.sh"), *args],
@@ -153,7 +167,7 @@ def test_with_docker_turns_it_on_and_every_compose_call_names_the_profile(
 ) -> None:
     path, env = installed
 
-    result = _run("start", "--with-docker", "--no-platform", cwd=path, env=env)
+    result = _run("start", "--with-docker", cwd=path, env=env)
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert switch(path) == "true"
@@ -177,7 +191,7 @@ def test_with_docker_appends_the_switch_to_an_env_that_predates_it(
     ]
     (path / ".env").write_text("\n".join(kept) + "\n")
 
-    result = _run("start", "--with-docker", "--no-platform", cwd=path, env=env)
+    result = _run("start", "--with-docker", cwd=path, env=env)
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert switch(path) == "true"
@@ -189,7 +203,7 @@ def test_off_by_default_names_no_profile_and_asks_no_daemon(
 ) -> None:
     path, env = installed
 
-    result = _run("start", "--no-platform", cwd=path, env=env)
+    result = _run("start", cwd=path, env=env)
 
     assert result.returncode == 0, result.stdout + result.stderr
     driving = [
@@ -228,7 +242,6 @@ def test_a_sidecar_backend_api_cannot_reach_is_recreated_once(
     result = _run(
         "start",
         "--with-docker",
-        "--no-platform",
         cwd=path,
         env={**env, "SHIM_REACH": "after-recreate"},
     )
@@ -245,9 +258,7 @@ def test_a_sidecar_that_stays_unreachable_refuses_the_start(
 ) -> None:
     path, env = installed
 
-    result = _run(
-        "start", "--with-docker", "--no-platform", cwd=path, env={**env, "SHIM_REACH": "no"}
-    )
+    result = _run("start", "--with-docker", cwd=path, env={**env, "SHIM_REACH": "no"})
 
     assert result.returncode != 0
     assert "still cannot reach the docker service" in result.stderr
@@ -264,7 +275,6 @@ def test_no_docker_turns_it_off_and_removes_a_leftover_sidecar(
     result = _run(
         "start",
         "--no-docker",
-        "--no-platform",
         cwd=path,
         env={**env, "SHIM_ALL": "postgres backend-api web-client docker"},
     )
@@ -280,7 +290,7 @@ def test_no_docker_turns_it_off_and_removes_a_leftover_sidecar(
 def test_off_with_no_sidecar_removes_nothing(installed: tuple[Path, dict[str, str]]) -> None:
     path, env = installed
 
-    _run("start", "--no-platform", cwd=path, env=env)
+    _run("start", cwd=path, env=env)
 
     assert not any(" rm " in call for call in calls(path))
 

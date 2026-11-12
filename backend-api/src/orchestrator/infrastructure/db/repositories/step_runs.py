@@ -120,6 +120,14 @@ class SQLAlchemyStepRunRepository:
         for column in MUTABLE_COLUMNS:
             setattr(row, column, values[column])
 
+    def list_running(self) -> list[StepRun]:
+        rows = self._session.scalars(
+            select(StepRunRow)
+            .where(StepRunRow.status == "running")
+            .order_by(StepRunRow.run_id, StepRunRow.seq)
+        ).all()
+        return [to_entity(row) for row in rows]
+
     def first_queued(self, run_id: UUID) -> StepRun | None:
         row = self._session.scalars(
             select(StepRunRow)

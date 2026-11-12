@@ -67,16 +67,18 @@ async def test_the_payload_names_the_app_the_kit_bmad_and_every_harness(
     env: dict[str, str], tmp_path: Path
 ) -> None:
     (tmp_path / "manifest.json").write_text(json.dumps({"kit_version": "9.9.9"}))
-    settings = Settings(kit_dir=tmp_path)
+    settings = Settings(kit_dir=tmp_path, agent_home=tmp_path)
 
     async with _client(settings, env["ORCHESTRATOR_TOKEN"]) as client:
         response = await client.get(VERSION)
 
     assert response.status_code == HTTP_OK
+    # Story 2, orchestrator-deploy-folder epic 1, 2026-11-11: the payload gains `bmad_installed`.
     assert response.json() == {
         "app_version": (REPO_ROOT / "VERSION").read_text().strip(),
         "kit_version": "9.9.9",
         "bmad_version": env["BMAD_VERSION"],
+        "bmad_installed": None,
         "harness_versions": {
             "claude": env["CLAUDE_CODE_VERSION"],
             "codex": env["CODEX_VERSION"],

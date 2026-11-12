@@ -37,7 +37,7 @@ NO_WORKTREE = "no worktree yet"
 NO_BUDGET = "no remaining budget"
 UNCONFIRMED = "anchor edits neither confirmed nor reverted: {paths}"
 NOT_AN_EDIT = "not an anchor edit of this session: {paths}"
-NO_SKILL = f"skill {session.OPENING_SKILL} is not installed"
+NO_SKILL = f"skill {session.OPENING_SKILL} is not installed on {{harness}}"
 
 #: The Run input naming its spec folder, as `infrastructure/db/environment.py` reads it.
 SPEC_FOLDER_INPUT = "spec_folder"
@@ -116,20 +116,20 @@ def _refuse_start(ports: SessionPorts, run: Run, rows: Sequence[StepRun], signal
     model = signal.payload.get(session.MODEL_KEY)
     if model and probe.models and model not in probe.models:
         raise Invalid(MODEL_UNLISTED.format(model=model, models=list(probe.models)))
-    _refuse_missing_skill(ports.skill_catalog)
+    _refuse_missing_skill(ports.skill_catalog, name)
     if run.worktree_path is None:
         raise Conflict(NO_WORKTREE)
     if run.budget_usd is not None and run.budget_usd - run.spend_usd <= 0:
         raise Conflict(NO_BUDGET)
 
 
-def _refuse_missing_skill(catalog: SkillCatalog | None) -> None:
+def _refuse_missing_skill(catalog: SkillCatalog | None, harness: str) -> None:
     """The opening line names the skill; a catalog that cannot answer holds no skill."""
     if catalog is None:
         return
-    installed = catalog.installed_skills()
+    installed = catalog.installed_skills(harness)
     if installed is None or session.OPENING_SKILL not in installed:
-        raise Invalid(NO_SKILL)
+        raise Invalid(NO_SKILL.format(harness=harness))
 
 
 def _refuse_end(

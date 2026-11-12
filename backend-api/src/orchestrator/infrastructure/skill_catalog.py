@@ -1,42 +1,47 @@
-"""Filesystem adapter for `SkillCatalog`: reads `{agent_home}/.claude/skills-manifest.json`."""
+"""Filesystem adapter for `SkillCatalog`: one skills manifest per harness under `agent_home`."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-#: Where `scripts/harness/_common.sh::write_skills_manifest` leaves the catalog, relative to
-#: `AGENT_HOME`. Claude's copy is the one the orchestrator reads: all three harnesses receive
-#: the same operator skills and the same BMAD stubs, under three different directories, so
-#: any one of them answers "can this instance resolve this skill name".
-MANIFEST_RELATIVE = Path(".claude") / "skills-manifest.json"
+#: Where `scripts/harness/_common.sh::write_skills_manifest` leaves each harness's catalog,
+#: relative to `AGENT_HOME`. The harnesses resolve skills from different directories, so a
+#: skill present for one is not present for another; `local` runs on opencode. `fake` (test
+#: mode only) speaks Claude's envelope and reads Claude's catalog, as every harness did before
+#: the split; without it no e2e Run passes pre-flight (PR #19 review, 2026-11-12).
+MANIFESTS: dict[str, Path] = {
+    "claude": Path(".claude") / "skills-manifest.json",
+    "fake": Path(".claude") / "skills-manifest.json",
+    "codex": Path(".agents") / "skills-manifest.json",
+    "opencode": Path(".config") / "opencode" / "skills-manifest.json",
+    "local": Path(".config") / "opencode" / "skills-manifest.json",
+}
 
 
-def manifest_path(agent_home: Path) -> Path:
-    """The skills manifest for an instance whose harness home is `agent_home`.
-
-    One statement of the path, because two readers need it — `api/providers.py` builds the
-    catalog pre-flight reads, and `infrastructure/dbos/startup.py` builds the one the
-    `agent` kind refuses an unresolvable skill with — and a drift between them would be
-    invisible until a Run dispatched a skill nobody could resolve.
-    """
-    return agent_home / MANIFEST_RELATIVE
+def manifest_path(agent_home: Path, harness: str) -> Path | None:
+    """The skills manifest of `harness` under `agent_home`, `None` for an unknown harness."""
+    relative = MANIFESTS.get(harness)
+    return agent_home / relative if relative is not None else None
 
 
 class FsSkillCatalog:
-    """Reads the skills manifest from a path on the local filesystem.
+    """Reads each harness's skills manifest from the local filesystem.
 
-    Returns `None` (catalog unavailable) when the file is missing or unparseable;
-    returns `frozenset[str]` of skill names on success.
+    Returns `None` (catalog unavailable) for an unknown harness and when the file is missing
+    or unparseable; returns `frozenset[str]` of skill names on success.
     """
 
-    def __init__(self, manifest_path: Path) -> None:
-        self._manifest_path = manifest_path
+    def __init__(self, agent_home: Path) -> None:
+        self._agent_home = agent_home
 
-    def installed_skills(self) -> frozenset[str] | None:
-        """The set of installed skill names, or `None` if the manifest is unavailable."""
+    def installed_skills(self, harness: str) -> frozenset[str] | None:
+        """The skill names installed for `harness`, or `None` if its manifest is unavailable."""
+        path = manifest_path(self._agent_home, harness)
+        if path is None:
+            return None
         try:
-            data = json.loads(self._manifest_path.read_text())
+            data = json.loads(path.read_text())
             skills = data["skills"]
             if not isinstance(skills, list):
                 return None

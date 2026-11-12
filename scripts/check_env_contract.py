@@ -17,6 +17,7 @@ never disagree about what the file says.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -25,6 +26,22 @@ from orchestrator.infrastructure.settings import Settings
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_EXAMPLE = REPO_ROOT / ".env.example"
 DEFAULT_DEPLOY_ENV_EXAMPLE = REPO_ROOT / "deploy" / ".env.example"
+DEFAULT_RELEASE_ENV = REPO_ROOT / "deploy" / "release.env"
+
+# The release's version pins: set in `deploy/release.env`, declared only as comments in
+# `deploy/.env.example`.
+RELEASE_PIN_VARIABLES = frozenset(
+    {
+        "BMAD_VERSION",
+        "DBOS_APPLICATION_VERSION",
+        "CLAUDE_CODE_VERSION",
+        "CODEX_VERSION",
+        "OPENCODE_VERSION",
+        "LANGFUSE_OPENCODE_PLUGIN_VERSION",
+    }
+)
+
+_COMMENTED_DECLARATION = re.compile(r"^#\s*([A-Z][A-Z0-9_]*)=")
 
 # Read by docker compose or the web-client; never by a backend-api module.
 COMPOSE_ONLY_VARIABLES = {
@@ -40,7 +57,6 @@ COMPOSE_ONLY_VARIABLES = {
 # Read by `deploy/docker-compose.yml` alone; never by the application, never valid in the
 # root contract (adding one there would fail this check as a field-less variable).
 DEPLOY_ONLY_VARIABLES = {
-    "IMAGE_TAG",
     "COMPOSE_PROJECT_NAME",
     "BIND_ADDRESS",
 }
@@ -123,7 +139,52 @@ def compare_deploy(contract: set[str], deploy: set[str]) -> tuple[list[str], lis
     return missing, stray, absent
 
 
-def check_deploy(contract: set[str], deploy_path: Path, name: str) -> int:
+def commented_declarations(path: Path) -> set[str]:
+    """Names of lines written `# NAME=…` — a commented assignment, nothing else."""
+    if not path.is_file():
+        raise ContractError(f"{path}: contract file not found")
+    found: set[str] = set()
+    for raw in path.read_text().splitlines():
+        match = _COMMENTED_DECLARATION.match(raw.strip())
+        if match:
+            found.add(match.group(1))
+    return found
+
+
+def compare_release(
+    deploy: set[str], commented: set[str], release: set[str]
+) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Return (pins missing from release.env, stray release.env names, pins set uncommented
+    in the deploy copy, pins not commented in the deploy copy)."""
+    missing = sorted(RELEASE_PIN_VARIABLES - release)
+    stray = sorted(release - RELEASE_PIN_VARIABLES)
+    uncommented = sorted(RELEASE_PIN_VARIABLES & deploy)
+    undeclared = sorted(RELEASE_PIN_VARIABLES - commented)
+    return missing, stray, uncommented, undeclared
+
+
+def _report_release(
+    deploy: set[str], commented: set[str], release: set[str], deploy_name: str, release_name: str
+) -> bool:
+    """Write one stderr line per release-pin drift; True when there was any."""
+    no_pin, stray_pin, uncommented, undeclared = compare_release(deploy, commented, release)
+    lines = (
+        [f"{v}: release pin missing from {release_name}" for v in no_pin]
+        + [f"{v}: in {release_name} but not a release pin" for v in stray_pin]
+        + [f"{v}: release pin set uncommented in {deploy_name}" for v in uncommented]
+        + [f"{v}: release pin not commented in {deploy_name}" for v in undeclared]
+    )
+    for line in lines:
+        sys.stderr.write(f"{line}\n")
+    return bool(lines)
+
+
+def check_deploy(
+    contract: set[str],
+    deploy_path: Path,
+    name: str,
+    release_path: Path = DEFAULT_RELEASE_ENV,
+) -> int:
     """Hold the consumer copy to the contract, silently on agreement.
 
     `test_env_contract.py` pins the root success line as the whole of stdout, so this
@@ -131,12 +192,16 @@ def check_deploy(contract: set[str], deploy_path: Path, name: str) -> int:
     """
     try:
         deploy = env_example_variables(deploy_path)
+        commented = commented_declarations(deploy_path)
+        release = set(parse_env_example(release_path))
     except ContractError as error:
         sys.stderr.write(f"{error}\n")
         return 1
 
-    lost, stray, gone = compare_deploy(contract, deploy)
     deploy_name = f"deploy/{deploy_path.name}"
+    release_drift = _report_release(deploy, commented, release, deploy_name, release_path.name)
+
+    lost, stray, gone = compare_deploy(contract, deploy | (release & commented))
 
     for variable in lost:
         sys.stderr.write(f"{variable}: in {name} but missing from {deploy_name}\n")
@@ -151,13 +216,14 @@ def check_deploy(contract: set[str], deploy_path: Path, name: str) -> int:
             f"{name} and {deploy_name} change together (hard rule 8)\n"
         )
         return 1
-    return 0
+    return 1 if release_drift else 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check the AD-20 environment contract.")
     parser.add_argument("--env-example", type=Path, default=DEFAULT_ENV_EXAMPLE)
     parser.add_argument("--deploy-env-example", type=Path, default=DEFAULT_DEPLOY_ENV_EXAMPLE)
+    parser.add_argument("--release-env", type=Path, default=DEFAULT_RELEASE_ENV)
     args = parser.parse_args(argv)
 
     try:
@@ -184,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    if check_deploy(contract, args.deploy_env_example, name) != 0:
+    if check_deploy(contract, args.deploy_env_example, name, args.release_env) != 0:
         return 1
 
     sys.stdout.write(

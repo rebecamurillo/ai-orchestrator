@@ -81,6 +81,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instance/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the instance activity
+         * @description The working steps and the Runs the engine holds. Writes nothing.
+         */
+        get: operations["read_instance_activity_api_v1_instance_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instance/hold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hold the instance
+         * @description Hold the instance, or answer 409 naming each working step and write nothing.
+         */
+        post: operations["hold_instance_api_v1_instance_hold_post"];
+        /**
+         * Release the instance hold
+         * @description Delete the hold, whether or not one exists.
+         */
+        delete: operations["release_instance_hold_api_v1_instance_hold_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kit/archive": {
         parameters: {
             query?: never;
@@ -1277,6 +1321,25 @@ export interface components {
             /** To */
             to: string;
         };
+        /** EngineRunOut */
+        EngineRunOut: {
+            /** Park Kind */
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | null;
+            /** Queue Reason */
+            queue_reason: string | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Run Label */
+            run_label: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
+        };
         /**
          * EnvVarCreate
          * @description One requested variable on a create, where there is nothing to keep.
@@ -1391,8 +1454,25 @@ export interface components {
             models?: string[];
             /** Name */
             name: string;
+            setup?: components["schemas"]["HarnessSetupOut"] | null;
             /** Version Pin */
             version_pin: string;
+        };
+        /**
+         * HarnessSetupOut
+         * @description What the last setup run did, for one harness.
+         */
+        HarnessSetupOut: {
+            /** At */
+            at: string;
+            /** Failures */
+            failures: components["schemas"]["SetupFailureOut"][];
+            /** Ok */
+            ok: boolean;
+            /** Skills */
+            skills: number;
+            /** Trigger */
+            trigger: string;
         };
         /**
          * HarnessVersions
@@ -1513,6 +1593,38 @@ export interface components {
             trace_url: string | null;
         };
         /**
+         * HoldConflictOut
+         * @description The 409 body: a problem document whose `errors` are the working steps.
+         */
+        HoldConflictOut: {
+            /** Detail */
+            detail: string;
+            /** Errors */
+            errors: components["schemas"]["WorkingStepOut"][];
+            /** Status */
+            status: number;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+        };
+        /** HoldIn */
+        HoldIn: {
+            /** Reason */
+            reason: string;
+            /** Ttl Seconds */
+            ttl_seconds: number;
+        };
+        /** HoldOut */
+        HoldOut: {
+            /** Expires At */
+            expires_at: string;
+            /** Held At */
+            held_at: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
          * InputDeclOut
          * @description One entry of the Template's `inputs:` map, for the screen's inputs table.
          */
@@ -1529,6 +1641,16 @@ export interface components {
             type: string;
             /** Values */
             values: string[];
+        };
+        /** InstanceActivityOut */
+        InstanceActivityOut: {
+            /** Dbos Application Version */
+            dbos_application_version: string;
+            hold: components["schemas"]["HoldOut"] | null;
+            /** In Engine */
+            in_engine: components["schemas"]["EngineRunOut"][];
+            /** Working */
+            working: components["schemas"]["WorkingStepOut"][];
         };
         /** LatestAttemptOut */
         LatestAttemptOut: {
@@ -2570,6 +2692,13 @@ export interface components {
             /** Turn */
             turn: number;
         };
+        /** SetupFailureOut */
+        SetupFailureOut: {
+            /** Reason */
+            reason: string;
+            /** Script */
+            script: string;
+        };
         /**
          * SignalIn
          * @description `POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.
@@ -2840,16 +2969,35 @@ export interface components {
          * @description The `/api/v1/version` payload (AD-3).
          *
          *     `kit_version` is what `GET /kit/archive` would hand out — `null` when this instance
-         *     ships no kit, which only a source-tree run does.
+         *     ships no kit, which only a source-tree run does. `bmad_installed` is what the last setup
+         *     run installed (`null` when none did), `bmad_version` the release pin.
          */
         VersionOut: {
             /** App Version */
             app_version: string;
+            /** Bmad Installed */
+            bmad_installed?: string | null;
             /** Bmad Version */
             bmad_version: string;
             harness_versions: components["schemas"]["HarnessVersions"];
             /** Kit Version */
             kit_version: string | null;
+        };
+        /** WorkingStepOut */
+        WorkingStepOut: {
+            /** Kind */
+            kind: string;
+            /** Path */
+            path: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Run Label */
+            run_label: string;
+            /** Started At */
+            started_at: string | null;
         };
         /** WorktreeOut */
         WorktreeOut: {
@@ -3057,6 +3205,118 @@ export interface operations {
             };
             /** @description `name` does not match the shape below. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_instance_activity_api_v1_instance_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceActivityOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    hold_instance_api_v1_instance_hold_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HoldIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Working steps stand; `errors[]` names each one and nothing was held. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldConflictOut"];
+                    "application/problem+json": components["schemas"]["HoldConflictOut"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    release_instance_hold_api_v1_instance_hold_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -34,6 +34,7 @@ from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyAttemptRepository,
     SQLAlchemyGateRecordRepository,
+    SQLAlchemyInstanceHoldRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
     SQLAlchemyRunRepository,
@@ -117,6 +118,7 @@ def open_writer_ports(
             git=git,
             trajectories=SQLAlchemyTrajectoryRepository(session),
             engine=engine,
+            holds=SQLAlchemyInstanceHoldRepository(session),
         )
     finally:
         session.close()

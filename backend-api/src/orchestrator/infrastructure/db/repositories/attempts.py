@@ -212,6 +212,14 @@ class SQLAlchemyAttemptRepository:
         ).all()
         return [to_entity(row) for row in rows]
 
+    def list_open(self) -> list[Attempt]:
+        rows = self._session.scalars(
+            select(AttemptRow)
+            .where(AttemptRow.ended_at.is_(None))
+            .order_by(AttemptRow.started_at.asc().nulls_last(), AttemptRow.id)
+        ).all()
+        return [to_entity(row) for row in rows]
+
     def update(self, attempt: Attempt) -> None:
         self._write(attempt, MUTABLE_COLUMNS)
 

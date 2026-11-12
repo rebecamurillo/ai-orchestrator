@@ -13,14 +13,13 @@ machine, and the release notes answer it.
 **The release added no migration, or only backward-compatible ones** — a tag change:
 
 ```bash
-./install.sh upgrade --tag 1.1.0
+./install.sh upgrade --tag <older>
 ```
 
-The pre-flight prints `running <newer> → target 1.1.0`, so the downgrade is visible before the
-confirm. It still takes a `pg_dump` first, which is what you want. It also rewrites the
-harness CLI pins in `.env` to the older release's values, listed (marked `downgrade`) before
-the confirm. A release image too old to carry those pins leaves them as they are, with a
-warning.
+The pre-flight prints `running <newer> → target <older>`, so the downgrade is visible before the
+confirm. It takes a `pg_dump` first, which is what you want, and the product files it replaces
+are kept in `.upgrade/{ts}/previous/`. The release pins come from the older release's
+`release.env`; a pin `.env` overrides keeps its value and is reported.
 
 **The release migrated the schema in a way the old code cannot read** — there is no rollback,
 only a restore, and everything written since the dump is lost. Say that in those words, get
@@ -32,7 +31,7 @@ docker volume rm <compose-project>_pgdata       # irreversible
 docker compose up -d --no-build --wait postgres
 docker compose exec -T postgres pg_restore -U orchestrator -d orchestrator --clean --if-exists \
   < backups/<dump>
-./install.sh upgrade --tag 1.1.0
+./install.sh upgrade --tag <older>
 ```
 
 Alembic refusing to start with `Can't locate revision identified by …` is the **safe** failure,
@@ -76,7 +75,7 @@ One variable at a time, in `.env`, then `./install.sh start` (which re-reads it)
 | `ORCHESTRATOR_TOKEN` | Re-run `kit/install.sh` in every plugged project, or edit `ORCHESTRATOR_TOKEN` in each project's `.env` by hand — every agent and dashboard holds the old one. It is also the web login. |
 | `GITHUB_TOKEN` | Nothing else; the next clone or push uses it. A Run parked on `push_rejected` can be retried after. |
 | `ORCHESTRATOR_SESSION_SECRET` | Every browser session is invalidated — they log in again with the same token. |
-| `LITELLM_API_KEY` / `LITELLM_SPEND_KEY` | Mint them in LiteLLM first; `llm-platform/sync-env.sh <path>/.env` does both and writes them in. The spend key is backend-only and must never reach a harness. |
+| `LITELLM_API_KEY` / `LITELLM_SPEND_KEY` | Mint them on your gateway first (its own admin UI or API), then write both in `.env` and `./install.sh start`. The spend key is backend-only and must never reach a harness. |
 | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | Take the pair from the Langfuse project; traces written before the rotation stay where they are. |
 | `POSTGRES_PASSWORD` | Change it in the database too, and keep `DATABASE_URL` in step — the two spellings must agree or the stack will not bind. |
 | `ORCHESTRATOR_SECRET_KEY` | **Stop.** This is the Fernet key for every Project env var already stored; rotating it makes them unreadable. It is a re-entry of every Project's env vars, not a rotation. Say so before they touch it. |
@@ -85,9 +84,9 @@ One variable at a time, in `.env`, then `./install.sh start` (which re-reads it)
 
 Two files, and both matter:
 
-- **`llm-platform/litellm.config.yaml`** — `model_list` is which models exist at all. A model
+- **Your gateway's `litellm.config.yaml`** — `model_list` is which models exist at all. A model
   named anywhere else and absent here answers 404 at dispatch time. Restart the gateway after
-  an edit: `./install.sh start --with-platform`.
+  an edit, the way its owner runs it; this folder does not start it.
 - **`.env`** — `READINESS_MODELS` is the default model per harness
   (`claude=…,codex=…,local=…`), and **every model it names must exist in `model_list` or
   backend-api refuses to start.** `LOCAL_MODELS` is the alias list the `local` harness is
@@ -156,14 +155,14 @@ npm view @langfuse/opencode-observability-plugin version   # LANGFUSE_OPENCODE_P
 ```
 
 `BMAD_VERSION` is outside this rule: it must equal the manifest in every target repository
-(AD-16), so it moves only when those repositories do. `./install.sh upgrade` sets the pins to the
-release's values, which can be older than the latest, so check them again after an upgrade.
+(AD-16), so it moves only when those repositories do. An upgrade takes the pins from the
+release's `release.env`, which can be older than the latest, so check them again after an upgrade.
 
 A newer release can change a flag the adapters pass. After raising a pin, re-run readiness for
 that harness. If it fails, tell the user which version failed and how, and do not fall back silently
 to an older one: the choice of version is theirs.
 
-The `*_VERSION` pins in `.env` (`CLAUDE_CODE_VERSION`, `CODEX_VERSION`, `OPENCODE_VERSION`) are
+The `*_VERSION` pins (`release.env`, overridden by a line in `.env`: `CLAUDE_CODE_VERSION`, `CODEX_VERSION`, `OPENCODE_VERSION`) are
 what the container runs. At every start `backend-api` checks each CLI against its pin, in
 order: the image's own copy at the pin is copied onto the `harness-bin` volume
 (`/opt/harness-cli`), which also undoes any change made to the volume's copy; else the
@@ -192,12 +191,10 @@ its probe reports `cli not at pinned version`, and the API and the other harness
 working. `./install.sh logs` names the harness and both versions. Nothing retries until the
 next start: put back a version that installs and recreate.
 
-`./install.sh upgrade --tag X` logs in to ghcr.io and pulls the release image before it asks
-to continue; declining writes nothing. It reads the three pins from that image and, before its
-confirmation, lists each one that differs as `NAME old → new`, marking a downgrade. It
-writes them only after the confirmation. A pin raised by hand is overwritten then; raise it
-again afterwards if it is still wanted. `.env` must declare all three pins, or the upgrade
-stops before writing anything.
+`./install.sh upgrade --tag X` does not write pins into `.env`: it replaces `release.env` with the
+release's and, before its confirmation, lists each pin that changes as `NAME old → new` and each
+pin `.env` overrides (which keeps its value). Delete an override from `.env` to follow the
+release. `./install.sh harness <name> --version X` is the command that edits `.env`.
 
 `harness-bin` is not backed up; `./install.sh uninstall` removes it. To re-seed it from the
 image: stop the stack, then `docker volume rm <project>_harness-bin`. Both take the
@@ -209,12 +206,16 @@ against the version `.env.example` ships.
 ## Template refresh
 
 Shipped templates are seeded at boot (`seed_shipped`): every shipped file is validated and
-inserted only when its content hash is new. So an upgrade that changed a template takes effect
+inserted only when its content hash is new. So a release that changed a template takes effect
 on the next start, with no command of its own, and a file that fails validation stops start-up
 outright with the file named rather than serving a half-seeded store. A booted instance
 therefore has a consistent store.
 
-The symptom of a stale one is a Run planning steps that do not match the template shipped with
+The release's examples are in `templates/shipped/` (a product folder, nothing there loads).
+`upgrade` lists each one whose content changed and whose name you hold in `templates/` as
+`improved:`, and each new one as `new:`; compare it with your copy and re-apply what you want.
+
+The symptom of a stale store is a Run planning steps that do not match the template shipped with
 the running image — a step that should not be there, or an input the UI does not offer. Check
 the instance, not the file on disk: `GET /api/v1/templates`, then
 `GET /api/v1/templates/{name}/{version}`, and compare the version number against what the new

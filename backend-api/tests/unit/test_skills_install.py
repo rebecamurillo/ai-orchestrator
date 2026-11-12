@@ -197,7 +197,7 @@ def test_a_failure_is_logged_as_a_warning_naming_the_script(
 def test_manifest_path_is_the_one_the_catalog_reads(tmp_path: Path) -> None:
     """One statement of where the manifest lives, shared by `api/providers.py` and the
     walker's `StepPorts` — two readers that must never drift apart."""
-    assert manifest_path(tmp_path) == tmp_path / ".claude" / "skills-manifest.json"
+    assert manifest_path(tmp_path, "claude") == tmp_path / ".claude" / "skills-manifest.json"
 
 
 def test_install_makes_the_catalog_readable_end_to_end(
@@ -222,5 +222,5 @@ def test_install_makes_the_catalog_readable_end_to_end(
 
     skills_install.install_operator_skills(settings)
 
-    catalog = FsSkillCatalog(manifest_path(settings.agent_home))
-    assert catalog.installed_skills() == frozenset({"spec-gate"})
+    catalog = FsSkillCatalog(settings.agent_home)
+    assert catalog.installed_skills("claude") == frozenset({"spec-gate"})

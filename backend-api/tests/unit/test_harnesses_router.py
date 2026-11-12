@@ -102,6 +102,7 @@ def test_the_router_declares_exactly_one_route_with_no_dependency_of_its_own() -
 
 
 def test_harness_out_of_renders_every_field() -> None:
+    """Story 2, orchestrator-deploy-folder epic 1, 2026-11-11: the closed set gains `setup`."""
     out = HarnessOut.of(
         Harness(name="claude", enabled=True, failing_check=None, version_pin="2.1.258")
     )
@@ -115,4 +116,5 @@ def test_harness_out_of_renders_every_field() -> None:
         "last_readiness_run_id": None,
         "lines": [],
         "models": [],
+        "setup": None,
     }

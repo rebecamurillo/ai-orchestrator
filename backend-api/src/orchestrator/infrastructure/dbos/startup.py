@@ -47,6 +47,7 @@ from orchestrator.application.steps import plan_check as _plan_check  # noqa: F4
 from orchestrator.application.steps import pr_link as _pr_link  # noqa: F401
 from orchestrator.application.steps import shell as _shell  # noqa: F401
 from orchestrator.application.use_cases.dependency_sweep import sweep_dependency_waiting
+from orchestrator.application.use_cases.instance_hold import release_hold
 from orchestrator.application.use_cases.session_sweep import sweep_session_turns
 from orchestrator.application.use_cases.session_turn import TurnPorts
 from orchestrator.domain.ports.chat import ChatChannelFactory
@@ -55,9 +56,11 @@ from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db.environment import read_run_environment
 from orchestrator.infrastructure.db.harness_readiness import readiness_evaluate_hook
+from orchestrator.infrastructure.db.repositories import SQLAlchemyInstanceHoldRepository
 from orchestrator.infrastructure.db.run_finished import run_finished_hook
 from orchestrator.infrastructure.db.writers import (
     SessionFactory,
+    SessionUnitOfWork,
     open_spend_ports,
     open_writer_ports,
 )
@@ -72,7 +75,7 @@ from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.process import RealProcessRunner
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
 from orchestrator.infrastructure.settings import Settings
-from orchestrator.infrastructure.skill_catalog import FsSkillCatalog, manifest_path
+from orchestrator.infrastructure.skill_catalog import FsSkillCatalog
 from orchestrator.infrastructure.terminal_jobs import CHAT_SLOT, current_chat, engine_jobs
 from orchestrator.infrastructure.tracing import build_tracer
 from orchestrator.infrastructure.workspace import FsWorkspace
@@ -156,11 +159,9 @@ def walker_deps(
             attempt_writes=partial(open_writer_ports, session_factory),
             logs=RealLogReader(log_secrets(settings)),
             spend_writes=partial(open_spend_ports, session_factory, gateway),
-            # the same catalog `api/providers.py` hands pre-flight, read at dispatch time so
-            # a Run planned before the instance changed underneath it still parks instead of
-            # letting a harness improvise on an unresolvable skill name
-            # (hub-Run operations, skills install fix, 2026-09-24)
-            skill_catalog=FsSkillCatalog(manifest_path(settings.agent_home)),
+            # read at dispatch time: a Run planned before the instance changed must still park
+            # rather than let a harness improvise on an unresolvable skill name
+            skill_catalog=FsSkillCatalog(settings.agent_home),
         ),
         human_wait_seconds=settings.human_wait_seconds,
         read_environment=partial(
@@ -233,8 +234,16 @@ def serving(
 
 
 def launch_engine() -> None:
-    """Launch the engine this process is serving with, if it is serving with one."""
-    for engine, _session_factory, _git in _SERVING:
+    """Launch the engine this process is serving with, if it is serving with one.
+
+    A hold outlives no start: every hold row is deleted before the engine can run a step."""
+    for engine, session_factory, _git in _SERVING:
+        if session_factory is not None:
+            session = session_factory()
+            try:
+                release_hold(SQLAlchemyInstanceHoldRepository(session), SessionUnitOfWork(session))
+            finally:
+                session.close()
         engine.launch()
 
 

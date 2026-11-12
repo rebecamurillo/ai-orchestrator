@@ -150,11 +150,11 @@ RUN set -eux; \
     useradd --create-home --home-dir "${AGENT_HOME}" --shell /bin/bash --uid 1000 agent; \
     echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent; \
     chmod 0440 /etc/sudoers.d/agent; \
-    mkdir -p "${WORK_DIR}" /opt/npm-global/bin /opt/harness-image /opt/harness-cli /app; \
+    mkdir -p "${WORK_DIR}" /opt/npm-global/bin /opt/harness-image /opt/harness-cli /opt/bmad /app; \
     corepack enable --install-directory /opt/npm-global/bin; \
     # Node's default global location is also agent-owned: `corepack enable` and any tool
     # that ignores NPM_CONFIG_PREFIX writes here, and the agent user must install freely.
-    chown -R agent:agent "${WORK_DIR}" "${AGENT_HOME}" /opt/npm-global /opt/harness-image /opt/harness-cli /app \
+    chown -R agent:agent "${WORK_DIR}" "${AGENT_HOME}" /opt/npm-global /opt/harness-image /opt/harness-cli /opt/bmad /app \
         /usr/local/bin /usr/local/lib/node_modules
 
 USER agent
@@ -173,6 +173,7 @@ RUN uv sync --locked --no-dev
 COPY --chown=agent:agent scripts/harness /app/scripts/harness
 COPY --chown=agent:agent scripts/readiness_fixture.sh /app/scripts/readiness_fixture.sh
 COPY --chown=agent:agent scripts/docker_context.sh /app/scripts/docker_context.sh
+COPY --chown=agent:agent scripts/setup /app/scripts/setup
 COPY --chown=agent:agent backend-api/docker-entrypoint.sh /app/docker-entrypoint.sh
 
 # The shipped Templates (SPEC CAP-3): `seed_shipped` reads this path at start-up
@@ -189,9 +190,13 @@ COPY --chown=agent:agent ia-agents-skills /app/ia-agents-skills
 
 WORKDIR /app
 
-# Each harness installs its CLI at its pinned version and copies the BMAD skill stubs into
-# the global skill directory it reads (AD-16). Run as `agent`, so the stubs land under
-# AGENT_HOME owned by the user that will read them.
+# BMAD is carried as a package under /opt/bmad (never mounted), at `_common.sh`'s
+# BMAD_VERSION default; no BMAD skill reaches a harness home from the image — the setup runner
+# installs it. Before the harness ARGs, so a harness pin change does not re-run it.
+RUN bash -c 'source scripts/harness/_common.sh && install_bmad_package'
+
+# Each harness installs its CLI at its pinned version and the operator skills into the global
+# skill directory it reads (AD-16). Run as `agent`.
 #
 # The pins are valueless ARGs: compose passes `.env`'s value, and unset, the script default
 # installs. Declared here, not with the others, because a changed ARG busts the cache of
@@ -211,7 +216,9 @@ RUN scripts/harness/claude.sh install \
 
 # The client install, entire (agent-delivery-kit plan §1): `docker run --rm <image> kit
 # bootstrap | tar x` hands a machine `install.sh`, the compose file, the env contract,
-# llm-platform/ and kit/ straight out of the image it will run, and `GET /api/v1/kit/*`
+# the product manifest, the shipped examples and kit/ straight out of the image it will run
+# (`llm-platform/` stays in the image for the repository's development; bootstrap leaves it
+# out), and `GET /api/v1/kit/*`
 # serves kit/ to project repositories (`KIT_DIR=/app/deploy/kit`). `.dockerignore` keeps
 # every filled `.env` and `llm-platform/backups/` out of the context (hard rule 5). `VERSION`
 # sits at /app as it sits at the repository root: `/api/v1/version` reads it there, and the
@@ -219,6 +226,9 @@ RUN scripts/harness/claude.sh install \
 # harness installs above: a kit edit must not re-run three `npm install`s.
 COPY --chown=agent:agent deploy /app/deploy
 COPY --chown=agent:agent VERSION /app/VERSION
+COPY --chown=agent:agent templates/*.yaml /app/deploy/templates/shipped/
+COPY --chown=agent:agent scripts/product_manifest.py /app/scripts/product_manifest.py
+RUN python3 /app/scripts/product_manifest.py /app/deploy /app/VERSION > /app/deploy/product-files.json
 
 # Informational: the published port comes from BACKEND_API_PORT in `.env`.
 EXPOSE 8000

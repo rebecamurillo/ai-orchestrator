@@ -1172,6 +1172,77 @@
         "title": "EdgeOut",
         "type": "object"
       },
+      "EngineRunOut": {
+        "properties": {
+          "park_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "blocked",
+                  "checkpoint",
+                  "verify_failed",
+                  "budget",
+                  "timeout",
+                  "push_rejected",
+                  "protected_path",
+                  "misconfigured",
+                  "plan_stale",
+                  "internal",
+                  "dependency",
+                  "merge_conflict",
+                  "paused"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Kind"
+          },
+          "queue_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Reason"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_label": {
+            "title": "Run Label",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "needs_you",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "run_label",
+          "status",
+          "park_kind",
+          "queue_reason"
+        ],
+        "title": "EngineRunOut",
+        "type": "object"
+      },
       "EnvVarCreate": {
         "description": "One requested variable on a create, where there is nothing to keep.",
         "properties": {
@@ -1520,6 +1591,16 @@
             "title": "Name",
             "type": "string"
           },
+          "setup": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarnessSetupOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "version_pin": {
             "title": "Version Pin",
             "type": "string"
@@ -1533,6 +1614,43 @@
           "version_pin"
         ],
         "title": "HarnessOut",
+        "type": "object"
+      },
+      "HarnessSetupOut": {
+        "description": "What the last setup run did, for one harness.",
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/SetupFailureOut"
+            },
+            "title": "Failures",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "skills": {
+            "title": "Skills",
+            "type": "integer"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "trigger",
+          "ok",
+          "failures",
+          "skills"
+        ],
+        "title": "HarnessSetupOut",
         "type": "object"
       },
       "HarnessVersions": {
@@ -1882,6 +2000,87 @@
         "title": "HistoryRowOut",
         "type": "object"
       },
+      "HoldConflictOut": {
+        "description": "The 409 body: a problem document whose `errors` are the working steps.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/WorkingStepOut"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "errors"
+        ],
+        "title": "HoldConflictOut",
+        "type": "object"
+      },
+      "HoldIn": {
+        "properties": {
+          "reason": {
+            "maxLength": 200,
+            "title": "Reason",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "maximum": 3600.0,
+            "minimum": 1.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ttl_seconds",
+          "reason"
+        ],
+        "title": "HoldIn",
+        "type": "object"
+      },
+      "HoldOut": {
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "held_at": {
+            "title": "Held At",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "held_at",
+          "expires_at",
+          "reason"
+        ],
+        "title": "HoldOut",
+        "type": "object"
+      },
       "InputDeclOut": {
         "description": "One entry of the Template's `inputs:` map, for the screen's inputs table.",
         "properties": {
@@ -1944,6 +2143,46 @@
           "values"
         ],
         "title": "InputDeclOut",
+        "type": "object"
+      },
+      "InstanceActivityOut": {
+        "properties": {
+          "dbos_application_version": {
+            "title": "Dbos Application Version",
+            "type": "string"
+          },
+          "hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HoldOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "in_engine": {
+            "items": {
+              "$ref": "#/components/schemas/EngineRunOut"
+            },
+            "title": "In Engine",
+            "type": "array"
+          },
+          "working": {
+            "items": {
+              "$ref": "#/components/schemas/WorkingStepOut"
+            },
+            "title": "Working",
+            "type": "array"
+          }
+        },
+        "required": [
+          "working",
+          "in_engine",
+          "hold",
+          "dbos_application_version"
+        ],
+        "title": "InstanceActivityOut",
         "type": "object"
       },
       "LatestAttemptOut": {
@@ -4812,6 +5051,24 @@
         "title": "SessionTurnOut",
         "type": "object"
       },
+      "SetupFailureOut": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "script": {
+            "title": "Script",
+            "type": "string"
+          }
+        },
+        "required": [
+          "script",
+          "reason"
+        ],
+        "title": "SetupFailureOut",
+        "type": "object"
+      },
       "SignalIn": {
         "description": "`POST /runs/{id}/signals`'s body: one signal kind, and whatever it carries.",
         "properties": {
@@ -5461,11 +5718,22 @@
         "type": "object"
       },
       "VersionOut": {
-        "description": "The `/api/v1/version` payload (AD-3).\n\n`kit_version` is what `GET /kit/archive` would hand out \u2014 `null` when this instance\nships no kit, which only a source-tree run does.",
+        "description": "The `/api/v1/version` payload (AD-3).\n\n`kit_version` is what `GET /kit/archive` would hand out \u2014 `null` when this instance\nships no kit, which only a source-tree run does. `bmad_installed` is what the last setup\nrun installed (`null` when none did), `bmad_version` the release pin.",
         "properties": {
           "app_version": {
             "title": "App Version",
             "type": "string"
+          },
+          "bmad_installed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bmad Installed"
           },
           "bmad_version": {
             "title": "Bmad Version",
@@ -5493,6 +5761,47 @@
           "harness_versions"
         ],
         "title": "VersionOut",
+        "type": "object"
+      },
+      "WorkingStepOut": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_label": {
+            "title": "Run Label",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "run_id",
+          "run_label",
+          "path",
+          "kind",
+          "started_at"
+        ],
+        "title": "WorkingStepOut",
         "type": "object"
       },
       "WorktreeOut": {
@@ -5841,6 +6150,163 @@
         "summary": "Dispatch a readiness Run for one harness",
         "tags": [
           "harnesses"
+        ]
+      }
+    },
+    "/api/v1/instance/activity": {
+      "get": {
+        "description": "The working steps and the Runs the engine holds. Writes nothing.",
+        "operationId": "read_instance_activity_api_v1_instance_activity_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceActivityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read the instance activity",
+        "tags": [
+          "instance"
+        ]
+      }
+    },
+    "/api/v1/instance/hold": {
+      "delete": {
+        "description": "Delete the hold, whether or not one exists.",
+        "operationId": "release_instance_hold_api_v1_instance_hold_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Release the instance hold",
+        "tags": [
+          "instance"
+        ]
+      },
+      "post": {
+        "description": "Hold the instance, or answer 409 naming each working step and write nothing.",
+        "operationId": "hold_instance_api_v1_instance_hold_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldConflictOut"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldConflictOut"
+                }
+              }
+            },
+            "description": "Working steps stand; `errors[]` names each one and nothing was held."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Hold the instance",
+        "tags": [
+          "instance"
         ]
       }
     },

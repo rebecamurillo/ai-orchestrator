@@ -39,8 +39,8 @@ doctor:
 ##        · test pairs · version manifests · contract drift · eslint · prettier --check · tsc --noEmit · astro check
 ## the web-client half of the test-pair check runs inside `pnpm lint`
 lint:
-	$(PYTHON_RUN) ruff check . ../scripts
-	$(PYTHON_RUN) ruff format --check . ../scripts
+	$(PYTHON_RUN) ruff check . ../scripts ../deploy-tests
+	$(PYTHON_RUN) ruff format --check . ../scripts ../deploy-tests
 	$(PYTHON_RUN) mypy src/orchestrator/domain src/orchestrator/application
 	$(PYTHON_RUN) lint-imports
 	$(PYTHON_RUN) python ../scripts/check_env_contract.py
@@ -225,3 +225,16 @@ platform-doctor:
 ## logs — follow every service's output
 logs:
 	docker compose logs -f
+
+.PHONY: test-deploy test-deploy-unit test-deploy-stack
+
+## test-deploy — the deployment gate (AD-31): deploy-tests/ in its own gate, never called by
+## lint, test, coverage, e2e, durability or ci.yml; `-unit` and `-stack` run one lane
+test-deploy:
+	./scripts/test-deploy.sh
+
+test-deploy-unit:
+	./scripts/test-deploy.sh unit
+
+test-deploy-stack:
+	./scripts/test-deploy.sh stack

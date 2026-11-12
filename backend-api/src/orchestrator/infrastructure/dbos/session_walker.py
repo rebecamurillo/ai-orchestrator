@@ -21,7 +21,7 @@ from uuid import UUID
 from orchestrator.application.use_cases.session_turn import TurnPorts, commit_turn, run_turn
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.infrastructure.dbos.facade import DurableEngine
-from orchestrator.infrastructure.dbos.walker import WalkerDeps
+from orchestrator.infrastructure.dbos.walker import HOLD_POLL_SECONDS, WalkerDeps
 
 
 def build_session_turn(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]:
@@ -44,8 +44,12 @@ def _ports(deps: WalkerDeps, writers: WriterPorts) -> TurnPorts:
 
 def _session_turn(deps: WalkerDeps) -> Callable[[str], None]:
     def session_turn(attempt_id: str) -> None:
-        with deps.open_ports() as writers:
-            run_turn(_ports(deps, writers), UUID(attempt_id))
+        while True:
+            with deps.open_ports() as writers:
+                held = run_turn(_ports(deps, writers), UUID(attempt_id))
+            if held is None:
+                return
+            deps.sleep(HOLD_POLL_SECONDS)
 
     return session_turn
 

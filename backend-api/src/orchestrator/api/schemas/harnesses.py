@@ -7,6 +7,8 @@ test_the_response_is_the_one_list_envelope`. Neither ruling weakened them; each 
 
 - **CAP-8** added `last_readiness_run_id` and `lines`, taking both equalities from five names
   to seven.
+- **Story 2** (orchestrator-deploy-folder epic 1, 2026-11-11) added `setup`, taking both to
+  nine; it is the last setup run's summary, `null` when no record exists.
 - **Story 7.3** (the Operator ruled in session on 2026-09-10) added `models`, taking both to
   eight. `local` is the harness that needs it: an Operator picks from `LOCAL_MODELS`, the
   aliases this instance's Gateway actually routes, rather than typing a model name the host
@@ -25,6 +27,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from orchestrator.api.schemas.common import UtcTimestamp
+from orchestrator.application.setup_summary import HarnessSetup
 from orchestrator.domain.entities.harness import EvaluationLine, Harness
 
 
@@ -53,6 +56,31 @@ class EvaluationLineOut(BaseModel):
         return cls(check=line.check, ok=line.ok, text=line.text)
 
 
+class SetupFailureOut(BaseModel):
+    script: str
+    reason: str
+
+
+class HarnessSetupOut(BaseModel):
+    """What the last setup run did, for one harness."""
+
+    at: UtcTimestamp
+    trigger: str
+    ok: bool
+    failures: list[SetupFailureOut]
+    skills: int
+
+    @classmethod
+    def of(cls, setup: HarnessSetup) -> HarnessSetupOut:
+        return cls(
+            at=setup.at,
+            trigger=setup.trigger,
+            ok=setup.ok,
+            failures=[SetupFailureOut(script=f.script, reason=f.reason) for f in setup.failures],
+            skills=setup.skills,
+        )
+
+
 class HarnessOut(BaseModel):
     """One row of `GET /harnesses`."""
 
@@ -73,9 +101,13 @@ class HarnessOut(BaseModel):
     #: existing frozen fixtures keep compiling — and `model_dump()` still renders the key
     #: always, so both closed-set equalities see it.
     models: list[str] = Field(default_factory=list)
+    #: Defaulted for the same reason; `model_dump()` still renders the key.
+    setup: HarnessSetupOut | None = None
 
     @classmethod
-    def of(cls, harness: Harness, models: Sequence[str] = ()) -> HarnessOut:
+    def of(
+        cls, harness: Harness, models: Sequence[str] = (), setup: HarnessSetup | None = None
+    ) -> HarnessOut:
         """The stored row, plus the models this instance currently offers for it.
 
         `models` is an argument rather than a field read off `harness`, because it is not on
@@ -90,4 +122,5 @@ class HarnessOut(BaseModel):
             last_readiness_run_id=harness.last_readiness_run_id,
             lines=[EvaluationLineOut.of(line) for line in harness.lines],
             models=list(models),
+            setup=HarnessSetupOut.of(setup) if setup is not None else None,
         )

@@ -187,6 +187,11 @@ class StepRunRepository(Protocol):
         """Replace the stored row with this one, matched on its id."""
         ...
 
+    def list_running(self) -> list[StepRun]:
+        """Every row in `running`, across Runs, ordered by `run_id` then `seq` — what the
+        instance activity reads (AD-30)."""
+        ...
+
     def first_queued(self, run_id: UUID) -> StepRun | None:
         """The lowest-`seq` row of this Run in `queued`, or `None` — what the walker runs."""
         ...
@@ -248,6 +253,11 @@ class AttemptRepository(Protocol):
     def list_open_sessions(self) -> list[Attempt]:
         """Every `session` attempt with no `ended_at`, oldest first: the turns a restart
         re-enqueues or recovers (AD-23)."""
+        ...
+
+    def list_open(self) -> list[Attempt]:
+        """Every attempt with no `ended_at`, any role, oldest `started_at` first, unstarted
+        last."""
         ...
 
 

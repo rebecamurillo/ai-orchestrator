@@ -6,6 +6,10 @@ gets that version and not "latest": a repository whose `_bmad/` and whose orches
 disagree is exactly the version skew AD-16 exists to prevent. `RunEnvironment.bmad_version`
 carries it — read once in `infrastructure/settings.py`, like every other instance value.
 
+**The image's copy is preferred.** `RunEnvironment.bmad_bin` is the `/opt/bmad` installer when
+it exists (decided in `infrastructure/db/environment.py`, so this module stays free of I/O);
+`npx` at the pinned version is the fallback, with the same arguments.
+
 **All three tool folders, because the harness is chosen per Run.** The Operator picks
 `claude`, `codex` or `local` when they start a Run, and a repository initialised for one of
 them would refuse the other two later.
@@ -46,10 +50,8 @@ DEFAULT_TIMEOUT_MIN = 30
 
 #: The command, in the shape `scripts/harness/_common.sh` already installs the skill stubs
 #: with — one argv, so nothing here builds a shell string a repository slug could break.
-INSTALL_COMMAND = (
-    "npx",
-    "--yes",
-    "bmad-method@{version}",
+NPX_PREFIX = ("npx", "--yes", "bmad-method@{version}")
+INSTALL_ARGS = (
     "install",
     "--yes",
     "--modules",
@@ -59,6 +61,7 @@ INSTALL_COMMAND = (
     "--directory",
     "{worktree}",
 )
+INSTALL_COMMAND = (*NPX_PREFIX, *INSTALL_ARGS)
 
 #: The file the ignore lines are appended to, and the lines themselves (AD-16).
 GITIGNORE = ".gitignore"
@@ -81,9 +84,8 @@ class BmadInstallExecutor:
         timeout_min = ctx.with_resolved.get(TIMEOUT_KEY, DEFAULT_TIMEOUT_MIN)
         output = log_path(ctx)
         process = require_process(ctx)
-        command = [
-            part.format(version=env.bmad_version, worktree=worktree) for part in INSTALL_COMMAND
-        ]
+        template = (env.bmad_bin, *INSTALL_ARGS) if env.bmad_bin else INSTALL_COMMAND
+        command = [part.format(version=env.bmad_version, worktree=worktree) for part in template]
         handle = process.start(
             command, cwd=worktree, env={}, timeout_min=timeout_min, log_path=output
         )

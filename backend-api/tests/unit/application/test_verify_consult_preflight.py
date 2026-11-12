@@ -28,7 +28,7 @@ def a_row(kind: str, with_resolved: dict[str, Any]) -> PlannedRow:
 
 
 def lines_for(installed: frozenset[str], row: PlannedRow) -> list[tuple[str, str]]:
-    ctx = _ctx(plan=_plan(row), skill_catalog=FakeSkillCatalog(installed))
+    ctx = _ctx(plan=_plan(row), skill_catalog=FakeSkillCatalog({"claude": installed}))
     return [(line.status, line.text) for line in lists.installed_skill_lines(ctx)]
 
 
@@ -38,7 +38,7 @@ ROUTE = {"target_seq": 1, "max": 2, "consult": {"skill": "senior-consult"}}
 def test_a_missing_verify_consult_skill_fails_preflight() -> None:
     row = a_row("shell", {"on_fail": ROUTE})
 
-    assert lines_for(frozenset(), row) == [("fail", "not installed: senior-consult")]
+    assert lines_for(frozenset(), row) == [("fail", "not installed: senior-consult on claude")]
 
 
 def test_an_installed_verify_consult_skill_passes() -> None:
@@ -50,7 +50,7 @@ def test_an_installed_verify_consult_skill_passes() -> None:
 def test_a_skill_named_twice_is_checked_once() -> None:
     both = a_row("agent", {"skill": "senior-consult", "on_fail": ROUTE})
 
-    assert lines_for(frozenset(), both) == [("fail", "not installed: senior-consult")]
+    assert lines_for(frozenset(), both) == [("fail", "not installed: senior-consult on claude")]
 
 
 def test_a_redispatch_without_a_consult_adds_nothing() -> None:

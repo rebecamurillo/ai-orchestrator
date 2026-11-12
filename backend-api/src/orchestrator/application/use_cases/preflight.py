@@ -23,6 +23,7 @@ from orchestrator.application.preflight.model import (
     PreflightRequest,
     PreflightResult,
 )
+from orchestrator.application.setup_summary import bmad_choice
 from orchestrator.application.templates.plan import plan_run
 from orchestrator.application.templates.plan_model import Plan, PlanError, ResolvedTree
 from orchestrator.application.use_cases.clone_check import BASE_DIRECTORY
@@ -38,6 +39,7 @@ from orchestrator.domain.ports.repositories import (
     RepositoryRepository,
     RunRepository,
 )
+from orchestrator.domain.ports.setup_record import SetupRecord
 from orchestrator.domain.ports.skill_catalog import SkillCatalog
 from orchestrator.domain.ports.templates import TemplateVersionRepository
 
@@ -73,6 +75,8 @@ class PreflightPorts:
     #: `Settings.verify_docker`: whether the optional `docker` service runs beside the
     #: backend. Read only by the `docker` line, which is `warn` while it is off.
     verify_docker: bool = False
+    #: Read once per pre-flight for the BMAD choice behind the skill fix; `None` reads as no record.
+    setup_record: SetupRecord | None = None
 
 
 @dataclass(frozen=True)
@@ -121,6 +125,9 @@ def preflight_and_plan(ports: PreflightPorts, req: PreflightRequest) -> Prefligh
         plan_error=plan_error,
         harness_registry=ports.harness_registry,
         skill_catalog=ports.skill_catalog,
+        bmad_choice=(
+            bmad_choice(ports.setup_record.read()) if ports.setup_record is not None else None
+        ),
     )
     lines = _lines(ctx)
     docker = docker_line(ctx, ports.verify_docker)

@@ -58,6 +58,7 @@ from orchestrator.api.routers import (
     harness_readiness,
     harnesses,
     history,
+    instance,
     kit,
     ping,
     project_channel,
@@ -315,6 +316,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         run_files.router,
         harnesses.router,
         queue.router,
+        instance.router,
         history.router,
         trajectories.router,
     ):
