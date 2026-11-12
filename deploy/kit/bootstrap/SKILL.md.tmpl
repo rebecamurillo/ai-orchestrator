@@ -1,0 +1,22 @@
+---
+name: orchestrator
+description: Drive the ai-orchestrator instance at the address below; read its guide first.
+---
+bootstrap_contract: 1
+
+The instance is at @@BASE_URL@@.
+
+@@WEB_URL@@
+
+This copy was written for: @@HARNESS@@.
+
+The token is in the environment variable `@@TOKEN_VAR@@`; never write its value into a file.
+
+## Rules
+
+- a Run's budget is the owner's decision, never invented or raised by the agent.
+- preflight comes before every launch.
+- answer a park only with what the Run offers.
+- a remote agent never maintains the installation.
+
+Call the `version` tool (or `GET @@BASE_URL@@/api/v1/version` with the bearer), then `read_guide` with no id (or `GET @@BASE_URL@@/llms.txt`), and follow the guide.

@@ -2,9 +2,9 @@
   "mcpServers": {
     "orchestrator": {
       "type": "http",
-      "url": "${ORCHESTRATOR_BASE_URL}/mcp",
+      "url": "@@BASE_URL@@/mcp",
       "headers": {
-        "Authorization": "Bearer ${ORCHESTRATOR_TOKEN}"
+        "Authorization": "Bearer ${@@TOKEN_VAR@@}"
       }
     }
   }

@@ -3,10 +3,10 @@
   "mcp": {
     "orchestrator": {
       "type": "remote",
-      "url": "{env:ORCHESTRATOR_BASE_URL}/mcp",
+      "url": "@@BASE_URL@@/mcp",
       "enabled": true,
       "headers": {
-        "Authorization": "Bearer {env:ORCHESTRATOR_TOKEN}"
+        "Authorization": "Bearer {env:@@TOKEN_VAR@@}"
       }
     }
   }
