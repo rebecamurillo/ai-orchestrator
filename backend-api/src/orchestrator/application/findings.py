@@ -2,7 +2,8 @@
 
 A code is `{area}-{slug of the reason}`; a guide page is `errors/{code}`. The registry is
 derived from `CODE_BY_REASON` and the explanation table, so the explanation a reader finds
-comes from the same release as the check that raised it. Pure: no I/O.
+comes from the same release as the check that raised it. Refusal codes are hand-named and their
+entries written here. Pure: no I/O.
 """
 
 from __future__ import annotations
@@ -91,6 +92,7 @@ TEMPLATE_REDISPATCH_TARGET_IS_NOT_A_ROW_OF_THIS_FRAME = (
     "template-redispatch-target-is-not-a-row-of-this-frame"
 )
 TEMPLATE_DUPLICATE_ROW_PATH = "template-duplicate-row-path"
+REFUSAL_GUIDE_UNAVAILABLE = "refusal-guide-unavailable"
 
 #: Reason text -> code, written out so a reworded reason is a visible change here.
 CODE_BY_REASON: Mapping[str, str] = {
@@ -157,8 +159,21 @@ def _entry(reason: str, code: str) -> CodeEntry:
     return CodeEntry(code, _AREA_OF[code], reason, EXPLANATIONS[reason], "check")
 
 
+#: Codes of a refusal an open route answers with; not reasons, so not in `CODE_BY_REASON`.
+REFUSALS: Mapping[str, CodeEntry] = {
+    REFUSAL_GUIDE_UNAVAILABLE: CodeEntry(
+        REFUSAL_GUIDE_UNAVAILABLE,
+        "refusal",
+        "guide page or schema not available",
+        "The page id is not listed in `/llms.txt`, or this instance was started from a source "
+        "tree where `make guide` has not run, so there is no built guide to serve.",
+        "check",
+    ),
+}
+
 REGISTRY: Mapping[str, CodeEntry] = {
-    code: _entry(reason, code) for reason, code in CODE_BY_REASON.items()
+    **{code: _entry(reason, code) for reason, code in CODE_BY_REASON.items()},
+    **REFUSALS,
 }
 
 

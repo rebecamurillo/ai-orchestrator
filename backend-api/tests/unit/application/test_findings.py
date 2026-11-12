@@ -33,7 +33,6 @@ LIST_FILE_REASONS = {
     plan_model.AMBIGUOUS_STORY_FILE,
     plan_model.ONLY_NOT_IN_LIST,
 }
-CODE_COUNT = 52
 ALL_REASONS = model.FINDING_REASONS + plan_model.FINDING_REASONS
 
 
@@ -93,19 +92,26 @@ def test_every_code_matches_the_pattern_and_keys_equal_codes() -> None:
     assert len({item.code for item in REGISTRY.values()}) == len(REGISTRY)
 
 
+# Declared revision for story 1.3 (owner, 2026-11-12): the slug rule binds the reason-derived
+# codes only; refusal codes are hand-named and later stories add more of them.
 def test_each_code_is_area_and_slug_of_its_message() -> None:
-    for item in REGISTRY.values():
+    for code in CODE_BY_REASON.values():
+        item = entry(code)
         assert item.code == f"{item.area}-{slug(item.message)}"
 
 
-def test_there_are_52_codes() -> None:
-    assert (
-        len(ALL_REASONS)
-        == len(set(ALL_REASONS))
-        == len(CODE_BY_REASON)
-        == len(REGISTRY)
-        == CODE_COUNT
-    )
+# Declared revision for story 1.3 (owner, 2026-11-12): no literal count; the registry is the
+# reason codes plus the hand-written refusals, whatever later stories add to either.
+def test_the_registry_is_the_reason_codes_plus_the_refusals() -> None:
+    reason_codes = set(CODE_BY_REASON.values())
+    assert len(ALL_REASONS) == len(set(ALL_REASONS)) == len(CODE_BY_REASON)
+    assert len(reason_codes) == len(CODE_BY_REASON)
+    for code in CODE_BY_REASON.values():
+        assert code in REGISTRY
+    others = {code for code in REGISTRY if code not in reason_codes}
+    assert others == set(findings.REFUSALS)
+    assert set(REGISTRY) == reason_codes | others
+    assert len(REGISTRY) == len(CODE_BY_REASON) + len(findings.REFUSALS)
 
 
 def test_entry_and_guide_id() -> None:

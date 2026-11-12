@@ -49,6 +49,7 @@ from sqlalchemy.orm import Session
 from orchestrator.api.deps import require_bearer
 from orchestrator.api.errors import UNAUTHORIZED_RESPONSE, install_error_handlers
 from orchestrator.api.mcp_mount import install_mcp
+from orchestrator.api.open_routes import install_open_routes
 from orchestrator.api.providers_channel import CHAT
 from orchestrator.api.routers import (
     clone_check,
@@ -323,8 +324,8 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         _mount(app, router)
     _mount(app, harness_readiness.router)
     _mount(app, harness_probe.router)
+    install_open_routes(app)
     install_mcp(app)
-
     return app
 
 

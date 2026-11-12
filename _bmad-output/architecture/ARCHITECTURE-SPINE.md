@@ -60,11 +60,24 @@ graph LR
   web[web-client] -->|HTTP JSON, Bearer token| api
 ```
 
-### AD-1 — Two deployables, one browser-facing origin [ADOPTED]
+### AD-1 — Two deployables, one browser-facing origin [ADOPTED] *(amended 2026-11-11, initiative orchestrator-instance-guide)*
 
 - **Binds:** all
 - **Prevents:** islands calling backend-api directly, CORS, cookies on the API, two auth surfaces
-- **Rule:** The deployables are `web-client` and `backend-api` (the orchestrator process and the harness CLIs share the backend-api container). The browser talks only to web-client. web-client's server side is the only caller of backend-api and always sends `Authorization: Bearer $ORCHESTRATOR_TOKEN`; `src/api/server.ts` (server-only, reads `astro:env/server`) and `src/api/client.ts` (browser, base `/api/`) are the only modules that call `fetch`; the proxy route `src/pages/api/[...path].ts` and Actions import `server.ts`. backend-api exposes `/api/v1/*` plus `/openapi.json` and `/healthz`, JSON only, no cookies, no CORS headers. Enforced by eslint `no-restricted-globals`/`no-restricted-imports` on `src/islands/**`, `src/stores/**`, `src/components/**`.
+- **Rule:** The deployables are `web-client` and `backend-api` (the orchestrator process and the harness CLIs share the backend-api container). The browser talks only to web-client. web-client's server side is the only caller of backend-api and always sends `Authorization: Bearer $ORCHESTRATOR_TOKEN`; `src/api/server.ts` (server-only, reads `astro:env/server`) and `src/api/client.ts` (browser, base `/api/`) are the only modules that call `fetch`; the proxy route `src/pages/api/[...path].ts` and Actions import `server.ts`. 
+  - **What backend-api exposes:**
+    - `/api/v1/*`;
+    - `/mcp`;
+    - `/openapi.json`;
+    - `/healthz`;
+    - and these three, which are read-only and need no bearer:
+      - `/llms.txt` (text/plain);
+      - `/guide/{id:path}.md` (text/markdown);
+      - `/schemas/{name}.json` (JSON).
+  - **The rest of AD-1 still applies.** There are no cookies and no CORS headers, and every other route answers JSON.
+  - **Where the open routes read from.** They read only the guide build the image ships, `guide-build/` beside `VERSION`, located relative to the package the way `VERSION` is (`/app/guide-build` in the image). They take no `Settings` dependency and no repository port. The release they report is the app's own version.
+  - **The guard.** A structural test fails if an open route's dependencies include `Settings`, a unit of work or any port.
+  - Enforced by eslint `no-restricted-globals`/`no-restricted-imports` on `src/islands/**`, `src/stores/**`, `src/components/**`.
 
 ### AD-2 — Dependency direction inside backend-api
 
