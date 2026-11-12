@@ -15,8 +15,7 @@ has a command for it — the script is what is tested, and the two drift.
 **Never stop anything the user did not ask you to stop.** No `make down`, no
 `docker stop`/`rm`/`compose down`, no killing a listening process, no restarting a service to
 "clear something up". A port conflict is resolved by moving *this* stack onto a free port —
-`WEB_CLIENT_PORT` / `BACKEND_API_PORT` in `.env`, the `*_PORT` variables in
-`llm-platform/.env` — never by taking over the port. If a step genuinely cannot proceed
+`WEB_CLIENT_PORT` / `BACKEND_API_PORT` in `.env` — never by taking over the port. If a step genuinely cannot proceed
 without stopping something, name exactly what would go down, why, and wait for the answer.
 
 ## Handshake
@@ -39,19 +38,31 @@ Everything a client has lives in one directory, the one `install.sh` sits in:
 | `install.sh` | the only command; `--help` lists every subcommand |
 | `.env` | the whole configuration, mode 600, written once and never overwritten |
 | `.env.example` | the contract — the reference for any variable, with its explanation inline |
+| `release.env` | the release pins (`BMAD_VERSION`, `DBOS_APPLICATION_VERSION`, the harness CLIs); a line in `.env` overrides one |
 | `VERSION` | the release these files came from |
-| `docker-compose.yml` | the three containers, pulling the two images by `IMAGE_TAG` |
-| `llm-platform/` | the optional LiteLLM gateway + Langfuse tracing stack, its own compose project |
+| `product-files.json` | the manifest: every product and seed path with its hash |
+| `docker-compose.yml` | the three containers, pulling the two images at the tag it carries |
+| `setup/`, `bmad/` | the client's setup scripts and `setup/bmad.choice`; the BMAD script |
+| `templates/` | the client's workflow files (`*.yaml`); `templates/shipped/` holds the release's examples |
 | `kit/` | the skills, and `kit/install.sh`, which plugs a project repository into the instance |
-| `backups/` | where `upgrade` leaves its `pg_dump` |
-| `diagnostics/` | where `diagnose` leaves its reports |
+| `backups/`, `diagnostics/`, `logs/`, `.upgrade/` | the `pg_dump`s of `upgrade`, `diagnose` reports, setup logs, what an upgrade staged and replaced |
+
+Each path is product (replaced by `upgrade`), seed (written only when absent) or client (the
+product never reads or writes it, `.env` apart): the table is in `README.md` § Which file is
+whose. An LLM platform is not part of the folder: the product neither ships nor manages one.
 
 ## Guided install
 
 ```bash
 ./install.sh                    # interactive
-GHCR_TOKEN=ghp_… ./install.sh --yes --with-platform    # unattended
+GHCR_TOKEN=ghp_… ./install.sh --yes          # unattended; nothing optional is asked
+GHCR_TOKEN=ghp_… ./install.sh --yes --no-bmad  # without the BMAD skills
 ```
+
+Run it on a fresh host, or in a folder that already holds a configuration: it creates only
+what is missing and changes no byte of a file that is present. It ends by running setup under
+the instance hold and printing the record; a setup that fails is reported and `install` still
+exits 0.
 
 Two prompts, and that is deliberate:
 
@@ -60,11 +71,14 @@ Two prompts, and that is deliberate:
    repositories registered in it — the usual case, and there are no per-repository
    credentials. `docker login ghcr.io` must already have happened for the bootstrap that
    produced these files; the script does its own login for the pulls.
-2. **The optional llm-platform stack.** LiteLLM (routes every model call, meters spend so a
-   Run budget is real) and Langfuse (traces), plus their four stores — seven more containers
-   on ports 3000, 4000, 5433, 9000, 9091. Without it each agent authenticates on its own,
-   cost figures are provisional, trace links are absent, and the `local` harness does not
-   exist. It can be added later: `./install.sh start --with-platform`.
+2. **The gateway and tracing values**, all optional, from the environment or asked for (the
+   secrets without echo): `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_SPEND_KEY`,
+   `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`. Blank keeps the gateway,
+   or tracing, off: each agent then authenticates on its own, cost figures are provisional,
+   trace links are absent, and the `local` harness does not exist. They are written only when
+   `.env` is created; to add them later, set them in `.env` and `./install.sh start`. The
+   starter platform is in the repository, not the folder (README.md § Getting an LLM
+   platform); the user runs it.
 
 Everything else is generated or defaulted. Of the ~50 variables, the ones a client has an
 opinion about are few — walk these and leave the rest alone:
@@ -94,13 +108,15 @@ register a Repository, run its clone check, `repo-init` if the repository is new
 
 Read-only, non-zero on any `fail`. One line per check, `ok` / `warn` / `fail`, and every
 `fail` and `warn` ends with the command to run or the variable to set. It covers: docker and
-compose v2 and the daemon; `.env` present, mode 600, no `change-me` left in a REQUIRED
-variable; `IMAGE_TAG` and whether both images are actually pulled; whether `~/.docker/config.json`
+compose v2 and the daemon; `docker engine` (26 or later, for the setup service's volume
+subpaths); `.env` present, mode 600, no `change-me` left in a REQUIRED variable; whether both
+images are actually pulled; `release pins` (each pin `.env` overrides) and `IMAGE_TAG` (a
+leftover line in `.env`, which nothing reads); whether `~/.docker/config.json`
 has a ghcr.io entry at all (only a pull proves the credential still works); the two ports,
 free or this stack's own; `/healthz`; whether `/api/v1/ping` accepts the token in `.env`;
-`/api/v1/version` against `IMAGE_TAG` and against `VERSION`, with the pinned BMAD and harness
-CLI versions; the llm-platform stack — configured, running, and pointed at; each harness's
-`enabled` and `failing_check`; Docker for Runs (`dind`); disk on the docker data root; the
+`/api/v1/version` against `VERSION`, with the pinned BMAD and harness CLI versions; each
+harness's `enabled` and `failing_check`; `setup` (the last run's record per harness) and
+`bmad` (installed against the release pin, or removed by choice); Docker for Runs (`dind`); disk on the docker data root; the
 retention and cron settings.
 
 How to read it:
@@ -108,7 +124,13 @@ How to read it:
 - **`fail` on `.env`** — nothing else is meaningful yet. Fix it first and re-run.
 - **`fail` on `token`** — the containers are running an older `ORCHESTRATOR_TOKEN` than the
   file says. `./install.sh start` re-reads `.env`.
-- **`warn` on `version`** — `IMAGE_TAG` was changed and never restarted, or these files came
+- **`fail` on `setup`** — a setup script failed or no record exists: `./install.sh setup`
+  runs it again; `logs/setup/` holds each script's output. **`fail` on `bmad`** — the
+  installed version differs from the release pin: `./install.sh setup`. **`fail` on
+  `docker engine`** — upgrade Docker Engine to 26 or later. **`warn` on `release pins`** —
+  `.env` overrides a pin of `release.env`; delete the line to follow the release.
+  **`warn` on `IMAGE_TAG`** — delete the line from `.env`.
+- **`warn` on `version`** — the instance was never restarted after a refresh, or these files came
   from a different release than the instance runs. The line names the `upgrade --tag` that
   reconciles them. Decide which number is the intended one before running it.
 - **`warn` on a harness** — the `failing_check` is the first failing readiness line
@@ -118,9 +140,9 @@ How to read it:
   `./install.sh harness <name> --version <pin>` applies it (see *Harness setup*); `not logged in (claude auth status)` means the subscription
   login expired (see below). Re-run the diagnostic with
   `POST /api/v1/harnesses/{name}/readiness`, or from the web UI's Fleet page.
-- **`warn` on `gateway`** — `llm-platform/` is installed but `LITELLM_BASE_URL` is blank,
-  which is the gateway's off switch. `llm-platform/sync-env.sh <path-to>/.env` fills in the
-  six connection values and mints the harness key.
+- **The gateway is blank** — `LITELLM_BASE_URL` blank is the gateway's off switch. Set the
+  six values in `.env` (README.md § The gateway and tracing values), then
+  `./install.sh start`.
 - **`dind`** — Docker for Runs. `ok … off` is the default: a repository whose commands run
   `docker compose` fails those rows with `Cannot connect to the Docker daemon`.
   `./install.sh start --with-docker` turns it on — a privileged sidecar, so put README.md
@@ -142,30 +164,39 @@ npm view @langfuse/opencode-observability-plugin version   # LANGFUSE_OPENCODE_P
 ```
 
 `BMAD_VERSION` is outside this rule: it must equal the manifest in every target repository
-(AD-16), so it moves only when those repositories do. `./install.sh upgrade` sets the pins to the
-release's values, which can be older than the latest, so check them again after an upgrade.
+(AD-16), so it moves only when those repositories do. An upgrade takes the pins from the
+release's `release.env`, which can be older than the latest, so check them again after an upgrade.
 
 The procedure and what to do if a release fails are in `references/runbooks.md`.
 
 ## Upgrade
 
 ```bash
-./install.sh upgrade --tag 1.2.0
+./install.sh upgrade --tag <newer>
 ```
 
-It prints `running <app_version> → target <tag>`, refuses a target equal to what is already
-running, takes a `pg_dump` into `backups/`, rewrites `IMAGE_TAG`, pulls, restarts and
-verifies. Before you run it, two decisions are the user's and neither can be automated:
+It prints `running <app_version> → target <tag>` and refuses a target equal to what is
+running. The order: extract the target release's folder from its image into
+`.upgrade/{ts}/staged/`; check that no working step runs and, when the release changes
+`DBOS_APPLICATION_VERSION`, that no Run is in the engine; ask; take the instance hold; `pg_dump`
+into `backups/`; replace each product file (the old copy moves to `.upgrade/{ts}/previous/`,
+locally edited ones are listed); write absent seed files; run setup; restart and verify. Your
+client files are never touched.
 
-1. **Does this release bump `DBOS_APPLICATION_VERSION`?** The release notes say. If it does,
-   every in-flight Run becomes unrecoverable under the new value, so the board must be
-   drained first — no Run in `queued`, `running` or `needs_you`. A parked Run cannot be
-   waited out: it holds its slot for `HUMAN_WAIT_SECONDS` (30 days). The two honest options
-   are to answer or cancel every parked Run, or to bump anyway and treat those Runs as
-   cancelled. `DEPLOY.md` §5.1 is the full statement; put the choice to the user, do not
-   make it.
-2. **Migrations run forward only.** The backup `upgrade` takes is what a rollback restores
-   from; a tag rolled back across a schema migration is expected to fail closed.
+Exit codes: 0 upgraded; 1 failed; 3 refused, a step is working (or the hold answered 409);
+4 refused, the release changes `DBOS_APPLICATION_VERSION` and Runs are in the engine; 5
+refused, the folder has no `product-files.json` — it needs README.md § Migrating an existing
+folder. A refusal prints `refused: nothing was changed`. Report the line, do not work around
+it. Two decisions are the user's:
+
+1. **Runs in the engine on a `DBOS_APPLICATION_VERSION` change (exit 4).** They would become
+   unrecoverable under the new value. A parked Run cannot be waited out: it holds its slot
+   for `HUMAN_WAIT_SECONDS` (30 days). The two honest options are to answer or cancel every
+   parked Run, or not to upgrade yet. `DEPLOY.md` §5.1 is the full statement; put the choice
+   to the user, do not make it.
+2. **Rollback.** `./install.sh upgrade --tag <older>`, plus restoring the `backups/` dump when
+   the newer release migrated the schema: migrations run forward only, and an older release on
+   a migrated database is expected to fail closed.
 
 Afterwards, the kit in every plugged project is stale — the skills came out of the old image.
 From inside each project repository:
@@ -178,6 +209,23 @@ curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \
 `--harness` is whatever that project's `.orchestrator/kit.json` records. Then
 `./install.sh doctor`, and check the templates — `references/runbooks.md`, *Template refresh*.
 
+## Setup and BMAD
+
+`setup/*.sh` are the client's scripts; the setup runner runs BMAD (when `setup/bmad.choice`
+reads `installed`), then each executable script directly under `setup/` in name order, then the
+operator skills and the catalog, then writes the record. It runs at `install` and `upgrade`
+and on demand, under the instance hold, and restarts nothing.
+
+```bash
+./install.sh setup            # run it now; exit 0 ok, 2 a script failed, 3 refused, 1 failed
+./install.sh setup --reset    # empty the harness asset folders first; the logins are kept
+./install.sh bmad remove      # write `removed` to setup/bmad.choice, then setup
+./install.sh bmad install     # write `installed`, then setup (also how to restore BMAD)
+```
+
+`setup/README.md` has what a script gets. A skill that a script changes under a `bmad-` name
+is restored and the script reported failed: tell the user, do not edit around it.
+
 ## Harness setup
 
 `GET /api/v1/harnesses` is the truth: each row carries `enabled`, `failing_check`,
@@ -187,7 +235,7 @@ curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \
 actually sets `enabled`. `../orchestrator/references/api.md` has the shapes.
 
 The CLIs ship in the image and run from the `harness-bin` volume (`/opt/harness-cli`). At
-every start `backend-api` compares each CLI with its `*_VERSION` in `.env`: the image's copy
+every start `backend-api` compares each CLI with its `*_VERSION` (`release.env`, overridden by `.env`): the image's copy
 is used when it is at the pin, otherwise one `npm install` of the pin runs — so a CLI upgrade
 needs no new image:
 
@@ -201,7 +249,7 @@ the harness row. A pin equal to the current one changes nothing. `docker compose
 old environment. The change resets that harness's readiness, so re-run it afterwards.
 A pin that cannot be installed refuses that harness alone; the API and the other harnesses
 keep working. `./install.sh logs` names the harness and both versions. Put back a version
-that installs and recreate. `./install.sh upgrade` moves the pins to the new release's.
+that installs and recreate. An upgrade leaves `.env` alone: a pin set there still overrides the release's.
 `references/runbooks.md`, *Upgrade a harness CLI*, is the full runbook.
 Never edit the probe's version check to make a row green.
 
@@ -212,7 +260,7 @@ Never edit the probe's version check to make a row green.
 ```
 
 It sets `CLAUDE_SUBSCRIPTION_AUTH=true` in `.env`, prints the two lines to uncomment in
-`llm-platform/litellm.config.yaml` and where, runs `docker compose exec backend-api claude
+your gateway's `litellm.config.yaml` and where, runs `docker compose exec backend-api claude
 login` when the stack is up (it prints a URL; the **user** completes it in a browser), restarts
 `backend-api` after they confirm, then reads `GET /api/v1/harnesses` back.
 
@@ -223,7 +271,7 @@ Three things to carry honestly:
 
 - **The gateway half has never been run against a live subscription.** The container half is
   unit-tested; the LiteLLM configuration is written from LiteLLM's own guide, and
-  `llm-platform/README.md` says so in those words. Do not report it as verified.
+  the starter's README says so in those words. Do not report it as verified.
 - **`forward_client_headers_to_llm_api: true` forwards client headers upstream on every route
   of that proxy**, not only the Claude one. It is acceptable here only because the proxy is
   single-tenant and reachable from the orchestrator alone.
@@ -237,7 +285,7 @@ Bind the Run to the model name `claude-subscription`: Claude Code's own default 
 re-running the command.
 
 **Codex and OpenCode have no subscription login.** They take an API key, set in
-`llm-platform/.env`. The command refuses them rather than pretending.
+your gateway's environment. The command refuses them rather than pretending.
 
 ## Diagnose, and filing a bug
 
@@ -245,7 +293,7 @@ re-running the command.
 ./install.sh diagnose
 ```
 
-Writes `diagnostics/<UTC timestamp>.md`: the versions (`/api/v1/version`, `IMAGE_TAG`,
+Writes `diagnostics/<UTC timestamp>.md`: the versions (`/api/v1/version`,
 `VERSION`), `docker compose ps`, the last 200 lines of `docker compose logs`, and `.env` with
 every value masked except the non-secret kinds (ports, crons, versions, directories, flags).
 Secrets are masked by name and the logs are filtered for token-shaped strings. It is still a
@@ -257,7 +305,7 @@ Then compose the report. Title: one line, the symptom, not the guess. Body:
 ```
 **What happened** — what the user did, and what the instance did instead.
 **Expected** — in one sentence.
-**Versions** — app, IMAGE_TAG, VERSION, bmad, harness CLIs (from the diagnostics file).
+**Versions** — app, VERSION, bmad, harness CLIs (from the diagnostics file).
 **Reproduce** — the smallest sequence, by command and by API call.
 **Evidence** — the relevant log lines, and the Run id / step path if there is one.
 **Diagnostics** — diagnostics/<timestamp>.md, attached.

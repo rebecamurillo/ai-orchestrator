@@ -49,15 +49,18 @@ docker run --rm ghcr.io/rebecamurillo/ai-orchestrator/backend-api:<tag> kit boot
 cd ai-orchestrator && ./install.sh
 ```
 
-`kit bootstrap` streams `deploy/` as a tar — `install.sh`, compose, the env contract,
-`README.md`, `llm-platform/`, `kit/`, and a `VERSION` naming the tag. One versioned unit means
+`kit bootstrap` streams `deploy/` as a tar, minus `llm-platform/` — `install.sh`, compose,
+`release.env`, the env contract, `README.md`, `product-files.json`, `kit/`, `setup/`, `bmad/`,
+`templates/shipped/`, and a `VERSION` naming the tag. The starter LLM platform stays in the
+repository: the package deploys and upgrades the orchestrator only, and the README points the
+client at `deploy/llm-platform/` on GitHub at the release's tag. One versioned unit means
 a client's scripts cannot name a different release than the image they run, which is what a
 second copy in a release asset kept doing (the asset and `deploy/get.sh` were retired on
 2026-09-30). A running instance serves the project-side half the same way:
 `GET /api/v1/kit/install.sh` and `GET /api/v1/kit/archive`.
 
 `scripts/bundle.sh` (also `make bundle TAG=v1.2.0`) still builds `ai-orchestrator-deploy-<tag>.tar.gz`
-on a workstation, from the working tree via `git ls-files` so a filled `.env` can never travel
+on a workstation, without `llm-platform/` either, from the working tree via `git ls-files` so a filled `.env` can never travel
 in it. That is the offline and procurement path, sent by hand, not the documented one. The
 client's side of all of it is `deploy/README.md`; this file remains the operator's own
 procedure for a host that has the checkout.
@@ -295,14 +298,17 @@ The checklist for a build a client tests before there is a tag (first done for `
    `.env` travels) is for a client who is offline or needs a file to sign for — send that
    instead, by hand.
 6. The client: bootstrap or extract, `./install.sh`, a token with `read:packages` (and `repo`
-   if it is also the orchestrator's git credential). Then, in each project repository they
+   if it is also the orchestrator's git credential), and optionally the six gateway and
+   tracing values (`LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_SPEND_KEY`,
+   `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`); no platform is installed.
+   `product-files.json` is what a later `./install.sh upgrade --tag <newer>` replaces. Then, in each project repository they
    want to drive from an agent, the one-line kit install
    (`GET /api/v1/kit/install.sh | bash -s -- --harness claude`). `deploy/README.md` is their
    side of both.
 
 What a future edit must keep true: the image tag is `VERSION`'s content everywhere
 (`make push`, `make bundle`, `release.yml`'s `verify` output, the bundle's own `VERSION`
-file); deploy-only variables (`IMAGE_TAG`, `COMPOSE_PROJECT_NAME`, `BIND_ADDRESS`) live in
+file); deploy-only variables (`COMPOSE_PROJECT_NAME`, `BIND_ADDRESS`) live in
 `deploy/.env.example` alone; `install.sh` stays bash 3.2 with no Python, because the client
 machine has neither `make` nor this checkout; and it is never run against real Docker on
 the operator's machine — `test_deploy_install.py`'s docker shim is how its control flow is
