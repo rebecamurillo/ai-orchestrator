@@ -41,6 +41,9 @@ money is a decimal string in USD.
 The web UI lives on the same host (default port 4321). The deep link for one Run is
 `/workflows/{run_id}` — hand it to the user whenever you name a Run.
 
+The instance side of connecting a project is `./install.sh doctor` green first (`host/day-2`); the
+Project, Repository, clone check and `repo-init` are `projects`.
+
 ## Handshake
 
 Do this before anything else, every session: call the `version` tool, or `GET /api/v1/version` →
@@ -55,3 +58,7 @@ exactly that and continue the work — a difference is reported, never a stop.
 orchestrator does not compare it with any repository: preflight has no method-version line.
 A BMAD skill renders from the target's own `_bmad/`, so a repository whose manifest names
 another version, or none, may render a different workflow than the one you authored for.
+
+For the instance's host agent, a release difference is often the problem it was called about: report
+it as the finding and reconcile it with `./install.sh upgrade` (`host/upgrade`). `./install.sh doctor`
+needs no handshake and is the first move when the API does not answer (`host/day-2`).

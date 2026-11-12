@@ -55,6 +55,10 @@ once by `install`.
 
 ## Install
 
+<!-- guide:install -->
+
+Local agent on the host or the user only.
+
 These files come out of the image you are about to run, so they can never describe a
 different version than it. Log Docker in first (`docker login ghcr.io -u <your-github-user>`,
 the token as the password), then:
@@ -133,7 +137,45 @@ The registry credential goes to `docker login` only. It is held by the Docker da
 config, never by a container: the one credential a *process* in this stack holds is
 `ORCHESTRATOR_TOKEN`.
 
+### For the host agent
+
+Two prompts, and that is deliberate. The first is a GitHub token: a classic PAT. `read:packages`
+pulls the two private images; add `repo` if the same token will be the credential the
+orchestrator uses to clone and push the repositories registered in it — the usual case, and
+there are no per-repository credentials. `docker login ghcr.io` must already have happened for
+the bootstrap that produced these files; the script does its own login for the pulls. The second
+is the gateway and tracing values, all optional. Blank keeps the gateway, or tracing, off: each
+agent then authenticates on its own, cost figures are provisional, trace links are absent, and
+the `local` harness does not exist. The starter platform is in the repository, not the folder
+(README.md § Getting an LLM platform); the user runs it.
+
+Everything else is generated or defaulted. Of the ~50 variables, the ones a client has an
+opinion about are few — walk these and leave the rest alone:
+
+| Variable | Why they would change it |
+| --- | --- |
+| `WEB_CLIENT_PORT`, `BACKEND_API_PORT` | 4321 or 8000 already taken on their machine |
+| `BIND_ADDRESS` | `0.0.0.0` exposes the UI and API to the network. One bearer token is the entire authentication and nothing rate-limits it — read the README's *Exposure* section to them before they do this |
+| `MAX_ACTIVE_RUNS` | how many Runs the engine holds at once; a parked Run keeps its slot |
+| `READINESS_MODELS` | the default model per harness; every model named must exist in the gateway |
+| `READINESS_BUDGET_USD` | the budget the readiness diagnostic gives itself |
+| `WORKTREE_RETENTION_DAYS` | how long a finished Run's worktrees and logs survive |
+| `HUMAN_WAIT_SECONDS` | how long a parked Run waits for them, 30 days by default |
+
+Never echo a generated secret back to them beyond the one line the script already prints (the
+login token). `./install.sh env` re-renders `.env` without touching the stack; it will not
+overwrite an existing file, so starting over means deleting it deliberately.
+
+After the install, the first-run flow is `projects` and `runs/first-run`: create a Project,
+register a Repository, run its clone check, `repo-init` if the repository is new to BMAD.
+
+<!-- /guide -->
+
 ## Day 2
+
+<!-- guide:day-2 -->
+
+Local agent on the host or the user only.
 
 ```bash
 ./install.sh status              # docker compose ps, for this stack
@@ -193,15 +235,75 @@ taken on your machine the script stops before starting anything and names the va
 that moves this stack off it (`WEB_CLIENT_PORT`, `BACKEND_API_PORT` in `.env`). It never
 stops what is listening there.
 
+### For the host agent
+
+`./install.sh doctor` is your first move, every time, before diagnosing anything by hand. Besides
+the checks listed above it covers: whether both images are actually pulled; `.env` with no
+`change-me` left in a REQUIRED variable; whether `~/.docker/config.json` has a ghcr.io entry at
+all (only a pull proves the credential still works); `/api/v1/version` against `VERSION`, with
+the pinned BMAD and harness CLI versions; each harness's `enabled` and `failing_check`; and
+Docker for Runs (`dind`).
+
+How to read it:
+
+- **`fail` on `.env`** — nothing else is meaningful yet. Fix it first and re-run.
+- **`fail` on `token`** — the containers are running an older `ORCHESTRATOR_TOKEN` than the
+  file says. `./install.sh start` re-reads `.env`.
+- **`fail` on `setup`** — a setup script failed or no record exists: `./install.sh setup`
+  runs it again; `logs/setup/` holds each script's output. **`fail` on `bmad`** — the
+  installed version differs from the release pin: `./install.sh setup`. **`fail` on
+  `docker engine`** — upgrade Docker Engine to 26 or later. **`warn` on `release pins`** —
+  `.env` overrides a pin of `release.env`; delete the line to follow the release.
+  **`warn` on `IMAGE_TAG`** — delete the line from `.env`.
+- **`warn` on `version`** — the instance was never restarted after a refresh, or these files came
+  from a different release than the instance runs. The line names the `upgrade --tag` that
+  reconciles them. Decide which number is the intended one before running it.
+- **`warn` on a harness** — the `failing_check` is the first failing readiness line
+  verbatim. `cli not at pinned version` means the CLI in the container is not the
+  `*_VERSION` `.env` pins — `backend-api` was not recreated since the pin changed, or the
+  start-up install of that pin failed (`./install.sh logs` names both versions);
+  `./install.sh harness <name> --version <pin>` applies it (see `host/harness-setup`);
+  `not logged in (claude auth status)` means the subscription login expired (see
+  `host/harness-setup`). Re-run the diagnostic with
+  `POST /api/v1/harnesses/{name}/readiness`, or from the web UI's Fleet page.
+- **The gateway is blank** — `LITELLM_BASE_URL` blank is the gateway's off switch. Set the
+  six values in `.env` (README.md § The gateway and tracing values), then
+  `./install.sh start`.
+- **`dind`** — Docker for Runs. `ok … off` is the default: a repository whose commands run
+  `docker compose` fails those rows with `Cannot connect to the Docker daemon`.
+  `./install.sh start --with-docker` turns it on — a privileged sidecar, so put README.md
+  § Trust to the user first; it is their decision. `fail` while on names the case (not
+  running, unhealthy, left in an old network namespace after backend-api restarted), and
+  `./install.sh start` repairs each.
+
+<!-- /guide -->
+
 ## Setup scripts and BMAD
 
-`setup/` is yours. `install`, `upgrade` and `setup` run a one-shot setup container, under the
-instance hold, in this order: BMAD (when `setup/bmad.choice` reads `installed`), each
-executable `setup/*.sh` directly under `setup/` in name order, the operator skills of the
-image, the catalog of each harness, and the record. A script sees the harness asset folders
-under `HOME` and nothing else — no secret, no login, no database; `setup/README.md` has what it
-gets, the clash rule and `examples/copy-folder.sh`. The record is
-`.orchestrator/setup-run.json` in the agent home; the logs are `logs/setup/{timestamp}/`.
+<!-- guide:setup-and-bmad -->
+
+Local agent on the host or the user only.
+
+`setup/` is yours. `install`, `upgrade` and `setup` run, under the instance hold, in this order.
+
+1. `install.sh` makes `logs/setup` mode 1777 and runs `scripts/setup/prepare.sh` in a one-shot
+   `agent` container of the backend-api image. It creates every harness asset folder and
+   `.orchestrator` under the agent home, and needs no running backend-api. A failure is a
+   warning: setup continues.
+2. The one-shot setup container runs five phases: BMAD (when `setup/bmad.choice` reads
+   `installed`); each executable `setup/*.sh` directly under `setup/` in name order; the operator
+   skills of the image; the fourth phase only counts each harness's skills, for the record
+   (`catalog.log` and the record's `catalog` counts); and the record itself.
+3. After the setup service, when backend-api is running and the command is not `upgrade`,
+   `install.sh` runs each harness script's `catalog` verb inside backend-api
+   (`docker compose exec`), so the catalog changes with no restart. A failure is a warning:
+   pre-flight reads the previous catalog until the next start. With backend-api stopped, its
+   next start writes the catalogs; an `upgrade` recreates backend-api as its own step, and that
+   start rewrites them.
+
+A script sees the harness asset folders under `HOME` and nothing else — no secret, no login, no
+database; `setup/README.md` has what it gets, the clash rule and `examples/copy-folder.sh`. The
+record is `.orchestrator/setup-run.json` in the agent home; the logs are `logs/setup/{timestamp}/`.
 No command restarts backend-api.
 
 - `./install.sh setup` runs it now. Exit 0: every phase passed; 2: a script failed or the
@@ -214,7 +316,19 @@ No command restarts backend-api.
   BMAD after a remove.
 - `./install.sh install --no-bmad` writes `removed` before the first setup.
 
+### For the host agent
+
+`setup/*.sh` are the client's scripts; setup runs at `install` and `upgrade` and on demand, under
+the instance hold. A skill that a script changes under a `bmad-` name is restored and the script
+reported failed: tell the user, do not edit around it.
+
+<!-- /guide -->
+
 ## Editing the workflow templates
+
+<!-- guide:template-folder -->
+
+Local agent on the host or the user only.
 
 The shipped templates are a starting point, not a fixed part of the product. Five single
 files ship — `staged-initiative-hub` and `staged-initiative-repo` (three agent sessions per
@@ -260,6 +374,8 @@ parked on a denied package manager or test runner. An install that narrows it to
 families (`Bash(yarn *)`, `Bash(npx *)`, …) must list every tool its repositories use, and
 a change needs `./install.sh start`.
 
+<!-- /guide -->
+
 ## Getting an LLM platform
 
 The product neither ships nor manages an LLM platform: this folder holds none, and no
@@ -284,52 +400,7 @@ backend-api refuses to start.
 
 ## Docker for Runs (optional, off by default)
 
-A Run executes the target repository's own commands — install, tests, quality gate — inside
-`backend-api`. The image carries the `docker` CLI with the compose and buildx plugins, but no
-daemon: a repository whose commands run `docker compose` (database integration tests, an
-end-to-end suite in compose) fails those rows with `Cannot connect to the Docker daemon`.
-
-```bash
-./install.sh start --with-docker     # sets VERIFY_DOCKER=true in .env, starts the sidecar
-./install.sh start --no-docker       # sets it false, removes the sidecar, keeps its image cache
-```
-
-`VERIFY_DOCKER=true` starts the `docker` service (compose profile `docker`): Docker-in-Docker
-(`docker:<version>-dind`, privileged), placed in backend-api's network namespace.
-
-- **Where the daemon is.** dockerd listens on `127.0.0.1:2375` inside that namespace only —
-  nothing is published on this machine. At each start backend-api writes a docker context
-  for the `agent` user (`$HOME/.docker`), so every `docker` a Run's command or a coding agent
-  types reaches it; no variable has to be passed to the Run.
-- **Ports.** A port a target's compose file publishes appears on backend-api's `localhost`,
-  which is where its scripts look (`localhost:5432`). It collides with backend-api's own
-  `BACKEND_API_PORT` (8000 by default) if a target publishes that one.
-- **Bind mounts.** The sidecar mounts the `work` volume at `WORK_DIR`, the path backend-api
-  uses, so a relative bind mount in a target's compose file (`./tests/fixtures:/fixtures`)
-  resolves to the worktree.
-- **Networks.** The daemon's bridge and its compose networks use `10.213.0.0/24` and
-  `10.214.0.0/16`, away from `172.16.0.0/12`, where compose and Docker Desktop put theirs.
-- **Image cache.** Pulled images and build cache live on the `docker-data` volume and survive
-  restarts; it is not backed up, and `docker volume rm <project>_docker-data` while the
-  sidecar is stopped empties it.
-- **Concurrency.** One daemon serves every Run. A target whose compose file fixes its
-  project name, container names or host ports collides with itself when two Runs on that
-  repository verify at once (`MAX_ACTIVE_RUNS` above 1); the second `up` fails or stops the
-  first one's containers. Keep such a repository to one Run at a time, or make its scripts
-  take the project name and ports from the environment.
-- **Cleanup.** Nothing removes what a target starts. A script that exits before its own
-  `docker compose down` leaves containers running in the sidecar until the next Run's
-  `down`, or until the sidecar is recreated (`./install.sh start --no-docker`, then
-  `--with-docker`).
-- **Restarts.** If backend-api restarts or is recreated on its own, the sidecar is left in the
-  old namespace and Runs reach nothing. `./install.sh doctor` reports it on its `dind` line;
-  `./install.sh start` (and every install.sh command that recreates backend-api) checks the
-  daemon from inside backend-api and recreates the sidecar when it does not answer.
-
-Pre-flight warns on the New-workflow screen (`docker` line) when VERIFY_DOCKER is off and the
-Run looks like it needs a daemon: a `shell` row naming `docker`, or a compose file at the
-repository root. It is a guess and never blocks a start. By hand, without install.sh:
-`VERIFY_DOCKER=true` in `.env`, then `docker compose --profile docker up -d --wait`.
+On a running instance: `$ORCHESTRATOR_BASE_URL/guide/host/docker-for-runs.md`.
 
 ## Agents in your projects
 
@@ -365,11 +436,7 @@ The skill's `references/spec-folder.md` documents the `epics.yaml` / `stories.ya
 
 ## Notifications
 
-Set `NOTIFY_WEBHOOK_URL` in `.env` to be told when a Run needs you or ends. One POST is sent each time a Run enters `needs_you`, `done`, `failed` or `cancelled`; blank (the default) sends nothing. Delivery is best-effort: a webhook that is down is logged as `notify_failed` and never fails the Run.
-
-- `NOTIFY_WEBHOOK_FORMAT=json` posts the structured event (run, project, repository, template, status, park kind, reason, step path, attempt, spend, time). `slack` posts a one-line `{"text": ...}` that Slack and Mattermost incoming webhooks accept.
-- `NOTIFY_WEBHOOK_SECRET`, when set, adds `X-Orchestrator-Signature: sha256=<hex HMAC-SHA256 of the request body>` so the receiver can check the sender.
-- `PUBLIC_BASE_URL` (for example `https://orchestrator.example.com`) adds a link to the Run; blank leaves it out.
+On a running instance: `$ORCHESTRATOR_BASE_URL/guide/host/notifications.md`.
 
 ## Exposure
 
@@ -384,24 +451,13 @@ PostgreSQL publishes no port in any case; reach it with
 
 ## Trust
 
-The backend container runs harness CLIs as the user `agent` with passwordless sudo, and
-without `cap_drop` — deliberately, so an agent can `apt-get install` what a target
-repository's install script needs. A Run executes code from the repositories you
-register. Register only repositories you trust as much as this machine.
-
-`VERIFY_DOCKER=true` widens that. The `docker` sidecar is privileged, and anything that can
-reach its daemon — every Run's commands and every coding agent, by design — can start a
-privileged container or mount the host filesystem of the machine the daemon runs on: root
-in Docker Desktop's VM, root on a Linux host running Docker Engine. What it does not give is
-this stack's own daemon: the sidecar is a separate dockerd with its own containers, images
-and networks, so a Run cannot see, stop or read the orchestrator's containers, its database
-or its `.env` through it, and nothing it publishes leaves backend-api's network namespace.
-Containers it starts can still reach the network, and the rest of the compose network
-(`postgres`, `web-client`) can reach the ports they publish on backend-api. Turn it on only
-for repositories you would let run `docker` on that machine, and turn it off when none
-needs it.
+On a running instance: `$ORCHESTRATOR_BASE_URL/guide/trust.md`.
 
 ## Upgrading
+
+<!-- guide:upgrade -->
+
+Local agent on the host or the user only.
 
 ```bash
 ./install.sh upgrade --tag <newer>
@@ -474,6 +530,33 @@ never touched.
   is reused as the image cache. A hand-added service the new file no longer declares is left
   as an orphan container — `docker compose up -d --remove-orphans` from this directory
   removes it — and `docker volume rm` removes any volume only it used.
+
+### For the host agent
+
+A refusal prints `refused: nothing was changed`. Report the line, do not work around it. Two
+decisions are the user's:
+
+1. **Runs in the engine on a `DBOS_APPLICATION_VERSION` change (exit 4).** They would become
+   unrecoverable under the new value. A parked Run cannot be waited out: it holds its slot
+   for `HUMAN_WAIT_SECONDS` (30 days). The two honest options are to answer or cancel every
+   parked Run, or not to upgrade yet. `DEPLOY.md` §5.1 is the full statement; put the choice
+   to the user, do not make it.
+2. **Rollback.** `./install.sh upgrade --tag <older>`, plus restoring the `backups/` dump when
+   the newer release migrated the schema: migrations run forward only, and an older release on
+   a migrated database is expected to fail closed.
+
+Afterwards, the kit in every plugged project is stale — the skills came out of the old image.
+From inside each project repository:
+
+```bash
+curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \
+  "$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness claude
+```
+
+`--harness` is whatever that project's `.orchestrator/kit.json` records. Then
+`./install.sh doctor`, and check the templates — `host/runbooks`, *Template refresh*.
+
+<!-- /guide -->
 
 ## Migrating an existing folder
 

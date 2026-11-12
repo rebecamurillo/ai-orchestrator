@@ -20,7 +20,7 @@ from orchestrator.application.templates import plan_model as p
 CODE_PATTERN = r"^(template|spec|refusal)-[a-z0-9]+(-[a-z0-9]+)*$"
 
 Area = Literal["template", "spec", "refusal"]
-Source = Literal["check"]
+Source = Literal["check", "agent"]
 
 
 @dataclass(frozen=True)
@@ -93,6 +93,7 @@ TEMPLATE_REDISPATCH_TARGET_IS_NOT_A_ROW_OF_THIS_FRAME = (
 )
 TEMPLATE_DUPLICATE_ROW_PATH = "template-duplicate-row-path"
 REFUSAL_GUIDE_UNAVAILABLE = "refusal-guide-unavailable"
+REFUSAL_LOCAL_ONLY = "refusal-local-only"
 
 #: Reason text -> code, written out so a reworded reason is a visible change here.
 CODE_BY_REASON: Mapping[str, str] = {
@@ -159,7 +160,8 @@ def _entry(reason: str, code: str) -> CodeEntry:
     return CodeEntry(code, _AREA_OF[code], reason, EXPLANATIONS[reason], "check")
 
 
-#: Codes of a refusal an open route answers with; not reasons, so not in `CODE_BY_REASON`.
+#: Hand-named refusal codes, not reasons, so not in `CODE_BY_REASON`: those an open route answers
+#: with (`check`) and those an agent reports (`agent`).
 REFUSALS: Mapping[str, CodeEntry] = {
     REFUSAL_GUIDE_UNAVAILABLE: CodeEntry(
         REFUSAL_GUIDE_UNAVAILABLE,
@@ -168,6 +170,14 @@ REFUSALS: Mapping[str, CodeEntry] = {
         "The page id is not listed in `/llms.txt`, or this instance was started from a source "
         "tree where `make guide` has not run, so there is no built guide to serve.",
         "check",
+    ),
+    REFUSAL_LOCAL_ONLY: CodeEntry(
+        REFUSAL_LOCAL_ONLY,
+        "refusal",
+        "this is done on the host only",
+        "No instance tool or route upgrades, restarts or reconfigures the instance; the host "
+        "agent or the user does it from the deploy folder, following the `host/*` pages.",
+        "agent",
     ),
 }
 

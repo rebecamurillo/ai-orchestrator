@@ -9,7 +9,8 @@ from pathlib import Path
 
 from tests.unit.conftest import REPO_ROOT
 
-SKILLS = ("orchestrator", "initiative-spec", "initiative-run")
+# Story 6 (2026-11-12, SPEC CAP-6 / AC-6 host half): orchestrator-admin joins the mapped skills.
+SKILLS = ("orchestrator", "initiative-spec", "initiative-run", "orchestrator-admin")
 FIXTURE = Path(__file__).parent / "fixtures" / "kit_skill_sections.json"
 
 
