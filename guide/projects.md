@@ -113,3 +113,20 @@ If the user wants fewer unattended stops, the levers are, in order: a narrower `
 verify commands that are green today, stories whose descriptions leave one implementation,
 and a template edit for the rest (`./workflows.md`). If they want more control, add
 `spec_checkpoint` or `done_checkpoint` to the stories that deserve a look.
+
+## Over MCP
+
+Five tools set a target up with no web UI and no hand-written request: `create_project`,
+`update_project`, `add_repository`, `check_clone` and `init_repository`. Each makes one call
+to the REST route named above.
+
+The order: `create_project` → `add_repository` → `check_clone` → `init_repository` (first time
+only) → `update_project` (set variables) → `preflight_run` → `create_run`.
+
+- `init_repository` starts a `repo-init` Run. Until it ends, pre-flight on the same repository
+  answers a `warn` line for it and `create_run` is refused without `conflict_consent: true`.
+- `update_project` replaces the whole project. Read it with `list_projects` first and send
+  every field and every variable: an omitted `context_text` or `context_paths` is reset and an
+  omitted variable is dropped; an omitted `log_prompt_content` keeps its stored value.
+- Every project variable is secret. It leaves the API as `{name, masked}`. A variable sent
+  without `value` keeps its stored value. A value can be replaced and never read back.

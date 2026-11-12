@@ -49,12 +49,19 @@ PROJECT_ID = UUID("01960000-0000-7000-9000-00000000a0f1")
 REPOSITORY_ID = UUID("01960000-0000-7000-9000-00000000a0f2")
 
 #: The tool set §4 declares. A tool added or renamed is a kit-configuration change.
+#: Story 1 of epic 2, 2026-11-12 (AD-34, owner 2026-11-11): five setup tools added —
+#: create_project, update_project, add_repository, check_clone, init_repository.
 EXPECTED_TOOLS = (
     "version",
     "list_templates",
     "get_template",
     "list_projects",
     "list_queue",
+    "create_project",
+    "update_project",
+    "add_repository",
+    "check_clone",
+    "init_repository",
     "preflight_run",
     "create_run",
     "send_signal",

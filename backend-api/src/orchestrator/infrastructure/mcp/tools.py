@@ -8,25 +8,68 @@ these rules in prose, and nothing here is a second source of truth for *how* the
 
 Thin by construction: a tool parses nothing, decides nothing and writes no status (AD-8).
 
-Three builders rather than one, in the order a session uses them — what this instance holds,
-what starts and steers a Run, what watches one. The split is also what keeps each function
-under the complexity limit `backend-api/AGENTS.md` sets, since a nested definition counts.
+Four builders rather than one, in the order a session uses them — what this instance holds,
+what sets a target up, what starts and steers a Run, what watches one. The split is also what
+keeps each function under the complexity limit `backend-api/AGENTS.md` sets, since a nested
+definition counts.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
+from urllib.parse import quote
 
 from orchestrator.infrastructure.mcp.client import InProcessApi
+from orchestrator.infrastructure.mcp.facade import ToolFailure
 
 #: What `build_tools` hands the server: named async callables, their signatures the schema.
 type Tool = Callable[..., Awaitable[Any]]
 
 
+#: The operationId (as `app.openapi()` names it) of every operation a tool calls. A tool whose
+#: call is not here fails `tests/unit/test_mcp_allow_list.py`; nothing under `/instance`, `/kit`,
+#: `/readiness` or `/probe` may ever be added (AD-34).
+ALLOWED_OPERATION_IDS: frozenset[str] = frozenset(
+    {
+        "read_version_api_v1_version_get",
+        "list_templates_api_v1_templates_get",
+        "get_version_api_v1_templates__name___version__get",
+        "list_projects_api_v1_projects_get",
+        "read_queue_api_v1_queue_get",
+        "create_project_api_v1_projects_post",
+        "update_project_api_v1_projects__project_id__put",
+        "add_repository_api_v1_projects__project_id__repositories_post",
+        "run_clone_check_api_v1_repositories__repository_id__clone_check_post",
+        "init_api_v1_repositories__repository_id__init_post",
+        "preflight_api_v1_runs_preflight_post",
+        "create_api_v1_runs_post",
+        "post_signal_api_v1_runs__run_id__signals_post",
+        "get_api_v1_runs__run_id__get",
+        "detail_api_v1_runs__run_id__detail_get",
+        "events_api_v1_runs__run_id__events_get",
+    }
+)
+
+_UUID = re.compile(r"^[0-9a-fA-F-]{36}$")
+
+
+def _path_id(name: str, value: str) -> str:
+    """An id that goes into a path: UUID-shaped or refused, so it cannot add a segment."""
+    if not _UUID.fullmatch(value):
+        raise ToolFailure(f"{name} must be a UUID")
+    return quote(value, safe="")
+
+
 def build_tools(api: InProcessApi) -> list[Tool]:
     """The whole tool set, bound to one in-process API client."""
-    return [*_instance_tools(api), *_dispatch_tools(api), *_watch_tools(api)]
+    return [
+        *_instance_tools(api),
+        *_setup_tools(api),
+        *_dispatch_tools(api),
+        *_watch_tools(api),
+    ]
 
 
 def _instance_tools(api: InProcessApi) -> list[Tool]:
@@ -65,6 +108,58 @@ def _instance_tools(api: InProcessApi) -> list[Tool]:
         return await api.get("/queue")
 
     return [version, list_templates, get_template, list_projects, list_queue]
+
+
+def _setup_tools(api: InProcessApi) -> list[Tool]:
+    """What sets a target up: a Project, its Repository, the clone check, BMAD, variables."""
+
+    async def create_project(body: dict[str, Any]) -> Any:
+        """Create a Project: `{name, context_text, context_paths, env_vars}`.
+
+        Every variable carries a value and is secret: it leaves the API as `{name, masked}`.
+        Look with `list_projects` before creating — Projects are reused across Runs.
+        """
+        return await api.post("/projects", body)
+
+    async def update_project(project_id: str, body: dict[str, Any]) -> Any:
+        """Replace a Project. PUT replaces the whole Project, not the fields sent.
+
+        Read it with `list_projects` first and send every field and every variable: an omitted
+        `context_text` or `context_paths` is reset, an omitted variable is dropped (only an
+        omitted `log_prompt_content` keeps its stored value). Every project variable is secret
+        and leaves the API as `{name, masked}`. A variable sent without `value` keeps its
+        stored value; a value can be replaced, never read back.
+        """
+        return await api.put(f"/projects/{_path_id('project_id', project_id)}", body)
+
+    async def add_repository(project_id: str, body: dict[str, Any]) -> Any:
+        """Add a Repository to a Project.
+
+        The orchestrator clones with its own instance token, so the URL must be reachable by
+        it. `test_globs` is exactly the list sent: empty freezes no file for the agent.
+        """
+        return await api.post(f"/projects/{_path_id('project_id', project_id)}/repositories", body)
+
+    async def check_clone(repository_id: str) -> Any:
+        """Prove a Repository's URL and token resolve, and create its base clone.
+
+        Run it after `add_repository`. Do not proceed past a failing check: its lines and
+        hint say what to fix.
+        """
+        rid = _path_id("repository_id", repository_id)
+        return await api.post(f"/repositories/{rid}/clone-check")
+
+    async def init_repository(repository_id: str, body: dict[str, Any] | None = None) -> Any:
+        """Start a `repo-init` Run that sets a Repository up with BMAD, as a pull request.
+
+        Only when the Repository has never been BMAD-initialised, on its default branch. The
+        optional body is `{harness}`. Monitor the Run like any other: until it ends, pre-flight
+        on the same Repository warns about it and `create_run` needs `conflict_consent`.
+        """
+        rid = _path_id("repository_id", repository_id)
+        return await api.post(f"/repositories/{rid}/init", body)
+
+    return [create_project, update_project, add_repository, check_clone, init_repository]
 
 
 def _dispatch_tools(api: InProcessApi) -> list[Tool]:

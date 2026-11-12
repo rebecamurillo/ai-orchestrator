@@ -137,7 +137,8 @@ fall back to the 5 s / 30 s poll on `GET /api/v1/runs/{id}`.
 The same operations are also exposed as MCP tools at `$ORCHESTRATOR_BASE_URL/mcp`
 (streamable HTTP, the same bearer, no `/api/v1` prefix): `version`, `list_templates`,
 `get_template`, `preflight_run`, `create_run`, `get_run`, `get_run_detail`,
-`wait_run_events`, `send_signal`, `list_queue`, `list_projects`. Each tool is one call to the
+`wait_run_events`, `send_signal`, `list_queue`, `list_projects`, `create_project`,
+`update_project`, `add_repository`, `check_clone`, `init_repository`. Each tool is one call to the
 route above it, so the rules in `rules` apply unchanged. Per-harness configuration
 snippets ship in the kit under `mcp/`; they are not installed automatically.
 

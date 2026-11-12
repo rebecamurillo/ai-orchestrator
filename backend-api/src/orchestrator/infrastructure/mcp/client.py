@@ -61,6 +61,9 @@ class InProcessApi:
     async def post(self, path: str, body: Any = None) -> Any:
         return await self._call("POST", path, json=body)
 
+    async def put(self, path: str, body: Any = None) -> Any:
+        return await self._call("PUT", path, json=body)
+
     async def _call(self, method: str, path: str, **sent: Any) -> Any:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=self._app),

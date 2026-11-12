@@ -393,6 +393,29 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
     - Nothing between markers is edited by hand.
   - **Copies for harnesses without MCP (BR-12).** All three supported harnesses ship an MCP configuration (§ 1), so the set of such harnesses is empty and no copy is generated in this release. The mechanism is deferred (§ 8).
 
+### AD-34 — the MCP surface is thin wrappers over the REST API; nothing reaches maintenance *(ratified 2026-11-11, initiative orchestrator-instance-guide)*
+
+- **Binds:** `infrastructure/mcp/tools.py`, `facade.py`, the routers they call
+- **Prevents:** a second implementation of a use case behind MCP; a remote agent able to upgrade, hold, restart or reconfigure (BR-20, AC-15); a web editor whose behaviour changes as a side effect
+- **Rule:**
+  - **New tools.** Each new tool calls exactly one REST operation, existing or new, through `InProcessApi`, the same way the 11 existing tools do:
+    - `create_project` and `update_project` (variables included);
+    - `add_repository`, `check_clone` and `init_repository`;
+    - `validate_template`, `save_template` and `reload_templates`;
+    - `list_models`;
+    - `validate_spec_folder`;
+    - `read_guide`.
+  - **`read_guide`.** With an id it returns that page; with no id it returns the index. Any harness that can call MCP tools can therefore read the whole guide, whether or not it supports resources or prompts. This is what makes RP10 non-blocking.
+  - **Saving a folder-held template (BR-17, AC-16).**
+    - The REST save operation gains an optional precondition, `refuse_if_in_folder: bool = false`. When it is true and the template's name is in `folder_stems` (the live listing, as today; no origin column is added), the save answers 409 with code `refusal-template-in-folder`, the folder named and the guide id, and writes nothing.
+    - `save_template` always sends the precondition.
+    - The web editor does not send it, so its behaviour is unchanged.
+  - **Secret variables (BR-16, AC-17).** Variables leave every route and tool masked, as AD-5 already requires, with no new flag. Every project variable is treated as secret.
+  - **No maintenance from MCP.**
+    - No tool calls a route that holds the instance, changes settings, harness pins, models or LiteLLM, or upgrades anything.
+    - The tool table is checked against an allow-list of REST `operationId`s.
+    - A unit test fails on any tool outside the allow-list.
+
 ## Consistency Conventions
 
 | Concern | Convention |
