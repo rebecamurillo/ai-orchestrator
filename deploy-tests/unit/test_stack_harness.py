@@ -135,6 +135,8 @@ def test_whole_flow_carries_only_test_projects_and_stays_under_root(rig):
     assert PROJECT.match(project) and project == stack.project
     assert {p.name for p in rig.base.iterdir()} == {"root", "repo", "bin", "docker.log", "kit.tar"}
     assert n1.changed_example == "x"
+    dotenv = (stack.folder / ".env").read_text().splitlines()
+    assert any(ln.startswith("ORCHESTRATOR_SESSION_SECRET=") for ln in dotenv)
 
 
 @pytest.mark.parametrize(

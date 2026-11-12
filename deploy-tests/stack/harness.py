@@ -382,7 +382,7 @@ def install_stack(
         "WEB_CLIENT_PORT": str(web_port),
         "BACKEND_API_PORT": str(backend_port),
         "ORCHESTRATOR_TOKEN": TEST_TOKEN,
-        "SESSION_SECRET": secrets.token_hex(16),
+        "ORCHESTRATOR_SESSION_SECRET": secrets.token_hex(16),
         "ORCHESTRATOR_SECRET_KEY": base64.urlsafe_b64encode(os.urandom(32)).decode(),
         "POSTGRES_PASSWORD": password,
         "DATABASE_URL": f"postgresql+psycopg://orchestrator:{password}@postgres:5432/orchestrator",

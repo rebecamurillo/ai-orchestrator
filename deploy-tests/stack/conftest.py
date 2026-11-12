@@ -36,17 +36,6 @@ def runner(stack_work):
 
 
 @pytest.fixture(scope="session")
-def release_n(runner, stack_work):
-    repo_root = Path(__file__).resolve().parents[2]
-    yield harness.build_release_n(runner, repo_root, stack_work / "build")
-
-
-@pytest.fixture(scope="session")
-def release_n1(runner, stack_work, release_n):
-    yield harness.build_release_n1(runner, release_n, stack_work / "build")
-
-
-@pytest.fixture(scope="session", autouse=False)
 def _tags_removed(runner):
     yield
     harness.remove_release_tags(
@@ -54,6 +43,17 @@ def _tags_removed(runner):
         harness._release(harness.VERSION_1, None, ()),
         harness._release(harness.VERSION_2, None, ()),
     )
+
+
+@pytest.fixture(scope="session")
+def release_n(runner, stack_work, _tags_removed):
+    repo_root = Path(__file__).resolve().parents[2]
+    yield harness.build_release_n(runner, repo_root, stack_work / "build")
+
+
+@pytest.fixture(scope="session")
+def release_n1(runner, stack_work, release_n):
+    yield harness.build_release_n1(runner, release_n, stack_work / "build")
 
 
 @pytest.fixture
@@ -67,5 +67,9 @@ def installed_stack(runner, stack_work, _tags_removed):
         return stack
 
     yield make
+    failed = []
     for stack in reversed(made):
-        stack.teardown()
+        done = stack.teardown()
+        if done.returncode != 0:
+            failed.append(f"{stack.project}: {done.stderr.decode(errors='replace')[-2000:]}")
+    assert not failed, "teardown failed: " + "; ".join(failed)
