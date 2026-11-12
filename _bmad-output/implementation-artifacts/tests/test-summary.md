@@ -1,59 +1,64 @@
-# Test Automation Summary — orchestrator-deploy-folder / epic-3-deploy-folder
+# Test Automation Summary — orchestrator-deploy-folder / epic-4-stack-proof
 
 Generated: 2026-11-12 (dispatch, empty story id, covering the whole epic)
-Spec: `initiatives/orchestrator-deploy-folder/epic-3-deploy-folder/SPEC.md` (hub-relative)
-Stories: 1–5 (committed `98b9503`..`f1f033d`)
+Spec: `initiatives/orchestrator-deploy-folder/epic-4-stack-proof/SPEC.md` (hub-relative)
+Stories: 1–5 (committed `a5fdadb`..`f2dd7f9`)
 
 ---
 
 ## Generated Tests
 
-### API tests (unit gate, ASGI transport, run by `make test`)
+### Unit gate (run by `make test`)
 
-- [x] `backend-api/tests/unit/test_install_sh_wire_order.py` (3 tests). This pins the **key order** of the C5 responses that `deploy/install.sh` parses with sed and awk:
-  - `GET /instance/activity`: `working[]` rows are `run_id, run_label, path, kind, started_at`. `in_engine[]` rows are `run_id, run_label, status, park_kind, queue_reason`.
-  - `POST /instance/hold` 409: `errors[]` rows begin with `run_id`, in the same order as the `working[]` rows.
-  - `GET /harnesses`: an item begins with `name` and ends with `setup`, after `lines[]`. The setup object carries one `ok`. A failure row is `script, reason`.
-  - **Why this matters:** `install.sh` splits arrays on each row's first key (`json_array_items … run_id`, `json_items … name`). It reads a harness's setup record as everything after `"setup":`, then takes the last `"ok"` match. Suppose a schema field is reordered — for example, `setup` placed before `lines`. The upgrade's exit-3/4 refusals and the setup report would then misread, and no test would fail, because every deployment-test fixture is hand-written JSON. Epic 1's e2e and unit tests check these keys only as sets.
-  - Built on the shared fakes (`a_world`, `an_attempt`, `FakeInstanceHoldRepository`, `FakeSetupRecord`, and the `Api` of `test_harnesses_router.py`). No new doubles.
+- [x] `backend-api/tests/unit/test_deploy_stack_surface.py` (22 tests). It checks that the product still offers what the deployment stack tests drive. The module reads `deploy-tests/stack/*.py` as source with `ast`; it never imports or runs them, so the epic's constraint holds.
+  - **Every API path a stack test calls is a route.** All `/api/…` and `/healthz` string and f-string literals are checked against `contracts/openapi.json`, with placeholders matched to one segment. There is one case per module; 36 literals are checked across 5 modules.
+  - **Every variable a stack test writes is declared.** Each env-style dict literal (spreads ignored) must name only keys declared in `deploy/.env.example` or `deploy/release.env`. That covers the 15 keys of `harness.py`'s `.env`, the gateway/tracing/`GITHUB_TOKEN` keys of `test_install.py` and `test_setup.py`, and `test_runs_survive_upgrade.py`'s `ORCH_TEST_MODE`, `MAX_ACTIVE_RUNS` and `DBOS_APPLICATION_VERSION`.
+  - **The survival proofs' anchors.** `MAX_ACTIVE_RUNS`, `ORCH_TEST_MODE` and `COMPOSE_PROJECT_NAME` are declared, and `DBOS_APPLICATION_VERSION` lives in `release.env`, which is where AC-9a's derived release changes it.
+  - **The readers are tested themselves** on sources the module owns: f-string pieces, query stripping, extra or missing segments, spreads, and commented-out declarations.
+  - **Why this matters:** `harness._apply_release_env` replaces matching lines of the shipped `.env.example` and *appends* any key it does not find. Suppose a setting were renamed in the product. The stack would then start on that setting's default, with no error. AC-9's global queue (`MAX_ACTIVE_RUNS`) and AC-9a's engine-version refusal would no longer prove anything. A renamed route would surface only when `deploy.yml` runs. This test makes both kinds of drift fail in `make test`.
 
 ### Backend API E2E tests (`backend-api/tests/e2e`)
 
-- None added. Epic 3 changes no route, schema or contract: `git diff 8cd22ac HEAD -- backend-api/src web-client/src contracts` is empty. Epic 1's `tests/e2e/test_instance.py` already drives the C5 calls (hold, 409, activity, the `setup` field) against the running stack. Key order is deterministic in the response models, so the unit gate covers it without a stack.
+- None added. Epic 4 changes no product code: every commit touches only `deploy-tests/`.
 
 ### UI E2E tests
 
-- None. Epic 3 does not touch the web client.
+- None. Epic 4 does not touch the web client.
 
 ### Deployment tests (written by the stories, not run here)
 
-- `deploy-tests/unit/`: `test_folder_layout.py` (story 1), `test_install_folder.py` (2), `test_upgrade.py` (3), `test_setup_commands.py` (4), `test_readme_roles.py` (5), and the revised `test_deploy_install.py`, `test_install_admin.py` and `test_install_verify_docker.py`.
-- These were checked against each story's acceptance criteria. The SPEC forbids the Run from executing deployment tests or `install.sh`, so neither was run. They run in `deploy.yml` on the pull request.
+- `deploy-tests/stack/`:
+  - `conftest.py`, `harness.py` and `test_harness.py` (story 1), with the guard unit test `deploy-tests/unit/test_stack_harness.py`
+  - `test_install.py` (story 2)
+  - `test_upgrade.py` (story 3)
+  - `test_runs_survive_upgrade.py` (story 4)
+  - `test_setup.py` (story 5)
+- These were read against each story's scope. The SPEC forbids the Run from executing them, so none was run. They run in `deploy.yml` (job `stack`).
 
 ## Coverage
 
 | Story | CAP | Unit (`make test`) | Deployment (`deploy-tests/`) | Backend e2e | UI e2e |
 |-------|-----|--------------------|------------------------------|-------------|--------|
-| 1 — Folder layout, product manifest | CAP-1 | ✅ existing (Dockerfile/entrypoint pins) | ✅ existing | n/a (no route) | n/a |
-| 2 — install, no platform | CAP-2 | ✅ **new** wire order of hold, 409 and harness `setup` | ✅ existing | ✅ epic 1 `test_instance.py` | n/a |
-| 3 — upgrade under the hold | CAP-3 | ✅ **new** wire order of `working[]`, `in_engine[]` and 409 `errors[]` | ✅ existing | ✅ epic 1 `test_instance.py` | n/a |
-| 4 — setup and bmad commands | CAP-4 | ✅ **new** (same C5 calls) | ✅ existing | ✅ epic 1 | n/a |
-| 5 — Docs, kit skill, spine | CAP-5 | ✅ existing (`test_spine_deploy_folder.py`, docs tests) | ✅ existing (`test_readme_roles.py`) | n/a | n/a |
+| 1 — Throwaway-stack harness | CAP-1 | ✅ **new** `.env` keys and `/healthz` and `/runs/{id}` paths | ✅ existing | n/a | n/a |
+| 2 — Install proofs | CAP-2 | ✅ **new** gateway and tracing keys, probe/version/templates/runs paths | ✅ existing | n/a | n/a |
+| 3 — Upgrade proofs | CAP-3 | ✅ **new** templates, activity and version paths | ✅ existing | n/a | n/a |
+| 4 — Runs survive an upgrade | CAP-4 | ✅ **new** `ORCH_TEST_MODE`, `MAX_ACTIVE_RUNS`, `DBOS_APPLICATION_VERSION`; signals/detail/activity paths | ✅ existing | n/a | n/a |
+| 5 — Setup proofs | CAP-5 | ✅ **new** secret keys, preflight and harnesses paths | ✅ existing | n/a | n/a |
 
-- API endpoints added or changed by the epic: 0/0. API endpoints `install.sh` consumes whose wire order is now pinned: 3/3 (activity, hold, harnesses). `/version` is read only through `json_string` on top-level keys, which does not depend on order.
+- Stack-test API literals that resolve to a contract route: 36/36. Stack-test `.env` keys that are declared: all.
 
 ## Run Results
 
-- `make lint`: exit 0.
-- `make test`: exit 0. Backend: 10802 passed, 1 skipped, coverage thresholds held. Web client: 1868 passed.
-- `make e2e` was not run. The epic adds no e2e scenario. As the epic 1 and epic 2 summaries record, Repository-backed e2e modules cannot pass in this sandbox (`/work` is not shared with the docker daemon).
+- Targeted: `uv run pytest tests/unit/test_deploy_stack_surface.py` → 22 passed.
+- `make lint`: exit 0. The first run caught one E501 in the new module's docstring; it was shortened and lint re-run.
+- `make test`: exit 0. Backend: 10824 passed, 1 skipped, coverage thresholds held. Web client: 1868 passed.
+- Deployment tests (`deploy-tests/`), `docker` and `install.sh` were not run, as the SPEC requires.
 
-## Defects found
+## Observations (not defects found by a run)
 
-- None new. The schemas emit the keys in the order `install.sh` expects. The new tests guard that order going forward.
+- Story 4 says `MAX_ACTIVE_RUNS=1`, but `test_runs_survive_upgrade.py` sets `2`. A comment in that file explains why: a parked Run holds a global slot (AD-12), so P, B and Q can coexist only as two parked and one queued. The deviation is reasoned, but it departs from the story's text, and the Operator may want to confirm it when the PR runs `deploy.yml`.
 - Still open from earlier epics: the e2e harness envelope key set lacks `setup` (awaiting an Operator ruling), and `.dockerignore`'s root-only `.venv`.
 
 ## Next Steps
 
-- Let `deploy.yml` run the epic's deployment tests on the pull request.
-- Epic 4 (`deploy-tests/stack/`): drive `install.sh upgrade` and `setup` against a real throwaway stack. That proves the parsing end to end, not just the key order.
+- Let `deploy.yml` run `make test-deploy-stack` on the pull request. Only a real stack proves AC-1..AC-18.
