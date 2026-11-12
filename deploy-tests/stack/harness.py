@@ -5,6 +5,7 @@ import io
 import os
 import re
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -132,6 +133,13 @@ class Runner:
             raise RuntimeError(f"{list(argv)!r} exited {done.returncode}: {tail}")
         return done
 
+    def remove(self, path: str | Path) -> None:
+        target = self._inside(path)
+        if target.is_dir():
+            shutil.rmtree(target)
+        elif target.exists():
+            target.unlink()
+
     def mkdir(self, path: str | Path) -> Path:
         target = self._inside(path)
         target.mkdir(parents=True, exist_ok=True)
@@ -229,6 +237,8 @@ def build_release_n1(
     changed: str | None = None
     created = runner.check(["docker", "create", release_n.backend_image], cwd=base)
     cid = created.stdout.decode().strip()
+    # `docker cp` into an existing folder nests the copy: a second variant starts from a clean one
+    runner.remove(base / "deploy")
     try:
         runner.check(["docker", "cp", f"{cid}:/app/deploy", str(base / "deploy")], cwd=base)
         runner.check(["docker", "cp", f"{cid}:/app/VERSION", str(base / "VERSION")], cwd=base)

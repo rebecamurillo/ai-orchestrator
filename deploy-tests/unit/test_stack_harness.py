@@ -124,7 +124,9 @@ def test_whole_flow_carries_only_test_projects_and_stays_under_root(rig):
     for rec in records:
         argv = rec["argv"]
         assert "--pull" not in argv and "login" not in argv
-        assert Path(rec["cwd"]).resolve().is_relative_to(rig.root)
+        # guard.py's read-only `compose ls` runs wherever pytest stands (PR #19 review, 2026-11-12)
+        if argv[:2] != ["compose", "ls"]:
+            assert Path(rec["cwd"]).resolve().is_relative_to(rig.root)
         if argv[0] == "compose" and argv[1] != "ls":
             assert PROJECT.match(argv[argv.index("-p") + 1])
     composes = [r for r in records if r["argv"][:1] == ["compose"] and r["argv"][1] != "ls"]
