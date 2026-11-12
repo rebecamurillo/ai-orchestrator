@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -38,8 +39,7 @@ BMAD_PIN = next(
 )
 
 PREPARE_CALL = (
-    "run --rm --no-deps --user agent "
-    "--entrypoint /app/scripts/setup/prepare.sh backend-api"
+    "run --rm --no-deps --user agent --entrypoint /app/scripts/setup/prepare.sh backend-api"
 )
 
 needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not on PATH")
@@ -157,6 +157,19 @@ def folder(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     ):
         shutil.copy(DEPLOY_DIR / name, tmp_path / name)
     (tmp_path / "VERSION").write_text(f"{TAG}\n")
+    # epic 5 story 3, row 6, 2026-11-12: write_seeds reads the manifest the bundle ships.
+    manifest = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "product_manifest.py"),
+            str(DEPLOY_DIR),
+            str(tmp_path / "VERSION"),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    (tmp_path / "product-files.json").write_text(manifest)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for name, body in (("docker", DOCKER_SHIM), ("curl", CURL_SHIM)):
@@ -175,6 +188,8 @@ def folder(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         "SHIM_VERSION_FILE": str(served / "version.json"),
         "SHIM_HARNESS_FILE": str(served / "harnesses.json"),
         "GHCR_TOKEN": "ghp_folder_test_0123456789",
+        # epic 5 story 3, rows 4-5, 2026-11-12: --no-pull resolves no token, so doctor needs one.
+        "GITHUB_TOKEN": "ghp_folder_git_0123456789",
     }
     return tmp_path, env
 
@@ -188,13 +203,16 @@ def _hashes(path: Path) -> dict[str, str]:
     return {
         str(p.relative_to(path)): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(path.rglob("*"))
-        if p.is_file() and "bin" not in p.relative_to(path).parts[:1]
+        if p.is_file()
+        and "bin" not in p.relative_to(path).parts[:1]
         and p.name not in {"docker.log", "curl.log", "curl.argv"}
         and "served" not in p.relative_to(path).parts[:1]
     }
 
 
-def _install(folder: tuple[Path, dict[str, str]], *args: str, **env: str) -> subprocess.CompletedProcess[str]:
+def _install(
+    folder: tuple[Path, dict[str, str]], *args: str, **env: str
+) -> subprocess.CompletedProcess[str]:
     path, base = folder
     return _run("install", "--yes", "--no-pull", *args, cwd=path, env={**base, **env})
 
@@ -217,7 +235,12 @@ def test_install_writes_the_given_gateway_and_tracing_values(
     rendered = parse_env_example(path / ".env")
     assert rendered["LITELLM_BASE_URL"] == "http://gw.example:4000"
     assert rendered["LANGFUSE_BASE_URL"] == "http://lf.example"
-    for name in ("LITELLM_API_KEY", "LITELLM_SPEND_KEY", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
+    for name in (
+        "LITELLM_API_KEY",
+        "LITELLM_SPEND_KEY",
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_SECRET_KEY",
+    ):
         assert f"\n{name}=\n" in text
     assert "IMAGE_TAG" not in text
     assert not (path / "llm-platform").exists()
@@ -273,14 +296,19 @@ def test_install_changes_no_byte_of_a_present_file(
     folder: tuple[Path, dict[str, str]], flags: tuple[str, ...]
 ) -> None:
     path, _ = folder
-    (path / ".env").write_text((DEPLOY_DIR / ".env.example").read_text().replace(
-        "ORCHESTRATOR_TOKEN=change-me-long-random", "ORCHESTRATOR_TOKEN=keep-this-token"))
+    (path / ".env").write_text(
+        (DEPLOY_DIR / ".env.example")
+        .read_text()
+        .replace("ORCHESTRATOR_TOKEN=change-me-long-random", "ORCHESTRATOR_TOKEN=keep-this-token")
+    )
     (path / "templates").mkdir()
     (path / "templates" / "x.yaml").write_text("mine: true\n")
     (path / "compose.override.yml").write_text("services: {a: {}}\n")
     (path / "setup").mkdir()
     (path / "setup" / "bmad.choice").write_text("installed\n")
-    (path / "product-files.json").write_text(_manifest(("compose.override.yml", "setup/bmad.choice")))
+    (path / "product-files.json").write_text(
+        _manifest(("compose.override.yml", "setup/bmad.choice"))
+    )
     before = _hashes(path)
 
     result = _install(folder, *flags, LITELLM_BASE_URL="http://gw.example")
@@ -295,7 +323,9 @@ def test_install_changes_no_byte_of_a_present_file(
 def test_install_creates_only_the_absent_seeds(folder: tuple[Path, dict[str, str]]) -> None:
     path, _ = folder
     (path / "compose.override.yml").unlink()
-    (path / "product-files.json").write_text(_manifest(("compose.override.yml", "setup/bmad.choice")))
+    (path / "product-files.json").write_text(
+        _manifest(("compose.override.yml", "setup/bmad.choice"))
+    )
     before = set(_hashes(path))
 
     result = _install(folder)
@@ -306,7 +336,8 @@ def test_install_creates_only_the_absent_seeds(folder: tuple[Path, dict[str, str
     ).read_bytes()
     assert (path / "setup" / "bmad.choice").read_text().strip() == "installed"
     new = {
-        n for n in set(_hashes(path)) - before
+        n
+        for n in set(_hashes(path)) - before
         if n != ".env" and n.split("/")[0] not in {"logs", "backups", "diagnostics"}
     }
     assert new == {"compose.override.yml", "setup/bmad.choice"}
@@ -483,7 +514,9 @@ def test_doctor_setup_line_fails_naming_each_failed_script(
     folder: tuple[Path, dict[str, str]],
 ) -> None:
     path, _ = folder
-    failed = _record(False, [{"script": "10-x.sh", "reason": "r"}, {"script": "20-y.sh", "reason": "r"}])
+    failed = _record(
+        False, [{"script": "10-x.sh", "reason": "r"}, {"script": "20-y.sh", "reason": "r"}]
+    )
     (path / "served" / "harnesses.json").write_text(json.dumps(_harnesses(failed)))
 
     result = _doctor(folder)
@@ -545,7 +578,12 @@ def test_doctor_release_pins_warn_naming_both_values(folder: tuple[Path, dict[st
 
     assert result.returncode == 0
     line = " ".join(_line(result, "release pins"))
-    assert line.startswith("warn") and "CODEX_VERSION" in line and "0.1.0" in line and "0.167.0" in line
+    assert (
+        line.startswith("warn")
+        and "CODEX_VERSION" in line
+        and "0.1.0" in line
+        and "0.167.0" in line
+    )
 
 
 @needs_bash

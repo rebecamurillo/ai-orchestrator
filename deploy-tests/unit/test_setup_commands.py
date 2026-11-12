@@ -21,8 +21,7 @@ DEPLOY_DIR = REPO_ROOT / "deploy"
 TAG = "1.0.0-test"
 
 PREPARE_CALL = (
-    "run --rm --no-deps --user agent "
-    "--entrypoint /app/scripts/setup/prepare.sh backend-api"
+    "run --rm --no-deps --user agent --entrypoint /app/scripts/setup/prepare.sh backend-api"
 )
 
 needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not on PATH")
@@ -83,7 +82,7 @@ STEP = {
 }
 
 
-def _harnesses(ok: bool = True, failures: list[str] | None = None) -> dict[str, object]:
+def _harnesses(ok: bool = True, failures: list[dict[str, str]] | None = None) -> dict[str, object]:
     setup = {
         "at": "2026-11-11T10:00:00Z",
         "trigger": "on-demand",
@@ -173,6 +172,8 @@ def _prepares(path: Path) -> list[str]:
 
 HARNESS_COUNT = 3
 SETUP_FAILED_EXIT = 2
+HOLD_CALLS = 2  # POST + DELETE
+REFUSED_EXIT = 3
 CATALOG_SUFFIXES = tuple(
     f"exec -T backend-api /app/scripts/harness/{h}.sh catalog"
     for h in ("claude", "codex", "opencode")
@@ -221,11 +222,15 @@ def test_bmad_remove_writes_the_choice_and_runs_setup_under_the_hold(folder: Fol
     assert _choice(path) == "removed\n"
     runs = _runs(path)
     assert len(runs) == 1
-    assert f"--profile setup run --rm -e ORCH_SETUP_TRIGGER=on-demand -e ORCH_RELEASE={TAG}" in runs[0]
+    assert (
+        f"--profile setup run --rm -e ORCH_SETUP_TRIGGER=on-demand -e ORCH_RELEASE={TAG}" in runs[0]
+    )
     assert runs[0].endswith(" setup")
     curls = _log(path, "curl.log")
     post = next(i for i, ln in enumerate(curls) if ln.startswith("POST") and "/instance/hold" in ln)
-    delete = next(i for i, ln in enumerate(curls) if ln.startswith("DELETE") and "/instance/hold" in ln)
+    delete = next(
+        i for i, ln in enumerate(curls) if ln.startswith("DELETE") and "/instance/hold" in ln
+    )
     assert '{"ttl_seconds": 900, "reason": "setup"}' in curls[post]
     assert post < delete
     assert "/api/v1/harnesses" in curls[delete + 1]
@@ -241,7 +246,7 @@ def test_bmad_install_writes_installed_over_removed_and_over_absent(folder: Fold
     assert first.returncode == 0, first.stderr
     assert _choice(path) == "installed\n"
     assert len(_runs(path)) == 1
-    assert len(_hold_calls(path)) == 2
+    assert len(_hold_calls(path)) == HOLD_CALLS
 
     (path / "setup" / "bmad.choice").unlink()
     second = _run(folder, "bmad", "install")
@@ -286,7 +291,7 @@ def test_a_working_step_refuses_with_exit_3_and_changes_nothing(
 
     result = _run(folder, *args, SHIM_ACTIVITY_FILE=activity)
 
-    assert result.returncode == 3
+    assert result.returncode == REFUSED_EXIT
     assert "refused: nothing was changed" in result.stderr
     assert "run R1 (L1) step build/P (agent) working since 2026-11-11T10:05:00Z" in result.stderr
     assert _runs(path) == []
@@ -302,7 +307,7 @@ def test_a_409_hold_refuses_naming_the_step_and_other_codes_exit_1(folder: Folde
 
     busy = _run(folder, "bmad", "remove", SHIM_HOLD_CODE="409", SHIM_HOLD_FILE=body)
 
-    assert busy.returncode == 3
+    assert busy.returncode == REFUSED_EXIT
     assert "run R1 (L1) step build/P (agent)" in busy.stderr
     assert _runs(path) == []
     assert not any(ln.startswith("DELETE") for ln in _log(path, "curl.log"))
@@ -353,11 +358,14 @@ def test_without_backend_api_no_hold_is_taken_and_the_exit_is_the_runners(
 @pytest.mark.parametrize("rc", ["2", "0"])
 def test_a_failed_run_still_releases_the_hold_and_exits_2(folder: Folder, rc: str) -> None:
     path, _ = folder
-    served = _serve(path, "bad.json", _harnesses(ok=False, failures=["10-x.sh"]))
+    # epic 5 story 3, row 3, 2026-11-12: failures are SetupFailureOut {script, reason} objects.
+    served = _serve(
+        path, "bad.json", _harnesses(ok=False, failures=[{"script": "10-x.sh", "reason": "exit 1"}])
+    )
 
     result = _run(folder, "setup", SHIM_SETUP_RC=rc, SHIM_HARNESS_FILE=served)
 
-    assert result.returncode == 2
+    assert result.returncode == SETUP_FAILED_EXIT
     assert any(ln.startswith("DELETE") for ln in _log(path, "curl.log"))
     assert "10-x.sh" in result.stdout
 
@@ -375,11 +383,11 @@ def test_no_command_restarts_or_removes_a_service(folder: Folder, args: tuple[st
     result = _run(folder, *args)
 
     assert result.returncode == 0, result.stderr
+    # epic 5 story 3, row 2, 2026-11-12: argv words, not substrings of the tmp_path.
     for line in _log(path, "docker.log"):
-        padded = f" {line} "
-        scrubbed = padded.replace(" run --rm ", " ")
-        for word in (" up ", "restart", " stop", " down ", " rm ", "llm-platform"):
-            assert word not in scrubbed, line
+        words = line.split()
+        assert not ({"up", "restart", "stop", "down", "rm"} & set(words)), line
+        assert not [w for w in words if "llm-platform" in w], line
 
 
 # ── AC9 ──────────────────────────────────────────────────────────────────────
@@ -503,7 +511,9 @@ def test_catalog_still_runs_and_the_exit_code_is_kept_when_the_setup_service_fai
     folder: Folder,
 ) -> None:
     path, _ = folder
-    served = _serve(path, "bad.json", _harnesses(ok=False, failures=["10-x.sh"]))
+    served = _serve(
+        path, "bad.json", _harnesses(ok=False, failures=[{"script": "10-x.sh", "reason": "exit 1"}])
+    )
 
     result = _run(folder, "setup", SHIM_SETUP_RC="2", SHIM_HARNESS_FILE=served)
 

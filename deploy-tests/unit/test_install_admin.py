@@ -161,7 +161,12 @@ def _run(
         "GITHUB_TOKEN",
         "IMAGE_TAG",
         "DOCKER_CONFIG",
-        "LITELLM_BASE_URL", "LITELLM_API_KEY", "LITELLM_SPEND_KEY", "LANGFUSE_BASE_URL", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY",
+        "LITELLM_BASE_URL",
+        "LITELLM_API_KEY",
+        "LITELLM_SPEND_KEY",
+        "LANGFUSE_BASE_URL",
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_SECRET_KEY",
     }
     clean = {k: v for k, v in os.environ.items() if k not in dropped}
     return subprocess.run(  # fixed argv, no shell
@@ -181,7 +186,9 @@ def bundle(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     shutil.copy(INSTALL, tmp_path / "install.sh")
     shutil.copy(DEPLOY_DIR / ".env.example", tmp_path / ".env.example")
     shutil.copy(DEPLOY_DIR / "docker-compose.yml", tmp_path / "docker-compose.yml")
-    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install: doctor reads release.env, the setup record and bmad_installed
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no
+    # longer written; setup after install: doctor reads release.env, the setup record and
+    # bmad_installed
     shutil.copy(DEPLOY_DIR / "release.env", tmp_path / "release.env")
     (tmp_path / "VERSION").write_text(f"{TAG}\n")
 
@@ -202,10 +209,18 @@ def bundle(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         for line in (DEPLOY_DIR / "release.env").read_text().splitlines()
         if line.startswith("BMAD_VERSION=")
     )
-    ok_setup = {"at": "2026-11-11T10:00:00Z", "trigger": "install", "ok": True, "failures": [], "skills": 3}
+    ok_setup = {
+        "at": "2026-11-11T10:00:00Z",
+        "trigger": "install",
+        "ok": True,
+        "failures": [],
+        "skills": 3,
+    }
     (served / "version.json").write_text(json.dumps({**VERSION_BODY, "bmad_installed": bmad_pin}))
     (served / "harnesses.json").write_text(
-        json.dumps({**HARNESS_BODY, "items": [{**row, "setup": ok_setup} for row in HARNESS_BODY["items"]]})
+        json.dumps(
+            {**HARNESS_BODY, "items": [{**row, "setup": ok_setup} for row in HARNESS_BODY["items"]]}
+        )
     )
 
     env = {
@@ -277,7 +292,8 @@ def test_doctor_on_a_healthy_stack_exits_zero_and_prints_the_version_line(
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"running {TAG}" in result.stdout
-    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no
+    # longer written; setup after install
     assert f"VERSION {TAG}" in result.stdout
     assert "6.11.0" in result.stdout, "the pinned bmad version is part of the report"
     assert "2.1.258" in result.stdout, "the pinned harness CLI versions are part of the report"
@@ -321,7 +337,8 @@ def test_an_instance_behind_the_folder_version_is_a_warn_with_the_upgrade_comman
 ) -> None:
     """The folder was refreshed and never restarted — the one skew a client cannot see.
 
-    epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install: `VERSION` replaces `.env`'s `IMAGE_TAG`.
+    epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer
+    written; setup after install: `VERSION` replaces `.env`'s `IMAGE_TAG`.
     """
     path, env = installed
     (path / "VERSION").write_text("2.0.0\n")
@@ -437,7 +454,8 @@ def test_diagnose_writes_a_masked_report_and_prints_its_path(
     assert str(reports[0]) in result.stdout
     text = reports[0].read_text()
     assert f"app {TAG}" in text
-    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no
+    # longer written; setup after install
     assert f"VERSION    {TAG}" in text
     # the non-secret kinds stay readable: a maintainer cannot reproduce a port they cannot see
     assert "BACKEND_API_PORT=8000" in text
@@ -495,7 +513,8 @@ def test_upgrade_to_the_running_version_refuses_before_pulling_anything(
     calls = _docker_calls(path)
     assert " pull" not in calls, calls
     assert " up " not in calls, calls
-    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no
+    # longer written; setup after install
     assert (path / ".env").read_bytes() == env_before
 
 

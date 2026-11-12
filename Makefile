@@ -39,8 +39,8 @@ doctor:
 ##        · test pairs · version manifests · contract drift · eslint · prettier --check · tsc --noEmit · astro check
 ## the web-client half of the test-pair check runs inside `pnpm lint`
 lint:
-	$(PYTHON_RUN) ruff check . ../scripts
-	$(PYTHON_RUN) ruff format --check . ../scripts
+	$(PYTHON_RUN) ruff check . ../scripts ../deploy-tests
+	$(PYTHON_RUN) ruff format --check . ../scripts ../deploy-tests
 	$(PYTHON_RUN) mypy src/orchestrator/domain src/orchestrator/application
 	$(PYTHON_RUN) lint-imports
 	$(PYTHON_RUN) python ../scripts/check_env_contract.py

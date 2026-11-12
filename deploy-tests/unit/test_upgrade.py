@@ -48,8 +48,7 @@ RUN_ID = "0192f3a0-0000-7000-8000-000000000001"
 PARKED_ID = "0192f3a0-0000-7000-8000-000000000002"
 
 PREPARE_CALL = (
-    "run --rm --no-deps --user agent "
-    "--entrypoint /app/scripts/setup/prepare.sh backend-api"
+    "run --rm --no-deps --user agent --entrypoint /app/scripts/setup/prepare.sh backend-api"
 )
 
 needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not on PATH")
@@ -942,5 +941,7 @@ def test_the_script_has_no_pin_writing_left_and_keeps_its_pin_shape() -> None:
         if line.startswith("PLAIN_VERSION=")
     )
     assert shape in text.splitlines()
+    # epic 5 story 3, row 1, 2026-11-12: code lines only; the portability comment names them.
+    code = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
     for forbidden in ("declare -A", "local -A", "mapfile", "readarray", "sed -i"):
-        assert forbidden not in text, forbidden
+        assert forbidden not in code, forbidden

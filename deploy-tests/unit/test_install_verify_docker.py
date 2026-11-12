@@ -74,14 +74,20 @@ exit 0
 
 
 def _run(*args: str, cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no
+    # longer written; setup after install
     dropped = {
         "GHCR_TOKEN",
         "GITHUB_TOKEN",
         "IMAGE_TAG",
         "DOCKER_CONFIG",
         "VERIFY_DOCKER",
-        "LITELLM_BASE_URL", "LITELLM_API_KEY", "LITELLM_SPEND_KEY", "LANGFUSE_BASE_URL", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY",
+        "LITELLM_BASE_URL",
+        "LITELLM_API_KEY",
+        "LITELLM_SPEND_KEY",
+        "LANGFUSE_BASE_URL",
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_SECRET_KEY",
     }
     clean = {k: v for k, v in os.environ.items() if k not in dropped}
     return subprocess.run(  # fixed argv, no shell
@@ -252,9 +258,7 @@ def test_a_sidecar_that_stays_unreachable_refuses_the_start(
 ) -> None:
     path, env = installed
 
-    result = _run(
-        "start", "--with-docker", cwd=path, env={**env, "SHIM_REACH": "no"}
-    )
+    result = _run("start", "--with-docker", cwd=path, env={**env, "SHIM_REACH": "no"})
 
     assert result.returncode != 0
     assert "still cannot reach the docker service" in result.stderr

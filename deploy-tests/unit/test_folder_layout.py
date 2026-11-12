@@ -242,7 +242,9 @@ def test_the_example_is_executable_and_the_asset_lists_follow_the_harness_script
     text = COPY_FOLDER.read_text()
     for harness in ("claude", "codex", "opencode"):
         declared = re.search(
-            r"^ASSET_DIRS=\((.*)\)", (REPO_ROOT / "scripts/harness" / f"{harness}.sh").read_text(), re.M
+            r"^ASSET_DIRS=\((.*)\)",
+            (REPO_ROOT / "scripts/harness" / f"{harness}.sh").read_text(),
+            re.M,
         )
         assert declared is not None
         for directory in declared.group(1).split():

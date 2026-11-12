@@ -16,7 +16,8 @@ both are proved here, without it:
 - **It never overwrites.** A second run leaves the file byte for byte, so re-running
   `install.sh` after a failed pull cannot rotate the token a client already uses.
 - **The bundle is complete and carries no secret.** `install.sh` at the root beside
-  `VERSION`, `product-files.json`, `setup/` and `kit/` inside, no `llm-platform/`; never a `.env`, whatever the working tree holds.
+  `VERSION`, `product-files.json`, `setup/` and `kit/` inside, no `llm-platform/`; never a
+  `.env`, whatever the working tree holds.
 
 Shell is exercised through `bash`, skipped where there is none; the scripts are written for
 bash 3.2 because that is what a stock macOS ships.
@@ -164,7 +165,8 @@ def test_env_renders_the_whole_contract_with_generated_secrets(bundle_dir: Path)
     contract = parse_env_example(DEPLOY_ENV_EXAMPLE)
 
     assert set(rendered) == set(contract), sorted(set(rendered) ^ set(contract))
-    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no
+    # longer written; setup after install
     assert "IMAGE_TAG" not in rendered
     for name in REQUIRED:
         assert rendered[name], f"{name} is blank"
@@ -216,7 +218,8 @@ def test_the_bundle_version_file_names_the_release(bundle_dir: Path) -> None:
     result = _run(bundle_dir / "install.sh", "env", "--yes", cwd=bundle_dir)
 
     assert result.returncode == 0, result.stderr
-    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no
+    # longer written; setup after install
     assert "IMAGE_TAG" not in parse_env_example(bundle_dir / ".env")
 
 
@@ -306,7 +309,8 @@ def test_the_bundle_refuses_a_tag_that_is_not_a_release(tmp_path: Path) -> None:
 #
 # A `docker` shim on PATH records every invocation and answers success, so the script runs
 # its real control flow up to the first thing only a live stack can answer (the health
-# probe). epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install.
+# probe). epic 3 story 2, 2026-11-11: the LLM platform leaves the product;
+# IMAGE_TAG no longer written; setup after install.
 # A client's own `llm-platform/` folder is never read, started or changed (hard rule 9).
 
 
@@ -339,6 +343,8 @@ def shimmed(bundle_dir: Path) -> tuple[Path, Path, dict[str, str]]:
     )
     (shim / "docker").chmod(0o755)
     env = {"PATH": f"{shim}:{os.environ['PATH']}", "GHCR_TOKEN": "ghp_test"}
+    # epic 5 story 3, row 7, 2026-11-12: resolve_tag reads VERSION since epic 3 story 2.
+    (bundle_dir / "VERSION").write_text("v9.9.9\n")
     _run(bundle_dir / "install.sh", "env", "--tag", "v9.9.9", "--yes", cwd=bundle_dir, env=env)
     _rewrite(
         bundle_dir / ".env",
@@ -352,7 +358,8 @@ def shimmed(bundle_dir: Path) -> tuple[Path, Path, dict[str, str]]:
 def test_a_client_llm_platform_folder_is_never_touched(
     shimmed: tuple[Path, Path, dict[str, str]],
 ) -> None:
-    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no
+    # longer written; setup after install
     bundle_dir, log, env = shimmed
     host = bundle_dir / "llm-platform"
     host.mkdir()
@@ -393,7 +400,8 @@ def test_a_taken_stack_port_stops_start_before_any_up(
     shimmed: tuple[Path, Path, dict[str, str]],
 ) -> None:
     """Something else is listening there; the script names the variable and never takes it over."""
-    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no longer written; setup after install
+    # epic 3 story 2, 2026-11-11: the LLM platform leaves the product; IMAGE_TAG no
+    # longer written; setup after install
     bundle_dir, log, env = shimmed
     with socket.socket() as holder:
         holder.bind(("127.0.0.1", 0))
