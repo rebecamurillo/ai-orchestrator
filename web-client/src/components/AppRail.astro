@@ -8,7 +8,7 @@
  * The one exception is the amber `n need you`, and it is not rendered at all when n is 0.
  * That is what makes "an empty screen has no amber pixel" true by construction (NFR-6).
  */
-export type RailItem = 'workflows' | 'runs' | 'projects' | 'templates';
+export type RailItem = 'workflows' | 'runs' | 'metrics' | 'projects' | 'templates';
 
 interface Props {
   active: RailItem;
@@ -22,6 +22,7 @@ const { active, workflows = 0, runs = 0, needsYou = 0 } = Astro.props;
 const items: { id: RailItem; label: string; href: string; count: number }[] = [
   { id: 'workflows', label: 'Workflows', href: '/', count: workflows },
   { id: 'runs', label: 'Runs', href: '/runs', count: runs },
+  { id: 'metrics', label: 'Metrics', href: '/metrics', count: 0 },
 ];
 
 const configure: { id: RailItem; label: string; href: string }[] = [

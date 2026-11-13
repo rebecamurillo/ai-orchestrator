@@ -219,6 +219,11 @@ function pluralize(count: number, noun: string): string {
             <MetricHint client:load metricId="spend.month_recorded" />
           )}
         </p>
+        <p class="hint">
+          <a href={`/metrics?project=${project.id}`} data-testid="projects-metrics-link">
+            metrics for this project
+          </a>
+        </p>
         <p class="hint" data-testid="projects-export-hint">
           one line per done story · newest first · JSON lines ·{' '}
           {trajectoryCountText(project.trajectory_count ?? 0)}

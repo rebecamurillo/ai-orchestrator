@@ -1,0 +1,74 @@
+---
+/**
+ * Metrics (story 4.2): pick Runs of one project to compare, and read this month's spend per
+ * project. The filter is the `/runs` one — a full navigation that drops the selection.
+ */
+import type { components } from '../../api/schema';
+import Shell from '../../layouts/Shell.astro';
+import MetricsHome from '../../islands/MetricsHome';
+import { backend } from '../../api/server';
+import { monthText, parseSelect, projectsCount } from '../../lib/metrics/home';
+
+export const prerender = false;
+
+type ProjectListItem = components['schemas']['ProjectRead'];
+
+const selectedProjectId = Astro.url.searchParams.get('project');
+const select = parseSelect(Astro.url.searchParams.get('select'));
+
+let projects: ProjectListItem[] = [];
+try {
+  const { data, error } = await backend().GET('/api/v1/projects');
+  if (!error) projects = data?.items ?? [];
+} catch {
+  // the filter shows `all` only; the island reads its own endpoints
+}
+
+const projectName = projects.find((p) => p.id === selectedProjectId)?.name ?? null;
+const count = `${monthText(new Date())} · ${projectsCount(projects.length)}`;
+---
+
+<Shell active="metrics" title="METRICS" count={count}>
+  <Fragment slot="filters">
+    <div class="metrics-filter-project" data-testid="metrics-filter-project">
+      <a href="/metrics" aria-current={selectedProjectId ? undefined : 'true'}>all</a>
+      {
+        projects.map((project) => (
+          <a
+            href={`/metrics?project=${encodeURIComponent(project.id)}`}
+            aria-current={selectedProjectId === project.id ? 'true' : undefined}
+          >
+            {project.name}
+          </a>
+        ))
+      }
+    </div>
+  </Fragment>
+
+  <MetricsHome
+    client:load
+    projectId={selectedProjectId}
+    projectName={projectName}
+    select={select}
+  />
+</Shell>
+
+<style>
+  .metrics-filter-project {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-5);
+  }
+
+  .metrics-filter-project a {
+    color: var(--color-text-tertiary);
+    font-size: var(--type-control);
+    letter-spacing: var(--type-control-tracking);
+    text-transform: var(--type-control-transform);
+    text-decoration: none;
+  }
+
+  .metrics-filter-project a[aria-current='true'] {
+    color: var(--color-text);
+  }
+</style>
