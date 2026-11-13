@@ -48,6 +48,10 @@ interface Props {
   share?: number;
   /** The whole bar hatched, outlined 1 px in its series colour. */
   hatched?: boolean;
+  /** The Run is followed: an accent outline around the mark (never exported). */
+  outlined?: boolean;
+  /** Another method than the first Run's: the dot texture. */
+  dotted?: boolean;
   onTip: (text: string | null) => void;
 }
 
@@ -93,6 +97,16 @@ export default function ChartMark(props: Props) {
           stroke={colour}
           strokeWidth={1}
         />
+      ) : props.dotted ? (
+        <rect
+          x={x}
+          y={y}
+          width={mark.width}
+          height={height}
+          fill="url(#dots-1)"
+          stroke={colour}
+          strokeWidth={1}
+        />
       ) : props.hatched ? (
         <rect
           x={x}
@@ -117,6 +131,18 @@ export default function ChartMark(props: Props) {
           ) : null}
         </>
       )}
+      {props.outlined ? (
+        <rect
+          data-follow="1"
+          x={x - 1}
+          y={y - 1}
+          width={mark.width + 2}
+          height={height + 2}
+          fill="none"
+          stroke="var(--color-accent)"
+          strokeWidth={1}
+        />
+      ) : null}
       <text x={x + mark.width + 6} y={mid} fill={INK} fontSize={FONT}>
         {mark.label}
       </text>

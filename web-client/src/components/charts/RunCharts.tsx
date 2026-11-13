@@ -14,6 +14,7 @@ import {
 } from '../../lib/charts/export';
 import type { TargetContext } from '../../lib/run/metrics-glance';
 import type { MetricsSet } from '../../lib/run/metrics-tab';
+import { BACKGROUNDS, PREVIEWS, Switch, type Preview } from './ChartSwitch';
 import BarChart from './BarChart';
 import PairedBarChart from './PairedBarChart';
 import TimeStrip from './TimeStrip';
@@ -28,47 +29,6 @@ interface Props {
   set: MetricsSet;
   ctx: TargetContext;
   exportMeta?: Omit<ExportMeta, 'entries' | 'date'>;
-}
-
-type Preview = 'screen' | 'dark' | 'light';
-
-const BACKGROUNDS: [Background, string][] = [
-  ['transparent', 'TRANSPARENT'],
-  ['light', 'LIGHT'],
-  ['dark', 'DARK'],
-];
-const PREVIEWS: [Preview, string][] = [
-  ['screen', 'SCREEN'],
-  ['dark', 'DARK PAGE'],
-  ['light', 'LIGHT PAGE'],
-];
-
-function Switch<T extends string>({
-  label,
-  options,
-  current,
-  onPick,
-}: {
-  label: string;
-  options: [T, string][];
-  current: T;
-  onPick: (next: T) => void;
-}) {
-  return (
-    <div className="wf-metrics-toggle" role="group" aria-label={label}>
-      {options.map(([key, text]) => (
-        <button
-          key={key}
-          type="button"
-          className="wf-metrics-toggle-btn"
-          aria-pressed={key === current}
-          onClick={() => onPick(key)}
-        >
-          {text}
-        </button>
-      ))}
-    </div>
-  );
 }
 
 export default function RunCharts({ entries, items, stepOrder, set, ctx, exportMeta }: Props) {

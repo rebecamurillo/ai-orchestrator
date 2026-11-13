@@ -92,3 +92,55 @@
   width: 100%;
   margin: 0 0 var(--space-5);
 }
+
+.chart-run-name {
+  cursor: pointer;
+}
+
+.chart-panel svg text.chart-run-name.is-followed {
+  fill: var(--color-accent);
+  text-decoration: underline;
+}
+
+.chart-panel svg text.chart-run-name:focus-visible {
+  outline: 1px solid var(--color-accent);
+}
+
+.compare-chart-scroll {
+  max-height: calc(var(--space-8) * 10);
+  overflow-y: auto;
+}
+
+.compare-chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  align-items: center;
+  margin: 0 0 var(--space-4);
+}
+
+.compare-chart-label,
+.compare-chart-line {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+  color: var(--color-text-secondary);
+}
+
+.chart-png-all {
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--type-column-head);
+  color: var(--color-text-secondary);
+  background: none;
+  border: 1px solid var(--color-line-strong);
+  cursor: pointer;
+}
+
+.chart-png-all:hover,
+.chart-png-all:focus-visible {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}

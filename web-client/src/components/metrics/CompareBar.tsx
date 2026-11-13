@@ -27,8 +27,6 @@ export default function CompareBar({ state, projectId, onChange, onExport, expor
               type="button"
               className="metric-version-segment"
               aria-pressed={state.view === view}
-              aria-disabled={view === 'chart' ? true : undefined}
-              disabled={view === 'chart'}
               data-testid={`compare-view-${view}`}
               onClick={() => onChange({ ...state, view })}
             >

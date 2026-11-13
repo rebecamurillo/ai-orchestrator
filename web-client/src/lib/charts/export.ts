@@ -54,8 +54,8 @@ export function tokenValue(css: string, name: string): string {
   return found === null ? '' : found[1].trim();
 }
 
-const INK = tokenValue(tokensCss, '--color-chart-ink');
-const DATA = [
+export const INK = tokenValue(tokensCss, '--color-chart-ink');
+export const DATA = [
   tokenValue(tokensCss, '--color-chart-data-1'),
   tokenValue(tokensCss, '--color-chart-data-2'),
 ];
@@ -116,12 +116,12 @@ export function wrapText(text: string, fontSize: number, width: number): string[
   return lines;
 }
 
-const esc = (text: string): string =>
+export const esc = (text: string): string =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const ESCAPED_FAMILY = esc(FAMILY);
 
-function textEl(
+export function textEl(
   x: number | string,
   y: number | string,
   size: number,
@@ -132,7 +132,7 @@ function textEl(
   return `<text x="${x}" y="${y}" font-family="${ESCAPED_FAMILY}" font-size="${size}" fill="${INK}"${end}>${body}</text>`;
 }
 
-const fixed = (n: number): string => String(Number(n.toFixed(2)));
+export const fixed = (n: number): string => String(Number(n.toFixed(2)));
 
 interface Series {
   label: string;
@@ -157,7 +157,7 @@ function seriesOf(chart: RunChart, meta: ExportMeta, hasShare: boolean): Series[
     : base;
 }
 
-function patterns(): string {
+export function patterns(): string {
   const period = HATCH.line * 2;
   const hatch = DATA.map(
     (colour, i) =>
@@ -167,7 +167,7 @@ function patterns(): string {
   return `${hatch}${dots}`;
 }
 
-function markEls(
+export function markEls(
   mark: Mark,
   y: number,
   height: number,
@@ -278,6 +278,15 @@ function rowsSvg(chart: RunChart, top: number): { svg: string; bottom: number } 
   return { svg: out, bottom: top + total + 26 };
 }
 
+export function wrapSvg(body: string, height: number, background: Background): string {
+  const ground =
+    background === 'transparent'
+      ? ''
+      : `<rect x="0" y="0" width="${EXPORT_WIDTH}" height="${height}" fill="${background === 'light' ? LIGHT_GROUND : DARK_GROUND}"/>`;
+  const style = `<style>@font-face { font-family: 'JetBrains Mono Export'; src: url(${fontSubset}) format('woff2'); }</style>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${EXPORT_WIDTH}" height="${height}" viewBox="0 0 ${EXPORT_WIDTH} ${height}"><defs>${style}${patterns()}</defs>${ground}${body}</svg>`;
+}
+
 export function exportSvg(
   chart: RunChart,
   meta: ExportMeta,
@@ -323,12 +332,7 @@ export function exportSvg(
   y += 4;
   lines(sourceLine(meta), EXPORT_FOOTER, LINE);
   const height = Math.ceil(y + EXPORT_PAD - LINE + 4);
-  const ground =
-    background === 'transparent'
-      ? ''
-      : `<rect x="0" y="0" width="${EXPORT_WIDTH}" height="${height}" fill="${background === 'light' ? LIGHT_GROUND : DARK_GROUND}"/>`;
-  const style = `<style>@font-face { font-family: 'JetBrains Mono Export'; src: url(${fontSubset}) format('woff2'); }</style>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${EXPORT_WIDTH}" height="${height}" viewBox="0 0 ${EXPORT_WIDTH} ${height}"><defs>${style}${patterns()}</defs>${ground}${body}</svg>`;
+  return wrapSvg(body, height, background);
 }
 
 export const svgDataUrl = (svg: string): string =>

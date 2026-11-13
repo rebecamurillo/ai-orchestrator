@@ -30,12 +30,19 @@ const mount = (over: Partial<CompareState> = {}, exportLine = '') =>
   );
 
 describe('CompareBar', () => {
-  it('shows both segments, TABLE pressed, CHART disabled', () => {
+  it('shows both segments, TABLE pressed, CHART enabled (story 4.4, 2026-11-13: the chart view exists)', () => {
     mount();
     expect(screen.getByTestId('compare-view-table').getAttribute('aria-pressed')).toBe('true');
     const chart = screen.getByTestId('compare-view-chart') as HTMLButtonElement;
-    expect(chart.disabled).toBe(true);
-    expect(chart.getAttribute('aria-disabled')).toBe('true');
+    expect(chart.disabled).toBe(false);
+    expect(chart.hasAttribute('aria-disabled')).toBe(false);
+    expect(chart.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(chart);
+    expect(onChange).toHaveBeenCalledWith({ ...state, view: 'chart' });
+    cleanup();
+    mount({ view: 'chart' });
+    expect(screen.getByTestId('compare-view-chart').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('compare-view-table').getAttribute('aria-pressed')).toBe('false');
   });
 
   it('switches the metric set through onChange', () => {
