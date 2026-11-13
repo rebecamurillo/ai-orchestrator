@@ -470,3 +470,7 @@ steps:
         uses: git.push
         with: { branch: "{{branch}}" }
         gate: deterministic
+
+  - id: metrics
+    role: deterministic
+    uses: metrics.analyse

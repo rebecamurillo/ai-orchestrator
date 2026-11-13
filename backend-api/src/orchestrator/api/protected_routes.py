@@ -14,6 +14,7 @@ from orchestrator.api.errors import UNAUTHORIZED_RESPONSE
 from orchestrator.api.routers import (
     metrics,
     metrics_catalogue,
+    run_analysis,
     run_gateway_reads,
     run_label,
     run_metrics,
@@ -38,4 +39,5 @@ def install_metrics_routes(app: FastAPI) -> None:
     mount_protected(app, metrics.router)
     mount_protected(app, run_label.router)
     mount_protected(app, run_metrics.router)
+    mount_protected(app, run_analysis.router)
     mount_protected(app, run_gateway_reads.router)

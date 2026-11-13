@@ -17,18 +17,21 @@ row that takes forty minutes holds no connection while it runs.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from types import TracebackType
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from orchestrator.application.analysis.run_analysis import AnalysisScope
 from orchestrator.application.use_cases.announce import Announcer
 from orchestrator.application.use_cases.calculate_metrics import CalculationPorts
 from orchestrator.application.use_cases.record_attempt_facts import FactsPorts
 from orchestrator.application.use_cases.run_records import RecordPorts
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
+from orchestrator.domain.entities.analysis import Analysis
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.gateway import Gateway
 from orchestrator.domain.ports.git import Git
@@ -49,6 +52,7 @@ from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyStepRunRepository,
     SQLAlchemyTrajectoryRepository,
 )
+from orchestrator.infrastructure.db.repositories.analysis import SQLAlchemyAnalysisRepository
 from orchestrator.infrastructure.db.repositories.run_records import (
     SQLAlchemyRunCommitRepository,
     SQLAlchemyRunRepositoryRecords,
@@ -203,6 +207,7 @@ def open_calculation_ports(
     gateway: Gateway,
     extractors: Mapping[str, LogFacts],
     log_exists: Callable[[str], bool] = log_file_exists,
+    analysis: Callable[[UUID, UUID], Sequence[Analysis]] | None = None,
 ) -> Iterator[CalculationPorts]:
     """One session's worth of `CalculationPorts` for the metrics job, closed on every path."""
     session = session_factory()
@@ -222,6 +227,25 @@ def open_calculation_ports(
             extractors=extractors,
             log_exists=log_exists,
             clock=SystemClock(),
+            uow=SessionUnitOfWork(session),
+            analyses=SQLAlchemyAnalysisRepository(session),
+            analysis=analysis,
+        )
+    finally:
+        session.close()
+
+
+@contextmanager
+def open_analysis_ports(session_factory: SessionFactory) -> Iterator[AnalysisScope]:
+    """One session's worth of `AnalysisScope`: records to read, analyses to write."""
+    session = session_factory()
+    try:
+        yield AnalysisScope(
+            steps=SQLAlchemyStepRunRepository(session),
+            attempts=SQLAlchemyAttemptRepository(session),
+            run_records=SQLAlchemyRunRepositoryRecords(session),
+            run_commits=SQLAlchemyRunCommitRepository(session),
+            analyses=SQLAlchemyAnalysisRepository(session),
             uow=SessionUnitOfWork(session),
         )
     finally:

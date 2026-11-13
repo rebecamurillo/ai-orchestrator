@@ -36,7 +36,7 @@ fields already there rather than a new one.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,6 +48,7 @@ from orchestrator.application.use_cases.record_attempt_facts import FactsPorts
 from orchestrator.application.use_cases.run_records import RecordWrites
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
+from orchestrator.domain.entities.analysis import Analysis
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
@@ -71,6 +72,9 @@ WorkspaceFactory = Callable[[str | None], Workspace]
 #: single commit. The `agent` executor writes an attempt three times in three units of work
 #: (AD-8), and each of them opens one of these — never a session held across a dispatch that
 #: runs for ninety minutes.
+#: Analyse every `run_repository` of a Run and store the analyses pending (epic 5 story 4).
+RunAnalysis = Callable[[UUID], Sequence[Analysis]]
+
 AttemptWrites = Callable[[], AbstractContextManager[WriterPorts]]
 
 #: `StepPorts.spend_writes`: a `SpendPorts` scope of its own — `attempt_writes` reaches only
@@ -213,6 +217,8 @@ class StepPorts:
     facts_writes: FactsWrites | None = None
     skill_catalog: SkillCatalog | None = None
     record_writes: RecordWrites | None = None
+    #: `None` makes a `metrics.analyse` row read `analysis failed`, never an error.
+    analysis: RunAnalysis | None = None
 
 
 @dataclass(frozen=True)

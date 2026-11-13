@@ -396,3 +396,7 @@ steps:
         uses: pr.link
         with: { branch: "{{branch}}" }
         gate: liveness
+
+  - id: metrics
+    role: deterministic
+    uses: metrics.analyse

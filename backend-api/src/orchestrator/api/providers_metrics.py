@@ -10,6 +10,7 @@ from fastapi import Request
 from orchestrator.api.providers_base import ENGINE, SESSION_FACTORY, from_state
 from orchestrator.api.routers.metrics_catalogue import catalogue_port
 from orchestrator.application.metrics.live import MetricsReadPorts
+from orchestrator.application.use_cases.analysis_sarif import AnalysisReadPorts
 from orchestrator.application.use_cases.metric_calculations import CalculatePorts
 from orchestrator.application.use_cases.metrics_compare import MetricsComparePorts
 from orchestrator.application.use_cases.metrics_read import MetricsQueryPorts
@@ -27,6 +28,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyStepRunRepository,
     SQLAlchemyUnitOfWork,
 )
+from orchestrator.infrastructure.db.repositories.analysis import SQLAlchemyAnalysisRepository
 from orchestrator.infrastructure.db.repositories.run_records import SQLAlchemyRunRepositoryRecords
 from orchestrator.infrastructure.db.writers import SessionUnitOfWork
 
@@ -89,4 +91,12 @@ def metrics_compare_ports(request: Request) -> Iterator[MetricsComparePorts]:
             run_records=SQLAlchemyRunRepositoryRecords(session),
             catalogue=catalogue_port(),
             clock=SystemClock(),
+        )
+
+
+def analysis_read_ports(request: Request) -> Iterator[AnalysisReadPorts]:
+    with SQLAlchemyUnitOfWork(from_state(request, SESSION_FACTORY)) as scope:
+        yield AnalysisReadPorts(
+            analyses=SQLAlchemyAnalysisRepository(scope.session),
+            uow=SessionUnitOfWork(scope.session),
         )

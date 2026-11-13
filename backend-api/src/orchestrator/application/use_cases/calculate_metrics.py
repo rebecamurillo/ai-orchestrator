@@ -7,13 +7,15 @@ nothing else. Neither reads or writes a Run, step or attempt status.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+import hashlib
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from typing import Literal
 from uuid import UUID
 
 import structlog
 
+from orchestrator.application.analysis.run_analysis import load_code, pending_analyses
 from orchestrator.application.metrics.compute import compute
 from orchestrator.application.metrics.live import MetricsReadPorts, load_inputs
 from orchestrator.application.metrics.methods import REGISTRY
@@ -24,10 +26,16 @@ from orchestrator.application.use_cases.record_attempt_facts import (
     record_attempt_facts,
 )
 from orchestrator.application.use_cases.spend import SpendPorts, reread_gateway_for_run
+from orchestrator.domain.entities.analysis import Analysis
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.facts import GatewayTrigger
-from orchestrator.domain.entities.metric_results import MetricCalculation, ResultVersion
+from orchestrator.domain.entities.metric_results import (
+    EntryPoint,
+    MetricCalculation,
+    ResultVersion,
+)
 from orchestrator.domain.ids import new_id
+from orchestrator.domain.ports.analysis import AnalysisRepository
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.facts import FactSetRepository, GatewayReadRepository
 from orchestrator.domain.ports.gateway import Gateway
@@ -70,6 +78,9 @@ class CalculationPorts:
     log_exists: Callable[[str], bool]
     clock: Clock
     uow: UnitOfWork
+    analyses: AnalysisRepository | None = None
+    #: `(run_id, calculation_id)`: analyse every repository of the Run under that calculation.
+    analysis: Callable[[UUID, UUID], Sequence[Analysis]] | None = None
 
     def facts_ports(self) -> FactsPorts:
         return FactsPorts(
@@ -178,13 +189,43 @@ def _refresh_facts(ports: CalculationPorts, run_id: UUID) -> None:
             record_attempt_facts(ports.facts_ports(), attempt)
 
 
+def _analyses(ports: CalculationPorts, calculation: MetricCalculation) -> list[Analysis]:
+    """A manual calculation analyses afresh; every other reads what the workflow step stored."""
+    if "manual" in calculation.entry_point and ports.analysis is not None:
+        return list(ports.analysis(calculation.run_id, calculation.id))
+    if ports.analyses is None:
+        return []
+    with ports.uow:
+        return pending_analyses(ports.analyses.list_for_run(calculation.run_id), calculation.run_id)
+
+
+def _entry_point(
+    calculation: MetricCalculation, found: Sequence[Analysis]
+) -> tuple[EntryPoint, ...]:
+    """The workflow step is an entry point only when pending analyses fed the version."""
+    pending = any(a.calculation_id is None for a in found)
+    if pending and "workflow_step" not in calculation.entry_point:
+        return (*calculation.entry_point, "workflow_step")
+    return calculation.entry_point
+
+
+def _fingerprint(found: Sequence[Analysis]) -> str | None:
+    distinct = sorted({a.toolset_fingerprint for a in found})
+    if not distinct:
+        return None
+    return hashlib.sha256("\n".join(distinct).encode()).hexdigest()
+
+
 def _calculate(ports: CalculationPorts, calculation: MetricCalculation) -> None:
     run_id = calculation.run_id
     _refresh_facts(ports, run_id)
     trigger: GatewayTrigger = "run_end" if calculation.target_n == 1 else "recalculation"
     reread_gateway_for_run(ports.spend_ports(), run_id, trigger)
+    found = _analyses(ports, calculation)
     with ports.uow:
         inputs = load_inputs(ports.read_ports(), run_id)
+        if ports.analyses is not None:
+            inputs = replace(inputs, code=load_code(ports.analyses, found))
         earlier = [
             (v.n, ports.versions.values(v.id))
             for v in reversed(ports.versions.list_for_run(run_id))
@@ -195,9 +236,11 @@ def _calculate(ports: CalculationPorts, calculation: MetricCalculation) -> None:
         run_id=run_id,
         n=calculation.target_n,
         calculated_at=ports.clock.now(),
-        entry_point=calculation.entry_point,
+        entry_point=_entry_point(calculation, found),
         methods=tuple(sorted(REGISTRY)),
         fact_set_ids=tuple(sorted(a.fact_set.id for a in inputs.attempts if a.fact_set)),
+        analysis_ids=tuple(a.id for a in found),
+        toolset_fingerprint=_fingerprint(found),
     )
     stored = [to_stored(v, version.id, origin_of(v, inputs)) for v in values]
     with ports.uow:

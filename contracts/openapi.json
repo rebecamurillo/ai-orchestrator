@@ -11256,6 +11256,108 @@
         ]
       }
     },
+    "/api/v1/runs/{run_id}/analysis/{analysis_id}/sarif/{tool}": {
+      "get": {
+        "operationId": "read_analysis_sarif_api_v1_runs__run_id__analysis__analysis_id__sarif__tool__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "analysis_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Analysis Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tool",
+            "required": true,
+            "schema": {
+              "title": "Tool",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/sarif+json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The stored SARIF, decompressed."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such analysis of the Run, or the tool wrote no SARIF for it."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A path value is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The SARIF report one tool wrote for one analysis of a Run",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
     "/api/v1/runs/{run_id}/attempts/{attempt_id}/log": {
       "get": {
         "description": "Page through an attempt's log by byte cursor, or download the full file.\n\nReturns `LogPageOut` JSON when `download` is absent or false.  Returns a\n`text/plain` attachment when `?download=true`.  Both variants answer 200 with a\nhuman-readable message when the file has been garbage-collected.",

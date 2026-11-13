@@ -21,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -67,7 +68,9 @@ class ResultVersionRow(Base):
     entry_point: Mapped[list[str]] = mapped_column(JSONB())
     methods: Mapped[list[str]] = mapped_column(JSONB())
     fact_set_ids: Mapped[list[Any]] = mapped_column(JSONB())
-    analysis_ids: Mapped[list[Any]] = mapped_column(JSONB(), default=list)
+    analysis_ids: Mapped[list[Any]] = mapped_column(
+        JSONB(), default=list, server_default=text("'[]'::jsonb")
+    )
     toolset_fingerprint: Mapped[str | None] = mapped_column(Text(), nullable=True)
 
 
