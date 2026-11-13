@@ -83,7 +83,22 @@ def test_a_target_is_set_up_and_a_run_created_through_mcp_tools_alone(
     assert check["status"] == "ok", check
     init = mcp.call("init_repository", repository_id=repository["id"], body={"harness": "fake"})
     assert init["run"]["id"]
+    started = [init["run"]["id"]]
+    try:
+        _the_rest_of_the_setup_path(mcp, project, repository, leaf, started)
+    finally:
+        # A parked Run holds one of MAX_ACTIVE_RUNS' slots (AD-12): left alive, these two
+        # leave every later e2e Run queued behind them.
+        for run_id in started:
+            authenticated.post(
+                f"/api/v1/runs/{run_id}/signals",
+                json={"kind": "cancel", "payload": {"confirm": True}},
+            )
 
+
+def _the_rest_of_the_setup_path(
+    mcp: Mcp, project: dict[str, Any], repository: dict[str, Any], leaf: str, started: list[str]
+) -> None:
     mcp.call(
         "update_project",
         project_id=project["id"],
@@ -111,3 +126,4 @@ def test_a_target_is_set_up_and_a_run_created_through_mcp_tools_alone(
     # The repo-init Run is parked on its own branch, so pre-flight warns and asks for consent.
     created = mcp.call("create_run", body={**payload, "conflict_consent": True})
     assert created["run"]["id"]
+    started.append(created["run"]["id"])
