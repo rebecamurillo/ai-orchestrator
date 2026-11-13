@@ -1,7 +1,9 @@
 """The toolset an analysis ran with, and its fingerprint (ARCHITECTURE §7.5).
 
-Two analyses are comparable only when measured the same way: the fingerprint is the SHA-256 of
-the toolset's canonical JSON, tools in fixed order and keys sorted.
+Two analyses are comparable only when measured the same way. The fingerprint is the SHA-256 of
+the canonical JSON of the declaration hash and the sorted `{tool, installed version}` of every
+Tier 1 tool, whether or not it ran; the lookup and vulnerability-database dates are stored
+beside it and are not part of it (Operator ruling 2026-11-13).
 """
 
 from __future__ import annotations
@@ -15,31 +17,42 @@ from typing import Any
 from orchestrator.domain.entities.analysis import Analysis
 
 TOOLS = ("gitleaks", "jscpd", "lizard", "osv-scanner")
-NOT_RUN_VERSION = "not run"
+UNKNOWN_VERSION = "unknown"
+DECLARATION_HASH = "declaration_hash"
 
 
 def toolset_records(
-    tool_versions: Mapping[str, str],
+    installed: Mapping[str, str],
     *,
     vulnerability_db_date: date | None,
     lookup_date: date | None,
     declaration_hash: str | None,
 ) -> tuple[dict[str, Any], ...]:
-    """`{tool, version}` per tool, then the dates and the declaration hash."""
+    """`{tool, installed version}` per tool, then the dates and the declaration hash."""
     return (
-        *({"tool": tool, "version": tool_versions.get(tool, NOT_RUN_VERSION)} for tool in TOOLS),
+        *({"tool": tool, "version": installed.get(tool, UNKNOWN_VERSION)} for tool in TOOLS),
         {
             "vulnerability_db_date": vulnerability_db_date.isoformat()
             if vulnerability_db_date is not None
             else None,
             "lookup_date": lookup_date.isoformat() if lookup_date is not None else None,
-            "declaration_hash": declaration_hash,
+            DECLARATION_HASH: declaration_hash,
         },
     )
 
 
 def fingerprint(records: Sequence[Mapping[str, Any]]) -> str:
-    canonical = json.dumps(list(records), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    tools = sorted(
+        ({"tool": r["tool"], "version": r["version"]} for r in records if "tool" in r),
+        key=lambda r: (r["tool"], r["version"]),
+    )
+    hashes = [r[DECLARATION_HASH] for r in records if DECLARATION_HASH in r]
+    canonical = json.dumps(
+        {DECLARATION_HASH: hashes[0] if hashes else None, "tools": tools},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 

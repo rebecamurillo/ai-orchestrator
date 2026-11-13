@@ -8,7 +8,7 @@ never carries a figure; a partial Run total keeps its figure (ARCHITECTURE §5.6
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
@@ -32,6 +32,9 @@ TEST_RATE_UNIT = "per 100 test lines"
 LINE_METRICS = ("code.lines_added", "code.lines_removed", "code.test_lines")
 FILE_METRICS = ("code.files_touched", "code.test_files")
 DUPLICATION = "code.duplication_added"
+#: Metrics whose sources are open-ended (one row per value found, e.g. per licence); the
+#: catalogue sets `open_sources: true` on exactly these (Operator ruling 2026-11-13).
+OPEN_SOURCE_METRICS = ("code.deps_licences",)
 CENTS = Decimal("0.01")
 
 Key = tuple[str, str | None]
@@ -126,17 +129,42 @@ def _repository_cells(signals: RepositorySignals) -> list[_Cell]:
     return cells + [_Cell((m, None), None, w) for m, w in signals.words.items()]
 
 
+def _open_dropped(keys: list[Key]) -> list[Key]:
+    """An open-ended metric's sourceless row (its 0 or its word) goes when it has a source row."""
+    sourced = {metric_id for metric_id, source in keys if source is not None}
+    return [
+        key
+        for key in keys
+        if not (key[0] in OPEN_SOURCE_METRICS and key[1] is None and key[0] in sourced)
+    ]
+
+
+def _found(
+    key: Key, signals: Sequence[RepositorySignals], ran: dict[str, dict[Key, Count]]
+) -> list[tuple[Count, tuple[int, int]]]:
+    """The repositories that measured `key`. For an open-ended metric, a repository that
+    measured the metric but holds no row for this source counts 0, not missing."""
+    measured = [s for s in signals if s.status != "failed"]
+    if key[0] not in OPEN_SOURCE_METRICS:
+        return [(ran[s.path][key], _denominators(s.counts)) for s in measured if key in ran[s.path]]
+    template = next((counts[key] for counts in ran.values() if key in counts), None)
+    if template is None:
+        return []
+    zero = replace(template, value=0)
+    return [
+        (ran[s.path].get(key, zero), _denominators(s.counts))
+        for s in measured
+        if any(metric_id == key[0] for metric_id, _ in ran[s.path])
+    ]
+
+
 def _run_cells(signals: Sequence[RepositorySignals]) -> list[_Cell]:
     ran = {s.path: {(c.metric_id, c.source): c for c in s.counts} for s in signals}
     per_repository = {s.path: _repository_cells(s) for s in signals}
     keys = list(dict.fromkeys(cell.key for cells in per_repository.values() for cell in cells))
     cells: list[_Cell] = []
-    for key in keys:
-        found = [
-            (ran[s.path][key], _denominators(s.counts))
-            for s in signals
-            if s.status != "failed" and key in ran[s.path]
-        ]
+    for key in _open_dropped(keys):
+        found = _found(key, signals, ran)
         if not found:
             words = {
                 cell.word

@@ -92,6 +92,8 @@ select = ["E", "F", "I", "B", "UP", "PL", "C90", "DTZ", "T20", "RUF"]
 "tests/unit/application/analysis/test_toolset.py" = ["PLR2004"]
 "tests/unit/infrastructure/test_metrics_catalogue_code_tier1b.py" = ["PLR2004"]
 "tests/unit/infrastructure/test_package_lookup.py" = ["PLR2004"]
+"tests/unit/application/analysis/test_summary_open_sources.py" = ["PLR2004"]
+"tests/unit/infrastructure/test_analysis_tools_version.py" = ["PLR2004"]
 
 [tool.ruff.format]
 # Story 9-2 left these test files with formatting that hard rule 1 forbids fixing.

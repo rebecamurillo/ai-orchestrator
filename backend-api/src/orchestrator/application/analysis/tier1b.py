@@ -12,7 +12,7 @@ import csv
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from uuid import UUID
 
 from orchestrator.application.analysis.classify import classify
@@ -49,6 +49,14 @@ DUPLICATION = "code.duplication_added"
 CYCLOMATIC = "code.functions_over_cyclomatic"
 COGNITIVE = "code.functions_over_cognitive"
 NOT_COVERED = na("language not covered")
+#: The file extensions lizard 1.26.0 parses (its readers' `ext`, case as lizard matches them).
+LIZARD_LANGUAGES = (
+    *("c", "cpp", "cc", "cxx", "h", "hh", "hpp", "java", "cs", "js", "cjs", "mjs", "py", "m"),
+    *("mm", "ttcn", "ttcnpp", "rb", "php", "swift", "scala", "gd", "go", "lua", "rs", "ts"),
+    *("f70", "f90", "f95", "f03", "f08", "f", "for", "ftn", "fpp", "kt", "kts", "sol", "erl"),
+    *("hrl", "es", "escript", "zig", "tsx", "jsx", "vue", "pl", "pm", "st", "r", "R", "sql"),
+    *("pks", "pkb", "pls", "plb", "pck", "cbl", "cob", "cobol", "dart", "ml", "fs", "fsx"),
+)
 #: `nloc, ccn, tokens, params, length, name@start-end@file, file, name, longname, start, end`,
 #: then, with `-Ecognitive`, the cognitive value as a twelfth column.
 LIZARD_CCN, LIZARD_FILE, LIZARD_START, LIZARD_END, LIZARD_COGNITIVE = 1, 6, 9, 10, 11
@@ -212,20 +220,24 @@ def _lizard(
         FunctionRow(r.path.removeprefix(prefix), r.start, r.end, r.value)
         for r in parse_lizard(run.stdout, cognitive=measure.cognitive)
     ]
-    if measure.cognitive and not rows:
-        return Tier1bResult(words={measure.metric: NOT_COVERED}, tool_versions=versions)
     counts = _function_counts(measure.metric, functions_over(rows, added, measure.threshold))
     return Tier1bResult(counts, tool_versions=versions)
 
 
+def _covered(path: str) -> bool:
+    name = PurePosixPath(path).name
+    return "." in name.lstrip(".") and name.rsplit(".", 1)[1] in LIZARD_LANGUAGES
+
+
 def _functions(
-    scan: _Scan, written: Sequence[str], added: Mapping[str, frozenset[int]]
+    scan: _Scan, production: Sequence[str], added: Mapping[str, frozenset[int]]
 ) -> Tier1bResult:
-    if not written:
-        zeros = (*_function_counts(CYCLOMATIC, (0, 0)), *_function_counts(COGNITIVE, (0, 0)))
-        return Tier1bResult(zeros)
+    """Over the changed production files lizard parses; none of those → n/a (ruling 2026-11-13)."""
+    covered = [path for path in production if _covered(path)]
+    if not covered:
+        return Tier1bResult(words={CYCLOMATIC: NOT_COVERED, COGNITIVE: NOT_COVERED})
     return _merge(
-        [_lizard(scan, written, added, m) for m in (CYCLOMATIC_MEASURE, COGNITIVE_MEASURE)]
+        [_lizard(scan, covered, added, m) for m in (CYCLOMATIC_MEASURE, COGNITIVE_MEASURE)]
     )
 
 
@@ -325,7 +337,7 @@ def collect_tier1b(  # noqa: PLR0913 — the repository's inputs and the ports T
     return _merge(
         [
             _duplication(scan, production, added, new_id, analysis.id),
-            _functions(scan, written, added),
+            _functions(scan, production, added),
             _dependencies(
                 prepared,
                 name_status,

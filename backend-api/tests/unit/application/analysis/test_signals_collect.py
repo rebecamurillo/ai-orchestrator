@@ -49,25 +49,27 @@ def prepared(status: str = "ok") -> RepositoryInputs:
     return RepositoryInputs(analysis(status), scratch, DEFAULT_DECLARATION, (), False)
 
 
-def git() -> FakeGit:
+def git(files: dict[str, str] | None = None) -> FakeGit:
+    files = {"pnpm-lock.yaml": LOCK} if files is None else files
     script = AnalysisScript(
-        numstat={("b1", "h1"): (NumstatEntry("pnpm-lock.yaml", 4, 0, False),)},
-        name_status={("b1", "h1"): (NameStatus("M", "pnpm-lock.yaml", None),)},
+        numstat={("b1", "h1"): tuple(NumstatEntry(p, 4, 0, False) for p in files)},
+        name_status={("b1", "h1"): tuple(NameStatus("M", p, None) for p in files)},
     )
-    return FakeGit(analysis=script, files={("h1", "pnpm-lock.yaml"): LOCK})
+    return FakeGit(analysis=script, files={("h1", p): t for p, t in files.items()})
 
 
-def collect(
+def collect(  # noqa: PLR0913 — the scripted world of one collection
     fake_tools: FakeAnalysisTools,
     workspace: FakeWorkspace,
     lookup: FakePackageLookup,
     status: str = "ok",
     *,
     lookups: bool = True,
+    files: dict[str, str] | None = None,
 ) -> tuple[Analysis, RepositorySignals]:
     return collect_signals(
         prepared(status),
-        git=git(),
+        git=git(files),
         scratch_root=workspace,
         tools=fake_tools,
         lookup=lookup,
@@ -87,25 +89,46 @@ def test_both_tiers_are_collected_and_the_analysis_carries_the_toolset() -> None
     stamped, signals = collect(tools, workspace, FakePackageLookup())
     ids = {c.metric_id for c in signals.counts}
     assert {"code.lines_added", "code.deps_changed", "code.duplication_added"} <= ids
-    assert "code.functions_over_cyclomatic" in ids
+    # Operator ruling 2026-11-13: a YAML-only change has no file lizard parses.
+    assert signals.words["code.functions_over_cyclomatic"] == "n/a — language not covered"
     assert signals.words["code.functions_over_cognitive"] == "n/a — language not covered"
     assert signals.path == "."
     assert signals.status == "ok"
+    # Operator ruling 2026-11-13: installed versions, whether or not the tool ran here.
     versions = {r["tool"]: r["version"] for r in stamped.toolset if "tool" in r}
     assert versions == {
-        "gitleaks": "not run",
-        "jscpd": "not run",
+        "gitleaks": "unknown",
+        "jscpd": "5.4.3",
         "lizard": "1.26.0",
-        "osv-scanner": "0.0.0",
+        "osv-scanner": "unknown",
     }
+    assert tools.version_calls == ["gitleaks", "jscpd", "lizard", "osv-scanner"]
     assert stamped.toolset[-1] == {
         "vulnerability_db_date": "2026-11-13",
         "lookup_date": "2026-11-13",
         "declaration_hash": "decl",
     }
     assert stamped.toolset_fingerprint == fingerprint(stamped.toolset)
-    assert signals.tool_versions["lizard"] == "1.26.0"
     assert stamped.id == ANALYSIS_ID
+
+
+def test_a_change_that_skips_a_tool_has_the_same_fingerprint() -> None:
+    """Operator ruling 2026-11-13: the YAML-only change runs neither jscpd nor lizard, the
+    Python change runs both; same image and declaration, same fingerprint."""
+    runs = {
+        "gitleaks": ToolRun(0, "", "", "8.30.1"),
+        "jscpd": ToolRun(0, "", "", "5.4.3"),
+        "lizard": ToolRun(0, "", "", "1.26.0"),
+        "osv-scanner": ToolRun(0, "", "", "2.7.1"),
+    }
+    workspace = FakeWorkspace()
+    skipping = FakeAnalysisTools(runs, workspace=workspace, root=ROOT)
+    skipped, _ = collect(skipping, workspace, FakePackageLookup())
+    assert [c for c in skipping.calls if c["tool"] in {"jscpd", "lizard"}] == []
+    running = FakeAnalysisTools(runs, workspace=FakeWorkspace(), root=ROOT)
+    ran, _ = collect(running, FakeWorkspace(), FakePackageLookup(), files={"app.py": "x = 1\n"})
+    assert {c["tool"] for c in running.calls} >= {"jscpd", "lizard"}
+    assert skipped.toolset_fingerprint == ran.toolset_fingerprint
 
 
 def test_a_failed_input_calls_no_tool_and_no_lookup_and_holds_the_empty_toolset() -> None:
@@ -117,7 +140,8 @@ def test_a_failed_input_calls_no_tool_and_no_lookup_and_holds_the_empty_toolset(
     assert lookup.calls == []
     assert signals.status == "failed"
     assert signals.counts == ()
-    assert [r.get("version") for r in stamped.toolset[:4]] == ["not run"] * 4
+    assert [r.get("version") for r in stamped.toolset[:4]] == ["unknown"] * 4
+    assert tools.version_calls == ["gitleaks", "jscpd", "lizard", "osv-scanner"]
     assert stamped.toolset[-1] == {
         "vulnerability_db_date": None,
         "lookup_date": None,

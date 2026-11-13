@@ -583,16 +583,19 @@
   - raw only
   - partial
   limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+    The licences are open-ended - at Run scope a repository whose lookups ran counts 0 for a licence
+    it does not hold, and only a repository whose lookups did not run makes a licence row partial.
   fingerprint_group: true
   methods:
   - n: 1
     description: The licence the registry gives for each added dependency (the version's, else the package's),
       counted per licence; none declared when the registry gives none. Only the ecosystem, the name and the
-      version are sent.
+      version are sent. The 0 row without a licence is kept only where no licence row exists.
     parameters:
       registries:
         npm: https://registry.npmjs.org
         pypi: https://pypi.org
+      open_sources: true
       rate_min_lines: 50
       per_lines: 100
 - id: code.duplication_added
@@ -642,20 +645,26 @@
   additive: false
   missing_words:
   - not run
+  - n/a
   - partial
   limits: The count is summed over the repositories and the worst is the larger of their values; no rate
-    is computed.
+    is computed. A change with no production file in a language lizard parses reads n/a.
   fingerprint_group: true
   methods:
   - n: 1
-    description: lizard (`--csv`) measures the functions of the head's changed files; the count is those
-      whose line range contains an added line and whose cyclomatic complexity is above 15, and the
-      worst is the largest of them (0 when none is above).
+    description: lizard (`--csv`) measures the functions of the head's changed production files whose
+      extension it parses (`languages`); the count is those whose line range contains an added line and
+      whose cyclomatic complexity is above 15, and the worst is the largest of them (0 when none is
+      above, including when those files hold no function); no such file reads n/a - language not covered.
     parameters:
       threshold: 15
       lizard_command:
       - --csv
       - '{files}'
+      languages: &lizard_languages [c, cpp, cc, cxx, h, hh, hpp, java, cs, js, cjs, mjs, py, m, mm, ttcn,
+        ttcnpp, rb, php, swift, scala, gd, go, lua, rs, ts, f70, f90, f95, f03, f08, f, for, ftn, fpp, kt,
+        kts, sol, erl, hrl, es, escript, zig, tsx, jsx, vue, pl, pm, st, r, R, sql, pks, pkb, pls, plb, pck,
+        cbl, cob, cobol, dart, ml, fs, fsx]
       timeout_min: 10
       combine:
         count: sum
@@ -676,19 +685,21 @@
   - n/a
   - partial
   limits: The count is summed over the repositories and the worst is the larger of their values; no rate
-    is computed. A language lizard reports no cognitive value for reads n/a.
+    is computed. A change with no production file in a language lizard parses reads n/a.
   fingerprint_group: true
   methods:
   - n: 1
-    description: lizard (`--csv -Ecognitive`) measures the functions of the head's changed files; the count
-      is those whose line range contains an added line and whose cognitive complexity is above 15,
-      and the worst is the largest of them (0 when none is above).
+    description: lizard (`--csv -Ecognitive`) measures the functions of the head's changed production files
+      whose extension it parses (`languages`); the count is those whose line range contains an added line
+      and whose cognitive complexity is above 15, and the worst is the largest of them (0 when none is
+      above, including when those files hold no function); no such file reads n/a - language not covered.
     parameters:
       threshold: 15
       lizard_cognitive_command:
       - --csv
       - -Ecognitive
       - '{files}'
+      languages: *lizard_languages
       timeout_min: 10
       combine:
         count: sum

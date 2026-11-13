@@ -39,6 +39,9 @@ class ProcessAnalysisTools:
             timed_out=timed_out,
         )
 
+    def version(self, tool: str) -> str:
+        return self._version(tool)
+
     def _executable(self, tool: str) -> str:
         return self._binaries.get(tool, tool)
 

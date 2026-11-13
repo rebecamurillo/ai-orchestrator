@@ -26,6 +26,7 @@ from orchestrator.application.analysis.tier1b import (
     LIZARD,
     LIZARD_COGNITIVE_COMMAND,
     LIZARD_COMMAND,
+    LIZARD_LANGUAGES,
     NOT_COVERED,
     FunctionRow,
     Tier1bResult,
@@ -393,11 +394,64 @@ def test_the_worst_and_the_count_are_zero_when_no_changed_function_is_over() -> 
     assert by_source["count"].rate is None
 
 
-def test_a_language_lizard_gives_no_cognitive_value_for_reads_not_covered() -> None:
-    files = {"c.hs": "pick a b = a\n"}
-    result, _ = collect_with_lizard("", "", added_diff(c_hs=[1]), files)
+def test_a_change_with_no_file_lizard_parses_reads_not_covered_and_runs_nothing() -> None:
+    """Operator ruling 2026-11-13: n/a only when no changed production file has an extension
+    in `languages` — for both measures (replaces "no cognitive row reads n/a")."""
+    files = {"c.hs": "pick a b = a\n", "conf.yaml": "a: 1\n"}
+    result, tools = collect_with_lizard("", "", added_diff(c_hs=[1]), files)
     assert result.words[COGNITIVE] == NOT_COVERED == "n/a — language not covered"
+    assert result.words[CYCLOMATIC] == NOT_COVERED
+    assert [c for c in tools.calls if c["tool"] == LIZARD] == []
+    assert LIZARD not in result.tool_versions
+
+
+def test_a_yaml_only_change_reads_not_covered() -> None:
+    result, _ = collect_with_lizard("", "", NOTHING_ADDED, {"deploy/values.yaml": "a: 1\n"})
+    assert result.words[CYCLOMATIC] == result.words[COGNITIVE] == NOT_COVERED
+    assert [c for c in result.counts if c.metric_id in (CYCLOMATIC, COGNITIVE)] == []
+
+
+def test_a_python_constants_only_change_is_zero_not_not_covered() -> None:
+    """lizard parses Python and finds no function: a real 0/0 on both measures."""
+    result, tools = collect_with_lizard("", "", added_diff(consts_py=[1]), {"consts.py": "A = 1\n"})
+    for metric in (CYCLOMATIC, COGNITIVE):
+        assert metric not in result.words
+        assert figure(result, metric, "count") == 0
+        assert figure(result, metric, "worst") == 0
+    assert len([c for c in tools.calls if c["tool"] == LIZARD]) == 2
+
+
+def test_a_mixed_python_and_haskell_change_is_measured_over_the_python_file() -> None:
+    files = {"a.py": text("lizard-input/files/a.py"), "c.hs": "pick a b = a\n"}
+    csv = "\n".join(line for line in lizard_text("lizard.csv").splitlines() if "b.ts" not in line)
+    cognitive = "\n".join(
+        line for line in lizard_text("lizard-cognitive.csv").splitlines() if "b.ts" not in line
+    )
+    result, tools = collect_with_lizard(csv, cognitive, added_diff(a_py=[10], c_hs=[1]), files)
+    assert figure(result, CYCLOMATIC, "count") == 1
+    assert figure(result, CYCLOMATIC, "worst") == 22
+    assert figure(result, COGNITIVE, "worst") == 21
+    for call in [c for c in tools.calls if c["tool"] == LIZARD]:
+        assert call["args"][-1] == f"{HEAD_FILES}a.py"
+        assert not any(str(arg).endswith(".hs") for arg in call["args"])
+
+
+def test_only_production_files_with_a_parsed_extension_are_measured() -> None:
+    files = {"tests/test_a.py": "def test(): pass\n", "a.py": "x = 1\n", "Makefile": "all:\n"}
+    result, tools = collect_with_lizard("", "", NOTHING_ADDED, files)
+    (plain, _) = [c for c in tools.calls if c["tool"] == LIZARD]
+    assert plain["args"] == ("--csv", f"{HEAD_FILES}a.py")
     assert figure(result, CYCLOMATIC, "count") == 0
+
+
+def test_the_languages_are_the_extensions_the_pinned_lizard_parses() -> None:
+    """`lizard-languages.txt`: each reader's name, languages and `ext` at lizard 1.26.0."""
+    recorded = [
+        ext
+        for line in text("lizard-languages.txt").splitlines()
+        for ext in re.findall(r"'([^']+)'", line.rsplit("[", 1)[1])
+    ]
+    assert list(LIZARD_LANGUAGES) == recorded
 
 
 def test_a_lizard_that_does_not_finish_reads_not_run_for_that_run_alone() -> None:
@@ -414,8 +468,8 @@ def test_deleted_files_are_neither_read_nor_scanned() -> None:
     result, tools, _ = run({"a.py": "x = 1\n"}, statuses="D")
     assert tools.calls == []
     assert figure(result, DUPLICATION) == 0
-    assert figure(result, CYCLOMATIC, "count") == 0
-    assert figure(result, COGNITIVE, "worst") == 0
+    # Operator ruling 2026-11-13: no changed production file lizard parses → n/a, not 0.
+    assert result.words[CYCLOMATIC] == result.words[COGNITIVE] == NOT_COVERED
 
 
 def test_a_file_the_commit_does_not_hold_is_not_written() -> None:
@@ -432,7 +486,8 @@ def test_a_file_the_commit_does_not_hold_is_not_written() -> None:
         new_id=lambda: UUID(int=1),
     )
     assert workspace.exists(f"{RELATIVE}.head") is False
-    assert figure(result, CYCLOMATIC, "count") == 0
+    # Operator ruling 2026-11-13: nothing written, nothing for lizard → n/a, not 0.
+    assert result.words[CYCLOMATIC] == NOT_COVERED
 
 
 def test_an_analysis_with_no_scratch_clone_holds_nothing() -> None:
@@ -622,5 +677,5 @@ def test_a_changed_binary_file_is_skipped_not_a_crash() -> None:
         now=NOW,
         new_id=iter(UUID(int=n) for n in range(500, 600)).__next__,
     )
-    assert figure(result, CYCLOMATIC, "count") == 0
+    assert result.words[CYCLOMATIC] == NOT_COVERED  # an image: no language lizard parses
     assert figure(result, DUPLICATION) == 0

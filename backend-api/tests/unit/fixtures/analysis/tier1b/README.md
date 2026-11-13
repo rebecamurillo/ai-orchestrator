@@ -12,6 +12,7 @@ Every file here is one of three kinds. Nothing is a binary or a `node_modules` f
 | `jscpd-folders-output/jscpd-report.sarif`, `jscpd-folders-output/jscpd-report.json` | jscpd 5.4.3 (npx) | `npx --yes jscpd@5.4.3 --reporters sarif,json --output <absolute path of jscpd-folders-output> <absolute paths of jscpd-folders-input/files/src/billing/invoice.py, lib/report/summary.py, api/helpers.py, web/helpers.py>`; both files are written by jscpd itself, unedited. The SARIF holds one `originalUriBaseIds` entry per folder (the recorder's absolute paths, which `test_tier1b.py` moves to its scan root); the JSON names every fragment by its bare basename, which is why the code reads paths from the SARIF only (Operator ruling 2026-11-13) |
 | `lizard.csv` | lizard 1.26.0 | `uv tool run --from lizard==1.26.0 lizard --csv <absolute paths of lizard-input/files/a.py and b.ts>` |
 | `lizard-cognitive.csv` | lizard 1.26.0 | the same with `-Ecognitive` |
+| `lizard-languages.txt` | lizard 1.26.0 | `uv tool run --from lizard==1.26.0 python -I -c "import lizard_languages as l; [print(c.__name__, c.language_names if hasattr(c, 'language_names') else '', getattr(c, 'ext', None)) for c in l.languages()]"`: each reader's name, language names and file extensions (`ext`); the source of the `languages` method parameter of the two function entries (Operator ruling 2026-11-13) |
 | `lizard-version.txt` | lizard 1.26.0 | `uv tool run --from lizard==1.26.0 lizard --version` |
 
 lizard's CSV has no header. Columns: `nloc, ccn, tokens, params, length, "name@start-end@file",

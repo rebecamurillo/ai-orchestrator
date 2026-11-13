@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from tests.unit.infrastructure.test_metrics_catalogue_code import entries, params
 
-from orchestrator.application.analysis import dependencies, lockfiles, tier1b
+from orchestrator.application.analysis import dependencies, lockfiles, summary, tier1b
 from orchestrator.infrastructure.analysis import package_lookup
 
 
@@ -48,6 +48,24 @@ def test_the_new_missing_words_are_declared() -> None:
     for metric_id in ("code.deps_not_in_registry", "code.deps_recent", "code.deps_licences"):
         assert "not checked" in missing_words(metric_id)
     assert "n/a" in missing_words("code.functions_over_cognitive")
+    assert "n/a" in missing_words("code.functions_over_cyclomatic")
+
+
+def test_both_function_methods_carry_the_languages_lizard_parses() -> None:
+    """Operator ruling 2026-11-13."""
+    for metric_id in ("code.functions_over_cyclomatic", "code.functions_over_cognitive"):
+        assert params(metric_id)["languages"] == list(tier1b.LIZARD_LANGUAGES)
+
+
+def test_only_the_licences_method_declares_open_sources() -> None:
+    """Operator ruling 2026-11-13: the flag `summary.OPEN_SOURCE_METRICS` mirrors."""
+    flagged = tuple(
+        metric_id for metric_id in entries() if params(metric_id).get("open_sources") is True
+    )
+    assert flagged == summary.OPEN_SOURCE_METRICS
+    limits = entries()["code.deps_licences"].limits or ""
+    assert "open-ended" in limits
+    assert "partial" in limits
 
 
 def test_the_function_entries_state_the_sum_the_larger_and_no_rate() -> None:

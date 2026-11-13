@@ -17,7 +17,7 @@ from orchestrator.application.analysis.inputs import RepositoryInputs, slug
 from orchestrator.application.analysis.secrets import GITLEAKS, scan_secrets
 from orchestrator.application.analysis.tier1a import Count, added_lines, count_tier1a
 from orchestrator.application.analysis.tier1b import collect_tier1b
-from orchestrator.application.analysis.toolset import toolset_records, with_toolset
+from orchestrator.application.analysis.toolset import TOOLS, toolset_records, with_toolset
 from orchestrator.domain.entities.analysis import Analysis, AnalysisArtifact, AnalysisStatus
 from orchestrator.domain.ports.analysis import AnalysisRepository
 from orchestrator.domain.ports.analysis_tools import AnalysisTools
@@ -96,10 +96,11 @@ def collect_signals(  # noqa: PLR0913 — the repository's inputs and every port
 ) -> tuple[Analysis, RepositorySignals]:
     """Tiers 1a and 1b of one repository, and the analysis stamped with its toolset."""
     analysis = prepared.analysis
+    installed = {tool: tools.version(tool) for tool in TOOLS}
     first = collect_tier1a(prepared, git=git, scratch_root=scratch_root, tools=tools, new_id=new_id)
     if analysis.status == "failed" or prepared.scratch is None:
         records = toolset_records(
-            {},
+            installed,
             vulnerability_db_date=None,
             lookup_date=None,
             declaration_hash=analysis.declaration_hash,
@@ -123,7 +124,7 @@ def collect_signals(  # noqa: PLR0913 — the repository's inputs and every port
         tool_versions={**first.tool_versions, **second.tool_versions},
     )
     records = toolset_records(
-        merged.tool_versions,
+        installed,
         vulnerability_db_date=second.vulnerability_db_date,
         lookup_date=second.lookup_date,
         declaration_hash=analysis.declaration_hash,

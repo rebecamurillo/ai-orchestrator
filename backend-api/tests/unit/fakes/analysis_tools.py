@@ -31,6 +31,13 @@ class FakeAnalysisTools:
         self._workspace = workspace
         self._root = root
         self.calls: list[dict[str, Any]] = []
+        #: Version probes, kept apart from `calls`: asking a version runs nothing on a repository.
+        self.version_calls: list[str] = []
+
+    def version(self, tool: str) -> str:
+        """The scripted run's version, as the subprocess adapter probes it apart from a run."""
+        self.version_calls.append(tool)
+        return self._runs.get(tool, UNSCRIPTED).version
 
     def run(self, tool: str, args: Sequence[str], cwd: Path, timeout: float) -> ToolRun:
         self.calls.append({"tool": tool, "args": tuple(args), "cwd": cwd, "timeout": timeout})

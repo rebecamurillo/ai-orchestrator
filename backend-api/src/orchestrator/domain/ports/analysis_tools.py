@@ -29,3 +29,7 @@ class AnalysisTools(Protocol):
     def run(self, tool: str, args: Sequence[str], cwd: Path, timeout: float) -> ToolRun:
         """Run `tool` with `args` in `cwd`; `timeout` is in minutes, as for `ProcessRunner`."""
         ...
+
+    def version(self, tool: str) -> str:
+        """The installed version of `tool`, whether or not an analysis runs it."""
+        ...
