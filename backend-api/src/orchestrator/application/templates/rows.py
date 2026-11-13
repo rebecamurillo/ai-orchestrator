@@ -42,7 +42,6 @@ from orchestrator.application.templates.defaults import with_defaults
 from orchestrator.application.templates.lists import (
     ID_KEY,
     STORIES_KIND,
-    check_entries,
     filter_only,
     item_label,
     list_kind,
@@ -182,7 +181,6 @@ def expand_loop(loop: ForEach, frame: Frame, ctx: Context) -> list[PlannedRow]:
     path = str(resolve(loop.source, frame.scope))
     raw_items, ref_used = read_list(ctx.reader, frame, path, line=loop.line)
     kind = list_kind(path)
-    check_entries(raw_items, kind, frame, line=loop.line)
     only = str(resolve(loop.only, frame.scope)) if loop.only is not None else None
     filtered = filter_only(raw_items, only, frame, line=loop.line)
     # the list decided which commit this frame reads at; the story files follow it

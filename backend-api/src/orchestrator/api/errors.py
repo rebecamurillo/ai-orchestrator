@@ -39,6 +39,7 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
+from orchestrator.application import findings
 from orchestrator.domain.errors import Conflict, DomainError, Forbidden, Invalid, NotFound
 
 log = structlog.get_logger(__name__)
@@ -76,6 +77,30 @@ class ProblemError(BaseModel):
     line: int | None = None
     path: str | None = None
     reason: str
+    code: str | None = None
+    guide: str | None = None
+
+
+def finding_error(
+    *,
+    reason: str,
+    template: str | None = None,
+    version: str | None = None,
+    line: int | None = None,
+    path: str | None = None,
+) -> ProblemError:
+    """The one place a finding gets its `code` and `guide`; a reason with none keeps both
+    `None`."""
+    code = findings.code_for(reason)
+    return ProblemError(
+        template=template,
+        version=version,
+        line=line,
+        path=path,
+        reason=reason,
+        code=code,
+        guide=None if code is None else findings.guide_id(code),
+    )
 
 
 class ProblemDetail(BaseModel):
@@ -87,6 +112,8 @@ class ProblemDetail(BaseModel):
     detail: str | None = None
     instance: str | None = None
     errors: list[ProblemError] | None = None
+    code: str | None = None
+    guide: str | None = None
 
     def as_body(self) -> dict[str, Any]:
         """The JSON body: only the members that carry something."""
@@ -99,7 +126,7 @@ class Problem(Exception):
     Named for the RFC 9457 document it becomes, not for the `...Error` convention.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 — one keyword per RFC 9457 member
         self,
         *,
         status: int,
@@ -107,12 +134,16 @@ class Problem(Exception):
         detail: str | None = None,
         errors: list[ProblemError] | None = None,
         headers: dict[str, str] | None = None,
+        code: str | None = None,
+        guide: str | None = None,
     ) -> None:
         super().__init__(detail or title)
         self.status = status
         self.title = title
         self.detail = detail
         self.errors = errors
+        self.code = code
+        self.guide = guide
         # RFC 9457's `type` member. Every problem this system raises so far is fully
         # described by its status, which is what `about:blank` means; a story that
         # introduces a documented problem type assigns this attribute.
@@ -129,6 +160,8 @@ class Problem(Exception):
             detail=self.detail,
             instance=instance,
             errors=self.errors,
+            code=self.code,
+            guide=self.guide,
         )
 
 

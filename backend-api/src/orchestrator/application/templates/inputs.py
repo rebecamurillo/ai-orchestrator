@@ -19,6 +19,8 @@ from orchestrator.application.templates.model import (
 )
 from orchestrator.application.templates.table import (
     INPUT_KEYS,
+    INPUT_TYPE_KEY,
+    INPUTS_KEY,
     TEXT_TYPES,
     problem,
     unknown_keys,
@@ -31,10 +33,10 @@ NUMBER = "number"
 
 def check_inputs(root: LinedMap) -> list[ValidationError]:
     """Every offence in the template's `inputs:` map. No block at all is not an offence."""
-    if "inputs" not in root:
+    if INPUTS_KEY not in root:
         return []
-    line = key_line(root, "inputs", root.line)
-    inputs = as_map(root["inputs"])
+    line = key_line(root, INPUTS_KEY, root.line)
+    inputs = as_map(root[INPUTS_KEY])
     if inputs is None:
         return [problem(line, MISSING_KEY)]
     errors: list[ValidationError] = []
@@ -56,14 +58,14 @@ def declared_inputs(root: LinedMap) -> dict[str, tuple[str, bool]]:
     twice under a different reason.
     """
     found: dict[str, tuple[str, bool]] = {}
-    inputs = as_map(root.get("inputs"))
+    inputs = as_map(root.get(INPUTS_KEY))
     if inputs is None:
         return found
     for name, decl in inputs.items():
         mapping = as_map(decl)
         if mapping is None or not isinstance(name, str):
             continue
-        declared = mapping.get("type")
+        declared = mapping.get(INPUT_TYPE_KEY)
         if isinstance(declared, str):
             found[name] = (declared, mapping.get("required") is True)
     return found
@@ -80,11 +82,11 @@ def _check_input(inputs: LinedMap, name: str) -> list[ValidationError]:
     if decl is None:
         return [problem(line, MISSING_KEY)]
     errors = unknown_keys(decl, INPUT_KEYS) + _check_description(decl, line)
-    if "type" not in decl:
+    if INPUT_TYPE_KEY not in decl:
         return [*errors, problem(line, MISSING_KEY)]
-    declared = decl["type"]
+    declared = decl[INPUT_TYPE_KEY]
     if declared not in INPUT_TYPES:
-        return [*errors, problem(key_line(decl, "type", line), INVALID_INPUT_TYPE)]
+        return [*errors, problem(key_line(decl, INPUT_TYPE_KEY, line), INVALID_INPUT_TYPE)]
     errors += _check_values(decl, str(declared), line)
     return errors + _check_default(decl, str(declared), line)
 

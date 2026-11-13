@@ -48,7 +48,7 @@ from tests.unit.conftest import REPO_ROOT, parse_env_example
 
 DEPLOY_DIR = REPO_ROOT / "deploy"
 INSTALL = DEPLOY_DIR / "install.sh"
-ADMIN_SKILL = DEPLOY_DIR / "kit" / "skills" / "orchestrator-admin"
+HOST_GUIDE = REPO_ROOT / "guide" / "host"
 
 #: the release the shimmed instance claims to run, and what `VERSION` beside the script says
 TAG = "1.0.0-test"
@@ -637,30 +637,19 @@ def test_harness_without_a_mode_flag_is_refused(installed: tuple[Path, dict[str,
     assert parse_env_example(path / ".env")["CLAUDE_SUBSCRIPTION_AUTH"] == "false"
 
 
-# ── the skill that drives them ───────────────────────────────────────────────
-
-
-def test_the_admin_skill_declares_the_name_its_directory_has() -> None:
-    """A SKILL.md whose frontmatter `name` disagrees with its directory never loads."""
-    text = (ADMIN_SKILL / "SKILL.md").read_text()
-    front = text.split("---")[1]
-
-    assert text.startswith("---\n")
-    assert "name: orchestrator-admin" in front
-    assert "description:" in front
-    for trigger in ("install", "upgrade", "doctor", "healthy", "harness", "bug", "back up"):
-        assert trigger in front, trigger
+# ── the host pages that drive them ───────────────────────────────────────────────
 
 
 def test_the_admin_skill_states_the_rules_it_cannot_leave_to_the_installer() -> None:
-    """Three things the script cannot enforce on an agent's behalf."""
-    text = (ADMIN_SKILL / "SKILL.md").read_text()
+    """Three things the script cannot enforce on an agent's behalf; the host pages hold them since
+    epic 3 story 3, 2026-11-12 (AD-33)."""
+    text = (HOST_GUIDE / "rules.md").read_text()
 
     assert "Never stop anything the user did not ask you to stop" in text
     assert "has never been run against a live subscription" in text
     assert "DBOS_APPLICATION_VERSION" in text
-    assert "references/runbooks.md" in text
-    assert (ADMIN_SKILL / "references" / "runbooks.md").is_file()
+    assert "host/runbooks" in text
+    assert (HOST_GUIDE / "runbooks.md").is_file()
 
 
 # ── harness <name> --version: the pin edited, then applied by a recreate ─────

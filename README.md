@@ -248,8 +248,8 @@ also the API under `/api/v1` with `Authorization: Bearer $ORCHESTRATOR_TOKEN`.
 
    Every template is editable at `/templates` (edit, Validate, Save as v{n+1}) and meant to
    be adapted to the project. The format and the edit loop are in
-   [`deploy/kit/skills/orchestrator/references/workflows.md`](deploy/kit/skills/orchestrator/references/workflows.md),
-   which the kit installs into client projects.
+   [`guide/workflows/customize.md`](guide/workflows/customize.md); agents read it through the
+   instance's guide.
 
    The harness page section shows each harness's live probe; the deeper readiness
    diagnostic (`POST /harnesses/{name}/readiness`) runs a trivial story end to end and
@@ -285,14 +285,10 @@ over HTTP:
 - **Let a project's agents use it** — from inside the consumer repository, against a running
   instance: `curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN"
   "$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness claude`. The instance
-  serves its own kit, so the skills cannot be a different version than the API they call;
-  `--harness claude|codex|opencode|all` picks `.claude/skills/`, `.agents/skills/` or both, and
-  `.orchestrator/kit.json` records what was installed. The skill
-  (`deploy/kit/skills/orchestrator/`) teaches the full API protocol: the version handshake,
-  project and repository setup, template discovery, preflight, run creation, polling, and
-  signals. The project needs `ORCHESTRATOR_BASE_URL` and `ORCHESTRATOR_TOKEN` in its
-  environment. `/plugin marketplace add rebecamurillo/ai-orchestrator` remains for a Claude
-  Code user who prefers the plugin route.
+  serves its own kit, so the bootstrap cannot be a different version than the API it calls. The
+  installer renders the bootstrap and the MCP configuration for `--harness
+  claude|codex|opencode|all`, and the guide (`guide/connect.md`) teaches the protocol. The
+  project needs `ORCHESTRATOR_BASE_URL` and `ORCHESTRATOR_TOKEN` in its environment.
 
 ### Build the images yourself
 

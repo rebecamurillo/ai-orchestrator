@@ -37,7 +37,7 @@ with their hashes; every path it does not name is yours.
 | --- | --- | --- |
 | `README.md`, `VERSION`, `install.sh`, `docker-compose.yml`, `release.env`, `.env.example`, `.gitignore` | product | replaced by `upgrade` |
 | `product-files.json` | product | the manifest: every product and seed path with its `sha256` |
-| `kit/` | product | the kit skills the instance serves |
+| `kit/` | product | the bootstrap template, its installer and the MCP templates the instance serves |
 | `bmad/install.sh`, `bmad/README.md` | product | the BMAD script and its notes |
 | `setup/README.md`, `setup/examples/copy-folder.sh` | product | the setup notes and an example script |
 | `templates/README.md`, `templates/shipped/*.yaml` | product | the template format and the shipped examples (nothing there loads) |
@@ -54,6 +54,10 @@ client file is never read or written by the product — `.env` is the one except
 once by `install`.
 
 ## Install
+
+<!-- guide:install -->
+
+Local agent on the host or the user only.
 
 These files come out of the image you are about to run, so they can never describe a
 different version than it. Log Docker in first (`docker login ghcr.io -u <your-github-user>`,
@@ -133,7 +137,45 @@ The registry credential goes to `docker login` only. It is held by the Docker da
 config, never by a container: the one credential a *process* in this stack holds is
 `ORCHESTRATOR_TOKEN`.
 
+### For the host agent
+
+Two prompts, and that is deliberate. The first is a GitHub token: a classic PAT. `read:packages`
+pulls the two private images; add `repo` if the same token will be the credential the
+orchestrator uses to clone and push the repositories registered in it — the usual case, and
+there are no per-repository credentials. `docker login ghcr.io` must already have happened for
+the bootstrap that produced these files; the script does its own login for the pulls. The second
+is the gateway and tracing values, all optional. Blank keeps the gateway, or tracing, off: each
+agent then authenticates on its own, cost figures are provisional, trace links are absent, and
+the `local` harness does not exist. The starter platform is in the repository, not the folder
+(README.md § Getting an LLM platform); the user runs it.
+
+Everything else is generated or defaulted. Of the ~50 variables, the ones a client has an
+opinion about are few — walk these and leave the rest alone:
+
+| Variable | Why they would change it |
+| --- | --- |
+| `WEB_CLIENT_PORT`, `BACKEND_API_PORT` | 4321 or 8000 already taken on their machine |
+| `BIND_ADDRESS` | `0.0.0.0` exposes the UI and API to the network. One bearer token is the entire authentication and nothing rate-limits it — read the README's *Exposure* section to them before they do this |
+| `MAX_ACTIVE_RUNS` | how many Runs the engine holds at once; a parked Run keeps its slot |
+| `READINESS_MODELS` | the default model per harness; every model named must exist in the gateway |
+| `READINESS_BUDGET_USD` | the budget the readiness diagnostic gives itself |
+| `WORKTREE_RETENTION_DAYS` | how long a finished Run's worktrees and logs survive |
+| `HUMAN_WAIT_SECONDS` | how long a parked Run waits for them, 30 days by default |
+
+Never echo a generated secret back to them beyond the one line the script already prints (the
+login token). `./install.sh env` re-renders `.env` without touching the stack; it will not
+overwrite an existing file, so starting over means deleting it deliberately.
+
+After the install, the first-run flow is `projects` and `runs/first-run`: create a Project,
+register a Repository, run its clone check, `repo-init` if the repository is new to BMAD.
+
+<!-- /guide -->
+
 ## Day 2
+
+<!-- guide:day-2 -->
+
+Local agent on the host or the user only.
 
 ```bash
 ./install.sh status              # docker compose ps, for this stack
@@ -183,25 +225,86 @@ instance does not answer at all, and the line that fails names its own fix. If t
 enough, `./install.sh diagnose` collects everything a maintainer will ask for, already
 redacted.
 
-The `orchestrator-admin` skill in `kit/` is the same ground for an agent: install it into this
-directory and Claude Code, Codex or OpenCode will walk install, upgrade, backup, rollback,
-harness and subscription setup, secret rotation, garbage collection and filing the bug report
-— running these commands and reading their output rather than improvising around them.
+The bootstrap in `kit/`, installed into this directory with `kit/install.sh --project .`,
+connects Claude Code, Codex or OpenCode to the instance and sends the host agent to the `host/*`
+pages: install, upgrade, backup, rollback, harness and subscription setup, secret rotation,
+garbage collection and filing the bug report — running these commands and reading their output
+rather than improvising around them.
 
 Ports: everything publishes on `127.0.0.1` — 4321 (web) and 8000 (API). If one is already
 taken on your machine the script stops before starting anything and names the variable
 that moves this stack off it (`WEB_CLIENT_PORT`, `BACKEND_API_PORT` in `.env`). It never
 stops what is listening there.
 
+### For the host agent
+
+`./install.sh doctor` is your first move, every time, before diagnosing anything by hand. Besides
+the checks listed above it covers: whether both images are actually pulled; `.env` with no
+`change-me` left in a REQUIRED variable; whether `~/.docker/config.json` has a ghcr.io entry at
+all (only a pull proves the credential still works); `/api/v1/version` against `VERSION`, with
+the pinned BMAD and harness CLI versions; each harness's `enabled` and `failing_check`; and
+Docker for Runs (`dind`).
+
+How to read it:
+
+- **`fail` on `.env`** — nothing else is meaningful yet. Fix it first and re-run.
+- **`fail` on `token`** — the containers are running an older `ORCHESTRATOR_TOKEN` than the
+  file says. `./install.sh start` re-reads `.env`.
+- **`fail` on `setup`** — a setup script failed or no record exists: `./install.sh setup`
+  runs it again; `logs/setup/` holds each script's output. **`fail` on `bmad`** — the
+  installed version differs from the release pin: `./install.sh setup`. **`fail` on
+  `docker engine`** — upgrade Docker Engine to 26 or later. **`warn` on `release pins`** —
+  `.env` overrides a pin of `release.env`; delete the line to follow the release.
+  **`warn` on `IMAGE_TAG`** — delete the line from `.env`.
+- **`warn` on `version`** — the instance was never restarted after a refresh, or these files came
+  from a different release than the instance runs. The line names the `upgrade --tag` that
+  reconciles them. Decide which number is the intended one before running it.
+- **`warn` on a harness** — the `failing_check` is the first failing readiness line
+  verbatim. `cli not at pinned version` means the CLI in the container is not the
+  `*_VERSION` `.env` pins — `backend-api` was not recreated since the pin changed, or the
+  start-up install of that pin failed (`./install.sh logs` names both versions);
+  `./install.sh harness <name> --version <pin>` applies it (see `host/harness-setup`);
+  `not logged in (claude auth status)` means the subscription login expired (see
+  `host/harness-setup`). Re-run the diagnostic with
+  `POST /api/v1/harnesses/{name}/readiness`, or from the web UI's Fleet page.
+- **The gateway is blank** — `LITELLM_BASE_URL` blank is the gateway's off switch. Set the
+  six values in `.env` (README.md § The gateway and tracing values), then
+  `./install.sh start`.
+- **`dind`** — Docker for Runs. `ok … off` is the default: a repository whose commands run
+  `docker compose` fails those rows with `Cannot connect to the Docker daemon`.
+  `./install.sh start --with-docker` turns it on — a privileged sidecar, so put README.md
+  § Trust to the user first; it is their decision. `fail` while on names the case (not
+  running, unhealthy, left in an old network namespace after backend-api restarted), and
+  `./install.sh start` repairs each.
+
+<!-- /guide -->
+
 ## Setup scripts and BMAD
 
-`setup/` is yours. `install`, `upgrade` and `setup` run a one-shot setup container, under the
-instance hold, in this order: BMAD (when `setup/bmad.choice` reads `installed`), each
-executable `setup/*.sh` directly under `setup/` in name order, the operator skills of the
-image, the catalog of each harness, and the record. A script sees the harness asset folders
-under `HOME` and nothing else — no secret, no login, no database; `setup/README.md` has what it
-gets, the clash rule and `examples/copy-folder.sh`. The record is
-`.orchestrator/setup-run.json` in the agent home; the logs are `logs/setup/{timestamp}/`.
+<!-- guide:setup-and-bmad -->
+
+Local agent on the host or the user only.
+
+`setup/` is yours. `install`, `upgrade` and `setup` run, under the instance hold, in this order.
+
+1. `install.sh` makes `logs/setup` mode 1777 and runs `scripts/setup/prepare.sh` in a one-shot
+   `agent` container of the backend-api image. It creates every harness asset folder and
+   `.orchestrator` under the agent home, and needs no running backend-api. A failure is a
+   warning: setup continues.
+2. The one-shot setup container runs five phases: BMAD (when `setup/bmad.choice` reads
+   `installed`); each executable `setup/*.sh` directly under `setup/` in name order; the operator
+   skills of the image; the fourth phase only counts each harness's skills, for the record
+   (`catalog.log` and the record's `catalog` counts); and the record itself.
+3. After the setup service, when backend-api is running and the command is not `upgrade`,
+   `install.sh` runs each harness script's `catalog` verb inside backend-api
+   (`docker compose exec`), so the catalog changes with no restart. A failure is a warning:
+   pre-flight reads the previous catalog until the next start. With backend-api stopped, its
+   next start writes the catalogs; an `upgrade` recreates backend-api as its own step, and that
+   start rewrites them.
+
+A script sees the harness asset folders under `HOME` and nothing else — no secret, no login, no
+database; `setup/README.md` has what it gets, the clash rule and `examples/copy-folder.sh`. The
+record is `.orchestrator/setup-run.json` in the agent home; the logs are `logs/setup/{timestamp}/`.
 No command restarts backend-api.
 
 - `./install.sh setup` runs it now. Exit 0: every phase passed; 2: a script failed or the
@@ -214,7 +317,19 @@ No command restarts backend-api.
   BMAD after a remove.
 - `./install.sh install --no-bmad` writes `removed` before the first setup.
 
+### For the host agent
+
+`setup/*.sh` are the client's scripts; setup runs at `install` and `upgrade` and on demand, under
+the instance hold. A skill that a script changes under a `bmad-` name is restored and the script
+reported failed: tell the user, do not edit around it.
+
+<!-- /guide -->
+
 ## Editing the workflow templates
+
+<!-- guide:template-folder -->
+
+Local agent on the host or the user only.
 
 The shipped templates are a starting point, not a fixed part of the product. Five single
 files ship — `staged-initiative-hub` and `staged-initiative-repo` (three agent sessions per
@@ -249,8 +364,8 @@ values with the new `docker-compose.yml` and `.env.example`.
 
 What you can change — step kinds, inputs, loops, checkpoints, a model or a timeout per step,
 the prompts agents are sent — and the same edit loop over the API are in
-`kit/skills/orchestrator/references/workflows.md`. That guide is installed into every project
-with the kit, so the project's coding agent can propose and validate a template change for
+the guide page `workflows/customize`, which a project's coding agent reads through the
+instance (`read_guide`), so it can propose and validate a template change for
 you; it saves only on your go-ahead.
 
 A template does not decide which shell commands an agent may run. That is
@@ -259,6 +374,8 @@ the sandbox, and `git push` stays denied by the harness adapter — so an agent 
 parked on a denied package manager or test runner. An install that narrows it to command
 families (`Bash(yarn *)`, `Bash(npx *)`, …) must list every tool its repositories use, and
 a change needs `./install.sh start`.
+
+<!-- /guide -->
 
 ## Getting an LLM platform
 
@@ -284,92 +401,148 @@ backend-api refuses to start.
 
 ## Docker for Runs (optional, off by default)
 
-A Run executes the target repository's own commands — install, tests, quality gate — inside
-`backend-api`. The image carries the `docker` CLI with the compose and buildx plugins, but no
-daemon: a repository whose commands run `docker compose` (database integration tests, an
-end-to-end suite in compose) fails those rows with `Cannot connect to the Docker daemon`.
-
-```bash
-./install.sh start --with-docker     # sets VERIFY_DOCKER=true in .env, starts the sidecar
-./install.sh start --no-docker       # sets it false, removes the sidecar, keeps its image cache
-```
-
-`VERIFY_DOCKER=true` starts the `docker` service (compose profile `docker`): Docker-in-Docker
-(`docker:<version>-dind`, privileged), placed in backend-api's network namespace.
-
-- **Where the daemon is.** dockerd listens on `127.0.0.1:2375` inside that namespace only —
-  nothing is published on this machine. At each start backend-api writes a docker context
-  for the `agent` user (`$HOME/.docker`), so every `docker` a Run's command or a coding agent
-  types reaches it; no variable has to be passed to the Run.
-- **Ports.** A port a target's compose file publishes appears on backend-api's `localhost`,
-  which is where its scripts look (`localhost:5432`). It collides with backend-api's own
-  `BACKEND_API_PORT` (8000 by default) if a target publishes that one.
-- **Bind mounts.** The sidecar mounts the `work` volume at `WORK_DIR`, the path backend-api
-  uses, so a relative bind mount in a target's compose file (`./tests/fixtures:/fixtures`)
-  resolves to the worktree.
-- **Networks.** The daemon's bridge and its compose networks use `10.213.0.0/24` and
-  `10.214.0.0/16`, away from `172.16.0.0/12`, where compose and Docker Desktop put theirs.
-- **Image cache.** Pulled images and build cache live on the `docker-data` volume and survive
-  restarts; it is not backed up, and `docker volume rm <project>_docker-data` while the
-  sidecar is stopped empties it.
-- **Concurrency.** One daemon serves every Run. A target whose compose file fixes its
-  project name, container names or host ports collides with itself when two Runs on that
-  repository verify at once (`MAX_ACTIVE_RUNS` above 1); the second `up` fails or stops the
-  first one's containers. Keep such a repository to one Run at a time, or make its scripts
-  take the project name and ports from the environment.
-- **Cleanup.** Nothing removes what a target starts. A script that exits before its own
-  `docker compose down` leaves containers running in the sidecar until the next Run's
-  `down`, or until the sidecar is recreated (`./install.sh start --no-docker`, then
-  `--with-docker`).
-- **Restarts.** If backend-api restarts or is recreated on its own, the sidecar is left in the
-  old namespace and Runs reach nothing. `./install.sh doctor` reports it on its `dind` line;
-  `./install.sh start` (and every install.sh command that recreates backend-api) checks the
-  daemon from inside backend-api and recreates the sidecar when it does not answer.
-
-Pre-flight warns on the New-workflow screen (`docker` line) when VERIFY_DOCKER is off and the
-Run looks like it needs a daemon: a `shell` row naming `docker`, or a compose file at the
-repository root. It is a guess and never blocks a start. By hand, without install.sh:
-`VERIFY_DOCKER=true` in `.env`, then `docker compose --profile docker up -d --wait`.
+On a running instance: `$ORCHESTRATOR_BASE_URL/guide/host/docker-for-runs.md`.
 
 ## Agents in your projects
 
-The instance serves the skills that teach a project's agents to drive this API — create
-projects, launch runs, poll progress, answer checkpoints. Run this **from inside the project
-repository**, with the two connection values exported:
+<!-- guide:agents -->
+
+The orchestrator runs BMAD dev-loop workflows against git repositories: a Run plans every
+step up front, dispatches stories to a coding-agent harness (claude, codex, opencode),
+verifies with the target repository's own commands, and stops only at declared checkpoints
+or when an agent is blocked. You talk to it over HTTP; humans watch the same Runs in its
+web UI.
+
+### What you need
+
+- the instance address, `ORCHESTRATOR_BASE_URL` — default `http://127.0.0.1:8000`;
+- optionally the web address, where humans watch Runs (the installer's `--web-url`);
+- the token, `ORCHESTRATOR_TOKEN` — the single bearer credential — in an environment variable.
+
+`api` is the endpoint reference — read it when you need exact
+request fields. `spec-folder` is the format of the files epic and
+initiative Runs read from the target repository (`epics.yaml`, `stories.yaml`,
+`SPEC.md`) — **read it before authoring or reviewing those files: there are two
+initiative flavors and each reads different `epics.yaml` fields.**
+`workflows/customize` is how to customize a workflow template — read it before
+editing or authoring one. `projects` is what every Project and
+Repository field does and what to confirm with the user before saving one.
+`runs/first-run` is the demo: one trivial story that
+proves the whole pipeline on a freshly wired project — run it before the first real Run.
+
+### Installing the bootstrap
+
+Run this from inside the project repository, with the two values exported:
 
 ```bash
 curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \
-  "$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness claude
+  "$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness <h> --base-url "$ORCHESTRATOR_BASE_URL"
 ```
 
-The kit comes out of the instance that answered, so the skills cannot be a different version
-than the API they call. `--harness` picks where they land, because the three agent CLIs read
-different directories:
+The bootstrap comes out of the instance that answered. Flags:
 
-| `--harness` | writes into | read by |
-| --- | --- | --- |
-| `claude` | `.claude/skills/` | Claude Code |
-| `codex`, `opencode` | `.agents/skills/` | Codex, OpenCode |
-| `all` (the default) | both | any of them |
+- `--harness claude|codex|opencode|all` — which agent CLI to set up (default `all`);
+- `--base-url URL` — the instance address (overrides `ORCHESTRATOR_BASE_URL`);
+- `--web-url URL` — the web address;
+- `--token-var NAME` — the environment variable that holds the token, when it is not
+  `ORCHESTRATOR_TOKEN`;
+- `--project DIR` or `--home` — install into a project (default the current directory) or into
+  the user's home;
+- `--token` is refused: the installer writes no token, and it leaves `.env` alone.
 
-It also adds `ORCHESTRATOR_BASE_URL` (default `http://127.0.0.1:8000`) and
-`ORCHESTRATOR_TOKEN` to the project's `.env` without ever overwriting a value you already
-have, writes `.orchestrator/kit.json` — the version marker the skill checks on every session,
-which holds no credential and is meant to be committed — and calls `GET /api/v1/version` to
-prove the pair. Re-run it whenever it tells you the kit is stale. `--base-url`, `--token` and
-`--project` override the environment; from a checkout or an extracted bundle, `kit/install.sh`
-uses the skills beside it and downloads nothing.
+It writes `.claude/skills/orchestrator/SKILL.md` and/or `.agents/skills/orchestrator/SKILL.md`,
+the MCP configuration for each harness, and `.orchestrator/bootstrap.json`, then probes
+`/api/v1/version`. From a checkout or the deploy folder, `kit/install.sh` uses the files beside it
+and downloads nothing.
 
-The skill's `references/spec-folder.md` documents the `epics.yaml` / `stories.yaml` /
-`SPEC.md` format the templates read.
+### Where the token lives
+
+Export `ORCHESTRATOR_TOKEN` in the shell, or set it in the harness's environment. A project `.env`
+is not read by the harness. The configuration the installer writes names the variable, never its value.
+
+### The MCP configuration per harness
+
+- claude: `.mcp.json` in the project, or `$HOME/.claude.json` with `--home`;
+- codex: `${CODEX_HOME:-$HOME/.codex}/config.toml`, table `[mcp_servers.orchestrator]` with
+  `bearer_token_env_var`; per user;
+- opencode: `opencode.json`; when the project has `opencode.jsonc`, no `opencode.json` is written
+  and the installer prints the block to add to it by hand.
+
+An existing `orchestrator` entry is left as it is. What each harness supports is the page
+`harness-support`.
+
+### The host agent
+
+The instance's host agent installs its own skill from the deploy folder with
+`kit/install.sh --project .` (`host/day-2`).
+
+### Moving from the beta.4 kit
+
+A project set up with the beta.4 kit stops at its first upgrade, because that kit's skills hold the old
+version stop. Reinstall once with this installer: it removes those skills, `.orchestrator/bin/` and
+`kit.json`. After that no upgrade needs a reinstall.
+
+### The one-token risk
+
+There is one token. Every tool added over MCP widens what that one token can do. This is accepted
+for the owner's own projects; scoped tokens are a later initiative.
+
+### Talking to the API
+
+Every call: `Authorization: Bearer $ORCHESTRATOR_TOKEN`. The handshake below is what proves
+the pair; `GET /api/v1/ping` proves the token alone and is the fallback for an instance
+older than `/api/v1/version`.
+
+`GET /healthz` needs no token (liveness only). Errors are RFC 9457
+`application/problem+json`: `{type, title, status, detail, errors[]}` — read `detail` and
+`errors[]` before retrying anything. Lists are `{items, next_cursor}`. Ids are UUIDs;
+money is a decimal string in USD.
+
+The web UI lives on the same host (default port 4321). The deep link for one Run is
+`/workflows/{run_id}` — hand it to the user whenever you name a Run.
+
+The instance side of connecting a project is `./install.sh doctor` green first (`host/day-2`); the
+Project, Repository, clone check and `repo-init` are `projects`.
+
+### Handshake
+
+Do this before anything else, every session: call the `version` tool, or `GET /api/v1/version` →
+`{app_version, bootstrap_contract, guide{index, page_url, resource}, kit_version, bmad_version, bmad_installed, harness_versions{}}`, first, then read `/llms.txt`. A 404
+means an instance older than the route: fall back to `GET /api/v1/ping`, say so, and treat the version
+as unknown. `kit_version` is always `null`.
+
+When the release a project was set up for differs from the instance's `app_version`, tell the user
+exactly that and continue the work — a difference is reported, never a stop.
+
+`bmad_version` is the BMAD release installed in the instance's harnesses (AD-16). The
+orchestrator does not compare it with any repository: preflight has no method-version line.
+A BMAD skill renders from the target's own `_bmad/`, so a repository whose manifest names
+another version, or none, may render a different workflow than the one you authored for.
+
+For the instance's host agent, a release difference is often the problem it was called about: report
+it as the finding and reconcile it with `./install.sh upgrade` (`host/upgrade`). `./install.sh doctor`
+needs no handshake and is the first move when the API does not answer (`host/day-2`).
+
+### Reading the guide
+
+The guide is open: `/llms.txt` is the index, and `/guide/{id}.md` is one page. Over MCP, the tool
+`read_guide` reads it on every harness: with no id it returns the index, with a page id it returns
+that page. A harness that supports resources also lists each page as `guide://{id}`, and each
+procedure page is a prompt named by its id with `/` replaced by `.` (`runs/launch` is `runs.launch`).
+
+### Contract differences
+
+Compare the `version` answer's `bootstrap_contract` with the number the installed bootstrap states.
+When the answer's number is above it, tell the user, naming the code `refusal-bootstrap-contract`
+and the page `errors/refusal-bootstrap-contract`, and continue: the installed bootstrap keeps
+working, and re-running the installer moves it to the newer contract when convenient. A release
+difference is never a stop.
+
+<!-- /guide -->
 
 ## Notifications
 
-Set `NOTIFY_WEBHOOK_URL` in `.env` to be told when a Run needs you or ends. One POST is sent each time a Run enters `needs_you`, `done`, `failed` or `cancelled`; blank (the default) sends nothing. Delivery is best-effort: a webhook that is down is logged as `notify_failed` and never fails the Run.
-
-- `NOTIFY_WEBHOOK_FORMAT=json` posts the structured event (run, project, repository, template, status, park kind, reason, step path, attempt, spend, time). `slack` posts a one-line `{"text": ...}` that Slack and Mattermost incoming webhooks accept.
-- `NOTIFY_WEBHOOK_SECRET`, when set, adds `X-Orchestrator-Signature: sha256=<hex HMAC-SHA256 of the request body>` so the receiver can check the sender.
-- `PUBLIC_BASE_URL` (for example `https://orchestrator.example.com`) adds a link to the Run; blank leaves it out.
+On a running instance: `$ORCHESTRATOR_BASE_URL/guide/host/notifications.md`.
 
 ## Exposure
 
@@ -384,24 +557,13 @@ PostgreSQL publishes no port in any case; reach it with
 
 ## Trust
 
-The backend container runs harness CLIs as the user `agent` with passwordless sudo, and
-without `cap_drop` — deliberately, so an agent can `apt-get install` what a target
-repository's install script needs. A Run executes code from the repositories you
-register. Register only repositories you trust as much as this machine.
-
-`VERIFY_DOCKER=true` widens that. The `docker` sidecar is privileged, and anything that can
-reach its daemon — every Run's commands and every coding agent, by design — can start a
-privileged container or mount the host filesystem of the machine the daemon runs on: root
-in Docker Desktop's VM, root on a Linux host running Docker Engine. What it does not give is
-this stack's own daemon: the sidecar is a separate dockerd with its own containers, images
-and networks, so a Run cannot see, stop or read the orchestrator's containers, its database
-or its `.env` through it, and nothing it publishes leaves backend-api's network namespace.
-Containers it starts can still reach the network, and the rest of the compose network
-(`postgres`, `web-client`) can reach the ports they publish on backend-api. Turn it on only
-for repositories you would let run `docker` on that machine, and turn it off when none
-needs it.
+On a running instance: `$ORCHESTRATOR_BASE_URL/guide/trust.md`.
 
 ## Upgrading
+
+<!-- guide:upgrade -->
+
+Local agent on the host or the user only.
 
 ```bash
 ./install.sh upgrade --tag <newer>
@@ -474,6 +636,29 @@ never touched.
   is reused as the image cache. A hand-added service the new file no longer declares is left
   as an orphan container — `docker compose up -d --remove-orphans` from this directory
   removes it — and `docker volume rm` removes any volume only it used.
+
+### For the host agent
+
+A refusal prints `refused: nothing was changed`. Report the line, do not work around it. Two
+decisions are the user's:
+
+1. **Runs in the engine on a `DBOS_APPLICATION_VERSION` change (exit 4).** They would become
+   unrecoverable under the new value. A parked Run cannot be waited out: it holds its slot
+   for `HUMAN_WAIT_SECONDS` (30 days). The two honest options are to answer or cancel every
+   parked Run, or not to upgrade yet. `DEPLOY.md` §5.1 is the full statement; put the choice
+   to the user, do not make it.
+2. **Rollback.** `./install.sh upgrade --tag <older>`, plus restoring the `backups/` dump when
+   the newer release migrated the schema: migrations run forward only, and an older release on
+   a migrated database is expected to fail closed.
+
+A project with the bootstrap needs nothing after an upgrade: it holds no release. When the
+upgrade raises `bootstrap_contract`, its agent says so and keeps working; re-running the
+installer moves it to the newer contract (`connect`). A project
+still on the beta.4 kit is moved over once by reinstalling with the bootstrap installer
+(`connect`). Then
+`./install.sh doctor`, and check the templates — `host/runbooks`, *Template refresh*.
+
+<!-- /guide -->
 
 ## Migrating an existing folder
 

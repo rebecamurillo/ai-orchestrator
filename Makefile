@@ -15,7 +15,7 @@ PYTHON_RUN := $(UV) run --locked --directory $(BACKEND)
 # --dir: the web-client scripts run from the repository root, with no `cd` in a recipe
 NODE_RUN := $(PNPM) --dir $(WEB) run
 
-.PHONY: install install-e2e doctor lint test coverage e2e e2e-api e2e-ui durability images openapi env up down logs platform-up platform-down platform-logs platform-doctor platform-env-sync local local-backend local-web bundle push
+.PHONY: install install-e2e doctor lint test coverage e2e e2e-api e2e-ui durability images openapi guide env up down logs platform-up platform-down platform-logs platform-doctor platform-env-sync local local-backend local-web bundle push
 
 ## install — a fresh checkout to a machine the gates run on (scripts/install.sh)
 ## Syncs backend-api's virtualenv from uv.lock, installs web-client from pnpm-lock.yaml at
@@ -36,7 +36,7 @@ doctor:
 	./scripts/install.sh --check
 
 ## lint — ruff · mypy (strict on domain/ and application/) · import-linter · env-contract check
-##        · test pairs · version manifests · contract drift · eslint · prettier --check · tsc --noEmit · astro check
+##        · test pairs · version manifests · guide pages · contract drift · eslint · prettier --check · tsc --noEmit · astro check
 ## the web-client half of the test-pair check runs inside `pnpm lint`
 lint:
 	$(PYTHON_RUN) ruff check . ../scripts ../deploy-tests
@@ -46,6 +46,7 @@ lint:
 	$(PYTHON_RUN) python ../scripts/check_env_contract.py
 	$(PYTHON) scripts/check_test_pairs.py
 	$(PYTHON) scripts/check_version.py
+	$(PYTHON) scripts/check_guide.py
 	$(NODE_RUN) gen:api -- --check
 	$(NODE_RUN) lint
 
@@ -155,6 +156,11 @@ bundle:
 openapi:
 	$(PYTHON_RUN) python -m orchestrator.tools.export_openapi --output ../contracts/openapi.json
 	$(NODE_RUN) gen:api
+
+## guide — build guide/ into guide-build/ as the image does (AD-32)
+## writes stamped pages, errors/{code}.md and guide-index.json; guide-build/ is git-ignored
+guide:
+	$(PYTHON_RUN) python -m orchestrator.tools.build_guide --source ../guide --out ../guide-build
 
 ## env — write the environment file of each local environment (AD-20)
 ## `.env` is aio-dev, the stack you develop against; `.env.e2e` is aio-e2e, which `make e2e`

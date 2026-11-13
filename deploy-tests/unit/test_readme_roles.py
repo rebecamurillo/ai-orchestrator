@@ -16,7 +16,7 @@ from tests.unit.conftest import REPO_ROOT
 DEPLOY = REPO_ROOT / "deploy"
 README = DEPLOY / "README.md"
 GENERATOR = REPO_ROOT / "scripts" / "product_manifest.py"
-ADMIN_SKILL = DEPLOY / "kit" / "skills" / "orchestrator-admin"
+HOST_GUIDE = REPO_ROOT / "guide" / "host"
 ROLE_HEADING = "## Which file is whose"
 MIGRATION_HEADING = "## Migrating an existing folder"
 PLATFORM_HEADING = "## Getting an LLM platform"
@@ -129,7 +129,7 @@ def test_the_migration_section_names_each_step_in_order() -> None:
 
 
 def test_no_document_names_a_platform_command() -> None:
-    files = [README, *ADMIN_SKILL.rglob("*.md")]
+    files = [README, *sorted(HOST_GUIDE.glob("*.md"))]
     for file in files:
         text = file.read_text()
         for word in FORBIDDEN:

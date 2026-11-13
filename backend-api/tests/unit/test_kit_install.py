@@ -1,43 +1,22 @@
-"""`deploy/kit/install.sh` — plugging one project repository into a running instance.
+"""`deploy/kit/install.sh` — the bootstrap installer.
 
-A client runs this from inside their own repository, piped out of the instance
-(`GET /api/v1/kit/install.sh | bash -s -- --harness claude`), so the kit they get is the one
-built into the image that answered. There is no Docker and no network in this module: the
-script's own control flow is what needs proving, and a `curl` shim on PATH is enough for all
-of it — the same technique `test_deploy_install.py` uses for `docker`.
+Rewritten under the declared behaviour change AD-33 (owner, 2026-11-11; epic 3 story 2): the
+installer renders one `orchestrator` bootstrap skill, configures the agent connection (MCP) per
+harness, writes `.orchestrator/bootstrap.json`, and never takes or writes a token value. The
+four-skill kit, `bin/`, `.env` and `kit.json` behaviour it replaces is no longer pinned.
 
-What is pinned here:
-
-- **The projection is per harness.** `claude` reads `<project>/.claude/skills/`; `codex` and
-  `opencode` both read `<project>/.agents/skills/` (`ia-agents-skills/README.md`); `all`
-  writes both. Writing the wrong directory is a silent failure — the agent simply never sees
-  the skill.
-- **Everything it writes is idempotent.** A second run replaces the installed skill, and
-  leaves an existing `.env` value alone: the two connection values belong to the project, and
-  re-running an installer must never rotate a token a client already uses.
-- **`.orchestrator/kit.json` is the version marker** the skill's handshake reads. It carries
-  the kit version from `manifest.json` and the harness flag, is meant to be committed, and
-  therefore must never carry the token.
-- **The probe is `/api/v1/version`, and a skew is named.** The mismatch warning has to print
-  the exact line that fixes it. `/api/v1/ping` is the fallback for an instance older than
-  the route, not the primary check.
-- **The token stays out of the output.** Not in a printed command line, not in a log line,
-  not in stdout or stderr — the re-install line keeps `$ORCHESTRATOR_TOKEN` as a variable
-  name for exactly that reason.
-- **Remote mode installs from the served archive** when no `skills/` sits beside the script,
-  which is what the documented one-liner does.
-
-Delivery revised under the Operator decision of 2026-09-30 (agent-delivery-kit plan §1, §3
-and §4): the instance serves its own kit, and version skew is unrepresentable.
+No Docker and no network: a `curl` shim on PATH answers the version probe and the archive.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tarfile
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -46,24 +25,14 @@ from tests.unit.conftest import REPO_ROOT
 
 KIT_DIR = REPO_ROOT / "deploy" / "kit"
 INSTALL = KIT_DIR / "install.sh"
-MANIFEST = KIT_DIR / "manifest.json"
 
-#: a value distinctive enough that its absence from the output is a real assertion
-TOKEN = "tok-never-printed-0123456789"
-
-CLAUDE_SKILLS = ".claude/skills"
-#: codex and opencode both read this one (`ia-agents-skills/README.md`)
-AGENTS_SKILLS = ".agents/skills"
-
-RE_INSTALL_LINE = (
-    'curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" '
-    '"$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness'
-)
+BASE = "https://orchestrator.example"
+WEB = "https://web.example"
+SECRET = "tok-secret-value"
+RELEASE = re.compile(r"\b\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?\b")
 
 needs_bash = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not on PATH")
 
-#: answers the two shapes the script asks for: `-o FILE URL` alone, and the same with
-#: `-w '%{http_code}'`. A body is served from a file so no JSON has to survive shell quoting.
 CURL_SHIM = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$SHIM_LOG"
 out=""
@@ -77,96 +46,118 @@ for arg in "$@"; do
 \tprev="$arg"
 done
 emit() {
-\tif [ -n "$out" ] && [ -n "$2" ]; then cp "$2" "$out"; fi
+\tif [ -n "$out" ]; then if [ -n "$2" ]; then cp "$2" "$out"; else : > "$out"; fi; fi
 \tif [ "$wants_code" = 1 ]; then printf '%s' "$1"; exit 0; fi
 \tcase "$1" in 2??) exit 0 ;; esac
 \texit 22
 }
 case "$url" in
 \t*/api/v1/version) emit "${SHIM_VERSION_CODE:-200}" "${SHIM_VERSION_FILE:-}" ;;
-\t*/api/v1/ping) emit "${SHIM_PING_CODE:-200}" "" ;;
 \t*/api/v1/kit/archive) emit "${SHIM_ARCHIVE_CODE:-200}" "${SHIM_ARCHIVE:-}" ;;
 esac
 emit 404 ""
 """
 
-
-def _run(
-    script: Path, *args: str, cwd: Path, env: dict[str, str] | None = None
-) -> subprocess.CompletedProcess[str]:
-    """Run the script the way a client does — as a command, no shell."""
-    clean = {
-        k: v
-        for k, v in os.environ.items()
-        if k not in {"ORCHESTRATOR_BASE_URL", "ORCHESTRATOR_TOKEN"}
-    }
-    return subprocess.run(  # fixed argv, no shell
-        ["bash", str(script), *args],
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        env={**clean, **(env or {})},
-        check=False,
-    )
+OLD_SKILLS = ("orchestrator", "orchestrator-admin", "initiative-spec", "initiative-run")
 
 
-def _kit_version() -> str:
-    return str(json.loads(MANIFEST.read_text())["kit_version"])
+class Env:
+    """One scratch world: a project, a HOME, CODEX_HOME and XDG under `tmp_path`."""
 
+    def __init__(self, tmp_path: Path) -> None:
+        self.root = tmp_path
+        self.project = tmp_path / "project"
+        self.project.mkdir()
+        self.home = tmp_path / "home"
+        self.codex = tmp_path / "codex"
+        self.xdg = tmp_path / "xdg"
+        for d in (self.home, self.codex, self.xdg):
+            d.mkdir()
+        bin_dir = tmp_path / "shimbin"
+        bin_dir.mkdir()
+        (bin_dir / "curl").write_text(CURL_SHIM)
+        (bin_dir / "curl").chmod(0o755)
+        self.log = tmp_path / "curl.log"
+        self.log.touch()
+        self.extra: dict[str, str] = {
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "SHIM_LOG": str(self.log),
+        }
 
-@pytest.fixture
-def project(tmp_path: Path) -> Path:
-    """The consumer repository: empty, as a fresh checkout is."""
-    path = tmp_path / "project"
-    path.mkdir()
-    return path
-
-
-@pytest.fixture
-def shim(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
-    """A `curl` on PATH that records its argv and answers canned replies."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "curl").write_text(CURL_SHIM)
-    (bin_dir / "curl").chmod(0o755)
-    log = tmp_path / "curl.log"
-    log.touch()
-    env = {"PATH": f"{bin_dir}:{os.environ['PATH']}", "SHIM_LOG": str(log)}
-    return bin_dir, log, env
-
-
-def _version_body(tmp_path: Path, app_version: str) -> str:
-    body = tmp_path / "version.json"
-    body.write_text(
-        json.dumps(
-            {
-                "app_version": app_version,
-                "kit_version": app_version,
-                "bmad_version": "6.11.0",
-                "harness_versions": {"claude": "1.2.3", "codex": "4.5.6", "opencode": "7.8.9"},
-            }
+    def run(
+        self,
+        *args: str,
+        script: Path = INSTALL,
+        env: dict[str, str] | None = None,
+        cwd: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("ORCHESTRATOR_")}
+        full = {
+            **clean,
+            **self.extra,
+            "HOME": str(self.home),
+            "CODEX_HOME": str(self.codex),
+            "XDG_CONFIG_HOME": str(self.xdg),
+            **(env or {}),
+        }
+        return subprocess.run(  # fixed argv, no shell
+            ["bash", str(script), *args],
+            capture_output=True,
+            text=True,
+            cwd=cwd or self.project,
+            env=full,
+            check=False,
         )
-    )
-    return str(body)
+
+    def install(
+        self, harness: str = "claude", *extra: str, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        return self.run("--harness", harness, "--base-url", BASE, *extra, env=env)
+
+    def written_files(self) -> list[Path]:
+        files: list[Path] = []
+        for d in (self.project, self.home, self.codex, self.xdg):
+            files += [p for p in d.rglob("*") if p.is_file()]
+        return files
+
+    def piped_script(self) -> Path:
+        piped = self.root / "piped"
+        piped.mkdir()
+        shutil.copy(INSTALL, piped / "install.sh")
+        return piped / "install.sh"
+
+    def version_body(self, release: str = "9.9.9", contract: int = 1) -> str:
+        body = self.root / "version.json"
+        body.write_text(json.dumps({"app_version": release, "bootstrap_contract": contract}))
+        return str(body)
+
+    def archive(self) -> str:
+        path = self.root / "kit.tar.gz"
+        with tarfile.open(path, "w:gz") as tar:
+            for entry in sorted(KIT_DIR.iterdir()):
+                tar.add(entry, arcname=entry.name)
+        return str(path)
 
 
-def _archive(tmp_path: Path) -> str:
-    """A real `.tar.gz` of `deploy/kit`, top-level entries as the endpoint serves them."""
-    path = tmp_path / "kit.tar.gz"
-    with tarfile.open(path, "w:gz") as tar:
-        for entry in sorted(KIT_DIR.iterdir()):
-            tar.add(entry, arcname=entry.name)
-    return str(path)
+@pytest.fixture
+def env(tmp_path: Path) -> Env:
+    return Env(tmp_path)
 
 
-# ── the script parses ────────────────────────────────────────────────────────
+def _ok(result: subprocess.CompletedProcess[str]) -> None:
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+SKILL_CLAUDE = ".claude/skills/orchestrator/SKILL.md"
+SKILL_AGENTS = ".agents/skills/orchestrator/SKILL.md"
+
+
+# ── the script parses and refuses ────────────────────────────────────────────
 
 
 @needs_bash
 def test_the_script_parses_and_is_executable() -> None:
-    assert INSTALL.is_file()
-    assert INSTALL.stat().st_mode & 0o111, "install.sh is not executable"
-
+    assert INSTALL.stat().st_mode & 0o111
     result = subprocess.run(  # fixed argv, no shell
         ["bash", "-n", str(INSTALL)], capture_output=True, text=True, check=False
     )
@@ -174,429 +165,576 @@ def test_the_script_parses_and_is_executable() -> None:
 
 
 @needs_bash
-def test_help_names_every_flag(tmp_path: Path) -> None:
-    result = _run(INSTALL, "--help", cwd=tmp_path)
+def test_help_names_every_flag(env: Env) -> None:
+    result = env.run("--help")
 
-    assert result.returncode == 0, result.stderr
-    for flag in ("--harness", "--base-url", "--token", "--project"):
+    _ok(result)
+    for flag in ("--harness", "--base-url", "--web-url", "--token-var", "--project", "--home"):
         assert flag in result.stdout, flag
     for harness in ("claude", "codex", "opencode", "all"):
         assert harness in result.stdout, harness
 
 
 @needs_bash
-def test_an_unknown_harness_is_refused(project: Path) -> None:
-    result = _run(INSTALL, "--harness", "cursor", "--project", str(project), cwd=project)
+def test_an_unknown_harness_is_refused(env: Env) -> None:
+    result = env.run("--harness", "cursor")
 
     assert result.returncode != 0
     assert "--harness" in result.stderr
-    assert not (project / CLAUDE_SKILLS).exists()
-
-
-# ── the per-harness projection ───────────────────────────────────────────────
+    assert env.written_files() == []
 
 
 @needs_bash
-def test_claude_writes_only_the_claude_directory(project: Path) -> None:
-    result = _run(INSTALL, "--harness", "claude", "--project", str(project), cwd=project)
+def test_a_bad_token_var_is_refused(env: Env) -> None:
+    result = env.run("--token-var", "lower-case")
 
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert (project / CLAUDE_SKILLS / "orchestrator" / "SKILL.md").is_file()
-    assert not (project / ".agents").exists()
-
-
-@needs_bash
-@pytest.mark.parametrize("harness", ["codex", "opencode"])
-def test_codex_and_opencode_share_the_agents_directory(project: Path, harness: str) -> None:
-    result = _run(INSTALL, "--harness", harness, "--project", str(project), cwd=project)
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert (project / AGENTS_SKILLS / "orchestrator" / "SKILL.md").is_file()
-    assert not (project / ".claude").exists()
+    assert result.returncode != 0
+    assert "--token-var" in result.stderr
+    assert env.written_files() == []
 
 
 @needs_bash
-def test_all_is_the_default_and_writes_both(project: Path) -> None:
-    result = _run(INSTALL, "--project", str(project), cwd=project)
+def test_project_with_home_is_refused(env: Env) -> None:
+    result = env.run("--project", str(env.project), "--home")
 
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert (project / CLAUDE_SKILLS / "orchestrator" / "SKILL.md").is_file()
-    assert (project / AGENTS_SKILLS / "orchestrator" / "SKILL.md").is_file()
-    assert json.loads((project / ".orchestrator" / "kit.json").read_text())["harness"] == "all"
+    assert result.returncode != 0
+    assert env.written_files() == []
 
 
 @needs_bash
-def test_the_project_defaults_to_the_working_directory(project: Path) -> None:
-    """The documented call is piped into bash from inside the repository, with no path."""
-    result = _run(INSTALL, "--harness", "claude", cwd=project)
+@pytest.mark.parametrize("form", [["--token", "x"], ["--token=x"]])
+def test_a_token_value_is_refused(env: Env, form: list[str]) -> None:
+    result = env.run(*form)
 
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert (project / CLAUDE_SKILLS / "orchestrator" / "SKILL.md").is_file()
+    assert result.returncode != 0
+    assert "pass the variable's name with --token-var" in result.stderr
+    assert env.written_files() == []
+
+
+# ── what each harness gets ───────────────────────────────────────────────────
+
+
+def _check_claude_mcp(env: Env) -> None:
+    cfg = json.loads((env.project / ".mcp.json").read_text())
+    server = cfg["mcpServers"]["orchestrator"]
+    assert server["url"] == f"{BASE}/mcp"
+    assert server["headers"]["Authorization"] == "Bearer ${ORCHESTRATOR_TOKEN}"
+
+
+def _check_codex_mcp(env: Env) -> None:
+    cfg = tomllib.loads((env.codex / "config.toml").read_text())
+    server = cfg["mcp_servers"]["orchestrator"]
+    assert server["url"] == f"{BASE}/mcp"
+    assert server["bearer_token_env_var"] == "ORCHESTRATOR_TOKEN"
+
+
+def _check_opencode_mcp(env: Env) -> None:
+    cfg = json.loads((env.project / "opencode.json").read_text())
+    server = cfg["mcp"]["orchestrator"]
+    assert server["url"] == f"{BASE}/mcp"
+    assert server["headers"]["Authorization"] == "Bearer {env:ORCHESTRATOR_TOKEN}"
 
 
 @needs_bash
-def test_a_bare_directory_argument_still_works(project: Path, tmp_path: Path) -> None:
-    """The pre-2026-09-30 call was `install.sh /path/to/project`."""
-    result = _run(INSTALL, str(project), cwd=tmp_path)
+@pytest.mark.parametrize("harness", ["claude", "codex", "opencode", "all"])
+def test_each_harness_gets_its_bootstrap_and_connection(env: Env, harness: str) -> None:
+    result = env.install(harness, "--web-url", WEB, env={"ORCHESTRATOR_TOKEN": SECRET})
 
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert (project / CLAUDE_SKILLS / "orchestrator" / "SKILL.md").is_file()
-
-
-@needs_bash
-def test_re_running_replaces_the_installed_copy(project: Path) -> None:
-    _run(INSTALL, "--harness", "claude", "--project", str(project), cwd=project)
-    installed = project / CLAUDE_SKILLS / "orchestrator"
-    (installed / "stale.md").write_text("from an older kit\n")
-
-    result = _run(INSTALL, "--harness", "claude", "--project", str(project), cwd=project)
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert not (installed / "stale.md").exists()
-    assert (installed / "SKILL.md").is_file()
-    assert (installed / "references" / "api.md").is_file()
-
-
-# ── the two connection values ────────────────────────────────────────────────
+    _ok(result)
+    claude = harness in ("claude", "all")
+    agents = harness in ("codex", "opencode", "all")
+    assert (env.project / SKILL_CLAUDE).is_file() is claude
+    assert (env.project / SKILL_AGENTS).is_file() is agents
+    if claude:
+        _check_claude_mcp(env)
+    if harness in ("codex", "all"):
+        _check_codex_mcp(env)
+        assert "per-user" in result.stdout
+    if harness in ("opencode", "all"):
+        _check_opencode_mcp(env)
+    bootstrap = json.loads((env.project / ".orchestrator" / "bootstrap.json").read_text())
+    assert bootstrap["harness"] == harness
 
 
 @needs_bash
-def test_the_connection_values_are_added_once(project: Path) -> None:
-    _run(
-        INSTALL,
-        "--harness",
-        "claude",
-        "--base-url",
-        "http://127.0.0.1:8123",
-        "--project",
-        str(project),
-        cwd=project,
+def test_claude_leaves_exactly_three_files_and_no_secret_or_release(env: Env) -> None:
+    result = env.install(
+        "claude", "--web-url", WEB, env={"ORCHESTRATOR_TOKEN": SECRET, "SHIM_VERSION_FILE": ""}
     )
-    _run(INSTALL, "--harness", "claude", "--project", str(project), cwd=project)
 
-    lines = (project / ".env").read_text().splitlines()
+    _ok(result)
+    rel = sorted(str(p.relative_to(env.project)) for p in env.project.rglob("*") if p.is_file())
+    assert rel == sorted([".mcp.json", SKILL_CLAUDE, ".orchestrator/bootstrap.json"])
+    assert [p for p in env.home.rglob("*") if p.is_file()] == []
+    for path in env.written_files():
+        text = path.read_text()
+        assert SECRET not in text, path
+        assert not RELEASE.search(text), (path, RELEASE.search(text))
+    assert SECRET not in result.stdout + result.stderr
 
-    assert lines.count("ORCHESTRATOR_BASE_URL=http://127.0.0.1:8123") == 1
-    assert [line for line in lines if line.startswith("ORCHESTRATOR_TOKEN=")] == [
-        "ORCHESTRATOR_TOKEN="
+
+@needs_bash
+@pytest.mark.parametrize("harness", ["codex", "opencode", "all"])
+def test_no_written_file_holds_a_release_string_or_the_token(env: Env, harness: str) -> None:
+    result = env.install(harness, env={"ORCHESTRATOR_TOKEN": SECRET})
+
+    _ok(result)
+    for path in env.written_files():
+        text = path.read_text()
+        assert SECRET not in text, path
+        assert not RELEASE.search(text), (path, RELEASE.search(text))
+    assert SECRET not in result.stdout + result.stderr
+
+
+@needs_bash
+def test_bootstrap_json_keys_and_no_credential(env: Env) -> None:
+    _ok(env.install("claude", env={"ORCHESTRATOR_TOKEN": SECRET}))
+
+    data = json.loads((env.project / ".orchestrator" / "bootstrap.json").read_text())
+
+    assert set(data) == {"bootstrap_contract", "harness", "base_url", "installed_at"}
+    assert data["bootstrap_contract"] == 1
+    assert data["base_url"] == BASE
+    assert data["installed_at"].endswith("Z")
+
+
+# ── the rendered bootstrap ───────────────────────────────────────────────────
+
+
+@needs_bash
+def test_rendering_without_a_web_url(env: Env) -> None:
+    _ok(env.install("claude"))
+
+    text = (env.project / SKILL_CLAUDE).read_text()
+
+    assert "No web address was given." in text
+    assert "@@" not in text
+    assert "bootstrap_contract: 1" in text
+    assert "name: orchestrator" in text
+    assert BASE in text
+    assert (
+        "The token is in the environment variable `ORCHESTRATOR_TOKEN`; "
+        "never write its value into a file." in text
+    )
+    for rule in (
+        "a Run's budget is the owner's decision, never invented or raised by the agent",
+        "preflight comes before every launch",
+        "answer a park only with what the Run offers",
+        "a remote agent never maintains the installation",
+    ):
+        assert rule in text, rule
+    assert "Call the `version` tool" in text
+    assert "`read_guide` with no id" in text
+
+
+@needs_bash
+def test_rendering_with_a_web_url(env: Env) -> None:
+    _ok(env.install("claude", "--web-url", WEB + "/"))
+
+    text = (env.project / SKILL_CLAUDE).read_text()
+
+    assert WEB in text
+    assert WEB + "/" not in text
+    assert "No web address was given." not in text
+
+
+@needs_bash
+def test_special_characters_in_a_value_survive_literally(env: Env) -> None:
+    base = "https://o.example/a&b|c\\d"
+    result = env.run("--harness", "claude", "--base-url", base)
+
+    _ok(result)
+    assert base in (env.project / SKILL_CLAUDE).read_text()
+
+
+@needs_bash
+def test_a_custom_token_var_is_referenced_by_name(env: Env) -> None:
+    _ok(env.install("all", "--token-var", "MY_TOKEN"))
+
+    assert "`MY_TOKEN`" in (env.project / SKILL_CLAUDE).read_text()
+    assert "Bearer ${MY_TOKEN}" in (env.project / ".mcp.json").read_text()
+    assert 'bearer_token_env_var = "MY_TOKEN"' in (env.codex / "config.toml").read_text()
+    assert "Bearer {env:MY_TOKEN}" in (env.project / "opencode.json").read_text()
+
+
+@needs_bash
+def test_a_trailing_slash_is_stripped(env: Env) -> None:
+    _ok(env.run("--harness", "claude", "--base-url", BASE + "/"))
+
+    _check_claude_mcp(env)
+
+
+@needs_bash
+def test_re_running_replaces_the_skill_folder(env: Env) -> None:
+    _ok(env.install("claude"))
+    stale = env.project / ".claude/skills/orchestrator/stale.md"
+    stale.write_text("old\n")
+
+    _ok(env.install("claude"))
+
+    assert not stale.exists()
+    assert [p.name for p in stale.parent.iterdir()] == ["SKILL.md"]
+
+
+# ── --home ───────────────────────────────────────────────────────────────────
+
+
+@needs_bash
+def test_home_writes_under_home_and_xdg(env: Env) -> None:
+    result = env.run("--harness", "all", "--base-url", BASE, "--home", cwd=env.root)
+
+    _ok(result)
+    assert (env.home / SKILL_CLAUDE).is_file()
+    assert (env.home / SKILL_AGENTS).is_file()
+    assert (env.home / ".orchestrator" / "bootstrap.json").is_file()
+    cfg = json.loads((env.home / ".claude.json").read_text())
+    assert cfg["mcpServers"]["orchestrator"]["url"] == f"{BASE}/mcp"
+    oc = json.loads((env.xdg / "opencode" / "opencode.json").read_text())
+    assert oc["mcp"]["orchestrator"]["url"] == f"{BASE}/mcp"
+    assert (env.codex / "config.toml").is_file()
+    assert [p for p in env.project.rglob("*")] == []
+
+
+# ── existing configuration ───────────────────────────────────────────────────
+
+
+@needs_bash
+def test_a_json_config_with_another_server_is_merged(env: Env) -> None:
+    (env.project / ".mcp.json").write_text(
+        json.dumps({"keep": 1, "mcpServers": {"other": {"url": "x"}}})
+    )
+
+    _ok(env.install("claude"))
+
+    cfg = json.loads((env.project / ".mcp.json").read_text())
+    assert cfg["keep"] == 1
+    assert cfg["mcpServers"]["other"] == {"url": "x"}
+    assert cfg["mcpServers"]["orchestrator"]["url"] == f"{BASE}/mcp"
+
+
+#: Epic 3 retro R2 / C1 (orchestrator-instance-guide close-out, 2026-11-13): the merge runs
+#: `python3 -I`, so a `json.py` in the project is never imported.
+@needs_bash
+def test_a_json_py_in_the_project_is_not_imported_by_the_merge(env: Env) -> None:
+    (env.project / "json.py").write_text("raise SystemExit('planted json.py ran')\n")
+    (env.project / ".mcp.json").write_text(json.dumps({"mcpServers": {"other": {"url": "x"}}}))
+
+    result = env.install("claude")
+
+    _ok(result)
+    assert "planted" not in result.stdout + result.stderr
+    cfg = json.loads((env.project / ".mcp.json").read_text())
+    assert cfg["mcpServers"]["other"] == {"url": "x"}
+    assert cfg["mcpServers"]["orchestrator"]["url"] == f"{BASE}/mcp"
+
+
+#: Epic 3 retro R4 / C2 (orchestrator-instance-guide close-out, 2026-11-13): TOML literal
+#: strings are spellings too; missing one appends a second table and codex refuses the file.
+@needs_bash
+@pytest.mark.parametrize(
+    "original",
+    [
+        "[mcp_servers.'orchestrator']\nurl = 'https://old.example/mcp'\n",
+        "mcp_servers.'orchestrator'.url = 'https://old.example/mcp'\n",
+        "[mcp_servers]\n'orchestrator' = { url = 'https://old.example/mcp' }\n",
+    ],
+)
+def test_a_single_quoted_codex_entry_is_kept(env: Env, original: str) -> None:
+    (env.codex / "config.toml").write_bytes(original.encode())
+
+    result = env.install("codex")
+
+    _ok(result)
+    assert (env.codex / "config.toml").read_bytes() == original.encode()
+    assert "kept" in result.stdout
+
+
+@needs_bash
+def test_a_single_quoted_codex_url_is_read_back(env: Env) -> None:
+    (env.codex / "config.toml").write_text(
+        "[mcp_servers.'orchestrator']\nurl = 'https://old.example/mcp'\n"
+    )
+
+    result = env.install("codex")
+
+    _ok(result)
+    assert "https://old.example/mcp" in result.stdout
+
+
+@needs_bash
+def test_an_existing_orchestrator_entry_is_kept_byte_for_byte(env: Env) -> None:
+    original = json.dumps({"mcpServers": {"orchestrator": {"url": "https://old.example/mcp"}}})
+    (env.project / ".mcp.json").write_text(original)
+
+    result = env.install("claude")
+
+    _ok(result)
+    assert (env.project / ".mcp.json").read_text() == original
+    assert "https://old.example/mcp" in result.stdout
+    assert f"{BASE}/mcp" in result.stdout
+    assert "by hand" in result.stdout
+
+
+@needs_bash
+def test_an_existing_orchestrator_entry_with_the_same_url_is_kept_quietly(env: Env) -> None:
+    original = json.dumps({"mcpServers": {"orchestrator": {"url": f"{BASE}/mcp"}}})
+    (env.project / ".mcp.json").write_text(original)
+
+    result = env.install("claude")
+
+    _ok(result)
+    assert (env.project / ".mcp.json").read_text() == original
+    assert "by hand" not in result.stdout
+
+
+@needs_bash
+def test_an_invalid_json_config_stops_with_exit_1_and_is_unchanged(env: Env) -> None:
+    (env.project / ".mcp.json").write_text("{not json")
+
+    result = env.install("claude")
+
+    assert result.returncode == 1
+    assert ".mcp.json" in result.stderr
+    assert (env.project / ".mcp.json").read_text() == "{not json"
+    assert not (env.project / ".claude").exists()
+
+
+@needs_bash
+def test_opencode_jsonc_gets_nothing_written_and_exit_1(env: Env) -> None:
+    (env.project / "opencode.jsonc").write_text("{}")
+
+    result = env.install("opencode")
+
+    assert result.returncode == 1
+    assert not (env.project / "opencode.json").exists()
+    assert "opencode.jsonc" in result.stderr + result.stdout
+    assert f"{BASE}/mcp" in result.stdout + result.stderr
+
+
+@needs_bash
+def test_a_codex_config_with_another_table_gets_the_table_appended(env: Env) -> None:
+    (env.codex / "config.toml").write_text('[other]\nkey = "v"')
+
+    result = env.install("codex")
+
+    _ok(result)
+    cfg = tomllib.loads((env.codex / "config.toml").read_text())
+    assert cfg["other"] == {"key": "v"}
+    assert cfg["mcp_servers"]["orchestrator"]["url"] == f"{BASE}/mcp"
+    assert "per-user" in result.stdout
+
+
+@needs_bash
+def test_an_existing_codex_table_is_kept_and_a_difference_printed(env: Env) -> None:
+    original = '[mcp_servers.orchestrator]\nurl = "https://old.example/mcp"\n'
+    (env.codex / "config.toml").write_text(original)
+
+    result = env.install("codex")
+
+    _ok(result)
+    assert (env.codex / "config.toml").read_text() == original
+    assert "https://old.example/mcp" in result.stdout
+    assert "by hand" in result.stdout
+    assert "per-user" in result.stdout
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    "original",
+    [
+        '  [mcp_servers.orchestrator]\n  url = "https://old.example/mcp"\n',
+        '[mcp_servers."orchestrator"]\nurl = "https://old.example/mcp"\n',
+        '[ mcp_servers.orchestrator ]\nurl = "https://old.example/mcp"\n',
+        '[mcp_servers]\norchestrator = { url = "https://old.example/mcp" }\n',
+        'mcp_servers.orchestrator.url = "https://old.example/mcp"\n',
+        '[mcp_servers.orchestrator]\r\nurl = "https://old.example/mcp"\r\n',
+    ],
+)
+def test_every_toml_spelling_of_the_codex_entry_is_kept(env: Env, original: str) -> None:
+    (env.codex / "config.toml").write_bytes(original.encode())
+
+    result = env.install("codex")
+
+    _ok(result)
+    assert (env.codex / "config.toml").read_bytes() == original.encode()
+    assert "kept" in result.stdout
+
+
+@needs_bash
+def test_a_servers_key_that_is_not_an_object_is_refused_before_any_write(env: Env) -> None:
+    original = '{"mcpServers": ["keep"], "a": 1}'
+    (env.project / ".mcp.json").write_text(original)
+
+    result = env.install("claude")
+
+    assert result.returncode == 1
+    assert "mcpServers" in result.stderr
+    assert (env.project / ".mcp.json").read_text() == original
+    assert not (env.project / ".claude").exists()
+
+
+@needs_bash
+def test_a_quote_or_backslash_in_the_base_url_stays_inside_the_strings(env: Env) -> None:
+    base = 'https://o.example/"q\\z'
+    (env.project / ".mcp.json").write_text('{"mcpServers": {"other": {}}}')
+
+    result = env.run("--harness", "all", "--base-url", base)
+
+    _ok(result)
+    claude = json.loads((env.project / ".mcp.json").read_text())
+    assert claude["mcpServers"]["orchestrator"]["url"] == f"{base}/mcp"
+    assert set(claude["mcpServers"]["orchestrator"]) == {"type", "url", "headers"}
+    opencode = json.loads((env.project / "opencode.json").read_text())
+    assert opencode["mcp"]["orchestrator"]["url"] == f"{base}/mcp"
+    codex = tomllib.loads((env.codex / "config.toml").read_text())
+    assert codex["mcp_servers"] == {
+        "orchestrator": {"url": f"{base}/mcp", "bearer_token_env_var": "ORCHESTRATOR_TOKEN"}
+    }
+    marker = json.loads((env.project / ".orchestrator" / "bootstrap.json").read_text())
+    assert marker["base_url"] == base
+
+
+@needs_bash
+@pytest.mark.parametrize("flag", ["--base-url", "--web-url"])
+def test_a_control_character_in_a_url_is_refused(env: Env, flag: str) -> None:
+    result = env.run("--harness", "codex", flag, 'https://x.example\ncommand = "sh"')
+
+    assert result.returncode == 1
+    assert "control character" in result.stderr
+    assert not (env.codex / "config.toml").exists()
+    assert not (env.project / ".agents").exists()
+
+
+# ── the beta.4 move ──────────────────────────────────────────────────────────
+
+
+@needs_bash
+def test_a_beta4_project_loses_its_kit(env: Env) -> None:
+    orch = env.project / ".orchestrator"
+    (orch / "bin").mkdir(parents=True)
+    (orch / "kit.json").write_text("{}")
+    (orch / "bin" / "orchestrator-watch").write_text("x")
+    (env.project / ".env").write_text("ORCHESTRATOR_TOKEN=old\n")
+    for d in (".claude/skills", ".agents/skills"):
+        for name in OLD_SKILLS:
+            (env.project / d / name / "references").mkdir(parents=True)
+            (env.project / d / name / "SKILL.md").write_text("old")
+            (env.project / d / name / "references" / "api.md").write_text("old")
+    (env.project / ".claude/skills/mine").mkdir()
+    (env.project / ".claude/skills/mine/SKILL.md").write_text("mine")
+
+    result = env.install("claude")
+
+    _ok(result)
+    assert [p.name for p in (env.project / ".claude/skills/orchestrator").iterdir()] == ["SKILL.md"]
+    assert sorted(p.name for p in (env.project / ".claude/skills").iterdir()) == [
+        "mine",
+        "orchestrator",
     ]
+    assert not (env.project / ".agents/skills").exists() or not any(
+        (env.project / ".agents/skills").iterdir()
+    )
+    assert not (orch / "bin").exists()
+    assert not (orch / "kit.json").exists()
+    assert (env.project / ".env").read_text() == "ORCHESTRATOR_TOKEN=old\n"
+    assert str(orch / "bin") in result.stdout
+    assert str(env.project / ".agents/skills/initiative-run") in result.stdout
+    assert ".env" in result.stdout and "not read by the bootstrap" in result.stdout
+
+
+# ── remote mode ──────────────────────────────────────────────────────────────
 
 
 @needs_bash
-def test_an_existing_value_is_never_overwritten(project: Path) -> None:
-    """The two values belong to the project; re-installing must not rotate the token."""
-    (project / ".env").write_text(
-        "ORCHESTRATOR_BASE_URL=http://elsewhere:9999\nORCHESTRATOR_TOKEN=already-mine\n"
-    )
-
-    result = _run(
-        INSTALL,
+def test_remote_mode_installs_from_the_served_archive(env: Env) -> None:
+    result = env.run(
         "--harness",
         "claude",
         "--base-url",
-        "http://127.0.0.1:8000",
-        "--token",
-        TOKEN,
-        "--project",
-        str(project),
-        cwd=project,
+        BASE,
+        script=env.piped_script(),
+        env={"ORCHESTRATOR_TOKEN": SECRET, "SHIM_ARCHIVE": env.archive()},
     )
 
-    assert "left alone" in result.stdout
-    assert (project / ".env").read_text() == (
-        "ORCHESTRATOR_BASE_URL=http://elsewhere:9999\nORCHESTRATOR_TOKEN=already-mine\n"
-    )
-    marker = json.loads((project / ".orchestrator" / "kit.json").read_text())
-    assert marker["base_url"] == "http://elsewhere:9999"
+    _ok(result)
+    log = env.log.read_text()
+    assert "/api/v1/kit/archive" in log
+    assert f"Authorization: Bearer {SECRET}" in log
+    assert (env.project / SKILL_CLAUDE).is_file()
+    assert SECRET not in result.stdout + result.stderr
+    for path in env.written_files():
+        assert SECRET not in path.read_text()
 
 
 @needs_bash
-def test_a_dotenv_without_a_final_newline_keeps_its_last_line(project: Path) -> None:
-    (project / ".env").write_text("EXISTING=value")
+def test_remote_mode_without_the_variable_names_it(env: Env) -> None:
+    result = env.run("--harness", "claude", "--base-url", BASE, script=env.piped_script())
 
-    _run(INSTALL, "--harness", "claude", "--project", str(project), cwd=project)
-
-    assert "EXISTING=value" in (project / ".env").read_text().splitlines()
-
-
-# ── the version marker ───────────────────────────────────────────────────────
+    assert result.returncode != 0
+    assert "ORCHESTRATOR_TOKEN" in result.stderr
+    assert env.written_files() == []
 
 
 @needs_bash
-def test_the_marker_records_the_manifest_version_the_harness_and_no_token(project: Path) -> None:
-    _run(
-        INSTALL,
+def test_remote_mode_reads_the_variable_the_flag_names(env: Env) -> None:
+    result = env.run(
         "--harness",
-        "codex",
-        "--token",
-        TOKEN,
+        "claude",
         "--base-url",
-        "http://127.0.0.1:8123",
-        "--project",
-        str(project),
-        cwd=project,
+        BASE,
+        "--token-var",
+        "MY_TOKEN",
+        script=env.piped_script(),
+        env={"MY_TOKEN": SECRET, "SHIM_ARCHIVE": env.archive()},
     )
 
-    text = (project / ".orchestrator" / "kit.json").read_text()
-    marker = json.loads(text)
-
-    assert marker["kit_version"] == _kit_version()
-    assert marker["harness"] == "codex"
-    assert marker["base_url"] == "http://127.0.0.1:8123"
-    assert marker["installed_at"].endswith("Z")
-    assert TOKEN not in text
+    _ok(result)
+    assert f"Authorization: Bearer {SECRET}" in env.log.read_text()
 
 
 # ── the probe ────────────────────────────────────────────────────────────────
 
 
 @needs_bash
-def test_the_probe_calls_version_with_a_bearer_and_prints_the_app_version(
-    project: Path, tmp_path: Path, shim: tuple[Path, Path, dict[str, str]]
-) -> None:
-    _, log, env = shim
-    env = {**env, "SHIM_VERSION_FILE": _version_body(tmp_path, _kit_version())}
+def test_the_probe_prints_the_release_and_contract(env: Env) -> None:
+    result = env.install(
+        "claude", env={"ORCHESTRATOR_TOKEN": SECRET, "SHIM_VERSION_FILE": env.version_body()}
+    )
 
-    result = _run(
-        INSTALL,
-        "--harness",
+    _ok(result)
+    assert f"{BASE}/api/v1/version" in env.log.read_text()
+    assert "9.9.9" in result.stdout
+    assert "bootstrap_contract" in result.stdout
+    assert SECRET not in result.stdout + result.stderr
+
+
+@needs_bash
+def test_a_higher_contract_is_a_difference_not_an_error(env: Env) -> None:
+    result = env.install(
         "claude",
-        "--token",
-        TOKEN,
-        "--base-url",
-        "http://127.0.0.1:8000",
-        "--project",
-        str(project),
-        cwd=project,
-        env=env,
+        env={"ORCHESTRATOR_TOKEN": SECRET, "SHIM_VERSION_FILE": env.version_body(contract=2)},
     )
 
-    calls = log.read_text()
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "http://127.0.0.1:8000/api/v1/version" in calls, calls
-    assert f"Authorization: Bearer {TOKEN}" in calls, "the bearer never reached curl"
-    assert "/api/v1/ping" not in calls, "ping is the fallback, not the check"
-    assert _kit_version() in result.stdout
-    assert "warning" not in result.stderr
+    _ok(result)
+    assert "refusal-bootstrap-contract" in result.stdout + result.stderr
+    assert "2" in result.stdout + result.stderr
 
 
 @needs_bash
-def test_a_version_mismatch_warns_with_the_reinstall_line(
-    project: Path, tmp_path: Path, shim: tuple[Path, Path, dict[str, str]]
-) -> None:
-    _, _, env = shim
-    env = {**env, "SHIM_VERSION_FILE": _version_body(tmp_path, "99.0.0")}
+def test_the_probe_is_skipped_without_the_variable(env: Env) -> None:
+    result = env.install("claude")
 
-    result = _run(
-        INSTALL,
-        "--harness",
-        "codex",
-        "--token",
-        TOKEN,
-        "--project",
-        str(project),
-        cwd=project,
-        env=env,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "99.0.0" in result.stderr
-    assert f"{RE_INSTALL_LINE} codex" in result.stderr
-
-
-@needs_bash
-def test_the_token_reaches_no_output_line(
-    project: Path, tmp_path: Path, shim: tuple[Path, Path, dict[str, str]]
-) -> None:
-    """kit.json is committed and a client pastes this output into a bug report."""
-    _, _, env = shim
-    env = {**env, "SHIM_VERSION_FILE": _version_body(tmp_path, "99.0.0")}
-
-    result = _run(INSTALL, "--token", TOKEN, "--project", str(project), cwd=project, env=env)
-
-    assert TOKEN not in result.stdout
-    assert TOKEN not in result.stderr
-
-
-@needs_bash
-def test_without_a_token_the_probe_is_skipped_and_says_how_to_set_it(project: Path) -> None:
-    result = _run(INSTALL, "--harness", "claude", "--project", str(project), cwd=project)
-
-    assert result.returncode == 0, result.stdout + result.stderr
+    _ok(result)
     assert "ORCHESTRATOR_TOKEN" in result.stdout
-    assert (project / CLAUDE_SKILLS / "orchestrator" / "SKILL.md").is_file()
+    assert "skipped" in result.stdout
+    assert "/api/v1/version" not in env.log.read_text()
 
 
 @needs_bash
-def test_a_404_on_version_falls_back_to_ping_and_says_so(
-    project: Path, shim: tuple[Path, Path, dict[str, str]]
-) -> None:
-    """An instance older than the route still answers `/api/v1/ping`."""
-    _, log, env = shim
-    env = {**env, "SHIM_VERSION_CODE": "404"}
-
-    result = _run(
-        INSTALL,
-        "--harness",
-        "claude",
-        "--token",
-        TOKEN,
-        "--project",
-        str(project),
-        cwd=project,
-        env=env,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "404" in result.stdout
-    assert "/api/v1/ping" in log.read_text()
-    assert "token accepted" in result.stdout
-
-
-@needs_bash
-def test_a_refused_token_stops_the_script(
-    project: Path, shim: tuple[Path, Path, dict[str, str]]
-) -> None:
-    _, _, env = shim
-    env = {**env, "SHIM_VERSION_CODE": "401"}
-
-    result = _run(
-        INSTALL,
-        "--harness",
-        "claude",
-        "--token",
-        TOKEN,
-        "--project",
-        str(project),
-        cwd=project,
-        env=env,
-    )
+def test_a_refused_token_stops_naming_the_variable_not_the_value(env: Env) -> None:
+    result = env.install("claude", env={"ORCHESTRATOR_TOKEN": SECRET, "SHIM_VERSION_CODE": "401"})
 
     assert result.returncode != 0
     assert "401" in result.stderr
-    assert TOKEN not in result.stderr
-
-
-# ── remote mode: the kit comes out of the instance ───────────────────────────
-
-
-@needs_bash
-def test_remote_mode_installs_from_the_served_archive(
-    project: Path, tmp_path: Path, shim: tuple[Path, Path, dict[str, str]]
-) -> None:
-    """What the documented one-liner does: no `skills/` beside the script, so it fetches."""
-    _, log, env = shim
-    piped = tmp_path / "piped"
-    piped.mkdir()
-    shutil.copy(INSTALL, piped / "install.sh")
-    env = {
-        **env,
-        "SHIM_ARCHIVE": _archive(tmp_path),
-        "SHIM_VERSION_FILE": _version_body(tmp_path, _kit_version()),
-    }
-
-    result = _run(
-        piped / "install.sh",
-        "--harness",
-        "claude",
-        "--token",
-        TOKEN,
-        "--project",
-        str(project),
-        cwd=project,
-        env=env,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "/api/v1/kit/archive" in log.read_text()
-    assert (project / CLAUDE_SKILLS / "orchestrator" / "SKILL.md").is_file()
-    marker = json.loads((project / ".orchestrator" / "kit.json").read_text())
-    assert marker["kit_version"] == _kit_version()
-
-
-@needs_bash
-def test_remote_mode_without_a_token_refuses_and_names_the_flag(
-    project: Path, tmp_path: Path, shim: tuple[Path, Path, dict[str, str]]
-) -> None:
-    _, _, env = shim
-    piped = tmp_path / "piped"
-    piped.mkdir()
-    shutil.copy(INSTALL, piped / "install.sh")
-
-    result = _run(
-        piped / "install.sh", "--harness", "claude", "--project", str(project), cwd=project, env=env
-    )
-
-    assert result.returncode != 0
-    assert "--token" in result.stderr
-    assert not (project / ".orchestrator").exists()
-
-
-@needs_bash
-def test_an_unreachable_archive_is_reported_with_its_url(
-    project: Path, tmp_path: Path, shim: tuple[Path, Path, dict[str, str]]
-) -> None:
-    _, _, env = shim
-    piped = tmp_path / "piped"
-    piped.mkdir()
-    shutil.copy(INSTALL, piped / "install.sh")
-    env = {**env, "SHIM_ARCHIVE_CODE": "502"}
-
-    result = _run(
-        piped / "install.sh", "--token", TOKEN, "--project", str(project), cwd=project, env=env
-    )
-
-    assert result.returncode != 0
-    assert "/api/v1/kit/archive" in result.stderr
-    assert TOKEN not in result.stderr
-
-
-# ── the kit's commands ───────────────────────────────────────────────────────
-# Added with `orchestrator-watch` (agent-delivery-kit plan phase 6, 2026-10-01).
-
-WATCHER = ".orchestrator/bin/orchestrator-watch"
-
-
-@needs_bash
-def test_the_watcher_lands_executable_with_its_path_line(project: Path) -> None:
-    """A watcher that is not executable, or that the client cannot find, supervises nothing."""
-    result = _run(INSTALL, "--harness", "claude", "--project", str(project), cwd=project)
-
-    watcher = project / WATCHER
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert watcher.is_file()
-    assert watcher.stat().st_mode & 0o111, "orchestrator-watch is not executable"
-    assert str(project / ".orchestrator" / "bin") in result.stdout
-    assert "export PATH=" in result.stdout
-
-
-@needs_bash
-def test_remote_mode_installs_the_watcher_from_the_served_archive(
-    project: Path, tmp_path: Path, shim: tuple[Path, Path, dict[str, str]]
-) -> None:
-    _, _, env = shim
-    piped = tmp_path / "piped"
-    piped.mkdir()
-    shutil.copy(INSTALL, piped / "install.sh")
-    env = {
-        **env,
-        "SHIM_ARCHIVE": _archive(tmp_path),
-        "SHIM_VERSION_FILE": _version_body(tmp_path, _kit_version()),
-    }
-
-    result = _run(
-        piped / "install.sh",
-        "--harness",
-        "claude",
-        "--token",
-        TOKEN,
-        "--project",
-        str(project),
-        cwd=project,
-        env=env,
-    )
-
-    watcher = project / WATCHER
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert watcher.is_file()
-    assert watcher.stat().st_mode & 0o111, "orchestrator-watch is not executable"
+    assert "ORCHESTRATOR_TOKEN" in result.stderr
+    assert SECRET not in result.stdout + result.stderr

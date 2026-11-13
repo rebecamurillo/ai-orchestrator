@@ -12,7 +12,9 @@ first finding a version number or supplying a body.
 rather than letting a raised `DomainError` become one: the validator's errors are structured
 (`template`, `version`, `line`, `reason`), and `api/errors.py`'s generic `DomainError`
 handler carries no such shape. The two other save refusals — a `name` or `version` that
-does not match the path — stay plain `Invalid`, mapped the usual way.
+does not match the path — stay plain `Invalid`, mapped the usual way. The folder refusal
+(`refuse_if_in_folder`, AD-34) is built here too: it is a decision about this request, taken
+before anything is validated or stored.
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ from orchestrator.api.schemas.templates import (
     ValidateOut,
     as_problem_errors,
 )
+from orchestrator.application import findings
 from orchestrator.application.use_cases import template_reload
 from orchestrator.application.use_cases import templates as use_cases
 from orchestrator.application.use_cases.templates import TemplatePorts, TemplateValidationFailed
@@ -73,6 +76,11 @@ READ_REFUSALS = {
 }
 SAVE_REFUSALS = {
     HTTP_NOT_FOUND: NOT_FOUND_RESPONSE,
+    http_status.HTTP_409_CONFLICT: _refusal(
+        "`refuse_if_in_folder` was set and the operator's template folder holds this name "
+        "(`refusal-template-in-folder`), or a concurrent save took this version number "
+        "(`conflict`); nothing is stored."
+    ),
     HTTP_UNPROCESSABLE_CONTENT: VALIDATION_RESPONSE,
 }
 CONFLICT_RESPONSE = _refusal(
@@ -117,6 +125,20 @@ def list_versions(name: str, ports: Ports) -> Page[int]:
     return Page[int](items=use_cases.list_versions(ports, name), next_cursor=None)
 
 
+def _held_in_folder(name: str, ports: TemplatePorts) -> Problem:
+    path = ports.folders.operator().path if ports.folders is not None else ""
+    return Problem(
+        status=http_status.HTTP_409_CONFLICT,
+        title="template held in the operator folder",
+        detail=(
+            f"{name}.yaml is in the operator template folder {path}; have the file edited on "
+            "the host, then call reload_templates."
+        ),
+        code=findings.REFUSAL_TEMPLATE_IN_FOLDER,
+        guide=findings.guide_id(findings.REFUSAL_TEMPLATE_IN_FOLDER),
+    )
+
+
 @router.post(
     "/templates/{name}/versions",
     response_model=TemplateVersionOut,
@@ -126,6 +148,8 @@ def list_versions(name: str, ports: Ports) -> Page[int]:
 )
 def save_version(name: str, payload: SaveVersionIn, ports: Ports) -> TemplateVersionOut:
     """`version` must be `max(existing) + 1`; a saved version can never be changed (AD-15)."""
+    if payload.refuse_if_in_folder is True and name in use_cases.folder_stems(ports):
+        raise _held_in_folder(name, ports)
     try:
         saved = use_cases.save_version(ports, name, payload.yaml)
     except TemplateValidationFailed as failure:

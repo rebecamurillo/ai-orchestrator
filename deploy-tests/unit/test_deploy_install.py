@@ -280,7 +280,7 @@ def test_the_bundle_carries_the_installer_and_no_secret(tmp_path: Path) -> None:
         "setup/examples/copy-folder.sh",
         "bmad/install.sh",
         "kit/install.sh",
-        "kit/skills/orchestrator/SKILL.md",
+        "kit/bootstrap/SKILL.md.tmpl",
     ):
         assert root + path in members, path
         assert members[root + path].mode & 0o111 if path.endswith(".sh") else True, path

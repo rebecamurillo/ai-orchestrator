@@ -2,7 +2,8 @@
 
 This pins documentation, not template content (hard rule 6 does not apply): the owner and an
 agent customising a workflow are told that the folder's file wins, and the README states the
-rules the reload answer relies on. Line wrapping is ignored.
+rules the reload answer relies on. Line wrapping is ignored. The kit skills' two pairs read the
+guide pages instead (epic 3 story 3, 2026-11-12, AD-33).
 """
 
 from __future__ import annotations
@@ -43,13 +44,12 @@ SHIPPED_OVERRIDE = (
 )
 
 README = "templates/README.md"
-KIT = "deploy/kit/skills/orchestrator"
 
 PAIRS = [
     (README, PRECEDENCE),
     ("deploy/README.md", PRECEDENCE),
-    (f"{KIT}/SKILL.md", PRECEDENCE),
-    (f"{KIT}/references/workflows.md", PRECEDENCE),
+    ("guide/workflows/customize.md", PRECEDENCE),
+    ("guide/host/template-folder.md", PRECEDENCE),
     (README, VERSION_REQUIRED),
     (README, VERSION_HASH),
     (README, VERSION_WEB),

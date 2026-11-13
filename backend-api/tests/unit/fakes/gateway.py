@@ -11,7 +11,7 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import UUID
 
-from orchestrator.domain.ports.gateway import AttemptSpend
+from orchestrator.domain.ports.gateway import AttemptSpend, GatewayUnreachable
 
 #: What every unscripted `(run_id, attempt_id)` pair answers — the real adapter's own
 #: "empty rows" and "connection error" outcomes collapse to this same shape.
@@ -34,3 +34,20 @@ class FakeGateway:
     def spend_for_attempt(self, run_id: UUID, attempt_id: UUID) -> AttemptSpend:
         self.calls.append((run_id, attempt_id))
         return self._scripted.get((run_id, attempt_id), PROVISIONAL_ZERO)
+
+
+class FakeGatewayModels:
+    """Scripted `GatewayModels`: a fixed list, or a scripted `GatewayUnreachable`; counts calls."""
+
+    def __init__(
+        self, models: tuple[str, ...] = (), *, error: GatewayUnreachable | None = None
+    ) -> None:
+        self._models = models
+        self._error = error
+        self.calls = 0
+
+    def models(self) -> tuple[str, ...]:
+        self.calls += 1
+        if self._error is not None:
+            raise self._error
+        return self._models

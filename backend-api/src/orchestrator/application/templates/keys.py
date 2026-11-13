@@ -65,12 +65,18 @@ from orchestrator.application.templates.model import (
 )
 from orchestrator.application.templates.on_fail import check_on_fail
 from orchestrator.application.templates.table import (
+    AGENT_DISPATCH_KEYS,
+    AGENT_INTENT_KEYS,
     AGENT_KEYS,
     CALL_TIMING_KEYS,
+    ID_KEY,
+    NAME_KEY,
     RUN_KEY,
     RUN_SUGAR_KIND,
     STEP_KEYS,
     TEMPLATE_KEYS,
+    USES_KEY,
+    VERSION_KEY,
     is_count,
     is_minutes,
     is_slug,
@@ -93,14 +99,14 @@ def check_keys(root: LinedMap) -> tuple[list[ValidationError], list[str]]:
 
 def _check_template(root: LinedMap) -> list[ValidationError]:
     errors = unknown_keys(root, TEMPLATE_KEYS)
-    if "name" not in root:
+    if NAME_KEY not in root:
         errors.append(problem(root.line, MISSING_KEY))
-    elif not is_slug(root["name"]):
-        errors.append(problem(key_line(root, "name", root.line), INVALID_SLUG))
-    if "version" not in root:
+    elif not is_slug(root[NAME_KEY]):
+        errors.append(problem(key_line(root, NAME_KEY, root.line), INVALID_SLUG))
+    if VERSION_KEY not in root:
         errors.append(problem(root.line, MISSING_KEY))
-    elif not is_count(root["version"]):
-        errors.append(problem(key_line(root, "version", root.line), NON_LITERAL_VERSION))
+    elif not is_count(root[VERSION_KEY]):
+        errors.append(problem(key_line(root, VERSION_KEY, root.line), NON_LITERAL_VERSION))
     return errors
 
 
@@ -108,7 +114,7 @@ def _check_template(root: LinedMap) -> list[ValidationError]:
 
 
 def _id_of(node: LinedMap) -> str:
-    declared = node.get("id")
+    declared = node.get(ID_KEY)
     return declared if isinstance(declared, str) else ""
 
 
@@ -120,7 +126,7 @@ def _path(node: LinedMap, enclosing: Sequence[LinedMap]) -> str | None:
     and the id itself is already reported as `invalid slug`.
     """
     segments = [*enclosing, node]
-    if not all(is_slug(segment.get("id")) for segment in segments):
+    if not all(is_slug(segment.get(ID_KEY)) for segment in segments):
         return None
     return ".".join(_id_of(segment) for segment in segments)
 
@@ -172,7 +178,7 @@ def _check_steps(root: LinedMap, unvalidated: list[str]) -> list[ValidationError
             lists_with_loop.add(owner)
             continue
         errors += _check_step(node, enclosing, earlier_agents, unvalidated)
-        if node.get("uses") == AGENT_KIND:
+        if node.get(USES_KEY) == AGENT_KIND:
             earlier_agents.add(_id_of(node))
     return errors
 
@@ -188,20 +194,20 @@ def _check_ids(
     errors: list[ValidationError] = []
     seen: dict[int, set[str]] = {}
     for node, enclosing in walked:
-        if "id" not in node:
+        if ID_KEY not in node:
             errors.append(problem(node.line, MISSING_KEY))
             continue
-        line = key_line(node, "id", node.line)
-        if isinstance(node["id"], str) and node["id"].isdigit() and node["id"].isascii():
+        line = key_line(node, ID_KEY, node.line)
+        if isinstance(node[ID_KEY], str) and node[ID_KEY].isdigit() and node[ID_KEY].isascii():
             errors.append(problem(line, ALL_DIGIT_STEP_ID))
             continue
-        if not is_slug(node["id"]):
+        if not is_slug(node[ID_KEY]):
             errors.append(problem(line, INVALID_SLUG))
             continue
         ids = seen.setdefault(id(enclosing[-1] if enclosing else root), set())
-        if node["id"] in ids:
+        if node[ID_KEY] in ids:
             errors.append(problem(line, DUPLICATE_STEP_ID))
-        ids.add(node["id"])
+        ids.add(node[ID_KEY])
     return errors
 
 
@@ -230,16 +236,16 @@ def _check_step(
 
 def _kind_of(node: LinedMap) -> tuple[str | None, list[ValidationError]]:
     """The step's kind, resolving the `run:` sugar; `None` when the file does not say."""
-    has_uses, has_run = "uses" in node, "run" in node
+    has_uses, has_run = USES_KEY in node, "run" in node
     if has_uses and has_run:
         return None, [problem(key_line(node, "run", node.line), USES_AND_RUN)]
     if has_run:
         return _run_sugar(node)
     if not has_uses:
         return None, [problem(node.line, MISSING_KEY)]
-    if node["uses"] in TEMPLATE_KINDS:
-        return str(node["uses"]), []
-    return None, [problem(key_line(node, "uses", node.line), UNKNOWN_KIND)]
+    if node[USES_KEY] in TEMPLATE_KINDS:
+        return str(node[USES_KEY]), []
+    return None, [problem(key_line(node, USES_KEY, node.line), UNKNOWN_KIND)]
 
 
 def _run_sugar(node: LinedMap) -> tuple[str | None, list[ValidationError]]:
@@ -252,16 +258,9 @@ def _run_sugar(node: LinedMap) -> tuple[str | None, list[ValidationError]]:
     return RUN_SUGAR_KIND, []
 
 
-#: The three dispatch forms an `agent` `with` block may carry — only one at a time.
-_DISPATCH_KEYS: frozenset[str] = frozenset({"skill", "prompt", "prompt_file"})
-#: The intent key for the intent dispatch form (IMP-002 accepted 2026-09-15).
-#: NOT added to _DISPATCH_KEYS to avoid triggering INVALID_DISPATCH_FORM for skill+intent.
-_INTENT_KEYS: frozenset[str] = frozenset({"intent"})
-
-
 def _check_dispatch_form(params: LinedMap, with_line: int) -> list[ValidationError]:
     """More than one dispatch key in the same `with` block is ambiguous and rejected."""
-    if sum(1 for k in params if k in _DISPATCH_KEYS) > 1:
+    if sum(1 for k in params if k in AGENT_DISPATCH_KEYS) > 1:
         return [problem(with_line, INVALID_DISPATCH_FORM)]
     return []
 
@@ -292,7 +291,7 @@ def _check_with(node: LinedMap, kind: str) -> list[ValidationError]:
     if params is None:
         return [problem(line, MISSING_KEY)]
     base = KIND_META[kind].with_keys
-    allowed = base | _DISPATCH_KEYS | _INTENT_KEYS if kind == AGENT_KIND else base
+    allowed = base | AGENT_DISPATCH_KEYS | AGENT_INTENT_KEYS if kind == AGENT_KIND else base
     errors = unknown_keys(params, allowed)
     if kind == AGENT_KIND:
         errors += _check_dispatch_form(params, line)
@@ -309,10 +308,10 @@ def _check_call_with(params: LinedMap) -> list[ValidationError]:
     No `version` is an unpinned call, resolved to the callee's latest by `calls.py`.
     """
     errors: list[ValidationError] = []
-    if not isinstance(params.get("name"), str):
-        errors.append(problem(key_line(params, "name", params.line), MISSING_KEY))
-    if "version" in params and not is_count(params["version"]):
-        errors.append(problem(key_line(params, "version", params.line), NON_LITERAL_VERSION))
+    if not isinstance(params.get(NAME_KEY), str):
+        errors.append(problem(key_line(params, NAME_KEY, params.line), MISSING_KEY))
+    if VERSION_KEY in params and not is_count(params[VERSION_KEY]):
+        errors.append(problem(key_line(params, VERSION_KEY, params.line), NON_LITERAL_VERSION))
     return errors
 
 

@@ -37,7 +37,8 @@ HTTP_UNPROCESSABLE = 422
 HTTP_METHOD_NOT_ALLOWED = 405
 HTTP_SERVER_ERROR = 500
 
-PROBLEM_KEYS = {"type", "title", "status", "detail", "instance", "errors"}
+# Story 1, 2026-11-11 (AD-15 amended): ProblemDetail gains top-level `code` and `guide`.
+PROBLEM_KEYS = {"type", "title", "status", "detail", "instance", "errors", "code", "guide"}
 
 
 class Counted(BaseModel):
@@ -110,7 +111,16 @@ def test_the_problem_document_carries_exactly_the_declared_members() -> None:
 
 
 def test_an_error_entry_carries_exactly_the_declared_members() -> None:
-    assert set(ProblemError.model_fields) == {"template", "version", "line", "path", "reason"}
+    # Story 1, 2026-11-11 (AD-15 amended): ProblemError gains `code` and `guide`.
+    assert set(ProblemError.model_fields) == {
+        "template",
+        "version",
+        "line",
+        "path",
+        "reason",
+        "code",
+        "guide",
+    }
 
 
 def test_only_the_reason_of_an_error_entry_is_required() -> None:

@@ -1,38 +1,34 @@
 """Composition root: the only module that wires adapters into ports.
 
-The durable engine is launched here too (Operations): `main()` builds it — no connection —
-names it as the engine this process serves with, and `run_migrations` launches it after the
-schema and the seeds, before uvicorn binds. `infrastructure/dbos/startup.py` says why the
-launch lives inside that one name and not beside it. Everything else is a FastAPI
-application: the public `/healthz`, and every feature router mounted under `/api/v1` behind
-the one bearer dependency (AD-4).
+The durable engine is launched here too (Operations): `main()` builds it — no connection — names it
+as the engine this process serves with, and `run_migrations` launches it after the schema and the
+seeds, before uvicorn binds. `infrastructure/dbos/startup.py` says why the launch lives inside that
+one name and not beside it. Everything else is a FastAPI application: the public `/healthz`, and
+every feature router mounted under `/api/v1` behind the one bearer dependency (AD-4).
 
-`create_app` performs no I/O, and it is `main()` — never `create_app` — that wires
-`alembic upgrade head` in as the application's start-up step. Why it is done that way, and
-what it guarantees, is stated once in
-`orchestrator.infrastructure.db.migrations`; this module is where it is wired.
+`create_app` performs no I/O, and it is `main()` — never `create_app` — that wires `alembic upgrade
+head` in as the application's start-up step. Why it is done that way, and what it guarantees, is
+stated once in `orchestrator.infrastructure.db.migrations`; this module is where it is wired.
 
-The adapters follow the same split. `main()` builds the engine and the session factory —
-neither opens a connection — and stores them on `app.state` for `api/providers.py` to read
-per request. The `Crypto` adapter is passed as a *factory* rather than as an instance,
-because `FernetCrypto` validates `ORCHESTRATOR_SECRET_KEY` strictly and the contract's
-placeholder is not a Fernet key: `tests/unit/test_logging.py` and
-`tests/unit/test_migrations.py` call `main()` with exactly those placeholders. Deferring
-the construction means a misconfigured instance still starts and still answers `/healthz`.
-What it does not do is serve `/api/v1/projects`: `api/providers.py` builds the adapter for
-every request that needs a Project port, so a *read* fails as surely as a write, and it
-fails the same way — a bare `internal server error` problem document, with the message
-naming `ORCHESTRATOR_SECRET_KEY` in the log and nothing of it in the body. The operator
-sees a 500 and finds the reason in `docker compose logs backend-api`.
+The adapters follow the same split. `main()` builds the engine and the session factory — neither
+opens a connection — and stores them on `app.state` for `api/providers.py` to read per request. The
+`Crypto` adapter is passed as a *factory* rather than as an instance, because `FernetCrypto`
+validates `ORCHESTRATOR_SECRET_KEY` strictly and the contract's placeholder is not a Fernet key:
+`tests/unit/test_logging.py` and `tests/unit/test_migrations.py` call `main()` with exactly those
+placeholders. Deferring the construction means a misconfigured instance still starts and still
+answers `/healthz`. What it does not do is serve `/api/v1/projects`: `api/providers.py` builds the
+adapter for every request that needs a Project port, so a *read* fails as surely as a write, and it
+fails the same way — a bare `internal server error` problem document, with the message naming
+`ORCHESTRATOR_SECRET_KEY` in the log and nothing of it in the body. The operator sees a 500 and
+finds the reason in `docker compose logs backend-api`.
 
-This module's own `run_migrations` wraps `infrastructure.db.migrations.run_migrations`
-with the shipped-Templates seed (SPEC CAP-3), because `tests/unit/test_migrations.py`
-proves "migrate before bind" by replacing `main.run_migrations` wholesale. Seeding shares
-that one name so the same replacement keeps it, too, out of a unit test's reach — a test
-that patched only the alembic step would leave the seed to run for real, against no
-database at all, which AD-18 forbids. `infrastructure.db.migrations.run_migrations` stays
-the one statement of *when the schema migrates*; this module only orders the two steps.
-"""
+This module's own `run_migrations` wraps `infrastructure.db.migrations.run_migrations` with the
+shipped-Templates seed (SPEC CAP-3), because `tests/unit/test_migrations.py` proves "migrate before
+bind" by replacing `main.run_migrations` wholesale. Seeding shares that one name so the same
+replacement keeps it, too, out of a unit test's reach — a test that patched only the alembic step
+would leave the seed to run for real, against no database at all, which AD-18 forbids.
+`infrastructure.db.migrations.run_migrations` stays the one statement of *when the schema migrates*;
+this module only orders the two steps."""
 
 from __future__ import annotations
 
@@ -49,11 +45,13 @@ from sqlalchemy.orm import Session
 from orchestrator.api.deps import require_bearer
 from orchestrator.api.errors import UNAUTHORIZED_RESPONSE, install_error_handlers
 from orchestrator.api.mcp_mount import install_mcp
+from orchestrator.api.open_routes import install_open_routes
 from orchestrator.api.providers_channel import CHAT
 from orchestrator.api.routers import (
     clone_check,
     graph,
     graph_text,
+    harness_models,
     harness_probe,
     harness_readiness,
     harnesses,
@@ -75,6 +73,7 @@ from orchestrator.api.routers import (
     runs,
     session,
     signals,
+    spec_folders,
     step_detail,
     templates,
     trajectories,
@@ -319,12 +318,14 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         instance.router,
         history.router,
         trajectories.router,
+        spec_folders.router,
+        harness_models.router,
     ):
         _mount(app, router)
     _mount(app, harness_readiness.router)
     _mount(app, harness_probe.router)
+    install_open_routes(app)
     install_mcp(app)
-
     return app
 
 

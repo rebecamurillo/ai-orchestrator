@@ -210,6 +210,14 @@ jobs:
           export AGENT_HOME="${RUNNER_TEMP:-/tmp}/agent-home"
           mkdir -p "$AGENT_HOME"
           export GIT_ALLOW_PROTOCOL=file
+          # The image builds the guide into /app/guide-build; a source run reads
+          # <repo>/guide-build, so without this every open guide route answers
+          # refusal-guide-unavailable (AD-32).
+          make guide
+          test -f guide-build/guide-index.json
+          # KIT_DIR is /app/deploy/kit in the image; GET /api/v1/kit/* serves the checkout's copy here.
+          export KIT_DIR="$GITHUB_WORKSPACE/deploy/kit"
+          test -f "$KIT_DIR/install.sh"
           uv run --locked --directory backend-api python -m orchestrator.main > backend-api.log 2>&1 &
           for _ in $(seq 1 60); do
             curl -fsS http://127.0.0.1:8000/healthz && exit 0

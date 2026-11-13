@@ -3,7 +3,8 @@
     curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \\
       "$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness claude
 
-The script then fetches `/kit/archive` for the skills. Both are read off `KIT_DIR` by
+The script then fetches `/kit/archive` for the bootstrap template and the MCP templates
+when it was piped. Both are read off `KIT_DIR` by
 `infrastructure/kit.py`; an instance without a kit (a source-tree run) answers 404 rather
 than an empty archive, so a client never installs nothing and calls it done.
 """

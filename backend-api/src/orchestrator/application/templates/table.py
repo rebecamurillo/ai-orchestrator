@@ -23,9 +23,27 @@ from orchestrator.application.templates.model import UNKNOWN_KEY, ValidationErro
 #: A Template `name`, a step `id` and a `for_each` `as` name are all slugs.
 SLUG = re.compile(r"^[a-z][a-z0-9-]*$")
 
-TEMPLATE_KEYS = frozenset({"name", "version", "description", "inputs", STEPS_KEY})
-INPUT_KEYS = frozenset({"type", "required", "default", "values", "description"})
-STEP_KEYS = frozenset({"id", "uses", "run", "with", "gate", "timeout_min", "stall_min", "on_fail"})
+NAME_KEY = "name"
+VERSION_KEY = "version"
+INPUTS_KEY = "inputs"
+ID_KEY = "id"
+USES_KEY = "uses"
+GATE_KEY = "gate"
+INPUT_TYPE_KEY = "type"
+DESCRIPTION_KEY = "description"
+
+TEMPLATE_KEYS = frozenset({NAME_KEY, VERSION_KEY, DESCRIPTION_KEY, INPUTS_KEY, STEPS_KEY})
+INPUT_KEYS = frozenset({INPUT_TYPE_KEY, "required", "default", "values", DESCRIPTION_KEY})
+STEP_KEYS = frozenset(
+    {ID_KEY, USES_KEY, "run", "with", GATE_KEY, "timeout_min", "stall_min", "on_fail"}
+)
+
+#: What `validate()` refuses a level for lacking, by level.
+REQUIRED_TEMPLATE_KEYS = (NAME_KEY, VERSION_KEY)
+REQUIRED_STEP_KEYS = (ID_KEY,)
+REQUIRED_INPUT_KEYS = (INPUT_TYPE_KEY,)
+REQUIRED_FOR_EACH_KEYS = (ID_KEY, FOR_EACH_KEY, AS_KEY, STEPS_KEY)
+
 WRITES_KEY = "writes"
 
 #: The `prompts` block: the prose a dispatch is composed from, one clause per moment
@@ -47,12 +65,18 @@ CONSULT_ON = frozenset({"blocked", "protected_path"})
 REDISPATCH_CONSULT_ON = frozenset({"verify_failed"})
 REDISPATCH_CONSULT_REQUIRED = ("model", "skill", PROMPTS_KEY)
 
+#: The three dispatch forms an `agent` `with` block may carry — only one at a time.
+AGENT_DISPATCH_KEYS: frozenset[str] = frozenset({"skill", "prompt", "prompt_file"})
+#: The intent key for the intent dispatch form (IMP-002 accepted 2026-09-15).
+#: NOT added to AGENT_DISPATCH_KEYS to avoid triggering INVALID_DISPATCH_FORM for skill+intent.
+AGENT_INTENT_KEYS: frozenset[str] = frozenset({"intent"})
+
 AGENT_KEYS = frozenset(
     {"expect", "retry", "escalate_when", "pause_when", WRITES_KEY, PROMPTS_KEY, CONSULT_KEY}
 )
 FOR_EACH_KEYS = frozenset(
     {
-        "id",
+        ID_KEY,
         FOR_EACH_KEY,
         AS_KEY,
         STEPS_KEY,

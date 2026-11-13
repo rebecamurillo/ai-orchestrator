@@ -60,11 +60,24 @@ graph LR
   web[web-client] -->|HTTP JSON, Bearer token| api
 ```
 
-### AD-1 — Two deployables, one browser-facing origin [ADOPTED]
+### AD-1 — Two deployables, one browser-facing origin [ADOPTED] *(amended 2026-11-11, initiative orchestrator-instance-guide)*
 
 - **Binds:** all
 - **Prevents:** islands calling backend-api directly, CORS, cookies on the API, two auth surfaces
-- **Rule:** The deployables are `web-client` and `backend-api` (the orchestrator process and the harness CLIs share the backend-api container). The browser talks only to web-client. web-client's server side is the only caller of backend-api and always sends `Authorization: Bearer $ORCHESTRATOR_TOKEN`; `src/api/server.ts` (server-only, reads `astro:env/server`) and `src/api/client.ts` (browser, base `/api/`) are the only modules that call `fetch`; the proxy route `src/pages/api/[...path].ts` and Actions import `server.ts`. backend-api exposes `/api/v1/*` plus `/openapi.json` and `/healthz`, JSON only, no cookies, no CORS headers. Enforced by eslint `no-restricted-globals`/`no-restricted-imports` on `src/islands/**`, `src/stores/**`, `src/components/**`.
+- **Rule:** The deployables are `web-client` and `backend-api` (the orchestrator process and the harness CLIs share the backend-api container). The browser talks only to web-client. web-client's server side is the only caller of backend-api and always sends `Authorization: Bearer $ORCHESTRATOR_TOKEN`; `src/api/server.ts` (server-only, reads `astro:env/server`) and `src/api/client.ts` (browser, base `/api/`) are the only modules that call `fetch`; the proxy route `src/pages/api/[...path].ts` and Actions import `server.ts`.
+  - **What backend-api exposes:**
+    - `/api/v1/*`;
+    - `/mcp`;
+    - `/openapi.json`;
+    - `/healthz`;
+    - and these three, which are read-only and need no bearer:
+      - `/llms.txt` (text/plain);
+      - `/guide/{id:path}.md` (text/markdown);
+      - `/schemas/{name}.json` (JSON).
+  - **The rest of AD-1 still applies.** There are no cookies and no CORS headers, and every other route answers JSON.
+  - **Where the open routes read from.** They read only the guide build the image ships, `guide-build/` beside `VERSION`, located relative to the package the way `VERSION` is (`/app/guide-build` in the image). They take no `Settings` dependency and no repository port. The release they report is the app's own version.
+  - **The guard.** A structural test fails if an open route's dependencies include `Settings`, a unit of work or any port.
+  - Enforced by eslint `no-restricted-globals`/`no-restricted-imports` on `src/islands/**`, `src/stores/**`, `src/components/**`.
 
 ### AD-2 — Dependency direction inside backend-api
 
@@ -218,12 +231,24 @@ A `mode: session` answer or retry *(ratified 2026-09-15, FR-18/FR-20 — IMP-003
 - **Prevents:** shell strings or file I/O in use cases; a harness inheriting the orchestrator's environment; orphaned worktrees when an initiative spans branches
 - **Rule:** `Git` port (`ls_remote`, `read_file(ref, path)`, `list_files(ref, prefix)`, `branch_exists`, `clone_base`, `worktree_add`, `sync`, `status`, `diff_names(from_sha)`, `commit`, `push`, `remove_worktree`, `delete_branch`, and *(ratified 2026-09-23, multi-repository initiative dispatch)* `merge` — merge a ref into the current worktree's branch, aborting any merge in progress first — and *(ratified 2026-09-23, hub-Run initiative workflow)* the submodule operations — `submodule_update(worktree)`, the init + update of the Run's worktree's submodules, `submodule_path(worktree, workdir)`, the read-only probe — the initialized submodule that `workdir` names, repository-relative and normalised, or nothing — which reads and mutates no checkout and is what per-dispatch `workdir` verification asks, precisely because `submodule update` in its default checkout mode resets a submodule to the gitlink the hub's index records and so would discard an advanced member checkout *(ratified 2026-09-23, hub-Run initiative workflow — H6 defect fix)*, `submodule_checkout(worktree, workdir, branch, base?)`, create-or-checkout of `branch` inside the submodule at `workdir` with upstream set, cut from `origin/{branch}` when that submodule's remote holds it and from the submodule's current HEAD otherwise, and the `workdir` variants of `commit` and `push`, which run in the submodule's own repository), `Workspace` port (`read`, `write`, `glob`, `exists`, `move`, `tree` — rooted at the Run's current worktree, unavailable before the first `git.worktree` row, path traversal rejected) and `ProcessRunner` port (`start(cmd, cwd, env, timeout_min?, stall_min?) -> {pid, pgid}`, `wait`, `kill_group(pgid)`); both timers live in the `ProcessRunner`, the engine never times a step: `timeout_min` is the wall clock (kill group → row `error`, reason `timeout {path} after {n} min`) — on an `agent` row only when the Template declares it, no default hard kill *(ratified 2026-09-15, FR-10)* — and `stall_min` is the default liveness signal for `agent` rows, passed only by the `agent` executor, never for `shell` or `git.*`. The runner's stall signal is exactly: no mtime change under `cwd` (`.git` included, which covers commits) and no growth of the attempt log for `n` minutes → kill group; `wait` returns a result discriminated `{exited(code) | timed_out | stalled}`, and the `agent` executor composes the park (row `error`, reason `stalled {path}: no activity for {n} min`; template-tunable via `stall_min`, default 30) — the expected-Story-file judgment belongs to the executor's `expect` evaluation, never to the runner. Base clones live at `/work/{project}/{repo}/base` with a detached `HEAD` (so any branch, the default one included, can be added as a worktree), worktrees at `/work/{project}/{repo}/wt/{branch}`, logs at `/work/logs/{run_id}/`, all on the named volume `work`. `git.worktree` adds or reuses `wt/{branch}` (reuse when clean, refuse when dirty — and the cleanliness asked is the worktree's own, `Git.status(ignore_submodules=True)`, since a hub Run advances its members on purpose and never commits the gitlink move, so an advanced submodule is never dirt *(ratified 2026-09-24, hub-Run initiative workflow — H7 defect fix)*), appends `{branch, path, created_branch, pushed: false}` to `run.worktrees[]` if absent, and sets `run.worktree_path` to it; `git.push` sets `pushed` on the matching entry and refuses `branch == repository.default_branch`; `pr.link` appends to `run.compare_urls[]`; a submodule is a working folder inside a worktree, never a second workspace *(ratified 2026-09-23, hub-Run initiative workflow)* — every submodule operation runs under the adapter's existing per-command `GIT_ASKPASS` credential path (AD-5), because a member repository may be private; a harness or `shell` row never receives `GITHUB_TOKEN`, which is **why** submodule materialisation and member-repository pushes are orchestrator step kinds and never template shell commands; a `git.push` declaring `workdir` pushes that submodule's branch to the submodule's own origin, and its refusal of `branch == default_branch` reads the **submodule's** default branch, not the Run Repository's; `run.worktrees[]` tracks the Run's own worktrees only, so a `workdir` push sets no `pushed` flag there and `cancel`'s branch deletion never reaches into a submodule; and the hub Run never commits gitlink pointer moves — the hub-side `git.commit` (no `workdir`) stages the spec folder only, and a submodule pointer is not spec content; pre-flight refuses when the branch a `git.worktree` row of the plan was declared from is held by a worktree **or declared by a `git.worktree` row** of a non-terminal Run **whose `engine_ref` is not null** — planned rows exist from `create_run` (AD-7), so a Run that is in the engine guards its branches before it materialises anything, while a saved Run holds none *(ratified 2026-09-23, multi-repository initiative dispatch)*: it can enter the engine only through `start`, which re-runs exactly these pre-flight lines, or through dependency resolution, where AD-12's partition serializes it against every Run on that branch; the allocated name is fresh by construction, so only the declared one can collide. The executor is the backstop for the residual race: `git.worktree` parks `misconfigured: branch held by {run}` when `wt/{branch}` is registered in another non-terminal Run's `worktrees[]`. A `git.worktree` declaring `with {mode: attach}` (AD-7) shares one branch across Runs deliberately — a repository's integration branch — so the fresh-branch guarantee is waived for those frames and for those only; the `{repository_id}:{branch}` partition is what keeps two Runs from writing it at once, which means the backstop is never reached rather than relaxed *(ratified 2026-09-23, multi-repository initiative dispatch; post-mortem proposal D)*. `repository.clone_check{status, at, output, bmad_version}` is written only by `use_cases/projects.run_clone_check` (project save, `POST /repositories/{id}/clone-check`, scheduled job `clone_check`), which also reads `_bmad/_config/manifest.yaml` at the default branch (`bmad_version` = its version, `missing`, or `outdated` against `BMAD_VERSION`); a failing check never blocks the save; `create_run` returns 409 while it is `failed`; `Git.sync` is a recorded no-op when `rev-parse --abbrev-ref @{upstream}` fails (no upstream); `git.worktree` runs no install of its own — `repository.install_command` is a declared template `shell` row (`run: "{{repository.install_command}}"`), and a repository with no command plans it `skipped · no command` *(ratified 2026-09-27, Operator decision: what a Run executes is readable off its template; supersedes the sentence that ran the install inside the kind, which also double-ran it wherever a template declared a setup row)*; pre-flight's `origin reachable` reads `Git.ls_remote` and writes nothing. Every harness process starts in its own session/process group with the AD-10 env; `attempt.pgid` is recorded before the process is awaited; a re-attempt first kills the recorded group and waits for `.git/index.lock` to vanish. Scheduled jobs: `clone_check` (daily), `worktree_gc` (removes worktrees and logs of terminal Runs after 7 days, iterating `run.worktrees[]`), `terminal_poll` (30 s).
 
-### AD-15 — Templates are immutable versions validated by one function; variables do not inherit; the graph is computed once
+### AD-15 — Templates are immutable versions validated by one function; variables do not inherit; the graph is computed once *(amended 2026-11-11, initiative orchestrator-instance-guide)*
 
 - **Binds:** FR-5, FR-6, FR-7, FR-29, FR-34, NFR-6
 - **Prevents:** a second parser in TypeScript; a Run resolving a changed callee; a callee reading its caller's scope; graph nodes that do not join to rows
 - **Rule:** `application/templates/validate.py` is the single parser/validator and implements exactly the "Template DSL v1 keys" table in the Structural Seed: unknown keys, unbound variables, unknown kinds, nested or multiple `for_each` per file, expressions beyond the grammar, cycles, depth > 3, callee input name/type mismatches, non-literal `version`, `parallel`, `timeout_min`/`on_fail` on `template` are rejected; a missing `gate` is reported as `unvalidated`. Errors carry `{template, version, line, reason}`. A callee sees only its declared `inputs`; item bindings are inputs of type `item`, and their **fields are unchecked by design** — a list entry is repository content the validator cannot see, so `{{epic.workdir}}` and `{{epic.quality_gate}}` are grammar-checked and nothing more, and an omitted field resolves empty (AD-7) *(ratified 2026-09-23, hub-Run initiative workflow)*; entity inputs expose a fixed field whitelist (`project.name`, `repository.url | default_branch | install_command | quality_gate_command | unit_test_command`). `POST /templates/{name}/validate`, `plan_run` and `application/graph.py` call it. Saving creates version n+1; a version pinned by any Run, directly or as a callee, is frozen. `graph.py` produces `{nodes, edges, groups, statuses?}` for `GET /templates/{name}/{v}/graph` (node id = template-relative path without indices, e.g. `stories.story.build`; callee calls collapsed) and `GET /runs/{id}/graph` (node id = `step_run.path`, group id = path prefix); group status is computed only there by one rule — `error | blocked | checkpoint` if any row is; else `running` if any; else `skipped` when all are `skipped`; else `done` when all are `done | skipped`; else `queued | planned`. The template graph is index-free with loops unexpanded and calls collapsed; the run graph is the expanded rows. Every node carries `step_run.label` beside `path`; cards and strips show `label`, the Steps table and gate record show `path`. A cancelled Run's group tokens are not derived; the Run token `CAN` wins. web-client lays out with `@dagrejs/dagre` and renders SVG, read-only, embedded in the Run detail — the standalone `?view=diagram` surface is retired and redirects there *(ratified 2026-09-15, FR-29)*. The diagram maps **stored tokens** to the FR-29 border-colour dialect — `done`→green, `running`→blue (`signal-criterion`, revived for exactly this surface), `error`→red, `blocked | checkpoint`→amber, `planned | queued`→grey, `skipped | cancelled`→faint grey, never green (NFR-6's one-signal-per-surface rule is exempted here, colour-never-alone is not) — and derives nothing new: loop iterations render as one group box per path prefix (`epics[0]`, `epics[0].stories[2]`) whose token and border carry the group-status rule above; `graph.py` computes each group's `k/n steps` into the `groups` payload — `k` = rows `done`, `n` = rows not `skipped`, and an all-`skipped` group shows no count; expansion is one level per click, never hover. A leaf node navigates to the Step-run detail (FR-34) at `/workflows/:runId/steps/{path}` with the Path in **dot-index form** (`epics.0.stories.3.build`); one web-client util owns the bracket ↔ dot-index bijection, encode and decode in the same module — the API accepts and returns canonical bracket Paths, never dot-index, and `validate.py` rejects an all-digit step `id`, which would break the bijection.
 - **Amendment** *Amendment (orchestrator-client-kit, 2026-11-06).* A `for_each` may hold one `for_each` among its `steps`: loop depth is at most **2 per file**, and each `steps` list holds at most one `for_each` (`nested for_each` is reported at depth 3, `second for_each` for a second loop in one list). A `for_each` may declare `bind:`, a map of names (`[a-z_][a-z0-9_]*`, the expression grammar's names) to string values resolved once per item, after the item's `as` name is bound, and added to that item's scope as text; a value that is exactly one `{{name}}` of an `item`, `project` or `repository` name is `invalid value`. A bind name is text: `{{name}}` interpolates it, `{{name.field}}` is `unknown field`, a whole `{{name}}` binds a callee input of type `string`, `path` or `enum` (as any text value does), and it reads as a string in `timeout_min`/`stall_min`. Steps inside a loop see the file's declared `inputs` plus the `as` and `bind` names of **every enclosing loop** and of their own loop. A loop's own `for_each` and `only` see only the names of the loops around it; its own pause conditions and `bind` values also see its own `as` (never its own `bind` names). A loop's `as` or `bind` name equal to an enclosing loop's `as` or `bind` name, a `bind` name equal to its own loop's `as` or to an input name, or two equal `bind` names, is rejected (`loop name already bound`); nothing else about names changes. A step id is unique within its own `steps` list; the index-free path (`epics.stories.build`) is the unique key the template graph, `unvalidated` and the planner use; an outer loop's graph group lists every node inside it, the inner loop's nodes included. No rule rejects a file of depth 0 or 1 that validated before this amendment. Call rules are unchanged: `uses: template` stays accepted, a callee sees only its declared `inputs`, call depth ≤ 3. An input may carry an optional `description` string, returned with the version's `inputs`. A stored version's number is the row's, never the text's `version:` line: the planner, `pinned_versions`, callee lookup and plan errors read the row number.
+
+#### Amended 2026-11-11 (initiative orchestrator-instance-guide)
+
+- **Rule:**
+  - **Codes.** A code is `{area}-{slug}`, lowercase `[a-z0-9-]`, unique across the registry. The areas are `template`, `spec` and `refusal`.
+  - **The registry.** Each code is one entry of a single registry in `application/`, holding the code, a message template and an explanation paragraph. The code is also its page id, `errors/{code}`.
+  - **The finding shape.** A finding is today's `ProblemError`, keeping `reason`, plus `code` and `guide`, where `guide` is the page id.
+  - **Pre-flight.** Pre-flight `Line`s that come from a finding gain the same `code` and `guide`.
+  - **Refusals.** Every refusal this initiative adds is a problem document carrying `code` and `guide`; refusals that exist before it keep their shape. That covers a save refused, a local-only action, a harness that cannot list its models and a bootstrap contract difference (PRD § 7, loud refusals).
+  - **Generated pages.** The image build generates `guide/errors/{code}.md` from the registry.
+  - **The test.** A unit test fails when a code is emitted that has no registry entry, and when the registry holds a code nothing emits.
+  - **One function.** The template validation function stays one (AD-15); only its output gains fields.
 
 ### AD-16 — BMAD lives in the image and in `_bmad/`; skill folders are never committed
 
@@ -327,6 +352,129 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
 - **Binds:** `deploy-tests/` (new, repository root), `scripts/test-deploy.sh` (new), `Makefile` (`test-deploy`), `.github/workflows/deploy.yml` (new), `.github/workflows/release.yml`, every epic of this initiative
 - **Prevents:** deployment tests mixed into the code and feature gates; a Run executing install, upgrade or setup code; a release cut on an untested deployment
 - **Rule:** A **deployment test** is a test whose subject is the deploy folder (`deploy/` minus `deploy/llm-platform/`), `install.sh`, the setup runner (`scripts/setup/`), the BMAD sample script, the release files (`release.env`, the compose image tags, `product-files.json`, the `kit bootstrap` archive) or a stack started from them. Every deployment test lives in `deploy-tests/` — `deploy-tests/unit/` (no Docker: scripts on scratch folders, `install.sh` with stubbed `docker` and `curl`, file and archive checks) and `deploy-tests/stack/` (throwaway stacks, hub AD-5) — and runs only through `scripts/test-deploy.sh`, i.e. `make test-deploy` (`make test-deploy-unit`, `make test-deploy-stack` for one level). No other target calls it: not `make lint`, `make test`, `make openapi`, `make coverage`, `make e2e`, `make durability`, not `ci.yml`, and not any Run's `install`, `test` or `quality_gate`. No dispatched agent runs it either. `.github/workflows/deploy.yml` runs `make test-deploy` on `workflow_dispatch` (on demand, e.g. at the end of a development cycle before a release) and on pull requests and pushes to `main` that touch: `deploy/**` except `deploy/llm-platform/**`, `deploy-tests/**`, `scripts/test-deploy.sh`, `scripts/setup/**`, `scripts/harness/**`, `scripts/readiness_fixture.sh`, `scripts/bundle.sh`, `backend-api/Dockerfile`, `backend-api/docker-entrypoint.sh`, `ia-agents-skills/**`, `VERSION`, `.github/workflows/deploy.yml`. *(Amended 2026-11-11 after gate 7, T-1/T-2.)* Of the existing tests, the three that **execute** `install.sh` (`test_deploy_install.py`, `test_install_admin.py`, `test_install_verify_docker.py`) move to `deploy-tests/unit/` with their assertions unchanged; the one import line between them (`test_install_verify_docker.py` → `test_install_admin`) becomes `from test_install_admin import …`, which resolves because pytest's default import mode puts `deploy-tests/unit/` (no `__init__.py`) on the path, and the moved files keep importing `tests.unit.conftest` because `scripts/test-deploy.sh` runs `python -m pytest` from `backend-api/`. Existing tests that only **read** deployment files as text alongside the development stack and the image (`test_deploy_compose.py`, `test_deploy_env_contract.py`, `test_backend_image_docker.py`, `test_dockerfiles.py`, `test_compose_fails_closed.py`, `test_env_template_names.py`, `test_deploy_operator_templates.py` and the like) stay in `make test`, where other tests import their helpers; a story that changes what one of them pins revises it in place under member hard rule 1. Every **new** deployment test this initiative writes goes to `deploy-tests/`; none is added to `make test`. Tests of the image's start-up scripts (`scripts/harness/`, `docker-entrypoint.sh`, `readiness_fixture.sh`), of `deploy/kit/install.sh` (it installs the kit into a project, not the orchestrator) and of `deploy/llm-platform/` stay in `make test`. The env-contract check of AD-20 stays in `make lint`: it is the settings contract, not a deployment test. `release.yml` refuses a tag unless `deploy.yml` succeeded for that commit, as it already does for `ci.yml` (a release commit changes `VERSION`, so the workflow runs on it).
+
+### AD-32 — One guide source per release; every served or generated copy is built from it *(ratified 2026-11-11, initiative orchestrator-instance-guide)*
+
+- **Binds:** `guide/` (new, repository root), the backend image build, `/llms.txt`, `/guide/*`, MCP resources and prompts, `read_guide`, `deploy/README.md`'s shared sections, `make lint`
+- **Prevents:**
+  - a hand-made copy going stale (BR-3);
+  - the README and the guide saying the same thing twice (BR-5);
+  - a page claiming another release (AC-8);
+  - two epics addressing a page differently.
+- **Rule:**
+  - **The source.**
+    - The guide is Markdown under `guide/`.
+    - A **page id** is the page's path under `guide/` without `.md`: lowercase `[a-z0-9-]` segments joined by `/`, for example `connect` or `errors/template-unknown-key`.
+    - Each page opens with front matter:
+      - `title`;
+      - `kind: page | procedure`;
+      - `audience: any | host`;
+      - optional `readme: <section id>`.
+  - **How a page is addressed.** The page id is the only address:
+    - route `/guide/{id}.md`;
+    - MCP resource `guide://{id}`;
+    - `read_guide(id)`.
+
+    A procedure's MCP prompt name is the id with `/` replaced by `.`, mapped by one function. One test fetches every id from the index over HTTP, as a resource and through `read_guide`.
+  - **The build.**
+    - The image build builds `guide/` into `guide-build/` beside `VERSION`, `errors/` included.
+    - It writes the release from `VERSION` into each page's front matter as `release`.
+    - It writes `guide-index.json`: every id in order, with title, kind and audience. `/llms.txt` follows the llmstxt.org layout and is rendered from that index.
+  - **Pages the guide must hold:**
+    - every procedure of the four retired kit skills (AC-6);
+    - the connecting page, which states the one-token accepted risk (PRD § 7) and the one-time move from the beta.4 kit (AD-33);
+    - "would a new workflow do it?" (BR-21);
+    - the feature-request page (BR-22);
+    - the host pages.
+  - **Host pages.** Each page with `audience: host` carries the line "Local agent on the host or the user only" (BR-4, AC-9). A lint check enforces it.
+  - **README shared sections.**
+    - The README sections named by a page's `readme:` sit between `<!-- guide:{section id} -->` and `<!-- /guide -->` markers in `deploy/README.md`, and are generated from that page without its front matter.
+    - `make lint` regenerates them and fails on `git diff`, the same pattern as AD-3.
+    - Nothing between markers is edited by hand.
+  - **Copies for harnesses without MCP (BR-12).** All three supported harnesses ship an MCP configuration (§ 1), so the set of such harnesses is empty and no copy is generated in this release. The mechanism is deferred (§ 8).
+
+### AD-33 — the bootstrap is release-free, its contract is frozen and self-describing *(ratified 2026-11-11, initiative orchestrator-instance-guide)*
+
+- **Binds:** the bootstrap template and its installer in `deploy/kit/`, the MCP `version` and `read_guide` tools, `VersionOut`, `/llms.txt`, `/mcp`
+- **Prevents:**
+  - an upgrade that forces a reinstall or stops a connected agent (BR-8, AC-2);
+  - a secret in a project file;
+  - two epics owning the `version` answer.
+- **Rule:**
+  - **Template and copy.**
+    - `deploy/kit/` ships a bootstrap **template**. The installer renders it into a project, or into a harness home, as the **installed bootstrap**.
+    - The deploy folder's `kit/` (a product path, AD-27) holds only the template and the installer, so an upgrade refreshes them and never holds client values.
+    - The host agent's installed bootstrap is rendered from the same template (BR-10, AC-5).
+  - **What the installed bootstrap holds:**
+    - the instance address;
+    - the optional web address (BR-11);
+    - the **name** of the environment variable holding the token;
+    - the MCP client configuration for its harness (from `deploy/kit/mcp/`);
+    - the four rules of BR-13;
+    - the contract number it was written for, `bootstrap_contract: 1`;
+    - one instruction: call `version`, then read the guide index.
+  - **No token value is written.** The installer never writes a token value anywhere. Today's write of the token into the project's `.env` is removed. The token is read from the variable the owner sets.
+  - **No release string.** A test renders the template and fails if the result, or any file the installer writes, matches `\b\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?\b`.
+  - **The frozen contract, C1:**
+    - the `/mcp` path;
+    - the tool `version`, whose answer carries:
+      - `app_version`;
+      - `bootstrap_contract: int`;
+      - `guide: {index, page_url, resource}`, where `index` is the `/llms.txt` URL, `page_url` is the URL template `/guide/{id}.md` and `resource` is the URI template `guide://{id}`;
+    - the tool `read_guide(id?)`;
+    - `/llms.txt`.
+
+    No release removes or renames any of these. A changed shape is a new contract number, with the old one still served. A contract test pins the C1 names and keys.
+  - **How a contract difference is reported.** When `version`'s `bootstrap_contract` is above the installed one, the agent reports the difference, with its code and guide page, and continues.
+  - **`kit_version`.** `kit_version` stays in `VersionOut` as `null`, so the beta.4 skills that read it still parse the answer.
+  - **The one-time move.** A project on the beta.4 kit still stops at its first upgrade, because that kit's own skills hold the old version check. The connecting page gives that one reinstall. BR-8 holds for every upgrade after the bootstrap is installed.
+  - **Who owns `version`.** The bootstrap epic alone owns `VersionOut`, the `version` tool's code and its description. The description loses "stop on mismatch".
+  - **Retiring the kit skills.** The four kit skills leave `deploy/kit/skills/`; their content is guide pages (AC-6).
+
+### AD-34 — the MCP surface is thin wrappers over the REST API; nothing reaches maintenance *(ratified 2026-11-11, initiative orchestrator-instance-guide)*
+
+- **Binds:** `infrastructure/mcp/tools.py`, `facade.py`, the routers they call
+- **Prevents:** a second implementation of a use case behind MCP; a remote agent able to upgrade, hold, restart or reconfigure (BR-20, AC-15); a web editor whose behaviour changes as a side effect
+- **Rule:**
+  - **New tools.** Each new tool calls exactly one REST operation, existing or new, through `InProcessApi`, the same way the 11 existing tools do:
+    - `create_project` and `update_project` (variables included);
+    - `add_repository`, `check_clone` and `init_repository`;
+    - `validate_template`, `save_template` and `reload_templates`;
+    - `list_models`;
+    - `validate_spec_folder`;
+    - `read_guide`.
+  - **`read_guide`.** With an id it returns that page; with no id it returns the index. Any harness that can call MCP tools can therefore read the whole guide, whether or not it supports resources or prompts. This is what makes RP10 non-blocking.
+  - **Saving a folder-held template (BR-17, AC-16).**
+    - The REST save operation gains an optional precondition, `refuse_if_in_folder: bool = false`. When it is true and the template's name is in `folder_stems` (the live listing, as today; no origin column is added), the save answers 409 with code `refusal-template-in-folder`, the folder named and the guide id, and writes nothing.
+    - `save_template` always sends the precondition.
+    - The web editor does not send it, so its behaviour is unchanged.
+  - **Secret variables (BR-16, AC-17).** Variables leave every route and tool masked, as AD-5 already requires, with no new flag. Every project variable is treated as secret.
+  - **No maintenance from MCP.**
+    - No tool calls a route that holds the instance, changes settings, harness pins, models or LiteLLM, or upgrades anything.
+    - The tool table is checked against an allow-list of REST `operationId`s.
+    - A unit test fails on any tool outside the allow-list.
+
+### AD-35 — the model list names its source and never guesses; the spec-folder check is one pure function *(ratified 2026-11-11, initiative orchestrator-instance-guide)*
+
+- **Binds:** `infrastructure/harness/models.py`, a new read in `infrastructure/gateway/`, `GET /api/v1/harnesses/{name}/models` (new), `POST /api/v1/spec-folders/validate` (new), `plan_run`, pre-flight, `/schemas/*.json`
+- **Prevents:** a model list that silently falls back to a guess (BR-19); a pre-push check that disagrees with the launch check (AC-13); a format description that drifts from the checks (BR-3)
+- **Rule:**
+  - **The models answer, C4.** It reads `{harness, source: "litellm" | "configured" | "none", models[], note}`.
+    - When `LITELLM_BASE_URL` is set, the backend reads `GET /v1/models` with `LITELLM_API_KEY`, server side, through the gateway port, cached for 60 s. The answer is the list visible to that key, with `source: "litellm"`.
+    - `local` keeps `LOCAL_MODELS`, answered as `source: "configured"`.
+    - Otherwise the answer is `source: "none"` with a `note` and the code `refusal-models-unlisted`.
+    - A harness CLI becomes a source only after the **[experiment]** story shows that the pinned CLI lists its models.
+    - The answer never uses `LITELLM_SPEND_KEY` (AD-5).
+  - **The spec-folder check.**
+    - `application/` gains one pure function, `check_spec_folder(files: Mapping[path, text]) -> list[Finding]`. It holds every spec-folder rule pre-flight and `plan_run` apply today, duplicate story ids included.
+    - `plan_run` reads the files through the `Git` port at `origin/{branch}`, as AD-7 requires, and calls the function.
+    - `POST /api/v1/spec-folders/validate` passes the request body's files to the same function.
+    - A unit test runs one defective fixture both ways and compares the lists of codes.
+  - **The format descriptions.**
+    - `/schemas/workflow.json` is generated at build from the key tables `validate()` uses.
+    - `/schemas/spec-folder.json` is generated from the models `check_spec_folder` parses.
+    - Both are generated at build and never committed; a unit test in `make test` fails when a key of the tables is missing from the schema (`make lint` holds exactly five `uv` invocations, pinned by `test_makefile.py`).
+    - No schema is written by hand.
 
 ## Consistency Conventions
 

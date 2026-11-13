@@ -1532,6 +1532,30 @@
         "title": "GroupOut",
         "type": "object"
       },
+      "GuideRefs": {
+        "description": "Where this instance's guide is (C1): the index, the page route and the MCP resource.",
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "string"
+          },
+          "page_url": {
+            "title": "Page Url",
+            "type": "string"
+          },
+          "resource": {
+            "title": "Resource",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "page_url",
+          "resource"
+        ],
+        "title": "GuideRefs",
+        "type": "object"
+      },
       "HarnessOut": {
         "description": "One row of `GET /harnesses`.",
         "properties": {
@@ -2301,6 +2325,17 @@
             "title": "Check",
             "type": "string"
           },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
           "fix": {
             "anyOf": [
               {
@@ -2311,6 +2346,17 @@
               }
             ],
             "title": "Fix"
+          },
+          "guide": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide"
           },
           "status": {
             "enum": [
@@ -2394,6 +2440,78 @@
           "text"
         ],
         "title": "MessageIn",
+        "type": "object"
+      },
+      "ModelsOut": {
+        "description": "The models a harness can use, and where that list comes from.",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Finding code when `source` is `none`.",
+            "title": "Code"
+          },
+          "guide": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Guide page that explains `code`.",
+            "title": "Guide"
+          },
+          "harness": {
+            "title": "Harness",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the list is, or why there is none.",
+            "title": "Note"
+          },
+          "source": {
+            "description": "`litellm`: the instance's LiteLLM key's model list; `configured`: `LOCAL_MODELS`; `none`: no list is available, ask the user for a model name.",
+            "enum": [
+              "litellm",
+              "configured",
+              "none"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness",
+          "source",
+          "models",
+          "note",
+          "code",
+          "guide"
+        ],
+        "title": "ModelsOut",
         "type": "object"
       },
       "NodeCallOut": {
@@ -3039,6 +3157,17 @@
       "ProblemDetail": {
         "description": "The problem document itself. Members that do not apply are omitted, never `null`.",
         "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
           "detail": {
             "anyOf": [
               {
@@ -3063,6 +3192,17 @@
               }
             ],
             "title": "Errors"
+          },
+          "guide": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide"
           },
           "instance": {
             "anyOf": [
@@ -3099,6 +3239,28 @@
       "ProblemError": {
         "description": "One entry of `errors[]`.\n\n`reason` is always present; the rest name where the reason applies \u2014 a request field\n(`path`) or a place in a workflow template (`template`, `version`, `line`).",
         "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "guide": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guide"
+          },
           "line": {
             "anyOf": [
               {
@@ -4850,8 +5012,20 @@
         "type": "object"
       },
       "SaveVersionIn": {
-        "description": "`POST /templates/{name}/versions`. Same one field; a distinct name for a distinct route.",
+        "description": "`POST /templates/{name}/versions`: the YAML, and whether the folder may refuse it.",
         "properties": {
+          "refuse_if_in_folder": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Refuse with 409 `refusal-template-in-folder` instead of saving when the operator's template folder holds this name; the web editor never sends it. Absent or null means false.",
+            "title": "Refuse If In Folder"
+          },
           "yaml": {
             "maxLength": 200000,
             "title": "Yaml",
@@ -5115,6 +5289,40 @@
           "kind"
         ],
         "title": "SignalIn",
+        "type": "object"
+      },
+      "SpecFolderCheckOut": {
+        "description": "200: a defect is data. The findings equal what the launch check reports.",
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ProblemError"
+            },
+            "title": "Findings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "findings"
+        ],
+        "title": "SpecFolderCheckOut",
+        "type": "object"
+      },
+      "SpecFolderIn": {
+        "description": "`{files: {path: text}}`, paths relative to the initiative folder.",
+        "properties": {
+          "files": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "object"
+          }
+        },
+        "required": [
+          "files"
+        ],
+        "title": "SpecFolderIn",
         "type": "object"
       },
       "StepDetailOut": {
@@ -5718,7 +5926,7 @@
         "type": "object"
       },
       "VersionOut": {
-        "description": "The `/api/v1/version` payload (AD-3).\n\n`kit_version` is what `GET /kit/archive` would hand out \u2014 `null` when this instance\nships no kit, which only a source-tree run does. `bmad_installed` is what the last setup\nrun installed (`null` when none did), `bmad_version` the release pin.",
+        "description": "The `/api/v1/version` payload (AD-3).\n\n`bootstrap_contract` is the C1 contract number and `guide` the three guide addresses.\n`kit_version` is always `null`: the key stays so beta.4 kit skills still parse the answer\n(AD-33). `bmad_installed` is what the last setup run installed (`null` when none did),\n`bmad_version` the release pin.",
         "properties": {
           "app_version": {
             "title": "App Version",
@@ -5739,6 +5947,13 @@
             "title": "Bmad Version",
             "type": "string"
           },
+          "bootstrap_contract": {
+            "title": "Bootstrap Contract",
+            "type": "integer"
+          },
+          "guide": {
+            "$ref": "#/components/schemas/GuideRefs"
+          },
           "harness_versions": {
             "$ref": "#/components/schemas/HarnessVersions"
           },
@@ -5756,6 +5971,8 @@
         },
         "required": [
           "app_version",
+          "bootstrap_contract",
+          "guide",
           "kit_version",
           "bmad_version",
           "harness_versions"
@@ -5884,6 +6101,105 @@
           }
         ],
         "summary": "List every harness",
+        "tags": [
+          "harnesses"
+        ]
+      }
+    },
+    "/api/v1/harnesses/{name}/models": {
+      "get": {
+        "description": "The list names its `source`; `none` carries a `code` and `guide` and an empty list.",
+        "operationId": "list_models_api_v1_harnesses__name__models_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9-]{0,31}$",
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No harness has that name."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`name` does not match the shape below."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The LiteLLM gateway is configured but its model list could not be read."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The models a harness can use, with their source",
         "tags": [
           "harnesses"
         ]
@@ -9589,6 +9905,72 @@
         ]
       }
     },
+    "/api/v1/spec-folders/validate": {
+      "post": {
+        "operationId": "validate_spec_folder_api_v1_spec_folders_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecFolderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecFolderCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "More files or bytes than the limits allow, or an unsafe path."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Validate Spec Folder",
+        "tags": [
+          "spec-folders"
+        ]
+      }
+    },
     "/api/v1/steps": {
       "get": {
         "description": "One page of executed attempts. Writes nothing; derives no status (AD-8).",
@@ -10309,6 +10691,21 @@
             },
             "description": "No Template has that name, or no version has that number."
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "`refuse_if_in_folder` was set and the operator's template folder holds this name (`refusal-template-in-folder`), or a concurrent save took this version number (`conflict`); nothing is stored."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -10580,6 +10977,68 @@
         ]
       }
     },
+    "/guide/{page_id}.md": {
+      "get": {
+        "operationId": "read_page_guide__page_id__md_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "title": "Page Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/markdown; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such page or schema, or no built guide."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request was refused before it was routed."
+          }
+        },
+        "summary": "One guide page",
+        "tags": [
+          "guide"
+        ]
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "healthz_healthz_get",
@@ -10598,6 +11057,124 @@
         "summary": "Healthz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/llms.txt": {
+      "get": {
+        "operationId": "read_index_llms_txt_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/plain; charset=utf-8": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such page or schema, or no built guide."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request was refused before it was routed."
+          }
+        },
+        "summary": "The guide's index",
+        "tags": [
+          "guide"
+        ]
+      }
+    },
+    "/schemas/{name}.json": {
+      "get": {
+        "operationId": "read_schema_schemas__name__json_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/schema+json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such page or schema, or no built guide."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request was refused before it was routed."
+          }
+        },
+        "summary": "One format description",
+        "tags": [
+          "guide"
         ]
       }
     }

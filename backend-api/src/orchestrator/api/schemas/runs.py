@@ -16,7 +16,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from orchestrator.api.errors import ProblemError
+from orchestrator.api.errors import ProblemError, finding_error
 from orchestrator.api.schemas.common import MAX_VERSION, MoneyStr, RunStateOut, UtcTimestamp
 from orchestrator.application.rules.signals import run_admitted_signals
 from orchestrator.application.templates.plan_model import PlanError
@@ -37,7 +37,7 @@ def plan_error_problems(error: PlanError) -> list[ProblemError]:
     `reason` — the shape `api/schemas/templates.py::as_problem_errors` gives a validation
     failure, extended with `path` because a plan error names an entry, not only a line."""
     return [
-        ProblemError(
+        finding_error(
             template=error.template,
             version=str(error.version) if error.version is not None else None,
             line=error.line,

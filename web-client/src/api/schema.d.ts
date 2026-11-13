@@ -31,6 +31,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/harnesses/{name}/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The models a harness can use, with their source
+         * @description The list names its `source`; `none` carries a `code` and `guide` and an empty list.
+         */
+        get: operations["list_models_api_v1_harnesses__name__models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/harnesses/{name}/probe": {
         parameters: {
             query?: never;
@@ -711,6 +731,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/spec-folders/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Spec Folder */
+        post: operations["validate_spec_folder_api_v1_spec_folders_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/steps": {
         parameters: {
             query?: never;
@@ -905,6 +942,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/guide/{page_id}.md": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One guide page */
+        get: operations["read_page_guide__page_id__md_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -914,6 +968,40 @@ export interface paths {
         };
         /** Healthz */
         get: operations["healthz_healthz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/llms.txt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The guide's index */
+        get: operations["read_index_llms_txt_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/schemas/{name}.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One format description */
+        get: operations["read_schema_schemas__name__json_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1436,6 +1524,18 @@ export interface components {
             members: string[];
         };
         /**
+         * GuideRefs
+         * @description Where this instance's guide is (C1): the index, the page route and the MCP resource.
+         */
+        GuideRefs: {
+            /** Index */
+            index: string;
+            /** Page Url */
+            page_url: string;
+            /** Resource */
+            resource: string;
+        };
+        /**
          * HarnessOut
          * @description One row of `GET /harnesses`.
          */
@@ -1682,8 +1782,12 @@ export interface components {
         LineOut: {
             /** Check */
             check: string;
+            /** Code */
+            code?: string | null;
             /** Fix */
             fix?: string | null;
+            /** Guide */
+            guide?: string | null;
             /**
              * Status
              * @enum {string}
@@ -1725,6 +1829,37 @@ export interface components {
         MessageIn: {
             /** Text */
             text: string;
+        };
+        /**
+         * ModelsOut
+         * @description The models a harness can use, and where that list comes from.
+         */
+        ModelsOut: {
+            /**
+             * Code
+             * @description Finding code when `source` is `none`.
+             */
+            code: string | null;
+            /**
+             * Guide
+             * @description Guide page that explains `code`.
+             */
+            guide: string | null;
+            /** Harness */
+            harness: string;
+            /** Models */
+            models: string[];
+            /**
+             * Note
+             * @description What the list is, or why there is none.
+             */
+            note: string | null;
+            /**
+             * Source
+             * @description `litellm`: the instance's LiteLLM key's model list; `configured`: `LOCAL_MODELS`; `none`: no list is available, ask the user for a model name.
+             * @enum {string}
+             */
+            source: "litellm" | "configured" | "none";
         };
         /**
          * NodeCallOut
@@ -1935,10 +2070,14 @@ export interface components {
          * @description The problem document itself. Members that do not apply are omitted, never `null`.
          */
         ProblemDetail: {
+            /** Code */
+            code?: string | null;
             /** Detail */
             detail?: string | null;
             /** Errors */
             errors?: components["schemas"]["ProblemError"][] | null;
+            /** Guide */
+            guide?: string | null;
             /** Instance */
             instance?: string | null;
             /** Status */
@@ -1959,6 +2098,10 @@ export interface components {
          *     (`path`) or a place in a workflow template (`template`, `version`, `line`).
          */
         ProblemError: {
+            /** Code */
+            code?: string | null;
+            /** Guide */
+            guide?: string | null;
             /** Line */
             line?: number | null;
             /** Path */
@@ -2631,9 +2774,14 @@ export interface components {
         };
         /**
          * SaveVersionIn
-         * @description `POST /templates/{name}/versions`. Same one field; a distinct name for a distinct route.
+         * @description `POST /templates/{name}/versions`: the YAML, and whether the folder may refuse it.
          */
         SaveVersionIn: {
+            /**
+             * Refuse If In Folder
+             * @description Refuse with 409 `refusal-template-in-folder` instead of saving when the operator's template folder holds this name; the web editor never sends it. Absent or null means false.
+             */
+            refuse_if_in_folder?: boolean | null;
             /** Yaml */
             yaml: string;
         };
@@ -2715,6 +2863,24 @@ export interface components {
             };
             /** Stop */
             stop?: number | null;
+        };
+        /**
+         * SpecFolderCheckOut
+         * @description 200: a defect is data. The findings equal what the launch check reports.
+         */
+        SpecFolderCheckOut: {
+            /** Findings */
+            findings: components["schemas"]["ProblemError"][];
+        };
+        /**
+         * SpecFolderIn
+         * @description `{files: {path: text}}`, paths relative to the initiative folder.
+         */
+        SpecFolderIn: {
+            /** Files */
+            files: {
+                [key: string]: string;
+            };
         };
         /**
          * StepDetailOut
@@ -2968,9 +3134,10 @@ export interface components {
          * VersionOut
          * @description The `/api/v1/version` payload (AD-3).
          *
-         *     `kit_version` is what `GET /kit/archive` would hand out — `null` when this instance
-         *     ships no kit, which only a source-tree run does. `bmad_installed` is what the last setup
-         *     run installed (`null` when none did), `bmad_version` the release pin.
+         *     `bootstrap_contract` is the C1 contract number and `guide` the three guide addresses.
+         *     `kit_version` is always `null`: the key stays so beta.4 kit skills still parse the answer
+         *     (AD-33). `bmad_installed` is what the last setup run installed (`null` when none did),
+         *     `bmad_version` the release pin.
          */
         VersionOut: {
             /** App Version */
@@ -2979,6 +3146,9 @@ export interface components {
             bmad_installed?: string | null;
             /** Bmad Version */
             bmad_version: string;
+            /** Bootstrap Contract */
+            bootstrap_contract: number;
+            guide: components["schemas"]["GuideRefs"];
             harness_versions: components["schemas"]["HarnessVersions"];
             /** Kit Version */
             kit_version: string | null;
@@ -3039,6 +3209,68 @@ export interface operations {
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_models_api_v1_harnesses__name__models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelsOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No harness has that name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description `name` does not match the shape below. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The LiteLLM gateway is configured but its model list could not be read. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5307,6 +5539,50 @@ export interface operations {
             };
         };
     };
+    validate_spec_folder_api_v1_spec_folders_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecFolderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecFolderCheckOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description More files or bytes than the limits allow, or an unsafe path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     read_history_api_v1_steps_get: {
         parameters: {
             query?: {
@@ -5727,6 +6003,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
+            /** @description `refuse_if_in_folder` was set and the operator's template folder holds this name (`refusal-template-in-folder`), or a concurrent save took this version number (`conflict`); nothing is stored. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
             /** @description The posted YAML failed validation; `errors[]` names each problem by line. */
             422: {
                 headers: {
@@ -5885,6 +6171,48 @@ export interface operations {
             };
         };
     };
+    read_page_guide__page_id__md_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown; charset=utf-8": string;
+                };
+            };
+            /** @description No such page or schema, or no built guide. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request was refused before it was routed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     healthz_healthz_get: {
         parameters: {
             query?: never;
@@ -5901,6 +6229,89 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    read_index_llms_txt_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                    "text/plain; charset=utf-8": string;
+                };
+            };
+            /** @description No such page or schema, or no built guide. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                    "text/plain": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request was refused before it was routed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                    "text/plain": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_schema_schemas__name__json_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/schema+json": string;
+                };
+            };
+            /** @description No such page or schema, or no built guide. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request was refused before it was routed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
         };

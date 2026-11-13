@@ -226,6 +226,8 @@ RUN scripts/harness/claude.sh install \
 # harness installs above: a kit edit must not re-run three `npm install`s.
 COPY --chown=agent:agent deploy /app/deploy
 COPY --chown=agent:agent VERSION /app/VERSION
+COPY --chown=agent:agent guide /app/guide
+RUN python -m orchestrator.tools.build_guide --source /app/guide --out /app/guide-build --version-file /app/VERSION
 COPY --chown=agent:agent templates/*.yaml /app/deploy/templates/shipped/
 COPY --chown=agent:agent scripts/product_manifest.py /app/scripts/product_manifest.py
 RUN python3 /app/scripts/product_manifest.py /app/deploy /app/VERSION > /app/deploy/product-files.json

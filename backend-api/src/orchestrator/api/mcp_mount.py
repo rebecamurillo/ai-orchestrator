@@ -29,7 +29,8 @@ The path is matched exactly rather than mounted: Starlette's `Mount("/mcp", …)
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+import json
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -38,7 +39,17 @@ from fastapi.responses import JSONResponse
 
 from orchestrator.api.deps import UNAUTHORIZED_HEADERS, token_matches
 from orchestrator.api.errors import PROBLEM_MEDIA_TYPE, ProblemDetail
-from orchestrator.infrastructure.mcp import InProcessApi, McpEndpoint, build_endpoint, build_tools
+from orchestrator.api.routers import guide
+from orchestrator.infrastructure.mcp import (
+    PAGE_ID,
+    InProcessApi,
+    McpEndpoint,
+    McpPrompt,
+    McpResource,
+    build_endpoint,
+    build_tools,
+    prompt_name,
+)
 
 #: Where the endpoint answers. The kit's harness configuration points at this path.
 MCP_PATH = "/mcp"
@@ -110,11 +121,54 @@ def instance_token(app: FastAPI) -> Token:
 def install_mcp(app: FastAPI) -> McpEndpoint:
     """Build the endpoint, guard it, and make its task group part of start-up."""
     token = instance_token(app)
-    endpoint = build_endpoint(version=app.version, tools=build_tools(InProcessApi(app, token)))
+    api = InProcessApi(app, token)
+    resources, prompts = guide_entries(api)
+    endpoint = build_endpoint(
+        version=app.version, tools=build_tools(api), resources=resources, prompts=prompts
+    )
     setattr(app.state, MCP, endpoint)
     app.add_middleware(McpGuard, token=token, endpoint=endpoint)
     _open_task_group_at_startup(app, endpoint.run)
     return endpoint
+
+
+def _index_pages() -> list[dict[str, Any]]:
+    """The pages of the built guide index, `[]` when there is no readable build."""
+    try:
+        index = json.loads((guide.GUIDE_DIR / "guide-index.json").read_text())
+    except OSError, ValueError, RecursionError:
+        return []
+    pages = index.get("pages") if isinstance(index, dict) else None
+    if not isinstance(pages, list):
+        return []
+    return [
+        page
+        for page in pages
+        if isinstance(page, dict)
+        and isinstance(page.get("id"), str)
+        and PAGE_ID.fullmatch(page["id"])
+    ]
+
+
+def _reader(api: InProcessApi, page_id: str) -> Callable[[], Awaitable[str]]:
+    async def read() -> str:
+        return await api.get_open(f"/guide/{page_id}.md")
+
+    return read
+
+
+def guide_entries(api: InProcessApi) -> tuple[list[McpResource], list[McpPrompt]]:
+    """One resource per guide page and one prompt per procedure page, from the built index."""
+    resources: list[McpResource] = []
+    prompts: list[McpPrompt] = []
+    for page in _index_pages():
+        page_id: str = page["id"]
+        title = str(page.get("title") or page_id)
+        read = _reader(api, page_id)
+        resources.append(McpResource(f"guide://{page_id}", page_id, title, "text/markdown", read))
+        if page.get("kind") == "procedure":
+            prompts.append(McpPrompt(prompt_name(page_id), title, read))
+    return resources, prompts
 
 
 def _open_task_group_at_startup(app: FastAPI, run: Callable[[], Any]) -> None:

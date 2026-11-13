@@ -136,6 +136,49 @@ LOOP_NAME_BOUND = "loop name already bound"
 #: error: a file fault becomes a refusal, never a crash (AD-26).
 INVALID_TEMPLATE = "invalid template"
 
+#: Every reason `validate()` can report, in the order above; `findings.py` codes each.
+FINDING_REASONS: tuple[str, ...] = (
+    UNKNOWN_KEY,
+    UNBOUND_VARIABLE,
+    UNKNOWN_KIND,
+    USES_AND_RUN,
+    NESTED_FOR_EACH,
+    SECOND_FOR_EACH,
+    EXPRESSION_SYNTAX,
+    NON_LITERAL_VERSION,
+    CALL_CYCLE,
+    CALL_DEPTH,
+    CALLEE_INPUT_MISMATCH,
+    PARALLEL_RESERVED,
+    CALL_TIMING,
+    UNKNOWN_FIELD,
+    DUPLICATE_STEP_ID,
+    BAD_REDISPATCH,
+    INVALID_ON_FAIL,
+    INVALID_GATE,
+    INVALID_YAML,
+    CALLEE_NOT_FOUND,
+    MISSING_KEY,
+    INVALID_SLUG,
+    INVALID_INPUT_TYPE,
+    BAD_DEFAULT,
+    EMPTY_STEPS,
+    INVALID_TIMEOUT,
+    INVALID_STATUS_TOKEN,
+    INVALID_VALUE,
+    RETRY_PROMPT_REQUIRED,
+    INVALID_DISPATCH_FORM,
+    INVALID_SUBMODULE_FORM,
+    ALL_DIGIT_STEP_ID,
+    CONFLICTING_ROUTE,
+    DISPATCH_PROMPT_REQUIRED,
+    RENDERED_PROMPT_REQUIRED,
+    HALT_PROMPT_REQUIRED,
+    INVALID_CONSULT_ON,
+    LOOP_NAME_BOUND,
+    INVALID_TEMPLATE,
+)
+
 # --- the tree ---------------------------------------------------------------------------
 
 

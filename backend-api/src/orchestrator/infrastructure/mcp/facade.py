@@ -22,13 +22,16 @@ Three settings of the SDK's app are decisions rather than defaults:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.mcpserver.prompts import Prompt
+from mcp.server.mcpserver.prompts.base import UserMessage
+from mcp.server.mcpserver.resources.types import FunctionResource
 from mcp.server.transport_security import TransportSecuritySettings
 
 #: The SDK's own class for a failure a tool *anticipated*: its message reaches the agent,
@@ -43,7 +46,8 @@ SERVER_NAME = "ai-orchestrator"
 INSTRUCTIONS = (
     "The orchestrator runs BMAD dev-loop workflows against your repositories. "
     "Read version first, pre-flight before creating a Run, carry the operator's budget "
-    "unchanged, and send only a Signal the Run's admitted_signals lists."
+    "unchanged, and send only a Signal the Run's admitted_signals lists. "
+    "Read the guide: read_guide with no id lists every page."
 )
 
 
@@ -61,11 +65,60 @@ class McpEndpoint:
     tool_names: tuple[str, ...]
 
 
-def build_endpoint(*, version: str, tools: Sequence[Callable[..., Any]]) -> McpEndpoint:
-    """One MCP server over the given tools, as an ASGI handler and its task group."""
+@dataclass(frozen=True)
+class McpResource:
+    """A readable document the endpoint lists under `uri`; `read` returns its text."""
+
+    uri: str
+    name: str
+    description: str
+    mime_type: str
+    read: Callable[[], Awaitable[str]]
+
+
+@dataclass(frozen=True)
+class McpPrompt:
+    """A named prompt whose single user message is the text `render` returns."""
+
+    name: str
+    description: str
+    render: Callable[[], Awaitable[str]]
+
+
+def _user_message(render: Callable[[], Awaitable[str]]) -> Callable[[], Awaitable[UserMessage]]:
+    async def message() -> UserMessage:
+        return UserMessage(await render())
+
+    return message
+
+
+def build_endpoint(
+    *,
+    version: str,
+    tools: Sequence[Callable[..., Any]],
+    resources: Sequence[McpResource] = (),
+    prompts: Sequence[McpPrompt] = (),
+) -> McpEndpoint:
+    """One MCP server over the given tools, resources and prompts, as an ASGI handler."""
     server = MCPServer(name=SERVER_NAME, version=version, instructions=INSTRUCTIONS)
     for tool in tools:
         server.add_tool(tool)
+    for resource in resources:
+        server.add_resource(
+            FunctionResource(
+                uri=resource.uri,  # type: ignore[arg-type]
+                name=resource.name,
+                description=resource.description,
+                mime_type=resource.mime_type,
+                fn=resource.read,
+            )
+        )
+    for prompt in prompts:
+        server.add_prompt(
+            Prompt.from_function(
+                _user_message(prompt.render), name=prompt.name, description=prompt.description
+            )
+        )
     # built for its side effect: the session manager is created lazily by this call, and
     # `api/mcp_mount.py` serves the manager rather than the Starlette app it returns
     server.streamable_http_app(
