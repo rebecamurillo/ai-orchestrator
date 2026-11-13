@@ -1,4 +1,5 @@
 {
+  "deploy/README.md#Agents in your projects": "connect",
   "deploy/README.md#Day 2": "host/day-2",
   "deploy/README.md#Docker for Runs (optional, off by default)": "host/docker-for-runs",
   "deploy/README.md#Editing the workflow templates": "host/template-folder",
