@@ -33,6 +33,7 @@ from uuid import UUID
 from orchestrator.application.use_cases.spend_figures import (
     AttemptRows,
     figures_of,
+    first_fact_money,
     gateway_read_for,
 )
 from orchestrator.domain.entities.attempt import Attempt
@@ -180,16 +181,6 @@ def _run_spend_and_provisional(
 
 
 def _fact_set_money(ports: SpendPorts, attempt_id: UUID) -> tuple[UsageFact, ...]:
-    """The harness money rows of the first fact set that has any, so a Claude attempt's
-    per-model rows and a migrated row of the same attempt are never added together."""
     if ports.fact_sets is None:
         return ()
-    for fact_set in ports.fact_sets.list_for_attempt(attempt_id):
-        rows = tuple(
-            u
-            for u in ports.fact_sets.rows(fact_set.id).usage
-            if u.source == "harness" and u.usage_class == "money"
-        )
-        if rows:
-            return rows
-    return ()
+    return first_fact_money(ports.fact_sets, attempt_id)

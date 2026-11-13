@@ -15,6 +15,7 @@ from uuid import UUID
 
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.facts import GatewayRead, UsageFact
+from orchestrator.domain.ports.facts import FactSetRepository
 from orchestrator.domain.ports.gateway import AttemptSpend
 from orchestrator.domain.ports.harness import HarnessUsage
 
@@ -124,8 +125,8 @@ def figures_of(attempts: Iterable[AttemptRows]) -> SpendFigures:
             reported.append(settled.usd)
             gateway_reported = True
         money = next(
-            (rows for _, usage in reads if (rows := _harness_money(usage))),
-            _harness_money(attempt.fact_money),
+            (rows for _, usage in reads if (rows := harness_money(usage))),
+            harness_money(attempt.fact_money),
         )
         if money:
             attempt_harness = sum((u.usd or _ZERO for u in money), _ZERO)
@@ -142,5 +143,14 @@ def figures_of(attempts: Iterable[AttemptRows]) -> SpendFigures:
     )
 
 
-def _harness_money(usage: Sequence[UsageFact]) -> tuple[UsageFact, ...]:
+def harness_money(usage: Sequence[UsageFact]) -> tuple[UsageFact, ...]:
     return tuple(u for u in usage if u.source == "harness" and u.usage_class == "money")
+
+
+def first_fact_money(fact_sets: FactSetRepository, attempt_id: UUID) -> tuple[UsageFact, ...]:
+    """The harness money rows of the first fact set that has any, so a Claude attempt's
+    per-model rows and a migrated row of the same attempt are never added together."""
+    for fact_set in fact_sets.list_for_attempt(attempt_id):
+        if rows := harness_money(fact_sets.rows(fact_set.id).usage):
+            return rows
+    return ()

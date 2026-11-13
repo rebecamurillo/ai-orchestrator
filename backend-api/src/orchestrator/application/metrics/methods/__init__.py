@@ -1,14 +1,20 @@
 """The method registry: `metric_id@n` → the function that computes that method.
 
-No method is registered yet; a test ties every key held here to a catalogued `metric_id@n`.
+Importing this package registers every part A method; a test ties the registry to the
+catalogue.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-Method = Callable[..., object]
+if TYPE_CHECKING:
+    from orchestrator.application.metrics.inputs import RunInputs
+    from orchestrator.application.metrics.values import MetricValue
+
+Method = Callable[["RunInputs"], list["MetricValue"]]
 
 REGISTRY: dict[str, Method] = {}
 
@@ -27,3 +33,14 @@ def register(method_id: str) -> Callable[[Method], Method]:
         return method
 
     return decorate
+
+
+from orchestrator.application.metrics.methods import (  # noqa: E402, F401
+    activity,
+    budget,
+    cost,
+    process,
+    spend,
+    time,
+    tokens,
+)
