@@ -72,6 +72,7 @@ from typing import Any
 
 from orchestrator.domain.ports.git import Change, CloneResult, NoUpstream, RemoteRef
 from tests.unit.fakes.clock import FakeClock
+from tests.unit.fakes.git_analysis import AnalysisScript, FakeAnalysisGit
 
 #: The answers a reachable repository with no BMAD manifest gives.
 DEFAULT_SHA = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
@@ -95,7 +96,7 @@ RESOLVES = "<the workdir this call asked about>"
 DEFAULT_MEMBER_BRANCH = "member-main"
 
 
-class FakeGit:
+class FakeGit(FakeAnalysisGit):
     """Scripted answers, a call log, and a clock that moves once per command."""
 
     def __init__(  # noqa: PLR0913 — one keyword per port method, each optional
@@ -134,6 +135,7 @@ class FakeGit:
         heads: dict[str, list[Any]] | None = None,
         statuses: dict[str, str] | None = None,
         changes: dict[str, tuple[Change, ...]] | None = None,
+        analysis: AnalysisScript | None = None,
     ) -> None:
         self.clock = clock
         self.seconds = seconds
@@ -144,6 +146,7 @@ class FakeGit:
         self.heads = heads
         self.statuses = statuses
         self.changes = changes
+        self.analysis = analysis or AnalysisScript()
         #: How far each per-tree `heads` script has been read — one cursor per tree, so the
         #: hub's start/end pair is not consumed by the submodule's own two calls (H4).
         self._head_used: dict[str, int] = {}
