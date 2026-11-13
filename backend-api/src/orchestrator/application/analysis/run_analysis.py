@@ -6,7 +6,7 @@ and one scope per repository stores that repository's analysis and its summary.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,12 +25,14 @@ from orchestrator.application.analysis.signals import (
     signals_to_json,
     store_signals,
 )
+from orchestrator.application.analysis.tier2 import Tier2Ports
 from orchestrator.domain.entities.analysis import Analysis, AnalysisArtifact
 from orchestrator.domain.ports.analysis import AnalysisRepository
 from orchestrator.domain.ports.analysis_tools import AnalysisTools
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.package_lookup import PackageLookup
+from orchestrator.domain.ports.process import ProcessRunner
 from orchestrator.domain.ports.repositories import AttemptRepository, StepRunRepository
 from orchestrator.domain.ports.run_records import RunCommitRepository, RunRepositoryRecords
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
@@ -38,6 +40,10 @@ from orchestrator.domain.ports.workspace import Workspace
 
 SUMMARY_MEDIA_TYPE = "application/json"
 NO_SUMMARY = "no summary stored for this analysis"
+
+
+def _no_project_env(run_id: UUID) -> Mapping[str, str]:
+    return {}
 
 
 @dataclass(frozen=True)
@@ -50,6 +56,9 @@ class AnalysisDeps:
     work_dir: Path
     clock: Clock
     new_id: Callable[[], UUID]
+    runner: ProcessRunner | None = None
+    command_timeout_min: float = 20
+    project_env: Callable[[UUID], Mapping[str, str]] = _no_project_env
 
 
 @dataclass(frozen=True)
@@ -70,8 +79,11 @@ def _first_line(error: Exception) -> str:
     return f"{type(error).__name__}: {lines[0] if lines else ''}"
 
 
-def _collect(deps: AnalysisDeps, prepared: RepositoryInputs) -> tuple[Analysis, RepositorySignals]:
+def _collect(
+    deps: AnalysisDeps, prepared: RepositoryInputs, env: Mapping[str, str]
+) -> tuple[Analysis, RepositorySignals]:
     """One repository's failure is that analysis's `failed`, never another's."""
+    ports = None if deps.runner is None else Tier2Ports(deps.runner, deps.command_timeout_min, env)
     try:
         return collect_signals(
             prepared,
@@ -82,6 +94,7 @@ def _collect(deps: AnalysisDeps, prepared: RepositoryInputs) -> tuple[Analysis, 
             lookups=deps.lookups,
             now=deps.clock.now(),
             new_id=deps.new_id,
+            tier2=ports,
         )
     except Exception as error:
         output = _first_line(error)
@@ -114,6 +127,7 @@ def analyse_run(
     deps: AnalysisDeps, writes: AnalysisWrites, run_id: UUID, calculation_id: UUID | None
 ) -> tuple[Analysis, ...]:
     """Analyse each `run_repository` of the Run; `calculation_id` is `None` while pending."""
+    env = deps.project_env(run_id)
     with writes() as scope:
         records = scope.run_records.list_for_run(run_id)
         commits = scope.run_commits.list_for_run(run_id)
@@ -137,7 +151,7 @@ def analyse_run(
         clock=deps.clock,
     ) as prepared:
         for item in prepared:
-            analysis, signals = _collect(deps, item)
+            analysis, signals = _collect(deps, item, env)
             _store(deps, writes, analysis, signals)
             stored.append(analysis)
     return tuple(stored)

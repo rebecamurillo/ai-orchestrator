@@ -234,6 +234,8 @@ class Settings(BaseSettings):
     #: `off`: no package name leaves the instance and every lookup signal reads
     #: `not run — lookups off`.
     analysis_lookups: Literal["on", "off"] = "on"
+    #: Each Tier 2 command; the process group is killed on expiry.
+    analysis_command_timeout_min: Annotated[int, Field(ge=1)] = 20
 
     # ── Pinned tool versions carried by the image (AD-16) ────────────────────
     bmad_version: str = "6.12.4"

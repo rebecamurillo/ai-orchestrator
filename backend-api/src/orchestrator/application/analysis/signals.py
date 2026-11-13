@@ -19,6 +19,7 @@ from orchestrator.application.analysis.languages import languages_of
 from orchestrator.application.analysis.secrets import GITLEAKS, scan_secrets
 from orchestrator.application.analysis.tier1a import Count, added_lines, count_tier1a
 from orchestrator.application.analysis.tier1b import collect_tier1b
+from orchestrator.application.analysis.tier2 import Tier2Ports, collect_tier2
 from orchestrator.application.analysis.toolset import TOOLS, toolset_records, with_toolset
 from orchestrator.domain.entities.analysis import Analysis, AnalysisArtifact, AnalysisStatus
 from orchestrator.domain.ports.analysis import AnalysisRepository
@@ -100,8 +101,9 @@ def collect_signals(  # noqa: PLR0913 — the repository's inputs and every port
     lookups: bool,
     now: datetime,
     new_id: Callable[[], UUID],
+    tier2: Tier2Ports | None = None,
 ) -> tuple[Analysis, RepositorySignals]:
-    """Tiers 1a and 1b of one repository, and the analysis stamped with its toolset."""
+    """Tiers 1a, 1b and 2 of one repository, and the analysis stamped with its toolset."""
     analysis = prepared.analysis
     installed = {tool: tools.version(tool) for tool in TOOLS}
     first = collect_tier1a(prepared, git=git, scratch_root=scratch_root, tools=tools, new_id=new_id)
@@ -123,11 +125,12 @@ def collect_signals(  # noqa: PLR0913 — the repository's inputs and every port
         now=now,
         new_id=new_id,
     )
+    third = collect_tier2(prepared, git=git, scratch_root=scratch_root, ports=tier2, new_id=new_id)
     merged = replace(
         first,
-        counts=(*first.counts, *second.counts),
-        words={**first.words, **second.words},
-        artifacts=(*first.artifacts, *second.artifacts),
+        counts=(*first.counts, *second.counts, *third.counts),
+        words={**first.words, **second.words, **third.words},
+        artifacts=(*first.artifacts, *second.artifacts, *third.artifacts),
         tool_versions={**first.tool_versions, **second.tool_versions},
     )
     records = toolset_records(

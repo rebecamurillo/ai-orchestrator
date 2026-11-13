@@ -29,6 +29,9 @@ SAST_KEYS = ("rules",)
 TOP_KEYS = ("tests", "tier2", "commands", "sast", "registries")
 WRONG_TYPE = "wrong type: {key}"
 UNKNOWN_KEY = "unknown key: {key}"
+MISSING_KEY = "missing key: {key}"
+NOT_RELATIVE = "not repository-relative: {key}"
+REPORT_PATHS = (("coverage", "coverage_report"), ("test_report", "test_report_path"))
 UNREADABLE = "declaration unreadable: {error}"
 DOCUMENT = "<document>"
 
@@ -81,6 +84,19 @@ def _section(
     return {name: item for name, item in value.items() if name in known}
 
 
+def _repository_relative(path: str) -> bool:
+    return not path.startswith("/") and ".." not in path.split("/")
+
+
+def _check_report_paths(commands: dict[str, str], problems: list[str]) -> None:
+    for command, path_key in REPORT_PATHS:
+        if path_key in commands and not _repository_relative(commands[path_key]):
+            problems.append(NOT_RELATIVE.format(key=f"commands.{path_key}"))
+            del commands[path_key]
+        if command in commands and path_key not in commands:
+            problems.append(MISSING_KEY.format(key=f"commands.{path_key}"))
+
+
 def _from_document(document: dict[str, Any], problems: list[str]) -> Declaration:
     problems.extend(UNKNOWN_KEY.format(key=name) for name in document if name not in TOP_KEYS)
     tests = _section(document, "tests", TESTS_KEYS, problems)
@@ -98,6 +114,7 @@ def _from_document(document: dict[str, Any], problems: list[str]) -> Declaration
             commands[key] = value
         else:
             problems.append(WRONG_TYPE.format(key=f"commands.{key}"))
+    _check_report_paths(commands, problems)
     sast = _section(document, "sast", SAST_KEYS, problems)
     rules = sast.get("rules")
     if "rules" in sast and not isinstance(rules, str):

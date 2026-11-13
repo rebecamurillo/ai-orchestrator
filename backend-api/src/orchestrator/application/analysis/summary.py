@@ -29,13 +29,15 @@ PER_100 = "per_100"
 RUN = "run"
 PRODUCTION_RATE_UNIT = "per 100 production lines"
 TEST_RATE_UNIT = "per 100 test lines"
-LINE_METRICS = ("code.lines_added", "code.lines_removed", "code.test_lines")
+COVERAGE = "code.coverage_changed_lines"
+LINE_METRICS = ("code.lines_added", "code.lines_removed", "code.test_lines", COVERAGE)
 FILE_METRICS = ("code.files_touched", "code.test_files")
 DUPLICATION = "code.duplication_added"
 #: Metrics whose sources are open-ended (one row per value found, e.g. per licence); the
 #: catalogue sets `open_sources: true` on exactly these (Operator ruling 2026-11-13).
 OPEN_SOURCE_METRICS = ("code.deps_licences",)
 CENTS = Decimal("0.01")
+NO_INSTRUMENTED = "n/a — no added production line instrumented"
 
 Key = tuple[str, str | None]
 
@@ -190,14 +192,34 @@ def _run_cells(signals: Sequence[RepositorySignals]) -> list[_Cell]:
     return cells
 
 
+def _coverage_share(
+    rows: Sequence[MetricValue], scope_type: str, scope_key: str, repository: str | None
+) -> list[MetricValue]:
+    """Covered over instrumented added lines at one scope, recomputed from the two sums."""
+    by_source = {r.source: r for r in rows if r.metric_id == COVERAGE and r.value_num is not None}
+    covered, instrumented = by_source.get("covered"), by_source.get("instrumented")
+    if covered is None or instrumented is None:
+        return []
+    fields: dict[str, object] = {"repository": repository, "source": "share", "unit": "%"}
+    lines, total = covered.value_num or Decimal(0), instrumented.value_num or Decimal(0)
+    if total == 0:
+        return [word(COVERAGE, scope_type, scope_key, NO_INSTRUMENTED, **fields)]
+    share = (lines * 100 / total).quantize(CENTS, ROUND_HALF_UP)
+    partial = {k: getattr(covered, k) for k in ("missing", "partial_n", "partial_m")}
+    return [number(COVERAGE, scope_type, scope_key, share, **fields, **partial)]
+
+
 def summarise(signals: Sequence[RepositorySignals]) -> list[MetricValue]:
     """Repository rows in input order, then the Run rows; `[]` for no repository."""
     if not signals:
         return []
     values: list[MetricValue] = []
     for repository in signals:
+        rows: list[MetricValue] = []
         for cell in _repository_cells(repository):
-            values += _rows(cell, "repository", repository.path, repository.path)
+            rows += _rows(cell, "repository", repository.path, repository.path)
+        values += rows + _coverage_share(rows, "repository", repository.path, repository.path)
+    rows = []
     for cell in _run_cells(signals):
-        values += _rows(cell, "run", RUN, None)
-    return values
+        rows += _rows(cell, "run", RUN, None)
+    return values + rows + _coverage_share(rows, "run", RUN, None)

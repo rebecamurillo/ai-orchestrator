@@ -33,6 +33,12 @@ TABLE = {
     "code.duplication_added": ("duplicated lines added", "A"),
     "code.functions_over_cyclomatic": ("functions above the cyclomatic threshold · worst", "A"),
     "code.functions_over_cognitive": ("functions above the cognitive threshold · worst", "A"),
+    # epic 6 story 1, 2026-11-13: the five Tier 2 entries.
+    "code.linter_warnings_new": ("new linter warnings", "A"),
+    "code.typecheck_errors_new": ("new type-check errors", "A"),
+    "code.coverage_changed_lines": ("coverage of changed lines", "A"),
+    "code.tests_executed": ("test cases executed, base → head, by class", "A"),
+    "code.fail_to_pass": ("new tests that fail at base", "A"),
 }
 
 
