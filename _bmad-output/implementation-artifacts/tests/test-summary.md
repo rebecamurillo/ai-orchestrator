@@ -1,91 +1,96 @@
-# Test Automation Summary — orchestrator-run-metrics / epic-2-run-versions
+# Test Automation Summary — orchestrator-run-metrics / epic-3-run-page
 
 Generated: 2026-11-13. Dispatch mode with an empty story id, so this covers the whole epic.
-Spec: `initiatives/orchestrator-run-metrics/epic-2-run-versions/SPEC.md` (path relative to the hub)
-Stories: 1–6 (commits `167fdb9`..`4211d4b`)
-Previous summary (epic-1-run-facts): in git history at `270bdfe`.
+Spec: `initiatives/orchestrator-run-metrics/epic-3-run-page/SPEC.md` (path relative to the hub)
+Stories: 1–6 (commits `b652211`..`91c567e`)
+Previous summary (epic-2-run-versions): in git history at `da81060`.
 
-Framework: the project's own, pytest + httpx in `backend-api/tests/e2e` (`make e2e-api`). The
-epic changed no UI, so no Playwright test was added.
+Framework: the project's own Playwright suite in `web-client/tests/e2e` (`make e2e-ui`). It runs
+against the built web-client and the stub backend. The epic made no backend change, so no API
+test was added.
 
 ## Generated Tests
 
-### API (e2e) tests — `make e2e-api` gate
+### E2E (UI) tests — `make e2e-ui` gate
 
-- [x] `backend-api/tests/e2e/test_run_metrics_versions.py` (23 tests). It reuses the suite's
-  helpers (`test_run_creation`, `test_signals`, `test_clone_check.Fixtures`). Templates are
-  fresh `e2e-metrics-<uuid>` fixtures owned by the test, so no shipped template content is
-  pinned (hard rule 6). Every Run it creates ends terminal inside its own test.
-  - **Bearer and 404** (CAP-3, CAP-5, CAP-6): each of the six new operations is checked twice.
-    Without the bearer it returns 401 problem+json. With the bearer and an unknown Run it
-    returns 404 problem+json. The operations are `GET …/metrics`, `GET …/metrics/versions`,
-    `POST …/metrics/calculate`, `GET …/metrics/calculations/{n}`,
-    `GET …/metrics/gateway-reads` and `PATCH /runs/{id}`.
-  - **Migrations** (stories 1, 2, 3, 5):
-    - `run_repository`, `run_commit`, `metric_calculation`, `result_version` and
-      `metric_value` exist in `public`.
-    - `step_run.role`, `run.label` and `run.label_set_by_operator` are NOT NULL with defaults.
-    - A `metric_value` that has both a figure and `missing = 'not recorded'` is refused with
-      SQLSTATE 23514. The write runs in a transaction that is rolled back.
-  - **Roles** (CAP-1):
-    - Saving a template with `role: build` returns 422, and `errors[]` holds
-      `unknown role build` with a line.
-    - With `role: implement`, the planned `step_run.role` is `implement`.
-  - **Label** (CAP-3, plus the CAP-2 `.` row):
-    - The default is `{project} {template} {YYYY-MM-DD HH:MM}` from the Run's `created_at`.
-    - A PATCH on a `done` Run trims and sets the label, with operator `true`, and leaves the
-      status `done`.
-    - A label of 121 characters, or of whitespace only, returns 422 problem+json.
-    - `null` restores the default, with operator `false`.
-    - A label given at creation is stored with operator `true`.
-    - Exactly one `run_repository` row (`.`) exists for a single-repository Run.
-  - **Result versions** (CAP-5):
-    - A Run that ends `done` gets v1 from the real DBOS calculation workflow. Its entry point
-      is `at_attempt_end`, `calculations/1` reads `done`, and `?v=1` is not "values so far".
-    - A manual `POST …/calculate` returns 202 with `target_n` 2 and entry point `manual`. v2
-      appears, the versions list reads `[1, 2]`, the latest read is v2, `?v=1` is byte-equal
-      to before, and `?v=3` returns 404.
-    - Every stored value has a `method_id` of the form `{metric_id}@n`. It never holds both a
-      figure and a non-`partial` missing word. Its origin names the Run and the template.
-    - On a Run parked at `needs_you`, `GET …/metrics` returns `values_so_far: true` and
-      `POST …/calculate` returns 409 problem+json. After `cancel`, the Run gets v1.
-  - **Gateway reads** (CAP-6): an ended Run returns `{items, next_cursor: null}`. Each item has
-    a UUID `attempt_id` and a non-empty role, `harness_usd` is null or a non-negative decimal,
-    and the reads are in time order.
+- [x] `web-client/tests/e2e/run-detail-metrics.spec.ts` (16 tests, new file). Every metrics route
+  (catalogue, versions, metrics, calculate, calculations, PATCH label) is answered with
+  `page.route()` through the real same-origin proxy, as `run-detail-tabs.spec.ts` does. The
+  catalogue is a fixture the spec owns, so no shipped template or catalogue content is pinned.
+  - **Arrival** (CAP-3, CAP-4): an ended Run opens on METRICS. Its title is the label and the
+    branch is the first meta field. The arrival URL stays untouched.
+  - **Cost block** (CAP-3): it shows GATEWAY · HARNESS with both value cells. The figures-differ
+    card reads `gateway $15.35 · harness $16.01 · harness is $0.66 higher (4.3 %)` and the gate
+    line. Equal figures (v1 via `?v=1`) show no card, and the cost block prints the version line.
+  - **Hint** (CAP-2): hover does not open it. Click and Enter do, and it shows the catalogue's
+    method and source text. Escape closes it and focus returns to the control.
+  - **Origin drawer** (CAP-2): a value cell opens it. It shows `{label} · {run id}`, the branch,
+    and `n/a — a Run total spans 2 models`. Escape closes it.
+  - **By role** (CAP-4): rows are senior, builder, reviewer (gateway descending). `senior` is a
+    row, and a missing value reads `not recorded`.
+  - **URL state and versions** (CAP-4): `?v=1` reads v1 (the request carries `v=1`) and shows
+    `showing v1 of 2 · latest is v2`. CHART writes `tab=metrics&view=chart&v=1`, ALL METRICS
+    writes `metrics=all`, and choosing `v2 latest` drops `v=`.
+  - **Run label** (CAP-3): Escape sends no PATCH. Enter sends `{label: "snake round 1"}`, the
+    title updates and `your label` shows. Clearing sends `{label: null}` and restores the default.
+  - **Recalculate** (CAP-3): the confirm text is `Creates v3 … v1 to v2 are kept.` Next the line
+    reads `calculating v3 · started 10:00:01` and the button is withdrawn. When the calculation
+    is done, `v3 latest` appears on the next poll. When it fails, the page shows
+    `calculation v3 failed · no version created ·`, the output appears in a command block, and
+    no v3 is offered.
+  - **Running Run** (CAP-3, CAP-4): it opens on GATE with no RECALCULATE METRICS. Its METRICS tab
+    states `Run running · values so far, stored as each attempt ends`.
+  - **CHART view** (CAP-5): `role="figure"` panels named `cost by role` and
+    `where the money went, by scope`. A mark is a focusable button named `{run label} …$9.00`,
+    and focusing it shows the tooltip.
+  - **PNG** (CAP-6): a real download in Chromium. TRANSPARENT is the default. The file name is
+    `familio-{slugged label}-cost-by-role-{yyyy-mm-dd}.png`, and the file is a PNG whose IHDR
+    width is 1640. The preview switch (DARK PAGE) swaps the screen chart for the export image.
+  - **Runs history** (story 4): the `cost` head carries `how recorded spend is calculated`. It
+    does not open on hover, it opens on click with the catalogue text, and Escape closes it.
+    The cell still reads `$0.250000`.
+
+## Results
+
+- `E2E_PREVIEW_PORT=4399 E2E_STUB_BACKEND_PORT=8799 pnpm exec playwright test tests/e2e/run-detail-metrics.spec.ts`
+  passes: 16 tests (15 pass, 1 is the expected failure below). `--repeat-each=5` gives 80/80
+  with no flake. eslint, prettier and tsc are clean on the file.
+- Running the full Playwright suite once gives 338 passed, 1 skipped and **3 failed**, all in
+  existing tests (see Findings).
+- Environment: Playwright here pins chromium-headless-shell 1234, and only 1248 was in the
+  cache. `pnpm exec playwright install chromium` (the `make install-e2e` step) fixed it.
+  Alternate ports were used, so nothing on 4321 was touched.
+
+## Findings (product defects; not fixed here — tests only)
+
+1. **The PNG control cannot be clicked with a mouse** (CAP-6). `.chart-png` is absolutely
+   positioned and comes before the `position: relative` `.chart-panel` in the DOM, so the
+   panel's `.chart-head` paints over the button and catches the click. Playwright reports
+   `<h4 class="chart-head"> … intercepts pointer events`. Keyboard activation works, and the
+   whole export pipeline is proven that way. `the PNG control takes a mouse click` is marked
+   `test.fail()` to pin the defect: once the control is stacked above the head (for example
+   with `z-index` on `.chart-png` in `src/components/charts/charts.css`), Playwright will flag it
+   as an unexpected pass, and the marker should then be removed.
+2. **`run-diagram-error.spec.ts` regressed** (3 tests, existing and protected, not in any epic-3
+   story's list of tests it may change). The stub backend 404s the new metrics reads. Since
+   story 3, the cost block renders its own `fetch-failed` readout, so
+   `locator('[data-testid="fetch-failed"]')` now matches two elements under strict mode. I did
+   not edit it (hard rule 1). The Operator decides between scoping the cost block's readout
+   differently (a product change) and a declared revision of that spec.
 
 ## Coverage
 
-- API endpoints added by the epic: 6/6, each with happy path, 401 and 404. Also covered:
-  422 on PATCH and 409 on calculate.
-- Not covered at e2e, because each needs a staged race or a harness and is settled by the
-  stories' unit tests:
-  - the second-calculate-while-queued 409 (the real job can finish first)
-  - `carried_from` after a log sweep
-  - a method that raises
-  - `failed: interrupted` at start-up (the durability stack's concern)
-  - the instance hold against a running calculation
-  - the label surviving a stale `update`
-  - the hub `run_repository` and `run_commit` rows (they need agent and git commit rows)
-  - the part A method values (story 4: pure functions over fixed fact sets)
-- UI: none in this epic.
-
-## Verification
-
-- `ruff check` and `ruff format --check`: clean. `pytest --collect-only`: 23 tests collected.
-- The 6 bearer scenarios were run against the in-process app (`create_app(Settings())` with
-  the `.env.example` contract, FastAPI `TestClient`). All 6 return 401
-  `application/problem+json`.
-- Unit meta-tests over test files (`-k "source_limit or e2e or pair or marker"`): 1585 passed.
-- **The other 17 tests were not run against a stack.** The epic's constraints forbid starting,
-  stopping or calling a running instance, and `make e2e` builds one. Those tests need Postgres,
-  DBOS and git. They run on the next `make e2e`, which is the gate.
-- `mypy` on the new file reports only the `Settings()` call-arg note that the existing e2e
-  modules also have. `make lint` scopes mypy to `domain/` and `application/`.
+- Epic-3 capabilities with an e2e path: 6/6 (CAP-1 tokens are only checked through the
+  rendered charts; their exact values and contrast stay in the unit tests).
+- Story acceptance criteria exercised end to end: 16 of 32 (story 1: 0/3, story 2: 3/5,
+  story 3: 5/5, story 4: 4/6, story 5: 2/7, story 6: 2/6). The rest are pure-layout or
+  token checks, and the unit suite (`make test`) is where they belong: tokens and contrast,
+  nice ticks, zero, partial and missing marks, the export SVG's text and background
+  rectangles, the follow highlight, and the OFL file. Also left to unit tests: the
+  seven-version select, a poll keeping an open drawer (needs a 30 s slow tick), the
+  board-card hint, and the step-detail attempt rows.
 
 ## Next Steps
 
-- Run `make e2e` (the disposable `aio-e2e` stack) to execute the module against Postgres and
-  DBOS. The first thing to watch is how long the calculation takes: `wait_for_version` waits
-  90 s.
-- When epics 3 and 4 add the Run page and the comparison/export endpoints, extend the e2e suite
-  from there.
+- Fix finding 1, then remove `test.fail()`.
+- The Operator decides finding 2 before `make e2e-ui` is relied on as a gate for this branch.
