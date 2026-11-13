@@ -97,6 +97,8 @@ def to_entity(row: RunRow) -> Run:
         active_seconds=row.active_seconds,
         last_opened_at=row.last_opened_at,
         last_opened_before=row.last_opened_before,
+        label=row.label or "",
+        label_set_by_operator=row.label_set_by_operator or False,
         created_at=row.created_at,
         # `None` until the row has been flushed: the column's value is the database's
         updated_at=row.updated_at,
@@ -161,6 +163,8 @@ def row_values(run: Run) -> dict[str, Any]:
         "active_seconds": run.active_seconds,
         "last_opened_at": run.last_opened_at,
         "last_opened_before": run.last_opened_before,
+        "label": run.label,
+        "label_set_by_operator": run.label_set_by_operator,
         "created_at": run.created_at,
         "started_at": run.started_at,
         "ended_at": run.ended_at,
@@ -175,10 +179,15 @@ def row_values(run: Run) -> dict[str, Any]:
 #: the events route polls would stop advancing.
 DATABASE_OWNED_COLUMNS = ("id", "updated_at")
 
+#: Written only by `set_label`, so a writer holding an older copy cannot revert them.
+OPERATOR_OWNED_COLUMNS = ("label", "label_set_by_operator")
+
 #: What `update` writes back: every other column, read off the table so a column added to the
 #: model cannot be left out of an update by hand.
 MUTABLE_COLUMNS: tuple[str, ...] = tuple(
-    column.name for column in RunRow.__table__.columns if column.name not in DATABASE_OWNED_COLUMNS
+    column.name
+    for column in RunRow.__table__.columns
+    if column.name not in DATABASE_OWNED_COLUMNS + OPERATOR_OWNED_COLUMNS
 )
 
 
@@ -216,6 +225,19 @@ class SQLAlchemyRunRepository:
         values = row_values(run)
         for column in MUTABLE_COLUMNS:
             setattr(row, column, values[column])
+
+    def set_label(self, run_id: UUID, label: str, by_operator: bool) -> None:
+        statement = (
+            select(RunRow)
+            .where(RunRow.id == run_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        row = self._session.scalars(statement).first()
+        if row is None:
+            raise ValueError(f"no run with id {run_id} is stored")
+        row.label = label
+        row.label_set_by_operator = by_operator
 
     def list(self, *, project_id: UUID | None = None) -> list[Run]:
         statement = select(RunRow)

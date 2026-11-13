@@ -527,7 +527,12 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Set or restore a Run's label
+         * @description A string of 1-120 characters sets the label; `null` restores the computed default.
+         *     Allowed at every status; never touches the status.
+         */
+        patch: operations["patch_label_api_v1_runs__run_id__patch"];
         trace?: never;
     };
     "/api/v1/runs/{run_id}/activity": {
@@ -1194,6 +1199,10 @@ export interface components {
             id: string;
             /** Kind Label */
             kind_label: string | null;
+            /** Label */
+            label?: string;
+            /** Label Set By Operator */
+            label_set_by_operator?: boolean;
             /** Needs You Since */
             needs_you_since: string | null;
             /** Park Kind */
@@ -2281,6 +2290,10 @@ export interface components {
             id: string;
             /** Is Init */
             is_init: boolean;
+            /** Label */
+            label?: string;
+            /** Label Set By Operator */
+            label_set_by_operator?: boolean;
             /** Reason */
             reason: string;
             /**
@@ -2508,6 +2521,10 @@ export interface components {
             inputs: {
                 [key: string]: unknown;
             };
+            /** Label */
+            label?: string;
+            /** Label Set By Operator */
+            label_set_by_operator?: boolean;
             /** Last Opened At */
             last_opened_at?: string | null;
             /** Manual Estimate H */
@@ -2734,6 +2751,8 @@ export interface components {
             inputs?: {
                 [key: string]: unknown;
             };
+            /** Label */
+            label?: string | null;
             /** Manual Estimate H */
             manual_estimate_h?: number | string | null;
             /** Model */
@@ -2762,6 +2781,14 @@ export interface components {
             template_name: string;
             /** Template Version */
             template_version: number;
+        };
+        /**
+         * RunLabelIn
+         * @description `PATCH /runs/{id}`'s body: a string sets the label, `null` restores the default.
+         */
+        RunLabelIn: {
+            /** Label */
+            label: string | null;
         };
         /**
          * RunNodeOut
@@ -2809,6 +2836,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Label */
+            label?: string;
+            /** Label Set By Operator */
+            label_set_by_operator?: boolean;
             /** Park Seq */
             park_seq?: number;
             /** Pause Requested */
@@ -4911,6 +4942,62 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    patch_label_api_v1_runs__run_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunLabelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummaryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The label is empty or over 120 characters, or `run_id` is not a UUID. */
             422: {
                 headers: {
                     [name: string]: unknown;

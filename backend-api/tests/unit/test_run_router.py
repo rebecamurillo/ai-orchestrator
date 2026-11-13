@@ -205,7 +205,8 @@ async def test_the_openapi_document_still_lists_preflight_as_its_own_path(api: A
         document = (await client.get("/openapi.json")).json()
 
     assert set(document["paths"][PREFLIGHT]) == {"get", "post"}
-    assert set(document["paths"][f"{RUNS}/{{run_id}}"]) == {"get"}
+    # Story 3 (epic 2, 2026-11-13) declares `PATCH /runs/{run_id}` (the Run label).
+    assert set(document["paths"][f"{RUNS}/{{run_id}}"]) == {"get", "patch"}
 
 
 # ── POST /runs ───────────────────────────────────────────────────────────────────────────

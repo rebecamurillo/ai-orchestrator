@@ -129,6 +129,9 @@ class Run(BaseModel):
     active_seconds: int = 0
     last_opened_at: datetime | None = None
     last_opened_before: datetime | None = None
+    #: `RunRepository.set_label` is the only writer after creation.
+    label: str = ""
+    label_set_by_operator: bool = False
     created_at: datetime
     #: When this row was last written, maintained by the database rather than by any use
     #: case (AD-8): `None` on a Run that has not been stored yet, which is what a planner

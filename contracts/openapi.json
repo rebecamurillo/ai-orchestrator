@@ -568,6 +568,14 @@
             ],
             "title": "Kind Label"
           },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "label_set_by_operator": {
+            "title": "Label Set By Operator",
+            "type": "boolean"
+          },
           "needs_you_since": {
             "anyOf": [
               {
@@ -3742,6 +3750,14 @@
             "title": "Is Init",
             "type": "boolean"
           },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "label_set_by_operator": {
+            "title": "Label Set By Operator",
+            "type": "boolean"
+          },
           "reason": {
             "title": "Reason",
             "type": "string"
@@ -4305,6 +4321,14 @@
             "additionalProperties": true,
             "title": "Inputs",
             "type": "object"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "label_set_by_operator": {
+            "title": "Label Set By Operator",
+            "type": "boolean"
           },
           "last_opened_at": {
             "anyOf": [
@@ -4881,6 +4905,17 @@
             "title": "Inputs",
             "type": "object"
           },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
           "manual_estimate_h": {
             "anyOf": [
               {
@@ -4946,6 +4981,27 @@
           "base_branch"
         ],
         "title": "RunIn",
+        "type": "object"
+      },
+      "RunLabelIn": {
+        "description": "`PATCH /runs/{id}`'s body: a string sets the label, `null` restores the default.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "RunLabelIn",
         "type": "object"
       },
       "RunNodeOut": {
@@ -5094,6 +5150,14 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "label_set_by_operator": {
+            "title": "Label Set By Operator",
+            "type": "boolean"
           },
           "park_seq": {
             "title": "Park Seq",
@@ -8840,6 +8904,98 @@
           }
         ],
         "summary": "Read one Run",
+        "tags": [
+          "runs"
+        ]
+      },
+      "patch": {
+        "description": "A string of 1-120 characters sets the label; `null` restores the computed default.\nAllowed at every status; never touches the status.",
+        "operationId": "patch_label_api_v1_runs__run_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunLabelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The label is empty or over 120 characters, or `run_id` is not a UUID."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set or restore a Run's label",
         "tags": [
           "runs"
         ]

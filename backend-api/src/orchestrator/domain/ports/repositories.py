@@ -124,7 +124,15 @@ class RunRepository(Protocol):
         ...
 
     def update(self, run: Run) -> None:
-        """Replace the stored Run with this one, matched on its id."""
+        """Replace the stored Run with this one, matched on its id.
+
+        The label columns stay as stored; `set_label` is their only writer.
+        """
+        ...
+
+    def set_label(self, run_id: UUID, label: str, by_operator: bool) -> None:
+        """Write the two label columns under the Run's row lock; the only writer of them
+        after `add`."""
         ...
 
     def list_by_status(self, status: RunStatus) -> list[Run]:

@@ -44,6 +44,7 @@ from orchestrator.application.preflight.model import (
     Line,
     PreflightRequest,
 )
+from orchestrator.application.rules.run_label import initial_label
 from orchestrator.application.rules.signals import row_at
 from orchestrator.application.templates.plan_model import Plan
 from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
@@ -115,6 +116,7 @@ class CreateRunRequest:
     #: A non-empty list requires `save=True`: the Run is stored but not enqueued until
     #: every predecessor is `done` (→ enqueue) or one ends `failed | cancelled` (→ park).
     after_run_ids: tuple[UUID, ...] = ()
+    label: str | None = None
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -192,6 +194,10 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     assert plan is not None
     assert tree is not None
 
+    now = ports.clock.now()
+    label, by_operator = initial_label(
+        req.label, project.name, _inputs_dict(req), req.template_name, now
+    )
     run_id: UUID = new_id()
     trace = (
         ports.tracer.create_run_trace(run_id, project.slug, (), name=_trace_name(req))
@@ -219,7 +225,9 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         manual_estimate_h=req.manual_estimate_h,
         re_review_done=req.re_review_done,
         trace_id=trace.trace_id if trace is not None else None,
-        created_at=ports.clock.now(),
+        created_at=now,
+        label=label,
+        label_set_by_operator=by_operator,
         partition_branch=declared_branch,
         after_run_ids=tuple(req.after_run_ids),
     )
