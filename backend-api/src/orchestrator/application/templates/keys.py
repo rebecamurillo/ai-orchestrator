@@ -62,6 +62,7 @@ from orchestrator.application.templates.model import (
     UNKNOWN_KIND,
     USES_AND_RUN,
     ValidationError,
+    unknown_role,
 )
 from orchestrator.application.templates.on_fail import check_on_fail
 from orchestrator.application.templates.table import (
@@ -71,9 +72,11 @@ from orchestrator.application.templates.table import (
     CALL_TIMING_KEYS,
     ID_KEY,
     NAME_KEY,
+    ROLE_KEY,
     RUN_KEY,
     RUN_SUGAR_KIND,
     STEP_KEYS,
+    STEP_ROLES,
     TEMPLATE_KEYS,
     USES_KEY,
     VERSION_KEY,
@@ -222,6 +225,7 @@ def _check_step(
 ) -> list[ValidationError]:
     kind, errors = _kind_of(node)
     errors += unknown_keys(node, STEP_KEYS | AGENT_KEYS if kind == AGENT_KIND else STEP_KEYS)
+    errors += _check_role(node)
     if kind is None:
         return errors
     errors += _check_with(node, kind)
@@ -232,6 +236,15 @@ def _check_step(
         errors += check_agent_extras(node)
     errors += _check_minutes(node, "timeout_min") + _check_minutes(node, "stall_min")
     return errors + check_on_fail(node, earlier_agents, kind)
+
+
+def _check_role(node: LinedMap) -> list[ValidationError]:
+    if ROLE_KEY not in node:
+        return []
+    value = node[ROLE_KEY]
+    if isinstance(value, str) and value in STEP_ROLES:
+        return []
+    return [problem(key_line(node, ROLE_KEY, node.line), unknown_role(value))]
 
 
 def _kind_of(node: LinedMap) -> tuple[str | None, list[ValidationError]]:

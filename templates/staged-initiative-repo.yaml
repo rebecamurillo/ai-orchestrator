@@ -49,6 +49,7 @@ steps:
   # `mode: attach`: the Run works on the initiative branch by its exact name, cut from
   # `base_branch` on the first Run and found on origin on every later one (AD-7, AD-14).
   - id: checkout
+    role: deterministic
     uses: git.worktree
     with: { base: "{{base_branch}}", branch: "{{branch}}", mode: attach }
     gate: deterministic
@@ -65,16 +66,19 @@ steps:
       # The repository's own commands, from its record: a repository with no command plans the
       # row `skipped · no command` (AD-7).
       - id: setup
+        role: deterministic
         run: "{{repository.install_command}}"
         timeout_min: 20
         gate: deterministic
 
       - id: baseline
+        role: deterministic
         run: "{{repository.unit_test_command}}"
         on_fail: fail
         gate: deterministic
 
       - id: spec-gate
+        role: spec-gate
         uses: agent
         with:
           harness: "{{harness}}"
@@ -106,6 +110,7 @@ steps:
             # fast-forward: by the second story the local branch is ahead of origin; a conflict is the
             # one stop a human has to resolve.
             - id: sync
+              role: deterministic
               uses: git.merge
               with: { from: "{{branch}}" }
               gate: deterministic
@@ -114,6 +119,7 @@ steps:
             # The marker, not the Story file, is what routes the row: an `answer` archives the row's
             # first matched file to `.answers/`, and that must never be the spec itself.
             - id: plan
+              role: plan
               uses: agent
               with:
                 harness: "{{harness}}"
@@ -164,6 +170,7 @@ steps:
 
             # --- 2. implement -------------------------------------------------------------------------
             - id: implement
+              role: implement
               uses: agent
               with:
                 harness: "{{harness}}"
@@ -216,6 +223,7 @@ steps:
 
             # --- 3. verify (deterministic; a failure sends the implementer back to its own breakage) --
             - id: verify
+              role: verify
               run: "{{repository.unit_test_command}}"
               on_fail:
                 redispatch: implement
@@ -244,6 +252,7 @@ steps:
 
             # --- 4. review ----------------------------------------------------------------------------
             - id: review
+              role: review
               uses: agent
               with:
                 harness: "{{harness}}"
@@ -286,11 +295,13 @@ steps:
             # One tree: the code, the Story file and the three markers are committed together, under
             # the story's own title, after the protected-path check.
             - id: commit-guard
+              role: deterministic
               uses: git.commit
               with: { message: "story {{story.id}}: {{story.title}} (orchestrator)" }
               gate: deterministic
 
       - id: gen-e2e
+        role: e2e-gen
         uses: agent
         with:
           harness: "{{harness}}"
@@ -309,17 +320,20 @@ steps:
         gate: liveness
 
       - id: commit-e2e
+        role: deterministic
         uses: git.commit
         with: { message: "e2e: generated tests (orchestrator)" }
         gate: deterministic
 
       - id: e2e
+        role: e2e
         run: "{{repository.quality_gate_command}}"
         on_fail: { redispatch: gen-e2e, max: 2 }
         timeout_min: 45
         gate: deterministic
 
       - id: retro
+        role: retro
         uses: agent
         with:
           harness: "{{harness}}"
@@ -358,6 +372,7 @@ steps:
         gate: liveness
 
       - id: commit-retro
+        role: deterministic
         uses: git.commit
         with: { message: "retro: epic retrospective (orchestrator)" }
         gate: deterministic
@@ -365,16 +380,19 @@ steps:
       # Bring in whatever origin's initiative branch received during this epic before pushing;
       # a conflict is the one stop a human has to resolve.
       - id: merge
+        role: deterministic
         uses: git.merge
         with: { from: "{{branch}}" }
         gate: deterministic
 
       - id: push
+        role: deterministic
         uses: git.push
         with: { branch: "{{branch}}" }
         gate: deterministic
 
       - id: link
+        role: deterministic
         uses: pr.link
         with: { branch: "{{branch}}" }
         gate: liveness

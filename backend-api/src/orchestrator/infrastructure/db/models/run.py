@@ -173,6 +173,7 @@ class StepRunRow(Base):
     redispatch_count: Mapped[int] = mapped_column(Integer())
     frame: Mapped[str | None] = mapped_column(Text(), nullable=True)
     story_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    role: Mapped[str] = mapped_column(Text(), server_default=text("''"))
     consults: Mapped[dict[str, Any]] = mapped_column(JSONB(), server_default=text("'{}'::jsonb"))
 
 

@@ -72,6 +72,11 @@ BAD_REDISPATCH = "redispatch target not an earlier agent step"
 INVALID_ON_FAIL = "invalid on_fail"
 INVALID_GATE = "invalid gate"
 
+
+def unknown_role(value: object) -> str:
+    return f"unknown role {value}"
+
+
 #: The nine the key table states rules for but has no phrase for.
 INVALID_YAML = "invalid yaml"
 CALLEE_NOT_FOUND = "callee not found"
@@ -275,6 +280,7 @@ class Step(BaseModel):
     id: str
     uses: str
     meta: KindMeta
+    role: str | None = None
     #: The `with` map as pairs, in file order; empty for a `uses: template` step, whose
     #: `with` is the `call` below.
     params: tuple[tuple[str, Any], ...] = ()

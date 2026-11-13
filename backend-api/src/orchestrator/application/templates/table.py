@@ -34,8 +34,25 @@ DESCRIPTION_KEY = "description"
 
 TEMPLATE_KEYS = frozenset({NAME_KEY, VERSION_KEY, DESCRIPTION_KEY, INPUTS_KEY, STEPS_KEY})
 INPUT_KEYS = frozenset({INPUT_TYPE_KEY, "required", "default", "values", DESCRIPTION_KEY})
+ROLE_KEY = "role"
 STEP_KEYS = frozenset(
-    {ID_KEY, USES_KEY, "run", "with", GATE_KEY, "timeout_min", "stall_min", "on_fail"}
+    {ID_KEY, USES_KEY, "run", "with", GATE_KEY, "timeout_min", "stall_min", "on_fail", ROLE_KEY}
+)
+
+#: The one list of roles a step may declare; Runs of different templates compare by these.
+STEP_ROLES = frozenset(
+    {
+        "plan",
+        "implement",
+        "review",
+        "verify",
+        "spec-gate",
+        "e2e-gen",
+        "e2e",
+        "retro",
+        "orchestrate",
+        "deterministic",
+    }
 )
 
 #: What `validate()` refuses a level for lacking, by level.

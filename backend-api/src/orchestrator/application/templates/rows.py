@@ -239,6 +239,7 @@ def step_row(step: Step, frame: Frame) -> PlannedRow:
         kind=step.uses,
         # what the file declared, or the word for "the file declared nothing" (NFR-2)
         gate=step.gate or UNVALIDATED,
+        role=step.role or "",
         status=status,
         reason=reason,
         with_resolved=resolved,

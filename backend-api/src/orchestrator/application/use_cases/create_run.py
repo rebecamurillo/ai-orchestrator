@@ -381,4 +381,5 @@ def _step_run(run_id: UUID, row: PlannedRow) -> StepRun:
         with_resolved=row.with_resolved,
         frame=row.frame,
         story_id=row.story_id,
+        role=row.role,
     )

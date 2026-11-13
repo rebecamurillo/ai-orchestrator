@@ -53,6 +53,7 @@ from orchestrator.application.templates.model import (
 )
 from orchestrator.application.templates.on_fail import parse_redispatch_consult
 from orchestrator.application.templates.table import (
+    ROLE_KEY,
     RUN_KEY,
     RUN_SUGAR_KIND,
     WITH_KEY,
@@ -241,6 +242,7 @@ def _step(node: LinedMap) -> Step:
         id=node["id"],
         uses=kind,
         meta=KIND_META[kind],
+        role=node.get(ROLE_KEY),
         params=_params(node, params, kind),
         gate=node.get("gate"),
         timeout_min=node.get("timeout_min"),
