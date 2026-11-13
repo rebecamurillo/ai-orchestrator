@@ -9,7 +9,9 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from orchestrator.application.metrics.values import MetricValue
+from orchestrator.application.use_cases.gateway_comparison import AttemptGatewayReads
 from orchestrator.application.use_cases.metrics_read import RunMetrics, VersionView
+from orchestrator.domain.entities.facts import GatewayRead, GatewayTrigger
 from orchestrator.domain.entities.metric_results import (
     CalculationState,
     EntryPoint,
@@ -147,4 +149,46 @@ class CalculationOut(BaseModel):
             started_at=calculation.started_at,
             ended_at=calculation.ended_at,
             output=calculation.output,
+        )
+
+
+class GatewayReadOut(BaseModel):
+    trigger: GatewayTrigger
+    read_at: datetime
+    usd: str
+    rows: int | None
+    calls: int | None
+    provisional: bool
+    capped: bool
+
+    @classmethod
+    def of(cls, read: GatewayRead) -> GatewayReadOut:
+        return cls(
+            trigger=read.trigger,
+            read_at=read.read_at,
+            usd=_decimal(read.usd),
+            rows=read.rows,
+            calls=read.calls,
+            provisional=read.provisional,
+            capped=read.capped,
+        )
+
+
+class AttemptGatewayReadsOut(BaseModel):
+    attempt_id: UUID
+    row_path: str
+    attempt_n: int
+    role: str
+    harness_usd: str | None
+    reads: list[GatewayReadOut]
+
+    @classmethod
+    def of(cls, item: AttemptGatewayReads) -> AttemptGatewayReadsOut:
+        return cls(
+            attempt_id=item.attempt_id,
+            row_path=item.row_path,
+            attempt_n=item.attempt_n,
+            role=item.role,
+            harness_usd=None if item.harness_usd is None else _decimal(item.harness_usd),
+            reads=[GatewayReadOut.of(read) for read in item.reads],
         )

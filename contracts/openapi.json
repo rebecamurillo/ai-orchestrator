@@ -389,6 +389,55 @@
         "title": "AttemptDetailOut",
         "type": "object"
       },
+      "AttemptGatewayReadsOut": {
+        "properties": {
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "attempt_n": {
+            "title": "Attempt N",
+            "type": "integer"
+          },
+          "harness_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Usd"
+          },
+          "reads": {
+            "items": {
+              "$ref": "#/components/schemas/GatewayReadOut"
+            },
+            "title": "Reads",
+            "type": "array"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "row_path": {
+            "title": "Row Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "row_path",
+          "attempt_n",
+          "role",
+          "harness_usd",
+          "reads"
+        ],
+        "title": "AttemptGatewayReadsOut",
+        "type": "object"
+      },
       "AttributionOut": {
         "description": "The blocked Question's eyebrow (5.10, SPEC CAP-10): `Agent \u00b7 {harness} \u00b7 {model} \u00b7\n{ended_at}`.",
         "properties": {
@@ -1674,6 +1723,69 @@
           "attempt_n"
         ],
         "title": "GateRecordOut",
+        "type": "object"
+      },
+      "GatewayReadOut": {
+        "properties": {
+          "calls": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calls"
+          },
+          "capped": {
+            "title": "Capped",
+            "type": "boolean"
+          },
+          "provisional": {
+            "title": "Provisional",
+            "type": "boolean"
+          },
+          "read_at": {
+            "format": "date-time",
+            "title": "Read At",
+            "type": "string"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows"
+          },
+          "trigger": {
+            "enum": [
+              "attempt_end",
+              "run_end",
+              "recalculation"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          },
+          "usd": {
+            "title": "Usd",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trigger",
+          "read_at",
+          "usd",
+          "rows",
+          "calls",
+          "provisional",
+          "capped"
+        ],
+        "title": "GatewayReadOut",
         "type": "object"
       },
       "GraphOut": {
@@ -3183,6 +3295,33 @@
           "base_commit_na"
         ],
         "title": "OriginOut",
+        "type": "object"
+      },
+      "Page_AttemptGatewayReadsOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptGatewayReadsOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[AttemptGatewayReadsOut]",
         "type": "object"
       },
       "Page_CatalogueEntryOut_": {
@@ -10611,6 +10750,89 @@
           }
         ],
         "summary": "The state and output of the calculation that makes version n",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/metrics/gateway-reads": {
+      "get": {
+        "operationId": "read_gateway_reads_api_v1_runs__run_id__metrics_gateway_reads_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_AttemptGatewayReadsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such Run, version or calculation."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A path or query value is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Per attempt, the gateway reads beside the harness figure",
         "tags": [
           "metrics"
         ]

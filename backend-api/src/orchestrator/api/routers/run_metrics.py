@@ -17,10 +17,12 @@ from orchestrator.api.errors import (
 from orchestrator.api.providers_metrics import calculate_ports, metrics_query_ports
 from orchestrator.api.schemas.common import Page
 from orchestrator.api.schemas.metric_results import (
+    AttemptGatewayReadsOut,
     CalculationOut,
     ResultVersionOut,
     RunMetricsOut,
 )
+from orchestrator.application.use_cases.gateway_comparison import gateway_comparison
 from orchestrator.application.use_cases.metric_calculations import (
     CalculatePorts,
     request_calculation,
@@ -104,3 +106,16 @@ def read_calculation(
     run_id: UUID, n: Annotated[int, Path(ge=1)], ports: QueryPorts
 ) -> CalculationOut:
     return CalculationOut.of(calculation_for(ports, run_id, n))
+
+
+@router.get(
+    "/runs/{run_id}/metrics/gateway-reads",
+    response_model=Page[AttemptGatewayReadsOut],
+    summary="Per attempt, the gateway reads beside the harness figure",
+    responses=NOT_FOUND,
+)
+def read_gateway_reads(run_id: UUID, ports: QueryPorts) -> Page[AttemptGatewayReadsOut]:
+    return Page[AttemptGatewayReadsOut](
+        items=[AttemptGatewayReadsOut.of(i) for i in gateway_comparison(ports.read, run_id)],
+        next_cursor=None,
+    )

@@ -724,6 +724,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/metrics/gateway-reads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per attempt, the gateway reads beside the harness figure */
+        get: operations["read_gateway_reads_api_v1_runs__run_id__metrics_gateway_reads_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/metrics/versions": {
         parameters: {
             query?: never;
@@ -1205,6 +1222,24 @@ export interface components {
             /** Tokens Out */
             tokens_out: number | null;
         };
+        /** AttemptGatewayReadsOut */
+        AttemptGatewayReadsOut: {
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Attempt N */
+            attempt_n: number;
+            /** Harness Usd */
+            harness_usd: string | null;
+            /** Reads */
+            reads: components["schemas"]["GatewayReadOut"][];
+            /** Role */
+            role: string;
+            /** Row Path */
+            row_path: string;
+        };
         /**
          * AttributionOut
          * @description The blocked Question's eyebrow (5.10, SPEC CAP-10): `Agent · {harness} · {model} ·
@@ -1654,6 +1689,29 @@ export interface components {
             path: string | null;
             /** Text */
             text: string;
+        };
+        /** GatewayReadOut */
+        GatewayReadOut: {
+            /** Calls */
+            calls: number | null;
+            /** Capped */
+            capped: boolean;
+            /** Provisional */
+            provisional: boolean;
+            /**
+             * Read At
+             * Format: date-time
+             */
+            read_at: string;
+            /** Rows */
+            rows: number | null;
+            /**
+             * Trigger
+             * @enum {string}
+             */
+            trigger: "attempt_end" | "run_end" | "recalculation";
+            /** Usd */
+            usd: string;
         };
         /**
          * GraphOut
@@ -2145,6 +2203,13 @@ export interface components {
             template_name: string;
             /** Template Version */
             template_version: number;
+        };
+        /** Page[AttemptGatewayReadsOut] */
+        Page_AttemptGatewayReadsOut_: {
+            /** Items */
+            items: components["schemas"]["AttemptGatewayReadsOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** Page[CatalogueEntryOut] */
         Page_CatalogueEntryOut_: {
@@ -5774,6 +5839,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalculationOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, version or calculation. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_gateway_reads_api_v1_runs__run_id__metrics_gateway_reads_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AttemptGatewayReadsOut_"];
                 };
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
