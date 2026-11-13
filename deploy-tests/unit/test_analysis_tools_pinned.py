@@ -92,3 +92,60 @@ def test_each_pinned_version_equals_the_recorded_fixtures(name: str, path: objec
 def test_the_osv_scanner_pin_equals_the_version_its_synthetic_report_imitates() -> None:
     sarif = json.loads((FIXTURES / "tier1b" / "synthetic-osv.sarif").read_text())
     assert args()["OSV_SCANNER_VERSION"] == sarif["runs"][0]["tool"]["driver"]["version"]
+
+
+OPENGREP_ARGS = ("OPENGREP_VERSION", "OPENGREP_SHA256_AMD64", "OPENGREP_SHA256_ARM64")
+RULE_PACK_FRAGMENTS = (
+    "semgrep-rules",
+    "--config p/",
+    "--config r/",
+    "--config auto",
+    "registry.semgrep.dev",
+    "semgrep.dev/c/",
+)
+
+
+def opengrep_run() -> str:
+    runs = [
+        run
+        for run in instructions(code(dockerfile("backend-api")), "RUN")
+        if "/usr/local/bin/opengrep" in run
+    ]
+    assert len(runs) == 1, runs
+    return runs[0]
+
+
+def test_the_opengrep_version_is_a_literal() -> None:
+    assert re.fullmatch(r"\d+\.\d+\.\d+", args().get("OPENGREP_VERSION", ""))
+
+
+@pytest.mark.parametrize("name", OPENGREP_ARGS[1:])
+def test_opengrep_has_a_literal_sha256_per_architecture_used_in_its_run(name: str) -> None:
+    assert re.fullmatch(r"[0-9a-f]{64}", args().get(name, ""))
+    assert f"${{{name}}}" in opengrep_run()
+
+
+def test_the_opengrep_download_is_checked_once_with_sha256sum() -> None:
+    assert opengrep_run().count("sha256sum -c -") == 1
+
+
+def test_the_opengrep_run_names_the_release_and_the_pinned_version() -> None:
+    assert "opengrep/opengrep/releases/download/v${OPENGREP_VERSION}/" in opengrep_run()
+
+
+def test_opengrep_is_installed_before_the_user_exists() -> None:
+    text = code(dockerfile("backend-api"))
+    assert text.index("/usr/local/bin/opengrep") < text.index("useradd")
+
+
+def test_the_opengrep_pin_equals_the_recorded_fixture() -> None:
+    recorded = re.search(
+        r"\d+\.\d+\.\d+", (FIXTURES / "tier2" / "opengrep" / "opengrep-version.txt").read_text()
+    )
+    assert recorded is not None
+    assert args()["OPENGREP_VERSION"] == recorded.group(0)
+
+
+@pytest.mark.parametrize("fragment", RULE_PACK_FRAGMENTS)
+def test_no_rule_pack_is_fetched_anywhere_in_the_dockerfile(fragment: str) -> None:
+    assert fragment not in code(dockerfile("backend-api"))

@@ -39,6 +39,9 @@ TABLE = {
     "code.coverage_changed_lines": ("coverage of changed lines", "A"),
     "code.tests_executed": ("test cases executed, base → head, by class", "A"),
     "code.fail_to_pass": ("new tests that fail at base", "A"),
+    # epic 6 story 2, 2026-11-13: the two Opengrep finding entries.
+    "code.findings_security": ("possible security findings, new, by severity (CWE)", "H"),
+    "code.findings_bug": ("possible bug findings, new", "A"),
 }
 
 

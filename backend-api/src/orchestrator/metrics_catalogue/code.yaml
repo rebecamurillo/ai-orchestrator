@@ -840,3 +840,96 @@
         collecting|collection failure
       output_tail_chars: 1000000
       timeout_setting: ANALYSIS_COMMAND_TIMEOUT_MIN
+- id: code.findings_security
+  label: possible security findings, new, by severity (CWE)
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: Opengrep run with the rules the repository declares at sast.rules, on the changed files at base and at head.
+  component_of: null
+  additive: false
+  missing_words:
+  - n/a
+  - not run
+  - partial
+  limits: possible findings, leads to review, not confirmed defects; only the repository's declared rules
+    run, so counts are comparable only under the same rule pack hash; matched on rule, path after renames
+    and the hash of the matched text with whitespace collapsed, so code moved across files without a
+    rename reads as one new and one fixed; no rate is computed
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: opengrep scans the changed files at base and at head with the rule files of sast.rules read
+      at base; results are matched on tool, rule, path after rename detection and the whitespace-collapsed
+      hash of the matched text; new findings are counted by severity (the rule's security-severity, else
+      the result level) and listed with their CWE; fixed and unchanged are counted. Results whose rule
+      carries a security tag count here.
+    parameters:
+      command:
+      - opengrep
+      - scan
+      - --config
+      - '{rules}'
+      - --sarif-output
+      - '{file}'
+      - '{files}'
+      timeout_min: 10
+      severity_from_level:
+        error: high
+        warning: medium
+        note: low
+        none: low
+      severity_thresholds:
+        high: 7.0
+        medium: 4.0
+      security_tag: security
+      cwe_pattern: CWE-\d+
+- id: code.findings_bug
+  label: possible bug findings, new
+  group: code
+  level: A
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: Opengrep run with the rules the repository declares at sast.rules, on the changed files at base and at head.
+  component_of: null
+  additive: false
+  missing_words:
+  - n/a
+  - not run
+  - partial
+  limits: possible findings, leads to review, not confirmed defects; only the repository's declared rules
+    run, so counts are comparable only under the same rule pack hash; matched on rule, path after renames
+    and the hash of the matched text with whitespace collapsed, so code moved across files without a
+    rename reads as one new and one fixed; no rate is computed
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: opengrep scans the changed files at base and at head with the rule files of sast.rules read
+      at base; results are matched on tool, rule, path after rename detection and the whitespace-collapsed
+      hash of the matched text; new findings are counted by severity and listed; fixed and unchanged are
+      counted. Results whose rule carries no security tag count here.
+    parameters:
+      command:
+      - opengrep
+      - scan
+      - --config
+      - '{rules}'
+      - --sarif-output
+      - '{file}'
+      - '{files}'
+      timeout_min: 10
+      severity_from_level:
+        error: high
+        warning: medium
+        note: low
+        none: low
+      severity_thresholds:
+        high: 7.0
+        medium: 4.0
+      security_tag: security
+      cwe_pattern: CWE-\d+

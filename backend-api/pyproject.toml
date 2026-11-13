@@ -61,9 +61,10 @@ packages = ["src/orchestrator"]
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
-# Epic 5 story 3: sample programs the jscpd and lizard outputs were recorded on; reformatting
-# or "fixing" them would no longer be the input the recorded output describes.
-extend-exclude = ["tests/unit/fixtures/analysis/tier1b"]
+# Epic 5 story 3, epic 6 story 2: sample programs and rule sources the recorded jscpd, lizard and
+# Opengrep outputs were recorded on; reformatting or "fixing" them would no longer be the input
+# the recorded output describes.
+extend-exclude = ["tests/unit/fixtures/analysis/tier1b", "tests/unit/fixtures/analysis/tier2"]
 
 [tool.ruff.lint]
 # DTZ/T20/RUF added after review: they make "no naive datetime", "no print" and

@@ -39,6 +39,7 @@ from orchestrator.application.metrics.methods import (  # noqa: E402, F401
     activity,
     budget,
     code,
+    code_findings,
     code_tier2,
     cost,
     process,

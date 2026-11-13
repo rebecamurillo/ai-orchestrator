@@ -14,6 +14,7 @@ from typing import Any, Literal, cast
 from uuid import UUID
 
 from orchestrator.application.analysis.classify import classify
+from orchestrator.application.analysis.findings import collect_findings
 from orchestrator.application.analysis.inputs import RepositoryInputs, slug
 from orchestrator.application.analysis.languages import languages_of
 from orchestrator.application.analysis.secrets import GITLEAKS, scan_secrets
@@ -103,7 +104,7 @@ def collect_signals(  # noqa: PLR0913 — the repository's inputs and every port
     new_id: Callable[[], UUID],
     tier2: Tier2Ports | None = None,
 ) -> tuple[Analysis, RepositorySignals]:
-    """Tiers 1a, 1b and 2 of one repository, and the analysis stamped with its toolset."""
+    """Tiers 1a, 1b, 2 and the findings of one repository."""
     analysis = prepared.analysis
     installed = {tool: tools.version(tool) for tool in TOOLS}
     first = collect_tier1a(prepared, git=git, scratch_root=scratch_root, tools=tools, new_id=new_id)
@@ -126,18 +127,22 @@ def collect_signals(  # noqa: PLR0913 — the repository's inputs and every port
         new_id=new_id,
     )
     third = collect_tier2(prepared, git=git, scratch_root=scratch_root, ports=tier2, new_id=new_id)
+    fourth = collect_findings(
+        prepared, git=git, scratch_root=scratch_root, tools=tools, new_id=new_id
+    )
     merged = replace(
         first,
-        counts=(*first.counts, *second.counts, *third.counts),
-        words={**first.words, **second.words, **third.words},
-        artifacts=(*first.artifacts, *second.artifacts, *third.artifacts),
-        tool_versions={**first.tool_versions, **second.tool_versions},
+        counts=(*first.counts, *second.counts, *third.counts, *fourth.counts),
+        words={**first.words, **second.words, **third.words, **fourth.words},
+        artifacts=(*first.artifacts, *second.artifacts, *third.artifacts, *fourth.artifacts),
+        tool_versions={**first.tool_versions, **second.tool_versions, **fourth.tool_versions},
     )
     records = toolset_records(
         installed,
         vulnerability_db_date=second.vulnerability_db_date,
         lookup_date=second.lookup_date,
         declaration_hash=analysis.declaration_hash,
+        extra=fourth.toolset,
     )
     return with_toolset(analysis, records), merged
 

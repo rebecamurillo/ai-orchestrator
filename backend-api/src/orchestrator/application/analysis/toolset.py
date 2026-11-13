@@ -2,8 +2,9 @@
 
 Two analyses are comparable only when measured the same way. The fingerprint is the SHA-256 of
 the canonical JSON of the declaration hash and the sorted `{tool, installed version}` of every
-Tier 1 tool, whether or not it ran; the lookup and vulnerability-database dates are stored
-beside it and are not part of it (Operator ruling 2026-11-13).
+Tier 1 tool, whether or not it ran, plus the rule pack hash of a tool that has one; the lookup
+and vulnerability-database dates are stored beside it and are not part of it (Operator ruling
+2026-11-13).
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from orchestrator.domain.entities.analysis import Analysis
 TOOLS = ("gitleaks", "jscpd", "lizard", "osv-scanner")
 UNKNOWN_VERSION = "unknown"
 DECLARATION_HASH = "declaration_hash"
+RULE_PACK_HASH = "rule_pack_hash"
 
 
 def toolset_records(
@@ -27,10 +29,12 @@ def toolset_records(
     vulnerability_db_date: date | None,
     lookup_date: date | None,
     declaration_hash: str | None,
+    extra: Sequence[Mapping[str, Any]] = (),
 ) -> tuple[dict[str, Any], ...]:
-    """`{tool, installed version}` per tool, then the dates and the declaration hash."""
+    """`{tool, installed version}` per tool, `extra` records, then the dates and the hash."""
     return (
         *({"tool": tool, "version": installed.get(tool, UNKNOWN_VERSION)} for tool in TOOLS),
+        *(dict(record) for record in extra),
         {
             "vulnerability_db_date": vulnerability_db_date.isoformat()
             if vulnerability_db_date is not None
@@ -41,10 +45,17 @@ def toolset_records(
     )
 
 
+def _entry(record: Mapping[str, Any]) -> dict[str, Any]:
+    entry = {"tool": record["tool"], "version": record["version"]}
+    if RULE_PACK_HASH in record:
+        entry[RULE_PACK_HASH] = record[RULE_PACK_HASH]
+    return entry
+
+
 def fingerprint(records: Sequence[Mapping[str, Any]]) -> str:
     tools = sorted(
-        ({"tool": r["tool"], "version": r["version"]} for r in records if "tool" in r),
-        key=lambda r: (r["tool"], r["version"]),
+        (_entry(r) for r in records if "tool" in r),
+        key=lambda r: (r["tool"], r["version"], r.get(RULE_PACK_HASH) or ""),
     )
     hashes = [r[DECLARATION_HASH] for r in records if DECLARATION_HASH in r]
     canonical = json.dumps(
