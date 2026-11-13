@@ -19,11 +19,21 @@ interface Props {
   path: string;
   status: number | null;
   onRetry: () => void;
+  /** The readout's test-ids; every caller but the Run page's cost block keeps the defaults. */
+  testId?: string;
+  retryTestId?: string;
 }
 
-export default function FailedFetch({ method, path, status, onRetry }: Props) {
+export default function FailedFetch({
+  method,
+  path,
+  status,
+  onRetry,
+  testId = 'fetch-failed',
+  retryTestId = 'fetch-retry',
+}: Props) {
   return (
-    <section className="failed-fetch" data-testid="fetch-failed">
+    <section className="failed-fetch" data-testid={testId}>
       <p className="failed-fetch-headline">COULD NOT REACH BACKEND-API</p>
       <figure className="failed-fetch-block">
         <figcaption className="failed-fetch-eyebrow">REQUEST</figcaption>
@@ -32,7 +42,7 @@ export default function FailedFetch({ method, path, status, onRetry }: Props) {
       <button
         type="button"
         className="failed-fetch-retry"
-        data-testid="fetch-retry"
+        data-testid={retryTestId}
         onClick={onRetry}
       >
         Retry

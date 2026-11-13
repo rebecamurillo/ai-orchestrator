@@ -266,7 +266,11 @@ describe('the state rows (EXPERIENCE §6)', () => {
 
   it('a failed read shows the readout inside the block and keeps the rows', () => {
     mount(state({ status: 'failed', failed: { path: '/api/runs/1/metrics', status: 500 } }));
-    expect(screen.getByTestId('fetch-failed').textContent).toContain('/api/runs/1/metrics');
+    expect(screen.getByTestId('cost-fetch-failed').textContent).toContain('/api/runs/1/metrics');
+    // its own test-id: the page-level `fetch-failed` readout stays unique (epic 3 retro E2)
+    expect(screen.queryByTestId('fetch-failed')).toBeNull();
+    expect(screen.queryByTestId('fetch-retry')).toBeNull();
+    expect(screen.getByTestId('cost-fetch-retry').textContent).toBe('Retry');
     expect(text()).toContain('$16.01 / $100.00');
   });
 

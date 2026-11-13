@@ -68,6 +68,8 @@
 
 .chart-png {
   position: absolute;
+  /* above the chart panel that follows it in the slot, so a pointer reaches it (epic 3 retro E1) */
+  z-index: 1;
   top: 0;
   right: 0;
   padding: 0 var(--space-2);

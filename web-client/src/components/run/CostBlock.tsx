@@ -68,6 +68,8 @@ export default function CostBlock({
           path={glance.failed.path}
           status={glance.failed.status}
           onRetry={onRetryMetrics}
+          testId="cost-fetch-failed"
+          retryTestId="cost-fetch-retry"
         />
       ) : null}
       {showGlance ? (

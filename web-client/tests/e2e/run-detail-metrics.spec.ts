@@ -569,18 +569,19 @@ test.describe('/workflows/[id] — Run page metrics (orchestrator-run-metrics ep
   });
 
   test('the PNG control takes a mouse click', async ({ page }) => {
-    // Known defect (found 2026-11-13): `.chart-png` is absolutely positioned before the
-    // `position: relative` `.chart-panel`, so the panel's `.chart-head` paints over it and
-    // swallows the click. Remove `test.fail` once the control is stacked above the head.
-    test.fail();
+    // A real pointer click (no force, no dispatchEvent): Playwright's actionability check
+    // fails if the chart head paints over the control (epic 3 retro E1).
     await mockBackend(page);
     await page.goto(`${URL}?tab=metrics&view=chart`);
 
+    const control = page.getByRole('button', { name: 'PNG cost by role' });
+    await expect(control).toBeVisible();
     const [download] = await Promise.all([
       page.waitForEvent('download', { timeout: 5_000 }),
-      page.getByRole('button', { name: 'PNG cost by role' }).click({ timeout: 5_000 }),
+      control.click({ timeout: 5_000 }),
     ]);
     expect(download.suggestedFilename()).toMatch(/-cost-by-role-\d{4}-\d{2}-\d{2}\.png$/);
+    await expect(page.getByText(/^PNG not written/)).toHaveCount(0);
   });
 
   test('the preview switch swaps the screen chart for the export image', async ({ page }) => {
