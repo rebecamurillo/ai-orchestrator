@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from orchestrator.api.schemas.common import UtcTimestamp
+from orchestrator.api.schemas.common import StorableText, UtcTimestamp
 from orchestrator.application.use_cases.instance_activity import (
     EngineRun,
     HoldView,
@@ -68,7 +68,7 @@ class HoldOut(BaseModel):
 
 class HoldIn(BaseModel):
     ttl_seconds: int = Field(ge=1, le=3600)
-    reason: str = Field(max_length=200)
+    reason: StorableText = Field(max_length=200)
 
 
 class HoldConflictOut(BaseModel):
