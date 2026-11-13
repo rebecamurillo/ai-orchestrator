@@ -55,6 +55,7 @@ def _version(row: ResultVersionRow) -> ResultVersion:
         entry_point=tuple(row.entry_point),  # type: ignore[arg-type]
         methods=tuple(row.methods),
         fact_set_ids=tuple(UUID(item) for item in row.fact_set_ids),
+        analysis_ids=tuple(UUID(item) for item in row.analysis_ids or ()),
         toolset_fingerprint=row.toolset_fingerprint,
     )
 
@@ -140,6 +141,7 @@ class SQLAlchemyResultVersionRepository:
                     **{
                         "entry_point": dumped["entry_point"],
                         "fact_set_ids": dumped["fact_set_ids"],
+                        "analysis_ids": dumped["analysis_ids"],
                         "methods": dumped["methods"],
                     },
                 }

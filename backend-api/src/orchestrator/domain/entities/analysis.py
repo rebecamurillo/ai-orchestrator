@@ -16,7 +16,7 @@ class Analysis(BaseModel):
 
     id: UUID
     run_id: UUID
-    calculation_id: UUID
+    calculation_id: UUID | None = None
     repository_path: str
     base: str | None = None
     head: str | None = None

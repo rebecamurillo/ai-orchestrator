@@ -101,7 +101,7 @@ def prepare_repository(  # noqa: PLR0913 — one record and the facts its analys
     *,
     analysis_id: UUID,
     run_id: UUID,
-    calculation_id: UUID,
+    calculation_id: UUID | None,
     record: RunRepositoryRecord,
     hub: bool,
     commits: Sequence[RunCommit],
@@ -180,7 +180,7 @@ def _read(  # noqa: PLR0913 — the fetched clone and the facts its analysis rea
 def prepare_analysis(  # noqa: PLR0913 — the Run's records and the ports the preparation needs
     *,
     run_id: UUID,
-    calculation_id: UUID,
+    calculation_id: UUID | None,
     records: Sequence[RunRepositoryRecord],
     commits: Sequence[RunCommit],
     ranges: Sequence[AttemptRange],

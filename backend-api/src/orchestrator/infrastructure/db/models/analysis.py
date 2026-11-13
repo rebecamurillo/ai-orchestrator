@@ -30,7 +30,9 @@ class AnalysisRow(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     run_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey(f"{RUN_TABLE}.id"))
-    calculation_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey(f"{CALCULATION_TABLE}.id"))
+    calculation_id: Mapped[UUID | None] = mapped_column(
+        Uuid(), ForeignKey(f"{CALCULATION_TABLE}.id"), nullable=True
+    )
     repository_path: Mapped[str] = mapped_column(Text())
     base: Mapped[str | None] = mapped_column(Text(), nullable=True)
     head: Mapped[str | None] = mapped_column(Text(), nullable=True)

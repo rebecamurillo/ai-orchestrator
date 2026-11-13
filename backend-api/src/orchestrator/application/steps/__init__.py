@@ -98,6 +98,9 @@ KIND_META: dict[str, KindMeta] = {
     "checkpoint": KindMeta("human", None, frozenset({"when"})),
     "template": KindMeta(None, None, frozenset({"name", "version", "inputs"})),
     "bmad.install": KindMeta("deterministic", 30, frozenset()),
+    # No gate default: a `metrics.analyse` row without a `gate` stays `unvalidated` (epic 5
+    # story 4, operator answer 2026-11-13). The analysis tools carry their own timeouts.
+    "metrics.analyse": KindMeta(None, None, frozenset()),
 }
 
 #: The kinds a Template file may name — every kind the planner does not own by itself.
@@ -119,6 +122,9 @@ CHECKPOINT_KIND = "checkpoint"
 #: The kind whose step runs a command. Named here because the planner skips a row of this
 #: kind whose command resolved to nothing, and that test is a test about the kind.
 SHELL_KIND = "shell"
+
+#: The kind whose row starts the code analysis of every repository the Run worked on.
+ANALYSE_KIND = "metrics.analyse"
 
 #: The kind of the first row of every plan (AD-7). The planner inserts it; a Template that
 #: writes it is `unknown kind`, which is what `planner_only` above says.
@@ -199,6 +205,7 @@ LINK_KIND = "pr.link"
 #: whichever half it needs (AD-9: "the registry in `application/steps/__init__.py`").
 __all__ = [
     "AGENT_KIND",
+    "ANALYSE_KIND",
     "ATTACH_MODE",
     "CHECKPOINT_KIND",
     "COMMIT_KIND",

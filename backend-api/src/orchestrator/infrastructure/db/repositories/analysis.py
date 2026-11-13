@@ -55,6 +55,18 @@ class SQLAlchemyAnalysisRepository:
         )
         self._session.flush()
 
+    def get(self, analysis_id: UUID) -> Analysis | None:
+        row = self._session.get(AnalysisRow, analysis_id)
+        return None if row is None else _analysis(row)
+
+    def list_for_run(self, run_id: UUID) -> list[Analysis]:
+        rows = self._session.scalars(
+            select(AnalysisRow)
+            .where(AnalysisRow.run_id == run_id)
+            .order_by(AnalysisRow.repository_path, AnalysisRow.created_at)
+        ).all()
+        return [_analysis(row) for row in rows]
+
     def list_for_calculation(self, calculation_id: UUID) -> list[Analysis]:
         rows = self._session.scalars(
             select(AnalysisRow)

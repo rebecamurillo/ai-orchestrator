@@ -45,6 +45,7 @@ class ResultVersion(BaseModel):
     entry_point: tuple[EntryPoint, ...]
     methods: tuple[str, ...]
     fact_set_ids: tuple[UUID, ...] = ()
+    analysis_ids: tuple[UUID, ...] = ()
     toolset_fingerprint: str | None = None
 
 

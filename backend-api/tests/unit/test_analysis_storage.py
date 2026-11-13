@@ -71,7 +71,9 @@ def an_analysis(**over: Any) -> Analysis:
 
 def test_the_tables_and_their_nullable_columns() -> None:
     tables = Base.metadata.tables
+    # Revised: a pending analysis has no calculation yet (epic 5 story 4, 2026-11-13).
     assert {c.name for c in tables["analysis"].columns if c.nullable} == {
+        "calculation_id",
         "base",
         "head",
         "declaration_hash",
@@ -129,3 +131,35 @@ def test_the_repositories_satisfy_the_port() -> None:
     fake.add(analysis)
     assert fake.list_for_calculation(CALCULATION) == [analysis]
     assert fake.list_for_calculation(new_id()) == []
+
+
+class GetSession(Session):
+    def get(self, model: Any, key: UUID) -> Any:
+        return next((r for r in self.rows if r.id == key), None)
+
+
+def test_an_analysis_is_read_by_id_and_by_run_and_a_pending_one_has_no_calculation() -> None:
+    """Epic 5 story 4, 2026-11-13."""
+    pending = an_analysis(calculation_id=None)
+    row = AnalysisRow(**{**pending.model_dump(), "toolset": list(pending.toolset)})
+    session = GetSession([row])
+    repository = SQLAlchemyAnalysisRepository(session)  # type: ignore[arg-type]
+
+    assert repository.get(pending.id) == pending
+    assert repository.get(new_id()) is None
+    assert repository.list_for_run(RUN) == [pending]
+    assert "ORDER BY analysis.repository_path, analysis.created_at" in session.statements[0]
+
+
+def test_the_fake_reads_by_id_and_orders_a_runs_analyses_by_path_then_time() -> None:
+    fake = FakeAnalysisRepository()
+    later = an_analysis(repository_path="a", created_at=NOW.replace(hour=10))
+    earlier = an_analysis(repository_path="a")
+    other = an_analysis(repository_path="b")
+    foreign = an_analysis(run_id=UUID(int=9))
+    for row in (other, later, earlier, foreign):
+        fake.add(row)
+
+    assert fake.get(earlier.id) == earlier
+    assert fake.get(new_id()) is None
+    assert fake.list_for_run(RUN) == [earlier, later, other]
