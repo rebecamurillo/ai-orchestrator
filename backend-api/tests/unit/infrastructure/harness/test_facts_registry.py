@@ -18,9 +18,21 @@ from orchestrator.infrastructure.harness.facts import (
 from orchestrator.infrastructure.settings import Settings
 
 
-def test_the_registry_holds_the_fake_and_claude_extractors(env: dict[str, str]) -> None:
-    # Story 3 of orchestrator-run-metrics (2026-11-13): `claude` is registered.
-    assert set(build_log_facts(Settings())) == {"fake", "claude"}
+def test_the_registry_holds_every_harness_extractor(env: dict[str, str]) -> None:
+    # Story 4 of orchestrator-run-metrics (2026-11-13): `codex`, `opencode` and `local` are
+    # registered alongside story 3's `claude`.
+    assert set(build_log_facts(Settings())) == {"fake", "claude", "codex", "opencode", "local"}
+
+
+def test_the_codex_and_opencode_extractors_are_wrapped_and_local_is_opencode(
+    env: dict[str, str],
+) -> None:
+    registry = build_log_facts(Settings())
+
+    for key, name in (("codex", "codex"), ("opencode", "opencode"), ("local", "opencode")):
+        assert isinstance(registry[key], RedactingLogFacts)
+        assert registry[key].name == name
+        assert not any(vars(registry[key].capabilities).values())
 
 
 def test_a_stored_command_carries_stars_in_place_of_an_instance_secret(

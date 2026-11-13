@@ -12,7 +12,9 @@ from orchestrator.domain.entities.facts import AttemptFacts
 from orchestrator.domain.ports.catalogue import Catalogue
 from orchestrator.domain.ports.log_facts import LogFacts, LogFactsCapabilities
 from orchestrator.infrastructure.harness.claude.facts import ClaudeLogFacts
+from orchestrator.infrastructure.harness.codex.facts import CodexLogFacts
 from orchestrator.infrastructure.harness.fake.facts import FakeLogFacts
+from orchestrator.infrastructure.harness.opencode.facts import OpenCodeLogFacts
 from orchestrator.infrastructure.metrics_catalogue import PackageCatalogue
 from orchestrator.infrastructure.process.logs import log_secrets
 from orchestrator.infrastructure.redact import redact
@@ -48,9 +50,13 @@ class RedactingLogFacts:
 def build_log_facts(settings: Settings) -> dict[str, LogFacts]:
     """The extractors this instance has, by harness name."""
     secrets = log_secrets(settings)
+    opencode = RedactingLogFacts(OpenCodeLogFacts(), secrets)
     return {
         "fake": RedactingLogFacts(FakeLogFacts(), secrets),
         "claude": RedactingLogFacts(ClaudeLogFacts(test_run_patterns(PackageCatalogue())), secrets),
+        "codex": RedactingLogFacts(CodexLogFacts(), secrets),
+        "opencode": opencode,
+        "local": opencode,
     }
 
 
