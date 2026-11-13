@@ -123,6 +123,11 @@ class FamilyOut(BaseModel):
     cells: dict[UUID, FamilyCellOut]
 
 
+class ToolVersionOut(BaseModel):
+    tool: str
+    version: str
+
+
 class CompareMetricOut(BaseModel):
     metric_id: str
     methods_differ: bool
@@ -130,6 +135,8 @@ class CompareMetricOut(BaseModel):
     cells: dict[UUID, list[CompareCellOut]]
     harness_delta: dict[UUID, str]
     families: list[FamilyOut]
+    tool_versions_differ: bool = False
+    toolsets: dict[UUID, list[ToolVersionOut]] = {}
 
 
 class CompareOut(BaseModel):

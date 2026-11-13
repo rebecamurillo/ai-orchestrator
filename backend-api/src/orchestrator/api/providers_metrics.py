@@ -15,6 +15,7 @@ from orchestrator.application.use_cases.metric_calculations import CalculatePort
 from orchestrator.application.use_cases.metrics_compare import MetricsComparePorts
 from orchestrator.application.use_cases.metrics_read import MetricsQueryPorts
 from orchestrator.application.use_cases.metrics_spend import MetricsHomePorts
+from orchestrator.application.use_cases.run_analyses import RunAnalysesPorts
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
     SQLAlchemyAttemptRepository,
@@ -91,6 +92,7 @@ def metrics_compare_ports(request: Request) -> Iterator[MetricsComparePorts]:
             run_records=SQLAlchemyRunRepositoryRecords(session),
             catalogue=catalogue_port(),
             clock=SystemClock(),
+            analyses=SQLAlchemyAnalysisRepository(session),
         )
 
 
@@ -99,4 +101,15 @@ def analysis_read_ports(request: Request) -> Iterator[AnalysisReadPorts]:
         yield AnalysisReadPorts(
             analyses=SQLAlchemyAnalysisRepository(scope.session),
             uow=SessionUnitOfWork(scope.session),
+        )
+
+
+def run_analyses_ports(request: Request) -> Iterator[RunAnalysesPorts]:
+    with SQLAlchemyUnitOfWork(from_state(request, SESSION_FACTORY)) as scope:
+        session = scope.session
+        yield RunAnalysesPorts(
+            runs=SQLAlchemyRunRepository(session),
+            versions=SQLAlchemyResultVersionRepository(session),
+            analyses=SQLAlchemyAnalysisRepository(session),
+            run_records=SQLAlchemyRunRepositoryRecords(session),
         )

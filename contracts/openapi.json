@@ -127,6 +127,152 @@
         "title": "AlertOut",
         "type": "object"
       },
+      "AnalysisOut": {
+        "properties": {
+          "analysis_id": {
+            "format": "uuid",
+            "title": "Analysis Id",
+            "type": "string"
+          },
+          "base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          },
+          "commits_outside_run": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commits Outside Run"
+          },
+          "declaration_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declaration Hash"
+          },
+          "head": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head"
+          },
+          "languages": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Languages"
+          },
+          "lookup_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lookup Date"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "repository_path": {
+            "title": "Repository Path",
+            "type": "string"
+          },
+          "sarif_tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sarif Tools",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolVersionOut"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "vulnerability_db_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vulnerability Db Date"
+          }
+        },
+        "required": [
+          "analysis_id",
+          "repository_path",
+          "status",
+          "reason",
+          "base",
+          "head",
+          "base_branch",
+          "languages",
+          "commits_outside_run",
+          "tools",
+          "vulnerability_db_date",
+          "lookup_date",
+          "declaration_hash",
+          "sarif_tools"
+        ],
+        "title": "AnalysisOut",
+        "type": "object"
+      },
       "AnchorEditOut": {
         "description": "One anchor the session changed, spelled as AD-17 spells a hit.",
         "properties": {
@@ -1610,6 +1756,25 @@
           "metric_id": {
             "title": "Metric Id",
             "type": "string"
+          },
+          "tool_versions_differ": {
+            "default": false,
+            "title": "Tool Versions Differ",
+            "type": "boolean"
+          },
+          "toolsets": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/ToolVersionOut"
+              },
+              "type": "array"
+            },
+            "default": {},
+            "propertyNames": {
+              "format": "uuid"
+            },
+            "title": "Toolsets",
+            "type": "object"
           }
         },
         "required": [
@@ -5718,6 +5883,40 @@
         "title": "ResultVersionOut",
         "type": "object"
       },
+      "RunAnalysesOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "run_id",
+          "version",
+          "items"
+        ],
+        "title": "RunAnalysesOut",
+        "type": "object"
+      },
       "RunDetailOut": {
         "description": "`GET /runs/{run_id}/detail`. One request, every section the screen shows.",
         "properties": {
@@ -7819,6 +8018,24 @@
           "in_progress"
         ],
         "title": "TerminalOut",
+        "type": "object"
+      },
+      "ToolVersionOut": {
+        "properties": {
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "version"
+        ],
+        "title": "ToolVersionOut",
         "type": "object"
       },
       "ValidateIn": {
@@ -11253,6 +11470,106 @@
         "summary": "Report Operator focus time for a Run",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/analysis": {
+      "get": {
+        "operationId": "list_run_analyses_api_v1_runs__run_id__analysis_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "V"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunAnalysesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such Run, or no such result version of it."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A path or query value is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The analyses behind a Run's shown result version",
+        "tags": [
+          "metrics"
         ]
       }
     },

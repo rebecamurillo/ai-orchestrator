@@ -204,3 +204,29 @@
   font-size: var(--type-meta);
   color: var(--color-text-secondary);
 }
+
+/* ── Static signals on the change (epic 5 story 5) ── */
+
+.static-detail {
+  font-size: var(--type-meta);
+  color: var(--color-text-tertiary);
+}
+
+.static-foot {
+  margin-top: var(--space-3);
+  font-size: var(--type-meta);
+  color: var(--color-text-secondary);
+}
+
+tr.tier th {
+  text-align: left;
+  font-size: var(--type-column-head);
+  color: var(--color-text-tertiary);
+}
+
+.findings-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--type-meta);
+}

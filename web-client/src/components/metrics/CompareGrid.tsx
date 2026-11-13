@@ -22,6 +22,7 @@ import {
 import { $catalogue } from '../../stores/catalogue';
 import '../../styles/metrics-compare.css';
 import CompareHeader from './CompareHeader';
+import CompareStaticRows from './CompareStaticRows';
 import HintControl from './HintControl';
 import MissingWord from './MissingWord';
 import ValueCell from './ValueCell';
@@ -103,6 +104,7 @@ export default function CompareGrid({ payload, set, onRemove, onVersion }: Props
               );
             })}
           </tr>
+          <CompareStaticRows payload={payload} entries={entries} set={set} />
         </tbody>
       </table>
     </div>

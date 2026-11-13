@@ -13,7 +13,9 @@ from datetime import datetime
 from typing import Any, Literal, cast
 from uuid import UUID
 
+from orchestrator.application.analysis.classify import classify
 from orchestrator.application.analysis.inputs import RepositoryInputs, slug
+from orchestrator.application.analysis.languages import languages_of
 from orchestrator.application.analysis.secrets import GITLEAKS, scan_secrets
 from orchestrator.application.analysis.tier1a import Count, added_lines, count_tier1a
 from orchestrator.application.analysis.tier1b import collect_tier1b
@@ -40,6 +42,8 @@ class RepositorySignals:
     words: Mapping[str, str] = field(default_factory=dict)
     artifacts: tuple[AnalysisArtifact, ...] = ()
     tool_versions: Mapping[str, str] = field(default_factory=dict)
+    languages: tuple[str, ...] | None = None
+    commits_not_made_by_run: tuple[str, ...] | None = None
 
 
 def collect_tier1a(
@@ -55,8 +59,9 @@ def collect_tier1a(
     if analysis.status == "failed" or scratch is None or base is None or head is None:
         return RepositorySignals(analysis.repository_path, analysis.status, analysis.output, ())
     text = git.diff_text(scratch, base, head, ())
+    numstat = git.diff_numstat(scratch, base, head)
     counts = count_tier1a(
-        git.diff_numstat(scratch, base, head),
+        numstat,
         git.diff_name_status(scratch, base, head),
         text,
         prepared.declaration,
@@ -80,6 +85,8 @@ def collect_tier1a(
         {SECRETS_ID: secrets.missing} if secrets.missing is not None else {},
         (secrets.artifact,) if secrets.artifact is not None else (),
         {GITLEAKS: secrets.version} if secrets.version else {},
+        languages_of(numstat, lambda path: classify(path, prepared.declaration, hub=prepared.hub)),
+        prepared.commits_not_made_by_run,
     )
 
 
@@ -148,12 +155,18 @@ def signals_to_json(signals: RepositorySignals) -> bytes:
         "counts": [[c.metric_id, c.source, c.value, c.rate, c.combine] for c in signals.counts],
         "words": dict(signals.words),
         "tool_versions": dict(signals.tool_versions),
+        "languages": None if signals.languages is None else list(signals.languages),
+        "commits_not_made_by_run": None
+        if signals.commits_not_made_by_run is None
+        else list(signals.commits_not_made_by_run),
     }
     return json.dumps(document, ensure_ascii=False).encode()
 
 
 def signals_from_json(body: bytes) -> RepositorySignals:
     document: dict[str, Any] = json.loads(body)
+    languages = document.get("languages")
+    commits = document.get("commits_not_made_by_run")
     return RepositorySignals(
         path=document["path"],
         status=cast("AnalysisStatus", document["status"]),
@@ -171,4 +184,6 @@ def signals_from_json(body: bytes) -> RepositorySignals:
         words=document["words"],
         artifacts=(),
         tool_versions=document["tool_versions"],
+        languages=None if languages is None else tuple(languages),
+        commits_not_made_by_run=None if commits is None else tuple(commits),
     )

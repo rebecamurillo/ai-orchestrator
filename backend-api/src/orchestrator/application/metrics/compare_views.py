@@ -3,7 +3,7 @@ figure already a decimal string, so the API maps them without computing anything
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from orchestrator.application.metrics.export_rows import ExportRow
@@ -82,6 +82,12 @@ class FamilyView:
 
 
 @dataclass(frozen=True)
+class ToolVersion:
+    tool: str
+    version: str
+
+
+@dataclass(frozen=True)
 class CompareMetric:
     metric_id: str
     methods_differ: bool
@@ -89,6 +95,8 @@ class CompareMetric:
     cells: dict[UUID, list[CompareCell]]
     harness_delta: dict[UUID, str]
     families: list[FamilyView]
+    tool_versions_differ: bool = False
+    toolsets: dict[UUID, list[ToolVersion]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

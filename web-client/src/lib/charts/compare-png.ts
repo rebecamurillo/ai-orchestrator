@@ -82,7 +82,11 @@ export const markWord = (mark: CompareMark): string | null => {
 export function drawn(mark: CompareMark, maxTick: number, plot: number): Mark | null {
   if (mark.word !== undefined) return { kind: 'missing', width: 0, label: '', word: mark.word };
   if (mark.value === null) return null;
-  const found = markFor(mark.value, maxTick, plot);
+  const raw = markFor(mark.value, maxTick, plot);
+  const found =
+    mark.rate !== undefined && raw.kind === 'bar'
+      ? { ...raw, label: `${raw.label} · ${mark.rate}` }
+      : raw;
   if (mark.outline && found.kind !== 'missing')
     return { ...found, kind: 'partial', label: `${found.label} · partial` };
   return mark.dotted !== undefined && found.kind === 'bar'

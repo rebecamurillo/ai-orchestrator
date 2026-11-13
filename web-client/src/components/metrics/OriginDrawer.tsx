@@ -6,6 +6,7 @@ import { $catalogue } from '../../stores/catalogue';
 import { $openHint, $originTarget, closeHint, closeOrigin } from '../../stores/metric-ui';
 import '../../styles/metrics.css';
 import { DrawerPanel } from '../run/HelperDrawer';
+import FindingsList from './FindingsList';
 import HintControl from './HintControl';
 import MissingWord from './MissingWord';
 
@@ -85,6 +86,14 @@ export default function OriginDrawer() {
             </button>
           )}
         </p>
+      )}
+      {target.findings && target.findings.length > 0 && (
+        <section className="origin-drawer-findings" aria-label="findings">
+          <h4 className="origin-drawer-findings-head">findings</h4>
+          {target.findings.map((f) => (
+            <FindingsList key={`${f.analysisId}-${f.tool}`} source={f} />
+          ))}
+        </section>
       )}
       <div className="origin-drawer-foot">
         <HintControl metricId={value.metric_id} methodId={value.method_id} showLabel />

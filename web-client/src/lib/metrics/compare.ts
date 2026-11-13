@@ -227,3 +227,15 @@ export const exportLine = (base: string, runs: number, metrics: number, blind: b
 
 export const exportFailedLine = (path: string, status: number | string): string =>
   `export failed · GET ${path} · ${status}`;
+
+/** The `code` rows of the payload, in payload order; the headline set keeps level `H`. */
+export function staticRows(
+  entries: Record<string, CatalogueEntryOut>,
+  metrics: readonly CompareMetricOut[],
+  set: CompareState['set'],
+): CompareMetricOut[] {
+  return metrics.filter((m) => {
+    const entry = entries[m.metric_id];
+    return entry?.group === 'code' && (set === 'all' || entry.level === 'H');
+  });
+}

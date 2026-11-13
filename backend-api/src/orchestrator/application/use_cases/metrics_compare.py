@@ -12,6 +12,11 @@ from decimal import Decimal
 from uuid import UUID
 
 from orchestrator.application.metrics.blind import HIDDEN, blind_label, blind_value
+from orchestrator.application.metrics.compare_toolsets import (
+    diff_size_words,
+    fingerprints_differ,
+    run_toolset,
+)
 from orchestrator.application.metrics.compare_views import (
     CompareCell,
     CompareMetric,
@@ -37,9 +42,11 @@ from orchestrator.application.metrics.families import (
     orchestrate_in_story,
 )
 from orchestrator.application.metrics.subscription import run_subscription
+from orchestrator.domain.entities.analysis import Analysis
 from orchestrator.domain.entities.metric_results import ResultVersion, StoredMetricValue
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.errors import Invalid, NotFound
+from orchestrator.domain.ports.analysis import AnalysisRepository
 from orchestrator.domain.ports.catalogue import Catalogue, CatalogueEntry
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.facts import FactSetRepository
@@ -51,7 +58,6 @@ from orchestrator.domain.ports.repositories import (
 )
 from orchestrator.domain.ports.run_records import RunRepositoryRecords
 
-NOT_RUN = "not run"
 STORIES_DONE = "process.stories_done"
 COST_GATEWAY = "cost.gateway"
 COST_HARNESS = "cost.harness"
@@ -69,6 +75,7 @@ class MetricsComparePorts:
     run_records: RunRepositoryRecords
     catalogue: Catalogue
     clock: Clock
+    analyses: AnalysisRepository | None = None
 
 
 @dataclass(frozen=True)
@@ -85,6 +92,7 @@ class _Column:
     version: ResultVersion | None
     available: list[int]
     values: list[StoredMetricValue]
+    analyses: list[Analysis]
 
 
 def parse_versions(text: str) -> dict[UUID, int]:
@@ -136,7 +144,15 @@ def _column(ports: MetricsComparePorts, query: CompareQuery, n: int, run: Run) -
     if query.blind:
         values = [blind_value(value) for value in values]
     label = run.label or blind_label(n)
-    return _Column(run, blind_label(n) if query.blind else label, version, available, values)
+    held = _analyses(ports, version)
+    return _Column(run, blind_label(n) if query.blind else label, version, available, values, held)
+
+
+def _analyses(ports: MetricsComparePorts, version: ResultVersion | None) -> list[Analysis]:
+    if version is None or ports.analyses is None:
+        return []
+    found = (ports.analyses.get(analysis_id) for analysis_id in version.analysis_ids)
+    return [analysis for analysis in found if analysis is not None]
 
 
 def _entry(ports: MetricsComparePorts) -> dict[str, CatalogueEntry]:
@@ -283,6 +299,10 @@ def _metric(
     methods = {run_id: sorted({v.method_id for v in values}) for run_id, values in by_run.items()}
     present = [ids for ids in methods.values() if ids]
     families = _family_views(family_results(by_run, modes)) if family_applies(entry) else []
+    analysed = [c for c in columns if c.analyses]
+    differ = entry.group == "code" and fingerprints_differ(
+        c.version.toolset_fingerprint for c in analysed if c.version is not None
+    )
     return CompareMetric(
         metric_id=entry.id,
         methods_differ=any(ids != present[0] for ids in present[1:]),
@@ -290,6 +310,8 @@ def _metric(
         cells={run_id: [_cell(v) for v in values] for run_id, values in by_run.items()},
         harness_delta=_harness_delta(columns) if entry.id == COST_HARNESS else {},
         families=families,
+        tool_versions_differ=differ,
+        toolsets={c.run.id: run_toolset(c.analyses) for c in analysed} if differ else {},
     )
 
 
@@ -304,7 +326,7 @@ def compare_runs(ports: MetricsComparePorts, query: CompareQuery) -> Comparison:
         runs=[_header(ports, c, flags, query.blind) for c in columns],
         same_work=_same_work(ports, columns),
         metrics=[m for m in metrics if m is not None],
-        diff_size={c.run.id: NOT_RUN for c in columns},
+        diff_size={c.run.id: diff_size_words(c.values, bool(c.analyses)) for c in columns},
     )
 
 

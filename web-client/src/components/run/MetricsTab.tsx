@@ -27,6 +27,7 @@ import VersionSelector from '../metrics/VersionSelector';
 import MetricsFlatTable from './MetricsFlatTable';
 import MetricsList from './MetricsList';
 import MetricsScopeTable from './MetricsScopeTable';
+import StaticSignals from './StaticSignals';
 
 interface Props {
   detail: RunDetailOut;
@@ -141,6 +142,17 @@ export default function MetricsTab({ detail, glance, onSelectVersion, onRetryMet
               <MetricsFlatTable scopeType="role" items={items} ctx={ctx} />
               <MetricsFlatTable scopeType="model" items={items} ctx={ctx} />
               <MetricsList items={items} set={set} ctx={ctx} />
+              {/* Keyed on the version `items` were read at, not `shown`: after a version
+                  switch the items trail the selector until the metrics read lands. */}
+              {metrics.version !== null && !metrics.values_so_far ? (
+                <StaticSignals
+                  runId={detail.run.id}
+                  shown={metrics.version}
+                  items={items}
+                  ctx={ctx}
+                  set={set}
+                />
+              ) : null}
             </>
           )}
         </>

@@ -5,6 +5,7 @@
 import type { components } from '../../api/schema';
 import { NO_CELL, runCells, type CompareState } from '../metrics/compare';
 import { NO_SUCH_STEP, runNames, sharedWords } from './compare-runs';
+import { isStaticSpec, markToolVersions, staticMark } from './compare-static-charts';
 import { unitWords } from './export';
 import { niceTicks, type Ticks } from './layout';
 import { NO_MODEL_GATEWAY, roleOrder } from './run-charts';
@@ -23,6 +24,7 @@ export interface CompareMark {
   word?: string;
   dotted?: string;
   share?: MetricValueOut | null;
+  rate?: string;
   outline?: true;
 }
 export interface CompareRow {
@@ -57,6 +59,8 @@ interface TotalSpec {
   share?: string;
   second?: 'hatch';
   all?: true;
+  source?: string;
+  rate?: string;
 }
 export const TOTAL_CHARTS: TotalSpec[] = [
   { title: 'cost · gateway and harness', kind: 'dot', ids: COST },
@@ -85,6 +89,37 @@ export const TOTAL_CHARTS: TotalSpec[] = [
     title: 'method fingerprint · pauses over cache lifetime',
     kind: 'bar',
     ids: ['activity.pauses_over_cache_lifetime'],
+    all: true,
+  },
+  {
+    title: 'type escapes in tests · per 100 test lines',
+    kind: 'bar',
+    ids: ['code.type_escapes_added'],
+    source: 'test',
+    rate: 'test:per_100',
+  },
+  { title: 'duplicated lines added', kind: 'bar', ids: ['code.duplication_added'], all: true },
+  { title: 'suppressions added', kind: 'bar', ids: ['code.suppressions_added'], all: true },
+  {
+    title: 'skip and focus markers added',
+    kind: 'bar',
+    ids: ['code.skip_focus_markers_added'],
+    all: true,
+  },
+  {
+    title: 'test lines added · unit',
+    kind: 'bar',
+    ids: ['code.test_lines'],
+    source: 'test_unit:added',
+    rate: 'test_unit:added:per_100',
+    all: true,
+  },
+  {
+    title: 'test lines added · e2e',
+    kind: 'bar',
+    ids: ['code.test_lines'],
+    source: 'test_e2e:added',
+    rate: 'test_e2e:added:per_100',
     all: true,
   },
 ];
@@ -159,12 +194,15 @@ export function totalCharts(payload: CompareOut, entries: Entries, set: MetricSe
   return specs.map((spec) => {
     const primary = metricOf(payload, spec.ids[0]) as CompareMetricOut;
     const unit = entries[spec.ids[0]].unit;
-    const differs = spec.kind !== 'dot' && primary.methods_differ;
+    const stat = isStaticSpec(spec);
+    const differs =
+      spec.kind !== 'dot' && primary.methods_differ && !(stat && primary.tool_versions_differ);
     const methods = payload.runs.map((h) => primary.methods[h.run_id] ?? []);
     const base = JSON.stringify(methods[0]);
     const rows: CompareRow[] = payload.runs.map((h, i) => {
       const marks = spec.ids.map((id) => {
         const metric = metricOf(payload, id);
+        if (stat && metric !== undefined) return staticMark(payload, metric, spec, h.run_id);
         return metric === undefined
           ? { value: null, word: NO_CELL }
           : markOf(runCells(metric, h.run_id)[0], id);
@@ -182,6 +220,7 @@ export function totalCharts(payload: CompareOut, entries: Entries, set: MetricSe
         marks: marks as CompareRow['marks'],
       };
     });
+    const toolFlagged = stat ? markToolVersions(payload, primary, rows) : null;
     const line = [unitWords(unit), ...(spec.kind === 'dot' ? [AXIS_NOTE] : [])].join(' · ');
     const distinct = [...new Set(methods.flat())].sort();
     return {
@@ -189,7 +228,7 @@ export function totalCharts(payload: CompareOut, entries: Entries, set: MetricSe
       title: spec.title,
       groups: [{ name: null, rows }],
       axisFromZero: spec.kind !== 'dot',
-      flag: differs ? `≠ methods differ: ${distinct.join(' · ')}` : null,
+      flag: toolFlagged ?? (differs ? `≠ methods differ: ${distinct.join(' · ')}` : null),
       context: [...(shared === '' ? [] : [shared]), line],
       ...(spec.second ? { second: spec.second } : {}),
     };

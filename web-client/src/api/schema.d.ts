@@ -640,6 +640,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The analyses behind a Run's shown result version */
+        get: operations["list_run_analyses_api_v1_runs__run_id__analysis_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/analysis/{analysis_id}/sarif/{tool}": {
         parameters: {
             query?: never;
@@ -1251,6 +1268,40 @@ export interface components {
             /** Token */
             token: string;
         };
+        /** AnalysisOut */
+        AnalysisOut: {
+            /**
+             * Analysis Id
+             * Format: uuid
+             */
+            analysis_id: string;
+            /** Base */
+            base: string | null;
+            /** Base Branch */
+            base_branch: string | null;
+            /** Commits Outside Run */
+            commits_outside_run: number | null;
+            /** Declaration Hash */
+            declaration_hash: string | null;
+            /** Head */
+            head: string | null;
+            /** Languages */
+            languages: string[] | null;
+            /** Lookup Date */
+            lookup_date: string | null;
+            /** Reason */
+            reason: string;
+            /** Repository Path */
+            repository_path: string;
+            /** Sarif Tools */
+            sarif_tools: string[];
+            /** Status */
+            status: string;
+            /** Tools */
+            tools: components["schemas"]["ToolVersionOut"][];
+            /** Vulnerability Db Date */
+            vulnerability_db_date: string | null;
+        };
         /**
          * AnchorEditOut
          * @description One anchor the session changed, spelled as AD-17 spells a hit.
@@ -1747,6 +1798,18 @@ export interface components {
             methods_differ: boolean;
             /** Metric Id */
             metric_id: string;
+            /**
+             * Tool Versions Differ
+             * @default false
+             */
+            tool_versions_differ: boolean;
+            /**
+             * Toolsets
+             * @default {}
+             */
+            toolsets: {
+                [key: string]: components["schemas"]["ToolVersionOut"][];
+            };
         };
         /** CompareOut */
         CompareOut: {
@@ -3122,6 +3185,18 @@ export interface components {
             /** N */
             n: number;
         };
+        /** RunAnalysesOut */
+        RunAnalysesOut: {
+            /** Items */
+            items: components["schemas"]["AnalysisOut"][];
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Version */
+            version: number | null;
+        };
         /**
          * RunDetailOut
          * @description `GET /runs/{run_id}/detail`. One request, every section the screen shows.
@@ -3902,6 +3977,13 @@ export interface components {
             in_progress: boolean;
             /** Session Lifetime Ends At */
             session_lifetime_ends_at: string | null;
+        };
+        /** ToolVersionOut */
+        ToolVersionOut: {
+            /** Tool */
+            tool: string;
+            /** Version */
+            version: string;
         };
         /**
          * ValidateIn
@@ -6000,6 +6082,60 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID, or `focused_seconds` is outside [1, 3600]. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_run_analyses_api_v1_runs__run_id__analysis_get: {
+        parameters: {
+            query?: {
+                v?: number | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunAnalysesOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, or no such result version of it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
             422: {
                 headers: {
                     [name: string]: unknown;
