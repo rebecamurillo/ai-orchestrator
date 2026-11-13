@@ -30,6 +30,7 @@ discards every one of these rows.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -72,6 +73,11 @@ def to_entity(row: RunRow) -> Run:
         budget_usd=row.budget_usd,
         spend_usd=row.spend_usd,
         spend_provisional=row.spend_provisional or False,
+        gateway_spend_usd=row.gateway_spend_usd or Decimal("0"),
+        harness_spend_usd=row.harness_spend_usd or Decimal("0"),
+        gate_spend_usd=row.gate_spend_usd or Decimal("0"),
+        gateway_reported=row.gateway_reported or False,
+        harness_reported=row.harness_reported or False,
         manual_estimate_h=row.manual_estimate_h,
         re_review_done=row.re_review_done,
         park_kind=row.park_kind,
@@ -132,6 +138,11 @@ def row_values(run: Run) -> dict[str, Any]:
         "budget_usd": run.budget_usd,
         "spend_usd": run.spend_usd,
         "spend_provisional": run.spend_provisional,
+        "gateway_spend_usd": run.gateway_spend_usd,
+        "harness_spend_usd": run.harness_spend_usd,
+        "gate_spend_usd": run.gate_spend_usd,
+        "gateway_reported": run.gateway_reported,
+        "harness_reported": run.harness_reported,
         "manual_estimate_h": run.manual_estimate_h,
         "re_review_done": run.re_review_done,
         "park_kind": run.park_kind,

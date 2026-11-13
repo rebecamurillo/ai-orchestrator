@@ -152,6 +152,7 @@ def a_run(**over: Any) -> Run:
         "status": "running",
         "budget_usd": BUDGET,
         "spend_usd": SPEND,
+        "gate_spend_usd": SPEND,
         "created_at": EPOCH,
         "worktree_path": WORKTREE,
     }

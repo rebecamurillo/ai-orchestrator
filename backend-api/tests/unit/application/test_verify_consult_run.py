@@ -229,7 +229,8 @@ def test_a_touched_tree_fails_closed_naming_the_files() -> None:
 
 def test_no_remaining_budget_dispatches_nothing_and_parks_the_verify_stop() -> None:
     world = a_verify_consult_world(
-        decision=a_decision(), run=a_run(budget_usd=Decimal("5"), spend_usd=Decimal("5"))
+        decision=a_decision(),
+        run=a_run(budget_usd=Decimal("5"), spend_usd=Decimal("5"), gate_spend_usd=Decimal("5")),
     )
 
     failed(world, "no remaining budget")
@@ -242,7 +243,11 @@ def test_an_answer_over_budget_parks_the_verify_stop_and_adds_the_budget_record(
     world = with_spend(
         a_verify_consult_world(
             decision=a_decision("answer", "Regenerate the mock."),
-            run=a_run(budget_usd=Decimal("3.00"), spend_usd=Decimal("2.50")),
+            run=a_run(
+                budget_usd=Decimal("3.00"),
+                spend_usd=Decimal("2.50"),
+                gate_spend_usd=Decimal("2.50"),
+            ),
         ),
         gateway=gateway,
     )

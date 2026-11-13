@@ -37,6 +37,7 @@ from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyAttemptRepository,
     SQLAlchemyFactSetRepository,
     SQLAlchemyGateRecordRepository,
+    SQLAlchemyGatewayReadRepository,
     SQLAlchemyInstanceHoldRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
@@ -140,6 +141,8 @@ def open_spend_ports(session_factory: SessionFactory, gateway: Gateway) -> Itera
             runs=SQLAlchemyRunRepository(session),
             steps=SQLAlchemyStepRunRepository(session),
             attempts=SQLAlchemyAttemptRepository(session),
+            gateway_reads=SQLAlchemyGatewayReadRepository(session),
+            clock=SystemClock(),
             uow=SessionUnitOfWork(session),
         )
     finally:

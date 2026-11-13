@@ -36,6 +36,7 @@ def parked(row_status: str, path: str = BUILD, **over: object) -> World:
         "park_path": path,
         "park_reason": "budget $9.00 / $5.00",
         "spend_usd": Decimal("9"),
+        "gate_spend_usd": Decimal("9"),
         "budget_usd": Decimal("5"),
     }
     fields.update(over)
@@ -110,7 +111,7 @@ def test_the_record_names_the_new_figure_rather_than_the_operator() -> None:
 
 def test_a_figure_that_does_not_clear_the_spend_is_refused_with_the_spend() -> None:
     """AC3: `budget_usd: 30` against `spend_usd: 41.20` is a 409 that says which is which."""
-    world = parked("blocked", spend_usd=Decimal("41.20"))
+    world = parked("blocked", spend_usd=Decimal("41.20"), gate_spend_usd=Decimal("41.20"))
 
     with pytest.raises(Conflict, match=r"new budget must exceed spend \$41\.20"):
         raise_to(world, "30")
@@ -131,6 +132,7 @@ def test_a_budget_raise_on_a_park_it_is_not_admitted_on_keeps_ad13s_own_sentence
         park_path=BUILD,
         park_reason="timeout",
         spend_usd=Decimal("9"),
+        gate_spend_usd=Decimal("9"),
     )
 
     with pytest.raises(Conflict, match="signal budget_raise invalid for status needs_you"):

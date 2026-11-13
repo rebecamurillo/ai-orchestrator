@@ -65,6 +65,12 @@ class Run(BaseModel):
     budget_usd: Decimal | None
     spend_usd: Decimal = Decimal("0")
     spend_provisional: bool = False
+    #: Gateway and harness totals kept apart; the gate figure is `rules/budget.figure` (RM-4).
+    gateway_spend_usd: Decimal = Decimal("0")
+    harness_spend_usd: Decimal = Decimal("0")
+    gate_spend_usd: Decimal = Decimal("0")
+    gateway_reported: bool = False
+    harness_reported: bool = False
     #: Hours the Operator estimated the same work would take by hand. Immutable after start.
     manual_estimate_h: Decimal | None = None
     re_review_done: bool = False

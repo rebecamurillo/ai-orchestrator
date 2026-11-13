@@ -57,6 +57,9 @@ class FakeGatewayReadRepository:
         found = [r for r, _ in self.reads if r.attempt_id == attempt_id]
         return sorted(found, key=lambda r: r.read_at, reverse=True)
 
+    def usage(self, read_id: UUID) -> tuple[UsageFact, ...]:
+        return next((u for r, u in self.reads if r.id == read_id), ())
+
 
 assert isinstance(FakeFactSetRepository(), FactSetRepository)
 assert isinstance(FakeGatewayReadRepository(), GatewayReadRepository)

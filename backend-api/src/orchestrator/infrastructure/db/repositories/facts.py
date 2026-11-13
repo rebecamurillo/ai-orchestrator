@@ -158,7 +158,9 @@ class SQLAlchemyGatewayReadRepository:
         rows = self._session.scalars(
             select(GatewayReadRow)
             .where(GatewayReadRow.attempt_id == attempt_id)
-            .order_by(GatewayReadRow.read_at.desc())
+            # the gate figure takes the newest read: two reads stamped alike are told apart
+            # by their UUIDv7 ids, never by whatever order postgres returns them in
+            .order_by(GatewayReadRow.read_at.desc(), GatewayReadRow.id.desc())
         ).all()
         return [
             GatewayRead.model_validate(
@@ -166,3 +168,15 @@ class SQLAlchemyGatewayReadRepository:
             )
             for r in rows
         ]
+
+    def usage(self, read_id: UUID) -> tuple[UsageFact, ...]:
+        rows = self._session.scalars(
+            select(UsageFactRow).where(UsageFactRow.gateway_read_id == read_id)
+        ).all()
+        skip = ("id", "fact_set_id", "gateway_read_id")
+        return tuple(
+            UsageFact(
+                **{k: v for k, v in r.__dict__.items() if not k.startswith("_") and k not in skip}
+            )
+            for r in rows
+        )

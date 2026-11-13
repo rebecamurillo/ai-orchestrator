@@ -27,7 +27,9 @@ from tests.unit.application.consult_fixtures import planned
 from tests.unit.application.steps.agent_fixtures import RecordingEnv
 from tests.unit.application.steps.agent_tail_fixtures import a_section, a_story, contracted
 from tests.unit.application.writer_fixtures import World, a_world
+from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
+from tests.unit.fakes.facts import FakeGatewayReadRepository
 from tests.unit.fakes.gateway import FakeGateway
 from tests.unit.fakes.git import FakeGit
 from tests.unit.fakes.harness import FakeHarness
@@ -117,6 +119,8 @@ class Loop:
             runs=ports.runs,
             steps=ports.steps,
             attempts=ports.attempts,
+            gateway_reads=FakeGatewayReadRepository(),
+            clock=FakeClock(),
             uow=FakeUnitOfWork(),
         )
 

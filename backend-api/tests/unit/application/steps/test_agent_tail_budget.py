@@ -138,7 +138,13 @@ def test_a_retry_path_error_over_budget_parks_with_no_automatic_retry() -> None:
 def test_without_a_spend_scope_the_budget_check_never_runs() -> None:
     """`spend_writes` unwired degrades like `tracer`: every fixture predating this story
     keeps working, even one whose Run happens to already be over its own budget."""
-    world = a_tail_world(run=a_run(budget_usd=Decimal("1.00"), spend_usd=Decimal("999.00")))
+    world = a_tail_world(
+        run=a_run(
+            budget_usd=Decimal("1.00"),
+            spend_usd=Decimal("999.00"),
+            gate_spend_usd=Decimal("999.00"),
+        )
+    )
     result = HarnessResult(session_id=SESSION_ID, exit_code=0, log_path=LOG_PATH)
 
     outcome = agent_tail.tail(world.ctx, world.attempt, result)

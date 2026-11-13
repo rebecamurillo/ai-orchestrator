@@ -71,6 +71,9 @@ MATCH_ATTEMPT_TAG = "attempt_tag"
 #: error, or a body the adapter could not read) — never raised.
 SPEND_QUERY_DEGRADED = "litellm spend query answered provisional zero"
 
+#: Logged when the spend log says its `total` is capped: the figure may be incomplete.
+SPEND_CAPPED = "litellm spend answer capped; total may be incomplete"
+
 #: What a provisional answer looks like — one place, so every degraded path returns the
 #: same shape `tests/unit/fakes/gateway.py::PROVISIONAL_ZERO` also gives.
 _PROVISIONAL_ZERO = AttemptSpend(
@@ -88,7 +91,7 @@ class LiteLLMSpend:
 
     def spend_for_attempt(self, run_id: UUID, attempt_id: UUID) -> AttemptSpend:
         try:
-            rows = self._rows(run_id, attempt_id)
+            rows, capped = self._rows(run_id, attempt_id)
         except Exception:
             log.exception(
                 SPEND_QUERY_DEGRADED, run_id=str(run_id), attempt_id=str(attempt_id), reason="error"
@@ -99,21 +102,26 @@ class LiteLLMSpend:
                 SPEND_QUERY_DEGRADED, run_id=str(run_id), attempt_id=str(attempt_id), reason="empty"
             )
             return _PROVISIONAL_ZERO
-        return _aggregate(rows)
+        if capped:
+            log.warning(SPEND_CAPPED, run_id=str(run_id), attempt_id=str(attempt_id))
+        return _aggregate(rows, capped=capped)
 
-    def _rows(self, run_id: UUID, attempt_id: UUID) -> list[dict[str, Any]]:
+    def _rows(self, run_id: UUID, attempt_id: UUID) -> tuple[list[dict[str, Any]], bool]:
         """Every row across every page — `/spend/logs/v2` pages, and this reads them all —
-        narrowed to the ones that actually match, per `_matches`'s own docstring."""
+        narrowed to the ones that actually match, per `_matches`'s own docstring — and whether
+        any page's body said its total is capped."""
         by_tag = self._settings.litellm_spend_match == MATCH_ATTEMPT_TAG
         rows: list[dict[str, Any]] = []
         page = 1
         total_pages = 1
+        capped = False
         while page <= total_pages:
             body = self._page(run_id, attempt_id, page, by_tag=by_tag)
             rows.extend(body.get("data") or [])
             total_pages = int(body.get("total_pages") or 1)
+            capped = capped or bool(body.get("total_is_capped"))
             page += 1
-        return [row for row in rows if _matches(row, run_id, attempt_id, by_tag=by_tag)]
+        return [row for row in rows if _matches(row, run_id, attempt_id, by_tag=by_tag)], capped
 
     def _page(self, run_id: UUID, attempt_id: UUID, page: int, *, by_tag: bool) -> dict[str, Any]:
         """One page of the Run's rows. In `attempt_tag` mode the query names no session: the
@@ -180,7 +188,7 @@ class _Bucket:
     tokens_out: int = 0
 
 
-def _aggregate(rows: Sequence[Mapping[str, Any]]) -> AttemptSpend:
+def _aggregate(rows: Sequence[Mapping[str, Any]], *, capped: bool = False) -> AttemptSpend:
     """Sum every row, and sum again per model — one pass, since every row names exactly
     one model."""
     per_model: dict[str, _Bucket] = {}
@@ -212,6 +220,7 @@ def _aggregate(rows: Sequence[Mapping[str, Any]]) -> AttemptSpend:
         by_model=by_model,
         calls=len(rows),
         provisional=False,
+        capped=capped,
     )
 
 

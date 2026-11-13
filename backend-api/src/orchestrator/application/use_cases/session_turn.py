@@ -27,7 +27,7 @@ from uuid import UUID
 
 import structlog
 
-from orchestrator.application.rules import session
+from orchestrator.application.rules import budget, session
 from orchestrator.application.rules.signals import row_at
 from orchestrator.application.steps import agent_tail, agent_workdir
 from orchestrator.application.steps.context import (
@@ -99,7 +99,7 @@ def post_message(ports: MessagePorts, run_id: UUID, text: str) -> SessionTurn:
         turns = session.session_attempts(attempts, records)
         if session.turn_open(turns):
             raise Conflict(TURN_RUNNING)
-        if run.budget_usd is not None and run.budget_usd - run.spend_usd <= 0:
+        if run.budget_usd is not None and run.budget_usd - budget.figure(run) <= 0:
             raise Conflict(NO_BUDGET)
         started = session.last_start_payload(records)
         attempt = Attempt(

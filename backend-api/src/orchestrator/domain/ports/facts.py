@@ -45,3 +45,7 @@ class GatewayReadRepository(Protocol):
     def list_for_attempt(self, attempt_id: UUID) -> list[GatewayRead]:
         """Every read of this attempt, newest first."""
         ...
+
+    def usage(self, read_id: UUID) -> tuple[UsageFact, ...]:
+        """The usage rows stored under one read."""
+        ...

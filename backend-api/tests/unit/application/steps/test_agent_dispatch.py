@@ -342,7 +342,7 @@ def test_a_later_attempt_dispatches_the_same_way_the_first_one_did() -> None:
     world = a_world(
         previous=an_attempt(row, 1),
         git=FakeGit(status=[""], head_sha=[HEAD_SHA, END_SHA]),
-        run=a_run(spend_usd=Decimal("9.00")),
+        run=a_run(spend_usd=Decimal("9.00"), gate_spend_usd=Decimal("9.00")),
     )
 
     run(world)

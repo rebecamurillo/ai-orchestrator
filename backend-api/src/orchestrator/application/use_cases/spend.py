@@ -18,8 +18,9 @@ replay: the second call's figures *replace* the first's on the one attempt they 
 about, so summing again never double-counts.
 
 **Not `WriterPorts`.** `SpendPorts` is its own bundle (Design Notes): a different write, a
-different, smaller dependency set — `gateway`, `runs`, `steps`, `attempts`, `uow` — no
-`records`/`clock`, since nothing here appends a gate record or reads the time.
+different, smaller dependency set — `gateway`, `runs`, `steps`, `attempts`,
+`gateway_reads`, `clock`, `uow` — no `records`, since nothing here appends a gate record.
+The clock stamps the `gateway_read` each call stores (SPEC CAP-5).
 """
 
 from __future__ import annotations
@@ -27,8 +28,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
+from orchestrator.application.use_cases.spend_figures import StoredRead, figures, gateway_read_for
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
+from orchestrator.domain.ids import new_id
+from orchestrator.domain.ports.clock import Clock
+from orchestrator.domain.ports.facts import GatewayReadRepository
 from orchestrator.domain.ports.gateway import AttemptSpend, Gateway, ModelSpend
 from orchestrator.domain.ports.harness import HarnessUsage
 from orchestrator.domain.ports.repositories import (
@@ -51,6 +56,8 @@ class SpendPorts:
     runs: RunRepository
     steps: StepRunRepository
     attempts: AttemptRepository
+    gateway_reads: GatewayReadRepository
+    clock: Clock
     uow: UnitOfWork
 
 
@@ -73,11 +80,25 @@ def record_attempt_spend(
         if locked:
             run = ports.runs.get_for_update(run.id) or run
         spend = ports.gateway.spend_for_attempt(run.id, attempt.id)
+        ports.gateway_reads.add(
+            *gateway_read_for(attempt, spend, harness_usage, new_id(), ports.clock.now())
+        )
         priced = _priced_attempt(attempt, spend, harness_usage)
         if priced is not attempt:
             ports.attempts.update(priced)
-        total, provisional = _run_spend_and_provisional(ports, run)
-        updated = run.model_copy(update={"spend_usd": total, "spend_provisional": provisional})
+        total, provisional, reads = _run_spend_and_provisional(ports, run)
+        spent = figures(reads)
+        updated = run.model_copy(
+            update={
+                "spend_usd": total,
+                "spend_provisional": provisional,
+                "gateway_spend_usd": spent.gateway_usd,
+                "harness_spend_usd": spent.harness_usd,
+                "gate_spend_usd": spent.gate_usd,
+                "gateway_reported": spent.gateway_reported,
+                "harness_reported": spent.harness_reported,
+            }
+        )
         ports.runs.update(updated)
         ports.uow.commit()
         return updated
@@ -124,15 +145,24 @@ def _dominant_model(by_model: tuple[ModelSpend, ...]) -> str | None:
     return max(by_model, key=lambda model_spend: (model_spend.usd, model_spend.model)).model
 
 
-def _run_spend_and_provisional(ports: SpendPorts, run: Run) -> tuple[Decimal, bool]:
+def _run_spend_and_provisional(
+    ports: SpendPorts, run: Run
+) -> tuple[Decimal, bool, list[list[StoredRead]]]:
     """Every attempt of every row of this Run, summed, plus a flag that is `True` when any
     attempt carries `cost_provisional=True`. Recomputed in one pass, never incremented — see
     the module docstring."""
     total = _ZERO
     provisional = False
+    reads: list[list[StoredRead]] = []
     for row in ports.steps.list_for_run(run.id):
         for row_attempt in ports.attempts.list_for_row(row.id):
             total += row_attempt.cost_usd or _ZERO
             if row_attempt.cost_provisional:
                 provisional = True
-    return total, provisional
+            reads.append(
+                [
+                    (r, ports.gateway_reads.usage(r.id))
+                    for r in ports.gateway_reads.list_for_attempt(row_attempt.id)
+                ]
+            )
+    return total, provisional, reads

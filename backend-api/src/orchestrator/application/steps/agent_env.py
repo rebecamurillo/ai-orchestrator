@@ -7,6 +7,7 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
+from orchestrator.application.rules import budget
 from orchestrator.application.steps.context import (
     StepContext,
     require_cwd,
@@ -36,7 +37,7 @@ def environment(ctx: StepContext, attempt: Attempt, traceparent: str) -> dict[st
 
 def remaining(run: Run) -> Decimal | None:
     """What the Run may still spend, or `None` when it has no budget (FR-17)."""
-    return run.budget_usd - run.spend_usd if run.budget_usd is not None else None
+    return run.budget_usd - budget.figure(run) if run.budget_usd is not None else None
 
 
 def add_dirs(ctx: StepContext, dispatch_cwd: Path) -> tuple[Path, ...]:
