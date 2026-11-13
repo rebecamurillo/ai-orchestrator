@@ -1,9 +1,9 @@
-# Test Automation Summary — orchestrator-instance-guide / epic-3-bootstrap
+# Test Automation Summary — orchestrator-run-metrics / epic-1-run-facts
 
 Generated: 2026-11-13 (dispatch mode with an empty story id, so it covers the whole epic)
-Spec: `initiatives/orchestrator-instance-guide/epic-3-bootstrap/SPEC.md` (path relative to the hub)
-Stories: 1–4 (commits `ffcc010`..`ba4a325`)
-Previous summary (epic 2): in git history at `acff0e3`.
+Spec: `initiatives/orchestrator-run-metrics/epic-1-run-facts/SPEC.md` (path relative to the hub)
+Stories: 1–6 (commits `4f1b36e`..`9f838a3`)
+Previous summary (orchestrator-instance-guide epic 3): in git history at `fb299d7`.
 
 Framework: the project's own, pytest + httpx in `backend-api/tests/e2e` (`make e2e-api`). The
 epic changed no UI, so no Playwright test was added.
@@ -12,57 +12,59 @@ epic changed no UI, so no Playwright test was added.
 
 ### API (e2e) tests — `make e2e-api` gate
 
-- [x] `backend-api/tests/e2e/test_bootstrap.py` (11 tests). The unit suite proves the version
-  answer through a test client and the installer against a `curl` stub. This module tests what
-  only the running image can show:
-  - **CAP-1 / C1:** `GET /api/v1/version` without a bearer gets 401. With one, the answer
-    holds a non-empty `app_version`, `bootstrap_contract == 1`, exactly the three `guide`
-    addresses, and `kit_version` as a key whose value is `null`. The MCP `version` tool returns
-    the same answer as the route. Its description names `refusal-bootstrap-contract`, says to
-    continue, and never says to stop on a mismatch. `read_guide` takes one optional `id`. The
-    three guide addresses from the answer resolve on this instance (index → a listed page →
-    the same text through `guide://{id}`). The page `errors/refusal-bootstrap-contract` is
-    served.
-  - **CAP-3:** both kit routes require the bearer. The served archive has nothing under
-    `skills/` or `bin/` and holds `bootstrap/SKILL.md.tmpl`, `install.sh` and the three `mcp/`
-    templates (AC-4). The installer served by `/kit/install.sh` is byte-identical to the
-    `install.sh` inside the archive.
-  - **CAP-2 (AC-1/AC-3 over the wire):** the served installer is piped into `bash -s --
-    --harness all --base-url <stack>/`, as the connect page documents. It runs in `tmp_path`,
-    with `HOME`, `CODEX_HOME` and `XDG_CONFIG_HOME` there too. Checked:
-    - it fetches the kit from this instance's `/kit/archive` and its probe reports
-      `bootstrap_contract 1`;
-    - all three MCP configurations parse (`json`, `tomllib`), point at `<stack>/mcp` (trailing
-      `/` stripped) and refer to the token variable by name;
-    - `bootstrap.json` holds contract 1, and each skill folder holds exactly `SKILL.md`;
-    - no written file and no output contains the token value, no written file contains the
-      instance's `app_version`, and no placeholder is left unsubstituted.
-
-    The release check uses the release the instance actually serves, not the AD-33 regex,
-    because the stack address (`127.0.0.1:<port>`) matches that regex (SPEC § Constraints).
-    The regex check stays in the unit suite, which renders with host names.
-
-No assertion reads page prose or pins which pages or template steps ship (member hard rule 6).
-No existing test file was changed (member hard rule 1).
-
-## Verification
-
-- `ruff format`, `ruff check`, `mypy` on the new module: clean. `make lint`: green.
-- `pytest --collect-only tests/e2e/test_bootstrap.py`: 11 tests collected.
-- **Not run.** The SPEC forbids the Run from running `make e2e*` or starting a stack, so these
-  tests have not been run against a stack. The Operator runs them with `make e2e`, the
-  disposable `aio-e2e` stack.
-- The piped-installer test needs `bash`, `curl`, `tar` and `python3` on the e2e runner (the
-  host, through `uv run`). If any is missing, the test fails and names it; it never skips.
+- [x] `backend-api/tests/e2e/test_metrics_catalogue.py` (8 tests, story 1 / CAP-1). The unit
+  suite covers the validator and the router with a fake catalogue. This module covers what
+  only the built image can show: the YAML ships as package data, start-up validated it, and the
+  route is mounted behind the bearer.
+  - Without a bearer: 401 `application/problem+json`.
+  - With one: `{items}` is non-empty. Each entry has exactly the 13 catalogue fields. Ids match
+    `group.name` and are unique. `level` ∈ {H, A}, `scopes` is non-empty and drawn from the 13
+    declared scopes, `additive` ∈ {true, false, `within_scope_type`}. Every `component_of`
+    names a catalogued id. The three relations the story declares (`tokens.thinking` →
+    `tokens.output`, `tokens.cache_write_5m|1h` → `tokens.cache_write`) are served. Every
+    entry has at least one method, numbered ascending from ≥ 1, each with a description and a
+    `parameters` object.
+  - Structural only: no id list, count or label from the shipped files is pinned.
+- [x] `backend-api/tests/e2e/test_run_facts_schema.py` (5 tests, stories 2 and 5 / CAP-2,
+  CAP-5). The unit migration tests read the revisions; this module checks what only a migrated
+  Postgres can show:
+  - The seven fact tables exist in schema `public`.
+  - Money (`gateway_read.usd`, `usage_fact.usd` and the three `run.*_spend_usd`) is `numeric`.
+  - The five Run figure columns are `NOT NULL` with a `0` / `false` default.
+  - A `usage_fact` with neither parent, or with both, is refused with SQLSTATE 23514 by the
+    one-parent check. Postgres evaluates CHECK before FK triggers, so the "both" case reaches
+    the check even though its parent ids don't exist.
+  - Every write runs in a transaction that is rolled back and is refused anyway, so the shared
+    stack is left unchanged.
 
 ## Coverage
 
-- C1 elements (`/mcp`, `version` keys, `read_guide(id?)`, `/llms.txt`): 4/4 against the image.
-- Epic routes touched (`/version`, `/kit/install.sh`, `/kit/archive`): 3/3, happy path + 401.
-- AC-1, AC-3, AC-4 (the parts a running stack can show): covered. AC-2 (two builds) and the
-  live session per CLI are left to the owner by hand (SPEC § Non-goals).
-- UI: none changed, so 0/0.
+- API endpoints added by the epic: 1/1 (`GET /api/v1/metrics/catalogue`), happy path + 401.
+- Database constraints the epic's ACs name: one-parent check (both cases), money as numeric,
+  Run figures NOT NULL with defaults. The `fact_set` unique constraint and the story 6 data
+  revision are not covered at e2e. Exercising either would need real attempts written into the
+  shared stack. Both are covered by unit tests (`test_fact_repository_adapter.py`,
+  `test_migrated_attempt_facts_migration.py`).
+- Extractors (stories 3–4), the facts sweep and the budget-gate figure (story 5) are pure or
+  log-reading logic with no new endpoint. They are covered by the stories' unit tests, and an
+  e2e module would add nothing a stack alone can show.
+- UI: none in this epic.
+
+## Verification
+
+- `ruff check` and `ruff format --check`: clean on both files. `pytest --collect-only`:
+  13 tests collected.
+- The 8 catalogue scenarios were run against the in-process app (`create_app(Settings())`
+  with the `.env.example` contract, FastAPI `TestClient`): 8/8 pass.
+- Unit meta-tests over test files (`-k "source_limit or e2e or pair or marker"`): 1466 passed.
+- **Not run against a stack.** The epic's standing rule says never to start, stop or call a
+  running instance, and `make e2e` builds one. Both modules run on the next `make e2e`, which
+  is the gate. The schema module has no in-process stand-in because it needs Postgres.
+- `mypy` on the new files reports only the `Settings()` call-arg note that the existing
+  `tests/e2e/test_migrations.py` also has. `make lint` scopes mypy to `domain/` and
+  `application/`.
 
 ## Next Steps
 
-- Operator: run `make e2e` to execute the module in the disposable stack.
+- Run `make e2e` (disposable `aio-e2e` stack) to execute both modules against Postgres.
+- When epic 2 adds result versions and its endpoints, extend the e2e suite from there.
