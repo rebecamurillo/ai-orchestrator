@@ -202,7 +202,7 @@ plan_json_target() {   # plan_json_target FILE TEMPLATE KEY
 		exit 1
 	fi
 	local key="$3" rc=0
-	python3 -c "$MERGE_PY" check "$target" /dev/null "$key" || rc=$?
+	python3 -I -c "$MERGE_PY" check "$target" /dev/null "$key" || rc=$?
 	case "$rc" in
 		0) ;;
 		4) die "${target}: its \"${key}\" is not an object; fix it and run again. Nothing was written" ;;
@@ -290,7 +290,7 @@ install_json_mcp() {   # install_json_mcp TARGET TEMPLATE KEY
 		written="${written}${target}"$'\n'
 		return 0
 	fi
-	url="$(python3 -c "$MERGE_PY" merge "$target" "$block" "$key")" || rc=$?
+	url="$(python3 -I -c "$MERGE_PY" merge "$target" "$block" "$key")" || rc=$?
 	case "$rc" in
 		0) say "mcp      ${target} merged (every other key kept)"; written="${written}${target}"$'\n' ;;
 		3) say "mcp      ${target} already declares orchestrator — kept as it is"; differs "$target" "$url"; written="${written}${target} (kept)"$'\n' ;;
@@ -314,11 +314,11 @@ install_codex_mcp() {
 	# Every TOML spelling of the key: a header (indented, spaced, quoted, or a sub-table), an
 	# `orchestrator = {…}` inside `[mcp_servers]`, or a dotted key. Missing one appends a
 	# second table and codex refuses the whole file.
-	local ws='[[:space:]]*' name='"?orchestrator"?' in_servers=0
+	local ws='[[:space:]]*' name="[\"']?orchestrator[\"']?" in_servers=0
 	local hdr="^${ws}\\[${ws}mcp_servers${ws}\\.${ws}${name}${ws}[].]"
 	local dotted="^${ws}mcp_servers${ws}\\.${ws}${name}${ws}[.=]"
 	local inline="^${ws}${name}${ws}[.=]"
-	local urlre="^${ws}url${ws}=${ws}\"([^\"]*)\""
+	local urlre="^${ws}url${ws}=${ws}[\"']([^\"']*)[\"']"
 	while IFS= read -r line || [[ -n "$line" ]]; do
 		line="${line%$'\r'}"
 		if [[ "$line" =~ $hdr ]]; then in_table=1; in_servers=0; found=1; continue; fi

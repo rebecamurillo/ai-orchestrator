@@ -108,7 +108,8 @@ def operation_id(paths: dict[str, Any], method: str, path: str) -> str | None:
     return max(candidates)[1] if candidates else None
 
 
-type Builder = Callable[[RecordingApi], list[Tool]]
+#: Not a `type` statement: scripts/check_test_pairs.py parses tests on the system python3 (3.9).
+Builder = Callable[[RecordingApi], list[Tool]]
 
 
 async def violations(build: Builder, allowed: frozenset[str], paths: dict[str, Any]) -> list[str]:

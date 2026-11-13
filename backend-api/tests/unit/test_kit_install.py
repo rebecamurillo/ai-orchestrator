@@ -412,6 +412,55 @@ def test_a_json_config_with_another_server_is_merged(env: Env) -> None:
     assert cfg["mcpServers"]["orchestrator"]["url"] == f"{BASE}/mcp"
 
 
+#: Epic 3 retro R2 / C1 (orchestrator-instance-guide close-out, 2026-11-13): the merge runs
+#: `python3 -I`, so a `json.py` in the project is never imported.
+@needs_bash
+def test_a_json_py_in_the_project_is_not_imported_by_the_merge(env: Env) -> None:
+    (env.project / "json.py").write_text("raise SystemExit('planted json.py ran')\n")
+    (env.project / ".mcp.json").write_text(json.dumps({"mcpServers": {"other": {"url": "x"}}}))
+
+    result = env.install("claude")
+
+    _ok(result)
+    assert "planted" not in result.stdout + result.stderr
+    cfg = json.loads((env.project / ".mcp.json").read_text())
+    assert cfg["mcpServers"]["other"] == {"url": "x"}
+    assert cfg["mcpServers"]["orchestrator"]["url"] == f"{BASE}/mcp"
+
+
+#: Epic 3 retro R4 / C2 (orchestrator-instance-guide close-out, 2026-11-13): TOML literal
+#: strings are spellings too; missing one appends a second table and codex refuses the file.
+@needs_bash
+@pytest.mark.parametrize(
+    "original",
+    [
+        "[mcp_servers.'orchestrator']\nurl = 'https://old.example/mcp'\n",
+        "mcp_servers.'orchestrator'.url = 'https://old.example/mcp'\n",
+        "[mcp_servers]\n'orchestrator' = { url = 'https://old.example/mcp' }\n",
+    ],
+)
+def test_a_single_quoted_codex_entry_is_kept(env: Env, original: str) -> None:
+    (env.codex / "config.toml").write_bytes(original.encode())
+
+    result = env.install("codex")
+
+    _ok(result)
+    assert (env.codex / "config.toml").read_bytes() == original.encode()
+    assert "kept" in result.stdout
+
+
+@needs_bash
+def test_a_single_quoted_codex_url_is_read_back(env: Env) -> None:
+    (env.codex / "config.toml").write_text(
+        "[mcp_servers.'orchestrator']\nurl = 'https://old.example/mcp'\n"
+    )
+
+    result = env.install("codex")
+
+    _ok(result)
+    assert "https://old.example/mcp" in result.stdout
+
+
 @needs_bash
 def test_an_existing_orchestrator_entry_is_kept_byte_for_byte(env: Env) -> None:
     original = json.dumps({"mcpServers": {"orchestrator": {"url": "https://old.example/mcp"}}})
