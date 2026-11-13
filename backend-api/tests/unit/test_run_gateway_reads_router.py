@@ -8,6 +8,7 @@ from uuid import UUID
 
 import pytest
 
+from orchestrator.api.routers import run_gateway_reads
 from orchestrator.domain.entities.facts import GatewayRead, UsageFact
 from orchestrator.domain.ids import new_id
 from tests.unit.application.metrics_fixed_run import RUN_ID, S0, T0
@@ -75,3 +76,11 @@ async def test_unknown_run_is_404_problem_json_and_no_bearer_401(api: Api) -> No
     assert unknown.status_code == HTTP_NOT_FOUND
     assert unknown.headers["content-type"].startswith(PROBLEM)
     assert anonymous.status_code == HTTP_UNAUTHORIZED
+
+
+def test_the_router_declares_the_one_operation() -> None:
+    operations = {
+        (r.path, tuple(sorted(r.methods)))
+        for r in run_gateway_reads.router.routes  # type: ignore[attr-defined]
+    }
+    assert operations == {("/runs/{run_id}/metrics/gateway-reads", ("GET",))}
