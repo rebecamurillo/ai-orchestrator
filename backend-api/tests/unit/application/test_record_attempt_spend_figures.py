@@ -67,6 +67,29 @@ def test_gateway_below_harness_parks_on_the_harness_figure() -> None:
     assert park.reason == "budget $10.50 / $10.25"
 
 
+def test_attempts_reporting_through_different_sources_add_up_and_park() -> None:
+    """Operator answer, 2026-11-13 (story 5): the gate is summed per attempt."""
+    world = World(budget_usd=Decimal("9"))
+    world.record(world.attempt(1), settled("5"), None)
+
+    run = world.record(world.attempt(2), PROVISIONAL, usage("5"))
+
+    assert run.gate_spend_usd == Decimal("10.00")
+    park = budget.check(run)
+    assert park is not None
+    assert park.reason == "budget $10.00 / $9.00"
+
+
+def test_a_replayed_provisional_read_keeps_the_settled_gateway_figure() -> None:
+    world = World()
+    attempt = world.attempt()
+    world.record(attempt, settled("4"), None)
+
+    run = world.record(attempt, PROVISIONAL, None)
+
+    assert (run.gateway_spend_usd, run.gate_spend_usd) == (Decimal("4"), Decimal("4"))
+
+
 def test_a_disabled_gateway_leaves_the_harness_money_as_the_gate() -> None:
     world = World()
 
@@ -104,7 +127,7 @@ def test_two_attempts_sum_and_a_replay_changes_nothing() -> None:
         assert (got.gateway_spend_usd, got.harness_spend_usd, got.gate_spend_usd) == (
             Decimal("3"),
             Decimal("3.30"),
-            Decimal("3.30"),
+            Decimal("3.50"),
         )
     assert len(world.reads.reads) == 3  # noqa: PLR2004
 

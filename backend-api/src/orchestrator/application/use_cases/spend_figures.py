@@ -87,29 +87,42 @@ def gateway_read_for(
 
 
 def figures(reads_by_attempt: Iterable[Sequence[StoredRead]]) -> SpendFigures:
-    """`reads_by_attempt`: one newest-first sequence of stored reads per attempt."""
+    """`reads_by_attempt`: one newest-first sequence of stored reads per attempt.
+
+    Per attempt, the gateway figure is its newest settled read, else its newest provisional
+    one: settled beats provisional, so a replay's provisional read never hides a settled
+    figure. The gate sums, per attempt, the higher of that attempt's reported figures
+    (operator answer 2026-11-13, story 5): a max of the two Run totals reads below the real
+    spend when attempts report through different sources.
+    """
     gateway = _ZERO
     harness = _ZERO
+    gate = _ZERO
     gateway_reported = False
     harness_reported = False
     for reads in reads_by_attempt:
-        if reads and not reads[0][0].provisional:
-            gateway += reads[0][0].usd
+        reported: list[Decimal] = []
+        settled = next((read for read, _ in reads if not read.provisional), None)
+        newest = settled or (reads[0][0] if reads else None)
+        if newest is not None:
+            gateway += newest.usd
+        if settled is not None:
+            reported.append(settled.usd)
             gateway_reported = True
         money = next(
             (rows for _, usage in reads if (rows := _harness_money(usage))),
             (),
         )
         if money:
-            harness += sum((u.usd or _ZERO for u in money), _ZERO)
+            attempt_harness = sum((u.usd or _ZERO for u in money), _ZERO)
+            harness += attempt_harness
+            reported.append(attempt_harness)
             harness_reported = True
-    reported = [
-        total for total, flag in ((gateway, gateway_reported), (harness, harness_reported)) if flag
-    ]
+        gate += max(reported, default=_ZERO)
     return SpendFigures(
         gateway_usd=gateway,
         harness_usd=harness,
-        gate_usd=max(reported, default=_ZERO),
+        gate_usd=gate,
         gateway_reported=gateway_reported,
         harness_reported=harness_reported,
     )

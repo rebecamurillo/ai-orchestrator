@@ -111,7 +111,8 @@ def test_harness_only_run_gates_on_the_harness() -> None:
     assert (got.gate_usd, got.gateway_reported, got.harness_reported) == (Decimal("3"), False, True)
 
 
-def test_two_attempts_sum_and_the_higher_total_gates() -> None:
+def test_two_attempts_sum_and_the_higher_figure_per_attempt_gates() -> None:
+    """AC4 as amended by the operator answer, 2026-11-13 (story 5): gate $3.50, not $3.30."""
     got = figures(
         [[stored("1", harness="1.50")], [stored("2", harness="1.80")]],
     )
@@ -119,7 +120,7 @@ def test_two_attempts_sum_and_the_higher_total_gates() -> None:
     assert (got.gateway_usd, got.harness_usd, got.gate_usd) == (
         Decimal("3"),
         Decimal("3.30"),
-        Decimal("3.30"),
+        Decimal("3.50"),
     )
 
 
@@ -133,10 +134,22 @@ def test_the_newest_read_is_the_one_counted() -> None:
     assert got.gateway_usd == Decimal("4")
 
 
-def test_a_provisional_newest_read_reports_no_gateway_money() -> None:
-    got = figures([[stored("0", at=2, provisional=True), stored("9", at=1)]])
+def test_a_newer_provisional_read_never_hides_a_settled_one() -> None:
+    got = figures([[stored("3", at=2, provisional=True), stored("4", at=1)]])
 
-    assert (got.gateway_usd, got.gateway_reported) == (0, False)
+    assert (got.gateway_usd, got.gate_usd, got.gateway_reported) == (
+        Decimal("4"),
+        Decimal("4"),
+        True,
+    )
+
+
+def test_only_provisional_reads_use_the_newest_one_and_report_nothing() -> None:
+    got = figures(
+        [[stored("2", at=2, provisional=True), stored("1", at=1, provisional=True)]],
+    )
+
+    assert (got.gateway_usd, got.gate_usd, got.gateway_reported) == (Decimal("2"), 0, False)
 
 
 def test_the_harness_row_comes_from_the_newest_read_that_carries_one() -> None:
