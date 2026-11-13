@@ -67,6 +67,7 @@ TEST_CLASSES: tuple[FileClass, ...] = ("test_unit", "test_e2e", "test_unclassifi
 KINDS = ("added", "modified", "deleted")
 _TYPE_ESCAPES = tuple(re.compile(pattern) for pattern in TYPE_ESCAPE_PATTERNS)
 _HUNK = re.compile(r"^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@")
+_HUNK_NEW_START = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)")
 _ESCAPES = {"n": 10, "t": 9, "a": 7, "b": 8, "f": 12, "r": 13, "v": 11, '"': 34, "\\": 92}
 _OCTAL = re.compile(r"[0-7]{3}")
 _KIND_OF = {"A": "added", "C": "added", "M": "modified", "T": "modified", "R": "modified"}
@@ -154,6 +155,57 @@ def added_lines(diff_text: str) -> dict[str, tuple[str, ...]]:
             if path is not None and added:
                 found.setdefault(path, []).extend(added)
     return {key: tuple(value) for key, value in found.items()}
+
+
+def _hunk_numbers(
+    lines: list[str], start: int, counts: tuple[int, int], first: int
+) -> tuple[list[int], int]:
+    """The head line numbers one hunk adds, read by the counts in its header, and the next index."""
+    old, new = counts
+    numbers: list[int] = []
+    number = first
+    index = start
+    while (old > 0 or new > 0) and index < len(lines):
+        body = lines[index]
+        index += 1
+        if body.startswith("\\"):
+            continue
+        if body.startswith("-"):
+            old -= 1
+            continue
+        if body.startswith("+"):
+            new -= 1
+            numbers.append(number)
+        else:
+            old -= 1
+            new -= 1
+        number += 1
+    return numbers, index
+
+
+def added_line_numbers(diff_text: str) -> dict[str, frozenset[int]]:
+    """Head path → the line numbers, in the head file, of the lines the diff adds there.
+
+    Read from a zero-context diff by the same header state as `added_lines`.
+    """
+    found: dict[str, set[int]] = {}
+    lines = diff_text.split("\n")
+    path: str | None = None
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        index += 1
+        if line.startswith("diff --git"):
+            path = None
+        elif line.startswith("+++ "):
+            path = _head_path(line[4:])
+        elif (hunk := _HUNK.match(line)) is not None:
+            counts = tuple(int(g) if g is not None else 1 for g in hunk.groups())
+            first = int(_HUNK_NEW_START.match(line).group(1))  # type: ignore[union-attr]
+            numbers, index = _hunk_numbers(lines, index, (counts[0], counts[1]), first)
+            if path is not None and numbers:
+                found.setdefault(path, set()).update(numbers)
+    return {key: frozenset(value) for key, value in found.items()}
 
 
 def _basename_matches(path: str, patterns: Sequence[str]) -> bool:

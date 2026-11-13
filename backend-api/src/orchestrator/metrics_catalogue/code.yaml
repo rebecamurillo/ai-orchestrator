@@ -448,8 +448,17 @@
   fingerprint_group: true
   methods:
   - n: 1
-    description: Manifest entries compared between base and head and counted as added, removed or upgraded.
+    description: The changed lock files compared between base and head (the manifest only where no lock
+      file exists at head in its folder), counted as dependencies added, removed or upgraded.
     parameters:
+      lock_files:
+      - package-lock.json
+      - pnpm-lock.yaml
+      - uv.lock
+      - poetry.lock
+      manifests:
+      - package.json
+      - pyproject.toml
       rate_min_lines: 50
       per_lines: 100
 - id: code.deps_not_in_registry
@@ -465,15 +474,20 @@
   additive: false
   missing_words:
   - not run
+  - not checked
   - raw only
   - partial
   limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
   fingerprint_group: true
   methods:
   - n: 1
-    description: Each added or upgraded dependency is looked up in its public registry; the count is those
-      not found.
+    description: Each added dependency is looked up in its registry (the public one, or the declaration's
+      for that ecosystem); the count is those the registry does not know. A lookup that cannot be made
+      reads not run, and a private registry that does not answer reads not checked.
     parameters:
+      registries:
+        npm: https://registry.npmjs.org
+        pypi: https://pypi.org
       rate_min_lines: 50
       per_lines: 100
 - id: code.deps_known_vulns
@@ -495,9 +509,32 @@
   fingerprint_group: true
   methods:
   - n: 1
-    description: Each added or upgraded dependency version is looked up in the advisory database; the
-      count is those with a known vulnerability.
+    description: osv-scanner scans the head's lock files that changed; the count is the added dependencies
+      whose name and version it reports as vulnerable. Dependencies read from a manifest alone have no
+      lock file and read not run.
     parameters:
+      lock_files:
+      - package-lock.json
+      - pnpm-lock.yaml
+      - uv.lock
+      - poetry.lock
+      osv_command:
+      - scan
+      - --lockfile
+      - '{file}'
+      - --format
+      - sarif
+      - --output-file
+      - '{report}'
+      osv_json_command:
+      - scan
+      - --lockfile
+      - '{file}'
+      - --format
+      - json
+      - --output-file
+      - '{report}'
+      timeout_min: 10
       rate_min_lines: 50
       per_lines: 100
 - id: code.deps_recent
@@ -513,16 +550,20 @@
   additive: false
   missing_words:
   - not run
+  - not checked
   - raw only
   - partial
   limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
   fingerprint_group: true
   methods:
   - n: 1
-    description: Each added or upgraded dependency version whose registry publication date is less than
-      30 days before the analysis.
+    description: Each added dependency whose package the registry first published less than 30 days before
+      the analysis (the package's first publication, not the version's).
     parameters:
       recent_days: 30
+      registries:
+        npm: https://registry.npmjs.org
+        pypi: https://pypi.org
       rate_min_lines: 50
       per_lines: 100
 - id: code.deps_licences
@@ -538,14 +579,20 @@
   additive: false
   missing_words:
   - not run
+  - not checked
   - raw only
   - partial
   limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
   fingerprint_group: true
   methods:
   - n: 1
-    description: The licence each added dependency declares in its registry, counted per licence.
+    description: The licence the registry gives for each added dependency (the version's, else the package's),
+      counted per licence; none declared when the registry gives none. Only the ecosystem, the name and the
+      version are sent.
     parameters:
+      registries:
+        npm: https://registry.npmjs.org
+        pypi: https://pypi.org
       rate_min_lines: 50
       per_lines: 100
 - id: code.duplication_added
@@ -569,9 +616,16 @@
   fingerprint_group: true
   methods:
   - n: 1
-    description: jscpd reports duplicated lines in the changed files; the count is the duplicated lines
-      the change adds.
+    description: jscpd runs on the head's changed production files; the count is the distinct added lines
+      that lie inside a clone fragment, a clone that involves no added line counting nothing.
     parameters:
+      jscpd_command:
+      - --reporters
+      - sarif,json
+      - --output
+      - '{dir}'
+      - '{files}'
+      timeout_min: 10
       small_change_lines: 200
       rate_min_lines: 50
       per_lines: 100
@@ -589,15 +643,23 @@
   missing_words:
   - not run
   - partial
-  limits: The Run row holds the larger of the repositories' values, not their sum; no rate is computed.
+  limits: The count is summed over the repositories and the worst is the larger of their values; no rate
+    is computed.
   fingerprint_group: true
   methods:
   - n: 1
-    description: lizard measures the changed functions; the count is those above cyclomatic complexity
-      15, and the worst value is the largest.
+    description: lizard (`--csv`) measures the functions of the head's changed files; the count is those
+      whose line range contains an added line and whose cyclomatic complexity is above 15, and the
+      worst is the largest of them (0 when none is above).
     parameters:
       threshold: 15
-      combine: max
+      lizard_command:
+      - --csv
+      - '{files}'
+      timeout_min: 10
+      combine:
+        count: sum
+        worst: max
 - id: code.functions_over_cognitive
   label: functions above the cognitive threshold · worst
   group: code
@@ -611,13 +673,23 @@
   additive: false
   missing_words:
   - not run
+  - n/a
   - partial
-  limits: The Run row holds the larger of the repositories' values, not their sum; no rate is computed.
+  limits: The count is summed over the repositories and the worst is the larger of their values; no rate
+    is computed. A language lizard reports no cognitive value for reads n/a.
   fingerprint_group: true
   methods:
   - n: 1
-    description: lizard measures the changed functions; the count is those above cognitive complexity
-      15, and the worst value is the largest.
+    description: lizard (`--csv -Ecognitive`) measures the functions of the head's changed files; the count
+      is those whose line range contains an added line and whose cognitive complexity is above 15,
+      and the worst is the largest of them (0 when none is above).
     parameters:
       threshold: 15
-      combine: max
+      lizard_cognitive_command:
+      - --csv
+      - -Ecognitive
+      - '{files}'
+      timeout_min: 10
+      combine:
+        count: sum
+        worst: max

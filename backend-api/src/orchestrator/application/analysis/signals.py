@@ -8,17 +8,21 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import datetime
 from typing import Any, Literal, cast
 from uuid import UUID
 
 from orchestrator.application.analysis.inputs import RepositoryInputs, slug
 from orchestrator.application.analysis.secrets import GITLEAKS, scan_secrets
 from orchestrator.application.analysis.tier1a import Count, added_lines, count_tier1a
+from orchestrator.application.analysis.tier1b import collect_tier1b
+from orchestrator.application.analysis.toolset import toolset_records, with_toolset
 from orchestrator.domain.entities.analysis import Analysis, AnalysisArtifact, AnalysisStatus
 from orchestrator.domain.ports.analysis import AnalysisRepository
 from orchestrator.domain.ports.analysis_tools import AnalysisTools
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.package_lookup import PackageLookup
 from orchestrator.domain.ports.workspace import Workspace
 
 SUMMARY_TOOL = "summary"
@@ -77,6 +81,54 @@ def collect_tier1a(
         (secrets.artifact,) if secrets.artifact is not None else (),
         {GITLEAKS: secrets.version} if secrets.version else {},
     )
+
+
+def collect_signals(  # noqa: PLR0913 — the repository's inputs and every port the two tiers read
+    prepared: RepositoryInputs,
+    *,
+    git: Git,
+    scratch_root: Workspace,
+    tools: AnalysisTools,
+    lookup: PackageLookup,
+    lookups: bool,
+    now: datetime,
+    new_id: Callable[[], UUID],
+) -> tuple[Analysis, RepositorySignals]:
+    """Tiers 1a and 1b of one repository, and the analysis stamped with its toolset."""
+    analysis = prepared.analysis
+    first = collect_tier1a(prepared, git=git, scratch_root=scratch_root, tools=tools, new_id=new_id)
+    if analysis.status == "failed" or prepared.scratch is None:
+        records = toolset_records(
+            {},
+            vulnerability_db_date=None,
+            lookup_date=None,
+            declaration_hash=analysis.declaration_hash,
+        )
+        return with_toolset(analysis, records), first
+    second = collect_tier1b(
+        prepared,
+        git=git,
+        scratch_root=scratch_root,
+        tools=tools,
+        lookup=lookup,
+        lookups=lookups,
+        now=now,
+        new_id=new_id,
+    )
+    merged = replace(
+        first,
+        counts=(*first.counts, *second.counts),
+        words={**first.words, **second.words},
+        artifacts=(*first.artifacts, *second.artifacts),
+        tool_versions={**first.tool_versions, **second.tool_versions},
+    )
+    records = toolset_records(
+        merged.tool_versions,
+        vulnerability_db_date=second.vulnerability_db_date,
+        lookup_date=second.lookup_date,
+        declaration_hash=analysis.declaration_hash,
+    )
+    return with_toolset(analysis, records), merged
 
 
 def store_signals(repo: AnalysisRepository, analysis: Analysis, signals: RepositorySignals) -> None:

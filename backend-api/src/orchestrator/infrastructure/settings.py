@@ -230,6 +230,11 @@ class Settings(BaseSettings):
     chat_poll_seconds: int = 30
     chat_reminder_hours: Annotated[int, Field(ge=1)] = 4
 
+    # ── Code analysis ────────────────────────────────────────────────────────
+    #: `off`: no package name leaves the instance and every lookup signal reads
+    #: `not run — lookups off`.
+    analysis_lookups: Literal["on", "off"] = "on"
+
     # ── Pinned tool versions carried by the image (AD-16) ────────────────────
     bmad_version: str = "6.12.4"
     claude_code_version: str = "2.1.319"

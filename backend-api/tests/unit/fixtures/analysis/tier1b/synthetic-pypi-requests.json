@@ -1,0 +1,16 @@
+{
+  "info": {
+    "name": "requests",
+    "version": "2.32.3",
+    "license": "Apache 2.0",
+    "license_expression": null
+  },
+  "releases": {
+    "2.32.3": [{ "upload_time_iso_8601": "2024-05-29T15:37:47.000000Z" }],
+    "0.2.0": [
+      { "upload_time_iso_8601": "2011-02-14T10:00:00.000000Z" },
+      { "upload_time_iso_8601": "2011-02-13T09:00:00.000000Z" }
+    ],
+    "0.1.0": []
+  }
+}
