@@ -1,0 +1,138 @@
+- id: cost.gateway
+  label: gateway
+  group: cost
+  level: H
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - attempt
+  - role
+  - model
+  unit: USD
+  source: model gateway spend log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - list-price equivalent
+  - not recorded
+  - n/a — template has no story frame
+  limits: A Run without a gateway has no figure. The gateway reports prompt and completion tokens only,
+    so no token class comes from it.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: 'Money the model gateway recorded for the work in scope: the sum of the gateway''s spend-log
+      rows tied to the attempts in that scope. On a subscription Run the figure is a list-price equivalent,
+      not money charged.'
+    parameters: {}
+- id: cost.harness
+  label: harness
+  group: cost
+  level: H
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - attempt
+  - role
+  - model
+  unit: USD
+  source: harness `result` event in the attempt log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Codex does not report a cost, so the figure reads not available for it. The harness figure can
+    differ from the gateway's; both are kept and never combined.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: 'Money the harness reported for the work in scope: the cost in the harness''s own `result`
+      event, summed over the attempts in that scope.'
+    parameters: {}
+- id: cost.figure_gap
+  label: difference between figures
+  group: cost
+  level: H
+  scopes:
+  - run
+  unit: USD
+  source: cost.gateway and cost.harness
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: Needs both figures; absent when either is missing.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The absolute difference between the Run's gateway cost and its harness cost, shown beside
+      both figures.
+    parameters: {}
+- id: cost.retries
+  label: of which retries
+  group: cost
+  level: H
+  scopes:
+  - run
+  - epic
+  - story
+  unit: USD
+  source: attempts n > 1
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: A subset of the total cost, never added to it.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The part of the cost that came from attempts after the first of a step (attempt number
+      above 1), summed per figure.
+    parameters: {}
+- id: cost.failures
+  label: of which failed attempts
+  group: cost
+  level: H
+  scopes:
+  - run
+  - epic
+  - story
+  unit: USD
+  source: attempts not done
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: A subset of the total cost, never added to it; an attempt can be both a retry and a failure.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The part of the cost that came from attempts that did not end done, summed per figure.
+    parameters: {}
+- id: cost.per_story_done
+  label: cost per story done, both figures
+  group: cost
+  level: A
+  scopes:
+  - run
+  unit: USD
+  source: derived
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: 'A ratio: never combined across the two figures, absent when no story is done.'
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Run cost divided by the number of stories done, computed once for the gateway figure
+      and once for the harness figure.
+    parameters: {}

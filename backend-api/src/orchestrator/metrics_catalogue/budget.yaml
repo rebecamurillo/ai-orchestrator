@@ -1,0 +1,37 @@
+- id: budget.set
+  label: budget
+  group: budget
+  level: H
+  scopes:
+  - run
+  unit: USD
+  source: Run record
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: null
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The budget the Run was created with.
+    parameters: {}
+- id: budget.used
+  label: budget used
+  group: budget
+  level: H
+  scopes:
+  - run
+  unit: ratio
+  source: the higher of the two cost figures, as the budget gate uses it
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: A ratio, never a bar; absent when the Run has no budget.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The higher of the gateway and harness cost divided by the budget, the same figure the
+      budget gate reads.
+    parameters: {}

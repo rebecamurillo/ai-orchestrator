@@ -179,6 +179,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metrics/catalogue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every metric the instance describes */
+        get: operations["read_catalogue_api_v1_metrics_catalogue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ping": {
         parameters: {
             query?: never;
@@ -1198,6 +1215,49 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** CatalogueEntryOut */
+        CatalogueEntryOut: {
+            /** Additive */
+            additive: boolean | "within_scope_type";
+            /** Component Of */
+            component_of: string | null;
+            /** Fingerprint Group */
+            fingerprint_group: boolean;
+            /** Group */
+            group: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "H" | "A";
+            /** Limits */
+            limits: string | null;
+            /** Methods */
+            methods: components["schemas"]["CatalogueMethodOut"][];
+            /** Missing Words */
+            missing_words: string[];
+            /** Scopes */
+            scopes: string[];
+            /** Source */
+            source: string;
+            /** Unit */
+            unit: string;
+        };
+        /** CatalogueMethodOut */
+        CatalogueMethodOut: {
+            /** Description */
+            description: string;
+            /** N */
+            n: number;
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
+            };
+        };
         /**
          * ChannelIn
          * @description `PUT` body. Without `token`, the stored one is kept for the same provider; `off`
@@ -1898,6 +1958,13 @@ export interface components {
             kind: string;
             /** Label */
             label: string;
+        };
+        /** Page[CatalogueEntryOut] */
+        Page_CatalogueEntryOut_: {
+            /** Items */
+            items: components["schemas"]["CatalogueEntryOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** Page[HarnessOut] */
         Page_HarnessOut_: {
@@ -3636,6 +3703,36 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                     "text/plain": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_catalogue_api_v1_metrics_catalogue_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_CatalogueEntryOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
         };

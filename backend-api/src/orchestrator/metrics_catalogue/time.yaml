@@ -1,0 +1,198 @@
+- id: time.wall
+  label: wall-clock
+  group: time
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  unit: seconds
+  source: Run record start to end
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: Includes the time the Run waited on you.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Time from the start to the end of the Run, epic or story as the Run record holds it.
+    parameters: {}
+- id: time.machine
+  label: machine time
+  group: time
+  level: H
+  scopes:
+  - run
+  - epic
+  - story
+  unit: seconds
+  source: derived
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: Derived from wall-clock and the parked time.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Wall-clock minus the time spent waiting on you.
+    parameters: {}
+- id: time.parked
+  label: waiting on you
+  group: time
+  level: H
+  scopes:
+  - run
+  - park
+  unit: seconds
+  source: gate record park to resume
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: A park still open has no end; it counts up to now.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Time from a park to its resume, per park, and its sum for the Run.
+    parameters: {}
+- id: time.attempt_seconds
+  label: attempt time
+  group: time
+  level: A
+  scopes:
+  - run
+  - role
+  - model
+  unit: seconds
+  source: attempts
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  limits: 'Not a share of wall-clock: attempts can overlap and are not the whole Run.'
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The sum of attempt durations in scope.
+    parameters: {}
+- id: time.operator_active
+  label: your active time
+  group: time
+  level: A
+  scopes:
+  - run
+  unit: seconds
+  source: Run record `active_seconds`
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: null
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The seconds the Run record counts as your active time.
+    parameters: {}
+- id: time.story_wall_stats
+  label: 'story wall-clock: average, median, longest'
+  group: time
+  level: A
+  scopes:
+  - run
+  - epic
+  unit: seconds
+  source: Run record
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: Statistics, not sums.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Average, median and longest wall-clock over the stories in scope.
+    parameters: {}
+- id: time.epic_wall_stats
+  label: 'epic wall-clock: average, median, longest'
+  group: time
+  level: A
+  scopes:
+  - run
+  unit: seconds
+  source: Run record
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: Statistics, not sums.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Average, median and longest wall-clock over the epics of the Run.
+    parameters: {}
+- id: time.by_role
+  label: time per role
+  group: time
+  level: A
+  scopes:
+  - run
+  - role
+  unit: seconds
+  source: attempts
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: Shown on the Run page only.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Attempt time of the Run split by the role that ran each attempt.
+    parameters: {}
+- id: time.retries
+  label: of which retries
+  group: time
+  level: H
+  scopes:
+  - run
+  - epic
+  - story
+  unit: seconds
+  source: attempts n > 1
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: A subset of attempt time.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The part of attempt time that came from attempts after the first of a step.
+    parameters: {}
+- id: time.failures
+  label: of which failed attempts
+  group: time
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  unit: seconds
+  source: attempts not done
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: A subset of attempt time.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The part of attempt time that came from attempts that did not end done.
+    parameters: {}

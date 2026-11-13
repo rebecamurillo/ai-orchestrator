@@ -1,0 +1,303 @@
+- id: tokens.input
+  label: input (uncached)
+  group: tokens
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - attempt
+  - role
+  - model
+  unit: tokens
+  source: harness `modelUsage` in the attempt log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: 'Harness only: the gateway does not split token classes.'
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Input tokens the model read without a cache hit, from the harness's per-model usage,
+      summed in scope.
+    parameters: {}
+- id: tokens.output
+  label: output
+  group: tokens
+  level: H
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - attempt
+  - role
+  - model
+  unit: tokens
+  source: harness `modelUsage` in the attempt log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Harness only.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Output tokens the model produced, from the harness's per-model usage, summed in scope.
+      Includes thinking tokens.
+    parameters: {}
+- id: tokens.cache_read
+  label: cache read
+  group: tokens
+  level: H
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - attempt
+  - role
+  - model
+  unit: tokens
+  source: harness `modelUsage` in the attempt log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Harness only.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Input tokens served from the prompt cache, from the harness's per-model usage, summed
+      in scope.
+    parameters: {}
+- id: tokens.cache_write
+  label: cache write
+  group: tokens
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - attempt
+  - role
+  - model
+  unit: tokens
+  source: harness `modelUsage` in the attempt log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Harness only. The sum of its two components; never add the components again.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: 'Input tokens written to the prompt cache: the 5-minute and the 1-hour writes together.'
+    parameters: {}
+- id: tokens.cache_write_5m
+  label: cache write, 5-minute
+  group: tokens
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - attempt
+  - role
+  - model
+  unit: tokens
+  source: attempt log (`modelUsage`)
+  component_of: tokens.cache_write
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Harness only. Part of tokens.cache_write.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Cache-write tokens with the 5-minute lifetime, read from the attempt log's per-model
+      usage.
+    parameters: {}
+- id: tokens.cache_write_1h
+  label: cache write, 1-hour
+  group: tokens
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - attempt
+  - role
+  - model
+  unit: tokens
+  source: attempt log
+  component_of: tokens.cache_write
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Harness only. Part of tokens.cache_write.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Cache-write tokens with the 1-hour lifetime, read from the attempt log's per-model usage.
+    parameters: {}
+- id: tokens.thinking
+  label: thinking (inside output, never added again)
+  group: tokens
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - attempt
+  - role
+  - model
+  unit: tokens
+  source: attempt log
+  component_of: tokens.output
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Harness only. Already inside tokens.output; adding it again double-counts.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Thinking tokens, a part of the output tokens, read from the attempt log.
+    parameters: {}
+- id: tokens.gateway_prompt
+  label: prompt tokens, as the gateway reports them
+  group: tokens
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - attempt
+  unit: tokens
+  source: gateway spend log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: The gateway reports prompt and completion only; it does not split cache classes.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Prompt tokens in the gateway's spend-log rows tied to the attempts in scope.
+    parameters: {}
+- id: tokens.gateway_completion
+  label: completion tokens, as the gateway reports them
+  group: tokens
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - attempt
+  unit: tokens
+  source: gateway spend log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: The gateway reports prompt and completion only; it does not split cache classes.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Completion tokens in the gateway's spend-log rows tied to the attempts in scope.
+    parameters: {}
+- id: tokens.cache_hit_share
+  label: cache hit share
+  group: tokens
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  - role
+  unit: ratio
+  source: derived
+  component_of: null
+  additive: false
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: A ratio of harness figures; absent when the denominator is zero.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Cache read tokens divided by the sum of cache read, cache write and uncached input tokens.
+    parameters: {}
+- id: tokens.recorded_in
+  label: recorded input tokens
+  group: tokens
+  level: A
+  scopes:
+  - attempt
+  - step
+  - story
+  - epic
+  - run
+  unit: tokens
+  source: the attempt record
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Describes today's stored figure exactly; it does not split cache classes.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The attempt's `tokens_in` as stored today, summed in scope.
+    parameters: {}
+- id: tokens.recorded_out
+  label: recorded output tokens
+  group: tokens
+  level: A
+  scopes:
+  - attempt
+  - step
+  - story
+  - epic
+  - run
+  unit: tokens
+  source: the attempt record
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Describes today's stored figure exactly.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The attempt's `tokens_out` as stored today, summed in scope.
+    parameters: {}

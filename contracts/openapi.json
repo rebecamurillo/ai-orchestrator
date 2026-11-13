@@ -668,6 +668,138 @@
         "title": "CardOut",
         "type": "object"
       },
+      "CatalogueEntryOut": {
+        "properties": {
+          "additive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "const": "within_scope_type",
+                "type": "string"
+              }
+            ],
+            "title": "Additive"
+          },
+          "component_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Of"
+          },
+          "fingerprint_group": {
+            "title": "Fingerprint Group",
+            "type": "boolean"
+          },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "H",
+              "A"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limits"
+          },
+          "methods": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogueMethodOut"
+            },
+            "title": "Methods",
+            "type": "array"
+          },
+          "missing_words": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Words",
+            "type": "array"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "group",
+          "level",
+          "scopes",
+          "unit",
+          "source",
+          "component_of",
+          "additive",
+          "missing_words",
+          "limits",
+          "fingerprint_group",
+          "methods"
+        ],
+        "title": "CatalogueEntryOut",
+        "type": "object"
+      },
+      "CatalogueMethodOut": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          }
+        },
+        "required": [
+          "n",
+          "description",
+          "parameters"
+        ],
+        "title": "CatalogueMethodOut",
+        "type": "object"
+      },
       "ChannelIn": {
         "description": "`PUT` body. Without `token`, the stored one is kept for the same provider; `off`\nneeds no other field and deletes the channel.",
         "properties": {
@@ -2607,6 +2739,33 @@
           "call"
         ],
         "title": "NodeOut",
+        "type": "object"
+      },
+      "Page_CatalogueEntryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogueEntryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[CatalogueEntryOut]",
         "type": "object"
       },
       "Page_HarnessOut_": {
@@ -6741,6 +6900,47 @@
         "summary": "The kit installer, to pipe into bash from a project repository",
         "tags": [
           "kit"
+        ]
+      }
+    },
+    "/api/v1/metrics/catalogue": {
+      "get": {
+        "operationId": "read_catalogue_api_v1_metrics_catalogue_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_CatalogueEntryOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Every metric the instance describes",
+        "tags": [
+          "metrics"
         ]
       }
     },
