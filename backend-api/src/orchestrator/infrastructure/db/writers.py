@@ -144,6 +144,7 @@ def open_spend_ports(session_factory: SessionFactory, gateway: Gateway) -> Itera
             gateway_reads=SQLAlchemyGatewayReadRepository(session),
             clock=SystemClock(),
             uow=SessionUnitOfWork(session),
+            fact_sets=SQLAlchemyFactSetRepository(session),
         )
     finally:
         session.close()

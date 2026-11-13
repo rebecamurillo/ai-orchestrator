@@ -86,21 +86,35 @@ def gateway_read_for(
     return read, tuple(usage)
 
 
-def figures(reads_by_attempt: Iterable[Sequence[StoredRead]]) -> SpendFigures:
-    """`reads_by_attempt`: one newest-first sequence of stored reads per attempt.
+@dataclass(frozen=True)
+class AttemptRows:
+    """What one attempt's figures are computed from: its stored reads (newest first) and the
+    harness `money` rows of one of its fact sets."""
 
-    Per attempt, the gateway figure is its newest settled read, else its newest provisional
+    reads: Sequence[StoredRead] = ()
+    fact_money: tuple[UsageFact, ...] = ()
+
+
+def figures(reads_by_attempt: Iterable[Sequence[StoredRead]]) -> SpendFigures:
+    """`figures_of` over attempts that carry reads only."""
+    return figures_of(AttemptRows(reads=reads) for reads in reads_by_attempt)
+
+
+def figures_of(attempts: Iterable[AttemptRows]) -> SpendFigures:
+    """Per attempt, the gateway figure is its newest settled read, else its newest provisional
     one: settled beats provisional, so a replay's provisional read never hides a settled
-    figure. The gate sums, per attempt, the higher of that attempt's reported figures
-    (operator answer 2026-11-13, story 5): a max of the two Run totals reads below the real
-    spend when attempts report through different sources.
+    figure. The harness figure is the harness money rows of its newest read that has any,
+    else its fact-set rows — counted once. The gate sums, per attempt, the higher of that
+    attempt's reported figures (operator answers 2026-11-13, stories 5 and 6): a max of the
+    two Run totals reads below the real spend when attempts report through different sources.
     """
     gateway = _ZERO
     harness = _ZERO
     gate = _ZERO
     gateway_reported = False
     harness_reported = False
-    for reads in reads_by_attempt:
+    for attempt in attempts:
+        reads = attempt.reads
         reported: list[Decimal] = []
         settled = next((read for read, _ in reads if not read.provisional), None)
         newest = settled or (reads[0][0] if reads else None)
@@ -111,7 +125,7 @@ def figures(reads_by_attempt: Iterable[Sequence[StoredRead]]) -> SpendFigures:
             gateway_reported = True
         money = next(
             (rows for _, usage in reads if (rows := _harness_money(usage))),
-            (),
+            _harness_money(attempt.fact_money),
         )
         if money:
             attempt_harness = sum((u.usd or _ZERO for u in money), _ZERO)

@@ -19,7 +19,8 @@ about, so summing again never double-counts.
 
 **Not `WriterPorts`.** `SpendPorts` is its own bundle (Design Notes): a different write, a
 different, smaller dependency set — `gateway`, `runs`, `steps`, `attempts`,
-`gateway_reads`, `clock`, `uow` — no `records`, since nothing here appends a gate record.
+`gateway_reads`, `clock`, `uow`, and an optional `fact_sets` the budget gate reads migrated
+harness money through — no `records`, since nothing here appends a gate record.
 The clock stamps the `gateway_read` each call stores (SPEC CAP-5).
 """
 
@@ -27,13 +28,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from uuid import UUID
 
-from orchestrator.application.use_cases.spend_figures import StoredRead, figures, gateway_read_for
+from orchestrator.application.use_cases.spend_figures import (
+    AttemptRows,
+    figures_of,
+    gateway_read_for,
+)
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.facts import UsageFact
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
-from orchestrator.domain.ports.facts import GatewayReadRepository
+from orchestrator.domain.ports.facts import FactSetRepository, GatewayReadRepository
 from orchestrator.domain.ports.gateway import AttemptSpend, Gateway, ModelSpend
 from orchestrator.domain.ports.harness import HarnessUsage
 from orchestrator.domain.ports.repositories import (
@@ -59,6 +66,7 @@ class SpendPorts:
     gateway_reads: GatewayReadRepository
     clock: Clock
     uow: UnitOfWork
+    fact_sets: FactSetRepository | None = None
 
 
 def record_attempt_spend(
@@ -86,8 +94,8 @@ def record_attempt_spend(
         priced = _priced_attempt(attempt, spend, harness_usage)
         if priced is not attempt:
             ports.attempts.update(priced)
-        total, provisional, reads = _run_spend_and_provisional(ports, run)
-        spent = figures(reads)
+        total, provisional, attempts = _run_spend_and_provisional(ports, run)
+        spent = figures_of(attempts)
         updated = run.model_copy(
             update={
                 "spend_usd": total,
@@ -147,22 +155,41 @@ def _dominant_model(by_model: tuple[ModelSpend, ...]) -> str | None:
 
 def _run_spend_and_provisional(
     ports: SpendPorts, run: Run
-) -> tuple[Decimal, bool, list[list[StoredRead]]]:
+) -> tuple[Decimal, bool, list[AttemptRows]]:
     """Every attempt of every row of this Run, summed, plus a flag that is `True` when any
     attempt carries `cost_provisional=True`. Recomputed in one pass, never incremented — see
     the module docstring."""
     total = _ZERO
     provisional = False
-    reads: list[list[StoredRead]] = []
+    attempts: list[AttemptRows] = []
     for row in ports.steps.list_for_run(run.id):
         for row_attempt in ports.attempts.list_for_row(row.id):
             total += row_attempt.cost_usd or _ZERO
             if row_attempt.cost_provisional:
                 provisional = True
-            reads.append(
-                [
-                    (r, ports.gateway_reads.usage(r.id))
-                    for r in ports.gateway_reads.list_for_attempt(row_attempt.id)
-                ]
+            attempts.append(
+                AttemptRows(
+                    reads=[
+                        (r, ports.gateway_reads.usage(r.id))
+                        for r in ports.gateway_reads.list_for_attempt(row_attempt.id)
+                    ],
+                    fact_money=_fact_set_money(ports, row_attempt.id),
+                )
             )
-    return total, provisional, reads
+    return total, provisional, attempts
+
+
+def _fact_set_money(ports: SpendPorts, attempt_id: UUID) -> tuple[UsageFact, ...]:
+    """The harness money rows of the first fact set that has any, so a Claude attempt's
+    per-model rows and a migrated row of the same attempt are never added together."""
+    if ports.fact_sets is None:
+        return ()
+    for fact_set in ports.fact_sets.list_for_attempt(attempt_id):
+        rows = tuple(
+            u
+            for u in ports.fact_sets.rows(fact_set.id).usage
+            if u.source == "harness" and u.usage_class == "money"
+        )
+        if rows:
+            return rows
+    return ()
