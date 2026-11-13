@@ -102,3 +102,34 @@ describe('the signal colours', () => {
     },
   );
 });
+
+describe('the chart colours (epic 3 story 1, D7/D26/T18, 2026-11-13)', () => {
+  it.each(['#ffffff', '#000000'])('--color-chart-ink reaches AA text on %s', (ground) => {
+    const ratio = contrast(token('--color-chart-ink'), ground);
+
+    expect(ratio, `--color-chart-ink on ${ground} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+      AA_TEXT,
+    );
+  });
+
+  it.each(['--color-bg', '--color-surface'])('--color-chart-ink reaches 3:1 on %s', (ground) => {
+    const ratio = contrast(token('--color-chart-ink'), token(ground));
+
+    expect(ratio, `--color-chart-ink on ${ground} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+      AA_INCIDENTAL,
+    );
+  });
+
+  it.each(['--color-chart-data-1', '--color-chart-data-2'])(
+    '%s reaches 3:1 on white and bg',
+    (mark) => {
+      for (const ground of ['#ffffff', token('--color-bg')]) {
+        const ratio = contrast(token(mark), ground);
+
+        expect(ratio, `${mark} on ${ground} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(
+          AA_INCIDENTAL,
+        );
+      }
+    },
+  );
+});

@@ -2,7 +2,7 @@
 title: AI Orchestrator — Design
 status: final
 created: 2026-08-25
-updated: 2026-09-24
+updated: 2026-11-13
 name: AI Orchestrator
 description: Single-operator control surface for an autonomous development pipeline. Instrument-dark — a severe all-monospace readout on a fixed column grid, where colour is signal and never decoration. Dark-first, from scratch, no inherited UI system.
 colors:
@@ -29,6 +29,10 @@ colors:
   signal-criterion: '#6C8CD5'
   # interaction: the single non-signal accent
   accent: '#7FD4C1'
+  # chart: marks and PNG export only (D7, T18)
+  chart-data-1: '#3987E5'
+  chart-data-2: '#E0702F'
+  chart-ink: '#767676'
 typography:
   # Every role is monospace. There is no second family and no weight above 400.
   font-family-mono: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
