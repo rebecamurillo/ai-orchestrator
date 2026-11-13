@@ -7,7 +7,7 @@ under (ARCHITECTURE §7.3, one JSON summary per repository).
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Literal, cast
@@ -18,10 +18,12 @@ from orchestrator.application.analysis.findings import collect_findings
 from orchestrator.application.analysis.inputs import RepositoryInputs, slug
 from orchestrator.application.analysis.languages import languages_of
 from orchestrator.application.analysis.secrets import GITLEAKS, scan_secrets
+from orchestrator.application.analysis.step_results import collect_step_results
 from orchestrator.application.analysis.tier1a import Count, added_lines, count_tier1a
 from orchestrator.application.analysis.tier1b import collect_tier1b
 from orchestrator.application.analysis.tier2 import Tier2Ports, collect_tier2
 from orchestrator.application.analysis.toolset import TOOLS, toolset_records, with_toolset
+from orchestrator.application.templates.step_metric_model import StepMetric
 from orchestrator.domain.entities.analysis import Analysis, AnalysisArtifact, AnalysisStatus
 from orchestrator.domain.ports.analysis import AnalysisRepository
 from orchestrator.domain.ports.analysis_tools import AnalysisTools
@@ -46,6 +48,7 @@ class RepositorySignals:
     tool_versions: Mapping[str, str] = field(default_factory=dict)
     languages: tuple[str, ...] | None = None
     commits_not_made_by_run: tuple[str, ...] | None = None
+    not_catalogued: tuple[str, ...] = ()
 
 
 def collect_tier1a(
@@ -103,6 +106,7 @@ def collect_signals(  # noqa: PLR0913 — the repository's inputs and every port
     now: datetime,
     new_id: Callable[[], UUID],
     tier2: Tier2Ports | None = None,
+    step_metrics: Sequence[StepMetric] = (),
 ) -> tuple[Analysis, RepositorySignals]:
     """Tiers 1a, 1b, 2 and the findings of one repository."""
     analysis = prepared.analysis
@@ -130,12 +134,14 @@ def collect_signals(  # noqa: PLR0913 — the repository's inputs and every port
     fourth = collect_findings(
         prepared, git=git, scratch_root=scratch_root, tools=tools, new_id=new_id
     )
+    fifth = collect_step_results(prepared, git=git, declared=step_metrics)
     merged = replace(
         first,
-        counts=(*first.counts, *second.counts, *third.counts, *fourth.counts),
-        words={**first.words, **second.words, **third.words, **fourth.words},
+        counts=(*first.counts, *second.counts, *third.counts, *fourth.counts, *fifth.counts),
+        words={**first.words, **second.words, **third.words, **fourth.words, **fifth.words},
         artifacts=(*first.artifacts, *second.artifacts, *third.artifacts, *fourth.artifacts),
         tool_versions={**first.tool_versions, **second.tool_versions, **fourth.tool_versions},
+        not_catalogued=fifth.not_catalogued,
     )
     records = toolset_records(
         installed,
@@ -167,6 +173,7 @@ def signals_to_json(signals: RepositorySignals) -> bytes:
         "commits_not_made_by_run": None
         if signals.commits_not_made_by_run is None
         else list(signals.commits_not_made_by_run),
+        "not_catalogued": list(signals.not_catalogued),
     }
     return json.dumps(document, ensure_ascii=False).encode()
 
@@ -194,4 +201,5 @@ def signals_from_json(body: bytes) -> RepositorySignals:
         tool_versions=document["tool_versions"],
         languages=None if languages is None else tuple(languages),
         commits_not_made_by_run=None if commits is None else tuple(commits),
+        not_catalogued=tuple(document.get("not_catalogued", [])),
     )

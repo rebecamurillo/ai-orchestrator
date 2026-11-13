@@ -26,6 +26,7 @@ from orchestrator.application.analysis.signals import (
     store_signals,
 )
 from orchestrator.application.analysis.tier2 import Tier2Ports
+from orchestrator.application.templates.step_metric_model import StepMetric
 from orchestrator.domain.entities.analysis import Analysis, AnalysisArtifact
 from orchestrator.domain.ports.analysis import AnalysisRepository
 from orchestrator.domain.ports.analysis_tools import AnalysisTools
@@ -46,6 +47,10 @@ def _no_project_env(run_id: UUID) -> Mapping[str, str]:
     return {}
 
 
+def _no_step_metrics(run_id: UUID) -> Sequence[StepMetric]:
+    return ()
+
+
 @dataclass(frozen=True)
 class AnalysisDeps:
     git: Git
@@ -59,6 +64,7 @@ class AnalysisDeps:
     runner: ProcessRunner | None = None
     command_timeout_min: float = 20
     project_env: Callable[[UUID], Mapping[str, str]] = _no_project_env
+    step_metrics: Callable[[UUID], Sequence[StepMetric]] = _no_step_metrics
 
 
 @dataclass(frozen=True)
@@ -80,7 +86,10 @@ def _first_line(error: Exception) -> str:
 
 
 def _collect(
-    deps: AnalysisDeps, prepared: RepositoryInputs, env: Mapping[str, str]
+    deps: AnalysisDeps,
+    prepared: RepositoryInputs,
+    env: Mapping[str, str],
+    declared: Sequence[StepMetric],
 ) -> tuple[Analysis, RepositorySignals]:
     """One repository's failure is that analysis's `failed`, never another's."""
     ports = None if deps.runner is None else Tier2Ports(deps.runner, deps.command_timeout_min, env)
@@ -95,6 +104,7 @@ def _collect(
             now=deps.clock.now(),
             new_id=deps.new_id,
             tier2=ports,
+            step_metrics=declared,
         )
     except Exception as error:
         output = _first_line(error)
@@ -128,6 +138,7 @@ def analyse_run(
 ) -> tuple[Analysis, ...]:
     """Analyse each `run_repository` of the Run; `calculation_id` is `None` while pending."""
     env = deps.project_env(run_id)
+    declared = deps.step_metrics(run_id)
     with writes() as scope:
         records = scope.run_records.list_for_run(run_id)
         commits = scope.run_commits.list_for_run(run_id)
@@ -151,7 +162,7 @@ def analyse_run(
         clock=deps.clock,
     ) as prepared:
         for item in prepared:
-            analysis, signals = _collect(deps, item, env)
+            analysis, signals = _collect(deps, item, env, declared)
             _store(deps, writes, analysis, signals)
             stored.append(analysis)
     return tuple(stored)

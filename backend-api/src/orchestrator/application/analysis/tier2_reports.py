@@ -73,6 +73,9 @@ def _parse_xml(text: str) -> ET.Element:
         raise ReportUnreadable(str(error)) from error
 
 
+parse_xml = _parse_xml
+
+
 @dataclass(frozen=True)
 class CoverageLines:
     """Report path → line number → covered."""

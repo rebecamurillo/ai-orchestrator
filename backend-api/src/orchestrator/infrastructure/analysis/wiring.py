@@ -7,6 +7,8 @@ from functools import partial
 from uuid import UUID
 
 from orchestrator.application.analysis.run_analysis import AnalysisDeps, analyse_run
+from orchestrator.application.templates.step_metric_model import StepMetric
+from orchestrator.application.templates.step_metrics import declared_step_metrics
 from orchestrator.domain.entities.analysis import Analysis
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.git import Git
@@ -15,6 +17,11 @@ from orchestrator.infrastructure.analysis.package_lookup import HttpPackageLooku
 from orchestrator.infrastructure.analysis.tools import ProcessAnalysisTools
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto.fernet import FernetCrypto
+from orchestrator.infrastructure.db import (
+    SQLAlchemyRunRepository,
+    SQLAlchemyTemplateVersionRepository,
+    SQLAlchemyUnitOfWork,
+)
 from orchestrator.infrastructure.db.environment import read_run_environment
 from orchestrator.infrastructure.db.writers import SessionFactory, open_analysis_ports
 from orchestrator.infrastructure.settings import Settings
@@ -37,6 +44,14 @@ def build_analysis(
         )
         return {} if found is None else found.project.env_vars
 
+    def step_metrics(run_id: UUID) -> Sequence[StepMetric]:
+        with SQLAlchemyUnitOfWork(session_factory) as scope:
+            return declared_step_metrics(
+                SQLAlchemyRunRepository(scope.session),
+                SQLAlchemyTemplateVersionRepository(scope.session),
+                run_id,
+            )
+
     deps = AnalysisDeps(
         git=git,
         tools=tools,
@@ -49,6 +64,7 @@ def build_analysis(
         runner=runner,
         command_timeout_min=settings.analysis_command_timeout_min,
         project_env=project_env,
+        step_metrics=step_metrics,
     )
     writes = partial(open_analysis_ports, session_factory)
 

@@ -32,7 +32,10 @@ GATE_KEY = "gate"
 INPUT_TYPE_KEY = "type"
 DESCRIPTION_KEY = "description"
 
-TEMPLATE_KEYS = frozenset({NAME_KEY, VERSION_KEY, DESCRIPTION_KEY, INPUTS_KEY, STEPS_KEY})
+METRICS_KEY = "metrics"
+TEMPLATE_KEYS = frozenset(
+    {NAME_KEY, VERSION_KEY, DESCRIPTION_KEY, INPUTS_KEY, STEPS_KEY, METRICS_KEY}
+)
 INPUT_KEYS = frozenset({INPUT_TYPE_KEY, "required", "default", "values", DESCRIPTION_KEY})
 ROLE_KEY = "role"
 STEP_KEYS = frozenset(

@@ -65,6 +65,7 @@ from orchestrator.application.templates.model import (
     unknown_role,
 )
 from orchestrator.application.templates.on_fail import check_on_fail
+from orchestrator.application.templates.step_metrics import check_metrics
 from orchestrator.application.templates.table import (
     AGENT_DISPATCH_KEYS,
     AGENT_INTENT_KEYS,
@@ -93,6 +94,7 @@ def check_keys(root: LinedMap) -> tuple[list[ValidationError], list[str]]:
     unvalidated: list[str] = []
     errors = _check_template(root)
     errors += check_inputs(root)
+    errors += check_metrics(root)
     errors += _check_steps(root, unvalidated)
     return errors, unvalidated
 

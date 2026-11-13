@@ -121,16 +121,16 @@ def _check_id(entry: Mapping[str, Any]) -> list[str]:
     return []
 
 
+def check_entry_fields(entry: Mapping[str, Any]) -> list[str]:
+    """Every offence of an entry's fields, its id and group aside."""
+    return _check_shape(entry) + _check_values(entry) + _check_methods(entry.get("methods"))
+
+
 def _check_entry(entry: Mapping[str, Any]) -> list[str]:
-    return (
-        _check_id(entry)
-        + _check_shape(entry)
-        + _check_values(entry)
-        + _check_methods(entry.get("methods"))
-    )
+    return _check_id(entry) + check_entry_fields(entry)
 
 
-def _build(entry: Mapping[str, Any]) -> CatalogueEntry:
+def build_entry(entry: Mapping[str, Any]) -> CatalogueEntry:
     return CatalogueEntry(
         id=entry["id"],
         label=entry["label"],
@@ -201,4 +201,4 @@ def validate_catalogue(files: Sequence[tuple[str, str]]) -> tuple[CatalogueEntry
     errors += _cross_checks(seen)
     if errors:
         raise CatalogueInvalid(tuple(errors))
-    return tuple(_build(entry) for _, entry in seen)
+    return tuple(build_entry(entry) for _, entry in seen)

@@ -42,6 +42,8 @@ TABLE = {
     # epic 6 story 2, 2026-11-13: the two Opengrep finding entries.
     "code.findings_security": ("possible security findings, new, by severity (CWE)", "H"),
     "code.findings_bug": ("possible bug findings, new", "A"),
+    # epic 6 story 3, 2026-11-13: the test-first order entry.
+    "code.test_first_order": ("test-first order, method followed (experimental)", "A"),
 }
 
 
@@ -63,6 +65,10 @@ def test_the_code_group_holds_exactly_the_twenty_one_ids_with_their_labels_and_l
 
 def test_every_entry_has_one_first_method_that_states_its_computation() -> None:
     for entry in entries().values():
+        # epic 6 story 3, 2026-11-13: a per-story log signal with verbatim limits, covered in
+        # test_metrics_catalogue_code_test_first.py (scopes, flags, method and the three limits).
+        if entry.id == "code.test_first_order":
+            continue
         assert [m.n for m in entry.methods] == [1]
         assert entry.methods[0].description.strip()
         assert entry.scopes == ("run", "repository")

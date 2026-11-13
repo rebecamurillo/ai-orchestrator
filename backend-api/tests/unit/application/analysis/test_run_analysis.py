@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
@@ -16,11 +17,13 @@ from orchestrator.application.analysis.run_analysis import (
     load_code,
     pending_analyses,
 )
-from orchestrator.application.analysis.signals import SUMMARY_TOOL
+from orchestrator.application.analysis.signals import SUMMARY_TOOL, signals_from_json
+from orchestrator.application.templates.step_metric_model import StepMetric
 from orchestrator.domain.entities.analysis import Analysis
 from orchestrator.domain.entities.run_records import RunRepositoryRecord
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ports.analysis_tools import ToolRun
+from orchestrator.domain.ports.catalogue import CatalogueEntry, CatalogueMethod
 from orchestrator.domain.ports.git_analysis import NameStatus, NumstatEntry
 from tests.unit.fakes.analysis import FakeAnalysisRepository
 from tests.unit.fakes.analysis_tools import FakeAnalysisTools
@@ -258,3 +261,44 @@ def test_load_code_reads_the_summary_back_and_a_missing_summary_is_failed() -> N
     assert code[0].status == "ok"
     assert code[1].status == "failed"
     assert "summary" in code[1].output
+
+
+def test_the_runs_declared_step_metrics_reach_its_own_repositorys_signals() -> None:
+    entry = CatalogueEntry(
+        "step.bench-v1.heldout_tests",
+        "held-out",
+        "step",
+        "A",
+        ("run",),
+        "tests",
+        "report",
+        None,
+        False,
+        (),
+        None,
+        False,
+        (CatalogueMethod(1, "reads it", {}),),
+    )
+    declared = StepMetric(line=1, entry=entry, format="junit", path="out/heldout.xml")
+    asked: list[UUID] = []
+
+    def step_metrics(run_id: UUID) -> Sequence[StepMetric]:
+        asked.append(run_id)
+        return [declared]
+
+    git = FakeGit(
+        analysis=AnalysisScript(merge_bases={("h1", "origin/main"): "m0"}),
+        files={
+            ("h1", "out/heldout.xml"): '<testsuite><testcase classname="c" name="a"/></testsuite>'
+        },
+        listings={("h1", "out"): ["out/heldout.xml"]},
+    )
+    world = World([record(".", 10)], git)
+
+    [stored] = analyse_run(
+        replace(world.deps(), step_metrics=step_metrics), world.writes, RUN, None
+    )
+
+    assert asked == [RUN]
+    signals = signals_from_json(world.analyses.artifact(stored.id, SUMMARY_TOOL).body)  # type: ignore[union-attr]
+    assert {c.source: c.value for c in signals.counts if c.metric_id == entry.id}["passed"] == 1

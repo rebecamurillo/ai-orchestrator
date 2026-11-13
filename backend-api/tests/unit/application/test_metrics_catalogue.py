@@ -8,6 +8,8 @@ import yaml
 from orchestrator.application.metrics.catalogue import (
     CatalogueError,
     CatalogueInvalid,
+    build_entry,
+    check_entry_fields,
     validate_catalogue,
 )
 
@@ -236,3 +238,24 @@ def test_a_method_without_parameters_builds_with_empty_parameters() -> None:
         [("cost.yaml", entry_yaml(methods=[{"n": 1, "description": "d"}]))]
     )
     assert entry.methods[0].parameters == {}
+
+
+def test_check_entry_fields_leaves_the_id_pattern_to_the_caller() -> None:
+    [fields] = yaml.safe_load(entry_yaml(id="step.bench.heldout_tests", group="step"))
+
+    assert check_entry_fields(fields) == []
+
+
+def test_check_entry_fields_names_every_field_offence() -> None:
+    [fields] = yaml.safe_load(entry_yaml(label="__drop__", level="Z"))
+
+    assert check_entry_fields(fields) == ["missing field label", "level must be one of H, A"]
+
+
+def test_build_entry_makes_the_entry_of_a_checked_mapping() -> None:
+    [fields] = yaml.safe_load(entry_yaml(scopes=["run"], limits="a limit"))
+
+    built = build_entry(fields)
+
+    assert (built.id, built.scopes, built.limits) == ("cost.gateway", ("run",), "a limit")
+    assert [m.n for m in built.methods] == [1]

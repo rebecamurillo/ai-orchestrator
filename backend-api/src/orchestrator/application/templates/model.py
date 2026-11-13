@@ -24,6 +24,7 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict
 
 from orchestrator.application.steps import Gate, KindMeta
+from orchestrator.application.templates.step_metric_model import StepMetric
 
 #: The declared type of a Template input (brief, key table "input").
 InputType = Literal["project", "repository", "string", "path", "enum", "number", "item"]
@@ -330,6 +331,7 @@ class ParsedTemplate(BaseModel):
     description: str | None = None
     inputs: tuple[InputDecl, ...] = ()
     steps: tuple[Step | ForEach, ...] = ()
+    metrics: tuple[StepMetric, ...] = ()
 
 
 # --- the result --------------------------------------------------------------------------

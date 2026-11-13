@@ -933,3 +933,35 @@
         medium: 4.0
       security_tag: security
       cwe_pattern: CWE-\d+
+- id: code.test_first_order
+  label: test-first order, method followed (experimental)
+  group: code
+  level: A
+  scopes:
+  - run
+  - story
+  unit: stories
+  source: event_fact writes and test runs of each story's attempts
+  component_of: null
+  additive: false
+  missing_words:
+  - n/a
+  - not readable
+  limits: |-
+    1. Test-first order did not predict quality in humans (K45).
+    2. When the workflow template itself instructs the agent to write tests first, the signal
+       measures **compliance with the template**, not the model's own habit. Runs compared on it
+       must use the same instruction.
+    3. An agent can write a failing test and later weaken it, so the signal is read next to the
+       test-tampering markers (§2.9).
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: 'Per story frame, from the event_fact rows of its attempts. Writes are classified by the
+      default classifier: test_unit, test_e2e and test_unclassified are tests, production is production,
+      every other class is ignored. With T the first test write and P the first production write: test
+      first when T precedes P and a test run with a non-zero exit precedes P; test after when P is present
+      and no test write precedes it; test with code otherwise; not readable when the story has no test
+      and no production write (the harness''s extractor declares no events). The Run value counts the
+      stories per outcome and the share of stories not readable.'
+    parameters: {}

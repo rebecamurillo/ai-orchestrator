@@ -19,6 +19,7 @@ from orchestrator.application.analysis.run_analysis import load_code, pending_an
 from orchestrator.application.metrics.compute import compute
 from orchestrator.application.metrics.live import MetricsReadPorts, load_inputs
 from orchestrator.application.metrics.methods import REGISTRY
+from orchestrator.application.metrics.step_values import not_catalogued, step_values
 from orchestrator.application.metrics.versions import carry_forward, origin_of, to_stored
 from orchestrator.application.use_cases.instance_hold import hold_active
 from orchestrator.application.use_cases.record_attempt_facts import (
@@ -230,14 +231,15 @@ def _calculate(ports: CalculationPorts, calculation: MetricCalculation) -> None:
             (v.n, ports.versions.values(v.id))
             for v in reversed(ports.versions.list_for_run(run_id))
         ]
-    values = carry_forward(compute(inputs), earlier)
+    declared = step_values(inputs.code)
+    values = [*carry_forward(compute(inputs), earlier), *declared]
     version = ResultVersion(
         id=new_id(),
         run_id=run_id,
         n=calculation.target_n,
         calculated_at=ports.clock.now(),
         entry_point=_entry_point(calculation, found),
-        methods=tuple(sorted(REGISTRY)),
+        methods=tuple(sorted({*REGISTRY, *(v.method_id for v in declared)})),
         fact_set_ids=tuple(sorted(a.fact_set.id for a in inputs.attempts if a.fact_set)),
         analysis_ids=tuple(a.id for a in found),
         toolset_fingerprint=_fingerprint(found),
@@ -250,8 +252,13 @@ def _calculate(ports: CalculationPorts, calculation: MetricCalculation) -> None:
                 update={
                     "state": "done",
                     "ended_at": ports.clock.now(),
-                    "output": f"v{version.n}: {len(stored)} values",
+                    "output": _output(version.n, len(stored), not_catalogued(inputs.code)),
                 }
             )
         )
         ports.uow.commit()
+
+
+def _output(n: int, stored: int, undeclared: Sequence[str]) -> str:
+    lines = [f"v{n}: {stored} values", *(f"not catalogued: {path}" for path in undeclared)]
+    return "\n".join(lines)
