@@ -55,7 +55,8 @@
   color: var(--color-text-tertiary);
 }
 
-.wf-branch {
+.wf-title {
+  margin: 0;
   color: var(--color-text);
   font-size: var(--type-detail-title);
   line-height: var(--type-detail-title-line);
@@ -63,6 +64,109 @@
 }
 
 .wf-age {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.wf-title-group {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.wf-label-edit {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+  cursor: pointer;
+}
+
+.wf-label-input {
+  min-width: 24ch;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-line-strong);
+  background: none;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-detail-title);
+  line-height: var(--type-detail-title-line);
+}
+
+.wf-label-state {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.wf-meta-branch {
+  color: var(--color-text);
+}
+
+.wf-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.wf-calc-line {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.wf-figures-differ {
+  margin-top: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-left: 2px solid var(--color-text-secondary);
+  background: var(--color-surface-raised);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.wf-figures-differ-eyebrow {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+}
+
+.wf-figures-differ-reason {
+  color: var(--color-text-secondary);
+}
+
+.wf-version-line {
+  color: var(--color-text-secondary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.wf-glance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.wf-glance-none {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.wf-glance-row {
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+.wf-glance-running-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.wf-glance-running {
   color: var(--color-text-tertiary);
   font-size: var(--type-meta);
 }

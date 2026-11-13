@@ -42,6 +42,8 @@ export interface FormState {
   budgetUsd: string;
   reReviewDone: boolean;
   manualEstimateH: string;
+  /** The Run's label; blank leaves the server to compute the default. */
+  label?: string;
 }
 
 /** The form as it opens: the catalog's first Template, fields seeded from its defaults. */
@@ -226,6 +228,7 @@ export function runBody(
     model: state.model || null,
     manual_estimate_h: state.manualEstimateH || null,
     re_review_done: state.reReviewDone,
+    ...(state.label?.trim() ? { label: state.label.trim() } : {}),
   };
 }
 

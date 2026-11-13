@@ -20,6 +20,7 @@
  */
 import type { components } from '../api/schema';
 import ModelField from './ModelField';
+import { defaultLabelPreview, MAX_LABEL, PLACEHOLDER } from '../lib/run/label';
 import { fieldsFor, type TemplateCatalog } from '../lib/newwf/catalog';
 import {
   isTemplateName,
@@ -47,6 +48,8 @@ interface Props {
    */
   models?: string[];
   note: string | undefined;
+  /** Epoch ms the label placeholder is computed at. */
+  now?: number;
   onChange: (next: FormState) => void;
 }
 
@@ -63,6 +66,7 @@ export default function NewWorkflowFields({
   repositories,
   models = [],
   note,
+  now = Date.now(),
   onChange,
 }: Props) {
   return (
@@ -174,6 +178,28 @@ export default function NewWorkflowFields({
           )}
         </label>
       ))}
+
+      <label
+        className="newwf-field"
+        title="Names this Run on the board and the Run page. Blank uses the computed default."
+      >
+        <span className="newwf-field-label">LABEL (optional)</span>
+        <input
+          type="text"
+          data-testid="newwf-label"
+          maxLength={MAX_LABEL}
+          value={state.label ?? ''}
+          placeholder={PLACEHOLDER(
+            defaultLabelPreview({
+              projectName: projects.find((p) => p.id === state.projectId)?.name ?? '',
+              inputs: state.inputs,
+              template: state.template,
+              nowMs: now,
+            }),
+          )}
+          onChange={(event) => onChange({ ...state, label: event.target.value })}
+        />
+      </label>
 
       <label
         className="newwf-field"

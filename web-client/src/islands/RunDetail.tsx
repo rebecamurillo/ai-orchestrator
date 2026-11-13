@@ -32,6 +32,7 @@ import { useStore } from '@nanostores/react';
 import { api } from '../api/client';
 import type { components } from '../api/schema';
 import FailedFetch from '../components/FailedFetch';
+import OriginDrawer from '../components/metrics/OriginDrawer';
 import ArtifactsPanel from '../components/run/ArtifactsPanel';
 import Banner from '../components/run/Banner';
 import CancelModal from '../components/run/CancelModal';
@@ -40,6 +41,7 @@ import CostBlock from '../components/run/CostBlock';
 import DiagramSection from '../components/run/DiagramSection';
 import GateRecord from '../components/run/GateRecord';
 import Header from '../components/run/Header';
+import RecalculateControl from '../components/run/RecalculateControl';
 import SessionPanel from '../components/run/SessionPanel';
 import StepsTable from '../components/run/StepsTable';
 import StopBody from '../components/run/StopBody';
@@ -48,6 +50,7 @@ import { acceptBody } from '../lib/run/accept';
 import { answerBody } from '../lib/run/answer';
 import { budgetRaiseBody } from '../lib/run/budget';
 import { isFile } from '../lib/run/artifacts';
+import { labelPayload } from '../lib/run/label';
 import { anchoredSeq, PROMOTED_MS, stepAnchorId } from '../lib/run/anchor';
 import { isSpecCheckpoint, plannedFilePath } from '../lib/run/checkpoint';
 import { detailRequestPath, runToken, stopKind, type RunDetailOut } from '../lib/run/detail';
@@ -66,7 +69,17 @@ import {
   type SessionOut,
 } from '../lib/run/session';
 import { terminalBlock, TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
-import { $poll, configurePolling, stopPolling } from '../stores/poll';
+import { loadCatalogue } from '../stores/catalogue';
+import { $poll, configurePolling, forceTick, stopPolling } from '../stores/poll';
+import {
+  $runMetrics,
+  calcActive,
+  loadRunMetrics,
+  pollCalculation,
+  resetRunMetrics,
+  selectVersion,
+  startCalculation,
+} from '../stores/run-metrics';
 import { startTracking, stopTracking } from '../stores/activity';
 import '../styles/run-detail.css';
 
@@ -100,6 +113,7 @@ export default function RunDetail({ runId }: Props) {
   const [anchored, setAnchored] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'gate' | 'steps' | 'session'>('gate');
   const pollTick = useStore($poll);
+  const glance = useStore($runMetrics);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
   /** One-shot guard: sets the active tab once on the first detail load. */
@@ -131,7 +145,10 @@ export default function RunDetail({ runId }: Props) {
       setDetail(data);
       setSession(read);
       setPhase({ kind: 'ready' });
-      configurePolling(keepsFastPoll(data.run.status, read));
+      // a metrics read never fails the page: its store keeps the failure for the cost block
+      void loadRunMetrics(runId);
+      if (calcActive($runMetrics.get())) void pollCalculation(runId);
+      configurePolling(keepsFastPoll(data.run.status, read) || calcActive($runMetrics.get()));
     } catch {
       if (seq !== requestSeqRef.current) return;
       stopPolling();
@@ -152,6 +169,8 @@ export default function RunDetail({ runId }: Props) {
 
   useEffect(() => {
     openedRef.current = false; // reset so ?opened=true fires again on navigation to a new Run
+    resetRunMetrics();
+    void loadCatalogue();
     void fetchDetail();
     return () => stopPolling();
     // fires once on mount; every later fetch is driven by the `$poll` effect below
@@ -288,6 +307,27 @@ export default function RunDetail({ runId }: Props) {
     }
   }
 
+  /** Saves the label (`null` restores the default); returns the problem a refusal carried. */
+  async function saveLabel(label: string | null): Promise<ProblemDetail | null> {
+    const body = label === null ? labelPayload('') : labelPayload(label);
+    try {
+      const { error } = await api.PATCH('/runs/{run_id}', {
+        params: { path: { run_id: runId } },
+        body,
+      });
+      if (error) return error;
+      await fetchDetail();
+      return null;
+    } catch {
+      return networkProblem('PATCH', `/api/runs/${runId}`);
+    }
+  }
+
+  async function recalculate(): Promise<void> {
+    await startCalculation(runId);
+    forceTick();
+  }
+
   if (phase.kind === 'error') {
     return (
       <FailedFetch
@@ -305,7 +345,21 @@ export default function RunDetail({ runId }: Props) {
 
   return (
     <div data-testid="wf-detail">
-      <Header detail={detail} token={token} now={Date.now()} />
+      <Header
+        detail={detail}
+        token={token}
+        now={Date.now()}
+        onSaveLabel={saveLabel}
+        actions={
+          <RecalculateControl
+            status={detail.run.status}
+            versions={glance.versions}
+            calc={glance.calc}
+            calcError={glance.calcError}
+            onConfirm={() => void recalculate()}
+          />
+        }
+      />
       <Banner detail={detail} token={token} />
       <div className="wf-top-zone">
         {/* keyed so a draft written for one stop can never be sent as the answer to the next */}
@@ -345,7 +399,13 @@ export default function RunDetail({ runId }: Props) {
         </div>
         <div className="wf-summary-col">
           <StoriesStrip stories={detail.stories} />
-          <CostBlock detail={detail} />
+          <CostBlock
+            detail={detail}
+            glance={glance}
+            subscription={false}
+            onSelectVersion={(n) => void selectVersion(runId, n)}
+            onRetryMetrics={() => void loadRunMetrics(runId)}
+          />
           <ArtifactsPanel runId={runId} run={detail.run} folder={detail.header.meta.folder} />
         </div>
       </div>
@@ -402,6 +462,7 @@ export default function RunDetail({ runId }: Props) {
           onDismiss={() => setCancelOpen(false)}
         />
       ) : null}
+      <OriginDrawer />
     </div>
   );
 }
