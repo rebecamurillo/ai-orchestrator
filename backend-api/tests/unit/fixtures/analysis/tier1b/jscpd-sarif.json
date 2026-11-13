@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "artifacts": [
+        {
+          "location": {
+            "uri": "a.py",
+            "uriBaseId": "%SRCROOT%"
+          }
+        },
+        {
+          "location": {
+            "uri": "b.py",
+            "uriBaseId": "%SRCROOT%"
+          }
+        },
+        {
+          "location": {
+            "uri": "c.py",
+            "uriBaseId": "%SRCROOT%"
+          }
+        },
+        {
+          "location": {
+            "uri": "d.py",
+            "uriBaseId": "%SRCROOT%"
+          }
+        }
+      ],
+      "originalUriBaseIds": {
+        "%SRCROOT%": {
+          "uri": "file:///work/rebecamurillo/my-agents-brain/wt/feat/orchestrator-run-metrics/repos/ai-orchestrator/backend-api/tests/unit/fixtures/analysis/tier1b/jscpd-input/files/"
+        }
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "index": 0,
+                  "uri": "a.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "endColumn": 4,
+                  "endLine": 19,
+                  "startColumn": 1,
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Duplicated code block (81 tokens), duplicated at [b.py:4](0)"
+          },
+          "partialFingerprints": {
+            "jscpdCloneHash/v1": "385ffad0b4170f9b"
+          },
+          "properties": {
+            "clone_hash": "385ffad0b4170f9b",
+            "token_count": 81
+          },
+          "relatedLocations": [
+            {
+              "id": 0,
+              "message": {
+                "text": "Duplicated at b.py:4"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "index": 1,
+                  "uri": "b.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "endColumn": 4,
+                  "endLine": 20,
+                  "startColumn": 1,
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "ruleId": "jscpd/duplicate-code"
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "index": 2,
+                  "uri": "c.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "endColumn": 47,
+                  "endLine": 14,
+                  "startColumn": 1,
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Duplicated code block (102 tokens), duplicated at [d.py:4](0)"
+          },
+          "partialFingerprints": {
+            "jscpdCloneHash/v1": "e9f6705eabfe7c59"
+          },
+          "properties": {
+            "clone_hash": "e9f6705eabfe7c59",
+            "token_count": 102
+          },
+          "relatedLocations": [
+            {
+              "id": 0,
+              "message": {
+                "text": "Duplicated at d.py:4"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "index": 3,
+                  "uri": "d.py",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "endColumn": 47,
+                  "endLine": 15,
+                  "startColumn": 1,
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "ruleId": "jscpd/duplicate-code"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/kucherenko/jscpd/",
+          "name": "jscpd",
+          "rules": [
+            {
+              "defaultConfiguration": {
+                "enabled": true,
+                "level": "warning"
+              },
+              "fullDescription": {
+                "text": "Duplicate sections of code increase the risk of development errors, especially if fixes are made to one code block but not the other. Duplicates that share the same abstractions should be refactored into reusable helper methods as an application of the Don't Repeat Yourself principle."
+              },
+              "helpUri": "https://github.com/kucherenko/jscpd/",
+              "id": "jscpd/duplicate-code",
+              "name": "jscpd/duplicate-code",
+              "properties": {
+                "problem.severity": "warning",
+                "tags": [
+                  "quality"
+                ]
+              },
+              "shortDescription": {
+                "text": "Duplicated code detected"
+              }
+            }
+          ],
+          "version": "5.4.3"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

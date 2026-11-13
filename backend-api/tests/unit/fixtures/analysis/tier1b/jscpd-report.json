@@ -1,0 +1,109 @@
+{
+  "duplicates": [
+    {
+      "firstFile": {
+        "end": 19,
+        "endLoc": {
+          "column": 3,
+          "line": 19,
+          "position": 401
+        },
+        "name": "a.py",
+        "start": 3,
+        "startLoc": {
+          "column": 0,
+          "line": 3,
+          "position": 11
+        }
+      },
+      "format": "python",
+      "fragment": "def compute_totals(rows, factor):\n    total = 0\n    for row in rows:\n        for cell in row:\n            if cell % 2 == 0 and cell % 3 == 0:\n                total += cell * factor\n            else:\n                total -= cell + factor\n    result = []\n    for value in range(total):\n        result.append(value * 2)\n        if value > 100:\n            break\n    return result, total\n\n\ndef only_in_a():",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 17,
+      "secondFile": {
+        "end": 20,
+        "endLoc": {
+          "column": 3,
+          "line": 20,
+          "position": 403
+        },
+        "name": "b.py",
+        "start": 4,
+        "startLoc": {
+          "column": 0,
+          "line": 4,
+          "position": 13
+        }
+      },
+      "tokens": 81
+    },
+    {
+      "firstFile": {
+        "end": 14,
+        "endLoc": {
+          "column": 46,
+          "line": 14,
+          "position": 428
+        },
+        "name": "c.py",
+        "start": 3,
+        "startLoc": {
+          "column": 0,
+          "line": 3,
+          "position": 11
+        }
+      },
+      "format": "python",
+      "fragment": "def render_report(entries, width):\n    lines = []\n    for entry in entries:\n        name = str(entry[\"name\"]).ljust(width)\n        amount = \"{:>10.2f}\".format(entry[\"amount\"])\n        if entry.get(\"flag\"):\n            lines.append(name + amount + \" *\")\n        else:\n            lines.append(name + amount)\n    header = \"=\" * (width + 10)\n    footer = \"-\" * (width + 10)\n    return \"\\n\".join([header, *lines, footer])",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 12,
+      "secondFile": {
+        "end": 15,
+        "endLoc": {
+          "column": 46,
+          "line": 15,
+          "position": 430
+        },
+        "name": "d.py",
+        "start": 4,
+        "startLoc": {
+          "column": 0,
+          "line": 4,
+          "position": 13
+        }
+      },
+      "tokens": 102
+    }
+  ],
+  "statistics": {
+    "detectionDate": "2026-11-13T15:11:07.459Z",
+    "formats": {
+      "python": {
+        "clones": 2,
+        "duplicatedLines": 29,
+        "duplicatedTokens": 183,
+        "lines": 74,
+        "newClones": 0,
+        "newDuplicatedLines": 0,
+        "percentage": 39.189189189189186,
+        "percentageTokens": 46.56488549618321,
+        "sources": 4,
+        "tokens": 393
+      }
+    },
+    "total": {
+      "clones": 2,
+      "duplicatedLines": 29,
+      "duplicatedTokens": 183,
+      "lines": 74,
+      "newClones": 0,
+      "newDuplicatedLines": 0,
+      "percentage": 39.189189189189186,
+      "percentageTokens": 46.56488549618321,
+      "sources": 4,
+      "tokens": 393
+    }
+  }
+}
