@@ -415,6 +415,47 @@ def test_an_unreadable_lock_file_makes_every_dependency_signal_a_word() -> None:
     assert set(signals.words.values()) == {"not run — package-lock.json: not parseable"}
 
 
+def test_a_manifest_folder_beside_a_lock_file_folder_reads_no_lock_file_not_a_figure() -> None:
+    """Epic 5 story 3 review, 2026-11-13: the manifest's added dependencies are never scanned,
+    so a figure from the other folder's lock file would count them as clean."""
+    files = {
+        ("b", "app/pnpm-lock.yaml"): fixture("pnpm-lock.base.yaml"),
+        ("h", "app/pnpm-lock.yaml"): fixture("pnpm-lock.head.yaml"),
+        ("b", "svc/package.json"): fixture("package.base.json"),
+        ("h", "svc/package.json"): fixture("package.head.json"),
+    }
+    changed = [
+        NameStatus("M", "app/pnpm-lock.yaml", None),
+        NameStatus("M", "svc/package.json", None),
+    ]
+    diff = diff_dependencies(changed, reader(files), "b", "h")
+    assert diff.lock_paths == ("app/pnpm-lock.yaml",)
+    assert diff.manifest_only is True
+    fake = FakePackageLookup()
+    signals = lookup(diff, fake)
+    assert signals.words["code.deps_known_vulns"] == "not run — no lock file"
+    assert [c for c in signals.counts if c.metric_id == "code.deps_known_vulns"] == []
+    assert [c for c in fake.calls if c["method"] == "vulnerabilities"] == []
+    assert figure(signals, "code.deps_changed", "added") == 3
+
+
+def test_a_manifest_that_adds_nothing_beside_a_lock_file_keeps_the_scan() -> None:
+    files = {
+        ("b", "app/pnpm-lock.yaml"): fixture("pnpm-lock.base.yaml"),
+        ("h", "app/pnpm-lock.yaml"): fixture("pnpm-lock.head.yaml"),
+        ("b", "svc/package.json"): fixture("package.head.json"),
+        ("h", "svc/package.json"): fixture("package.head.json").replace("\n", "\n\n", 1),
+    }
+    changed = [
+        NameStatus("M", "app/pnpm-lock.yaml", None),
+        NameStatus("M", "svc/package.json", None),
+    ]
+    diff = diff_dependencies(changed, reader(files), "b", "h")
+    assert diff.manifest_only is False
+    signals = lookup(diff, FakePackageLookup())
+    assert figure(signals, "code.deps_known_vulns") == 0
+
+
 def test_count_is_a_tier1a_count_rated_by_production_lines() -> None:
     signals = lookup(pnpm_diff(), FakePackageLookup(), lookups=False)
     assert signals.counts[0] == Count("code.deps_changed", "added", 1, "production")

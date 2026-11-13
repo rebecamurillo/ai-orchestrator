@@ -73,6 +73,7 @@ class DependencyDiff:
     removed: tuple[DepChange, ...] = ()
     upgraded: tuple[DepChange, ...] = ()
     lock_paths: tuple[str, ...] = ()
+    #: Some added dependency was read from a manifest alone (no lock file to scan for it).
     manifest_only: bool = False
     problems: tuple[str, ...] = ()
 
@@ -158,6 +159,12 @@ def diff_dependencies(
         added += found[0]
         removed += found[1]
         upgraded += found[2]
+    # Any added dependency read from a manifest has no lock file to scan, even when another
+    # folder's lock file is scanned: a figure would count it as clean.
+    from_manifest = any(
+        _compare(ecosystem, before.packages, after.packages)[0]
+        for ecosystem, before, after in manifests
+    )
     problems = tuple(
         parsed.problem
         for _, before, after in [*pairs, *manifests]
@@ -169,7 +176,7 @@ def diff_dependencies(
         tuple(removed),
         tuple(upgraded),
         tuple(lock_paths),
-        bool(manifests) and not lock_paths,
+        from_manifest,
         problems,
     )
 

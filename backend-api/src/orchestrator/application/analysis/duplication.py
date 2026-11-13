@@ -1,68 +1,114 @@
-"""Reading a jscpd run: the added lines inside clones, and the SARIF made path-free."""
+"""Reading a jscpd run through its SARIF: clone fragments at paths relative to the scan root.
+
+jscpd's JSON `name` depends on the scanned set (a bare basename for a flat one), so a path is
+taken only from the SARIF: each result is one clone, its fragments in `locations` and
+`relatedLocations`, each `file://` URI resolved against `originalUriBaseIds` and made relative
+to the scan root (Operator ruling 2026-11-13).
+"""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
+from urllib.parse import unquote
+
+FILE_SCHEME = "file://"
 
 
-def common_dir(paths: Sequence[str]) -> str:
-    """The deepest folder holding every path, as jscpd names its files relative to it."""
-    parents = [PurePosixPath(path).parent.parts for path in paths]
-    shared: list[str] = []
-    for level in zip(*parents, strict=False):
-        if len(set(level)) != 1:
-            break
-        shared.append(level[0])
-    return "/".join(shared)
+@dataclass(frozen=True)
+class Fragment:
+    path: str
+    start: int
+    end: int
 
 
-def duplication_added(report_json: str, added: Mapping[str, frozenset[int]], folder: str) -> int:
-    """Distinct added `(path, line)` inside any clone fragment, fragment ends included.
+def _bases(run: Mapping[str, Any]) -> dict[str, str]:
+    bases = run.get("originalUriBaseIds") or {}
+    return {
+        key: value["uri"]
+        for key, value in bases.items()
+        if isinstance(value, dict) and isinstance(value.get("uri"), str)
+    }
 
-    `folder` is the common folder of the scanned files: jscpd names a fragment relative to it.
-    """
+
+def _file_uri(location: Mapping[str, Any], bases: Mapping[str, str]) -> str | None:
+    """The location's absolute `file://` URI, or `None` when it does not resolve to one."""
+    uri = location.get("uri")
+    if not isinstance(uri, str):
+        return None
+    base_id = location.get("uriBaseId")
+    full = bases.get(base_id, "") + uri if isinstance(base_id, str) else uri
+    return full if full.startswith(FILE_SCHEME) else None
+
+
+def _relative(full: str, root: str) -> str | None:
+    """The path of a `file://` URI below `root`, or `None` when it lies elsewhere."""
+    path = unquote(full[len(FILE_SCHEME) :])
+    prefix = f"{root.rstrip('/')}/"
+    return path[len(prefix) :] if path.startswith(prefix) and path != prefix else None
+
+
+def clone_fragments(sarif_text: str, root: str) -> list[list[Fragment]]:
+    """One list of fragments per clone; a fragment outside `root` is left out."""
+    clones: list[list[Fragment]] = []
+    for run in json.loads(sarif_text)["runs"]:
+        bases = _bases(run)
+        for result in run.get("results", []):
+            fragments: list[Fragment] = []
+            for entry in [*result.get("locations", []), *result.get("relatedLocations", [])]:
+                physical = entry["physicalLocation"]
+                full = _file_uri(physical["artifactLocation"], bases)
+                path = _relative(full, root) if full is not None else None
+                if path is not None:
+                    region = physical["region"]
+                    fragments.append(
+                        Fragment(path, int(region["startLine"]), int(region["endLine"]))
+                    )
+            clones.append(fragments)
+    return clones
+
+
+def duplication_added(sarif_text: str, added: Mapping[str, frozenset[int]], root: str) -> int:
+    """Distinct added `(path, line)` inside any clone fragment, fragment ends included."""
     counted: set[tuple[str, int]] = set()
-    for clone in json.loads(report_json).get("duplicates", []):
-        for side in ("firstFile", "secondFile"):
-            fragment = clone[side]
-            path = f"{folder}/{fragment['name']}" if folder else fragment["name"]
+    for fragments in clone_fragments(sarif_text, root):
+        for fragment in fragments:
             counted.update(
-                (path, line)
-                for line in added.get(path, ())
-                if fragment["start"] <= line <= fragment["end"]
+                (fragment.path, line)
+                for line in added.get(fragment.path, ())
+                if fragment.start <= line <= fragment.end
             )
     return len(counted)
 
 
-def _rewrite(value: Any, prefixes: Sequence[str]) -> Any:
-    if isinstance(value, str):
-        for prefix in prefixes:
-            if value.startswith(prefix):
-                return value[len(prefix) :] or "./"
-        return value
+def _rewrite(value: Any, bases: Mapping[str, str], root: str) -> None:
     if isinstance(value, list):
-        return [_rewrite(item, prefixes) for item in value]
-    if isinstance(value, dict):
-        return {key: _rewrite(item, prefixes) for key, item in value.items()}
-    return value
+        for item in value:
+            _rewrite(item, bases, root)
+        return
+    if not isinstance(value, dict):
+        return
+    if isinstance(value.get("uri"), str):
+        full = _file_uri(value, bases)
+        if full is not None:
+            relative = _relative(full, root)
+            value["uri"] = relative if relative is not None else PurePosixPath(full).name
+            value.pop("uriBaseId", None)
+    for item in value.values():
+        _rewrite(item, bases, root)
 
 
-def relative_sarif(text: str) -> str:
-    """The SARIF with every `file://` URI made relative to its scan root.
+def relative_sarif(text: str, root: str) -> str:
+    """The SARIF with every `file://` location relative to `root` and no base URI left.
 
-    The base URI jscpd records is the absolute scan folder; stored as it is it would put a
-    scratch path in the result.
+    A location outside `root` keeps only its file name: no scratch path is stored.
     """
     document = json.loads(text)
-    for run in document.get("runs", []):
-        bases = run.get("originalUriBaseIds", {})
-        prefixes = [
-            base["uri"]
-            for base in bases.values()
-            if isinstance(base.get("uri"), str) and base["uri"].startswith("file://")
-        ]
-        run.update(_rewrite(run, prefixes))
+    for run in document["runs"]:
+        bases = _bases(run)
+        run.pop("originalUriBaseIds", None)
+        _rewrite(run, bases, root)
     return json.dumps(document, ensure_ascii=False)

@@ -21,11 +21,7 @@ from orchestrator.application.analysis.dependencies import (
     diff_dependencies,
     lookup_dependencies,
 )
-from orchestrator.application.analysis.duplication import (
-    common_dir,
-    duplication_added,
-    relative_sarif,
-)
+from orchestrator.application.analysis.duplication import duplication_added, relative_sarif
 from orchestrator.application.analysis.inputs import RepositoryInputs, slug
 from orchestrator.application.analysis.secrets import SARIF_MEDIA_TYPE
 from orchestrator.application.analysis.summary import not_run
@@ -47,7 +43,6 @@ JSCPD_TIMEOUT_MIN = 10
 LIZARD_TIMEOUT_MIN = 10
 CYCLOMATIC_THRESHOLD = 15
 COGNITIVE_THRESHOLD = 15
-JSCPD_JSON = "jscpd-report.json"
 JSCPD_SARIF = "jscpd-report.sarif"
 HEAD_FILES = "files"
 DUPLICATION = "code.duplication_added"
@@ -142,22 +137,6 @@ class _Scan:
     scratch_root: Workspace
 
 
-def _sarif_artifact(
-    scan: _Scan, new_id: Callable[[], UUID], analysis_id: UUID
-) -> AnalysisArtifact | None:
-    """The jscpd SARIF, its `file://` URIs made relative; `None` when absent or unreadable."""
-    sarif = scan.scratch_root.read(f"{scan.relative}.jscpd/{JSCPD_SARIF}")
-    if sarif is None:
-        return None
-    try:
-        body = relative_sarif(sarif).encode()
-    except ValueError, AttributeError, TypeError:
-        return None
-    return AnalysisArtifact(
-        id=new_id(), analysis_id=analysis_id, tool=JSCPD, media_type=SARIF_MEDIA_TYPE, body=body
-    )
-
-
 def _duplication(
     scan: _Scan,
     production: Sequence[str],
@@ -177,20 +156,25 @@ def _duplication(
     versions = {JSCPD: run.version}
     if (word := _finished(JSCPD, run)) is not None:
         return Tier1bResult(words={DUPLICATION: word}, tool_versions=versions)
-    report = scan.scratch_root.read(f"{scan.relative}.jscpd/{JSCPD_JSON}")
-    if report is None:
+    sarif = scan.scratch_root.read(f"{scan.relative}.jscpd/{JSCPD_SARIF}")
+    if sarif is None:
         return Tier1bResult(
             words={DUPLICATION: _failed(JSCPD, "no report")}, tool_versions=versions
         )
+    root = f"{scan.scratch}.head/{HEAD_FILES}"
+    in_production = {path: added[path] for path in production if path in added}
     try:
-        count = duplication_added(report, added, common_dir(production))
+        count = duplication_added(sarif, in_production, root)
+        body = relative_sarif(sarif, root).encode()
     except ValueError, KeyError, TypeError, AttributeError:
         unreadable = _failed(JSCPD, "report unreadable")
         return Tier1bResult(words={DUPLICATION: unreadable}, tool_versions=versions)
-    artifact = _sarif_artifact(scan, new_id, analysis_id)
+    artifact = AnalysisArtifact(
+        id=new_id(), analysis_id=analysis_id, tool=JSCPD, media_type=SARIF_MEDIA_TYPE, body=body
+    )
     return Tier1bResult(
         (Count(DUPLICATION, None, count, "production"),),
-        artifacts=(artifact,) if artifact is not None else (),
+        artifacts=(artifact,),
         tool_versions=versions,
     )
 

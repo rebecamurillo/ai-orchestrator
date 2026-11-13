@@ -13,8 +13,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-import pytest
-
 from orchestrator.application.analysis.declaration import DEFAULT_DECLARATION
 from orchestrator.application.analysis.duplication import duplication_added, relative_sarif
 from orchestrator.application.analysis.inputs import RepositoryInputs
@@ -115,11 +113,19 @@ def jscpd_files() -> dict[str, str]:
     return {name: text(f"jscpd-input/files/{name}") for name in ("a.py", "b.py", "c.py", "d.py")}
 
 
+SCAN_ROOT = f"{CLONE}.head/files"
+
+
+def jscpd_sarif(name: str, folder: str) -> str:
+    """A recorded SARIF, the recorder's absolute scan folder moved to this test's scan root."""
+    return re.sub(rf"file://[^\"]*/{folder}/files/", f"file://{SCAN_ROOT}/", text(name))
+
+
 def jscpd_workspace() -> FakeWorkspace:
     return FakeWorkspace(
         files={
             f"{RELATIVE}.jscpd/jscpd-report.json": text("jscpd-report.json"),
-            f"{RELATIVE}.jscpd/jscpd-report.sarif": text("jscpd-sarif.json"),
+            f"{RELATIVE}.jscpd/jscpd-report.sarif": jscpd_sarif("jscpd-sarif.json", "jscpd-input"),
         }
     )
 
@@ -211,7 +217,7 @@ def test_the_stored_sarif_holds_no_absolute_path_or_file_uri() -> None:
     assert "file://" not in body
     assert "/work/" not in body
     document = json.loads(body)
-    assert document["runs"][0]["originalUriBaseIds"]["%SRCROOT%"]["uri"] == "./"
+    assert "originalUriBaseIds" not in document["runs"][0]
     uris = [
         r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
         for r in document["runs"][0]["results"]
@@ -219,23 +225,50 @@ def test_the_stored_sarif_holds_no_absolute_path_or_file_uri() -> None:
     assert uris == ["a.py", "c.py"]
 
 
-def test_file_uris_become_relative_to_their_scan_root_wherever_they_sit() -> None:
+def located(artifact_location: dict[str, str]) -> dict[str, object]:
+    return {"physicalLocation": {"artifactLocation": artifact_location}}
+
+
+def test_file_uris_become_relative_to_the_scan_root_and_no_base_is_kept() -> None:
+    """Operator ruling 2026-11-13 (replaces the `./` base rewrite): every `file://` location,
+    with or without a base id, becomes its path below the scan root; one outside it keeps its
+    file name only."""
     document = {
         "runs": [
             {
-                "originalUriBaseIds": {"%SRCROOT%": {"uri": "file:///scan/head/files/"}},
-                "items": ["file:///scan/head/files/src/a.py", "plain", "file:///elsewhere/b.py"],
-                "n": 3,
-            },
-            {"results": []},
+                "originalUriBaseIds": {
+                    "%SRCROOT%": {"uri": "file:///scan/head/files/src/"},
+                    "%OTHER%": {"uri": "file:///elsewhere/"},
+                },
+                "artifacts": [{"location": {"uri": "a%20b.py", "uriBaseId": "%SRCROOT%"}}],
+                "results": [
+                    {
+                        "locations": [
+                            located({"uri": "b.py", "uriBaseId": "%OTHER%"}),
+                            located({"uri": "file:///scan/head/files/lib/c.py"}),
+                            located({"uri": "plain.py"}),
+                            located({"uri": "d.py", "uriBaseId": "%NONE%"}),
+                        ],
+                        "n": 3,
+                    }
+                ],
+            }
         ]
     }
-    rewritten = json.loads(relative_sarif(json.dumps(document)))
-    first = rewritten["runs"][0]
-    assert first["originalUriBaseIds"]["%SRCROOT%"]["uri"] == "./"
-    assert first["items"] == ["src/a.py", "plain", "file:///elsewhere/b.py"]
-    assert first["n"] == 3
-    assert rewritten["runs"][1] == {"results": []}
+    rewritten = json.loads(relative_sarif(json.dumps(document), "/scan/head/files/"))
+    run_ = rewritten["runs"][0]
+    assert "originalUriBaseIds" not in run_
+    assert run_["artifacts"] == [{"location": {"uri": "src/a b.py"}}]
+    locations = [
+        entry["physicalLocation"]["artifactLocation"] for entry in run_["results"][0]["locations"]
+    ]
+    assert locations == [
+        {"uri": "b.py"},
+        {"uri": "lib/c.py"},
+        {"uri": "plain.py"},
+        {"uri": "d.py", "uriBaseId": "%NONE%"},
+    ]
+    assert run_["results"][0]["n"] == 3
 
 
 def test_no_production_file_means_no_jscpd_run_and_a_zero() -> None:
@@ -257,47 +290,70 @@ def test_a_jscpd_that_does_not_finish_reads_not_run_and_the_analysis_goes_on() -
     assert figure(result, "code.functions_over_cyclomatic", "count") == 0
 
 
-def test_a_missing_or_unreadable_jscpd_report_reads_not_run() -> None:
+def test_a_missing_or_unreadable_jscpd_sarif_reads_not_run() -> None:
+    """Operator ruling 2026-11-13: the SARIF is the only source of fragment paths, so the JSON
+    report alone gives no figure (replaces "a missing SARIF keeps the count")."""
     ok = {JSCPD: ToolRun(0, "", "", "5.4.3")}
     result, _, _ = run(jscpd_files(), runs=ok)
     assert result.words[DUPLICATION] == "not run — jscpd: no report"
-    for body in ("{not json", "[]", '{"duplicates": [{"firstFile": 1}]}'):
-        workspace = FakeWorkspace(files={f"{RELATIVE}.jscpd/jscpd-report.json": body})
+    only_json = FakeWorkspace(
+        files={f"{RELATIVE}.jscpd/jscpd-report.json": text("jscpd-report.json")}
+    )
+    result, _, _ = run(jscpd_files(), added_diff(a_py=[5]), ok, only_json)
+    assert result.words[DUPLICATION] == "not run — jscpd: no report"
+    assert [a for a in result.artifacts if a.tool == "jscpd"] == []
+    for body in ("{not json", "[]", '{"runs": [{"results": [{"locations": [1]}]}]}'):
+        workspace = FakeWorkspace(files={f"{RELATIVE}.jscpd/jscpd-report.sarif": body})
         result, _, _ = run(jscpd_files(), runs=ok, workspace=workspace)
         assert result.words[DUPLICATION] == "not run — jscpd: report unreadable"
-
-
-def test_a_missing_or_unreadable_sarif_keeps_the_count_and_leaves_no_artefact() -> None:
-    ok = {JSCPD: ToolRun(0, "", "", "5.4.3")}
-    report = text("jscpd-report.json")
-    for sarif in (None, "{not json", "[]"):
-        files = {f"{RELATIVE}.jscpd/jscpd-report.json": report}
-        if sarif is not None:
-            files[f"{RELATIVE}.jscpd/jscpd-report.sarif"] = sarif
-        result, _, _ = run(jscpd_files(), added_diff(a_py=[5]), ok, FakeWorkspace(files=files))
-        assert figure(result, DUPLICATION) == 1
         assert [a for a in result.artifacts if a.tool == "jscpd"] == []
 
 
-def test_duplication_counts_distinct_lines_across_both_fragments_and_maps_the_folder() -> None:
-    report = json.dumps(
+def sarif_clone(*fragments: tuple[str, int, int]) -> dict[str, object]:
+    first, *related = [
         {
-            "duplicates": [
+            "physicalLocation": {
+                "artifactLocation": {"uri": f"file:///scan/files/{path}"},
+                "region": {"startLine": start, "endLine": end},
+            }
+        }
+        for path, start, end in fragments
+    ]
+    return {"locations": [first], "relatedLocations": related}
+
+
+def test_duplication_counts_distinct_added_lines_across_every_fragment() -> None:
+    sarif = json.dumps(
+        {
+            "runs": [
                 {
-                    "firstFile": {"name": "a.py", "start": 2, "end": 4},
-                    "secondFile": {"name": "b.py", "start": 10, "end": 12},
-                },
-                {
-                    "firstFile": {"name": "a.py", "start": 4, "end": 6},
-                    "secondFile": {"name": "b.py", "start": 1, "end": 1},
-                },
+                    "results": [
+                        sarif_clone(("src/a.py", 2, 4), ("src/b.py", 10, 12)),
+                        sarif_clone(("src/a.py", 4, 6), ("src/b.py", 1, 1)),
+                        sarif_clone(("../out.py", 1, 9)),
+                        {
+                            "locations": [
+                                {
+                                    "physicalLocation": {
+                                        "artifactLocation": {"uri": "file:///elsewhere/a.py"},
+                                        "region": {"startLine": 1, "endLine": 9},
+                                    }
+                                },
+                                {"physicalLocation": {"artifactLocation": {"index": 0}}},
+                            ]
+                        },
+                    ]
+                }
             ]
         }
     )
-    added = {"src/a.py": frozenset({1, 2, 4, 6, 7}), "src/b.py": frozenset({11, 1})}
-    assert duplication_added(report, added, "src") == 5  # a: 2, 4, 6; b: 11, 1
-    assert duplication_added(report, {"a.py": frozenset({3})}, "") == 1
-    assert duplication_added("{}", added, "src") == 0
+    added = {
+        "src/a.py": frozenset({1, 2, 4, 6, 7}),
+        "src/b.py": frozenset({11, 1}),
+        "out.py": frozenset({1}),
+    }
+    assert duplication_added(sarif, added, "/scan/files") == 5  # a: 2, 4, 6; b: 11, 1
+    assert duplication_added('{"runs": []}', added, "/scan/files") == 0
 
 
 # ── function complexity (AC6) ────────────────────────────────────────────────
@@ -461,32 +517,84 @@ def test_functions_over_needs_an_added_line_inside_the_range_and_a_value_above_t
     assert functions_over(rows, {}, 15) == (0, 0)
 
 
-@pytest.mark.parametrize(
-    ("paths", "expected"),
-    [(["src/a.py", "src/b.py"], "src"), (["a/x.py", "b/y.py"], ""), (["a.py", "b.py"], "")],
+FOLDER_FILES = (
+    "src/billing/invoice.py",
+    "lib/report/summary.py",
+    "api/helpers.py",
+    "web/helpers.py",
 )
-def test_the_jscpd_folder_is_the_deepest_one_holding_every_scanned_file(
-    paths: list[str], expected: str
-) -> None:
-    """A fragment named `a.py` is that file under the common folder: the diff adds it there."""
-    report = json.dumps(
-        {
-            "duplicates": [
-                {
-                    "firstFile": {"name": "a.py", "start": 1, "end": 1},
-                    "secondFile": {"name": "z.py", "start": 1, "end": 1},
-                }
-            ]
+
+
+def folders_run(diff: str) -> Tier1bResult:
+    """jscpd 5.4.3's recorded run over files in four folders (`jscpd-folders-output/`)."""
+    files = {path: text(f"jscpd-folders-input/files/{path}") for path in FOLDER_FILES}
+    sarif = jscpd_sarif("jscpd-folders-output/jscpd-report.sarif", "jscpd-folders-input")
+    workspace = FakeWorkspace(
+        files={
+            f"{RELATIVE}.jscpd/jscpd-report.sarif": sarif,
+            f"{RELATIVE}.jscpd/jscpd-report.json": text("jscpd-folders-output/jscpd-report.json"),
         }
     )
-    workspace = FakeWorkspace(files={f"{RELATIVE}.jscpd/jscpd-report.json": report})
-    prefix = f"{expected}/" if expected else ""
-    target = f"{prefix}a.py"
-    diff = f"diff --git a/{target} b/{target}\n--- a/{target}\n+++ b/{target}\n@@ -0,0 +1 @@\n+x\n"
-    result, _, _ = run(
-        {p: "x = 1\n" for p in paths}, diff, {JSCPD: ToolRun(0, "", "", "5.4.3")}, workspace
+    result, _, _ = run(files, diff, {JSCPD: ToolRun(0, "", "", "5.4.3")}, workspace)
+    return result
+
+
+def artifact_uris(result: Tier1bResult) -> set[str]:
+    (artifact,) = [a for a in result.artifacts if a.tool == JSCPD]
+    found: set[str] = set()
+
+    def walk(value: object) -> None:
+        if isinstance(value, dict):
+            if isinstance(value.get("uri"), str):
+                found.add(value["uri"])
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(json.loads(artifact.body))
+    return found
+
+
+def test_a_clone_across_two_folders_counts_its_added_lines_at_their_relative_paths() -> None:
+    """Operator ruling 2026-11-13: paths come from the SARIF, relative to the scan root; the
+    recorded fragments are invoice.py 3-19 and summary.py 6-22."""
+    diff = added_diff(src__billing__invoice_py=[5, 20], lib__report__summary_py=[2, 6])
+    result = folders_run(diff)
+    assert figure(result, DUPLICATION) == 2  # invoice.py 5, summary.py 6
+    assert artifact_uris(result) == set(FOLDER_FILES)
+    (artifact,) = [a for a in result.artifacts if a.tool == JSCPD]
+    assert "file://" not in artifact.body.decode()
+    assert SCAN_ROOT not in artifact.body.decode()
+
+
+def test_two_files_with_one_basename_in_different_folders_are_told_apart() -> None:
+    """Recorded fragments: api/helpers.py 3-14, web/helpers.py 7-18."""
+    inside_web = folders_run(added_diff(api__helpers_py=[1], web__helpers_py=[8]))
+    assert figure(inside_web, DUPLICATION) == 1
+    # web/helpers.py line 4 lies inside api's fragment, not web's: a basename would count it.
+    outside = folders_run(added_diff(api__helpers_py=[2], web__helpers_py=[4]))
+    assert figure(outside, DUPLICATION) == 0
+
+
+def test_the_recorded_folder_run_names_fragments_by_basename_in_its_json_only() -> None:
+    """Why the JSON `name` is never read: jscpd 5.4.3 gives the bare basename there."""
+    report = json.loads(text("jscpd-folders-output/jscpd-report.json"))
+    names = {
+        clone[side]["name"]
+        for clone in report["duplicates"]
+        for side in ("firstFile", "secondFile")
+    }
+    assert names == {"helpers.py", "summary.py", "invoice.py"}
+    sarif = text("jscpd-folders-output/jscpd-report.sarif")
+    root = str(FIXTURES / "jscpd-folders-input" / "files")
+    moved = sarif.replace(
+        re.search(r"file://([^\"]*/jscpd-folders-input/files)/", sarif).group(1),  # type: ignore[union-attr]
+        root,
     )
-    assert figure(result, DUPLICATION) == 1
+    added = {"api/helpers.py": frozenset({3}), "web/helpers.py": frozenset({3})}
+    assert duplication_added(moved, added, root) == 1
 
 
 class BinaryGit(FakeGit):

@@ -9,6 +9,7 @@ Every file here is one of three kinds. Nothing is a binary or a `node_modules` f
 | `jscpd-report.json` | jscpd 5.4.3 (npm) | `jscpd --reporters sarif,json --output <dir> files/a.py files/b.py files/c.py files/d.py`, run in `jscpd-input/` |
 | `jscpd-sarif.json` | jscpd 5.4.3 | the `jscpd-report.sarif` the same run wrote (named `.json` here; it holds the recorder's absolute scan folder in `originalUriBaseIds`, which the code makes relative before storing, see `test_tier1b.py`) |
 | `jscpd-version.txt` | jscpd 5.4.3 | `jscpd --version` |
+| `jscpd-folders-output/jscpd-report.sarif`, `jscpd-folders-output/jscpd-report.json` | jscpd 5.4.3 (npx) | `npx --yes jscpd@5.4.3 --reporters sarif,json --output <absolute path of jscpd-folders-output> <absolute paths of jscpd-folders-input/files/src/billing/invoice.py, lib/report/summary.py, api/helpers.py, web/helpers.py>`; both files are written by jscpd itself, unedited. The SARIF holds one `originalUriBaseIds` entry per folder (the recorder's absolute paths, which `test_tier1b.py` moves to its scan root); the JSON names every fragment by its bare basename, which is why the code reads paths from the SARIF only (Operator ruling 2026-11-13) |
 | `lizard.csv` | lizard 1.26.0 | `uv tool run --from lizard==1.26.0 lizard --csv <absolute paths of lizard-input/files/a.py and b.ts>` |
 | `lizard-cognitive.csv` | lizard 1.26.0 | the same with `-Ecognitive` |
 | `lizard-version.txt` | lizard 1.26.0 | `uv tool run --from lizard==1.26.0 lizard --version` |
@@ -23,7 +24,9 @@ exist on npm (checked 2026-11-13), so only `jscpd` is installed.
 
 ## Input files written by hand (the programs the tools were run on, and lock-file samples)
 
-`jscpd-input/files/*.py` (a and b share one clone, c and d another), `lizard-input/files/a.py`
+`jscpd-input/files/*.py` (a and b share one clone, c and d another),
+`jscpd-folders-input/files/{src/billing/invoice.py, lib/report/summary.py}` (one clone across two
+folders) and `{api,web}/helpers.py` (one clone between two files with the same basename), `lizard-input/files/a.py`
 (`changed_fn` at cyclomatic 22 and cognitive 21, `unchanged_fn` at 30 and 29) and `b.ts`,
 `pnpm-lock.{base,head}.yaml`, `package-lock.{base,head}.json`, `uv.{base,head}.lock`,
 `poetry.{base,head}.lock`, `package.{base,head}.json`: samples in each tool's documented
