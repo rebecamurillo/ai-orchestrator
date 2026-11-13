@@ -14,6 +14,7 @@ export const FIGURES_DIFFER = 'FIGURES DIFFER';
 export const RECALCULATE_LABEL = 'RECALCULATE METRICS';
 export const NO_VERSION = 'no result version';
 export const RUNNING_WORD = 'running';
+export const RECALC_PARAM = 'recalculate';
 const GATE_LINE = 'the budget gate uses the higher figure';
 
 export function runValue(
@@ -29,6 +30,10 @@ export function runValue(
         (source === undefined || v.source === source),
     ) ?? null
   );
+}
+
+export function recalcRequested(search: string): boolean {
+  return new URLSearchParams(search).get(RECALC_PARAM) === '1';
 }
 
 export function isEnded(status: string): boolean {

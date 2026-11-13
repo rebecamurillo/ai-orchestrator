@@ -76,6 +76,7 @@ import {
   settledVersion,
   type TabName,
 } from '../lib/run/metrics-tab';
+import { recalcRequested } from '../lib/run/metrics-glance';
 import { $metricsTab, initMetricsTab } from '../stores/metrics-tab';
 import { terminalBlock, TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
 import { loadCatalogue } from '../stores/catalogue';
@@ -115,6 +116,7 @@ export default function RunDetail({ runId }: Props) {
   const [detail, setDetail] = useState<RunDetailOut | null>(null);
   const [session, setSession] = useState<SessionOut | null>(null);
   const [sending, setSending] = useState(false);
+  const recalcOpenRef = useRef(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [posting, setPosting] = useState<SignalKind | null>(null);
   const [signalError, setSignalError] = useState<ProblemDetail | null>(null);
@@ -183,6 +185,7 @@ export default function RunDetail({ runId }: Props) {
   useEffect(() => {
     openedRef.current = false; // reset so ?opened=true fires again on navigation to a new Run
     resetRunMetrics();
+    recalcOpenRef.current = recalcRequested(window.location.search);
     const query = parseMetricsQuery(window.location.search);
     arrivedUrlRef.current = { view: query.view, set: query.set, v: query.v };
     urlLiveRef.current = false;
@@ -418,7 +421,12 @@ export default function RunDetail({ runId }: Props) {
             versions={glance.versions}
             calc={glance.calc}
             calcError={glance.calcError}
-            onConfirm={() => void recalculate()}
+            onConfirm={() => {
+              // the link opens the confirm once; a later remount (calculation ended) stays closed
+              recalcOpenRef.current = false;
+              void recalculate();
+            }}
+            opened={recalcOpenRef.current}
           />
         }
       />

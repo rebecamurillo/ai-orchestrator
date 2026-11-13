@@ -18,6 +18,7 @@ interface Props {
   calc: CalculationOut | null;
   calcError: ProblemDetail | null;
   onConfirm: () => void;
+  opened?: boolean;
 }
 
 /** Recalculate an ended Run's metrics; the running calculation replaces the button. */
@@ -27,6 +28,7 @@ export default function RecalculateControl({
   calc,
   calcError,
   onConfirm,
+  opened,
 }: Props) {
   if (!isEnded(status)) return null;
   const line = calcLine(calc);
@@ -54,6 +56,7 @@ export default function RecalculateControl({
           keepLabel={KEEP_LABEL}
           disabled={false}
           onConfirm={onConfirm}
+          initialOpen={opened}
         />
       )}
       {calcError ? (
