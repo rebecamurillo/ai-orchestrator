@@ -202,7 +202,6 @@ export default function StepDetail({ runId, dotPath }: Props) {
               versions: glance.versions,
               selected: glance.selected,
               latest: glance.metrics?.latest ?? null,
-              projectName: '',
               items: glance.metrics?.items ?? [],
               subscription: false,
             }}

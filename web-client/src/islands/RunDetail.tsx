@@ -69,7 +69,13 @@ import {
   messagesRequestPath,
   type SessionOut,
 } from '../lib/run/session';
-import { defaultTab, metricsSearch, parseMetricsQuery, type TabName } from '../lib/run/metrics-tab';
+import {
+  defaultTab,
+  metricsSearch,
+  parseMetricsQuery,
+  settledVersion,
+  type TabName,
+} from '../lib/run/metrics-tab';
 import { $metricsTab, initMetricsTab } from '../stores/metrics-tab';
 import { terminalBlock, TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
 import { loadCatalogue } from '../stores/catalogue';
@@ -122,6 +128,9 @@ export default function RunDetail({ runId }: Props) {
   const mountedTickRef = useRef(pollTick);
   /** One-shot guard: sets the active tab once on the first detail load. */
   const tabDefaultSetRef = useRef(false);
+  /** The view, set and version the URL arrived with; the URL is left alone until one differs. */
+  const arrivedUrlRef = useRef<{ view: string; set: string; v: number | null } | null>(null);
+  const urlLiveRef = useRef(false);
   // 8-3: on the first navigation fetch, append `?opened=true` so `open_run` records the
   // visit server-side before `build_detail` runs — the response's `last_opened_at` then
   // reflects the just-updated timestamp, and the files fetch sees the freshly committed
@@ -175,6 +184,8 @@ export default function RunDetail({ runId }: Props) {
     openedRef.current = false; // reset so ?opened=true fires again on navigation to a new Run
     resetRunMetrics();
     const query = parseMetricsQuery(window.location.search);
+    arrivedUrlRef.current = { view: query.view, set: query.set, v: query.v };
+    urlLiveRef.current = false;
     initMetricsTab(runId, { view: query.view, set: query.set });
     if (query.v !== null) void selectVersion(runId, query.v);
     void loadCatalogue();
@@ -267,10 +278,31 @@ export default function RunDetail({ runId }: Props) {
     );
   }, [detail]);
 
-  // The tab, view, metric set and version are mirrored into the URL; a poll that changes none
-  // of them writes nothing.
+  useEffect(() => {
+    if (settledVersion(glance.selected, glance.versions) === glance.selected) return;
+    void selectVersion(runId, Math.max(...glance.versions.map((v) => v.n)));
+  }, [glance.selected, glance.versions]);
+
+  function pickTab(tab: TabName): void {
+    urlLiveRef.current = true;
+    setActiveTab(tab);
+  }
+
+  // The tab, view, metric set and version are mirrored into the URL once the Operator changes
+  // one of them. Never on load: e2e specs pin the arrival URL (`run-diagram.spec.ts`,
+  // `runs-history.spec.ts`, `board.spec.ts`), and a poll that changes none of them writes nothing.
   useEffect(() => {
     if (!detail) return;
+    const arrived = arrivedUrlRef.current;
+    if (
+      arrived !== null &&
+      (metricsView.view !== arrived.view ||
+        metricsView.set !== arrived.set ||
+        glance.selected !== arrived.v)
+    ) {
+      urlLiveRef.current = true;
+    }
+    if (!urlLiveRef.current) return;
     const next = metricsSearch(window.location.search, {
       tab: activeTab,
       view: metricsView.view,
@@ -445,7 +477,7 @@ export default function RunDetail({ runId }: Props) {
             type="button"
             className="wf-tab-btn"
             aria-pressed={activeTab === 'gate'}
-            onClick={() => setActiveTab('gate')}
+            onClick={() => pickTab('gate')}
           >
             GATE
           </button>
@@ -453,7 +485,7 @@ export default function RunDetail({ runId }: Props) {
             type="button"
             className="wf-tab-btn"
             aria-pressed={activeTab === 'steps'}
-            onClick={() => setActiveTab('steps')}
+            onClick={() => pickTab('steps')}
           >
             STEPS
           </button>
@@ -461,7 +493,7 @@ export default function RunDetail({ runId }: Props) {
             type="button"
             className="wf-tab-btn"
             aria-pressed={activeTab === 'metrics'}
-            onClick={() => setActiveTab('metrics')}
+            onClick={() => pickTab('metrics')}
           >
             METRICS
           </button>
@@ -470,7 +502,7 @@ export default function RunDetail({ runId }: Props) {
               type="button"
               className="wf-tab-btn"
               aria-pressed={activeTab === 'session'}
-              onClick={() => setActiveTab('session')}
+              onClick={() => pickTab('session')}
             >
               SESSION
             </button>

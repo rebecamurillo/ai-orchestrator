@@ -10,6 +10,7 @@ import {
   metricList,
   metricsSearch,
   parseMetricsQuery,
+  settledVersion,
   scopeTree,
   storyFrame,
   TABLE_COLUMNS,
@@ -179,6 +180,7 @@ describe('query', () => {
     expect(parseMetricsQuery('?tab=nope&view=x&metrics=y&v=0').v).toBeNull();
     expect(parseMetricsQuery('?v=1.5&tab=nope')).toMatchObject({ tab: null, v: null });
     expect(parseMetricsQuery('?v=abc').v).toBeNull();
+    expect(parseMetricsQuery('?v=1000000000000000000000').v).toBeNull();
   });
 
   it('writes the state, keeping other parameters', () => {
@@ -217,5 +219,20 @@ describe('attemptValues', () => {
     const b = at('attempt', 'a.build2#1');
     const c = at('step', 'a.build');
     expect(attemptValues([a, b, c], 'a.build')).toEqual([a]);
+  });
+});
+
+describe('settledVersion', () => {
+  const versions = [{ n: 1 }, { n: 2 }];
+  it('keeps an older version the Run has', () => {
+    expect(settledVersion(1, versions)).toBe(1);
+  });
+  it('follows the latest for the latest or a version the Run lacks', () => {
+    expect(settledVersion(2, versions)).toBeNull();
+    expect(settledVersion(99, versions)).toBeNull();
+  });
+  it('waits while the versions are unknown, and leaves no selection alone', () => {
+    expect(settledVersion(3, [])).toBe(3);
+    expect(settledVersion(null, versions)).toBeNull();
   });
 });

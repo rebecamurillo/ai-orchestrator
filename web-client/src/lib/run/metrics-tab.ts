@@ -233,8 +233,21 @@ export function parseMetricsQuery(search: string): {
     tab: TABS.includes(tab) ? (tab as TabName) : null,
     view: q.get('view') === 'chart' ? 'chart' : 'table',
     set: q.get('metrics') === 'all' ? 'all' : 'headline',
-    v: /^[1-9]\d*$/.test(v) ? Number(v) : null,
+    v: /^[1-9]\d*$/.test(v) && Number.isSafeInteger(Number(v)) ? Number(v) : null,
   };
+}
+
+/**
+ * The selection a `?v=` read settles on once the versions are known: the latest version and a
+ * version the Run does not have both become `null` (follow the latest), so neither pins the page.
+ */
+export function settledVersion(
+  selected: number | null,
+  versions: readonly { n: number }[],
+): number | null {
+  if (selected === null || versions.length === 0) return selected;
+  const latest = Math.max(...versions.map((v) => v.n));
+  return selected === latest || !versions.some((v) => v.n === selected) ? null : selected;
 }
 
 export function metricsSearch(

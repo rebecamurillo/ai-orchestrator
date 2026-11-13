@@ -22,7 +22,9 @@ beforeEach(() => {
 describe('MetricsScopeTable', () => {
   it('drops a column whose metric has no catalogue entry', () => {
     const { entries } = $catalogue.get();
-    const { 'tokens.input': _gone, ...rest } = entries;
+    const rest = Object.fromEntries(
+      Object.entries(entries).filter(([id]) => id !== 'tokens.input'),
+    );
     $catalogue.set({ status: 'ready', entries: rest });
     const out = html([value({ metric_id: 'cost.gateway' })]);
     expect(out).toContain('label of cost.gateway');

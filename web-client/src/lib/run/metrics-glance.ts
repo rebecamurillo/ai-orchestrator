@@ -103,7 +103,8 @@ export interface TargetContext {
   versions: readonly ResultVersionOut[];
   selected: number | null;
   latest: number | null;
-  projectName: string;
+  /** Absent where the page does not know it: the drawer then reads it from the origin. */
+  projectName?: string;
   items: readonly MetricValueOut[];
   subscription: boolean;
 }
