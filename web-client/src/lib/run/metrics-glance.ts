@@ -98,7 +98,7 @@ export function calcLine(calc: CalculationOut | null): string | null {
   return `calculating v${calc.target_n} · started ${at}`;
 }
 
-interface TargetContext {
+export interface TargetContext {
   runLabel: string;
   versions: readonly ResultVersionOut[];
   selected: number | null;

@@ -17,6 +17,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
 
 import { api } from '../api/client';
+import OriginDrawer from '../components/metrics/OriginDrawer';
+import { attemptValues } from '../lib/run/metrics-tab';
+import { loadCatalogue } from '../stores/catalogue';
+import { $runMetrics, loadRunMetrics, resetRunMetrics } from '../stores/run-metrics';
 import { $poll, configurePolling, stopPolling } from '../stores/poll';
 import LogViewer from '../components/run/LogViewer';
 import HelperDrawer, { type DrawerContent } from '../components/run/HelperDrawer';
@@ -56,6 +60,7 @@ export default function StepDetail({ runId, dotPath }: Props) {
     null,
   );
   const pollTick = useStore($poll);
+  const glance = useStore($runMetrics);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
 
@@ -86,6 +91,8 @@ export default function StepDetail({ runId, dotPath }: Props) {
       }
       setDetail(data);
       setPhase({ kind: 'ready' });
+      // a metrics read never fails the page: the figure cells stay empty
+      void loadRunMetrics(runId);
       // Select the latest attempt (first in newest-first list) when first loaded
       if (data.attempts.length > 0 && selectedN === null) {
         setSelectedN(data.attempts[0].n);
@@ -100,6 +107,8 @@ export default function StepDetail({ runId, dotPath }: Props) {
   }
 
   useEffect(() => {
+    resetRunMetrics();
+    void loadCatalogue();
     void fetchDetail();
     return () => stopPolling();
   }, [runId, dotPath]);
@@ -131,6 +140,7 @@ export default function StepDetail({ runId, dotPath }: Props) {
 
   return (
     <div data-testid="step-detail">
+      <OriginDrawer />
       {/* ── Header ── */}
       <div className="wf-step-detail-header">
         <nav className="wf-step-detail-crumb">
@@ -186,6 +196,16 @@ export default function StepDetail({ runId, dotPath }: Props) {
             selectedN={selectedN}
             onSelect={setSelectedN}
             onDrawer={toggleDrawer}
+            values={attemptValues(glance.metrics?.items ?? [], detail.path)}
+            ctx={{
+              runLabel: detail.path,
+              versions: glance.versions,
+              selected: glance.selected,
+              latest: glance.metrics?.latest ?? null,
+              projectName: '',
+              items: glance.metrics?.items ?? [],
+              subscription: false,
+            }}
           />
 
           {selectedAttempt && (

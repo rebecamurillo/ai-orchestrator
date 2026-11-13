@@ -120,6 +120,10 @@ table.wf-step-attempts td {
   line-height: var(--type-row-body-line);
 }
 
+table.wf-step-attempts td.wf-step-figure {
+  text-align: right;
+}
+
 table.wf-step-attempts tr[data-selected='true'] td {
   color: var(--color-text);
 }

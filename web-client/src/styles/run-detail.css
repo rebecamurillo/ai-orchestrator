@@ -323,6 +323,104 @@
   /* Panel content is conditionally rendered; no layout needed here. */
 }
 
+.wf-metrics-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.wf-metrics-toggle {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.wf-metrics-toggle-btn {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-line);
+  background: none;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.wf-metrics-toggle-btn[aria-pressed='true'] {
+  color: var(--color-text);
+  border-color: var(--color-line-strong);
+}
+
+.wf-metrics-note {
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  margin-bottom: var(--space-6);
+}
+
+.wf-metrics-section,
+.wf-metrics-group {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  text-transform: var(--type-column-head-transform);
+  margin: var(--space-6) 0 var(--space-3);
+}
+
+.wf-metrics-scroll {
+  overflow-x: auto;
+}
+
+.wf-metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.wf-metrics-table th,
+.wf-metrics-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  font-size: var(--type-row-body);
+  text-align: left;
+}
+
+.wf-metrics-table td.wf-metrics-figure {
+  text-align: right;
+}
+
+.wf-metrics-table th[data-depth='1'] {
+  padding-left: var(--space-8);
+}
+
+.wf-metrics-table th[data-depth='2'] {
+  padding-left: calc(var(--space-8) * 2);
+}
+
+.wf-metrics-table th[data-depth='3'] {
+  padding-left: calc(var(--space-8) * 3);
+}
+
+.wf-metrics-table th[data-depth='4'] {
+  padding-left: calc(var(--space-8) * 4);
+}
+
+.wf-metrics-caret {
+  margin-right: var(--space-3);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+}
+
+.wf-metrics-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-3) var(--space-8);
+}
+
+.wf-metrics-kv dd {
+  margin: 0;
+}
+
 .wf-stop {
   display: flex;
   flex-direction: column;

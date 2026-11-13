@@ -31,6 +31,8 @@ import {
   type HistoryRowOut,
 } from '../../lib/runs/history';
 
+import HintControl from '../metrics/HintControl';
+
 interface Props {
   rows: HistoryRowOut[];
 }
@@ -44,6 +46,7 @@ export default function HistoryTable({ rows }: Props) {
             {HISTORY_COLUMNS.map((column, at) => (
               <th key={`${column}-${at}`} scope="col">
                 {column}
+                {column === 'cost' ? <HintControl metricId="spend.recorded" /> : null}
               </th>
             ))}
           </tr>

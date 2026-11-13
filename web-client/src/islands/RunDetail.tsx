@@ -41,6 +41,7 @@ import CostBlock from '../components/run/CostBlock';
 import DiagramSection from '../components/run/DiagramSection';
 import GateRecord from '../components/run/GateRecord';
 import Header from '../components/run/Header';
+import MetricsTab from '../components/run/MetricsTab';
 import RecalculateControl from '../components/run/RecalculateControl';
 import SessionPanel from '../components/run/SessionPanel';
 import StepsTable from '../components/run/StepsTable';
@@ -68,6 +69,8 @@ import {
   messagesRequestPath,
   type SessionOut,
 } from '../lib/run/session';
+import { defaultTab, metricsSearch, parseMetricsQuery, type TabName } from '../lib/run/metrics-tab';
+import { $metricsTab, initMetricsTab } from '../stores/metrics-tab';
 import { terminalBlock, TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
 import { loadCatalogue } from '../stores/catalogue';
 import { $poll, configurePolling, forceTick, stopPolling } from '../stores/poll';
@@ -111,9 +114,10 @@ export default function RunDetail({ runId }: Props) {
   const [signalError, setSignalError] = useState<ProblemDetail | null>(null);
   const [plannedFile, setPlannedFile] = useState<RunFileOut | null>(null);
   const [anchored, setAnchored] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<'gate' | 'steps' | 'session'>('gate');
+  const [activeTab, setActiveTab] = useState<TabName>('gate');
   const pollTick = useStore($poll);
   const glance = useStore($runMetrics);
+  const metricsView = useStore($metricsTab);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
   /** One-shot guard: sets the active tab once on the first detail load. */
@@ -170,6 +174,9 @@ export default function RunDetail({ runId }: Props) {
   useEffect(() => {
     openedRef.current = false; // reset so ?opened=true fires again on navigation to a new Run
     resetRunMetrics();
+    const query = parseMetricsQuery(window.location.search);
+    initMetricsTab(runId, { view: query.view, set: query.set });
+    if (query.v !== null) void selectVersion(runId, query.v);
     void loadCatalogue();
     void fetchDetail();
     return () => stopPolling();
@@ -250,10 +257,33 @@ export default function RunDetail({ runId }: Props) {
     if (tabDefaultSetRef.current) return;
     tabDefaultSetRef.current = true;
     if (anchoredSeq(window.location.hash) !== null) return;
-    if (terminalBlock(detail) !== null) {
-      setActiveTab('session');
-    }
+    setActiveTab(
+      defaultTab({
+        hashSeq: null,
+        queryTab: parseMetricsQuery(window.location.search).tab,
+        hasTerminal: terminalBlock(detail) !== null,
+        status: detail.run.status,
+      }),
+    );
   }, [detail]);
+
+  // The tab, view, metric set and version are mirrored into the URL; a poll that changes none
+  // of them writes nothing.
+  useEffect(() => {
+    if (!detail) return;
+    const next = metricsSearch(window.location.search, {
+      tab: activeTab,
+      view: metricsView.view,
+      set: metricsView.set,
+      v: glance.selected,
+    });
+    if (next === window.location.search) return;
+    window.history.replaceState(
+      null,
+      '',
+      `${window.location.pathname}${next}${window.location.hash}`,
+    );
+  }, [detail, activeTab, metricsView.view, metricsView.set, glance.selected]);
 
   /** Posts one signal and returns the problem it was refused with, or `null` when it applied. */
   async function sendSignal(kind: SignalKind, body?: SignalIn): Promise<ProblemDetail | null> {
@@ -427,6 +457,14 @@ export default function RunDetail({ runId }: Props) {
           >
             STEPS
           </button>
+          <button
+            type="button"
+            className="wf-tab-btn"
+            aria-pressed={activeTab === 'metrics'}
+            onClick={() => setActiveTab('metrics')}
+          >
+            METRICS
+          </button>
           {terminal !== null ? (
             <button
               type="button"
@@ -442,6 +480,14 @@ export default function RunDetail({ runId }: Props) {
           {activeTab === 'gate' ? <GateRecord detail={detail} token={token} /> : null}
           {activeTab === 'steps' ? (
             <StepsTable detail={detail} anchoredSeq={anchored} runId={runId} />
+          ) : null}
+          {activeTab === 'metrics' ? (
+            <MetricsTab
+              detail={detail}
+              glance={glance}
+              onSelectVersion={(n) => void selectVersion(runId, n)}
+              onRetryMetrics={() => void loadRunMetrics(runId)}
+            />
           ) : null}
           {activeTab === 'session' && terminal !== null ? (
             <CommandBlock

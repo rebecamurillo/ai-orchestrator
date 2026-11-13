@@ -51,6 +51,7 @@ import {
   MORE_LABEL,
   type HistoryRowOut,
 } from '../lib/runs/history';
+import { loadCatalogue } from '../stores/catalogue';
 import { $poll } from '../stores/poll';
 import '../styles/runs.css';
 
@@ -109,6 +110,7 @@ export default function RunsHistory({ projectId, status }: Props) {
   }
 
   useEffect(() => {
+    void loadCatalogue();
     void fetchFirstPage();
     // fires once on mount; every later read is a `$poll` tick or a `more` click
   }, []);

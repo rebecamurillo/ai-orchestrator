@@ -5,14 +5,25 @@
  * `AttemptDetail` is exported here (moves from `StepDetail.tsx`) so the island can import the
  * type back without duplication. `AttemptsTable` is the default export.
  *
- * Columns: #, status, harness, model, duration, cost, exit, actions.
+ * Columns: #, status, harness, model, duration, cost, then the gateway / harness figures and
+ * the four token classes of the Run's metrics (only the catalogued ones, from `values`), exit,
+ * actions. The `cost` head carries the `spend.recorded` hint; the figures open their origin drawer.
  * Status token is the only signal-coloured cell (NFR-6): the span uses `.wf-step-token` with
  * `data-signal={tokenSignal(attempt.token)}`; no other cell carries a signal hue.
  * `data-selected` on `<tr>` marks the selected row; `step-prompt-{n}` and `step-reach-{n}`
  * testids are preserved in the actions column.
- * Stateless (no hooks); testable with renderToStaticMarkup.
+ * Testable with renderToStaticMarkup.
  */
+import { Fragment } from 'react';
+import { useStore } from '@nanostores/react';
+
+import type { components } from '../../api/schema';
 import { tokenSignal } from '../../lib/board/format';
+import { targetFor, type TargetContext } from '../../lib/run/metrics-glance';
+import { ATTEMPT_COLUMNS } from '../../lib/run/metrics-tab';
+import { $catalogue } from '../../stores/catalogue';
+import HintControl from '../metrics/HintControl';
+import ValueCell from '../metrics/ValueCell';
 import type { DrawerContent } from './HelperDrawer';
 
 export interface AttemptDetail {
@@ -46,6 +57,9 @@ interface Props {
   selectedN: number | null;
   onSelect: (n: number) => void;
   onDrawer: (n: number, content: DrawerContent) => void;
+  /** Attempt-scope metric values of this step; with `ctx`, adds the figure columns. */
+  values?: readonly components['schemas']['MetricValueOut'][];
+  ctx?: TargetContext;
 }
 
 const ROLE_SUFFIX: Record<string, string> = { consult: ' · senior', session: ' · session' };
@@ -64,7 +78,16 @@ function costText(cost_usd: string | null): string {
   return `$${cost_usd}`;
 }
 
-export default function AttemptsTable({ attempts, selectedN, onSelect, onDrawer }: Props) {
+export default function AttemptsTable({
+  attempts,
+  selectedN,
+  onSelect,
+  onDrawer,
+  values = [],
+  ctx,
+}: Props) {
+  const { entries } = useStore($catalogue);
+  const columns = ctx ? ATTEMPT_COLUMNS.filter((id) => entries[id]) : [];
   return (
     <div className="wf-step-attempts-scroll">
       <table className="wf-step-attempts">
@@ -75,7 +98,15 @@ export default function AttemptsTable({ attempts, selectedN, onSelect, onDrawer 
             <th scope="col">harness</th>
             <th scope="col">model</th>
             <th scope="col">duration</th>
-            <th scope="col">cost</th>
+            <th scope="col">
+              cost
+              <HintControl metricId="spend.recorded" />
+            </th>
+            {columns.map((id) => (
+              <th key={id} scope="col">
+                <HintControl metricId={id} showLabel />
+              </th>
+            ))}
             <th scope="col">exit</th>
             <th scope="col">actions</th>
           </tr>
@@ -97,6 +128,18 @@ export default function AttemptsTable({ attempts, selectedN, onSelect, onDrawer 
               <td>{attempt.model ?? '—'}</td>
               <td>{durationText(attempt.seconds)}</td>
               <td>{costText(attempt.cost_usd)}</td>
+              {columns.map((id) => (
+                <td key={id} className="wf-step-figure">
+                  {values
+                    .filter((v) => v.metric_id === id && v.attempt_n === attempt.n)
+                    .map((v, at) => (
+                      <Fragment key={`${v.source ?? ''}-${at}`}>
+                        {at > 0 ? ' · ' : null}
+                        <ValueCell target={targetFor(v, ctx as TargetContext)} />
+                      </Fragment>
+                    ))}
+                </td>
+              ))}
               <td>{attempt.exit_code ?? '—'}</td>
               <td>
                 {attempt.command === null && (
