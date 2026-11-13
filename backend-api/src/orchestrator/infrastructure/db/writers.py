@@ -24,6 +24,7 @@ from types import TracebackType
 from sqlalchemy.orm import Session
 
 from orchestrator.application.use_cases.announce import Announcer
+from orchestrator.application.use_cases.calculate_metrics import CalculationPorts
 from orchestrator.application.use_cases.record_attempt_facts import FactsPorts
 from orchestrator.application.use_cases.run_records import RecordPorts
 from orchestrator.application.use_cases.spend import SpendPorts
@@ -40,8 +41,10 @@ from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyGateRecordRepository,
     SQLAlchemyGatewayReadRepository,
     SQLAlchemyInstanceHoldRepository,
+    SQLAlchemyMetricCalculationRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
+    SQLAlchemyResultVersionRepository,
     SQLAlchemyRunRepository,
     SQLAlchemyStepRunRepository,
     SQLAlchemyTrajectoryRepository,
@@ -130,6 +133,8 @@ def open_writer_ports(
             engine=engine,
             holds=SQLAlchemyInstanceHoldRepository(session),
             run_repositories=SQLAlchemyRunRepositoryRecords(session),
+            calculations=SQLAlchemyMetricCalculationRepository(session),
+            versions=SQLAlchemyResultVersionRepository(session),
         )
     finally:
         session.close()
@@ -184,6 +189,37 @@ def open_record_ports(session_factory: SessionFactory) -> Iterator[RecordPorts]:
         yield RecordPorts(
             repositories=SQLAlchemyRunRepositoryRecords(session),
             commits=SQLAlchemyRunCommitRepository(session),
+            uow=SessionUnitOfWork(session),
+        )
+    finally:
+        session.close()
+
+
+@contextmanager
+def open_calculation_ports(
+    session_factory: SessionFactory,
+    gateway: Gateway,
+    extractors: Mapping[str, LogFacts],
+    log_exists: Callable[[str], bool] = log_file_exists,
+) -> Iterator[CalculationPorts]:
+    """One session's worth of `CalculationPorts` for the metrics job, closed on every path."""
+    session = session_factory()
+    try:
+        yield CalculationPorts(
+            runs=SQLAlchemyRunRepository(session),
+            steps=SQLAlchemyStepRunRepository(session),
+            attempts=SQLAlchemyAttemptRepository(session),
+            records=SQLAlchemyGateRecordRepository(session),
+            holds=SQLAlchemyInstanceHoldRepository(session),
+            calculations=SQLAlchemyMetricCalculationRepository(session),
+            versions=SQLAlchemyResultVersionRepository(session),
+            fact_sets=SQLAlchemyFactSetRepository(session),
+            gateway_reads=SQLAlchemyGatewayReadRepository(session),
+            run_records=SQLAlchemyRunRepositoryRecords(session),
+            gateway=gateway,
+            extractors=extractors,
+            log_exists=log_exists,
+            clock=SystemClock(),
             uow=SessionUnitOfWork(session),
         )
     finally:

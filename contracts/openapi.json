@@ -527,6 +527,92 @@
         "title": "BoardOut",
         "type": "object"
       },
+      "CalculationOut": {
+        "properties": {
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "entry_point": {
+            "items": {
+              "enum": [
+                "at_attempt_end",
+                "workflow_step",
+                "manual"
+              ],
+              "type": "string"
+            },
+            "title": "Entry Point",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "output": {
+            "title": "Output",
+            "type": "string"
+          },
+          "queued_at": {
+            "format": "date-time",
+            "title": "Queued At",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "failed",
+              "done"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "target_n": {
+            "title": "Target N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "target_n",
+          "state",
+          "entry_point",
+          "queued_at",
+          "started_at",
+          "ended_at",
+          "output"
+        ],
+        "title": "CalculationOut",
+        "type": "object"
+      },
       "CardOut": {
         "properties": {
           "age_seconds": {
@@ -2582,6 +2668,182 @@
         "title": "MessageIn",
         "type": "object"
       },
+      "MetricValueOut": {
+        "properties": {
+          "attempt_n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt N"
+          },
+          "carried_from": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carried From"
+          },
+          "method_id": {
+            "title": "Method Id",
+            "type": "string"
+          },
+          "metric_id": {
+            "title": "Metric Id",
+            "type": "string"
+          },
+          "missing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OriginOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partial_m": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partial M"
+          },
+          "partial_n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partial N"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "scope_key": {
+            "title": "Scope Key",
+            "type": "string"
+          },
+          "scope_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Label"
+          },
+          "scope_type": {
+            "title": "Scope Type",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value_num": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Num"
+          }
+        },
+        "required": [
+          "metric_id",
+          "method_id",
+          "scope_type",
+          "scope_key",
+          "scope_label",
+          "role",
+          "model",
+          "repository",
+          "attempt_n",
+          "source",
+          "value_num",
+          "unit",
+          "missing",
+          "partial_n",
+          "partial_m",
+          "carried_from",
+          "origin"
+        ],
+        "title": "MetricValueOut",
+        "type": "object"
+      },
       "ModelsOut": {
         "description": "The models a harness can use, and where that list comes from.",
         "properties": {
@@ -2749,6 +3011,180 @@
         "title": "NodeOut",
         "type": "object"
       },
+      "OriginOut": {
+        "properties": {
+          "base_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Commit"
+          },
+          "base_commit_na": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Commit Na"
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "branch_na": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Na"
+          },
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit"
+          },
+          "commit_na": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit Na"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "harness_na": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness Na"
+          },
+          "origin_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin Model"
+          },
+          "origin_model_na": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin Model Na"
+          },
+          "origin_repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin Repository"
+          },
+          "origin_repository_na": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin Repository Na"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "template_name": {
+            "title": "Template Name",
+            "type": "string"
+          },
+          "template_version": {
+            "title": "Template Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id",
+          "run_id",
+          "template_name",
+          "template_version",
+          "harness",
+          "harness_na",
+          "origin_model",
+          "origin_model_na",
+          "origin_repository",
+          "origin_repository_na",
+          "branch",
+          "branch_na",
+          "commit",
+          "commit_na",
+          "base_commit",
+          "base_commit_na"
+        ],
+        "title": "OriginOut",
+        "type": "object"
+      },
       "Page_CatalogueEntryOut_": {
         "properties": {
           "items": {
@@ -2855,6 +3291,33 @@
           "items"
         ],
         "title": "Page[RepositoryOut]",
+        "type": "object"
+      },
+      "Page_ResultVersionOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ResultVersionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[ResultVersionOut]",
         "type": "object"
       },
       "Page_RunSummaryOut_": {
@@ -4145,6 +4608,46 @@
         "title": "RepositoryUpdate",
         "type": "object"
       },
+      "ResultVersionOut": {
+        "properties": {
+          "calculated_at": {
+            "format": "date-time",
+            "title": "Calculated At",
+            "type": "string"
+          },
+          "entry_point": {
+            "items": {
+              "enum": [
+                "at_attempt_end",
+                "workflow_step",
+                "manual"
+              ],
+              "type": "string"
+            },
+            "title": "Entry Point",
+            "type": "array"
+          },
+          "methods_changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Methods Changed",
+            "type": "array"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n",
+          "calculated_at",
+          "entry_point",
+          "methods_changed"
+        ],
+        "title": "ResultVersionOut",
+        "type": "object"
+      },
       "RunDetailOut": {
         "description": "`GET /runs/{run_id}/detail`. One request, every section the screen shows.",
         "properties": {
@@ -5002,6 +5505,57 @@
           "label"
         ],
         "title": "RunLabelIn",
+        "type": "object"
+      },
+      "RunMetricsOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MetricValueOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "values_so_far": {
+            "title": "Values So Far",
+            "type": "boolean"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "run_id",
+          "version",
+          "latest",
+          "values_so_far",
+          "items"
+        ],
+        "title": "RunMetricsOut",
         "type": "object"
       },
       "RunNodeOut": {
@@ -9768,6 +10322,380 @@
         "summary": "Read one Run's graph",
         "tags": [
           "templates"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/metrics": {
+      "get": {
+        "operationId": "read_metrics_api_v1_runs__run_id__metrics_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "V"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunMetricsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such Run, version or calculation."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A path or query value is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "A Run's metric values: a stored version, or the values so far on a live Run",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/metrics/calculate": {
+      "post": {
+        "operationId": "calculate_api_v1_runs__run_id__metrics_calculate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalculationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The Run has not ended, or a calculation of it is queued or running."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A path or query value is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Calculate a new result version of an ended Run",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/metrics/calculations/{n}": {
+      "get": {
+        "operationId": "read_calculation_api_v1_runs__run_id__metrics_calculations__n__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "n",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "N",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalculationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such Run, version or calculation."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A path or query value is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The state and output of the calculation that makes version n",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/metrics/versions": {
+      "get": {
+        "operationId": "read_versions_api_v1_runs__run_id__metrics_versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ResultVersionOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such Run, version or calculation."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A path or query value is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The result versions of a Run, with the methods each changed",
+        "tags": [
+          "metrics"
         ]
       }
     },

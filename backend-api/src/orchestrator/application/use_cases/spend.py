@@ -37,8 +37,9 @@ from orchestrator.application.use_cases.spend_figures import (
     gateway_read_for,
 )
 from orchestrator.domain.entities.attempt import Attempt
-from orchestrator.domain.entities.facts import UsageFact
+from orchestrator.domain.entities.facts import GatewayTrigger, UsageFact
 from orchestrator.domain.entities.run import Run
+from orchestrator.domain.errors import NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.facts import FactSetRepository, GatewayReadRepository
@@ -96,21 +97,48 @@ def record_attempt_spend(
         if priced is not attempt:
             ports.attempts.update(priced)
         total, provisional, attempts = _run_spend_and_provisional(ports, run)
-        spent = figures_of(attempts)
         updated = run.model_copy(
             update={
                 "spend_usd": total,
                 "spend_provisional": provisional,
-                "gateway_spend_usd": spent.gateway_usd,
-                "harness_spend_usd": spent.harness_usd,
-                "gate_spend_usd": spent.gate_usd,
-                "gateway_reported": spent.gateway_reported,
-                "harness_reported": spent.harness_reported,
+                **_figure_columns(attempts),
             }
         )
         ports.runs.update(updated)
         ports.uow.commit()
         return updated
+
+
+def reread_gateway_for_run(ports: SpendPorts, run_id: UUID, trigger: GatewayTrigger) -> Run:
+    """Read the gateway again for every harness attempt of the Run and recompute its five gate
+    columns. `spend_usd` and each attempt's `cost_usd` stay as they are (ARCHITECTURE §5.4)."""
+    with ports.uow:
+        run = ports.runs.get_for_update(run_id)
+        if run is None:
+            raise NotFound(f"no run {run_id}")
+        for row in ports.steps.list_for_run(run_id):
+            for attempt in ports.attempts.list_for_row(row.id):
+                if not attempt.harness:
+                    continue
+                spend = ports.gateway.spend_for_attempt(run_id, attempt.id)
+                read, usage = gateway_read_for(attempt, spend, None, new_id(), ports.clock.now())
+                ports.gateway_reads.add(read.model_copy(update={"trigger": trigger}), usage)
+        _total, _provisional, attempts = _run_spend_and_provisional(ports, run)
+        updated = run.model_copy(update=_figure_columns(attempts))
+        ports.runs.update(updated)
+        ports.uow.commit()
+        return updated
+
+
+def _figure_columns(attempts: list[AttemptRows]) -> dict[str, Decimal | bool]:
+    spent = figures_of(attempts)
+    return {
+        "gateway_spend_usd": spent.gateway_usd,
+        "harness_spend_usd": spent.harness_usd,
+        "gate_spend_usd": spent.gate_usd,
+        "gateway_reported": spent.gateway_reported,
+        "harness_reported": spent.harness_reported,
+    }
 
 
 def _priced_attempt(

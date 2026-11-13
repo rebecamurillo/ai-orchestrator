@@ -24,6 +24,10 @@ from orchestrator.infrastructure.db.repositories.history import SQLAlchemyHistor
 from orchestrator.infrastructure.db.repositories.instance_hold import (
     SQLAlchemyInstanceHoldRepository,
 )
+from orchestrator.infrastructure.db.repositories.metric_results import (
+    SQLAlchemyMetricCalculationRepository,
+    SQLAlchemyResultVersionRepository,
+)
 from orchestrator.infrastructure.db.repositories.project_channel import (
     SQLAlchemyProjectChannelRepository,
 )
@@ -52,9 +56,11 @@ __all__ = [
     "SQLAlchemyHarnessRepository",
     "SQLAlchemyHistoryQuery",
     "SQLAlchemyInstanceHoldRepository",
+    "SQLAlchemyMetricCalculationRepository",
     "SQLAlchemyProjectChannelRepository",
     "SQLAlchemyProjectRepository",
     "SQLAlchemyRepositoryRepository",
+    "SQLAlchemyResultVersionRepository",
     "SQLAlchemyRunRepository",
     "SQLAlchemyStepRunRepository",
     "SQLAlchemyTemplateVersionRepository",

@@ -48,6 +48,7 @@ from orchestrator.application.steps import pr_link as _pr_link  # noqa: F401
 from orchestrator.application.steps import shell as _shell  # noqa: F401
 from orchestrator.application.use_cases.dependency_sweep import sweep_dependency_waiting
 from orchestrator.application.use_cases.instance_hold import release_hold
+from orchestrator.application.use_cases.metric_calculations import sweep_calculations
 from orchestrator.application.use_cases.session_sweep import sweep_session_turns
 from orchestrator.application.use_cases.session_turn import TurnPorts
 from orchestrator.domain.ports.chat import ChatChannelFactory
@@ -61,6 +62,7 @@ from orchestrator.infrastructure.db.run_finished import run_finished_hook
 from orchestrator.infrastructure.db.writers import (
     SessionFactory,
     SessionUnitOfWork,
+    open_calculation_ports,
     open_facts_ports,
     open_record_ports,
     open_spend_ports,
@@ -179,6 +181,9 @@ def walker_deps(
         run_finished=partial(
             run_finished_hook, session_factory, git, settings.work_dir, settings.bmad_version
         ),
+        calculation_writes=partial(
+            open_calculation_ports, session_factory, gateway, build_log_facts(settings)
+        ),
         on_terminal=partial(
             readiness_evaluate_hook,
             session_factory,
@@ -292,6 +297,11 @@ def dependency_startup_sweep(settings: Settings) -> None:
                 writers=ports, step=deps.step_ports, read_environment=deps.read_environment
             )
             sweep_session_turns(turn_ports, engine, held)
+        if engine.walker_deps.calculation_writes is not None:
+            with engine.walker_deps.calculation_writes() as scope:
+                sweep_calculations(
+                    scope.calculations, scope.uow, scope.clock, engine, engine.held_calculations()
+                )
 
 
 def schedule_engine_jobs(settings: Settings) -> None:

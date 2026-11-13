@@ -673,6 +673,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A Run's metric values: a stored version, or the values so far on a live Run */
+        get: operations["read_metrics_api_v1_runs__run_id__metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/metrics/calculate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Calculate a new result version of an ended Run */
+        post: operations["calculate_api_v1_runs__run_id__metrics_calculate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/metrics/calculations/{n}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The state and output of the calculation that makes version n */
+        get: operations["read_calculation_api_v1_runs__run_id__metrics_calculations__n__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/metrics/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The result versions of a Run, with the methods each changed */
+        get: operations["read_versions_api_v1_runs__run_id__metrics_versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/session": {
         parameters: {
             query?: never;
@@ -1181,6 +1249,39 @@ export interface components {
             counts: components["schemas"]["BoardCountsOut"];
             /** Generated At */
             generated_at: string;
+        };
+        /** CalculationOut */
+        CalculationOut: {
+            /** Ended At */
+            ended_at: string | null;
+            /** Entry Point */
+            entry_point: ("at_attempt_end" | "workflow_step" | "manual")[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Output */
+            output: string;
+            /**
+             * Queued At
+             * Format: date-time
+             */
+            queued_at: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "running" | "failed" | "done";
+            /** Target N */
+            target_n: number;
         };
         /** CardOut */
         CardOut: {
@@ -1899,6 +2000,42 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** MetricValueOut */
+        MetricValueOut: {
+            /** Attempt N */
+            attempt_n: number | null;
+            /** Carried From */
+            carried_from: number | null;
+            /** Method Id */
+            method_id: string;
+            /** Metric Id */
+            metric_id: string;
+            /** Missing */
+            missing: string | null;
+            /** Model */
+            model: string | null;
+            origin: components["schemas"]["OriginOut"] | null;
+            /** Partial M */
+            partial_m: number | null;
+            /** Partial N */
+            partial_n: number | null;
+            /** Repository */
+            repository: string | null;
+            /** Role */
+            role: string | null;
+            /** Scope Key */
+            scope_key: string;
+            /** Scope Label */
+            scope_label: string | null;
+            /** Scope Type */
+            scope_type: string;
+            /** Source */
+            source: string | null;
+            /** Unit */
+            unit: string;
+            /** Value Num */
+            value_num: string | null;
+        };
         /**
          * ModelsOut
          * @description The models a harness can use, and where that list comes from.
@@ -1968,6 +2105,47 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** OriginOut */
+        OriginOut: {
+            /** Base Commit */
+            base_commit: string | null;
+            /** Base Commit Na */
+            base_commit_na: string | null;
+            /** Branch */
+            branch: string | null;
+            /** Branch Na */
+            branch_na: string | null;
+            /** Commit */
+            commit: string | null;
+            /** Commit Na */
+            commit_na: string | null;
+            /** Harness */
+            harness: string | null;
+            /** Harness Na */
+            harness_na: string | null;
+            /** Origin Model */
+            origin_model: string | null;
+            /** Origin Model Na */
+            origin_model_na: string | null;
+            /** Origin Repository */
+            origin_repository: string | null;
+            /** Origin Repository Na */
+            origin_repository_na: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Template Name */
+            template_name: string;
+            /** Template Version */
+            template_version: number;
+        };
         /** Page[CatalogueEntryOut] */
         Page_CatalogueEntryOut_: {
             /** Items */
@@ -1993,6 +2171,13 @@ export interface components {
         Page_RepositoryOut_: {
             /** Items */
             items: components["schemas"]["RepositoryOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[ResultVersionOut] */
+        Page_ResultVersionOut_: {
+            /** Items */
+            items: components["schemas"]["ResultVersionOut"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2472,6 +2657,20 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** ResultVersionOut */
+        ResultVersionOut: {
+            /**
+             * Calculated At
+             * Format: date-time
+             */
+            calculated_at: string;
+            /** Entry Point */
+            entry_point: ("at_attempt_end" | "workflow_step" | "manual")[];
+            /** Methods Changed */
+            methods_changed: string[];
+            /** N */
+            n: number;
+        };
         /**
          * RunDetailOut
          * @description `GET /runs/{run_id}/detail`. One request, every section the screen shows.
@@ -2789,6 +2988,22 @@ export interface components {
         RunLabelIn: {
             /** Label */
             label: string | null;
+        };
+        /** RunMetricsOut */
+        RunMetricsOut: {
+            /** Items */
+            items: components["schemas"]["MetricValueOut"][];
+            /** Latest */
+            latest: number | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Values So Far */
+            values_so_far: boolean;
+            /** Version */
+            version: number | null;
         };
         /**
          * RunNodeOut
@@ -5413,6 +5628,227 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_metrics_api_v1_runs__run_id__metrics_get: {
+        parameters: {
+            query?: {
+                v?: number | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunMetricsOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, version or calculation. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    calculate_api_v1_runs__run_id__metrics_calculate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalculationOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The Run has not ended, or a calculation of it is queued or running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_calculation_api_v1_runs__run_id__metrics_calculations__n__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                n: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalculationOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, version or calculation. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_versions_api_v1_runs__run_id__metrics_versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ResultVersionOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, version or calculation. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -86,3 +86,7 @@ class WorkflowEngine(Protocol):
     def enqueue_session_turn(self, run_id: UUID, attempt_id: UUID) -> None:
         """Run one senior session turn outside the walk, behind its Run (AD-6, AD-23)."""
         ...
+
+    def enqueue_calculation(self, calculation_id: UUID) -> None:
+        """Run one metrics calculation as its own workflow, outside the walk (AD-6)."""
+        ...

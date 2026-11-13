@@ -59,6 +59,7 @@ from orchestrator.application.use_cases.apply_step_result import (
     apply_step_result,
     budget_second_record,
 )
+from orchestrator.application.use_cases.metric_calculations import enqueue_queued
 from orchestrator.application.use_cases.start_attempt import start_attempt
 from orchestrator.application.use_cases.walk_context import redispatches_to
 from orchestrator.application.use_cases.writers import (
@@ -274,6 +275,7 @@ def close_run(ports: WalkPorts, run_id: UUID) -> RunStatus:
         writers.uow.commit()
     if run.status == "done":  # two-phase: commit first, enqueue after (story 5-4)
         enqueue_dependents(writers, writers.engine, run)
+    enqueue_queued(writers.engine, writers.calculations, run)
     return run.status
 
 
@@ -292,4 +294,5 @@ def expire(ports: WalkPorts, run_id: UUID) -> RunStatus:
         run = expire_run(writers, run)
         park_dependents(writers, run)  # park dependents in same UoW (story 5-4)
         writers.uow.commit()
+    enqueue_queued(writers.engine, writers.calculations, run)
     return run.status
