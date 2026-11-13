@@ -1,9 +1,9 @@
-# Test Automation Summary — orchestrator-run-metrics / epic-1-run-facts
+# Test Automation Summary — orchestrator-run-metrics / epic-2-run-versions
 
-Generated: 2026-11-13 (dispatch mode with an empty story id, so it covers the whole epic)
-Spec: `initiatives/orchestrator-run-metrics/epic-1-run-facts/SPEC.md` (path relative to the hub)
-Stories: 1–6 (commits `4f1b36e`..`9f838a3`)
-Previous summary (orchestrator-instance-guide epic 3): in git history at `fb299d7`.
+Generated: 2026-11-13. Dispatch mode with an empty story id, so this covers the whole epic.
+Spec: `initiatives/orchestrator-run-metrics/epic-2-run-versions/SPEC.md` (path relative to the hub)
+Stories: 1–6 (commits `167fdb9`..`4211d4b`)
+Previous summary (epic-1-run-facts): in git history at `270bdfe`.
 
 Framework: the project's own, pytest + httpx in `backend-api/tests/e2e` (`make e2e-api`). The
 epic changed no UI, so no Playwright test was added.
@@ -12,59 +12,80 @@ epic changed no UI, so no Playwright test was added.
 
 ### API (e2e) tests — `make e2e-api` gate
 
-- [x] `backend-api/tests/e2e/test_metrics_catalogue.py` (8 tests, story 1 / CAP-1). The unit
-  suite covers the validator and the router with a fake catalogue. This module covers what
-  only the built image can show: the YAML ships as package data, start-up validated it, and the
-  route is mounted behind the bearer.
-  - Without a bearer: 401 `application/problem+json`.
-  - With one: `{items}` is non-empty. Each entry has exactly the 13 catalogue fields. Ids match
-    `group.name` and are unique. `level` ∈ {H, A}, `scopes` is non-empty and drawn from the 13
-    declared scopes, `additive` ∈ {true, false, `within_scope_type`}. Every `component_of`
-    names a catalogued id. The three relations the story declares (`tokens.thinking` →
-    `tokens.output`, `tokens.cache_write_5m|1h` → `tokens.cache_write`) are served. Every
-    entry has at least one method, numbered ascending from ≥ 1, each with a description and a
-    `parameters` object.
-  - Structural only: no id list, count or label from the shipped files is pinned.
-- [x] `backend-api/tests/e2e/test_run_facts_schema.py` (5 tests, stories 2 and 5 / CAP-2,
-  CAP-5). The unit migration tests read the revisions; this module checks what only a migrated
-  Postgres can show:
-  - The seven fact tables exist in schema `public`.
-  - Money (`gateway_read.usd`, `usage_fact.usd` and the three `run.*_spend_usd`) is `numeric`.
-  - The five Run figure columns are `NOT NULL` with a `0` / `false` default.
-  - A `usage_fact` with neither parent, or with both, is refused with SQLSTATE 23514 by the
-    one-parent check. Postgres evaluates CHECK before FK triggers, so the "both" case reaches
-    the check even though its parent ids don't exist.
-  - Every write runs in a transaction that is rolled back and is refused anyway, so the shared
-    stack is left unchanged.
+- [x] `backend-api/tests/e2e/test_run_metrics_versions.py` (23 tests). It reuses the suite's
+  helpers (`test_run_creation`, `test_signals`, `test_clone_check.Fixtures`). Templates are
+  fresh `e2e-metrics-<uuid>` fixtures owned by the test, so no shipped template content is
+  pinned (hard rule 6). Every Run it creates ends terminal inside its own test.
+  - **Bearer and 404** (CAP-3, CAP-5, CAP-6): each of the six new operations is checked twice.
+    Without the bearer it returns 401 problem+json. With the bearer and an unknown Run it
+    returns 404 problem+json. The operations are `GET …/metrics`, `GET …/metrics/versions`,
+    `POST …/metrics/calculate`, `GET …/metrics/calculations/{n}`,
+    `GET …/metrics/gateway-reads` and `PATCH /runs/{id}`.
+  - **Migrations** (stories 1, 2, 3, 5):
+    - `run_repository`, `run_commit`, `metric_calculation`, `result_version` and
+      `metric_value` exist in `public`.
+    - `step_run.role`, `run.label` and `run.label_set_by_operator` are NOT NULL with defaults.
+    - A `metric_value` that has both a figure and `missing = 'not recorded'` is refused with
+      SQLSTATE 23514. The write runs in a transaction that is rolled back.
+  - **Roles** (CAP-1):
+    - Saving a template with `role: build` returns 422, and `errors[]` holds
+      `unknown role build` with a line.
+    - With `role: implement`, the planned `step_run.role` is `implement`.
+  - **Label** (CAP-3, plus the CAP-2 `.` row):
+    - The default is `{project} {template} {YYYY-MM-DD HH:MM}` from the Run's `created_at`.
+    - A PATCH on a `done` Run trims and sets the label, with operator `true`, and leaves the
+      status `done`.
+    - A label of 121 characters, or of whitespace only, returns 422 problem+json.
+    - `null` restores the default, with operator `false`.
+    - A label given at creation is stored with operator `true`.
+    - Exactly one `run_repository` row (`.`) exists for a single-repository Run.
+  - **Result versions** (CAP-5):
+    - A Run that ends `done` gets v1 from the real DBOS calculation workflow. Its entry point
+      is `at_attempt_end`, `calculations/1` reads `done`, and `?v=1` is not "values so far".
+    - A manual `POST …/calculate` returns 202 with `target_n` 2 and entry point `manual`. v2
+      appears, the versions list reads `[1, 2]`, the latest read is v2, `?v=1` is byte-equal
+      to before, and `?v=3` returns 404.
+    - Every stored value has a `method_id` of the form `{metric_id}@n`. It never holds both a
+      figure and a non-`partial` missing word. Its origin names the Run and the template.
+    - On a Run parked at `needs_you`, `GET …/metrics` returns `values_so_far: true` and
+      `POST …/calculate` returns 409 problem+json. After `cancel`, the Run gets v1.
+  - **Gateway reads** (CAP-6): an ended Run returns `{items, next_cursor: null}`. Each item has
+    a UUID `attempt_id` and a non-empty role, `harness_usd` is null or a non-negative decimal,
+    and the reads are in time order.
 
 ## Coverage
 
-- API endpoints added by the epic: 1/1 (`GET /api/v1/metrics/catalogue`), happy path + 401.
-- Database constraints the epic's ACs name: one-parent check (both cases), money as numeric,
-  Run figures NOT NULL with defaults. The `fact_set` unique constraint and the story 6 data
-  revision are not covered at e2e. Exercising either would need real attempts written into the
-  shared stack. Both are covered by unit tests (`test_fact_repository_adapter.py`,
-  `test_migrated_attempt_facts_migration.py`).
-- Extractors (stories 3–4), the facts sweep and the budget-gate figure (story 5) are pure or
-  log-reading logic with no new endpoint. They are covered by the stories' unit tests, and an
-  e2e module would add nothing a stack alone can show.
+- API endpoints added by the epic: 6/6, each with happy path, 401 and 404. Also covered:
+  422 on PATCH and 409 on calculate.
+- Not covered at e2e, because each needs a staged race or a harness and is settled by the
+  stories' unit tests:
+  - the second-calculate-while-queued 409 (the real job can finish first)
+  - `carried_from` after a log sweep
+  - a method that raises
+  - `failed: interrupted` at start-up (the durability stack's concern)
+  - the instance hold against a running calculation
+  - the label surviving a stale `update`
+  - the hub `run_repository` and `run_commit` rows (they need agent and git commit rows)
+  - the part A method values (story 4: pure functions over fixed fact sets)
 - UI: none in this epic.
 
 ## Verification
 
-- `ruff check` and `ruff format --check`: clean on both files. `pytest --collect-only`:
-  13 tests collected.
-- The 8 catalogue scenarios were run against the in-process app (`create_app(Settings())`
-  with the `.env.example` contract, FastAPI `TestClient`): 8/8 pass.
-- Unit meta-tests over test files (`-k "source_limit or e2e or pair or marker"`): 1466 passed.
-- **Not run against a stack.** The epic's standing rule says never to start, stop or call a
-  running instance, and `make e2e` builds one. Both modules run on the next `make e2e`, which
-  is the gate. The schema module has no in-process stand-in because it needs Postgres.
-- `mypy` on the new files reports only the `Settings()` call-arg note that the existing
-  `tests/e2e/test_migrations.py` also has. `make lint` scopes mypy to `domain/` and
-  `application/`.
+- `ruff check` and `ruff format --check`: clean. `pytest --collect-only`: 23 tests collected.
+- The 6 bearer scenarios were run against the in-process app (`create_app(Settings())` with
+  the `.env.example` contract, FastAPI `TestClient`). All 6 return 401
+  `application/problem+json`.
+- Unit meta-tests over test files (`-k "source_limit or e2e or pair or marker"`): 1585 passed.
+- **The other 17 tests were not run against a stack.** The epic's constraints forbid starting,
+  stopping or calling a running instance, and `make e2e` builds one. Those tests need Postgres,
+  DBOS and git. They run on the next `make e2e`, which is the gate.
+- `mypy` on the new file reports only the `Settings()` call-arg note that the existing e2e
+  modules also have. `make lint` scopes mypy to `domain/` and `application/`.
 
 ## Next Steps
 
-- Run `make e2e` (disposable `aio-e2e` stack) to execute both modules against Postgres.
-- When epic 2 adds result versions and its endpoints, extend the e2e suite from there.
+- Run `make e2e` (the disposable `aio-e2e` stack) to execute the module against Postgres and
+  DBOS. The first thing to watch is how long the calculation takes: `wait_for_version` waits
+  90 s.
+- When epics 3 and 4 add the Run page and the comparison/export endpoints, extend the e2e suite
+  from there.
