@@ -61,13 +61,15 @@ def test_a_member_without_a_url_or_a_tip_is_recorded_with_empty_strings() -> Non
     git = FakeGit(read_file=[None])
     records.note_member(context(scope, git), "repos/a")
     assert scope.repositories.rows[0].remote_url == ""
-    assert scope.repositories.rows[0].base_tip == ""
+    # Retro X1 fix (epic 2, operator order 2026-11-13): an unknown branch or base tip is None.
+    assert scope.repositories.rows[0].base_tip is None
     assert git.called("ls_remote") == []
     scope2 = RecordsScope()
     records.note_member(
         context(scope2, FakeGit(read_file=[GITMODULES], ls_remote=[None])), "repos/a"
     )
-    assert scope2.repositories.rows[0].base_tip == ""
+    # Retro X1 fix (epic 2, operator order 2026-11-13): an unknown branch or base tip is None.
+    assert scope2.repositories.rows[0].base_tip is None
 
 
 def test_the_member_takes_the_run_branch_from_the_row_when_the_run_has_none() -> None:

@@ -31,8 +31,8 @@ class RunRepositoryRow(Base):
     path: Mapped[str] = mapped_column(Text())
     remote_url: Mapped[str] = mapped_column(Text())
     base_branch: Mapped[str] = mapped_column(Text())
-    branch: Mapped[str] = mapped_column(Text())
-    base_tip: Mapped[str] = mapped_column(Text())
+    branch: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    base_tip: Mapped[str | None] = mapped_column(Text(), nullable=True)
     head_pushed: Mapped[str | None] = mapped_column(Text(), nullable=True)
     head_local_at_end: Mapped[str | None] = mapped_column(Text(), nullable=True)
 

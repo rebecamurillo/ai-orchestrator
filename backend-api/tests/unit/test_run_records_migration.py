@@ -32,9 +32,10 @@ def test_the_revision_follows_step_run_role() -> None:
 def test_run_repository_columns_and_unique_key() -> None:
     upgrade = source_of("upgrade")
     assert "op.create_table('run_repository'" in upgrade
-    for column in ("path", "remote_url", "base_branch", "branch", "base_tip"):
+    for column in ("path", "remote_url", "base_branch"):
         assert f"sa.Column('{column}', sa.Text(), nullable=False)" in upgrade
-    for column in ("head_pushed", "head_local_at_end"):
+    # Retro X1 fix (epic 2, operator order 2026-11-13): an unknown branch or base tip is None.
+    for column in ("branch", "base_tip", "head_pushed", "head_local_at_end"):
         assert f"sa.Column('{column}', sa.Text(), nullable=True)" in upgrade
     assert "name='uq_run_repository_run_path'" in upgrade
     assert "sa.UniqueConstraint('run_id', 'path'" in upgrade

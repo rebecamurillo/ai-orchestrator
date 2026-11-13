@@ -70,7 +70,8 @@ def test_both_tables_exist_with_nullability_and_unique_names() -> None:
     tables = Base.metadata.tables
     repository, commit = tables["run_repository"], tables["run_commit"]
     nullable = {c.name for c in repository.columns if c.nullable}
-    assert nullable == {"head_pushed", "head_local_at_end"}
+    # Retro X1 fix (epic 2, operator order 2026-11-13): an unknown branch or base tip is None.
+    assert nullable == {"branch", "base_tip", "head_pushed", "head_local_at_end"}
     assert not any(c.nullable for c in commit.columns)
     names = {c.name for t in (repository, commit) for c in t.constraints}
     assert {"uq_run_repository_run_path", "uq_run_commit_run_path_sha"} <= names

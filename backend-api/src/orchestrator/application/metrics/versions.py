@@ -22,6 +22,8 @@ SPANS_REPOSITORIES = "spans_repositories"
 NO_REPOSITORY_SCOPE = "no_repository_scope"
 COMMIT_MISSING = "commit_missing"
 NO_REPOSITORY_RECORD = "no_repository_record"
+BRANCH_UNKNOWN = "branch unknown"
+BASE_TIP_UNKNOWN = "base tip unknown"
 
 #: Scope types that cover every attempt of the Run.
 _WHOLE_RUN = frozenset({"run", "park", "tool", "conversation"})
@@ -161,9 +163,9 @@ def _repository_facts(inputs: RunInputs, repository: str | None) -> tuple[Fact, 
         return (None, None), (None, None), (None, None)
     head = record.head_pushed or record.head_local_at_end
     return (
-        (record.branch, None),
+        (record.branch, None if record.branch else BRANCH_UNKNOWN),
         (head, None if head else COMMIT_MISSING),
-        (record.base_tip, None),
+        (record.base_tip, None if record.base_tip else BASE_TIP_UNKNOWN),
     )
 
 

@@ -58,7 +58,9 @@ def test_create_run_writes_the_runs_own_row_from_the_plan_base_tip() -> None:
         fixtures.REPOSITORY.url,
         fixtures.BASE_BRANCH,
     )
-    assert (own.run_id, own.branch) == (run.id, str(run.inputs.get("branch") or ""))
+    assert "branch" not in run.inputs
+    # Retro X1 fix (epic 2, operator order 2026-11-13): an unknown branch or base tip is None.
+    assert (own.run_id, own.branch) == (run.id, None)
     assert own.base_tip == fixtures.BASE_SHA
 
 
@@ -66,7 +68,8 @@ def test_a_plan_that_did_not_read_the_base_has_its_tip_asked_once() -> None:
     run = created_run(FakeRunRepositoryRecords())
     unknown = FakeRunRepositoryRecords()
     record_own_repository(unknown, FakeGit(refs={}), run, "u", None)
-    assert unknown.rows[0].base_tip == ""
+    # Retro X1 fix (epic 2, operator order 2026-11-13): an unknown branch or base tip is None.
+    assert unknown.rows[0].base_tip is None
     asked = FakeRunRepositoryRecords()
     git = FakeGit(refs={fixtures.BASE_BRANCH: "tip"})
     record_own_repository(asked, git, run, "u", None)
@@ -182,4 +185,5 @@ def test_an_unreachable_remote_leaves_the_tip_empty_and_creation_unharmed() -> N
     records = FakeRunRepositoryRecords()
     git = FakeGit(ls_remote=[GitError(command="ls-remote", exit_code=128, output="")])
     record_own_repository(records, git, run, "u", None)
-    assert records.rows[0].base_tip == ""
+    # Retro X1 fix (epic 2, operator order 2026-11-13): an unknown branch or base tip is None.
+    assert records.rows[0].base_tip is None

@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 MadeBy = Literal["wip", "prepare", "git.commit", "git.merge", "session", "operator_edit"]
 MADE_BY: tuple[str, ...] = ("wip", "prepare", "git.commit", "git.merge", "session", "operator_edit")
@@ -18,7 +18,11 @@ ROOT_PATH = "."
 
 
 class RunRepositoryRecord(BaseModel):
-    """One repository of a Run: the Run's own (`path` `.`) or a submodule member."""
+    """One repository of a Run: the Run's own (`path` `.`) or a submodule member.
+
+    `branch` and `base_tip` are `None` when unknown: a Run without a `branch` input, or a base
+    tip `ls_remote` could not read. An empty string is read as unknown, built or loaded.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -27,10 +31,15 @@ class RunRepositoryRecord(BaseModel):
     path: str
     remote_url: str
     base_branch: str
-    branch: str
-    base_tip: str
+    branch: str | None = None
+    base_tip: str | None = None
     head_pushed: str | None = None
     head_local_at_end: str | None = None
+
+    @field_validator("branch", "base_tip", mode="before")
+    @classmethod
+    def _empty_is_unknown(cls, value: object) -> object:
+        return None if value == "" else value
 
 
 class RunCommit(BaseModel):
