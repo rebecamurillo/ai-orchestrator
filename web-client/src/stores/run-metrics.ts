@@ -65,19 +65,21 @@ export async function loadRunMetrics(runId: string): Promise<void> {
   let failed: RunMetricsState['failed'] = null;
   let versions: ResultVersionOut[] | null = null;
   let metrics: RunMetricsOut | null = null;
+  let reading = '/versions';
   try {
     const v = await api.GET('/runs/{run_id}/metrics/versions', {
       params: { path: { run_id: runId } },
     });
     if (v.data) versions = v.data.items;
     else failed = { path: path(runId, '/versions'), status: v.response.status };
+    reading = '';
     const m = await api.GET('/runs/{run_id}/metrics', {
       params: { path: { run_id: runId }, query: selected === null ? undefined : { v: selected } },
     });
     if (m.data) metrics = m.data;
     else failed ??= { path: path(runId, ''), status: m.response.status };
   } catch {
-    failed ??= { path: path(runId, failed ? '' : '/versions'), status: null };
+    failed ??= { path: path(runId, reading), status: null };
   }
   if (mine !== seq) return;
   const current = $runMetrics.get();

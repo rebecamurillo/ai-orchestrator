@@ -108,6 +108,17 @@ describe('RunTitle', () => {
     expect(await screen.findByText('broken')).toBeTruthy();
   });
 
+  it('Escape after a refusal clears the refusal with the input', async () => {
+    const onSave = vi.fn().mockResolvedValue({ status: 422, title: 'invalid', type: 'x' });
+    mount({ onSave });
+    fireEvent.click(screen.getByRole('button', { name: 'edit label' }));
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(await screen.findByText('invalid')).toBeTruthy();
+    fireEvent.keyDown(input(), { key: 'Escape' });
+    expect(screen.queryByText('invalid')).toBeNull();
+    expect(title()).toBe(LABEL);
+  });
+
   it('takes a new label prop over the locally shown text', async () => {
     const { rerender, onSave } = mount();
     fireEvent.click(screen.getByRole('button', { name: 'edit label' }));

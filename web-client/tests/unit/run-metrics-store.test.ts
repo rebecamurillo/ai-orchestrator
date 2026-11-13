@@ -115,6 +115,16 @@ describe('loadRunMetrics', () => {
       status: null,
     });
   });
+
+  it('names the metrics request when it is the read that fails on the network', async () => {
+    GET.mockImplementation(async (p: string) => {
+      if (p === VERSIONS) return { data: { items: [version(1)] } };
+      throw new Error('down');
+    });
+    await loadRunMetrics(RUN);
+    expect($runMetrics.get().failed).toEqual({ path: `/api/runs/${RUN}/metrics`, status: null });
+    expect($runMetrics.get().versions.map((v) => v.n)).toEqual([1]);
+  });
 });
 
 describe('selectVersion', () => {

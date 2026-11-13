@@ -46,7 +46,10 @@ export default function RunTitle({ label, byOperator, onSave }: Props) {
 
   function onKeyDown(event: KeyboardEvent): void {
     if (event.key === 'Enter') void save();
-    else if (event.key === 'Escape') setEditing(false);
+    else if (event.key === 'Escape') {
+      setError(null);
+      setEditing(false);
+    }
   }
 
   return (
