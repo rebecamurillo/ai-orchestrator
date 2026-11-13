@@ -1,0 +1,47 @@
+/* ── Charts (epic 3 story 5): chart ink and data colours live only in this folder ── */
+
+.chart-panel {
+  position: relative;
+  margin: 0 0 var(--space-5);
+}
+
+.chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: baseline;
+  margin: 0 0 var(--space-3);
+  font-size: var(--type-meta);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.chart-key {
+  color: var(--color-text-tertiary);
+}
+
+.chart-panel svg text {
+  fill: var(--color-chart-ink);
+}
+
+.chart-panel g[role='button'] {
+  cursor: pointer;
+}
+
+.chart-panel g[role='button']:focus-visible rect {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.chart-tooltip {
+  position: absolute;
+  right: 0;
+  top: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line-strong);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+  color: var(--color-text);
+  pointer-events: none;
+}

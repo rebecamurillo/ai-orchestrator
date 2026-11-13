@@ -1,10 +1,12 @@
 /**
- * The METRICS tab: view and metric-set toggles, the version selector, then the by-scope tree,
- * the by-role and by-model tables and the metric list. Every string this tab authors lives in
+ * The METRICS tab: view and metric-set toggles, the version selector, then either the by-scope
+ * tree, the by-role and by-model tables and the metric list (TABLE) or the Run page charts
+ * drawn from the same rows (CHART). Every string this tab authors lives in
  * `lib/run/metrics-tab.ts`; labels, hints and missing words come from the catalogue and API.
  */
 import { useStore } from '@nanostores/react';
 
+import RunCharts from '../charts/RunCharts';
 import FailedFetch from '../FailedFetch';
 import type { RunDetailOut } from '../../lib/run/detail';
 import { versionLine, type TargetContext } from '../../lib/run/metrics-glance';
@@ -18,6 +20,7 @@ import {
   type MetricsView,
 } from '../../lib/run/metrics-tab';
 import { isEnded } from '../../lib/run/metrics-glance';
+import { $catalogue } from '../../stores/catalogue';
 import { $metricsTab, setSet, setView } from '../../stores/metrics-tab';
 import type { RunMetricsState } from '../../stores/run-metrics';
 import VersionSelector from '../metrics/VersionSelector';
@@ -53,13 +56,11 @@ function Toggle<T extends string>({
   options,
   current,
   onPick,
-  disabled,
 }: {
   label: string;
   options: Record<T, string>;
   current: T;
   onPick: (next: T) => void;
-  disabled?: T;
 }) {
   return (
     <div className="wf-metrics-toggle" role="group" aria-label={label}>
@@ -69,7 +70,6 @@ function Toggle<T extends string>({
           type="button"
           className="wf-metrics-toggle-btn"
           aria-pressed={current === key}
-          disabled={disabled === key}
           onClick={() => onPick(key)}
         >
           {options[key]}
@@ -80,7 +80,8 @@ function Toggle<T extends string>({
 }
 
 export default function MetricsTab({ detail, glance, onSelectVersion, onRetryMetrics }: Props) {
-  const { set } = useStore($metricsTab);
+  const { set, view } = useStore($metricsTab);
+  const { entries } = useStore($catalogue);
   const metrics = glance.metrics;
   const queued = detail.run.status === 'queued';
   const noVersion =
@@ -97,13 +98,7 @@ export default function MetricsTab({ detail, glance, onSelectVersion, onRetryMet
   return (
     <div className="wf-metrics" data-testid="wf-metrics">
       <div className="wf-metrics-head" data-testid="wf-metrics-head">
-        <Toggle<MetricsView>
-          label="view"
-          options={VIEW_LABELS}
-          current="table"
-          onPick={setView}
-          disabled="chart"
-        />
+        <Toggle<MetricsView> label="view" options={VIEW_LABELS} current={view} onPick={setView} />
         <Toggle<MetricsSet> label="metric set" options={SET_LABELS} current={set} onPick={setSet} />
         {!queued && !noVersion && shown !== null && glance.versions.length > 0 ? (
           <VersionSelector versions={glance.versions} selected={shown} onSelect={onSelectVersion} />
@@ -123,11 +118,17 @@ export default function MetricsTab({ detail, glance, onSelectVersion, onRetryMet
       {!queued && metrics !== null && !noVersion ? (
         <>
           {metrics.values_so_far ? <p className="wf-metrics-note">{LIVE_LINE}</p> : null}
-          <h3 className="wf-metrics-section">BY SCOPE</h3>
-          <MetricsScopeTable items={items} stepOrder={stepOrder} ctx={ctx} />
-          <MetricsFlatTable scopeType="role" items={items} ctx={ctx} />
-          <MetricsFlatTable scopeType="model" items={items} ctx={ctx} />
-          <MetricsList items={items} set={set} ctx={ctx} />
+          {view === 'chart' ? (
+            <RunCharts entries={entries} items={items} stepOrder={stepOrder} set={set} ctx={ctx} />
+          ) : (
+            <>
+              <h3 className="wf-metrics-section">BY SCOPE</h3>
+              <MetricsScopeTable items={items} stepOrder={stepOrder} ctx={ctx} />
+              <MetricsFlatTable scopeType="role" items={items} ctx={ctx} />
+              <MetricsFlatTable scopeType="model" items={items} ctx={ctx} />
+              <MetricsList items={items} set={set} ctx={ctx} />
+            </>
+          )}
         </>
       ) : null}
     </div>

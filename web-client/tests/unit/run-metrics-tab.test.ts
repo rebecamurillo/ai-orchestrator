@@ -93,9 +93,16 @@ describe('MetricsTab', () => {
     );
   });
 
-  it('switches the metric set and keeps CHART disabled', () => {
+  it('switches the metric set; CHART is enabled (epic 3 story 5, 2026-11-13)', () => {
     mount();
-    expect(screen.getByRole('button', { name: 'CHART' }).hasAttribute('disabled')).toBe(true);
+    const chart = screen.getByRole('button', { name: 'CHART' });
+    expect(chart.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(chart);
+    expect(chart.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByRole('figure').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('wf-metrics-scope')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'TABLE' }));
+    expect(screen.getByTestId('wf-metrics-scope')).toBeTruthy();
     expect(screen.queryByText('TOKENS')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'ALL METRICS' }));
     expect(screen.getByText('ALL METRICS').getAttribute('aria-pressed')).toBe('true');
