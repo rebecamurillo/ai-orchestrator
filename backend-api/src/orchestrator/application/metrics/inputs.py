@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from orchestrator.application.use_cases.spend_figures import StoredRead, harness_money
 from orchestrator.domain.entities.attempt import Attempt
@@ -17,6 +18,9 @@ from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.run_records import RunRepositoryRecord
 from orchestrator.domain.entities.step_run import StepRun
+
+if TYPE_CHECKING:
+    from orchestrator.application.analysis.signals import RepositorySignals
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,8 @@ class RunInputs:
     records: Sequence[GateRecord]
     now: datetime
     run_repositories: Sequence[RunRepositoryRecord] = field(default_factory=tuple)
+    #: Filled by the calculation (story 4); empty while a Run is live.
+    code: Sequence[RepositorySignals] = field(default_factory=tuple)
 
 
 def choose_fact_set(sets: Sequence[FactSet]) -> FactSet | None:

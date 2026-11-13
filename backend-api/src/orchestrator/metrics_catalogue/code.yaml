@@ -1,0 +1,623 @@
+- id: code.lines_added
+  label: lines added, by class
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: lines
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - partial
+  limits: 'A size row and the stated denominator of every rate: it has no rate of its own. Counts are
+    summed and every rate is recomputed from the summed totals; rates are never summed.'
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: 'Added lines from git numstat, summed per file class: the declaration''s globs, then
+      the convention patterns in precedence order; the first match wins. Production lines are the denominator
+      of every rate; test lines of the test-class type escapes.'
+    parameters:
+      precedence:
+      - generated_or_artefact
+      - test_e2e
+      - test_unit
+      - test_unclassified
+      - docs
+      - configuration
+      - production
+      generated:
+      - _bmad-output/**
+      - dist/**
+      - build/**
+      - '*.min.js'
+      - '**/schema.d.ts'
+      - contracts/openapi.json
+      - '*.lock'
+      - package-lock.json
+      - pnpm-lock.yaml
+      - npm-shrinkwrap.json
+      - go.sum
+      hub:
+      - initiatives/**
+      - planning/**
+      e2e:
+      - tests/e2e/**
+      - e2e/**
+      - '*.e2e.*'
+      - playwright/**
+      unit:
+      - '*.test.*'
+      - '*.spec.*'
+      - test_*.py
+      - '*_test.py'
+      - '*_test.go'
+      - tests/unit/**
+      unclassified:
+      - tests/**
+      - test/**
+      docs:
+      - '*.md'
+      - docs/**
+      configuration:
+      - '*.json'
+      - '*.yaml'
+      - '*.yml'
+      - '*.toml'
+      - '*.ini'
+      - .env*
+      - Dockerfile*
+      - Makefile
+      lock_files:
+      - '*.lock'
+      - package-lock.json
+      - pnpm-lock.yaml
+      - npm-shrinkwrap.json
+      - go.sum
+- id: code.lines_removed
+  label: lines removed, by class
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: lines
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - partial
+  limits: 'A size row: it has no rate. Counts are summed and every rate is recomputed from the summed
+    totals; rates are never summed.'
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Removed lines from git numstat, summed per file class with the same classifier as lines
+      added.
+    parameters: {}
+- id: code.files_touched
+  label: files touched (added · modified · deleted)
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: files
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - partial
+  limits: 'A size row: it has no rate. Counts are summed and every rate is recomputed from the summed
+    totals; rates are never summed.'
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: 'Paths of git name-status with rename detection: A and C count as added, M, T and R as
+      modified, D as deleted.'
+    parameters: {}
+- id: code.suppressions_added
+  label: suppressions added
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Added lines, of every class, that contain any of the suppression patterns; a line counts
+      once.
+    parameters:
+      patterns:
+      - eslint-disable
+      - '@ts-ignore'
+      - '@ts-nocheck'
+      - '# noqa'
+      - '# type: ignore'
+      - //nolint
+      - '@SuppressWarnings'
+      - '# pylint: disable'
+      - '#[allow('
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.type_escapes_added
+  label: type escapes added, production and tests apart, each per 100 added lines of its own class (rev
+    3)
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Added lines matching any type-escape pattern (regular expressions), counted apart for
+      production files and for the three test classes; each is rated against the added lines of its own
+      class.
+    parameters:
+      patterns:
+      - ': any\b'
+      - as any\b
+      - <any>
+      - as unknown as
+      - '@ts-expect-error'
+      - typing\.Any
+      - cast\(Any
+      - interface\{\}
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.skip_focus_markers_added
+  label: skip and focus markers added
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Added lines, of every class, that contain any skip or focus marker; a line counts once.
+    parameters:
+      patterns:
+      - .skip(
+      - .only(
+      - xit(
+      - xdescribe(
+      - fit(
+      - fdescribe(
+      - '@pytest.mark.skip'
+      - '@pytest.mark.xfail'
+      - t.Skip(
+      - '@Disabled'
+      - '@Ignore'
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.preexisting_tests_changed
+  label: pre-existing tests changed
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: 'Name-status entries M, T or R whose base path is a test-class file: a test file present
+      at base and modified at head.'
+    parameters:
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.preexisting_tests_deleted
+  label: pre-existing tests deleted
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: 'Name-status entries D whose path is a test-class file: a test file present at base and
+      deleted at head.'
+    parameters:
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.test_files
+  label: test files added · modified · deleted, by class
+  group: code
+  level: A
+  scopes:
+  - run
+  - repository
+  unit: files
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Name-status entries whose head path is a test-class file, counted per test class and
+      change kind; every row is a figure, 0 when the diff holds no test file.
+    parameters:
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.test_lines
+  label: test lines, by class
+  group: code
+  level: A
+  scopes:
+  - run
+  - repository
+  unit: lines
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Added and removed lines of git numstat per test class; every row is a figure, 0 when
+      the diff holds no test file.
+    parameters:
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.test_cases_static
+  label: test cases opened (approximate)
+  group: code
+  level: A
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Added lines whose text, after leading whitespace, opens with a test-case opener; approximate,
+      it counts openers and not executed cases.
+    parameters:
+      openers:
+      - it(
+      - test(
+      - def test_
+      - async def test_
+      - func Test
+      - '@Test'
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.manifest_changes
+  label: dependency manifest changes
+  group: code
+  level: A
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: 'Scratch clone of the Run''s pushed head: git numstat, name-status and diff against the base.'
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Changed files, of any status, whose name matches a dependency manifest or a lock file.
+    parameters:
+      manifests:
+      - package.json
+      - pyproject.toml
+      - requirements*.txt
+      - go.mod
+      - Cargo.toml
+      - pom.xml
+      - build.gradle*
+      lock_files:
+      - '*.lock'
+      - package-lock.json
+      - pnpm-lock.yaml
+      - npm-shrinkwrap.json
+      - go.sum
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.possible_secrets
+  label: possible secrets added
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: gitleaks over a scratch folder holding only the lines the change adds.
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: gitleaks scans a folder holding, per changed file, only the head's added lines, with
+      its report redacted; the count is the results in its SARIF, which is stored as the analysis artefact.
+      The added lines sit one level below the scanned root and inline allows are ignored, so the change
+      cannot supply gitleaks' configuration, ignore list or allow comments.
+    parameters:
+      command:
+      - gitleaks
+      - dir
+      - '{folder}'
+      - --report-format
+      - sarif
+      - --report-path
+      - '{file}'
+      - --redact
+      - --no-banner
+      - --ignore-gitleaks-allow
+      added_files_folder: files
+      timeout_min: 10
+      redact: true
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.deps_changed
+  label: dependencies added · removed · upgraded
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: Dependency manifests of the change, read at base and at head.
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Manifest entries compared between base and head and counted as added, removed or upgraded.
+    parameters:
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.deps_not_in_registry
+  label: dependencies not found in the registry
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: Public package registries, looked up on the analysis date.
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Each added or upgraded dependency is looked up in its public registry; the count is those
+      not found.
+    parameters:
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.deps_known_vulns
+  label: dependencies with known vulnerabilities
+  group: code
+  level: H
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: Public advisory database, looked up on the analysis date.
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Each added or upgraded dependency version is looked up in the advisory database; the
+      count is those with a known vulnerability.
+    parameters:
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.deps_recent
+  label: dependencies published < 30 days before the analysis
+  group: code
+  level: A
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: Public package registries, looked up on the analysis date.
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Each added or upgraded dependency version whose registry publication date is less than
+      30 days before the analysis.
+    parameters:
+      recent_days: 30
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.deps_licences
+  label: licences of added dependencies
+  group: code
+  level: A
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: Public package registries, looked up on the analysis date.
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: The licence each added dependency declares in its registry, counted per licence.
+    parameters:
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.duplication_added
+  label: duplicated lines added
+  group: code
+  level: A
+  scopes:
+  - run
+  - repository
+  unit: lines
+  source: jscpd over the changed files.
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - raw only
+  - small change
+  - partial
+  limits: Counts are summed and every rate is recomputed from the summed totals; rates are never summed.
+    Below 200 added production lines the row reads small change.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: jscpd reports duplicated lines in the changed files; the count is the duplicated lines
+      the change adds.
+    parameters:
+      small_change_lines: 200
+      rate_min_lines: 50
+      per_lines: 100
+- id: code.functions_over_cyclomatic
+  label: functions above the cyclomatic threshold · worst
+  group: code
+  level: A
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: lizard over the changed files.
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - partial
+  limits: The Run row holds the larger of the repositories' values, not their sum; no rate is computed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: lizard measures the changed functions; the count is those above cyclomatic complexity
+      15, and the worst value is the largest.
+    parameters:
+      threshold: 15
+      combine: max
+- id: code.functions_over_cognitive
+  label: functions above the cognitive threshold · worst
+  group: code
+  level: A
+  scopes:
+  - run
+  - repository
+  unit: count
+  source: lizard over the changed files.
+  component_of: null
+  additive: false
+  missing_words:
+  - not run
+  - partial
+  limits: The Run row holds the larger of the repositories' values, not their sum; no rate is computed.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: lizard measures the changed functions; the count is those above cognitive complexity
+      15, and the worst value is the largest.
+    parameters:
+      threshold: 15
+      combine: max

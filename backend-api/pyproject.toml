@@ -75,6 +75,13 @@ select = ["E", "F", "I", "B", "UP", "PL", "C90", "DTZ", "T20", "RUF"]
 "tests/unit/test_null_tracer.py" = ["I001", "PLC0415"]
 "tests/unit/test_providers_tracing_off.py" = ["I001"]
 "tests/unit/test_startup_tracing_off.py" = ["E501"]
+# Epic 5 story 2: the expected counts of the committed diff fixtures are literals the tests state.
+"tests/unit/application/analysis/test_tier1a.py" = ["PLR2004"]
+"tests/unit/application/analysis/test_summary.py" = ["PLR2004"]
+"tests/unit/application/analysis/test_signals.py" = ["PLR2004"]
+"tests/unit/application/analysis/test_secrets.py" = ["PLR2004"]
+"tests/unit/application/test_metrics_methods_code.py" = ["PLR2004"]
+"tests/unit/infrastructure/test_analysis_tools.py" = ["PLR2004"]
 
 [tool.ruff.format]
 # Story 9-2 left these test files with formatting that hard rule 1 forbids fixing.

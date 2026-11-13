@@ -38,6 +38,7 @@ def register(method_id: str) -> Callable[[Method], Method]:
 from orchestrator.application.metrics.methods import (  # noqa: E402, F401
     activity,
     budget,
+    code,
     cost,
     process,
     spend,

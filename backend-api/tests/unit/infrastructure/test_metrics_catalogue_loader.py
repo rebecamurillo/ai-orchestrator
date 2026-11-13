@@ -22,7 +22,8 @@ VALID = (
     " source: s, additive: true, missing_words: [], fingerprint_group: false,"
     " methods: [{n: 1, description: d, parameters: {}}]}\n"
 )
-GROUPS = {"cost", "budget", "spend", "tokens", "time", "process", "activity"}
+# Epic 5 story 2 (2026-11-13): the `code` catalogue file joins the shipped set.
+GROUPS = {"cost", "budget", "spend", "tokens", "time", "process", "activity", "code"}
 D20_IDS = {"spend.recorded", "spend.month_recorded", "tokens.recorded_in", "tokens.recorded_out"}
 # ratios the story's design notes keep out of the within_scope_type rule
 NOT_SUMMABLE = {"cost.figure_gap", "cost.per_story_done", "tokens.cache_hit_share"}

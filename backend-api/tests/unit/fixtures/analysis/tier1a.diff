@@ -1,0 +1,118 @@
+diff --git a/src/app.ts b/src/app.ts
+index 1111111..2222222 100644
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,2 +1,6 @@
+-const old = 1;
+-const gone = 2;
++// eslint-disable-next-line no-console
++const a = value as any;
++let c: any = 1;
++++counter;
++// @ts-ignore
++const d = x as unknown as Y;
+diff --git a/tests/unit/app.test.ts b/tests/unit/app.test.ts
+index 3333333..4444444 100644
+--- a/tests/unit/app.test.ts
++++ b/tests/unit/app.test.ts
+@@ -3 +3,5 @@
+-old();
++describe.only("x", () => {
++  it("works", () => {
++    const v = foo as any;
++  test.skip("later", () => {});
++  test("again", () => {
+diff --git a/tests/e2e/flow.spec.ts b/tests/e2e/flow.spec.ts
+new file mode 100644
+index 0000000..5555555
+--- /dev/null
++++ b/tests/e2e/flow.spec.ts
+@@ -0,0 +1,3 @@
++import { test } from "@playwright/test";
++test("flow", async () => {
++xit("later", () => {});
+diff --git a/tests/helpers/util.py b/tests/helpers/util.py
+new file mode 100644
+index 0000000..6666666
+--- /dev/null
++++ b/tests/helpers/util.py
+@@ -0,0 +1,2 @@
++x = typing.Any  # noqa: F401
++def test_util():
+diff --git a/tests/unit/test_x.py b/tests/unit/test_x.py
+index 7777777..8888888 100644
+--- a/tests/unit/test_x.py
++++ b/tests/unit/test_x.py
+@@ -4,0 +5,3 @@
++@pytest.mark.skip
++def test_x():
++async def test_y():
+diff --git a/tests/unit/old_test.py b/tests/unit/old_test.py
+deleted file mode 100644
+index 9999999..0000000
+--- a/tests/unit/old_test.py
++++ /dev/null
+@@ -1,4 +0,0 @@
+-def test_old():
+-    assert True
+-
+-# end
+diff --git a/docs/guide.md b/docs/guide.md
+index aaaaaaa..bbbbbbb 100644
+--- a/docs/guide.md
++++ b/docs/guide.md
+@@ -2 +2,2 @@
+-Old text.
++Use // eslint-disable only when needed.
++Plain text.
+diff --git a/package.json b/package.json
+index ccccccc..ddddddd 100644
+--- a/package.json
++++ b/package.json
+@@ -5 +5 @@
+-  "version": "1.0.0",
++  "version": "1.0.1",
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index eeeeeee..fffffff 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -10,3 +10,5 @@
+-a: 1
+-b: 2
+-c: 3
++a: 2
++b: 3
++c: 4
++d: 5
++e: 6
+diff --git a/src/old_name.ts b/src/new_name.ts
+similarity index 90%
+rename from src/old_name.ts
+rename to src/new_name.ts
+index 1212121..3434343 100644
+--- a/src/old_name.ts
++++ b/src/new_name.ts
+@@ -1 +1 @@
+-export const n = 1;
++export const n = 2;
+diff --git a/tests/unit/old.test.ts b/tests/unit/new.test.ts
+similarity index 80%
+rename from tests/unit/old.test.ts
+rename to tests/unit/new.test.ts
+index 5656565..7878787 100644
+--- a/tests/unit/old.test.ts
++++ b/tests/unit/new.test.ts
+@@ -1 +1 @@
+-  it("old", () => {
++  it("renamed", () => {
+diff --git a/assets/logo.png b/assets/logo.png
+new file mode 100644
+index 0000000..9a9a9a9
+Binary files /dev/null and b/assets/logo.png differ
+diff --git "a/src/caf\303\251.ts" "b/src/caf\303\251.ts"
+new file mode 100644
+index 0000000..bcbcbcb
+--- /dev/null
++++ "b/src/caf\303\251.ts"
+@@ -0,0 +1 @@
++export const x = 1;
