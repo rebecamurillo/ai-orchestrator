@@ -195,7 +195,7 @@
   fingerprint_group: false
   methods:
   - n: 1
-    description: Shell tool calls whose command starts with a known test command.
+    description: Shell tool calls whose command contains a known test command as whole words; a command counts once.
     parameters:
       test_run_patterns:
       - pnpm test

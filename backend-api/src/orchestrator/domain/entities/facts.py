@@ -17,16 +17,16 @@ from pydantic import BaseModel, ConfigDict
 FactSetStatus = Literal["ok", "partial", "failed"]
 UsageSource = Literal["harness", "gateway"]
 UsageClass = Literal[
+    "money",
     "input_uncached",
     "cache_read",
     "cache_write_5m",
     "cache_write_1h",
-    "cache_write",
+    "cache_write_unsplit",
     "output",
-    "reasoning",
-    "tool_use",
-    "requests",
-    "money",
+    "thinking",
+    "gateway_prompt",
+    "gateway_completion",
 ]
 GatewayTrigger = Literal["attempt_end", "run_end", "recalculation"]
 EventKind = Literal["write", "test_run"]

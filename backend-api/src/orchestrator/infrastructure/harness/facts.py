@@ -9,8 +9,11 @@ from pathlib import Path
 
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.facts import AttemptFacts
+from orchestrator.domain.ports.catalogue import Catalogue
 from orchestrator.domain.ports.log_facts import LogFacts, LogFactsCapabilities
+from orchestrator.infrastructure.harness.claude.facts import ClaudeLogFacts
 from orchestrator.infrastructure.harness.fake.facts import FakeLogFacts
+from orchestrator.infrastructure.metrics_catalogue import PackageCatalogue
 from orchestrator.infrastructure.process.logs import log_secrets
 from orchestrator.infrastructure.redact import redact
 from orchestrator.infrastructure.settings import Settings
@@ -45,7 +48,17 @@ class RedactingLogFacts:
 def build_log_facts(settings: Settings) -> dict[str, LogFacts]:
     """The extractors this instance has, by harness name."""
     secrets = log_secrets(settings)
-    return {"fake": RedactingLogFacts(FakeLogFacts(), secrets)}
+    return {
+        "fake": RedactingLogFacts(FakeLogFacts(), secrets),
+        "claude": RedactingLogFacts(ClaudeLogFacts(test_run_patterns(PackageCatalogue())), secrets),
+    }
+
+
+def test_run_patterns(catalogue: Catalogue) -> tuple[str, ...]:
+    """The `test_run_patterns` parameter of method 1 of `activity.test_runs`."""
+    entries = {e.id: e for e in catalogue.entries()}
+    method = next(m for m in entries["activity.test_runs"].methods if m.n == 1)
+    return tuple(str(p) for p in method.parameters["test_run_patterns"])  # type: ignore[attr-defined]
 
 
 def log_file_exists(path: str) -> bool:

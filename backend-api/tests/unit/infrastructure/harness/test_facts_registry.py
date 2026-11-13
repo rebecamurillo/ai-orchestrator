@@ -18,8 +18,9 @@ from orchestrator.infrastructure.harness.facts import (
 from orchestrator.infrastructure.settings import Settings
 
 
-def test_the_registry_holds_the_fake_extractor_and_no_other(env: dict[str, str]) -> None:
-    assert set(build_log_facts(Settings())) == {"fake"}
+def test_the_registry_holds_the_fake_and_claude_extractors(env: dict[str, str]) -> None:
+    # Story 3 of orchestrator-run-metrics (2026-11-13): `claude` is registered.
+    assert set(build_log_facts(Settings())) == {"fake", "claude"}
 
 
 def test_a_stored_command_carries_stars_in_place_of_an_instance_secret(
