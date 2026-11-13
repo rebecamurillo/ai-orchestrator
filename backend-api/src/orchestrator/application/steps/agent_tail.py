@@ -24,6 +24,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import structlog
+
 from orchestrator.application.rules import (
     budget,
     harness_failure,
@@ -48,11 +50,16 @@ from orchestrator.application.templates.agent_row import (
     SPEC_FOLDER_KEY,
     STORY_ID_KEY,
 )
+from orchestrator.application.use_cases.record_attempt_facts import record_attempt_facts
 from orchestrator.application.use_cases.spend import record_attempt_spend
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.harness import HarnessResult
 from orchestrator.domain.values import Park, Retry, StepResult
+
+log = structlog.get_logger(__name__)
+
+FACTS_FAILED = "fact scope failed"
 
 #: The sub-keys of the two contracts, as `application/templates/agent_row.py:52-54` writes
 #: them onto the row. `Retry`'s own field names, so the three below name one thing each.
@@ -123,6 +130,7 @@ def finish(
         }
     )
     committed(ctx, lambda attempts: attempts.mark_finished(finished))
+    record_facts(ctx, finished)
     if not (result.stalled or result.timed_out):
         return tail(ctx, finished, result)
     record_spend(ctx, finished, result)
@@ -182,6 +190,17 @@ def _route(ctx: StepContext, result: HarnessResult) -> tuple[StepResult, str | N
         exit_reason=agent_failure.provider_reason(ctx, result),
     )
     return routed, story.blocking_condition if story is not None else None
+
+
+def record_facts(ctx: StepContext, attempt: Attempt) -> None:
+    """Store the finished attempt's facts; never raises and changes nothing the walker reads."""
+    if ctx.ports.facts_writes is None:
+        return
+    try:
+        with ctx.ports.facts_writes() as facts_ports:
+            record_attempt_facts(facts_ports, attempt)
+    except Exception:
+        log.exception(FACTS_FAILED, run_id=str(attempt.run_id), attempt=attempt.n)
 
 
 def record_spend(ctx: StepContext, attempt: Attempt, result: HarnessResult) -> Run | None:

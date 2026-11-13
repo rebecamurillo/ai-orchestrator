@@ -44,6 +44,7 @@ from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
 from orchestrator.application.steps.verify_failure import VerifyFailure
+from orchestrator.application.use_cases.record_attempt_facts import FactsPorts
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.entities.attempt import Attempt
@@ -74,6 +75,9 @@ AttemptWrites = Callable[[], AbstractContextManager[WriterPorts]]
 #: `StepPorts.spend_writes`: a `SpendPorts` scope of its own — `attempt_writes` reaches only
 #: `.attempts` (AD-8); the budget read (5.7) also needs `runs`/`steps`.
 SpendWrites = Callable[[], AbstractContextManager[SpendPorts]]
+
+#: `StepPorts.facts_writes`: the scope `record_attempt_facts` stores an ended attempt's facts in.
+FactsWrites = Callable[[], AbstractContextManager[FactsPorts]]
 
 #: The directory a Repository's base clone lives in, under its Project's (AD-14). The same
 #: word `use_cases/clone_check.py` uses, because it is the same directory.
@@ -204,6 +208,8 @@ class StepPorts:
     #: The attempt's own spend scope (5.7). `None` skips the budget read — see the module
     #: docstring's "degrades like `tracer`" — rather than raising like `attempt_writes`.
     spend_writes: SpendWrites | None = None
+    #: `None` records no facts, the same way `None` skips the budget read above.
+    facts_writes: FactsWrites | None = None
     skill_catalog: SkillCatalog | None = None
 
 

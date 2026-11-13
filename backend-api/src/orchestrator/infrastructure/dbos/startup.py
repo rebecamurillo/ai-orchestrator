@@ -61,6 +61,7 @@ from orchestrator.infrastructure.db.run_finished import run_finished_hook
 from orchestrator.infrastructure.db.writers import (
     SessionFactory,
     SessionUnitOfWork,
+    open_facts_ports,
     open_spend_ports,
     open_writer_ports,
 )
@@ -68,8 +69,10 @@ from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
 from orchestrator.infrastructure.dbos.config import engine_config
 from orchestrator.infrastructure.dbos.facade import RealEngine
 from orchestrator.infrastructure.dbos.walker import WalkerDeps
+from orchestrator.infrastructure.facts_jobs import facts_jobs
 from orchestrator.infrastructure.gateway import build_gateway
 from orchestrator.infrastructure.harness import build_harness_env, build_harnesses
+from orchestrator.infrastructure.harness.facts import build_log_facts
 from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.process import RealProcessRunner
@@ -159,6 +162,7 @@ def walker_deps(
             attempt_writes=partial(open_writer_ports, session_factory),
             logs=RealLogReader(log_secrets(settings)),
             spend_writes=partial(open_spend_ports, session_factory, gateway),
+            facts_writes=partial(open_facts_ports, session_factory, build_log_facts(settings)),
             # read at dispatch time: a Run planned before the instance changed must still park
             # rather than let a harness improvise on an unresolvable skill name
             skill_catalog=FsSkillCatalog(settings.agent_home),
@@ -308,4 +312,13 @@ def schedule_engine_jobs(settings: Settings) -> None:
         for name, cron, job in engine_jobs(
             settings, session_factory, git, engine, chat=current_chat()
         ):
+            engine.schedule(name, cron, job)
+
+
+def schedule_facts_jobs(settings: Settings) -> None:
+    """Register the facts sweep, guarded exactly as `schedule_jobs` is."""
+    for engine, session_factory, _git in _SERVING:
+        if session_factory is None:
+            continue
+        for name, cron, job in facts_jobs(settings, session_factory):
             engine.schedule(name, cron, job)

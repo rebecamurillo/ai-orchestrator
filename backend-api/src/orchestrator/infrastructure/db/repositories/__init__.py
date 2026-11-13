@@ -12,6 +12,10 @@ from orchestrator.infrastructure.db.repositories.chat import (
     SQLAlchemyChatNoticeRepository,
     SQLAlchemyChatThreadRepository,
 )
+from orchestrator.infrastructure.db.repositories.facts import (
+    SQLAlchemyFactSetRepository,
+    SQLAlchemyGatewayReadRepository,
+)
 from orchestrator.infrastructure.db.repositories.gate_records import (
     SQLAlchemyGateRecordRepository,
 )
@@ -42,7 +46,9 @@ __all__ = [
     "SQLAlchemyAttemptRepository",
     "SQLAlchemyChatNoticeRepository",
     "SQLAlchemyChatThreadRepository",
+    "SQLAlchemyFactSetRepository",
     "SQLAlchemyGateRecordRepository",
+    "SQLAlchemyGatewayReadRepository",
     "SQLAlchemyHarnessRepository",
     "SQLAlchemyHistoryQuery",
     "SQLAlchemyInstanceHoldRepository",

@@ -157,6 +157,8 @@ class Settings(BaseSettings):
     clone_check_cron: str = "0 3 * * *"
     worktree_gc_cron: str = "30 3 * * *"
     terminal_poll_cron: str = "*/30 * * * * *"
+    #: The facts sweep: fills the fact set of any ended harness attempt that has none.
+    facts_sweep_cron: str = "0 * * * *"
     #: `harness_readiness.start`'s own `budget_usd` (SPEC CAP-8) — the fixture's one story
     #: is small, so a low ceiling still leaves room for a retry or two.
     readiness_budget_usd: Annotated[Decimal, Field(gt=0)] = Decimal("5")

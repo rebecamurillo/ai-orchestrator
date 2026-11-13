@@ -17,22 +17,25 @@ row that takes forty minutes holds no connection while it runs.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from types import TracebackType
 
 from sqlalchemy.orm import Session
 
 from orchestrator.application.use_cases.announce import Announcer
+from orchestrator.application.use_cases.record_attempt_facts import FactsPorts
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.gateway import Gateway
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.log_facts import LogFacts
 from orchestrator.domain.ports.notifier import Notifier
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyAttemptRepository,
+    SQLAlchemyFactSetRepository,
     SQLAlchemyGateRecordRepository,
     SQLAlchemyInstanceHoldRepository,
     SQLAlchemyProjectRepository,
@@ -41,6 +44,7 @@ from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyStepRunRepository,
     SQLAlchemyTrajectoryRepository,
 )
+from orchestrator.infrastructure.harness.facts import log_file_exists
 
 #: How a scope reaches a session: `create_session_factory`'s own return shape.
 SessionFactory = Callable[[], Session]
@@ -137,6 +141,26 @@ def open_spend_ports(session_factory: SessionFactory, gateway: Gateway) -> Itera
             steps=SQLAlchemyStepRunRepository(session),
             attempts=SQLAlchemyAttemptRepository(session),
             uow=SessionUnitOfWork(session),
+        )
+    finally:
+        session.close()
+
+
+@contextmanager
+def open_facts_ports(
+    session_factory: SessionFactory,
+    extractors: Mapping[str, LogFacts],
+    log_exists: Callable[[str], bool] = log_file_exists,
+) -> Iterator[FactsPorts]:
+    """One session's worth of `FactsPorts`, closed on every path."""
+    session = session_factory()
+    try:
+        yield FactsPorts(
+            facts=SQLAlchemyFactSetRepository(session),
+            uow=SessionUnitOfWork(session),
+            clock=SystemClock(),
+            extractors=extractors,
+            log_exists=log_exists,
         )
     finally:
         session.close()
