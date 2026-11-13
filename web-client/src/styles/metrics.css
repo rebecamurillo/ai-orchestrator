@@ -1,0 +1,206 @@
+/* ── Metric primitives (epic 3 story 2): hint, value cell, origin drawer, version selector ── */
+
+.metric-hint-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.metric-label {
+  font-size: var(--type-meta);
+  color: var(--color-text-secondary);
+}
+
+.metric-hint-control {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-line-strong);
+  font-size: var(--type-column-head);
+  line-height: 1;
+  color: var(--color-text-tertiary);
+}
+
+.metric-hint-control:hover,
+.metric-hint-control:focus-visible,
+.metric-hint-control[aria-expanded='true'] {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.metric-hint {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  width: 420px;
+  margin-top: var(--space-2);
+  padding: var(--space-6) var(--space-8);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line-strong);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+  color: var(--color-text-secondary);
+  text-align: left;
+}
+
+.metric-hint-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.metric-hint-label {
+  font-size: var(--type-eyebrow);
+  letter-spacing: var(--type-eyebrow-tracking);
+  text-transform: var(--type-eyebrow-transform);
+  color: var(--color-text);
+}
+
+.metric-hint-id {
+  font-family: var(--font-mono);
+  color: var(--color-text-tertiary);
+}
+
+.metric-hint-rows {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--space-3) var(--space-6);
+  margin: 0;
+}
+
+.metric-hint-rows dt {
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  color: var(--color-text-tertiary);
+}
+
+.metric-hint-rows dd {
+  margin: 0;
+}
+
+.metric-hint-runs {
+  color: var(--color-text-tertiary);
+}
+
+.metric-value-cell {
+  display: inline-flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.metric-value-cell:hover {
+  background: var(--color-surface-raised);
+}
+
+.metric-missing,
+.metric-carried {
+  font-size: var(--type-meta);
+  color: var(--color-text-tertiary);
+}
+
+.metric-figure-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4) var(--space-8);
+}
+
+.metric-figure-head {
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  color: var(--color-text-tertiary);
+}
+
+.metric-figure-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--type-meta);
+  color: var(--color-text-tertiary);
+}
+
+.metric-version-segments {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.metric-version-segment {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--type-control);
+  color: var(--color-text-tertiary);
+  border: 1px solid var(--color-line);
+}
+
+.metric-version-segment[aria-pressed='true'] {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.metric-version-detail {
+  margin: var(--space-3) 0 0;
+  font-size: var(--type-meta);
+  color: var(--color-text-tertiary);
+}
+
+.origin-drawer {
+  width: 440px;
+}
+
+.origin-drawer-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.origin-drawer-value {
+  font-size: var(--type-detail-title);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.origin-drawer-label,
+.origin-drawer-state,
+.origin-drawer-run {
+  font-size: var(--type-meta);
+  color: var(--color-text-secondary);
+}
+
+.origin-drawer-rows {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--type-meta);
+}
+
+.origin-drawer-rows th {
+  width: 110px;
+  padding: var(--space-2) var(--space-4) var(--space-2) 0;
+  text-align: left;
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+  vertical-align: top;
+}
+
+.origin-drawer-rows td {
+  padding: var(--space-2) 0;
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.origin-drawer-aggregate,
+.origin-drawer-foot {
+  margin-top: var(--space-8);
+  font-size: var(--type-meta);
+  color: var(--color-text-secondary);
+}
