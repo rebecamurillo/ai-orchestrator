@@ -37,7 +37,7 @@ with their hashes; every path it does not name is yours.
 | --- | --- | --- |
 | `README.md`, `VERSION`, `install.sh`, `docker-compose.yml`, `release.env`, `.env.example`, `.gitignore` | product | replaced by `upgrade` |
 | `product-files.json` | product | the manifest: every product and seed path with its `sha256` |
-| `kit/` | product | the kit skills the instance serves |
+| `kit/` | product | the bootstrap template, its installer and the MCP templates the instance serves |
 | `bmad/install.sh`, `bmad/README.md` | product | the BMAD script and its notes |
 | `setup/README.md`, `setup/examples/copy-folder.sh` | product | the setup notes and an example script |
 | `templates/README.md`, `templates/shipped/*.yaml` | product | the template format and the shipped examples (nothing there loads) |
@@ -225,10 +225,11 @@ instance does not answer at all, and the line that fails names its own fix. If t
 enough, `./install.sh diagnose` collects everything a maintainer will ask for, already
 redacted.
 
-The `orchestrator-admin` skill in `kit/` is the same ground for an agent: install it into this
-directory and Claude Code, Codex or OpenCode will walk install, upgrade, backup, rollback,
-harness and subscription setup, secret rotation, garbage collection and filing the bug report
-— running these commands and reading their output rather than improvising around them.
+The bootstrap in `kit/`, installed into this directory with `kit/install.sh --project .`,
+connects Claude Code, Codex or OpenCode to the instance and sends the host agent to the `host/*`
+pages: install, upgrade, backup, rollback, harness and subscription setup, secret rotation,
+garbage collection and filing the bug report — running these commands and reading their output
+rather than improvising around them.
 
 Ports: everything publishes on `127.0.0.1` — 4321 (web) and 8000 (API). If one is already
 taken on your machine the script stops before starting anything and names the variable
@@ -363,8 +364,8 @@ values with the new `docker-compose.yml` and `.env.example`.
 
 What you can change — step kinds, inputs, loops, checkpoints, a model or a timeout per step,
 the prompts agents are sent — and the same edit loop over the API are in
-`kit/skills/orchestrator/references/workflows.md`. That guide is installed into every project
-with the kit, so the project's coding agent can propose and validate a template change for
+the guide page `workflows/customize`, which a project's coding agent reads through the
+instance (`read_guide`), so it can propose and validate a template change for
 you; it saves only on your go-ahead.
 
 A template does not decide which shell commands an agent may run. That is
@@ -545,15 +546,11 @@ decisions are the user's:
    the newer release migrated the schema: migrations run forward only, and an older release on
    a migrated database is expected to fail closed.
 
-Afterwards, the kit in every plugged project is stale — the skills came out of the old image.
-From inside each project repository:
-
-```bash
-curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \
-  "$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness claude
-```
-
-`--harness` is whatever that project's `.orchestrator/kit.json` records. Then
+A project with the bootstrap needs nothing after an upgrade: it holds no release. When the
+upgrade raises `bootstrap_contract`, its agent says so and keeps working; re-running the
+installer moves it to the newer contract (`connect`). A project
+still on the beta.4 kit is moved over once by reinstalling with the bootstrap installer
+(`connect`). Then
 `./install.sh doctor`, and check the templates — `host/runbooks`, *Template refresh*.
 
 <!-- /guide -->

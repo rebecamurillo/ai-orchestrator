@@ -1,10 +1,10 @@
 """The client kit off disk: the one reader of `KIT_DIR` (AD-2).
 
-`deploy/kit/` is what a project repository installs to talk to this instance — the skills
-and their installer. The image carries it at `KIT_DIR` so the running instance can hand a
-project the kit that matches it exactly: a kit fetched from the instance can never be a
-different version than the instance (plan agent-delivery-kit §1, the same law AD-16 lays
-down for `BMAD_VERSION`). `api/routers/kit.py` serves what this module reads.
+`deploy/kit/` is what a project repository installs to talk to this instance — the bootstrap
+template, its installer and the MCP templates. The image carries it at `KIT_DIR` so the running
+instance can hand a project the kit that matches it exactly: a kit fetched from the instance
+can never be a different version than the instance (plan agent-delivery-kit §1, the same law
+AD-16 lays down for `BMAD_VERSION`). `api/routers/kit.py` serves what this module reads.
 
 A source-tree run has no kit directory unless `KIT_DIR` points at `deploy/kit`; every
 reader answers `None` for an absent kit, and the router turns that into a 404 that says so.

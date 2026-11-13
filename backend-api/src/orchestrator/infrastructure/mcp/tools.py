@@ -1,10 +1,10 @@
 """The tools `/mcp` publishes: one REST operation each, and the rule that governs it.
 
 Every docstring here is read by the agent that calls the tool — the SDK publishes it as the
-tool's description — so each one states the same rule the `orchestrator` skill states for that
-endpoint. The skill remains the floor: an operator whose harness speaks no MCP reads exactly
-these rules in prose, and nothing here is a second source of truth for *how* the API behaves
-(`infrastructure/mcp/client.py` says why).
+tool's description — so each one states the same rule the guide states for that
+endpoint. The guide, read through `read_guide`, is the floor: an operator whose harness speaks no
+MCP reads exactly these rules in prose, and nothing here is a second source of truth for
+*how* the API behaves (`infrastructure/mcp/client.py` says why).
 
 Thin by construction: a tool parses nothing, decides nothing and writes no status (AD-8).
 

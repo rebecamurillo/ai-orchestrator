@@ -21,7 +21,7 @@ Everything a client has lives in one directory, the one `install.sh` sits in:
 | `docker-compose.yml` | the three containers, pulling the two images at the tag it carries |
 | `setup/`, `bmad/` | the client's setup scripts and `setup/bmad.choice`; the BMAD script |
 | `templates/` | the client's workflow files (`*.yaml`); `templates/shipped/` holds the release's examples |
-| `kit/` | the skills, and `kit/install.sh`, which plugs a project repository into the instance |
+| `kit/` | the bootstrap template, the MCP templates and `kit/install.sh`, which plugs a project repository into the instance |
 | `backups/`, `diagnostics/`, `logs/`, `.upgrade/` | the `pg_dump`s of `upgrade`, `diagnose` reports, setup logs, what an upgrade staged and replaced |
 
 Each path is product (replaced by `upgrade`), seed (written only when absent) or client (the

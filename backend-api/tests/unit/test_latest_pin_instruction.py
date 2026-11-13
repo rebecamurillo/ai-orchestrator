@@ -1,7 +1,8 @@
 """Agents setting up `.env` files are told to pin the latest release (Operator, 2026-10-30).
 
-The rule has to be readable wherever an agent meets the pins: the admin skill, its runbook, and
-the two contract files. It also has to carry what makes it safe to follow: a pin is an exact
+The rule has to be readable wherever an agent meets the pins: the host pages, and the two
+contract files. Paths repointed from the deleted admin skill by epic 3 story 3, 2026-11-12 (AD-33).
+It also has to carry what makes it safe to follow: a pin is an exact
 number, because `ensure` refuses the word `latest`, and `BMAD_VERSION` is outside the rule,
 because AD-16 ties it to the manifest in every target repository.
 """
@@ -14,7 +15,7 @@ import pytest
 
 from tests.unit.conftest import REPO_ROOT
 
-ADMIN_SKILL = REPO_ROOT / "deploy" / "kit" / "skills" / "orchestrator-admin"
+HOST = REPO_ROOT / "guide" / "host"
 
 #: The npm package behind each pin the rule covers, named so an agent can look it up.
 PACKAGES = (
@@ -25,8 +26,8 @@ PACKAGES = (
 )
 
 READERS = (
-    ADMIN_SKILL / "SKILL.md",
-    ADMIN_SKILL / "references" / "runbooks.md",
+    HOST / "harness-versions.md",
+    HOST / "runbooks.md",
     REPO_ROOT / ".env.example",
     REPO_ROOT / "deploy" / ".env.example",
 )
@@ -44,7 +45,7 @@ def test_every_place_an_agent_meets_the_pins_states_the_rule(path: Path) -> None
 
 
 def test_the_runbook_says_what_to_do_when_the_latest_release_does_not_work() -> None:
-    text = (ADMIN_SKILL / "references" / "runbooks.md").read_text()
+    text = (HOST / "runbooks.md").read_text()
 
     assert "readiness" in text
     assert "do not fall back silently" in text

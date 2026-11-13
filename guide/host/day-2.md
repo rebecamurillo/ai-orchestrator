@@ -55,10 +55,11 @@ instance does not answer at all, and the line that fails names its own fix. If t
 enough, `./install.sh diagnose` collects everything a maintainer will ask for, already
 redacted.
 
-The `orchestrator-admin` skill in `kit/` is the same ground for an agent: install it into this
-directory and Claude Code, Codex or OpenCode will walk install, upgrade, backup, rollback,
-harness and subscription setup, secret rotation, garbage collection and filing the bug report
-— running these commands and reading their output rather than improvising around them.
+The bootstrap in `kit/`, installed into this directory with `kit/install.sh --project .`,
+connects Claude Code, Codex or OpenCode to the instance and sends the host agent to the `host/*`
+pages: install, upgrade, backup, rollback, harness and subscription setup, secret rotation,
+garbage collection and filing the bug report — running these commands and reading their output
+rather than improvising around them.
 
 Ports: everything publishes on `127.0.0.1` — 4321 (web) and 8000 (API). If one is already
 taken on your machine the script stops before starting anything and names the variable

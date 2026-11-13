@@ -6,7 +6,7 @@
 #   scripts/bundle.sh 1.0.0-beta /dir   # … into that directory instead
 #
 # `deploy/` in the repository IS the client install, entire: `install.sh`, the compose file,
-# the env contract, `README.md`, `setup/`, `bmad/` and `kit/` (the agent skills); `llm-platform/`
+# the env contract, `README.md`, `setup/`, `bmad/` and `kit/` (the bootstrap and its installer); `llm-platform/`
 # (LiteLLM + Langfuse) stays in the repository and is not packaged. The archive is that one directory, extracted as `ai-orchestrator-deploy-<tag>/`,
 # plus a `VERSION` file carrying the tag so `install.sh` knows which images to pull, the
 # shipped examples (`templates/shipped/`) and `product-files.json`, the manifest of product files.
@@ -54,7 +54,7 @@ python3 "${root}/scripts/product_manifest.py" "$target" "${target}/VERSION" > "$
 for required in install.sh docker-compose.yml .env.example README.md \
 	product-files.json .gitignore compose.override.yml release.env setup/bmad.choice setup/README.md \
 	setup/examples/copy-folder.sh bmad/install.sh \
-	kit/install.sh kit/skills/orchestrator/SKILL.md; do
+	kit/install.sh kit/bootstrap/SKILL.md.tmpl; do
 	[[ -f "${target}/${required}" ]] || { echo "bundle is missing ${required}" >&2; exit 1; }
 done
 # and what must never be

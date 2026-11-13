@@ -2,38 +2,28 @@
 
 The instance serves the Model Context Protocol at `$ORCHESTRATOR_BASE_URL/mcp`, as a route on
 backend-api behind the same `ORCHESTRATOR_TOKEN` as every other call. Its tools are thin: each
-one is a single REST operation of the published contract — `version`, `list_templates`,
-`get_template`, `preflight_run`, `create_run`, `get_run`, `get_run_detail`, `wait_run_events`,
-`send_signal`, `list_queue`, `list_projects` — so there is nothing MCP can do that the API
-cannot, and nothing it does differently.
+one is a single REST operation of the published contract, so there is nothing MCP can do that
+the API cannot, and nothing it does differently. MCP and REST stay one operation each.
 
-**The `orchestrator` skill remains the floor.** Harness support for remote MCP differs, and the
-rules that matter — handshake first, pre-flight before creating a Run, one budget decision per
-Run made by a human, Signals chosen from `admitted_signals` — are the skill's, stated in prose
-that every harness reads. The tool descriptions repeat them, but a harness without MCP loses no
-capability by reading the skill instead. Configure MCP because typed tools are pleasanter than
-`curl`, not because anything requires it.
+**The guide is the floor.** Without MCP, an agent reads the same rules over `GET /llms.txt` and
+`GET /guide/{id}.md`; with MCP, `read_guide` reaches every page. Harness support for remote MCP
+differs, so a harness without it loses no capability.
 
-**These files are not installed for you.** `kit/install.sh` projects skills; wiring an MCP
-server edits a file that is yours — a project's `.mcp.json`, your `~/.codex/config.toml`, your
-`opencode.json` — and often holds servers of your own. Copy the snippet, keep your existing
-entries, and restart the harness.
+## What the installer does with these files
 
-## `claude.json` → the project's `.mcp.json`
+The three files are the templates `kit/install.sh` renders: the base URL is written as a
+literal, the token as a variable reference (`${VAR}`, `bearer_token_env_var`, `{env:VAR}`),
+never as a value. The installer merges the rendered block into the harness's own file and keeps
+every other server and key as it is:
 
-Merge the `mcpServers.orchestrator` block into `.mcp.json` at the project root (or into
-`~/.claude.json` for every project). Claude Code expands `${VAR}` from the environment, so the
-token stays in `.env`/your shell and never in the file. Check it with `/mcp` in a session.
+| Template | Merged into | `--harness` |
+| --- | --- | --- |
+| `claude.json` | `.mcp.json` in the project (`~/.claude.json` with `--home`) | `claude` |
+| `codex.toml` | `${CODEX_HOME:-~/.codex}/config.toml` | `codex` |
+| `opencode.json` | `opencode.json` in the project | `opencode` |
 
-## `codex.toml` → `~/.codex/config.toml`
-
-Append the `[mcp_servers.orchestrator]` table. `bearer_token_env_var` names the variable rather
-than carrying the token. Codex reads a literal `url`, so replace the default
-`http://127.0.0.1:8000` with the instance's base URL by hand. Remote (streamable-HTTP) MCP
-support is version-dependent in Codex: if `codex mcp list` does not show the server, you are on
-a build without it — use the skill, which needs nothing.
-
-## `opencode.json` → the project's `opencode.json`
-
-Merge the `mcp.orchestrator` block. opencode substitutes `{env:VAR}` at load time. `enabled:
-false` turns it off without deleting it.
+A file that already declares `orchestrator` is kept as it is. An `opencode.jsonc` is not
+written to; the installer prints the block to add by hand. Restart the harness afterwards;
+`/mcp` in a Claude Code session and `codex mcp list` show the server. Remote (streamable-HTTP)
+MCP support is version-dependent in Codex: a build without it does not list the server, and the
+guide over `/llms.txt` needs nothing.

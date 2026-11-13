@@ -186,8 +186,8 @@ consent.
 | `link` | `compare_urls` on the Run holds the GitHub compare page |
 | a `checkpoint` stop after the epic | present only when the entry says `done_checkpoint: true`; `continue` carries on |
 
-Supervise with `orchestrator-watch <run_id>` where it is installed (see
-`initiatives/run`), or poll at 5 s / 30 s. Expected stops, and what each means:
+Supervise with the `wait_run_events` tool or the events route (`runs/monitor`), or poll at
+5 s / 30 s. Expected stops, and what each means:
 
 - **`blocked`, the agent asking about git credentials or a push.** The agent tried to push.
   It must not: answer with the signal `answer` and text saying the orchestrator pushes, the

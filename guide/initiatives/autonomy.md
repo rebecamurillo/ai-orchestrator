@@ -56,8 +56,7 @@ need someone who can see the other side of the merge.
 
 ## Sending the signal
 
-Read `admitted_signals` off `GET /api/v1/runs/{id}` (the watcher's payload file carries the
-list it saw) and choose only from it. A non-admitted kind answers 409 — that is the API
+Read `admitted_signals` off `GET /api/v1/runs/{id}` and choose only from it. A non-admitted kind answers 409 — that is the API
 telling you the state is not what you think, so re-read the Run rather than trying another
 kind. Signal shapes are in `api`.
 

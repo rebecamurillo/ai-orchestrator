@@ -93,13 +93,9 @@ decisions are the user's:
    the newer release migrated the schema: migrations run forward only, and an older release on
    a migrated database is expected to fail closed.
 
-Afterwards, the kit in every plugged project is stale — the skills came out of the old image.
-From inside each project repository:
-
-```bash
-curl -fsSL -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \
-  "$ORCHESTRATOR_BASE_URL/api/v1/kit/install.sh" | bash -s -- --harness claude
-```
-
-`--harness` is whatever that project's `.orchestrator/kit.json` records. Then
+A project with the bootstrap needs nothing after an upgrade: it holds no release. When the
+upgrade raises `bootstrap_contract`, its agent says so and keeps working; re-running the
+installer moves it to the newer contract (`connect`). A project
+still on the beta.4 kit is moved over once by reinstalling with the bootstrap installer
+(`connect`). Then
 `./install.sh doctor`, and check the templates — `host/runbooks`, *Template refresh*.

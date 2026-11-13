@@ -2,7 +2,7 @@
 
 The rule this module exists to make structural (agent-delivery-kit plan §4): **no tool
 reimplements a use case.** A tool is a name, a docstring and one call to the published
-contract — the same operation the skill tells an agent to curl, with the same validation, the
+contract — the same operation the guide tells an agent to curl, with the same validation, the
 same problem documents and the same two status writers behind it (AD-8). Anything else would
 be a second implementation of the API that drifts from the first.
 

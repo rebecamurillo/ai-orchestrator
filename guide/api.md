@@ -31,7 +31,7 @@ are UUIDv7; times are ISO 8601 UTC with `Z`; money is a decimal string in USD.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/v1/kit/install.sh` | The installer itself, `text/x-shellscript` — pipe it to `bash` |
-| GET | `/api/v1/kit/archive` | The whole kit as `.tar.gz`: `install.sh`, `manifest.json`, `skills/`, `.claude-plugin/` |
+| GET | `/api/v1/kit/archive` | The whole kit as `.tar.gz`: `install.sh`, `manifest.json`, `bootstrap/`, `mcp/`, `.claude-plugin/` |
 
 ## Projects
 
@@ -142,8 +142,8 @@ The same operations are also exposed as MCP tools at `$ORCHESTRATOR_BASE_URL/mcp
 `update_project`, `add_repository`, `check_clone`, `init_repository`, `validate_template`,
 `save_template`, `reload_templates`, `validate_spec_folder`, `list_models`. Each tool is one call to the
 route above it, so the rules in `rules` apply unchanged. `read_guide` reads this guide: with no
-id it returns `/llms.txt`, with a page id it returns `/guide/{id}.md`; resources and prompts are described in `connect`. Per-harness configuration
-snippets ship in the kit under `mcp/`; they are not installed automatically.
+id it returns `/llms.txt`, with a page id it returns `/guide/{id}.md`; resources and prompts are described in `connect`. The installer writes the per-harness
+configuration from the kit's `mcp/` templates (`connect`).
 
 ## Fleet and harnesses
 

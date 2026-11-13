@@ -64,29 +64,19 @@ a `budget` park, which goes to the human (§4).
 
 ## 4. Supervise
 
-Supervision is a watcher, not an always-on agent: there is no push channel, and an agent
-idling against a poll loop burns context to learn nothing. `orchestrator-watch` is installed
-at `.orchestrator/bin/orchestrator-watch`:
+Supervision is a wait, not an always-on agent: an agent idling against a poll loop burns
+context to learn nothing. Watch with the `wait_run_events` tool or
+`GET /api/v1/runs/{id}/events?wait=30&since=<last updated_at>` (`runs/monitor`); a wait that
+answers `changed: false` is called again with the `updated_at` it returned. Without either, poll at the
+cadence the Run's own status sets: 5 s while `queued`/`running`, 30 s otherwise. Never tighter.
+What you do on each status:
 
-```bash
-orchestrator-watch <run_id>            # prints each status change, raises a desktop notification
-                                       # per change (--no-notify silences it); exits on what needs a human
-orchestrator-watch <run_id> --once     # one poll, for a harness that cannot hold a process
-```
-
-It polls at the documented cadence and refuses tighter. Its exit code is the branch:
-
-| exit | meaning | what you do |
-| --- | --- | --- |
-| 0 | `done` | report the result, close out the folder's `runs` entry |
-| 2 | `needs_you` | read `.orchestrator/runs/<run_id>.json` and go to the autonomy table |
-| 3 | `failed` / `cancelled` | report it with the alert; a failed Run is not retried blind |
-| 1 | HTTP or usage error | report the URL and the code it names |
-
-**Where the harness can run a background process, run the watcher there** and read the
-payload file when it exits 2 — that keeps the polling noise out of this conversation
-entirely. Where it cannot, call `--once` at the cadence the Run's own status sets: 5 s while
-`queued`/`running`, 30 s otherwise. Never tighter, in either mode.
+| status | what you do |
+| --- | --- |
+| `done` | report the result, close out the folder's `runs` entry |
+| `needs_you` | `get_run_detail`, then go to the autonomy table |
+| `failed` / `cancelled` | report it with the alert; a failed Run is not retried blind |
+| an HTTP error | report the URL and the code it names |
 
 On a park, `initiatives/autonomy` decides who answers: the table is indexed by
 `INITIATIVE.md`'s `autonomy` (`supervised`, `assisted`, `auto`; `assisted` is the default)
@@ -94,7 +84,8 @@ and by the alert's `park_kind`. Read it before sending any signal. Two rules hol
 level:
 
 - The signal kind comes from the Run's own `admitted_signals`, never from assumption.
-- `answer`, `retry` and `continue` carry `stop`: the payload's `park_seq`. A 409 means the
+- `answer`, `retry` and `continue` carry `stop`: the `park_seq` the Run detail
+  carries. A 409 means the
   Run has moved on, so read it again before deciding.
 - `budget` and `checkpoint` never resolve without the human.
 

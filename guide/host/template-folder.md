@@ -40,8 +40,8 @@ values with the new `docker-compose.yml` and `.env.example`.
 
 What you can change — step kinds, inputs, loops, checkpoints, a model or a timeout per step,
 the prompts agents are sent — and the same edit loop over the API are in
-`kit/skills/orchestrator/references/workflows.md`. That guide is installed into every project
-with the kit, so the project's coding agent can propose and validate a template change for
+the guide page `workflows/customize`, which a project's coding agent reads through the
+instance (`read_guide`), so it can propose and validate a template change for
 you; it saves only on your go-ahead.
 
 A template does not decide which shell commands an agent may run. That is
