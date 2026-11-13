@@ -28,6 +28,7 @@ from orchestrator.infrastructure.db.models.run import (
     RunRow,
     StepRunRow,
 )
+from orchestrator.infrastructure.db.models.run_records import RunCommitRow, RunRepositoryRow
 from orchestrator.infrastructure.db.models.template import TemplateRow, TemplateVersionRow
 from orchestrator.infrastructure.db.models.trajectory import TrajectoryRow
 
@@ -47,6 +48,8 @@ __all__ = [
     "ProjectRow",
     "RepositoryRow",
     "RequestFactRow",
+    "RunCommitRow",
+    "RunRepositoryRow",
     "RunRow",
     "StepRunRow",
     "TemplateRow",

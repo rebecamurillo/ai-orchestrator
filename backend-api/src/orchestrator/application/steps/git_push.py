@@ -38,9 +38,9 @@ is not yet exact for this row.
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from orchestrator.application.steps import WORKDIR_KEY
+from orchestrator.application.steps import WORKDIR_KEY, records
 from orchestrator.application.steps.context import (
     StepContext,
     require_cwd,
@@ -49,6 +49,7 @@ from orchestrator.application.steps.context import (
 )
 from orchestrator.application.steps.git_sync import DIVERGED
 from orchestrator.application.steps.registry import register
+from orchestrator.domain.entities.run_records import ROOT_PATH
 from orchestrator.domain.ports.git import Git, GitError
 from orchestrator.domain.values import Park, RunUpdates, StepResult, Worktree
 
@@ -97,6 +98,7 @@ class GitPushExecutor:
             output = git.push(worktree, branch, created)
         except GitError as error:
             return _park(ctx, REJECTED, output=error.output)
+        records.note_pushed(ctx, ROOT_PATH, worktree)
         return StepResult(
             status="done",
             gate=ctx.row.gate,
@@ -124,6 +126,9 @@ def _execute_workdir(
             reason=reason,
             park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
         )
+    normalised = str(PurePosixPath(workdir))
+    records.note_member(ctx, normalised)
+    records.note_pushed(ctx, normalised, worktree / normalised)
     return StepResult(status="done", gate=ctx.row.gate, output_ref=output)
 
 

@@ -48,6 +48,7 @@ from orchestrator.application.rules.signals import row_at
 from orchestrator.application.templates.plan_model import Plan
 from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
 from orchestrator.application.use_cases.queue import REASON_SAVED
+from orchestrator.application.use_cases.run_records import record_own_repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import Conflict, Invalid, NotFound
@@ -61,6 +62,7 @@ from orchestrator.domain.ports.repositories import (
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.run_records import RunRepositoryRecords
 from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.values import PlannedRow
@@ -87,6 +89,7 @@ class CreateRunPorts:
     #: frozen `CreateRunPorts(...)` construction predating this story keeps working
     #: unchanged. Production wiring (`api/providers.py::create_run_ports`) always sets one.
     tracer: Tracer | None = None
+    run_repositories: RunRepositoryRecords | None = None
 
 
 @dataclass(frozen=True)
@@ -224,6 +227,9 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
 
     ports.preflight.runs.add(run)
     ports.steps.add_many(step_rows)
+    record_own_repository(
+        ports.run_repositories, ports.preflight.git, run, repository.url, plan.base_tip
+    )
     ports.uow.commit()
     working = _working_branch(plan)
 

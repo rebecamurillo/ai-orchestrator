@@ -45,6 +45,7 @@ from uuid import UUID
 
 from orchestrator.application.steps.verify_failure import VerifyFailure
 from orchestrator.application.use_cases.record_attempt_facts import FactsPorts
+from orchestrator.application.use_cases.run_records import RecordWrites
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.entities.attempt import Attempt
@@ -211,6 +212,7 @@ class StepPorts:
     #: `None` records no facts, the same way `None` skips the budget read above.
     facts_writes: FactsWrites | None = None
     skill_catalog: SkillCatalog | None = None
+    record_writes: RecordWrites | None = None
 
 
 @dataclass(frozen=True)

@@ -33,9 +33,11 @@ the adapter (AD-5), so storing it verbatim cannot leak a credential.
 
 from __future__ import annotations
 
+from orchestrator.application.steps import records
 from orchestrator.application.steps.context import StepContext, require_cwd, require_env
 from orchestrator.application.steps.git_sync import NO_UPSTREAM as NO_UPSTREAM_REASON
 from orchestrator.application.steps.registry import register
+from orchestrator.domain.entities.run_records import ROOT_PATH
 from orchestrator.domain.ports.git import NO_UPSTREAM, GitError
 from orchestrator.domain.values import Park, StepResult
 
@@ -82,6 +84,7 @@ class GitMergeExecutor:
             return StepResult(status="done", gate=ctx.row.gate, reason=NO_UPSTREAM_REASON)
         if output is None:
             return StepResult(status="done", gate=ctx.row.gate, reason=ALREADY_MERGED)
+        records.note_head_commit(ctx, ROOT_PATH, worktree, "git.merge")
         return StepResult(status="done", gate=ctx.row.gate, output_ref=output)
 
 

@@ -64,7 +64,7 @@ def _terminal_poll_job(
     notifier: Notifier | None = None,
 ) -> Callable[[], None]:
     def run() -> None:
-        with open_writer_ports(session_factory, notifier=notifier) as writers:
+        with open_writer_ports(session_factory, git=git, notifier=notifier) as writers:
             ports = TerminalPollPorts(
                 signal=SignalPorts(writers=writers, engine=engine),
                 git=git,

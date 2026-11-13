@@ -53,6 +53,10 @@ class PlanReader:
             self._shas[branch] = None if found is None else found.sha
         return self._shas[branch]
 
+    def known(self, branch: str) -> str | None:
+        """The SHA of `branch` when `sha(branch)` was already asked; makes no call."""
+        return self._shas.get(branch)
+
     def read(self, ref: str, path: str) -> str | None:
         """One file's text at a ref, or `None` when the tree does not hold it."""
         key = (ref, path)

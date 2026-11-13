@@ -30,6 +30,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyStepRunRepository,
     SQLAlchemyUnitOfWork,
 )
+from orchestrator.infrastructure.db.repositories.run_records import SQLAlchemyRunCommitRepository
 from orchestrator.infrastructure.workspace.fs import FsWorkspace
 
 
@@ -59,6 +60,7 @@ def run_files_write_ports(request: Request) -> Iterator[RunFilesWritePorts]:
             records=SQLAlchemyGateRecordRepository(uow.session),
             clock=SystemClock(),
             uow=uow,
+            run_commits=SQLAlchemyRunCommitRepository(uow.session),
         )
 
 

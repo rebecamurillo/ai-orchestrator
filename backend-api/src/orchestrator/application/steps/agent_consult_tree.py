@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from orchestrator.application.rules.protected_paths import uncommitted
-from orchestrator.application.steps import agent_workdir
+from orchestrator.application.steps import agent_workdir, records
 from orchestrator.application.steps.context import StepContext, require_cwd, resolved_text
 from orchestrator.application.templates.agent_row import STORY_ID_KEY
 
@@ -39,7 +39,8 @@ def sweep_and_snapshot(ctx: StepContext, n: int) -> dict[str, Any]:
     """Commit both trees under the consult's WIP message, then record them; raises
     `GitError` for the caller to park on."""
     story_id = resolved_text(ctx.with_resolved, STORY_ID_KEY)
-    agent_workdir.sweep(ctx, WIP_MESSAGE.format(id=story_id, n=n))
+    made = agent_workdir.sweep(ctx, WIP_MESSAGE.format(id=story_id, n=n))
+    records.note_commits(ctx, made, "wip")
     return {half: _state(ctx, at) for half, at, _ in _trees(ctx)}
 
 

@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from orchestrator.application.use_cases.announce import Announcer
 from orchestrator.application.use_cases.record_attempt_facts import FactsPorts
+from orchestrator.application.use_cases.run_records import RecordPorts
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.ports.engine import WorkflowEngine
@@ -44,6 +45,10 @@ from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyRunRepository,
     SQLAlchemyStepRunRepository,
     SQLAlchemyTrajectoryRepository,
+)
+from orchestrator.infrastructure.db.repositories.run_records import (
+    SQLAlchemyRunCommitRepository,
+    SQLAlchemyRunRepositoryRecords,
 )
 from orchestrator.infrastructure.harness.facts import log_file_exists
 
@@ -124,6 +129,7 @@ def open_writer_ports(
             trajectories=SQLAlchemyTrajectoryRepository(session),
             engine=engine,
             holds=SQLAlchemyInstanceHoldRepository(session),
+            run_repositories=SQLAlchemyRunRepositoryRecords(session),
         )
     finally:
         session.close()
@@ -165,6 +171,20 @@ def open_facts_ports(
             clock=SystemClock(),
             extractors=extractors,
             log_exists=log_exists,
+        )
+    finally:
+        session.close()
+
+
+@contextmanager
+def open_record_ports(session_factory: SessionFactory) -> Iterator[RecordPorts]:
+    """One session's worth of `RecordPorts` for an executor's side record, closed on every path."""
+    session = session_factory()
+    try:
+        yield RecordPorts(
+            repositories=SQLAlchemyRunRepositoryRecords(session),
+            commits=SQLAlchemyRunCommitRepository(session),
+            uow=SessionUnitOfWork(session),
         )
     finally:
         session.close()

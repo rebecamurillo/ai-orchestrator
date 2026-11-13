@@ -19,6 +19,7 @@ from typing import Any
 from uuid import UUID
 
 from orchestrator.application.use_cases.announce import Announcer
+from orchestrator.application.use_cases.run_records import ended
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -34,6 +35,7 @@ from orchestrator.domain.ports.repositories import (
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.run_records import RunRepositoryRecords
 from orchestrator.domain.ports.trajectories import TrajectoryRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.statuses import (
@@ -68,9 +70,8 @@ RUN_DONE = "every planned step is done or skipped"
 class WriterPorts:
     """The four repositories every status write goes through, plus the scope and the clock.
 
-    `git` and `trajectories` (5.9) are the two `record_trajectory` needs beyond these four —
-    both default `None` and degrade like `tracer`/`spend_writes`, so every `WriterPorts(...)`
-    construction that predates this story keeps working unchanged.
+    `git` and `trajectories` (5.9) are what `record_trajectory` needs beyond these four; every
+    optional field defaults `None`, so a `WriterPorts(...)` that predates it keeps working.
     """
 
     runs: RunRepository
@@ -89,6 +90,7 @@ class WriterPorts:
     announcer: Announcer | None = None
     #: `None` reads no hold, so every construction that predates it behaves as before.
     holds: InstanceHoldRepository | None = None
+    run_repositories: RunRepositoryRecords | None = None
 
 
 def require_run(ports: WriterPorts, run_id: UUID, *, lock: bool = False) -> Run:
@@ -167,6 +169,7 @@ def set_run(ports: WriterPorts, run: Run, reason: str | None = None, **update: A
     if updated.status != "running":  # a Run that is not running has no pause pending
         updated = updated.model_copy(update={"pause_requested": False})
     ports.runs.update(updated)
+    ended(ports.git, ports.run_repositories, run, updated)
     if ports.announcer is not None:
         ports.announcer.transition(run, updated, reason)
     return updated

@@ -333,3 +333,5 @@ class Plan:
     #: where pre-flight reads the declared one back: AD-14 refuses a Run whose branch
     #: another Run is holding, and after allocation no two Runs can ever name one branch.
     branches: dict[str, str] = field(default_factory=dict)
+    #: The base branch's SHA when the plan read it; `None` when it planned from a working branch.
+    base_tip: str | None = None

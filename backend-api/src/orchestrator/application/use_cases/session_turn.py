@@ -29,7 +29,7 @@ import structlog
 
 from orchestrator.application.rules import budget, session
 from orchestrator.application.rules.signals import row_at
-from orchestrator.application.steps import agent_tail, agent_workdir
+from orchestrator.application.steps import agent_tail, agent_workdir, records
 from orchestrator.application.steps.context import (
     RunEnvironment,
     StepPorts,
@@ -209,9 +209,10 @@ def _commit_trees(turn: Turn) -> dict[str, Any]:
     """Each tree's `session: turn {k}` commit; git's refusal makes the turn `error`."""
     message = session.TURN_MESSAGE.format(k=session.turn_number(turn.turns, turn.ctx.attempt))
     try:
-        agent_workdir.sweep(turn.ctx, message)
+        made = agent_workdir.sweep(turn.ctx, message)
     except GitError as error:
         return {"status": "error", "output_ref": session_dispatch.git_words(error)}
+    records.note_commits(turn.ctx, made, "session")
     return {}
 
 

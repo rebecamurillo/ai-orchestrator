@@ -62,6 +62,7 @@ from orchestrator.infrastructure.db.writers import (
     SessionFactory,
     SessionUnitOfWork,
     open_facts_ports,
+    open_record_ports,
     open_spend_ports,
     open_writer_ports,
 )
@@ -163,6 +164,7 @@ def walker_deps(
             logs=RealLogReader(log_secrets(settings)),
             spend_writes=partial(open_spend_ports, session_factory, gateway),
             facts_writes=partial(open_facts_ports, session_factory, build_log_facts(settings)),
+            record_writes=partial(open_record_ports, session_factory),
             # read at dispatch time: a Run planned before the instance changed must still park
             # rather than let a harness improvise on an unresolvable skill name
             skill_catalog=FsSkillCatalog(settings.agent_home),
