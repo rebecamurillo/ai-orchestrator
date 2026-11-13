@@ -24,6 +24,9 @@ export default getViteConfig({
   },
   test: {
     environment: 'node',
+    // Vitest answers every `.css` import, `?raw` included, with an empty string unless listed:
+    // `lib/charts/export.ts` reads the token values from this file's text.
+    css: { include: [/tokens\.css/] },
     include: ['tests/unit/**/*.test.{ts,tsx}'],
     // Playwright specs are the `e2e-ui` gate and are driven by `pnpm e2e`, never by Vitest
     exclude: ['node_modules/**', 'dist/**', 'tests/e2e/**'],

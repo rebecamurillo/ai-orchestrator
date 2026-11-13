@@ -18,6 +18,18 @@ export const FONT = 12;
 export const HATCH = { angle: 45, line: 2.4 } as const;
 export const GRID_OPACITY = 0.35;
 const PLOT = CHART_WIDTH - GUTTER - VALUE_SPACE;
+export const EXPORT_WIDTH = 820;
+export const EXPORT_SCALE = 2;
+export const EXPORT_GUTTER = 300;
+export const EXPORT_VALUE_SPACE = 220;
+export const EXPORT_PAD = 16;
+export const EXPORT_FONT = 14;
+export const EXPORT_TITLE = 18;
+export const EXPORT_FOOTER = 12;
+export const EXPORT_BAR = 16;
+export const EXPORT_PAIR_BAR = 11;
+export const EXPORT_PAIR_GAP = 3;
+export const EXPORT_LABEL_CHARS = 34;
 const LINE = 14;
 
 export interface Ticks {
@@ -63,8 +75,8 @@ export function tickLabel(value: number, step: number, unit: string): string {
   return unit === 'USD' ? `$${text}` : text;
 }
 
-export function scale(value: number, maxTick: number): number {
-  return maxTick <= 0 ? 0 : (value / maxTick) * PLOT;
+export function scale(value: number, maxTick: number, plot = PLOT): number {
+  return maxTick <= 0 ? 0 : (value / maxTick) * plot;
 }
 
 export function wrapLabel(text: string, shortId?: string, max = 28): string[] {
@@ -91,7 +103,7 @@ export interface Mark {
   word: string;
 }
 
-export function markFor(value: MetricValueOut, maxTick: number): Mark {
+export function markFor(value: MetricValueOut, maxTick: number, plot = PLOT): Mark {
   if (value.value_num === null) {
     return { kind: 'missing', width: 0, label: '', word: value.missing ?? '' };
   }
@@ -101,7 +113,7 @@ export function markFor(value: MetricValueOut, maxTick: number): Mark {
   let label = formatValue(value.value_num, value.unit);
   if (partial) label += ` · partial · ${value.partial_n} of ${value.partial_m} attempts`;
   if (value.carried_from !== null) label += ` from v${value.carried_from}`;
-  return { kind: partial ? 'partial' : 'bar', width: scale(n, maxTick), label, word: '' };
+  return { kind: partial ? 'partial' : 'bar', width: scale(n, maxTick, plot), label, word: '' };
 }
 
 export type Texture = 'solid' | 'hatch' | 'dots';

@@ -119,7 +119,21 @@ export default function MetricsTab({ detail, glance, onSelectVersion, onRetryMet
         <>
           {metrics.values_so_far ? <p className="wf-metrics-note">{LIVE_LINE}</p> : null}
           {view === 'chart' ? (
-            <RunCharts entries={entries} items={items} stepOrder={stepOrder} set={set} ctx={ctx} />
+            <RunCharts
+              entries={entries}
+              items={items}
+              stepOrder={stepOrder}
+              set={set}
+              ctx={ctx}
+              exportMeta={{
+                project: detail.header.meta.project,
+                runLabel: ctx.runLabel,
+                runId: detail.run.id,
+                version: shown,
+                subscription: ctx.subscription,
+                notes: metrics.values_so_far ? [LIVE_LINE] : [],
+              }}
+            />
           ) : (
             <>
               <h3 className="wf-metrics-section">BY SCOPE</h3>
