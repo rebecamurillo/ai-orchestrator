@@ -93,4 +93,9 @@ def first_order_values(inputs: RunInputs) -> list[MetricValue]:
     ]
     share = (Decimal(held.count("not_readable")) * 100 / len(held)).quantize(CENTS, ROUND_HALF_UP)
     values.append(number(METRIC, "run", "run", share, source="not_readable_share", unit="%"))
+    readable = len(held) - held.count("not_readable")
+    values += [
+        number(METRIC, "run", "run", readable, source="readable", unit="stories"),
+        number(METRIC, "run", "run", len(held), source="stories", unit="stories"),
+    ]
     return values

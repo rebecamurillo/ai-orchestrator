@@ -16,6 +16,7 @@ from orchestrator.api.routers import (
     metrics_catalogue,
     run_analyses,
     run_analysis,
+    run_findings,
     run_gateway_reads,
     run_label,
     run_metrics,
@@ -42,4 +43,5 @@ def install_metrics_routes(app: FastAPI) -> None:
     mount_protected(app, run_metrics.router)
     mount_protected(app, run_analyses.router)
     mount_protected(app, run_analysis.router)
+    mount_protected(app, run_findings.router)
     mount_protected(app, run_gateway_reads.router)

@@ -19,13 +19,15 @@ const INITIAL: CatalogueState = { status: 'idle', entries: {} };
 
 export const $catalogue = atom<CatalogueState>(INITIAL);
 
+/** Entries a template catalogues (step-produced metrics); the instance catalogue lacks them. */
+let added: Record<string, CatalogueEntryOut> = {};
 let inflight: Promise<void> | null = null;
 let generation = 0;
 
 /** A second call shares the first; after a failure the next call fetches again, once. */
 export function loadCatalogue(): Promise<void> {
   if (inflight !== null) return inflight;
-  $catalogue.set({ status: 'loading', entries: {} });
+  $catalogue.set({ status: 'loading', entries: { ...added } });
   const mine = generation;
   const request = (async () => {
     try {
@@ -35,11 +37,11 @@ export function loadCatalogue(): Promise<void> {
       if (!data) throw new Error('catalogue request failed');
       $catalogue.set({
         status: 'ready',
-        entries: Object.fromEntries(data.items.map((item) => [item.id, item])),
+        entries: { ...Object.fromEntries(data.items.map((item) => [item.id, item])), ...added },
       });
     } catch {
       if (generation !== mine) return;
-      $catalogue.set({ status: 'failed', entries: {} });
+      $catalogue.set({ status: 'failed', entries: { ...added } });
       inflight = null;
     }
   })();
@@ -51,7 +53,13 @@ export function loadCatalogue(): Promise<void> {
 export function resetCatalogue(): void {
   generation += 1;
   inflight = null;
+  added = {};
   $catalogue.set(INITIAL);
+}
+
+export function addEntries(list: readonly CatalogueEntryOut[]): void {
+  added = { ...added, ...Object.fromEntries(list.map((e) => [e.id, e])) };
+  $catalogue.set({ ...$catalogue.get(), entries: { ...$catalogue.get().entries, ...added } });
 }
 
 export function entryOf(id: string): CatalogueEntryOut | null {

@@ -27,6 +27,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyResultVersionRepository,
     SQLAlchemyRunRepository,
     SQLAlchemyStepRunRepository,
+    SQLAlchemyTemplateVersionRepository,
     SQLAlchemyUnitOfWork,
 )
 from orchestrator.infrastructure.db.repositories.analysis import SQLAlchemyAnalysisRepository
@@ -112,4 +113,5 @@ def run_analyses_ports(request: Request) -> Iterator[RunAnalysesPorts]:
             versions=SQLAlchemyResultVersionRepository(session),
             analyses=SQLAlchemyAnalysisRepository(session),
             run_records=SQLAlchemyRunRepositoryRecords(session),
+            templates=SQLAlchemyTemplateVersionRepository(session),
         )

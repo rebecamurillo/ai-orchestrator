@@ -36,6 +36,17 @@ DUPLICATION = "code.duplication_added"
 #: Metrics whose sources are open-ended (one row per value found, e.g. per licence); the
 #: catalogue sets `open_sources: true` on exactly these (Operator ruling 2026-11-13).
 OPEN_SOURCE_METRICS = ("code.deps_licences",)
+#: Literal ids: `tier2.py` and `findings.py` import this module, so their constants cannot be
+#: imported here.
+OPT_IN_METRICS = (
+    "code.linter_warnings_new",
+    "code.typecheck_errors_new",
+    COVERAGE,
+    "code.tests_executed",
+    "code.fail_to_pass",
+    "code.findings_security",
+    "code.findings_bug",
+)
 CENTS = Decimal("0.01")
 NO_INSTRUMENTED = "n/a — no added production line instrumented"
 
@@ -165,9 +176,12 @@ def _run_cells(signals: Sequence[RepositorySignals]) -> list[_Cell]:
     per_repository = {s.path: _repository_cells(s) for s in signals}
     keys = list(dict.fromkeys(cell.key for cells in per_repository.values() for cell in cells))
     cells: list[_Cell] = []
-    for key in _open_dropped(keys):
-        found = _found(key, signals, ran)
+    measured = {key: _found(key, signals, ran) for key in _open_dropped(keys)}
+    measuring = {key[0] for key, found in measured.items() if found}
+    for key, found in measured.items():
         if not found:
+            if key[0] in OPT_IN_METRICS and key[0] in measuring:
+                continue
             words = {
                 cell.word
                 for cells_ in per_repository.values()

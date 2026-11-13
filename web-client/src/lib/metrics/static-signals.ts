@@ -4,6 +4,7 @@
  * is layout: tier membership, scope order, the raw/rate split and the tool-version flag.
  */
 import type { components } from '../../api/schema';
+import { formatValue } from './format';
 
 type AnalysisOut = components['schemas']['AnalysisOut'];
 type MetricValueOut = components['schemas']['MetricValueOut'];
@@ -38,7 +39,26 @@ export const TIER_1B_IDS: readonly string[] = [
   'code.functions_over_cognitive',
 ];
 
+export const TIER_2_IDS: readonly string[] = [
+  'code.linter_warnings_new',
+  'code.typecheck_errors_new',
+  'code.coverage_changed_lines',
+  'code.tests_executed',
+  'code.fail_to_pass',
+  'code.findings_security',
+  'code.findings_bug',
+];
+
+export const TEST_FIRST = 'code.test_first_order';
+export const FINDING_IDS: Readonly<Record<string, 'security' | 'bug'>> = {
+  'code.findings_security': 'security',
+  'code.findings_bug': 'bug',
+};
+export const SEVERITIES = ['high', 'medium', 'low'] as const;
+
 export const FINDING_TOOLS: Readonly<Record<string, string>> = {
+  'code.findings_security': 'opengrep',
+  'code.findings_bug': 'opengrep',
   'code.possible_secrets': 'gitleaks',
   'code.deps_known_vulns': 'osv-scanner',
   'code.duplication_added': 'jscpd',
@@ -70,6 +90,25 @@ export function splitCells<T extends Pick<StaticCell, 'source'>>(
 
 export const sourceWord = (source: string | null): string | null =>
   source === null ? null : source.replace(/[_:]/g, ' ');
+
+/** The words a labelled cell carries: a severity reads `possible {severity}` after the figure. */
+export function cellWords(
+  metricId: string,
+  source: string | null,
+): { before: string | null; after: string | null } {
+  const severity = (SEVERITIES as readonly (string | null)[]).includes(source);
+  if (metricId in FINDING_IDS && severity) return { before: null, after: `possible ${source}` };
+  return { before: sourceWord(source), after: null };
+}
+
+export function testFirstLine(readable: string | null, stories: string | null): string {
+  const head = 'test-first order · method followed, not quality';
+  if (readable === null || stories === null) return head;
+  return (
+    `${head} · ${formatValue(readable, 'stories')} of ${formatValue(stories, 'stories')} ` +
+    'stories readable from the logs'
+  );
+}
 
 const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(0, 7));
 
@@ -118,9 +157,14 @@ export function footerLines(analyses: readonly AnalysisOut[]): string[] {
       (TOOL_ORDER.indexOf(b) === -1 ? 99 : TOOL_ORDER.indexOf(b)),
   );
   const hashes = [...new Set(analyses.map((a) => a.declaration_hash?.slice(0, 8) ?? 'absent'))];
+  const packs = [
+    ...new Set(analyses.flatMap((a) => (a.rule_pack_hash ? [a.rule_pack_hash.slice(0, 8)] : []))),
+  ];
   return [
     `tools: ${tools.map((t) => `${t} ${(versions.get(t) ?? []).join('/')}`).join(' · ')}`,
-    'rule packs: n/a — Tier 1 runs no rule pack',
+    packs.length > 0
+      ? `rule packs: opengrep ${packs.join('/')}`
+      : 'rule packs: n/a — Tier 1 runs no rule pack',
     `vulnerability database ${datesOf(analyses.map((a) => a.vulnerability_db_date))}`,
     `registry lookup ${datesOf(analyses.map((a) => a.lookup_date))}`,
     `declaration orchestrator-analysis.yaml ${hashes.join('/')}`,
@@ -139,7 +183,7 @@ export interface StaticScope {
   rows: StaticRow[];
 }
 export interface StaticTier {
-  tier: '1a' | '1b';
+  tier: '1a' | '1b' | '2';
   head: string;
   scopes: StaticScope[];
 }
@@ -163,16 +207,23 @@ export function staticTable(
       analysis: a,
     })),
   ];
-  return (['1a', '1b'] as const).map((tier) => ({
+  const heads = { '1a': TIER_1A, '1b': tier1bHead(date), '2': TIER_2 } as const;
+  const inTier = (e: CatalogueEntryOut, tier: StaticTier['tier']): boolean => {
+    if (tier === '2') return TIER_2_IDS.includes(e.id);
+    if (TIER_2_IDS.includes(e.id) || e.id === TEST_FIRST) return false;
+    return TIER_1B_IDS.includes(e.id) === (tier === '1b');
+  };
+  return (['1a', '1b', '2'] as const).map((tier) => ({
     tier,
-    head: tier === '1a' ? TIER_1A : tier1bHead(date),
+    head: heads[tier],
     scopes: scopes.map((scope) => ({
       key: scope.key,
       name: scope.name,
       analysis: scope.analysis,
       detail: scope.analysis === null ? null : detailLine(scope.analysis),
       rows: code
-        .filter((e) => TIER_1B_IDS.includes(e.id) === (tier === '1b'))
+        .filter((e) => inTier(e, tier))
+        .sort((a, b) => (tier === '2' ? TIER_2_IDS.indexOf(a.id) - TIER_2_IDS.indexOf(b.id) : 0))
         .map((e) => ({
           metricId: e.id,
           cells: items.filter(
@@ -181,6 +232,37 @@ export function staticTable(
         })),
     })),
   }));
+}
+
+export const isEmptyTier = (tier: StaticTier): boolean =>
+  tier.scopes.every((scope) => scope.rows.every((row) => row.cells.length === 0));
+
+export const hasAnalysisCode = (items: readonly MetricValueOut[]): boolean =>
+  items.some((v) => v.metric_id.startsWith('code.') && v.metric_id !== TEST_FIRST);
+
+export interface TierThree {
+  testFirst: StaticCell[] | null;
+  steps: { metricId: string; cells: StaticCell[] }[];
+}
+
+const COUNT_SOURCES = ['readable', 'stories'];
+
+/** Run scope only: the test-first outcomes, then one entry per step-produced metric. */
+export function tierThree(
+  items: readonly MetricValueOut[],
+  stepEntries: readonly CatalogueEntryOut[],
+  set: 'headline' | 'all',
+): TierThree {
+  const atRun = (id: string) =>
+    items.filter((v) => v.metric_id === id && v.scope_type === 'run' && v.scope_key === 'run');
+  const first = atRun(TEST_FIRST);
+  return {
+    testFirst:
+      first.length === 0 ? null : first.filter((v) => !COUNT_SOURCES.includes(v.source ?? '')),
+    steps: stepEntries
+      .filter((e) => set === 'all' || e.level === 'H')
+      .map((e) => ({ metricId: e.id, cells: atRun(e.id) })),
+  };
 }
 
 /** Per tool, the version of each Run that has a toolset, in the order the Runs are shown. */

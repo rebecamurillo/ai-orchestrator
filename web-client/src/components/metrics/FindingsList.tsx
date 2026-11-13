@@ -3,12 +3,14 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { findingLine, sarifFindings, sarifHref, type SarifFinding } from '../../lib/metrics/sarif';
 import '../../styles/metrics.css';
+import OpengrepFindings from './OpengrepFindings';
 
 interface Source {
   runId: string;
   analysisId: string;
   tool: string;
   repository: string;
+  kind?: 'security' | 'bug';
 }
 
 type State =
@@ -16,6 +18,13 @@ type State =
 
 /** One stored SARIF report: its findings, one line each, and the download. */
 export default function FindingsList({ source }: { source: Source }) {
+  if (source.tool === 'opengrep' && source.kind !== undefined) {
+    return <OpengrepFindings source={{ ...source, kind: source.kind }} />;
+  }
+  return <SarifFindings source={source} />;
+}
+
+function SarifFindings({ source }: { source: Source }) {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const href = sarifHref(source.runId, source.analysisId, source.tool);
 

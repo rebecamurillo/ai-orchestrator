@@ -223,6 +223,17 @@
             "title": "Repository Path",
             "type": "string"
           },
+          "rule_pack_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Pack Hash"
+          },
           "sarif_tools": {
             "items": {
               "type": "string"
@@ -2440,6 +2451,95 @@
           "cells"
         ],
         "title": "FamilyOut",
+        "type": "object"
+      },
+      "FindingOut": {
+        "properties": {
+          "cwe": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cwe",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "security",
+              "bug"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "new",
+              "unchanged",
+              "absent"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "rule",
+          "path",
+          "line",
+          "severity",
+          "cwe",
+          "state"
+        ],
+        "title": "FindingOut",
+        "type": "object"
+      },
+      "FindingsOut": {
+        "properties": {
+          "analysis_id": {
+            "format": "uuid",
+            "title": "Analysis Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FindingOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "analysis_id",
+          "items"
+        ],
+        "title": "FindingsOut",
         "type": "object"
       },
       "GateRecordOut": {
@@ -5896,6 +5996,14 @@
             "format": "uuid",
             "title": "Run Id",
             "type": "string"
+          },
+          "step_entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CatalogueEntryOut"
+            },
+            "title": "Step Entries",
+            "type": "array"
           },
           "version": {
             "anyOf": [
@@ -11568,6 +11676,99 @@
           }
         ],
         "summary": "The analyses behind a Run's shown result version",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/analysis/{analysis_id}/findings": {
+      "get": {
+        "operationId": "read_analysis_findings_api_v1_runs__run_id__analysis__analysis_id__findings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "analysis_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Analysis Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such analysis of the Run, or opengrep stored no findings for it."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A path value is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The possible security and bug findings opengrep listed for one analysis",
         "tags": [
           "metrics"
         ]

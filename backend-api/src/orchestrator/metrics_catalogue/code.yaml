@@ -963,5 +963,6 @@
       first when T precedes P and a test run with a non-zero exit precedes P; test after when P is present
       and no test write precedes it; test with code otherwise; not readable when the story has no test
       and no production write (the harness''s extractor declares no events). The Run value counts the
-      stories per outcome and the share of stories not readable.'
+      stories per outcome, the share of stories not readable, and the count of readable stories beside the
+      count of stories.'
     parameters: {}

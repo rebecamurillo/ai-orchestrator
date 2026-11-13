@@ -19,7 +19,13 @@ export interface OriginTarget {
   aggregate?: { n: number; noun: string };
   subscription?: boolean;
   onBreakdown?: () => void;
-  findings?: { runId: string; analysisId: string; tool: string; repository: string }[];
+  findings?: {
+    runId: string;
+    analysisId: string;
+    tool: string;
+    repository: string;
+    kind?: 'security' | 'bug';
+  }[];
 }
 
 export const $openHint = atom<string | null>(null);

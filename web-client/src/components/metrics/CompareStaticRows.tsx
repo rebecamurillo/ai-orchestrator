@@ -11,7 +11,13 @@ import {
   staticRows,
   type CompareState,
 } from '../../lib/metrics/compare';
-import { sourceWord, splitCells, toolFlag, toolLine } from '../../lib/metrics/static-signals';
+import {
+  TEST_FIRST,
+  cellWords,
+  splitCells,
+  toolFlag,
+  toolLine,
+} from '../../lib/metrics/static-signals';
 import HintControl from './HintControl';
 import MissingWord from './MissingWord';
 import ValueCell from './ValueCell';
@@ -51,7 +57,7 @@ export default function CompareStaticRows({ payload, entries, set }: Props) {
               return (
                 <td key={h.run_id} data-testid={`compare-cell-${m.metric_id}-${h.run_id}`}>
                   {cells.length === 0 ? (
-                    payload.diff_size[h.run_id] === NOT_RUN_WORD ? (
+                    m.metric_id !== TEST_FIRST && payload.diff_size[h.run_id] === NOT_RUN_WORD ? (
                       <>
                         <MissingWord word={NOT_RUN_WORD} />{' '}
                         <a href={recalcHref(h.run_id)}>{RECALC_WORD}</a>
@@ -64,10 +70,18 @@ export default function CompareStaticRows({ payload, entries, set }: Props) {
                       {raws.map((c, at) => (
                         <Fragment key={at}>
                           {at > 0 && ' / '}
-                          {raws.length > 1 && (
-                            <span className="metric-label">{sourceWord(c.source)} </span>
+                          {raws.length > 1 && cellWords(m.metric_id, c.source).before !== null && (
+                            <span className="metric-label">
+                              {cellWords(m.metric_id, c.source).before}{' '}
+                            </span>
                           )}
                           {place(c)}
+                          {cellWords(m.metric_id, c.source).after !== null && (
+                            <span className="metric-label">
+                              {' '}
+                              {cellWords(m.metric_id, c.source).after}
+                            </span>
+                          )}
                         </Fragment>
                       ))}
                       {rates.map((c) => (

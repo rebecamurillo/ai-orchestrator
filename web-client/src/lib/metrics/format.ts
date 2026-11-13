@@ -25,6 +25,8 @@ export function formatValue(valueNum: string, unit: string): string {
     }
     case 'ratio':
       return n.toFixed(2);
+    case '%':
+      return `${n.toFixed(2)} %`;
     default:
       return GROUPED.format(n);
   }
@@ -33,12 +35,19 @@ export function formatValue(valueNum: string, unit: string): string {
 export const LIST_PRICE_WORDS = 'list-price equivalent';
 export const NOT_AVAILABLE_WORD = 'not available';
 
+export function partialWord(
+  value: Pick<MetricValueOut, 'metric_id' | 'partial_n' | 'partial_m'>,
+): string | null {
+  if (value.partial_n === null || value.partial_m === null) return null;
+  const noun = value.metric_id.startsWith('code.') ? 'repositories' : 'attempts';
+  return `partial · ${value.partial_n} of ${value.partial_m} ${noun}`;
+}
+
 export function stateWords(value: MetricValueOut, subscription: boolean): string[] {
   const words: string[] = [];
   if (subscription && value.unit === 'USD') words.push(LIST_PRICE_WORDS);
-  if (value.partial_n !== null && value.partial_m !== null) {
-    words.push(`partial · ${value.partial_n} of ${value.partial_m} attempts`);
-  }
+  const partial = partialWord(value);
+  if (partial !== null) words.push(partial);
   if (value.carried_from !== null) words.push(`from v${value.carried_from}`);
   return words;
 }

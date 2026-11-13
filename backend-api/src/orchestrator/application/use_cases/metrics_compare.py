@@ -13,6 +13,7 @@ from uuid import UUID
 
 from orchestrator.application.metrics.blind import HIDDEN, blind_label, blind_value
 from orchestrator.application.metrics.compare_toolsets import (
+    NO_TOOLSET_METRICS,
     diff_size_words,
     fingerprints_differ,
     run_toolset,
@@ -300,8 +301,12 @@ def _metric(
     present = [ids for ids in methods.values() if ids]
     families = _family_views(family_results(by_run, modes)) if family_applies(entry) else []
     analysed = [c for c in columns if c.analyses]
-    differ = entry.group == "code" and fingerprints_differ(
-        c.version.toolset_fingerprint for c in analysed if c.version is not None
+    differ = (
+        entry.group == "code"
+        and entry.id not in NO_TOOLSET_METRICS
+        and fingerprints_differ(
+            c.version.toolset_fingerprint for c in analysed if c.version is not None
+        )
     )
     return CompareMetric(
         metric_id=entry.id,

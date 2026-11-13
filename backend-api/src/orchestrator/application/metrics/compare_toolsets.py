@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
-from orchestrator.application.analysis.toolset import DECLARATION_HASH
+from orchestrator.application.analysis.toolset import DECLARATION_HASH, RULE_PACK_HASH
 from orchestrator.application.metrics.compare_views import ToolVersion
 from orchestrator.domain.entities.analysis import Analysis
 from orchestrator.domain.entities.metric_results import StoredMetricValue
@@ -17,6 +17,9 @@ DECLARATION_TOOL = "orchestrator-analysis.yaml"
 NOT_RUN = "not run"
 HASH_LENGTH = 8
 MINUS = "\N{MINUS SIGN}"
+RULE_PACK_TOOL = "opengrep rules"
+#: Read from the attempt logs, not measured by a tool, so a toolset difference never flags them.
+NO_TOOLSET_METRICS = ("code.test_first_order",)
 DIFF_METRICS = ("code.lines_added", "code.lines_removed", "code.files_touched")
 
 
@@ -24,15 +27,20 @@ def run_toolset(analyses: Sequence[Analysis]) -> list[ToolVersion]:
     """Per tool the distinct versions across the Run's analyses, then the declaration."""
     versions: dict[str, set[str]] = {}
     declarations: set[str] = set()
+    packs: set[str] = set()
     for analysis in analyses:
         held = analysis.declaration_hash
         for record in analysis.toolset:
             if "tool" in record:
                 versions.setdefault(str(record["tool"]), set()).add(str(record["version"]))
+                if RULE_PACK_HASH in record:
+                    packs.add(str(record[RULE_PACK_HASH] or "")[:HASH_LENGTH] or "none")
             else:
                 held = record.get(DECLARATION_HASH) or held
         declarations.add((held or "")[:HASH_LENGTH] or "absent")
     found = [ToolVersion(tool, "/".join(sorted(v))) for tool, v in sorted(versions.items())]
+    if packs:
+        found.append(ToolVersion(RULE_PACK_TOOL, "/".join(sorted(packs))))
     return [*found, ToolVersion(DECLARATION_TOOL, "/".join(sorted(declarations)))]
 
 

@@ -657,6 +657,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/analysis/{analysis_id}/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The possible security and bug findings opengrep listed for one analysis */
+        get: operations["read_analysis_findings_api_v1_runs__run_id__analysis__analysis_id__findings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/analysis/{analysis_id}/sarif/{tool}": {
         parameters: {
             query?: never;
@@ -1293,6 +1310,8 @@ export interface components {
             reason: string;
             /** Repository Path */
             repository_path: string;
+            /** Rule Pack Hash */
+            rule_pack_hash?: string | null;
             /** Sarif Tools */
             sarif_tools: string[];
             /** Status */
@@ -2040,6 +2059,42 @@ export interface components {
             source: string | null;
             /** Step Structure Differs */
             step_structure_differs: boolean;
+        };
+        /** FindingOut */
+        FindingOut: {
+            /** Cwe */
+            cwe: string[];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "security" | "bug";
+            /** Line */
+            line: number | null;
+            /** Path */
+            path: string;
+            /** Rule */
+            rule: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "high" | "medium" | "low";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "new" | "unchanged" | "absent";
+        };
+        /** FindingsOut */
+        FindingsOut: {
+            /**
+             * Analysis Id
+             * Format: uuid
+             */
+            analysis_id: string;
+            /** Items */
+            items: components["schemas"]["FindingOut"][];
         };
         /** GateRecordOut */
         GateRecordOut: {
@@ -3194,6 +3249,11 @@ export interface components {
              * Format: uuid
              */
             run_id: string;
+            /**
+             * Step Entries
+             * @default []
+             */
+            step_entries: components["schemas"]["CatalogueEntryOut"][];
             /** Version */
             version: number | null;
         };
@@ -6136,6 +6196,59 @@ export interface operations {
                 };
             };
             /** @description A path or query value is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_analysis_findings_api_v1_runs__run_id__analysis__analysis_id__findings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                analysis_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingsOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such analysis of the Run, or opengrep stored no findings for it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path value is not valid. */
             422: {
                 headers: {
                     [name: string]: unknown;

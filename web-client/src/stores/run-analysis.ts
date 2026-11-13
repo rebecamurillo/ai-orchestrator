@@ -6,14 +6,17 @@ import { atom } from 'nanostores';
 
 import { api } from '../api/client';
 import type { components } from '../api/schema';
+import { addEntries } from './catalogue';
 
 type AnalysisOut = components['schemas']['AnalysisOut'];
+type CatalogueEntryOut = components['schemas']['CatalogueEntryOut'];
 
 export interface RunAnalysisState {
   runId: string;
   version: number | null;
   status: 'idle' | 'loading' | 'ready' | 'failed';
   items: AnalysisOut[];
+  stepEntries?: CatalogueEntryOut[];
   failed: { path: string; status: number | null } | null;
 }
 
@@ -44,11 +47,12 @@ export async function loadRunAnalysis(runId: string, v: number): Promise<void> {
       params: { path: { run_id: runId }, query: { v } },
     });
     next = data
-      ? { status: 'ready', items: data.items, failed: null }
+      ? { status: 'ready', items: data.items, stepEntries: data.step_entries, failed: null }
       : { status: 'failed', failed: { path, status: response.status } };
   } catch {
     next = { status: 'failed', failed: { path, status: null } };
   }
   if (mine !== seq) return;
+  if (next.stepEntries) addEntries(next.stepEntries);
   $runAnalysis.set({ ...$runAnalysis.get(), ...next });
 }
