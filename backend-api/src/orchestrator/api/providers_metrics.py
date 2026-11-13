@@ -8,9 +8,12 @@ from collections.abc import Iterator
 from fastapi import Request
 
 from orchestrator.api.providers_base import ENGINE, SESSION_FACTORY, from_state
+from orchestrator.api.routers.metrics_catalogue import catalogue_port
 from orchestrator.application.metrics.live import MetricsReadPorts
 from orchestrator.application.use_cases.metric_calculations import CalculatePorts
+from orchestrator.application.use_cases.metrics_compare import MetricsComparePorts
 from orchestrator.application.use_cases.metrics_read import MetricsQueryPorts
+from orchestrator.application.use_cases.metrics_spend import MetricsHomePorts
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
     SQLAlchemyAttemptRepository,
@@ -18,6 +21,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyGateRecordRepository,
     SQLAlchemyGatewayReadRepository,
     SQLAlchemyMetricCalculationRepository,
+    SQLAlchemyProjectRepository,
     SQLAlchemyResultVersionRepository,
     SQLAlchemyRunRepository,
     SQLAlchemyStepRunRepository,
@@ -57,4 +61,32 @@ def calculate_ports(request: Request) -> Iterator[CalculatePorts]:
             engine=from_state(request, ENGINE),
             clock=SystemClock(),
             uow=SessionUnitOfWork(scope.session),
+        )
+
+
+def metrics_home_ports(request: Request) -> Iterator[MetricsHomePorts]:
+    with SQLAlchemyUnitOfWork(from_state(request, SESSION_FACTORY)) as scope:
+        session = scope.session
+        yield MetricsHomePorts(
+            projects=SQLAlchemyProjectRepository(session),
+            runs=SQLAlchemyRunRepository(session),
+            versions=SQLAlchemyResultVersionRepository(session),
+            fact_sets=SQLAlchemyFactSetRepository(session),
+            run_records=SQLAlchemyRunRepositoryRecords(session),
+            clock=SystemClock(),
+        )
+
+
+def metrics_compare_ports(request: Request) -> Iterator[MetricsComparePorts]:
+    with SQLAlchemyUnitOfWork(from_state(request, SESSION_FACTORY)) as scope:
+        session = scope.session
+        yield MetricsComparePorts(
+            projects=SQLAlchemyProjectRepository(session),
+            runs=SQLAlchemyRunRepository(session),
+            steps=SQLAlchemyStepRunRepository(session),
+            versions=SQLAlchemyResultVersionRepository(session),
+            fact_sets=SQLAlchemyFactSetRepository(session),
+            run_records=SQLAlchemyRunRepositoryRecords(session),
+            catalogue=catalogue_port(),
+            clock=SystemClock(),
         )

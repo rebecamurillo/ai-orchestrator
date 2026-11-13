@@ -7,6 +7,7 @@ cannot both write a set.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -61,6 +62,7 @@ def _set_entity(row: FactSetRow) -> FactSet:
         read_at=row.read_at,
         status=row.status,  # type: ignore[arg-type]
         reason=row.reason,
+        subscription=row.subscription,
     )
 
 
@@ -125,6 +127,17 @@ class SQLAlchemyFactSetRepository:
             gaps=tuple(GapFact(**{**plain(r), "gaps_s": tuple(r.gaps_s)}) for r in of(GapFactRow)),
             events=tuple(EventFact(**plain(r)) for r in of(EventFactRow)),
         )
+
+    def subscriptions(self, run_ids: Sequence[UUID]) -> dict[UUID, list[bool | None]]:
+        if not run_ids:
+            return {}
+        statement = select(FactSetRow.run_id, FactSetRow.subscription).where(
+            FactSetRow.run_id.in_(list(run_ids))
+        )
+        grouped: dict[UUID, list[bool | None]] = {}
+        for run_id, flag in self._session.execute(statement).all():
+            grouped.setdefault(run_id, []).append(flag)
+        return grouped
 
     def unrecorded_attempts(self, limit: int) -> list[Attempt]:
         rows = self._session.scalars(

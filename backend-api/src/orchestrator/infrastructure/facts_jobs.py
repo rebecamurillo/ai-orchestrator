@@ -21,7 +21,9 @@ def facts_jobs(
     """`(name, cron, job)`; building the job opens no session."""
 
     def job() -> None:
-        with open_facts_ports(session_factory, build_log_facts(settings)) as ports:
+        with open_facts_ports(
+            session_factory, build_log_facts(settings), subscription_auth=None
+        ) as ports:
             run_facts_sweep(ports)
 
     return [(FACTS_SWEEP_NAME, settings.facts_sweep_cron, job)]

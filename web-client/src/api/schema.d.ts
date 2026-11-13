@@ -196,6 +196,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metrics/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Selected Runs of one project, side by side */
+        get: operations["read_compare_api_v1_metrics_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metrics/compare.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The comparison as one CSV row per stored value */
+        get: operations["export_csv_api_v1_metrics_compare_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metrics/compare.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The comparison as JSON: the runs, the same rows, the catalogue once */
+        get: operations["export_json_api_v1_metrics_compare_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metrics/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project's Runs, newest first, with what the Metrics table shows */
+        get: operations["read_runs_api_v1_metrics_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metrics/spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Spend this month per project, both figures, cancelled Runs apart */
+        get: operations["read_spend_api_v1_metrics_spend_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ping": {
         parameters: {
             query?: never;
@@ -1318,6 +1403,15 @@ export interface components {
             /** Target N */
             target_n: number;
         };
+        /** CancelledSpendOut */
+        CancelledSpendOut: {
+            /** Gateway */
+            gateway: string;
+            /** Harness */
+            harness: string;
+            /** Runs */
+            runs: number;
+        };
         /** CardOut */
         CardOut: {
             /** Age Seconds */
@@ -1574,6 +1668,123 @@ export interface components {
              */
             status: "pending" | "ok" | "failed";
         };
+        /** CompareCellOut */
+        CompareCellOut: {
+            /** Attempt N */
+            attempt_n: number | null;
+            /** Carried From */
+            carried_from: number | null;
+            /** Method Id */
+            method_id: string;
+            /** Missing */
+            missing: string | null;
+            /** Model */
+            model: string | null;
+            /** Partial M */
+            partial_m: number | null;
+            /** Partial N */
+            partial_n: number | null;
+            /** Repository */
+            repository: string | null;
+            /** Role */
+            role: string | null;
+            /** Scope Key */
+            scope_key: string;
+            /** Scope Label */
+            scope_label: string | null;
+            /** Scope Type */
+            scope_type: string;
+            /** Source */
+            source: string | null;
+            /** Unit */
+            unit: string;
+            /** Value Num */
+            value_num: string | null;
+        };
+        /** CompareExportOut */
+        CompareExportOut: {
+            /** Catalogue */
+            catalogue: components["schemas"]["CatalogueEntryOut"][];
+            /** Rows */
+            rows: components["schemas"]["ExportRowOut"][];
+            /** Runs */
+            runs: components["schemas"]["CompareRunHeaderOut"][];
+        };
+        /** CompareMetricOut */
+        CompareMetricOut: {
+            /** Cells */
+            cells: {
+                [key: string]: components["schemas"]["CompareCellOut"][];
+            };
+            /** Families */
+            families: components["schemas"]["FamilyOut"][];
+            /** Harness Delta */
+            harness_delta: {
+                [key: string]: string;
+            };
+            /** Methods */
+            methods: {
+                [key: string]: string[];
+            };
+            /** Methods Differ */
+            methods_differ: boolean;
+            /** Metric Id */
+            metric_id: string;
+        };
+        /** CompareOut */
+        CompareOut: {
+            /** Diff Size */
+            diff_size: {
+                [key: string]: string;
+            };
+            /** Metrics */
+            metrics: components["schemas"]["CompareMetricOut"][];
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Runs */
+            runs: components["schemas"]["CompareRunHeaderOut"][];
+            same_work: components["schemas"]["SameWorkOut"];
+        };
+        /** CompareRunHeaderOut */
+        CompareRunHeaderOut: {
+            /** Base Branch */
+            base_branch: string | null;
+            /** Harness */
+            harness: string | null;
+            /** Label */
+            label: string;
+            /** Label Set By Operator */
+            label_set_by_operator: boolean;
+            /** Models By Role */
+            models_by_role: {
+                [key: string]: string[];
+            };
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Selected Version */
+            selected_version: number | null;
+            /** Short Id */
+            short_id: string;
+            /** Status */
+            status: string;
+            stories_done: components["schemas"]["StoriesDoneOut"] | null;
+            /** Subscription */
+            subscription: boolean | null;
+            /** Template Name */
+            template_name: string;
+            /** Template Version */
+            template_version: string;
+            /** Versions Available */
+            versions_available: number[];
+        };
         /** CostOut */
         CostOut: {
             /** Active Seconds */
@@ -1664,6 +1875,91 @@ export interface components {
             ok: boolean;
             /** Text */
             text: string;
+        };
+        /** ExportRowOut */
+        ExportRowOut: {
+            /** Additive */
+            additive: string;
+            /** Attempt N */
+            attempt_n: string;
+            /** Base Commit */
+            base_commit: string;
+            /** Branch */
+            branch: string;
+            /** Calculated At */
+            calculated_at: string;
+            /** Carried From */
+            carried_from: string;
+            /** Commit */
+            commit: string;
+            /** Component Of */
+            component_of: string;
+            /** Entry Point */
+            entry_point: string;
+            /** Harness */
+            harness: string;
+            /** Method Id */
+            method_id: string;
+            /** Metric Id */
+            metric_id: string;
+            /** Missing */
+            missing: string;
+            /** Model */
+            model: string;
+            /** Origin Model */
+            origin_model: string;
+            /** Origin Repository */
+            origin_repository: string;
+            /** Project Id */
+            project_id: string;
+            /** Repository */
+            repository: string;
+            /** Result Version */
+            result_version: string;
+            /** Role */
+            role: string;
+            /** Run Id */
+            run_id: string;
+            /** Run Label */
+            run_label: string;
+            /** Scope Key */
+            scope_key: string;
+            /** Scope Label */
+            scope_label: string;
+            /** Scope Type */
+            scope_type: string;
+            /** Source */
+            source: string;
+            /** Template Name */
+            template_name: string;
+            /** Template Version */
+            template_version: string;
+            /** Unit */
+            unit: string;
+            /** Value Num */
+            value_num: string;
+        };
+        /** FamilyCellOut */
+        FamilyCellOut: {
+            /** Missing */
+            missing: string | null;
+            /** Roles */
+            roles: string[];
+            /** Value Num */
+            value_num: string | null;
+        };
+        /** FamilyOut */
+        FamilyOut: {
+            /** Cells */
+            cells: {
+                [key: string]: components["schemas"]["FamilyCellOut"];
+            };
+            /** Family */
+            family: string;
+            /** Source */
+            source: string | null;
+            /** Step Structure Differs */
+            step_structure_differs: boolean;
         };
         /** GateRecordOut */
         GateRecordOut: {
@@ -2094,6 +2390,42 @@ export interface components {
             /** Value Num */
             value_num: string | null;
         };
+        /** MetricsRunOut */
+        MetricsRunOut: {
+            /** Base Branch */
+            base_branch: string | null;
+            /** Branch */
+            branch: string | null;
+            /** Gateway */
+            gateway: string;
+            /** Harness */
+            harness: string | null;
+            /** Harness Spend */
+            harness_spend: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Label Set By Operator */
+            label_set_by_operator: boolean;
+            /** Latest Version */
+            latest_version: number | null;
+            /** Selectable */
+            selectable: boolean;
+            /** Status */
+            status: string;
+            /** Subscription */
+            subscription: boolean | null;
+            /** Template Name */
+            template_name: string;
+            /** Template Version */
+            template_version: number;
+            /** Wall Clock Seconds */
+            wall_clock_seconds: number | null;
+        };
         /**
          * ModelsOut
          * @description The models a harness can use, and where that list comes from.
@@ -2225,10 +2557,24 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[MetricsRunOut] */
+        Page_MetricsRunOut_: {
+            /** Items */
+            items: components["schemas"]["MetricsRunOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[ProjectRead] */
         Page_ProjectRead_: {
             /** Items */
             items: components["schemas"]["ProjectRead"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[ProjectSpendOut] */
+        Page_ProjectSpendOut_: {
+            /** Items */
+            items: components["schemas"]["ProjectSpendOut"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2555,6 +2901,29 @@ export interface components {
             template: string;
             /** Token */
             token: string;
+        };
+        /** ProjectSpendOut */
+        ProjectSpendOut: {
+            cancelled: components["schemas"]["CancelledSpendOut"];
+            /** Gateway */
+            gateway: string;
+            /** Gateway Reported */
+            gateway_reported: boolean;
+            /** Harness */
+            harness: string;
+            /** Harness Reported */
+            harness_reported: boolean;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Runs */
+            runs: number;
+            /** Subscription */
+            subscription: boolean | null;
         };
         /**
          * ProjectUpdate
@@ -3150,6 +3519,26 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** SameWorkOut */
+        SameWorkOut: {
+            /** Differs */
+            differs: boolean;
+            /** Runs */
+            runs: {
+                [key: string]: components["schemas"]["SameWorkRunOut"];
+            };
+        };
+        /** SameWorkRunOut */
+        SameWorkRunOut: {
+            /** Base Commits */
+            base_commits: {
+                [key: string]: string | null;
+            };
+            /** Initiative Folder */
+            initiative_folder: string | null;
+            /** Stories Planned */
+            stories_planned: number | null;
+        };
         /**
          * SaveVersionIn
          * @description `POST /templates/{name}/versions`: the YAML, and whether the folder may refuse it.
@@ -3316,6 +3705,13 @@ export interface components {
             status: string;
             /** Token */
             token: string;
+        };
+        /** StoriesDoneOut */
+        StoriesDoneOut: {
+            /** Done */
+            done: number;
+            /** Planned */
+            planned: number;
         };
         /** StoryCellOut */
         StoryCellOut: {
@@ -4034,6 +4430,259 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_CatalogueEntryOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_compare_api_v1_metrics_compare_get: {
+        parameters: {
+            query: {
+                /** @description Run ids, comma separated, in column order. */
+                runs: string;
+                /** @description `{run}:{n}` pairs, comma separated. */
+                v?: string;
+                /** @description Hide labels, template and model names. */
+                blind?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompareOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id, or a Run has no such version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query value is not valid, or the selection is not comparable. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_csv_api_v1_metrics_compare_csv_get: {
+        parameters: {
+            query: {
+                /** @description Run ids, comma separated, in column order. */
+                runs: string;
+                /** @description `{run}:{n}` pairs, comma separated. */
+                v?: string;
+                /** @description Hide labels, template and model names. */
+                blind?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id, or a Run has no such version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query value is not valid, or the selection is not comparable. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_json_api_v1_metrics_compare_json_get: {
+        parameters: {
+            query: {
+                /** @description Run ids, comma separated, in column order. */
+                runs: string;
+                /** @description `{run}:{n}` pairs, comma separated. */
+                v?: string;
+                /** @description Hide labels, template and model names. */
+                blind?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompareExportOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id, or a Run has no such version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query value is not valid, or the selection is not comparable. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_runs_api_v1_metrics_runs_get: {
+        parameters: {
+            query: {
+                project: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_MetricsRunOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query value is not valid, or the selection is not comparable. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_spend_api_v1_metrics_spend_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ProjectSpendOut_"];
                 };
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */

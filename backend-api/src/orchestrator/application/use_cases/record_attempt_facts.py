@@ -37,6 +37,7 @@ class FactsPorts:
     clock: Clock
     extractors: Mapping[str, LogFacts]
     log_exists: Callable[[str], bool]
+    subscription_auth: bool | None = None
 
 
 def record_attempt_facts(ports: FactsPorts, attempt: Attempt) -> FactSet | None:
@@ -62,11 +63,18 @@ def _record(ports: FactsPorts, attempt: Attempt) -> FactSet | None:
         read_at=ports.clock.now(),
         status=status,
         reason=reason,
+        subscription=_subscription(ports, harness),
     )
     with ports.uow:
         stored = ports.facts.add(fact_set, facts)
         ports.uow.commit()
     return fact_set if stored else None
+
+
+def _subscription(ports: FactsPorts, harness: str) -> bool | None:
+    if ports.subscription_auth is None:
+        return None
+    return harness == "claude" and ports.subscription_auth
 
 
 def _extract(

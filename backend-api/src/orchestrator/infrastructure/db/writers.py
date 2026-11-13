@@ -166,6 +166,7 @@ def open_facts_ports(
     session_factory: SessionFactory,
     extractors: Mapping[str, LogFacts],
     log_exists: Callable[[str], bool] = log_file_exists,
+    subscription_auth: bool | None = None,
 ) -> Iterator[FactsPorts]:
     """One session's worth of `FactsPorts`, closed on every path."""
     session = session_factory()
@@ -176,6 +177,7 @@ def open_facts_ports(
             clock=SystemClock(),
             extractors=extractors,
             log_exists=log_exists,
+            subscription_auth=subscription_auth,
         )
     finally:
         session.close()

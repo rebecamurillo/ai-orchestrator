@@ -165,7 +165,12 @@ def walker_deps(
             attempt_writes=partial(open_writer_ports, session_factory),
             logs=RealLogReader(log_secrets(settings)),
             spend_writes=partial(open_spend_ports, session_factory, gateway),
-            facts_writes=partial(open_facts_ports, session_factory, build_log_facts(settings)),
+            facts_writes=partial(
+                open_facts_ports,
+                session_factory,
+                build_log_facts(settings),
+                subscription_auth=settings.claude_subscription_auth,
+            ),
             record_writes=partial(open_record_ports, session_factory),
             # read at dispatch time: a Run planned before the instance changed must still park
             # rather than let a harness improvise on an unresolvable skill name

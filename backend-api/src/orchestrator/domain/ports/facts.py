@@ -5,6 +5,7 @@ No update and no delete exist here, on purpose.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
@@ -27,6 +28,10 @@ class FactSetRepository(Protocol):
 
     def rows(self, fact_set_id: UUID) -> AttemptFacts:
         """The rows stored under one fact set."""
+        ...
+
+    def subscriptions(self, run_ids: Sequence[UUID]) -> dict[UUID, list[bool | None]]:
+        """The `subscription` of every fact set of each Run; a Run with none is absent."""
         ...
 
     def unrecorded_attempts(self, limit: int) -> list[Attempt]:

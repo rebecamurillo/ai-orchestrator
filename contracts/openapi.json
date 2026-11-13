@@ -662,6 +662,29 @@
         "title": "CalculationOut",
         "type": "object"
       },
+      "CancelledSpendOut": {
+        "properties": {
+          "gateway": {
+            "title": "Gateway",
+            "type": "string"
+          },
+          "harness": {
+            "title": "Harness",
+            "type": "string"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "gateway",
+          "harness",
+          "runs"
+        ],
+        "title": "CancelledSpendOut",
+        "type": "object"
+      },
       "CardOut": {
         "properties": {
           "age_seconds": {
@@ -1343,6 +1366,435 @@
         "title": "CloneCheckResultOut",
         "type": "object"
       },
+      "CompareCellOut": {
+        "properties": {
+          "attempt_n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt N"
+          },
+          "carried_from": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carried From"
+          },
+          "method_id": {
+            "title": "Method Id",
+            "type": "string"
+          },
+          "missing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "partial_m": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partial M"
+          },
+          "partial_n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partial N"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "scope_key": {
+            "title": "Scope Key",
+            "type": "string"
+          },
+          "scope_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Label"
+          },
+          "scope_type": {
+            "title": "Scope Type",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value_num": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Num"
+          }
+        },
+        "required": [
+          "method_id",
+          "scope_type",
+          "scope_key",
+          "scope_label",
+          "role",
+          "model",
+          "repository",
+          "attempt_n",
+          "source",
+          "value_num",
+          "unit",
+          "missing",
+          "partial_n",
+          "partial_m",
+          "carried_from"
+        ],
+        "title": "CompareCellOut",
+        "type": "object"
+      },
+      "CompareExportOut": {
+        "properties": {
+          "catalogue": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogueEntryOut"
+            },
+            "title": "Catalogue",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ExportRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/CompareRunHeaderOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs",
+          "rows",
+          "catalogue"
+        ],
+        "title": "CompareExportOut",
+        "type": "object"
+      },
+      "CompareMetricOut": {
+        "properties": {
+          "cells": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/CompareCellOut"
+              },
+              "type": "array"
+            },
+            "propertyNames": {
+              "format": "uuid"
+            },
+            "title": "Cells",
+            "type": "object"
+          },
+          "families": {
+            "items": {
+              "$ref": "#/components/schemas/FamilyOut"
+            },
+            "title": "Families",
+            "type": "array"
+          },
+          "harness_delta": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "format": "uuid"
+            },
+            "title": "Harness Delta",
+            "type": "object"
+          },
+          "methods": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "propertyNames": {
+              "format": "uuid"
+            },
+            "title": "Methods",
+            "type": "object"
+          },
+          "methods_differ": {
+            "title": "Methods Differ",
+            "type": "boolean"
+          },
+          "metric_id": {
+            "title": "Metric Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric_id",
+          "methods_differ",
+          "methods",
+          "cells",
+          "harness_delta",
+          "families"
+        ],
+        "title": "CompareMetricOut",
+        "type": "object"
+      },
+      "CompareOut": {
+        "properties": {
+          "diff_size": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "format": "uuid"
+            },
+            "title": "Diff Size",
+            "type": "object"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/CompareMetricOut"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/CompareRunHeaderOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "same_work": {
+            "$ref": "#/components/schemas/SameWorkOut"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "runs",
+          "same_work",
+          "metrics",
+          "diff_size"
+        ],
+        "title": "CompareOut",
+        "type": "object"
+      },
+      "CompareRunHeaderOut": {
+        "properties": {
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "label_set_by_operator": {
+            "title": "Label Set By Operator",
+            "type": "boolean"
+          },
+          "models_by_role": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Models By Role",
+            "type": "object"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "selected_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Version"
+          },
+          "short_id": {
+            "title": "Short Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "stories_done": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoriesDoneOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription"
+          },
+          "template_name": {
+            "title": "Template Name",
+            "type": "string"
+          },
+          "template_version": {
+            "title": "Template Version",
+            "type": "string"
+          },
+          "versions_available": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Versions Available",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "short_id",
+          "label",
+          "label_set_by_operator",
+          "template_name",
+          "template_version",
+          "harness",
+          "models_by_role",
+          "base_branch",
+          "status",
+          "stories_done",
+          "selected_version",
+          "versions_available",
+          "subscription"
+        ],
+        "title": "CompareRunHeaderOut",
+        "type": "object"
+      },
       "CostOut": {
         "properties": {
           "active_seconds": {
@@ -1584,6 +2036,245 @@
           "text"
         ],
         "title": "EvaluationLineOut",
+        "type": "object"
+      },
+      "ExportRowOut": {
+        "properties": {
+          "additive": {
+            "title": "Additive",
+            "type": "string"
+          },
+          "attempt_n": {
+            "title": "Attempt N",
+            "type": "string"
+          },
+          "base_commit": {
+            "title": "Base Commit",
+            "type": "string"
+          },
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "calculated_at": {
+            "title": "Calculated At",
+            "type": "string"
+          },
+          "carried_from": {
+            "title": "Carried From",
+            "type": "string"
+          },
+          "commit": {
+            "title": "Commit",
+            "type": "string"
+          },
+          "component_of": {
+            "title": "Component Of",
+            "type": "string"
+          },
+          "entry_point": {
+            "title": "Entry Point",
+            "type": "string"
+          },
+          "harness": {
+            "title": "Harness",
+            "type": "string"
+          },
+          "method_id": {
+            "title": "Method Id",
+            "type": "string"
+          },
+          "metric_id": {
+            "title": "Metric Id",
+            "type": "string"
+          },
+          "missing": {
+            "title": "Missing",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "origin_model": {
+            "title": "Origin Model",
+            "type": "string"
+          },
+          "origin_repository": {
+            "title": "Origin Repository",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "result_version": {
+            "title": "Result Version",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_label": {
+            "title": "Run Label",
+            "type": "string"
+          },
+          "scope_key": {
+            "title": "Scope Key",
+            "type": "string"
+          },
+          "scope_label": {
+            "title": "Scope Label",
+            "type": "string"
+          },
+          "scope_type": {
+            "title": "Scope Type",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "template_name": {
+            "title": "Template Name",
+            "type": "string"
+          },
+          "template_version": {
+            "title": "Template Version",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value_num": {
+            "title": "Value Num",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "run_label",
+          "result_version",
+          "metric_id",
+          "method_id",
+          "scope_type",
+          "scope_key",
+          "scope_label",
+          "role",
+          "model",
+          "repository",
+          "attempt_n",
+          "source",
+          "value_num",
+          "unit",
+          "missing",
+          "carried_from",
+          "component_of",
+          "additive",
+          "calculated_at",
+          "entry_point",
+          "project_id",
+          "template_name",
+          "template_version",
+          "harness",
+          "origin_model",
+          "origin_repository",
+          "branch",
+          "commit",
+          "base_commit"
+        ],
+        "title": "ExportRowOut",
+        "type": "object"
+      },
+      "FamilyCellOut": {
+        "properties": {
+          "missing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "value_num": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Num"
+          }
+        },
+        "required": [
+          "value_num",
+          "missing",
+          "roles"
+        ],
+        "title": "FamilyCellOut",
+        "type": "object"
+      },
+      "FamilyOut": {
+        "properties": {
+          "cells": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FamilyCellOut"
+            },
+            "propertyNames": {
+              "format": "uuid"
+            },
+            "title": "Cells",
+            "type": "object"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "step_structure_differs": {
+            "title": "Step Structure Differs",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "family",
+          "source",
+          "step_structure_differs",
+          "cells"
+        ],
+        "title": "FamilyOut",
         "type": "object"
       },
       "GateRecordOut": {
@@ -2956,6 +3647,132 @@
         "title": "MetricValueOut",
         "type": "object"
       },
+      "MetricsRunOut": {
+        "properties": {
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Branch"
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "gateway": {
+            "title": "Gateway",
+            "type": "string"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
+          "harness_spend": {
+            "title": "Harness Spend",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "label_set_by_operator": {
+            "title": "Label Set By Operator",
+            "type": "boolean"
+          },
+          "latest_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Version"
+          },
+          "selectable": {
+            "title": "Selectable",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription"
+          },
+          "template_name": {
+            "title": "Template Name",
+            "type": "string"
+          },
+          "template_version": {
+            "title": "Template Version",
+            "type": "integer"
+          },
+          "wall_clock_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wall Clock Seconds"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "label_set_by_operator",
+          "status",
+          "template_name",
+          "template_version",
+          "harness",
+          "base_branch",
+          "branch",
+          "wall_clock_seconds",
+          "gateway",
+          "harness_spend",
+          "latest_version",
+          "subscription",
+          "selectable"
+        ],
+        "title": "MetricsRunOut",
+        "type": "object"
+      },
       "ModelsOut": {
         "description": "The models a harness can use, and where that list comes from.",
         "properties": {
@@ -3378,6 +4195,33 @@
         "title": "Page[HarnessOut]",
         "type": "object"
       },
+      "Page_MetricsRunOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsRunOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[MetricsRunOut]",
+        "type": "object"
+      },
       "Page_ProjectRead_": {
         "properties": {
           "items": {
@@ -3403,6 +4247,33 @@
           "items"
         ],
         "title": "Page[ProjectRead]",
+        "type": "object"
+      },
+      "Page_ProjectSpendOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectSpendOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "Page[ProjectSpendOut]",
         "type": "object"
       },
       "Page_RepositoryOut_": {
@@ -4391,6 +5262,66 @@
           "created_at"
         ],
         "title": "ProjectRunOut",
+        "type": "object"
+      },
+      "ProjectSpendOut": {
+        "properties": {
+          "cancelled": {
+            "$ref": "#/components/schemas/CancelledSpendOut"
+          },
+          "gateway": {
+            "title": "Gateway",
+            "type": "string"
+          },
+          "gateway_reported": {
+            "title": "Gateway Reported",
+            "type": "boolean"
+          },
+          "harness": {
+            "title": "Harness",
+            "type": "string"
+          },
+          "harness_reported": {
+            "title": "Harness Reported",
+            "type": "boolean"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "gateway",
+          "harness",
+          "runs",
+          "cancelled",
+          "gateway_reported",
+          "harness_reported",
+          "subscription"
+        ],
+        "title": "ProjectSpendOut",
         "type": "object"
       },
       "ProjectUpdate": {
@@ -5927,6 +6858,77 @@
         "title": "RunSummaryOut",
         "type": "object"
       },
+      "SameWorkOut": {
+        "properties": {
+          "differs": {
+            "title": "Differs",
+            "type": "boolean"
+          },
+          "runs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SameWorkRunOut"
+            },
+            "propertyNames": {
+              "format": "uuid"
+            },
+            "title": "Runs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "runs",
+          "differs"
+        ],
+        "title": "SameWorkOut",
+        "type": "object"
+      },
+      "SameWorkRunOut": {
+        "properties": {
+          "base_commits": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Base Commits",
+            "type": "object"
+          },
+          "initiative_folder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiative Folder"
+          },
+          "stories_planned": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stories Planned"
+          }
+        },
+        "required": [
+          "base_commits",
+          "initiative_folder",
+          "stories_planned"
+        ],
+        "title": "SameWorkRunOut",
+        "type": "object"
+      },
       "SaveVersionIn": {
         "description": "`POST /templates/{name}/versions`: the YAML, and whether the folder may refuse it.",
         "properties": {
@@ -6395,6 +7397,24 @@
           "latest"
         ],
         "title": "StepRowOut",
+        "type": "object"
+      },
+      "StoriesDoneOut": {
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "planned": {
+            "title": "Planned",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "done",
+          "planned"
+        ],
+        "title": "StoriesDoneOut",
         "type": "object"
       },
       "StoryCellOut": {
@@ -7696,6 +8716,454 @@
           }
         ],
         "summary": "Every metric the instance describes",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/metrics/compare": {
+      "get": {
+        "operationId": "read_compare_api_v1_metrics_compare_get",
+        "parameters": [
+          {
+            "description": "Run ids, comma separated, in column order.",
+            "in": "query",
+            "name": "runs",
+            "required": true,
+            "schema": {
+              "description": "Run ids, comma separated, in column order.",
+              "title": "Runs",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`{run}:{n}` pairs, comma separated.",
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "`{run}:{n}` pairs, comma separated.",
+              "title": "V",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Hide labels, template and model names.",
+            "in": "query",
+            "name": "blind",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Hide labels, template and model names.",
+              "title": "Blind",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompareOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id, or a Run has no such version."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A query value is not valid, or the selection is not comparable."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Selected Runs of one project, side by side",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/metrics/compare.csv": {
+      "get": {
+        "operationId": "export_csv_api_v1_metrics_compare_csv_get",
+        "parameters": [
+          {
+            "description": "Run ids, comma separated, in column order.",
+            "in": "query",
+            "name": "runs",
+            "required": true,
+            "schema": {
+              "description": "Run ids, comma separated, in column order.",
+              "title": "Runs",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`{run}:{n}` pairs, comma separated.",
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "`{run}:{n}` pairs, comma separated.",
+              "title": "V",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Hide labels, template and model names.",
+            "in": "query",
+            "name": "blind",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Hide labels, template and model names.",
+              "title": "Blind",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id, or a Run has no such version."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A query value is not valid, or the selection is not comparable."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The comparison as one CSV row per stored value",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/metrics/compare.json": {
+      "get": {
+        "operationId": "export_json_api_v1_metrics_compare_json_get",
+        "parameters": [
+          {
+            "description": "Run ids, comma separated, in column order.",
+            "in": "query",
+            "name": "runs",
+            "required": true,
+            "schema": {
+              "description": "Run ids, comma separated, in column order.",
+              "title": "Runs",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`{run}:{n}` pairs, comma separated.",
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "`{run}:{n}` pairs, comma separated.",
+              "title": "V",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Hide labels, template and model names.",
+            "in": "query",
+            "name": "blind",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Hide labels, template and model names.",
+              "title": "Blind",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompareExportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Run has that id, or a Run has no such version."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A query value is not valid, or the selection is not comparable."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The comparison as JSON: the runs, the same rows, the catalogue once",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/metrics/runs": {
+      "get": {
+        "operationId": "read_runs_api_v1_metrics_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_MetricsRunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No project has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A query value is not valid, or the selection is not comparable."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "A project's Runs, newest first, with what the Metrics table shows",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/metrics/spend": {
+      "get": {
+        "operationId": "read_spend_api_v1_metrics_spend_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ProjectSpendOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Spend this month per project, both figures, cancelled Runs apart",
         "tags": [
           "metrics"
         ]

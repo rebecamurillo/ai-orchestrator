@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from uuid import UUID
 
 from orchestrator.domain.entities.attempt import Attempt
@@ -32,6 +33,13 @@ class FakeFactSetRepository:
 
     def rows(self, fact_set_id: UUID) -> AttemptFacts:
         return self.stored[fact_set_id]
+
+    def subscriptions(self, run_ids: Sequence[UUID]) -> dict[UUID, list[bool | None]]:
+        found: dict[UUID, list[bool | None]] = {}
+        for s in self.sets:
+            if s.run_id in run_ids:
+                found.setdefault(s.run_id, []).append(s.subscription)
+        return found
 
     def unrecorded_attempts(self, limit: int) -> list[Attempt]:
         self.calls.append(("unrecorded_attempts", limit))

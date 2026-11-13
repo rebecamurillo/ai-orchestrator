@@ -78,6 +78,7 @@ class CalculationPorts:
             clock=self.clock,
             extractors=self.extractors,
             log_exists=self.log_exists,
+            subscription_auth=None,
         )
 
     def spend_ports(self) -> SpendPorts:

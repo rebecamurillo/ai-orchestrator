@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, FastAPI
 from orchestrator.api.deps import require_bearer
 from orchestrator.api.errors import UNAUTHORIZED_RESPONSE
 from orchestrator.api.routers import (
+    metrics,
     metrics_catalogue,
     run_gateway_reads,
     run_label,
@@ -34,6 +35,7 @@ def mount_protected(app: FastAPI, router: APIRouter) -> None:
 
 def install_metrics_routes(app: FastAPI) -> None:
     mount_protected(app, metrics_catalogue.router)
+    mount_protected(app, metrics.router)
     mount_protected(app, run_label.router)
     mount_protected(app, run_metrics.router)
     mount_protected(app, run_gateway_reads.router)

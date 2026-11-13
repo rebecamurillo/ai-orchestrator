@@ -45,6 +45,7 @@ class FactSet(BaseModel):
     read_at: datetime
     status: FactSetStatus
     reason: str | None = None
+    subscription: bool | None = None
 
 
 class GatewayRead(BaseModel):

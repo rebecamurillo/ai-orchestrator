@@ -43,7 +43,8 @@ def test_gaps_are_an_integer_array_and_not_null() -> None:
 
 def test_nullability_follows_the_spec() -> None:
     nullable = {
-        "fact_set": {"reason"},
+        # Operator ruling 2026-11-13 (epic 4 story 1): subscription is unknown for old sets
+        "fact_set": {"reason", "subscription"},
         "gateway_read": {"rows", "calls", "prompt", "completion"},
         "usage_fact": {
             "fact_set_id",

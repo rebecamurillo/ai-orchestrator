@@ -56,6 +56,7 @@ class FactSetRow(Base):
     read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(Text())
     reason: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    subscription: Mapped[bool | None] = mapped_column(Boolean(), nullable=True)
 
 
 class GatewayReadRow(Base):
