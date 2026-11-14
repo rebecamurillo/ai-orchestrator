@@ -139,7 +139,7 @@ def plan_attempt(
     return fact_set, read, [usage]
 
 
-def _usage_fact(row: Mapping[str, Any]) -> UsageFact:
+def _as_usage_fact(row: Mapping[str, Any]) -> UsageFact:
     return UsageFact(
         source=row["source"], model=row.get("model"), usage_class=row["class"], usd=row["usd"]
     )
@@ -163,12 +163,12 @@ def run_totals(
             provisional=row["provisional"],
             usd=row["usd"],
         )
-        usage = tuple(_usage_fact(u) for u in read_usage.get(row["id"], ()))
+        usage = tuple(_as_usage_fact(u) for u in read_usage.get(row["id"], ()))
         by_attempt[row["attempt_id"]].append((read, usage))
     return figures_of(
         AttemptRows(
             reads=by_attempt[attempt_id],
-            fact_money=tuple(_usage_fact(u) for u in fact_money.get(attempt_id, ())),
+            fact_money=tuple(_as_usage_fact(u) for u in fact_money.get(attempt_id, ())),
         )
         for attempt_id in attempt_ids
     )

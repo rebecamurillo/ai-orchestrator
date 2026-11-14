@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+import sqlalchemy as sa
 
 from tests.unit.conftest import REPO_ROOT
 
@@ -95,6 +96,14 @@ def test_the_upgrade_rewrites_the_five_figure_columns() -> None:
     ):
         assert column in source
     assert "run_totals" in source
+
+
+def test_every_table_handle_is_still_a_table_once_the_module_is_loaded() -> None:
+    """A function sharing a handle's name rebinds it, and the upgrade fails on every database."""
+    module = load()
+
+    for name in ("_attempt", "_fact_set", "_gateway_read", "_usage_fact", "_run"):
+        assert isinstance(getattr(module, name), sa.TableClause), name
 
 
 def test_the_downgrade_is_not_supported() -> None:
