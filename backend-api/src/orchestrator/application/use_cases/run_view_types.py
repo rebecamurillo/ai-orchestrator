@@ -102,6 +102,8 @@ class Card:
     kind_label: str | None
     age_seconds: float
     needs_you_since: datetime | None
+    label: str = ""
+    label_set_by_operator: bool = False
 
 
 @dataclass(frozen=True)

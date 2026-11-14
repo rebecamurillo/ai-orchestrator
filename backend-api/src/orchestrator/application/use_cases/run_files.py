@@ -50,6 +50,7 @@ from orchestrator.application.rules.signals import row_at
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
+from orchestrator.domain.entities.run_records import ROOT_PATH, RunCommit
 from orchestrator.domain.errors import Conflict, Forbidden, Invalid, NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
@@ -60,6 +61,7 @@ from orchestrator.domain.ports.repositories import (
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.run_records import RunCommitRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.ports.workspace import TreeEntry, Workspace, WorkspaceError
 
@@ -129,6 +131,7 @@ class RunFilesWritePorts:
     records: GateRecordRepository
     clock: Clock
     uow: UnitOfWork
+    run_commits: RunCommitRepository | None = None
 
 
 @dataclass(frozen=True)
@@ -234,7 +237,18 @@ def write_run_file(ports: RunFilesWritePorts, run_id: UUID, path: str, content: 
     assert run.worktree_path is not None  # the read/write above already refused a rootless one
     worktree = Path(run.worktree_path)
     ports.git.stage(worktree, pathspec=path)
-    ports.git.commit(worktree, COMMIT_MESSAGE)
+    sha = ports.git.commit(worktree, COMMIT_MESSAGE)
+    if ports.run_commits is not None and sha:
+        ports.run_commits.add(
+            RunCommit(
+                id=new_id(),
+                run_id=run.id,
+                path=ROOT_PATH,
+                sha=sha,
+                made_by="operator_edit",
+                at=ports.clock.now(),
+            )
+        )
     ports.records.add(
         GateRecord(
             id=new_id(),

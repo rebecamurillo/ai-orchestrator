@@ -92,7 +92,13 @@ def test_a_message_with_no_budget_left_is_a_409() -> None:
     world = a_turn_world()
     run = world.session.world.stored_run()
     world.session.world.ports.runs.update(
-        run.model_copy(update={"budget_usd": Decimal("1.00"), "spend_usd": Decimal("1.00")})
+        run.model_copy(
+            update={
+                "budget_usd": Decimal("1.00"),
+                "spend_usd": Decimal("1.00"),
+                "gate_spend_usd": Decimal("1.00"),
+            }
+        )
     )
 
     assert refused(world, Conflict) == NO_BUDGET

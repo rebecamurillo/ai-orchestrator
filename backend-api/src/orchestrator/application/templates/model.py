@@ -24,6 +24,7 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict
 
 from orchestrator.application.steps import Gate, KindMeta
+from orchestrator.application.templates.step_metric_model import StepMetric
 
 #: The declared type of a Template input (brief, key table "input").
 InputType = Literal["project", "repository", "string", "path", "enum", "number", "item"]
@@ -71,6 +72,11 @@ DUPLICATE_STEP_ID = "duplicate step id"
 BAD_REDISPATCH = "redispatch target not an earlier agent step"
 INVALID_ON_FAIL = "invalid on_fail"
 INVALID_GATE = "invalid gate"
+
+
+def unknown_role(value: object) -> str:
+    return f"unknown role {value}"
+
 
 #: The nine the key table states rules for but has no phrase for.
 INVALID_YAML = "invalid yaml"
@@ -275,6 +281,7 @@ class Step(BaseModel):
     id: str
     uses: str
     meta: KindMeta
+    role: str | None = None
     #: The `with` map as pairs, in file order; empty for a `uses: template` step, whose
     #: `with` is the `call` below.
     params: tuple[tuple[str, Any], ...] = ()
@@ -324,6 +331,7 @@ class ParsedTemplate(BaseModel):
     description: str | None = None
     inputs: tuple[InputDecl, ...] = ()
     steps: tuple[Step | ForEach, ...] = ()
+    metrics: tuple[StepMetric, ...] = ()
 
 
 # --- the result --------------------------------------------------------------------------

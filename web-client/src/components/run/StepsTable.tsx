@@ -15,6 +15,7 @@
  */
 import { Fragment } from 'react';
 import type { RunDetailOut, StepRowOut } from '../../lib/run/detail';
+import HintControl from '../metrics/HintControl';
 import { currentStepPath, stepStatusText } from '../../lib/run/detail';
 import { ageText, tokenSignal } from '../../lib/board/format';
 import { stepAnchorId } from '../../lib/run/anchor';
@@ -55,6 +56,7 @@ export default function StepsTable({ detail, anchoredSeq = null, runId }: Props)
             {COLUMNS.map((column) => (
               <th key={column} scope="col">
                 {column}
+                {column === 'cost' ? <HintControl metricId="spend.recorded" /> : null}
               </th>
             ))}
           </tr>

@@ -264,7 +264,11 @@ def test_a_senior_crash_fails_closed_naming_the_exit_or_the_limit(
 
 
 def test_no_remaining_budget_dispatches_nothing() -> None:
-    world = a_consult_world(run=a_run(budget_usd=Decimal("5.00"), spend_usd=Decimal("5.00")))
+    world = a_consult_world(
+        run=a_run(
+            budget_usd=Decimal("5.00"), spend_usd=Decimal("5.00"), gate_spend_usd=Decimal("5.00")
+        )
+    )
 
     failed(world, "no remaining budget")
     assert world.harness.calls == []
@@ -354,7 +358,9 @@ def test_an_orphaned_senior_is_killed_before_anything_else() -> None:
         decision=a_decision(),
         entry=due_entry(orphan_pgid=777),
         process=process,
-        run=a_run(budget_usd=Decimal("1.00"), spend_usd=Decimal("1.00")),
+        run=a_run(
+            budget_usd=Decimal("1.00"), spend_usd=Decimal("1.00"), gate_spend_usd=Decimal("1.00")
+        ),
     )
 
     run(world)
@@ -370,7 +376,12 @@ def a_priced_world(decision: str, usd: str) -> World:
     gateway = FakeGateway()
     world = with_spend(
         a_consult_world(
-            decision=decision, run=a_run(budget_usd=Decimal("3.00"), spend_usd=Decimal("2.50"))
+            decision=decision,
+            run=a_run(
+                budget_usd=Decimal("3.00"),
+                spend_usd=Decimal("2.50"),
+                gate_spend_usd=Decimal("2.50"),
+            ),
         ),
         gateway=gateway,
     )

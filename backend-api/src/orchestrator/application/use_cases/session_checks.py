@@ -13,7 +13,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from orchestrator.application.rules import protected_paths, session
+from orchestrator.application.rules import budget, protected_paths, session
 from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY
 from orchestrator.application.use_cases.signal_effects import TURN_RUNNING
 from orchestrator.application.use_cases.walk_frame import INITIATIVE_FOLDER_INPUT, row_workdir
@@ -119,7 +119,7 @@ def _refuse_start(ports: SessionPorts, run: Run, rows: Sequence[StepRun], signal
     _refuse_missing_skill(ports.skill_catalog, name)
     if run.worktree_path is None:
         raise Conflict(NO_WORKTREE)
-    if run.budget_usd is not None and run.budget_usd - run.spend_usd <= 0:
+    if run.budget_usd is not None and run.budget_usd - budget.figure(run) <= 0:
         raise Conflict(NO_BUDGET)
 
 

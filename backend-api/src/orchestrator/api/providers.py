@@ -78,6 +78,7 @@ from orchestrator.infrastructure.db import (
     open_writer_ports,
 )
 from orchestrator.infrastructure.db.environment import read_run_environment
+from orchestrator.infrastructure.db.repositories.run_records import SQLAlchemyRunRepositoryRecords
 from orchestrator.infrastructure.harness.registry import build_harnesses, build_terminal_env
 from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
@@ -197,6 +198,7 @@ def create_run_ports(request: Request) -> Iterator[CreateRunPorts]:
             uow=uow,
             clock=SystemClock(),
             tracer=build_tracer(settings),
+            run_repositories=SQLAlchemyRunRepositoryRecords(uow.session),
         )
 
 
@@ -222,6 +224,7 @@ def readiness_ports(request: Request) -> Iterator[HarnessReadinessPorts]:
                 uow=uow,
                 clock=SystemClock(),
                 tracer=build_tracer(settings),
+                run_repositories=SQLAlchemyRunRepositoryRecords(uow.session),
             ),
             budget_usd=settings.readiness_budget_usd,
             template_name=settings.readiness_template,
@@ -373,7 +376,9 @@ def signal_effect_ports(request: Request) -> Iterator[SignalEffectPorts]:
     settings = from_state(request, SETTINGS)
     harnesses = build_harnesses(settings, RealProcessRunner())
     with SQLAlchemyUnitOfWork(session_factory) as preflight_uow:
-        with open_writer_ports(session_factory, notifier=build_notifier(settings)) as writers:
+        with open_writer_ports(
+            session_factory, git=git_adapter(request), notifier=build_notifier(settings)
+        ) as writers:
             yield SignalEffectPorts(
                 signal=SignalPorts(
                     writers=writers,

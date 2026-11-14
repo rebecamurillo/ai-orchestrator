@@ -157,6 +157,8 @@ class Settings(BaseSettings):
     clone_check_cron: str = "0 3 * * *"
     worktree_gc_cron: str = "30 3 * * *"
     terminal_poll_cron: str = "*/30 * * * * *"
+    #: The facts sweep: fills the fact set of any ended harness attempt that has none.
+    facts_sweep_cron: str = "0 * * * *"
     #: `harness_readiness.start`'s own `budget_usd` (SPEC CAP-8) — the fixture's one story
     #: is small, so a low ceiling still leaves room for a retry or two.
     readiness_budget_usd: Annotated[Decimal, Field(gt=0)] = Decimal("5")
@@ -227,6 +229,13 @@ class Settings(BaseSettings):
     #: `chat_poll` runs on `*/{s} * * * * *`, so `s` must divide a minute evenly.
     chat_poll_seconds: int = 30
     chat_reminder_hours: Annotated[int, Field(ge=1)] = 4
+
+    # ── Code analysis ────────────────────────────────────────────────────────
+    #: `off`: no package name leaves the instance and every lookup signal reads
+    #: `not run — lookups off`.
+    analysis_lookups: Literal["on", "off"] = "on"
+    #: Each Tier 2 command; the process group is killed on expiry.
+    analysis_command_timeout_min: Annotated[int, Field(ge=1)] = 20
 
     # ── Pinned tool versions carried by the image (AD-16) ────────────────────
     bmad_version: str = "6.12.4"

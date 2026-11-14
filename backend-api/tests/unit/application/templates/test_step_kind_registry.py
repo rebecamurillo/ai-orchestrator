@@ -65,16 +65,20 @@ SPINE = {
     "checkpoint": ("human", None, frozenset({"when"}), False),
     "template": (None, None, frozenset({"name", "version", "inputs"}), False),
     "bmad.install": ("deterministic", 30, frozenset(), False),
+    # Revised: `metrics.analyse` — no gate default, so an ungated row stays `unvalidated`
+    # (epic 5 story 4, operator answer 2026-11-13).
+    "metrics.analyse": (None, None, frozenset(), False),
 }
 
 #: Revised from twelve by the `git.submodule` row above, which was itself revised from
-#: eleven by `git.merge` (hub-Run initiative H1, 2026-09-23).
-THIRTEEN = 13
+#: eleven by `git.merge` (hub-Run initiative H1, 2026-09-23), then to fourteen by
+#: `metrics.analyse` (epic 5 story 4, 2026-11-13).
+FOURTEEN = 14
 
 
-def test_the_registry_holds_exactly_the_thirteen_shipped_kinds() -> None:
+def test_the_registry_holds_exactly_the_fourteen_shipped_kinds() -> None:
     assert set(KIND_META) == set(SPINE)
-    assert len(KIND_META) == THIRTEEN
+    assert len(KIND_META) == FOURTEEN
 
 
 @pytest.mark.parametrize("kind", sorted(SPINE))

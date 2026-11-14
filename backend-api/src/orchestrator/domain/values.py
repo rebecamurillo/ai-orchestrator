@@ -205,3 +205,4 @@ class PlannedRow(BaseModel):
     #: The innermost `…stories[n]` / `epics[n]` prefix of `path`, or `None` outside a frame.
     frame: str | None
     story_id: str | None
+    role: str = ""

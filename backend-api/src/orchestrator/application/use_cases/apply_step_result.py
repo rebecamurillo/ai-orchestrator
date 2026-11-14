@@ -60,6 +60,7 @@ from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
 from orchestrator.application.use_cases import apply_redispatch
 from orchestrator.application.use_cases.apply_consult import apply_consult, attempt_status
+from orchestrator.application.use_cases.metric_calculations import enqueue_queued
 from orchestrator.application.use_cases.pause_stop import park_before_next
 from orchestrator.application.use_cases.record_trajectory import record_trajectory
 from orchestrator.application.use_cases.writers import (
@@ -161,6 +162,7 @@ def apply_step_result(
         ports.uow.commit()
     if run.status == "done":  # two-phase: commit first, enqueue after (story 5-4)
         enqueue_dependents(ports, ports.engine, run)
+    enqueue_queued(ports.engine, ports.calculations, run)
 
 
 def _apply_run_updates(ports: WriterPorts, run: Run, result: StepResult) -> Run:

@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from orchestrator.application.rules import budget
 from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
 from orchestrator.application.rules.signals_table import (
     ACCEPTED,
@@ -258,4 +259,4 @@ def _refuse_extra(run: Run, rule: Rule, signal: Signal) -> Conflict:
     """
     if rule.extra_refusal is None:
         return _refuse(run, signal)
-    return Conflict(rule.extra_refusal.format(spend=f"{run.spend_usd:.2f}"))
+    return Conflict(rule.extra_refusal.format(spend=f"{budget.figure(run):.2f}"))

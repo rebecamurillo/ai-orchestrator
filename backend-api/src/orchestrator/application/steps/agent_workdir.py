@@ -72,7 +72,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from orchestrator.application.rules.protected_paths import uncommitted
-from orchestrator.application.steps import WORKDIR_KEY
+from orchestrator.application.steps import WORKDIR_KEY, records
 from orchestrator.application.steps.context import (
     StepContext,
     require_cwd,
@@ -81,6 +81,7 @@ from orchestrator.application.steps.context import (
 )
 from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY, STORY_ID_KEY
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.run_records import ROOT_PATH
 from orchestrator.domain.ports.git import Change, GitError
 from orchestrator.domain.values import Park, StepResult
 
@@ -195,26 +196,30 @@ def wip_commit(ctx: StepContext) -> StepResult | None:
         return None
     story_id = resolved_text(ctx.with_resolved, STORY_ID_KEY)
     try:
-        sweep(ctx, WIP_MESSAGE.format(id=story_id, n=ctx.attempt.n))
+        made = sweep(ctx, WIP_MESSAGE.format(id=story_id, n=ctx.attempt.n))
     except GitError as error:
         return _git_park(ctx, WIP_FAILED, error)
+    records.note_commits(ctx, made, "wip")
     return None
 
 
-def sweep(ctx: StepContext, message: str) -> None:
-    """Commit whatever either tree holds under `message`; raises `GitError` for the caller."""
+def sweep(ctx: StepContext, message: str) -> tuple[tuple[str, str | None], ...]:
+    """Commit whatever either tree holds under `message`; raises `GitError` for the caller.
+    Returns `(path, sha)` for each commit it made, for the caller to record."""
     git, root = ctx.ports.git, require_cwd(ctx)
     workdir = declared(ctx)
+    made: list[tuple[str, str | None]] = []
     if not workdir:
         if git.status(root).strip():
             git.stage(root)
-            git.commit(root, message)
-        return
+            made.append((ROOT_PATH, git.commit(root, message)))
+        return tuple(made)
     if git.status(tree(ctx)).strip():
-        git.commit(root, message, workdir=workdir)
+        made.append((workdir, git.commit(root, message, workdir=workdir)))
     if git.status(root, ignore_submodules=True).strip():
         git.stage(root)
-        git.commit(root, message)
+        made.append((ROOT_PATH, git.commit(root, message)))
+    return tuple(made)
 
 
 def _git_park(ctx: StepContext, reason: str, error: GitError) -> StepResult:

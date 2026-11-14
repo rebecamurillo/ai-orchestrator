@@ -83,6 +83,7 @@ def _run(ctx: StepContext, senior: Senior, traceparent: str) -> tuple[HarnessRes
         }
     )
     committed(ctx, lambda attempts: attempts.mark_finished(finished))
+    agent_tail.record_facts(ctx, finished)
     if ctx.ports.spend_writes is None:
         return result, None
     with ctx.ports.spend_writes() as spend_ports:

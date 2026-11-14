@@ -16,7 +16,9 @@ from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.gateway import AttemptSpend, ModelSpend
+from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
+from tests.unit.fakes.facts import FakeGatewayReadRepository
 from tests.unit.fakes.gateway import FakeGateway
 from tests.unit.fakes.runs import FakeAttemptRepository, FakeRunRepository, FakeStepRunRepository
 
@@ -80,7 +82,13 @@ def test_the_returned_run_carries_the_recomputed_spend() -> None:
         ),
     )
     ports = SpendPorts(
-        gateway=gateway, runs=runs, steps=steps, attempts=attempts, uow=FakeUnitOfWork()
+        gateway=gateway,
+        runs=runs,
+        steps=steps,
+        attempts=attempts,
+        gateway_reads=FakeGatewayReadRepository(),
+        clock=FakeClock(),
+        uow=FakeUnitOfWork(),
     )
 
     updated = record_attempt_spend(ports, run, attempt, None)

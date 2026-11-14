@@ -69,6 +69,7 @@ from orchestrator.application.steps import (
     agent_skill,
     agent_tail,
     agent_workdir,
+    records,
 )
 from orchestrator.application.steps.context import (
     StepContext,
@@ -153,6 +154,8 @@ class AgentExecutor:
         misconfigured = agent_workdir.verify(ctx) or agent_skill.verify(ctx)
         if misconfigured is not None:
             return misconfigured
+        if agent_workdir.declared(ctx):
+            records.note_member(ctx, agent_workdir.declared(ctx))
         _orphan_control(ctx)
         prepared = _prepare(ctx, found)
         if isinstance(prepared, StepResult):

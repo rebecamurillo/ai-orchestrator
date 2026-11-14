@@ -43,15 +43,19 @@ from orchestrator.application.steps import git_push as _git_push  # noqa: F401
 from orchestrator.application.steps import git_submodule as _git_submodule  # noqa: F401
 from orchestrator.application.steps import git_sync as _git_sync  # noqa: F401
 from orchestrator.application.steps import git_worktree as _git_worktree  # noqa: F401
+from orchestrator.application.steps import metrics_analyse as _metrics_analyse  # noqa: F401
 from orchestrator.application.steps import plan_check as _plan_check  # noqa: F401
 from orchestrator.application.steps import pr_link as _pr_link  # noqa: F401
 from orchestrator.application.steps import shell as _shell  # noqa: F401
 from orchestrator.application.use_cases.dependency_sweep import sweep_dependency_waiting
 from orchestrator.application.use_cases.instance_hold import release_hold
+from orchestrator.application.use_cases.metric_calculations import sweep_calculations
 from orchestrator.application.use_cases.session_sweep import sweep_session_turns
 from orchestrator.application.use_cases.session_turn import TurnPorts
 from orchestrator.domain.ports.chat import ChatChannelFactory
 from orchestrator.domain.ports.git import Git
+from orchestrator.infrastructure.analysis.scratch_sweep import sweep_analysis_scratch
+from orchestrator.infrastructure.analysis.wiring import build_analysis
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.crypto import FernetCrypto
 from orchestrator.infrastructure.db.environment import read_run_environment
@@ -61,6 +65,9 @@ from orchestrator.infrastructure.db.run_finished import run_finished_hook
 from orchestrator.infrastructure.db.writers import (
     SessionFactory,
     SessionUnitOfWork,
+    open_calculation_ports,
+    open_facts_ports,
+    open_record_ports,
     open_spend_ports,
     open_writer_ports,
 )
@@ -68,8 +75,10 @@ from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
 from orchestrator.infrastructure.dbos.config import engine_config
 from orchestrator.infrastructure.dbos.facade import RealEngine
 from orchestrator.infrastructure.dbos.walker import WalkerDeps
+from orchestrator.infrastructure.facts_jobs import facts_jobs
 from orchestrator.infrastructure.gateway import build_gateway
 from orchestrator.infrastructure.harness import build_harness_env, build_harnesses
+from orchestrator.infrastructure.harness.facts import build_log_facts
 from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.process import RealProcessRunner
@@ -135,6 +144,7 @@ def walker_deps(
     `None` keeps every test that calls `walker_deps` directly working unchanged.
     """
     runner = RealProcessRunner()
+    pending_analysis, calculating_analysis = build_analysis(settings, session_factory, git, runner)
     gateway = build_gateway(
         settings, httpx.Client(base_url=settings.litellm_base_url, timeout=SPEND_TIMEOUT_SECONDS)
     )
@@ -159,6 +169,14 @@ def walker_deps(
             attempt_writes=partial(open_writer_ports, session_factory),
             logs=RealLogReader(log_secrets(settings)),
             spend_writes=partial(open_spend_ports, session_factory, gateway),
+            facts_writes=partial(
+                open_facts_ports,
+                session_factory,
+                build_log_facts(settings),
+                subscription_auth=settings.claude_subscription_auth,
+            ),
+            record_writes=partial(open_record_ports, session_factory),
+            analysis=pending_analysis,
             # read at dispatch time: a Run planned before the instance changed must still park
             # rather than let a harness improvise on an unresolvable skill name
             skill_catalog=FsSkillCatalog(settings.agent_home),
@@ -172,6 +190,13 @@ def walker_deps(
         ),
         run_finished=partial(
             run_finished_hook, session_factory, git, settings.work_dir, settings.bmad_version
+        ),
+        calculation_writes=partial(
+            open_calculation_ports,
+            session_factory,
+            gateway,
+            build_log_facts(settings),
+            analysis=calculating_analysis,
         ),
         on_terminal=partial(
             readiness_evaluate_hook,
@@ -236,7 +261,9 @@ def serving(
 def launch_engine() -> None:
     """Launch the engine this process is serving with, if it is serving with one.
 
-    A hold outlives no start: every hold row is deleted before the engine can run a step."""
+    A hold outlives no start: every hold row is deleted before the engine can run a step. The
+    analysis scratch is swept before the launch too, so no recovered step can start an analysis
+    beside a leftover folder. An engine without `walker_deps` is a test double."""
     for engine, session_factory, _git in _SERVING:
         if session_factory is not None:
             session = session_factory()
@@ -244,6 +271,9 @@ def launch_engine() -> None:
                 release_hold(SQLAlchemyInstanceHoldRepository(session), SessionUnitOfWork(session))
             finally:
                 session.close()
+        deps = getattr(engine, "walker_deps", None)
+        if deps is not None:
+            sweep_analysis_scratch(deps.step_ports.work_dir)
         engine.launch()
 
 
@@ -286,6 +316,11 @@ def dependency_startup_sweep(settings: Settings) -> None:
                 writers=ports, step=deps.step_ports, read_environment=deps.read_environment
             )
             sweep_session_turns(turn_ports, engine, held)
+        if engine.walker_deps.calculation_writes is not None:
+            with engine.walker_deps.calculation_writes() as scope:
+                sweep_calculations(
+                    scope.calculations, scope.uow, scope.clock, engine, engine.held_calculations()
+                )
 
 
 def schedule_engine_jobs(settings: Settings) -> None:
@@ -308,4 +343,13 @@ def schedule_engine_jobs(settings: Settings) -> None:
         for name, cron, job in engine_jobs(
             settings, session_factory, git, engine, chat=current_chat()
         ):
+            engine.schedule(name, cron, job)
+
+
+def schedule_facts_jobs(settings: Settings) -> None:
+    """Register the facts sweep, guarded exactly as `schedule_jobs` is."""
+    for engine, session_factory, _git in _SERVING:
+        if session_factory is None:
+            continue
+        for name, cron, job in facts_jobs(settings, session_factory):
             engine.schedule(name, cron, job)

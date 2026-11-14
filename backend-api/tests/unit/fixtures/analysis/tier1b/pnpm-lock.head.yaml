@@ -1,0 +1,50 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      left-pad:
+        specifier: ^1.3.0
+        version: 1.3.0
+      zod:
+        specifier: ^3.23.0
+        version: 3.23.8
+      '@scope/pkg':
+        specifier: ^1.0.0
+        version: 1.0.0(react@18.2.0)
+      react:
+        specifier: ^18.2.0
+        version: 18.2.0
+
+packages:
+
+  '@scope/pkg@1.0.0':
+    resolution: {integrity: sha512-aaaa}
+    peerDependencies:
+      react: '>=18'
+
+  left-pad@1.3.0:
+    resolution: {integrity: sha512-dddd}
+
+  react@18.2.0:
+    resolution: {integrity: sha512-bbbb}
+
+  zod@3.23.8:
+    resolution: {integrity: sha512-eeee}
+
+snapshots:
+
+  '@scope/pkg@1.0.0(react@18.2.0)':
+    dependencies:
+      react: 18.2.0
+
+  left-pad@1.3.0: {}
+
+  react@18.2.0: {}
+
+  zod@3.23.8: {}

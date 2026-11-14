@@ -153,6 +153,8 @@ def _card(ports: RunReadPorts, run: Run, *, now: datetime) -> Card:
         kind_label=_kind_label(run, steps),
         age_seconds=(now - run.created_at).total_seconds(),
         needs_you_since=_needs_you_since(ports, run) if run.status == "needs_you" else None,
+        label=run.label,
+        label_set_by_operator=run.label_set_by_operator,
     )
 
 

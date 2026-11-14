@@ -36,7 +36,7 @@ fields already there rather than a new one.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,8 +44,11 @@ from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
 
 from orchestrator.application.steps.verify_failure import VerifyFailure
+from orchestrator.application.use_cases.record_attempt_facts import FactsPorts
+from orchestrator.application.use_cases.run_records import RecordWrites
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
+from orchestrator.domain.entities.analysis import Analysis
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
@@ -69,11 +72,17 @@ WorkspaceFactory = Callable[[str | None], Workspace]
 #: single commit. The `agent` executor writes an attempt three times in three units of work
 #: (AD-8), and each of them opens one of these — never a session held across a dispatch that
 #: runs for ninety minutes.
+#: Analyse every `run_repository` of a Run and store the analyses pending (epic 5 story 4).
+RunAnalysis = Callable[[UUID], Sequence[Analysis]]
+
 AttemptWrites = Callable[[], AbstractContextManager[WriterPorts]]
 
 #: `StepPorts.spend_writes`: a `SpendPorts` scope of its own — `attempt_writes` reaches only
 #: `.attempts` (AD-8); the budget read (5.7) also needs `runs`/`steps`.
 SpendWrites = Callable[[], AbstractContextManager[SpendPorts]]
+
+#: `StepPorts.facts_writes`: the scope `record_attempt_facts` stores an ended attempt's facts in.
+FactsWrites = Callable[[], AbstractContextManager[FactsPorts]]
 
 #: The directory a Repository's base clone lives in, under its Project's (AD-14). The same
 #: word `use_cases/clone_check.py` uses, because it is the same directory.
@@ -204,7 +213,12 @@ class StepPorts:
     #: The attempt's own spend scope (5.7). `None` skips the budget read — see the module
     #: docstring's "degrades like `tracer`" — rather than raising like `attempt_writes`.
     spend_writes: SpendWrites | None = None
+    #: `None` records no facts, the same way `None` skips the budget read above.
+    facts_writes: FactsWrites | None = None
     skill_catalog: SkillCatalog | None = None
+    record_writes: RecordWrites | None = None
+    #: `None` makes a `metrics.analyse` row read `analysis failed`, never an error.
+    analysis: RunAnalysis | None = None
 
 
 @dataclass(frozen=True)

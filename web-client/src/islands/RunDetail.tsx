@@ -32,6 +32,7 @@ import { useStore } from '@nanostores/react';
 import { api } from '../api/client';
 import type { components } from '../api/schema';
 import FailedFetch from '../components/FailedFetch';
+import OriginDrawer from '../components/metrics/OriginDrawer';
 import ArtifactsPanel from '../components/run/ArtifactsPanel';
 import Banner from '../components/run/Banner';
 import CancelModal from '../components/run/CancelModal';
@@ -40,6 +41,8 @@ import CostBlock from '../components/run/CostBlock';
 import DiagramSection from '../components/run/DiagramSection';
 import GateRecord from '../components/run/GateRecord';
 import Header from '../components/run/Header';
+import MetricsTab from '../components/run/MetricsTab';
+import RecalculateControl from '../components/run/RecalculateControl';
 import SessionPanel from '../components/run/SessionPanel';
 import StepsTable from '../components/run/StepsTable';
 import StopBody from '../components/run/StopBody';
@@ -48,6 +51,7 @@ import { acceptBody } from '../lib/run/accept';
 import { answerBody } from '../lib/run/answer';
 import { budgetRaiseBody } from '../lib/run/budget';
 import { isFile } from '../lib/run/artifacts';
+import { labelPayload } from '../lib/run/label';
 import { anchoredSeq, PROMOTED_MS, stepAnchorId } from '../lib/run/anchor';
 import { isSpecCheckpoint, plannedFilePath } from '../lib/run/checkpoint';
 import { detailRequestPath, runToken, stopKind, type RunDetailOut } from '../lib/run/detail';
@@ -65,8 +69,27 @@ import {
   messagesRequestPath,
   type SessionOut,
 } from '../lib/run/session';
+import {
+  defaultTab,
+  metricsSearch,
+  parseMetricsQuery,
+  settledVersion,
+  type TabName,
+} from '../lib/run/metrics-tab';
+import { recalcRequested } from '../lib/run/metrics-glance';
+import { $metricsTab, initMetricsTab } from '../stores/metrics-tab';
 import { terminalBlock, TERMINAL_RELEASE, TERMINAL_START } from '../lib/run/terminal';
-import { $poll, configurePolling, stopPolling } from '../stores/poll';
+import { loadCatalogue } from '../stores/catalogue';
+import { $poll, configurePolling, forceTick, stopPolling } from '../stores/poll';
+import {
+  $runMetrics,
+  calcActive,
+  loadRunMetrics,
+  pollCalculation,
+  resetRunMetrics,
+  selectVersion,
+  startCalculation,
+} from '../stores/run-metrics';
 import { startTracking, stopTracking } from '../stores/activity';
 import '../styles/run-detail.css';
 
@@ -93,17 +116,23 @@ export default function RunDetail({ runId }: Props) {
   const [detail, setDetail] = useState<RunDetailOut | null>(null);
   const [session, setSession] = useState<SessionOut | null>(null);
   const [sending, setSending] = useState(false);
+  const recalcOpenRef = useRef(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [posting, setPosting] = useState<SignalKind | null>(null);
   const [signalError, setSignalError] = useState<ProblemDetail | null>(null);
   const [plannedFile, setPlannedFile] = useState<RunFileOut | null>(null);
   const [anchored, setAnchored] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<'gate' | 'steps' | 'session'>('gate');
+  const [activeTab, setActiveTab] = useState<TabName>('gate');
   const pollTick = useStore($poll);
+  const glance = useStore($runMetrics);
+  const metricsView = useStore($metricsTab);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
   /** One-shot guard: sets the active tab once on the first detail load. */
   const tabDefaultSetRef = useRef(false);
+  /** The view, set and version the URL arrived with; the URL is left alone until one differs. */
+  const arrivedUrlRef = useRef<{ view: string; set: string; v: number | null } | null>(null);
+  const urlLiveRef = useRef(false);
   // 8-3: on the first navigation fetch, append `?opened=true` so `open_run` records the
   // visit server-side before `build_detail` runs — the response's `last_opened_at` then
   // reflects the just-updated timestamp, and the files fetch sees the freshly committed
@@ -131,7 +160,10 @@ export default function RunDetail({ runId }: Props) {
       setDetail(data);
       setSession(read);
       setPhase({ kind: 'ready' });
-      configurePolling(keepsFastPoll(data.run.status, read));
+      // a metrics read never fails the page: its store keeps the failure for the cost block
+      void loadRunMetrics(runId);
+      if (calcActive($runMetrics.get())) void pollCalculation(runId);
+      configurePolling(keepsFastPoll(data.run.status, read) || calcActive($runMetrics.get()));
     } catch {
       if (seq !== requestSeqRef.current) return;
       stopPolling();
@@ -152,6 +184,14 @@ export default function RunDetail({ runId }: Props) {
 
   useEffect(() => {
     openedRef.current = false; // reset so ?opened=true fires again on navigation to a new Run
+    resetRunMetrics();
+    recalcOpenRef.current = recalcRequested(window.location.search);
+    const query = parseMetricsQuery(window.location.search);
+    arrivedUrlRef.current = { view: query.view, set: query.set, v: query.v };
+    urlLiveRef.current = false;
+    initMetricsTab(runId, { view: query.view, set: query.set });
+    if (query.v !== null) void selectVersion(runId, query.v);
+    void loadCatalogue();
     void fetchDetail();
     return () => stopPolling();
     // fires once on mount; every later fetch is driven by the `$poll` effect below
@@ -231,10 +271,54 @@ export default function RunDetail({ runId }: Props) {
     if (tabDefaultSetRef.current) return;
     tabDefaultSetRef.current = true;
     if (anchoredSeq(window.location.hash) !== null) return;
-    if (terminalBlock(detail) !== null) {
-      setActiveTab('session');
-    }
+    setActiveTab(
+      defaultTab({
+        hashSeq: null,
+        queryTab: parseMetricsQuery(window.location.search).tab,
+        hasTerminal: terminalBlock(detail) !== null,
+        status: detail.run.status,
+      }),
+    );
   }, [detail]);
+
+  useEffect(() => {
+    if (settledVersion(glance.selected, glance.versions) === glance.selected) return;
+    void selectVersion(runId, Math.max(...glance.versions.map((v) => v.n)));
+  }, [glance.selected, glance.versions]);
+
+  function pickTab(tab: TabName): void {
+    urlLiveRef.current = true;
+    setActiveTab(tab);
+  }
+
+  // The tab, view, metric set and version are mirrored into the URL once the Operator changes
+  // one of them. Never on load: e2e specs pin the arrival URL (`run-diagram.spec.ts`,
+  // `runs-history.spec.ts`, `board.spec.ts`), and a poll that changes none of them writes nothing.
+  useEffect(() => {
+    if (!detail) return;
+    const arrived = arrivedUrlRef.current;
+    if (
+      arrived !== null &&
+      (metricsView.view !== arrived.view ||
+        metricsView.set !== arrived.set ||
+        glance.selected !== arrived.v)
+    ) {
+      urlLiveRef.current = true;
+    }
+    if (!urlLiveRef.current) return;
+    const next = metricsSearch(window.location.search, {
+      tab: activeTab,
+      view: metricsView.view,
+      set: metricsView.set,
+      v: glance.selected,
+    });
+    if (next === window.location.search) return;
+    window.history.replaceState(
+      null,
+      '',
+      `${window.location.pathname}${next}${window.location.hash}`,
+    );
+  }, [detail, activeTab, metricsView.view, metricsView.set, glance.selected]);
 
   /** Posts one signal and returns the problem it was refused with, or `null` when it applied. */
   async function sendSignal(kind: SignalKind, body?: SignalIn): Promise<ProblemDetail | null> {
@@ -288,6 +372,27 @@ export default function RunDetail({ runId }: Props) {
     }
   }
 
+  /** Saves the label (`null` restores the default); returns the problem a refusal carried. */
+  async function saveLabel(label: string | null): Promise<ProblemDetail | null> {
+    const body = label === null ? labelPayload('') : labelPayload(label);
+    try {
+      const { error } = await api.PATCH('/runs/{run_id}', {
+        params: { path: { run_id: runId } },
+        body,
+      });
+      if (error) return error;
+      await fetchDetail();
+      return null;
+    } catch {
+      return networkProblem('PATCH', `/api/runs/${runId}`);
+    }
+  }
+
+  async function recalculate(): Promise<void> {
+    await startCalculation(runId);
+    forceTick();
+  }
+
   if (phase.kind === 'error') {
     return (
       <FailedFetch
@@ -305,7 +410,26 @@ export default function RunDetail({ runId }: Props) {
 
   return (
     <div data-testid="wf-detail">
-      <Header detail={detail} token={token} now={Date.now()} />
+      <Header
+        detail={detail}
+        token={token}
+        now={Date.now()}
+        onSaveLabel={saveLabel}
+        actions={
+          <RecalculateControl
+            status={detail.run.status}
+            versions={glance.versions}
+            calc={glance.calc}
+            calcError={glance.calcError}
+            onConfirm={() => {
+              // the link opens the confirm once; a later remount (calculation ended) stays closed
+              recalcOpenRef.current = false;
+              void recalculate();
+            }}
+            opened={recalcOpenRef.current}
+          />
+        }
+      />
       <Banner detail={detail} token={token} />
       <div className="wf-top-zone">
         {/* keyed so a draft written for one stop can never be sent as the answer to the next */}
@@ -345,7 +469,13 @@ export default function RunDetail({ runId }: Props) {
         </div>
         <div className="wf-summary-col">
           <StoriesStrip stories={detail.stories} />
-          <CostBlock detail={detail} />
+          <CostBlock
+            detail={detail}
+            glance={glance}
+            subscription={false}
+            onSelectVersion={(n) => void selectVersion(runId, n)}
+            onRetryMetrics={() => void loadRunMetrics(runId)}
+          />
           <ArtifactsPanel runId={runId} run={detail.run} folder={detail.header.meta.folder} />
         </div>
       </div>
@@ -355,7 +485,7 @@ export default function RunDetail({ runId }: Props) {
             type="button"
             className="wf-tab-btn"
             aria-pressed={activeTab === 'gate'}
-            onClick={() => setActiveTab('gate')}
+            onClick={() => pickTab('gate')}
           >
             GATE
           </button>
@@ -363,16 +493,24 @@ export default function RunDetail({ runId }: Props) {
             type="button"
             className="wf-tab-btn"
             aria-pressed={activeTab === 'steps'}
-            onClick={() => setActiveTab('steps')}
+            onClick={() => pickTab('steps')}
           >
             STEPS
+          </button>
+          <button
+            type="button"
+            className="wf-tab-btn"
+            aria-pressed={activeTab === 'metrics'}
+            onClick={() => pickTab('metrics')}
+          >
+            METRICS
           </button>
           {terminal !== null ? (
             <button
               type="button"
               className="wf-tab-btn"
               aria-pressed={activeTab === 'session'}
-              onClick={() => setActiveTab('session')}
+              onClick={() => pickTab('session')}
             >
               SESSION
             </button>
@@ -382,6 +520,14 @@ export default function RunDetail({ runId }: Props) {
           {activeTab === 'gate' ? <GateRecord detail={detail} token={token} /> : null}
           {activeTab === 'steps' ? (
             <StepsTable detail={detail} anchoredSeq={anchored} runId={runId} />
+          ) : null}
+          {activeTab === 'metrics' ? (
+            <MetricsTab
+              detail={detail}
+              glance={glance}
+              onSelectVersion={(n) => void selectVersion(runId, n)}
+              onRetryMetrics={() => void loadRunMetrics(runId)}
+            />
           ) : null}
           {activeTab === 'session' && terminal !== null ? (
             <CommandBlock
@@ -402,6 +548,7 @@ export default function RunDetail({ runId }: Props) {
           onDismiss={() => setCancelOpen(false)}
         />
       ) : null}
+      <OriginDrawer />
     </div>
   );
 }

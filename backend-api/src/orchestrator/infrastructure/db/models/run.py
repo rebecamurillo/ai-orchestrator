@@ -102,6 +102,11 @@ class RunRow(Base):
     budget_usd: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     spend_usd: Mapped[Decimal] = mapped_column(MONEY)
     spend_provisional: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
+    gateway_spend_usd: Mapped[Decimal] = mapped_column(MONEY, server_default=text("0"))
+    harness_spend_usd: Mapped[Decimal] = mapped_column(MONEY, server_default=text("0"))
+    gate_spend_usd: Mapped[Decimal] = mapped_column(MONEY, server_default=text("0"))
+    gateway_reported: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
+    harness_reported: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
     manual_estimate_h: Mapped[Decimal | None] = mapped_column(HOURS, nullable=True)
     re_review_done: Mapped[bool] = mapped_column(Boolean())
     park_kind: Mapped[str | None] = mapped_column(Text(), nullable=True)
@@ -116,6 +121,8 @@ class RunRow(Base):
     trace_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
     terminal_session: Mapped[bool] = mapped_column(Boolean())
     senior_session: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
+    label: Mapped[str] = mapped_column(Text(), server_default=text("''"))
+    label_set_by_operator: Mapped[bool] = mapped_column(Boolean(), server_default=text("FALSE"))
     terminal_clean_polls: Mapped[int] = mapped_column(Integer())
     active_seconds: Mapped[int] = mapped_column(Integer())
     last_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -168,6 +175,7 @@ class StepRunRow(Base):
     redispatch_count: Mapped[int] = mapped_column(Integer())
     frame: Mapped[str | None] = mapped_column(Text(), nullable=True)
     story_id: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    role: Mapped[str] = mapped_column(Text(), server_default=text("''"))
     consults: Mapped[dict[str, Any]] = mapped_column(JSONB(), server_default=text("'{}'::jsonb"))
 
 

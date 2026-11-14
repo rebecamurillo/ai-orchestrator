@@ -6,9 +6,8 @@ the same four repositories through the same unit of work, append the same kind o
 and re-queue a row by the same rule — so those things are written once, here, and the three
 use cases hold only what is different about them.
 
-Nothing in this module decides *whether* to write. Each function is the mechanics of one
-write: `record` appends a line, `queue_row` moves a row to `queued` through the machine,
-`finish_run` ends a Run. The rules that call them live in the use cases.
+Nothing here decides *whether* to write: each function is the mechanics of one write. The
+rules that call them live in the use cases.
 """
 
 from __future__ import annotations
@@ -19,6 +18,8 @@ from typing import Any
 from uuid import UUID
 
 from orchestrator.application.use_cases.announce import Announcer
+from orchestrator.application.use_cases.metric_calculations import queue_terminal_calculation
+from orchestrator.application.use_cases.run_records import ended
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -28,12 +29,17 @@ from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.domain.ports.instance_hold import InstanceHoldRepository
+from orchestrator.domain.ports.metric_results import (
+    MetricCalculationRepository,
+    ResultVersionRepository,
+)
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
     GateRecordRepository,
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.run_records import RunRepositoryRecords
 from orchestrator.domain.ports.trajectories import TrajectoryRepository
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.statuses import (
@@ -48,9 +54,7 @@ from orchestrator.domain.statuses import (
 from orchestrator.domain.values import Park
 
 #: How a row in each status is put back on the queue. A row in any other status has no way
-#: to `queued` in AD-8's diagram, so `step_transition` refuses it by name rather than this
-#: table growing a case: `predecessor_done` is the only event a `planned` row accepts, and
-#: asking for it from `done` or `running` is the bug the refusal reports.
+#: to `queued` in AD-8's diagram, so `step_transition` refuses it by name.
 QUEUE_EVENTS: dict[StepStatus, StepEvent] = {
     "planned": "predecessor_done",
     "error": "retry",
@@ -68,9 +72,7 @@ RUN_DONE = "every planned step is done or skipped"
 class WriterPorts:
     """The four repositories every status write goes through, plus the scope and the clock.
 
-    `git` and `trajectories` (5.9) are the two `record_trajectory` needs beyond these four —
-    both default `None` and degrade like `tracer`/`spend_writes`, so every `WriterPorts(...)`
-    construction that predates this story keeps working unchanged.
+    Every optional field defaults `None`, so a `WriterPorts(...)` that predates it still works.
     """
 
     runs: RunRepository
@@ -81,18 +83,20 @@ class WriterPorts:
     clock: Clock
     git: Git | None = None
     trajectories: TrajectoryRepository | None = None
-    #: Optional engine for two-phase dependent enqueue (story 5-4). `None` on every call
-    #: site that predates this field — every frozen `WriterPorts(...)` construction keeps
-    #: working unchanged. When set, `enqueue_dependents` uses it after a `done` transition.
+    #: Two-phase enqueue of dependents and calculations, after the commit.
     engine: WorkflowEngine | None = None
     #: Tells the outside world a Run needs the Operator or has ended; `None` announces nothing.
     announcer: Announcer | None = None
     #: `None` reads no hold, so every construction that predates it behaves as before.
     holds: InstanceHoldRepository | None = None
+    run_repositories: RunRepositoryRecords | None = None
+    #: Both set: a write that ends the Run queues its metrics calculation in the same unit.
+    calculations: MetricCalculationRepository | None = None
+    versions: ResultVersionRepository | None = None
 
 
 def require_run(ports: WriterPorts, run_id: UUID, *, lock: bool = False) -> Run:
-    """The stored Run, or `NotFound` (404); `lock` reads it under a row lock."""
+    """The stored Run, or `NotFound`; `lock` reads it under a row lock."""
     run = ports.runs.get_for_update(run_id) if lock else ports.runs.get(run_id)
     if run is None:
         raise NotFound(f"no run {run_id}")
@@ -111,9 +115,7 @@ def require_row(ports: WriterPorts, run_id: UUID, seq: int) -> StepRun:
 class Entry:
     """One gate-record line before it has an id and a time — what a caller decides.
 
-    A dataclass rather than six keyword arguments on `record`: ruff's `PLR0913` caps a
-    signature at five, and the same reason `AttemptRepository.mark_started` takes an entity
-    applies here — the columns belong together, so they travel together.
+    A dataclass: ruff's `PLR0913` caps a signature at five arguments.
     """
 
     event: GateEvent
@@ -143,7 +145,7 @@ def record(ports: WriterPorts, run: Run, entry: Entry) -> GateRecord:
 
 
 def queue_row(ports: WriterPorts, row: StepRun) -> StepRun:
-    """Put one row back on the queue through the machine, and store it."""
+    """Put one row back on the queue through the machine."""
     event = QUEUE_EVENTS.get(row.status, "predecessor_done")
     updated = row.model_copy(update={"status": step_transition(row.status, event)})
     ports.steps.update(updated)
@@ -160,13 +162,14 @@ def set_row(ports: WriterPorts, row: StepRun, **update: Any) -> StepRun:
 def set_run(ports: WriterPorts, run: Run, reason: str | None = None, **update: Any) -> Run:
     """Replace the Run with the same Run plus `update`. The only way a Run is written.
 
-    `reason` is not a column: it is the sentence a terminal transition gives the notification,
-    which the cleared park fields no longer carry.
+    `reason` is not a column: it is the sentence a terminal transition gives the notification.
     """
     updated = run.model_copy(update=update)
     if updated.status != "running":  # a Run that is not running has no pause pending
         updated = updated.model_copy(update={"pause_requested": False})
     ports.runs.update(updated)
+    ended(ports.git, ports.run_repositories, run, updated)
+    queue_terminal_calculation(ports.calculations, ports.versions, ports.clock, run, updated)
     if ports.announcer is not None:
         ports.announcer.transition(run, updated, reason)
     return updated
@@ -254,7 +257,7 @@ def finish_run(ports: WriterPorts, run: Run) -> Run:
     return finished
 
 
-#: Reason text for a dependency park: the predecessor's terminal status (story 5-4).
+#: Reason text for a dependency park.
 DEPENDENCY_PARK_REASON = "run {run_id} ended {status}"
 
 #: Reason text when a predecessor id no longer resolves to a stored Run (fan-in

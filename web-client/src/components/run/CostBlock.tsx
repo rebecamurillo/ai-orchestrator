@@ -14,6 +14,9 @@
  * restated here since a `.astro` component cannot be nested inside a React island).
  * Stateless (`renderToStaticMarkup`).
  */
+import FailedFetch from '../FailedFetch';
+import HintControl from '../metrics/HintControl';
+import VersionSelector from '../metrics/VersionSelector';
 import type { RunDetailOut } from '../../lib/run/detail';
 import {
   activeTimeText,
@@ -23,27 +26,65 @@ import {
   wallClockText,
 } from '../../lib/run/detail';
 import { compareLinkText } from '../../lib/run/skip';
+import type { RunMetricsState } from '../../stores/run-metrics';
+import CostGlance, { FiguresGap } from './CostGlance';
 
 interface Props {
   detail: RunDetailOut;
+  /** The metric reads; absent, the block shows the Run record's own rows only. */
+  glance?: RunMetricsState;
+  subscription?: boolean;
+  onSelectVersion?: (n: number) => void;
+  onRetryMetrics?: () => void;
 }
 
-export default function CostBlock({ detail }: Props) {
+const NOOP = (): void => undefined;
+
+export default function CostBlock({
+  detail,
+  glance,
+  subscription = false,
+  onSelectVersion = NOOP,
+  onRetryMetrics = NOOP,
+}: Props) {
   const cost = detail.cost;
+  const showGlance = glance !== undefined && detail.run.status !== 'queued';
+  const latest = Math.max(0, ...(glance?.versions.map((v) => v.n) ?? []));
   const branchHref = branchLinkHref(detail);
 
   return (
     <section className="wf-cost" data-testid="wf-cost">
       <h2 className="wf-section-head">COST &amp; TRACE</h2>
+      {showGlance && glance.versions.length > 0 ? (
+        <VersionSelector
+          versions={glance.versions}
+          selected={glance.selected ?? glance.metrics?.latest ?? latest}
+          onSelect={onSelectVersion}
+        />
+      ) : null}
+      {showGlance && glance.failed ? (
+        <FailedFetch
+          method="GET"
+          path={glance.failed.path}
+          status={glance.failed.status}
+          onRetry={onRetryMetrics}
+          testId="cost-fetch-failed"
+          retryTestId="cost-fetch-retry"
+        />
+      ) : null}
+      {showGlance ? (
+        <CostGlance detail={detail} glance={glance} subscription={subscription} />
+      ) : null}
       <table className="wf-cost-kv">
         <tbody>
           <tr>
-            <th scope="row">spent / budget</th>
+            <th scope="row">budget used</th>
             <td>
               {moneyRatio(cost)}
               {cost.provisional ? (
                 <span data-testid="wf-cost-provisional"> provisional</span>
               ) : null}
+              <HintControl metricId="budget.used" />
             </td>
           </tr>
           <tr>
@@ -70,6 +111,7 @@ export default function CostBlock({ detail }: Props) {
           ) : null}
         </tbody>
       </table>
+      {showGlance ? <FiguresGap glance={glance} /> : null}
       <ul className="wf-cost-links">
         {detail.run.compare_urls.map((url) => (
           <li key={url}>

@@ -1,0 +1,17 @@
+[[package]]
+name = "click"
+version = "8.1.8"
+description = "Composable command line interface toolkit"
+optional = false
+python-versions = ">=3.7"
+
+[[package]]
+name = "Typing_Extensions"
+version = "4.12.2"
+description = "Backported typing hints"
+optional = false
+python-versions = ">=3.8"
+
+[metadata]
+lock-version = "2.0"
+python-versions = "^3.12"

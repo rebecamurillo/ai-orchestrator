@@ -1,0 +1,17 @@
+---
+/**
+ * The comparison (story 4.3): the selected Runs side by side. The island reads
+ * `/api/metrics/compare` itself, so the page makes no backend read.
+ */
+import Shell from '../../layouts/Shell.astro';
+import MetricsCompare from '../../islands/MetricsCompare';
+import { COMPARE_TITLE, parseCompare } from '../../lib/metrics/compare';
+
+export const prerender = false;
+
+const initial = parseCompare(Astro.url.search);
+---
+
+<Shell active="metrics" title={COMPARE_TITLE} count={`${initial.runIds.length} runs`}>
+  <MetricsCompare client:load initial={initial} />
+</Shell>

@@ -253,7 +253,11 @@ def test_a_senior_that_changed_the_tree_fails_closed() -> None:
 
 
 def test_no_remaining_budget_dispatches_nothing() -> None:
-    world = a_review_world(run=a_run(budget_usd=Decimal("5.00"), spend_usd=Decimal("5.00")))
+    world = a_review_world(
+        run=a_run(
+            budget_usd=Decimal("5.00"), spend_usd=Decimal("5.00"), gate_spend_usd=Decimal("5.00")
+        )
+    )
 
     fails_closed(world, "no remaining budget")
 
@@ -271,7 +275,11 @@ def test_an_acceptance_that_exhausts_the_budget_parks_with_the_budget_on_top() -
     world = with_spend(
         a_review_world(
             accepting(f"[{FROZEN}, {OTHER}]"),
-            run=a_run(budget_usd=Decimal("3.00"), spend_usd=Decimal("2.50")),
+            run=a_run(
+                budget_usd=Decimal("3.00"),
+                spend_usd=Decimal("2.50"),
+                gate_spend_usd=Decimal("2.50"),
+            ),
         ),
         gateway=gateway,
     )
@@ -293,7 +301,11 @@ def test_an_escalation_over_budget_keeps_the_hits_and_gets_the_budget_record() -
     world = with_spend(
         a_review_world(
             "---\nstatus: escalate\nreason: r\n---\n",
-            run=a_run(budget_usd=Decimal("3.00"), spend_usd=Decimal("2.50")),
+            run=a_run(
+                budget_usd=Decimal("3.00"),
+                spend_usd=Decimal("2.50"),
+                gate_spend_usd=Decimal("2.50"),
+            ),
         ),
         gateway=gateway,
     )

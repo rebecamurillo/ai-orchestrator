@@ -21,6 +21,7 @@ from typing import Any
 from uuid import UUID
 
 from orchestrator.application.rules.signals import Rule, record_text, validate
+from orchestrator.application.use_cases.metric_calculations import enqueue_queued
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.signal_effects import EFFECTS, CancelPlan, Effect
 from orchestrator.application.use_cases.writers import (
@@ -149,6 +150,8 @@ def finish_signal(
     # Two-phase enqueue for done dependents after signal (e.g. skip-to-done, story 5-4).
     if run.status == "done":
         enqueue_dependents(ports.writers, ports.writers.engine, run)
+    # `ports.engine`, not `writers.engine`: the signal providers open writers without one
+    enqueue_queued(ports.engine, ports.writers.calculations, run)
     return SignalOutcome(run=run, resumed=resumed, cancel_plan=effect.cancel_plan)
 
 

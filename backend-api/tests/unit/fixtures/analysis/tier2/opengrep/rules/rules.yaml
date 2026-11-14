@@ -1,0 +1,22 @@
+rules:
+  - id: fixture-eval-call
+    languages: [python]
+    severity: ERROR
+    message: eval on dynamic input
+    pattern: eval(...)
+    metadata:
+      category: security
+      cwe: ["CWE-95: Eval Injection"]
+  - id: fixture-os-system
+    languages: [python]
+    severity: WARNING
+    message: shell command from a string
+    pattern: os.system(...)
+    metadata:
+      category: security
+      cwe: ["CWE-78: OS Command Injection"]
+  - id: fixture-compare-none
+    languages: [python]
+    severity: INFO
+    message: compare with None through is
+    pattern: $X == None

@@ -7,9 +7,24 @@ exactly that reason: a model nothing imported would be invisible to `alembic
 
 from __future__ import annotations
 
+from orchestrator.infrastructure.db.models.analysis import AnalysisArtifactRow, AnalysisRow
 from orchestrator.infrastructure.db.models.chat import ChatNoticeRow, ChatThreadRow
+from orchestrator.infrastructure.db.models.facts import (
+    ActivityFactRow,
+    EventFactRow,
+    FactSetRow,
+    GapFactRow,
+    GatewayReadRow,
+    RequestFactRow,
+    UsageFactRow,
+)
 from orchestrator.infrastructure.db.models.harness import HarnessRow
 from orchestrator.infrastructure.db.models.instance_hold import InstanceHoldRow
+from orchestrator.infrastructure.db.models.metric_results import (
+    MetricCalculationRow,
+    MetricValueRow,
+    ResultVersionRow,
+)
 from orchestrator.infrastructure.db.models.project import ProjectRow
 from orchestrator.infrastructure.db.models.project_channel import ProjectChannelRow
 from orchestrator.infrastructure.db.models.repository import RepositoryRow
@@ -19,22 +34,37 @@ from orchestrator.infrastructure.db.models.run import (
     RunRow,
     StepRunRow,
 )
+from orchestrator.infrastructure.db.models.run_records import RunCommitRow, RunRepositoryRow
 from orchestrator.infrastructure.db.models.template import TemplateRow, TemplateVersionRow
 from orchestrator.infrastructure.db.models.trajectory import TrajectoryRow
 
 __all__ = [
+    "ActivityFactRow",
+    "AnalysisArtifactRow",
+    "AnalysisRow",
     "AttemptRow",
     "ChatNoticeRow",
     "ChatThreadRow",
+    "EventFactRow",
+    "FactSetRow",
+    "GapFactRow",
     "GateRecordRow",
+    "GatewayReadRow",
     "HarnessRow",
     "InstanceHoldRow",
+    "MetricCalculationRow",
+    "MetricValueRow",
     "ProjectChannelRow",
     "ProjectRow",
     "RepositoryRow",
+    "RequestFactRow",
+    "ResultVersionRow",
+    "RunCommitRow",
+    "RunRepositoryRow",
     "RunRow",
     "StepRunRow",
     "TemplateRow",
     "TemplateVersionRow",
     "TrajectoryRow",
+    "UsageFactRow",
 ]

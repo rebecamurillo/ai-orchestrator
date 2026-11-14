@@ -4,8 +4,8 @@ Its own module — none of `runs.py`, `run.py`, `signals.py` or `repository_init
 this path, and each of those already carries its own frozen route-count assertion
 (`tests/unit/test_runs_router.py`, `test_run_router.py`, `test_signals_router.py`,
 `test_repository_init_router.py`) — so a new route belongs in a new module on the same
-`/api/v1` prefix, mounted through `main.py`'s `_mount` helper like every router but the two
-`test_graph_text_router.py` reads by AST.
+`/api/v1` prefix, mounted through `api/protected_routes.py`'s `mount_protected` like every
+router but the two `test_graph_text_router.py` reads by AST.
 """
 
 from __future__ import annotations

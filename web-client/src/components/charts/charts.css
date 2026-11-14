@@ -1,0 +1,146 @@
+/* ── Charts (epic 3 story 5): chart ink and data colours live only in this folder ── */
+
+.chart-panel {
+  position: relative;
+  margin: 0 0 var(--space-5);
+}
+
+.chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: baseline;
+  margin: 0 0 var(--space-3);
+  padding-right: calc(var(--space-8) * 4);
+  font-size: var(--type-meta);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.chart-key {
+  color: var(--color-text-tertiary);
+}
+
+.chart-panel svg text {
+  fill: var(--color-chart-ink);
+}
+
+.chart-panel g[role='button'] {
+  cursor: pointer;
+}
+
+.chart-panel g[role='button']:focus-visible rect {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.chart-tooltip {
+  position: absolute;
+  right: 0;
+  top: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line-strong);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+  color: var(--color-text);
+  pointer-events: none;
+}
+
+.chart-export-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  align-items: center;
+  margin: 0 0 var(--space-4);
+}
+
+.chart-export-error {
+  margin: 0;
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+  color: var(--color-text-secondary);
+}
+
+.chart-slot {
+  position: relative;
+}
+
+.chart-png {
+  position: absolute;
+  /* above the chart panel that follows it in the slot, so a pointer reaches it (epic 3 retro E1) */
+  z-index: 1;
+  top: 0;
+  right: 0;
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--type-column-head);
+  color: var(--color-text-secondary);
+  background: none;
+  border: 1px solid var(--color-line-strong);
+  cursor: pointer;
+}
+
+.chart-png:hover,
+.chart-png:focus-visible {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.chart-preview {
+  display: block;
+  width: 100%;
+  margin: 0 0 var(--space-5);
+}
+
+.chart-run-name {
+  cursor: pointer;
+}
+
+.chart-panel svg text.chart-run-name.is-followed {
+  fill: var(--color-accent);
+  text-decoration: underline;
+}
+
+.chart-panel svg text.chart-run-name:focus-visible {
+  outline: 1px solid var(--color-accent);
+}
+
+.compare-chart-scroll {
+  max-height: calc(var(--space-8) * 10);
+  overflow-y: auto;
+}
+
+.compare-chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  align-items: center;
+  margin: 0 0 var(--space-4);
+}
+
+.compare-chart-label,
+.compare-chart-line {
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+  color: var(--color-text-secondary);
+}
+
+.chart-png-all {
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--type-column-head);
+  color: var(--color-text-secondary);
+  background: none;
+  border: 1px solid var(--color-line-strong);
+  cursor: pointer;
+}
+
+.chart-png-all:hover,
+.chart-png-all:focus-visible {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}

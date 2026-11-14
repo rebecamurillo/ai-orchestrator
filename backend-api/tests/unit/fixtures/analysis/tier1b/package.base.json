@@ -1,0 +1,5 @@
+{
+  "name": "demo",
+  "dependencies": { "zod": "^3.22.0" },
+  "devDependencies": { "vitest": "^1.0.0" }
+}

@@ -38,9 +38,9 @@ def test_a_row_with_no_story_hands_none() -> None:
 
 
 def test_the_remaining_budget_is_budget_less_spend_or_none_without_one() -> None:
-    assert agent_env.remaining(a_run(budget_usd=Decimal("10"), spend_usd=Decimal("4"))) == Decimal(
-        "6"
-    )
+    assert agent_env.remaining(
+        a_run(budget_usd=Decimal("10"), spend_usd=Decimal("4"), gate_spend_usd=Decimal("4"))
+    ) == Decimal("6")
     assert agent_env.remaining(a_run(budget_usd=None)) is None
 
 

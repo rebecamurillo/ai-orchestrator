@@ -33,6 +33,7 @@ import structlog
 
 from orchestrator.domain.ports.engine import EngineRecord, QueueEntry, QueueState
 from orchestrator.domain.values import Signal
+from orchestrator.infrastructure.dbos.calculation import build_calculation
 from orchestrator.infrastructure.dbos.config import (
     HUMAN_TOPIC,
     QUEUE_NAME,
@@ -82,6 +83,7 @@ class DbosWorkflowEngine:
         self._deps = deps
         self._walk: Callable[[str], None] | None = None
         self._turn: Callable[[str], None] | None = None
+        self._calculation: Callable[[str], None] | None = None
 
     def launch(self) -> None:
         """Start the engine: from here it dequeues Runs and recovers interrupted ones."""
@@ -90,6 +92,7 @@ class DbosWorkflowEngine:
         # before `start`, which recovers a turn a dead backend left running only once its
         # workflow is registered (AD-23)
         self._turn = build_session_turn(self._engine, self._deps)
+        self._calculation = build_calculation(self._engine, self._deps)
         self._engine.start()
         # after `start`, and that is the library's order rather than a preference: declaring
         # the queue writes its concurrency to the system database, which does not exist until
@@ -125,6 +128,20 @@ class DbosWorkflowEngine:
         if self._turn is None:
             raise RuntimeError(NOT_LAUNCHED)
         self._engine.enqueue(SESSION_QUEUE, self._turn, str(attempt_id), partition_key=str(run_id))
+
+    def enqueue_calculation(self, calculation_id: UUID) -> None:
+        """One metrics calculation on the session queue, outside the walk: its workflow id and
+        partition are the calculation id, so a repeated enqueue finds it already there."""
+        if self._calculation is None:
+            raise RuntimeError(NOT_LAUNCHED)
+        self._engine.enqueue(
+            SESSION_QUEUE, self._calculation, str(calculation_id), partition_key=str(calculation_id)
+        )
+
+    def held_calculations(self) -> frozenset[UUID]:
+        """The ids the session queue holds, enqueued or running (calculation ids never collide
+        with attempt ids: both are UUIDv7)."""
+        return frozenset(UUID(entry.workflow_id) for entry in self._engine.queued(SESSION_QUEUE))
 
     @property
     def walker_deps(self) -> WalkerDeps:

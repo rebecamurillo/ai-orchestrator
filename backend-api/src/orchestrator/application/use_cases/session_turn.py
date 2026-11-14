@@ -27,9 +27,9 @@ from uuid import UUID
 
 import structlog
 
-from orchestrator.application.rules import session
+from orchestrator.application.rules import budget, session
 from orchestrator.application.rules.signals import row_at
-from orchestrator.application.steps import agent_workdir
+from orchestrator.application.steps import agent_tail, agent_workdir, records
 from orchestrator.application.steps.context import (
     RunEnvironment,
     StepPorts,
@@ -99,7 +99,7 @@ def post_message(ports: MessagePorts, run_id: UUID, text: str) -> SessionTurn:
         turns = session.session_attempts(attempts, records)
         if session.turn_open(turns):
             raise Conflict(TURN_RUNNING)
-        if run.budget_usd is not None and run.budget_usd - run.spend_usd <= 0:
+        if run.budget_usd is not None and run.budget_usd - budget.figure(run) <= 0:
             raise Conflict(NO_BUDGET)
         started = session.last_start_payload(records)
         attempt = Attempt(
@@ -188,6 +188,7 @@ def commit_turn(ports: TurnPorts, attempt_id: UUID) -> None:
     _guarded(turn, fields, _reply)
     finished = attempt.model_copy(update={**fields, "ended_at": ctx.ports.clock.now()})
     committed(ctx, lambda attempts: attempts.mark_finished(finished))
+    agent_tail.record_facts(ctx, finished)
     if ctx.ports.spend_writes is None:
         return
     with ctx.ports.spend_writes() as spend_ports:
@@ -208,9 +209,10 @@ def _commit_trees(turn: Turn) -> dict[str, Any]:
     """Each tree's `session: turn {k}` commit; git's refusal makes the turn `error`."""
     message = session.TURN_MESSAGE.format(k=session.turn_number(turn.turns, turn.ctx.attempt))
     try:
-        agent_workdir.sweep(turn.ctx, message)
+        made = agent_workdir.sweep(turn.ctx, message)
     except GitError as error:
         return {"status": "error", "output_ref": session_dispatch.git_words(error)}
+    records.note_commits(turn.ctx, made, "session")
     return {}
 
 

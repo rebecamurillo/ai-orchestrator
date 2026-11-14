@@ -31,7 +31,9 @@ from tests.unit.application.steps.agent_fixtures import (
     a_run,
 )
 from tests.unit.application.steps.agent_tail_fixtures import END_SHA, LOG_PATH, a_tail_world
+from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
+from tests.unit.fakes.facts import FakeGatewayReadRepository
 from tests.unit.fakes.gateway import FakeGateway
 from tests.unit.fakes.git import FakeGit
 from tests.unit.fakes.harness import FakeHarness
@@ -141,7 +143,13 @@ def spend_scope(world: World, gateway: FakeGateway) -> tuple[World, FakeRunRepos
     @contextmanager
     def open_scope() -> Iterator[SpendPorts]:
         yield SpendPorts(
-            gateway=gateway, runs=runs, steps=steps, attempts=attempts, uow=FakeUnitOfWork()
+            gateway=gateway,
+            runs=runs,
+            steps=steps,
+            attempts=attempts,
+            gateway_reads=FakeGatewayReadRepository(),
+            clock=FakeClock(),
+            uow=FakeUnitOfWork(),
         )
 
     ports = replace(world.ctx.ports, spend_writes=open_scope)

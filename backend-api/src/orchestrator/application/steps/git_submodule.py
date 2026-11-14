@@ -43,6 +43,7 @@ from orchestrator.application.steps import (
     SUBMODULE_KIND,
     SUBMODULE_UPDATE_KEY,
     SUBMODULE_WORKDIR_KEY,
+    records,
 )
 from orchestrator.application.steps.context import (
     StepContext,
@@ -135,6 +136,7 @@ def _checkout(
         return _park(ctx, CHECKOUT_FAILED.format(path=workdir), output=error.output)
     if sha is None:
         return _park(ctx, NOT_A_SUBMODULE.format(path=workdir))
+    records.note_member(ctx, workdir)
     return StepResult(status="done", gate=ctx.row.gate, output_ref=sha)
 
 

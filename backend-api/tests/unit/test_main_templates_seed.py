@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from orchestrator import main as main_module
+from orchestrator.application.metrics.catalogue import CatalogueError, CatalogueInvalid
 from orchestrator.application.use_cases.templates import SeedResult
 from orchestrator.infrastructure.logging import configure_logging
 from orchestrator.infrastructure.settings import Settings
@@ -91,14 +92,21 @@ def test_run_migrations_migrates_then_seeds_and_returns_the_head(
 
     monkeypatch.setattr(main_module.db_migrations, "run_migrations", fake_migrate)
     monkeypatch.setattr(main_module, "install_operator_skills", fake_skills)
+
+    def fake_catalogue() -> int:
+        recorder.order.append("catalogue")
+        return 0
+
     monkeypatch.setattr(main_module, "seed_shipped_templates", fake_seed)
+    monkeypatch.setattr(main_module, "validate_shipped_catalogue", fake_catalogue)
     monkeypatch.setattr(main_module, "seed_folder_templates", fake_folder_seed)
     monkeypatch.setattr(main_module, "seed_harness_table", fake_harness_seed)
 
     head = main_module.run_migrations(Settings())
 
-    # story 4, 2026-11-06 (AD-26): the folder pass runs right after the shipped pass
-    assert recorder.order == ["migrate", "skills", "seed", "folder", "harness"]
+    # story 4, 2026-11-06 (AD-26): the folder pass runs right after the shipped pass.
+    # run metrics epic 1 story 1, 2026-11-13: the catalogue check sits between the two
+    assert recorder.order == ["migrate", "skills", "seed", "catalogue", "folder", "harness"]
     assert head == "0004_template"
 
 
@@ -300,3 +308,28 @@ def test_seed_shipped_templates_does_not_warn_when_files_are_found(
 
     out = capsys.readouterr().out
     assert "no shipped templates found" not in out
+
+
+def test_an_invalid_catalogue_stops_start_up_before_the_folder_seed_and_the_engine(
+    env: dict[str, str], monkeypatch: pytest.MonkeyPatch, recorder: _Recorder
+) -> None:
+    """AC7, run metrics epic 1 story 1 (2026-11-13): as an invalid shipped template does."""
+    error = CatalogueInvalid((CatalogueError("cost.yaml", "cost.gateway", "unknown field colour"),))
+
+    def refuse() -> int:
+        raise error
+
+    def unreachable(*_: Any) -> None:
+        recorder.order.append("reached")
+
+    monkeypatch.setattr(main_module.db_migrations, "run_migrations", lambda settings: "head")
+    monkeypatch.setattr(main_module, "install_operator_skills", lambda settings: [])
+    monkeypatch.setattr(main_module, "seed_shipped_templates", lambda settings: [])
+    monkeypatch.setattr(main_module, "validate_shipped_catalogue", refuse)
+    monkeypatch.setattr(main_module, "seed_folder_templates", unreachable)
+    monkeypatch.setattr(main_module, "launch_engine", unreachable)
+
+    with pytest.raises(CatalogueInvalid, match=r"cost\.yaml: cost\.gateway"):
+        main_module.run_migrations(Settings())
+
+    assert recorder.order == []

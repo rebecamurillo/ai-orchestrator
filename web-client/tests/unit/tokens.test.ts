@@ -46,6 +46,7 @@ function token(name: string): string | undefined {
 /** UX-DR1's palette plus the diagram-surface fourth signal. Four grounds, two hairlines, three
  *  texts, four signals (criterion added by story 1-5, 2026-09-16 per SPEC.md / AD-15), accent.
  *  Revised: story 1-5 (2026-09-16) — signal-criterion enters tokens for the diagram surface only.
+ *  Revised: epic 3 story 1 (2026-11-13, D7/T18) — three chart colours, for chart marks and exports only.
  */
 const COLORS: Record<string, string> = {
   '--color-bg': '#0B0D0E',
@@ -63,6 +64,9 @@ const COLORS: Record<string, string> = {
   '--color-signal-failed': '#E05252',
   '--color-signal-criterion': '#6C8CD5',
   '--color-accent': '#7FD4C1',
+  '--color-chart-data-1': '#3987E5',
+  '--color-chart-data-2': '#E0702F',
+  '--color-chart-ink': '#767676',
 };
 
 /**
@@ -101,7 +105,7 @@ describe('colours', () => {
     expect(token(name)).toBe(canonical(value));
   });
 
-  it('carries no colour beyond the fifteen the design names (fourteen UX-DR1 + signal-criterion, story 1-5 2026-09-16)', () => {
+  it('carries no colour beyond the eighteen the design names (fourteen UX-DR1 + signal-criterion, story 1-5 2026-09-16, + three chart tokens, epic 3 story 1, 2026-11-13, D7/T18)', () => {
     const declared = [...TOKENS.keys()].filter((name) => name.startsWith('--color-'));
 
     expect(declared.sort()).toEqual(Object.keys(COLORS).sort());

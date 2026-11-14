@@ -17,6 +17,7 @@ from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
     SQLAlchemyAttemptRepository,
     SQLAlchemyInstanceHoldRepository,
+    SQLAlchemyMetricCalculationRepository,
     SQLAlchemyRunRepository,
     SQLAlchemyStepRunRepository,
     SQLAlchemyUnitOfWork,
@@ -39,6 +40,7 @@ def activity_ports(request: Request) -> Iterator[ActivityPorts]:
             ),
             attempts=SQLAlchemyAttemptRepository(uow.session),
             dbos_application_version=str(settings.dbos_application_version),
+            calculations=SQLAlchemyMetricCalculationRepository(uow.session),
         )
 
 
@@ -53,4 +55,5 @@ def hold_ports(request: Request) -> Iterator[HoldPorts]:
             holds=SQLAlchemyInstanceHoldRepository(scope.session),
             uow=SessionUnitOfWork(scope.session),
             clock=SystemClock(),
+            calculations=SQLAlchemyMetricCalculationRepository(scope.session),
         )

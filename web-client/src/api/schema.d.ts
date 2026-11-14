@@ -179,6 +179,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metrics/catalogue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every metric the instance describes */
+        get: operations["read_catalogue_api_v1_metrics_catalogue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metrics/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Selected Runs of one project, side by side */
+        get: operations["read_compare_api_v1_metrics_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metrics/compare.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The comparison as one CSV row per stored value */
+        get: operations["export_csv_api_v1_metrics_compare_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metrics/compare.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The comparison as JSON: the runs, the same rows, the catalogue once */
+        get: operations["export_json_api_v1_metrics_compare_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metrics/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project's Runs, newest first, with what the Metrics table shows */
+        get: operations["read_runs_api_v1_metrics_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metrics/spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Spend this month per project, both figures, cancelled Runs apart */
+        get: operations["read_spend_api_v1_metrics_spend_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ping": {
         parameters: {
             query?: never;
@@ -510,7 +612,12 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Set or restore a Run's label
+         * @description A string of 1-120 characters sets the label; `null` restores the computed default.
+         *     Allowed at every status; never touches the status.
+         */
+        patch: operations["patch_label_api_v1_runs__run_id__patch"];
         trace?: never;
     };
     "/api/v1/runs/{run_id}/activity": {
@@ -527,6 +634,57 @@ export interface paths {
          * @description Increment `run.active_seconds` by `focused_seconds` and return the new total.
          */
         post: operations["report_activity_api_v1_runs__run_id__activity_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The analyses behind a Run's shown result version */
+        get: operations["list_run_analyses_api_v1_runs__run_id__analysis_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/analysis/{analysis_id}/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The possible security and bug findings opengrep listed for one analysis */
+        get: operations["read_analysis_findings_api_v1_runs__run_id__analysis__analysis_id__findings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/analysis/{analysis_id}/sarif/{tool}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The SARIF report one tool wrote for one analysis of a Run */
+        get: operations["read_analysis_sarif_api_v1_runs__run_id__analysis__analysis_id__sarif__tool__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -643,6 +801,91 @@ export interface paths {
          * @description `build_run_graph` (SPEC CAP-12, AD-15): the planned rows, chained, grouped, coloured.
          */
         get: operations["run_graph_api_v1_runs__run_id__graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A Run's metric values: a stored version, or the values so far on a live Run */
+        get: operations["read_metrics_api_v1_runs__run_id__metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/metrics/calculate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Calculate a new result version of an ended Run */
+        post: operations["calculate_api_v1_runs__run_id__metrics_calculate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/metrics/calculations/{n}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The state and output of the calculation that makes version n */
+        get: operations["read_calculation_api_v1_runs__run_id__metrics_calculations__n__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/metrics/gateway-reads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Per attempt, the gateway reads beside the harness figure */
+        get: operations["read_gateway_reads_api_v1_runs__run_id__metrics_gateway_reads_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/metrics/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The result versions of a Run, with the methods each changed */
+        get: operations["read_versions_api_v1_runs__run_id__metrics_versions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1042,6 +1285,42 @@ export interface components {
             /** Token */
             token: string;
         };
+        /** AnalysisOut */
+        AnalysisOut: {
+            /**
+             * Analysis Id
+             * Format: uuid
+             */
+            analysis_id: string;
+            /** Base */
+            base: string | null;
+            /** Base Branch */
+            base_branch: string | null;
+            /** Commits Outside Run */
+            commits_outside_run: number | null;
+            /** Declaration Hash */
+            declaration_hash: string | null;
+            /** Head */
+            head: string | null;
+            /** Languages */
+            languages: string[] | null;
+            /** Lookup Date */
+            lookup_date: string | null;
+            /** Reason */
+            reason: string;
+            /** Repository Path */
+            repository_path: string;
+            /** Rule Pack Hash */
+            rule_pack_hash?: string | null;
+            /** Sarif Tools */
+            sarif_tools: string[];
+            /** Status */
+            status: string;
+            /** Tools */
+            tools: components["schemas"]["ToolVersionOut"][];
+            /** Vulnerability Db Date */
+            vulnerability_db_date: string | null;
+        };
         /**
          * AnchorEditOut
          * @description One anchor the session changed, spelled as AD-17 spells a hit.
@@ -1115,6 +1394,24 @@ export interface components {
             /** Tokens Out */
             tokens_out: number | null;
         };
+        /** AttemptGatewayReadsOut */
+        AttemptGatewayReadsOut: {
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Attempt N */
+            attempt_n: number;
+            /** Harness Usd */
+            harness_usd: string | null;
+            /** Reads */
+            reads: components["schemas"]["GatewayReadOut"][];
+            /** Role */
+            role: string;
+            /** Row Path */
+            row_path: string;
+        };
         /**
          * AttributionOut
          * @description The blocked Question's eyebrow (5.10, SPEC CAP-10): `Agent · {harness} · {model} ·
@@ -1160,6 +1457,48 @@ export interface components {
             /** Generated At */
             generated_at: string;
         };
+        /** CalculationOut */
+        CalculationOut: {
+            /** Ended At */
+            ended_at: string | null;
+            /** Entry Point */
+            entry_point: ("at_attempt_end" | "workflow_step" | "manual")[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Output */
+            output: string;
+            /**
+             * Queued At
+             * Format: date-time
+             */
+            queued_at: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "running" | "failed" | "done";
+            /** Target N */
+            target_n: number;
+        };
+        /** CancelledSpendOut */
+        CancelledSpendOut: {
+            /** Gateway */
+            gateway: string;
+            /** Harness */
+            harness: string;
+            /** Runs */
+            runs: number;
+        };
         /** CardOut */
         CardOut: {
             /** Age Seconds */
@@ -1177,6 +1516,10 @@ export interface components {
             id: string;
             /** Kind Label */
             kind_label: string | null;
+            /** Label */
+            label?: string;
+            /** Label Set By Operator */
+            label_set_by_operator?: boolean;
             /** Needs You Since */
             needs_you_since: string | null;
             /** Park Kind */
@@ -1197,6 +1540,49 @@ export interface components {
             token: string;
             /** Version */
             version: number;
+        };
+        /** CatalogueEntryOut */
+        CatalogueEntryOut: {
+            /** Additive */
+            additive: boolean | "within_scope_type";
+            /** Component Of */
+            component_of: string | null;
+            /** Fingerprint Group */
+            fingerprint_group: boolean;
+            /** Group */
+            group: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "H" | "A";
+            /** Limits */
+            limits: string | null;
+            /** Methods */
+            methods: components["schemas"]["CatalogueMethodOut"][];
+            /** Missing Words */
+            missing_words: string[];
+            /** Scopes */
+            scopes: string[];
+            /** Source */
+            source: string;
+            /** Unit */
+            unit: string;
+        };
+        /** CatalogueMethodOut */
+        CatalogueMethodOut: {
+            /** Description */
+            description: string;
+            /** N */
+            n: number;
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
+            };
         };
         /**
          * ChannelIn
@@ -1369,6 +1755,135 @@ export interface components {
              */
             status: "pending" | "ok" | "failed";
         };
+        /** CompareCellOut */
+        CompareCellOut: {
+            /** Attempt N */
+            attempt_n: number | null;
+            /** Carried From */
+            carried_from: number | null;
+            /** Method Id */
+            method_id: string;
+            /** Missing */
+            missing: string | null;
+            /** Model */
+            model: string | null;
+            /** Partial M */
+            partial_m: number | null;
+            /** Partial N */
+            partial_n: number | null;
+            /** Repository */
+            repository: string | null;
+            /** Role */
+            role: string | null;
+            /** Scope Key */
+            scope_key: string;
+            /** Scope Label */
+            scope_label: string | null;
+            /** Scope Type */
+            scope_type: string;
+            /** Source */
+            source: string | null;
+            /** Unit */
+            unit: string;
+            /** Value Num */
+            value_num: string | null;
+        };
+        /** CompareExportOut */
+        CompareExportOut: {
+            /** Catalogue */
+            catalogue: components["schemas"]["CatalogueEntryOut"][];
+            /** Rows */
+            rows: components["schemas"]["ExportRowOut"][];
+            /** Runs */
+            runs: components["schemas"]["CompareRunHeaderOut"][];
+        };
+        /** CompareMetricOut */
+        CompareMetricOut: {
+            /** Cells */
+            cells: {
+                [key: string]: components["schemas"]["CompareCellOut"][];
+            };
+            /** Families */
+            families: components["schemas"]["FamilyOut"][];
+            /** Harness Delta */
+            harness_delta: {
+                [key: string]: string;
+            };
+            /** Methods */
+            methods: {
+                [key: string]: string[];
+            };
+            /** Methods Differ */
+            methods_differ: boolean;
+            /** Metric Id */
+            metric_id: string;
+            /**
+             * Tool Versions Differ
+             * @default false
+             */
+            tool_versions_differ: boolean;
+            /**
+             * Toolsets
+             * @default {}
+             */
+            toolsets: {
+                [key: string]: components["schemas"]["ToolVersionOut"][];
+            };
+        };
+        /** CompareOut */
+        CompareOut: {
+            /** Diff Size */
+            diff_size: {
+                [key: string]: string;
+            };
+            /** Metrics */
+            metrics: components["schemas"]["CompareMetricOut"][];
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Runs */
+            runs: components["schemas"]["CompareRunHeaderOut"][];
+            same_work: components["schemas"]["SameWorkOut"];
+        };
+        /** CompareRunHeaderOut */
+        CompareRunHeaderOut: {
+            /** Base Branch */
+            base_branch: string | null;
+            /** Harness */
+            harness: string | null;
+            /** Label */
+            label: string;
+            /** Label Set By Operator */
+            label_set_by_operator: boolean;
+            /** Models By Role */
+            models_by_role: {
+                [key: string]: string[];
+            };
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Selected Version */
+            selected_version: number | null;
+            /** Short Id */
+            short_id: string;
+            /** Status */
+            status: string;
+            stories_done: components["schemas"]["StoriesDoneOut"] | null;
+            /** Subscription */
+            subscription: boolean | null;
+            /** Template Name */
+            template_name: string;
+            /** Template Version */
+            template_version: string;
+            /** Versions Available */
+            versions_available: number[];
+        };
         /** CostOut */
         CostOut: {
             /** Active Seconds */
@@ -1460,6 +1975,127 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** ExportRowOut */
+        ExportRowOut: {
+            /** Additive */
+            additive: string;
+            /** Attempt N */
+            attempt_n: string;
+            /** Base Commit */
+            base_commit: string;
+            /** Branch */
+            branch: string;
+            /** Calculated At */
+            calculated_at: string;
+            /** Carried From */
+            carried_from: string;
+            /** Commit */
+            commit: string;
+            /** Component Of */
+            component_of: string;
+            /** Entry Point */
+            entry_point: string;
+            /** Harness */
+            harness: string;
+            /** Method Id */
+            method_id: string;
+            /** Metric Id */
+            metric_id: string;
+            /** Missing */
+            missing: string;
+            /** Model */
+            model: string;
+            /** Origin Model */
+            origin_model: string;
+            /** Origin Repository */
+            origin_repository: string;
+            /** Project Id */
+            project_id: string;
+            /** Repository */
+            repository: string;
+            /** Result Version */
+            result_version: string;
+            /** Role */
+            role: string;
+            /** Run Id */
+            run_id: string;
+            /** Run Label */
+            run_label: string;
+            /** Scope Key */
+            scope_key: string;
+            /** Scope Label */
+            scope_label: string;
+            /** Scope Type */
+            scope_type: string;
+            /** Source */
+            source: string;
+            /** Template Name */
+            template_name: string;
+            /** Template Version */
+            template_version: string;
+            /** Unit */
+            unit: string;
+            /** Value Num */
+            value_num: string;
+        };
+        /** FamilyCellOut */
+        FamilyCellOut: {
+            /** Missing */
+            missing: string | null;
+            /** Roles */
+            roles: string[];
+            /** Value Num */
+            value_num: string | null;
+        };
+        /** FamilyOut */
+        FamilyOut: {
+            /** Cells */
+            cells: {
+                [key: string]: components["schemas"]["FamilyCellOut"];
+            };
+            /** Family */
+            family: string;
+            /** Source */
+            source: string | null;
+            /** Step Structure Differs */
+            step_structure_differs: boolean;
+        };
+        /** FindingOut */
+        FindingOut: {
+            /** Cwe */
+            cwe: string[];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "security" | "bug";
+            /** Line */
+            line: number | null;
+            /** Path */
+            path: string;
+            /** Rule */
+            rule: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "high" | "medium" | "low";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "new" | "unchanged" | "absent";
+        };
+        /** FindingsOut */
+        FindingsOut: {
+            /**
+             * Analysis Id
+             * Format: uuid
+             */
+            analysis_id: string;
+            /** Items */
+            items: components["schemas"]["FindingOut"][];
+        };
         /** GateRecordOut */
         GateRecordOut: {
             /**
@@ -1484,6 +2120,29 @@ export interface components {
             path: string | null;
             /** Text */
             text: string;
+        };
+        /** GatewayReadOut */
+        GatewayReadOut: {
+            /** Calls */
+            calls: number | null;
+            /** Capped */
+            capped: boolean;
+            /** Provisional */
+            provisional: boolean;
+            /**
+             * Read At
+             * Format: date-time
+             */
+            read_at: string;
+            /** Rows */
+            rows: number | null;
+            /**
+             * Trigger
+             * @enum {string}
+             */
+            trigger: "attempt_end" | "run_end" | "recalculation";
+            /** Usd */
+            usd: string;
         };
         /**
          * GraphOut
@@ -1830,6 +2489,78 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** MetricValueOut */
+        MetricValueOut: {
+            /** Attempt N */
+            attempt_n: number | null;
+            /** Carried From */
+            carried_from: number | null;
+            /** Method Id */
+            method_id: string;
+            /** Metric Id */
+            metric_id: string;
+            /** Missing */
+            missing: string | null;
+            /** Model */
+            model: string | null;
+            origin: components["schemas"]["OriginOut"] | null;
+            /** Partial M */
+            partial_m: number | null;
+            /** Partial N */
+            partial_n: number | null;
+            /** Repository */
+            repository: string | null;
+            /** Role */
+            role: string | null;
+            /** Scope Key */
+            scope_key: string;
+            /** Scope Label */
+            scope_label: string | null;
+            /** Scope Type */
+            scope_type: string;
+            /** Source */
+            source: string | null;
+            /** Unit */
+            unit: string;
+            /** Value Num */
+            value_num: string | null;
+        };
+        /** MetricsRunOut */
+        MetricsRunOut: {
+            /** Base Branch */
+            base_branch: string | null;
+            /** Branch */
+            branch: string | null;
+            /** Gateway */
+            gateway: string;
+            /** Harness */
+            harness: string | null;
+            /** Harness Spend */
+            harness_spend: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Label Set By Operator */
+            label_set_by_operator: boolean;
+            /** Latest Version */
+            latest_version: number | null;
+            /** Selectable */
+            selectable: boolean;
+            /** Status */
+            status: string;
+            /** Subscription */
+            subscription: boolean | null;
+            /** Template Name */
+            template_name: string;
+            /** Template Version */
+            template_version: number;
+            /** Wall Clock Seconds */
+            wall_clock_seconds: number | null;
+        };
         /**
          * ModelsOut
          * @description The models a harness can use, and where that list comes from.
@@ -1899,10 +2630,72 @@ export interface components {
             /** Label */
             label: string;
         };
+        /** OriginOut */
+        OriginOut: {
+            /** Base Commit */
+            base_commit: string | null;
+            /** Base Commit Na */
+            base_commit_na: string | null;
+            /** Branch */
+            branch: string | null;
+            /** Branch Na */
+            branch_na: string | null;
+            /** Commit */
+            commit: string | null;
+            /** Commit Na */
+            commit_na: string | null;
+            /** Harness */
+            harness: string | null;
+            /** Harness Na */
+            harness_na: string | null;
+            /** Origin Model */
+            origin_model: string | null;
+            /** Origin Model Na */
+            origin_model_na: string | null;
+            /** Origin Repository */
+            origin_repository: string | null;
+            /** Origin Repository Na */
+            origin_repository_na: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Template Name */
+            template_name: string;
+            /** Template Version */
+            template_version: number;
+        };
+        /** Page[AttemptGatewayReadsOut] */
+        Page_AttemptGatewayReadsOut_: {
+            /** Items */
+            items: components["schemas"]["AttemptGatewayReadsOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[CatalogueEntryOut] */
+        Page_CatalogueEntryOut_: {
+            /** Items */
+            items: components["schemas"]["CatalogueEntryOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[HarnessOut] */
         Page_HarnessOut_: {
             /** Items */
             items: components["schemas"]["HarnessOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[MetricsRunOut] */
+        Page_MetricsRunOut_: {
+            /** Items */
+            items: components["schemas"]["MetricsRunOut"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -1913,10 +2706,24 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[ProjectSpendOut] */
+        Page_ProjectSpendOut_: {
+            /** Items */
+            items: components["schemas"]["ProjectSpendOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[RepositoryOut] */
         Page_RepositoryOut_: {
             /** Items */
             items: components["schemas"]["RepositoryOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[ResultVersionOut] */
+        Page_ResultVersionOut_: {
+            /** Items */
+            items: components["schemas"]["ResultVersionOut"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2214,6 +3021,10 @@ export interface components {
             id: string;
             /** Is Init */
             is_init: boolean;
+            /** Label */
+            label?: string;
+            /** Label Set By Operator */
+            label_set_by_operator?: boolean;
             /** Reason */
             reason: string;
             /**
@@ -2225,6 +3036,29 @@ export interface components {
             template: string;
             /** Token */
             token: string;
+        };
+        /** ProjectSpendOut */
+        ProjectSpendOut: {
+            cancelled: components["schemas"]["CancelledSpendOut"];
+            /** Gateway */
+            gateway: string;
+            /** Gateway Reported */
+            gateway_reported: boolean;
+            /** Harness */
+            harness: string;
+            /** Harness Reported */
+            harness_reported: boolean;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Runs */
+            runs: number;
+            /** Subscription */
+            subscription: boolean | null;
         };
         /**
          * ProjectUpdate
@@ -2392,6 +3226,37 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** ResultVersionOut */
+        ResultVersionOut: {
+            /**
+             * Calculated At
+             * Format: date-time
+             */
+            calculated_at: string;
+            /** Entry Point */
+            entry_point: ("at_attempt_end" | "workflow_step" | "manual")[];
+            /** Methods Changed */
+            methods_changed: string[];
+            /** N */
+            n: number;
+        };
+        /** RunAnalysesOut */
+        RunAnalysesOut: {
+            /** Items */
+            items: components["schemas"]["AnalysisOut"][];
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Step Entries
+             * @default []
+             */
+            step_entries: components["schemas"]["CatalogueEntryOut"][];
+            /** Version */
+            version: number | null;
+        };
         /**
          * RunDetailOut
          * @description `GET /runs/{run_id}/detail`. One request, every section the screen shows.
@@ -2441,6 +3306,10 @@ export interface components {
             inputs: {
                 [key: string]: unknown;
             };
+            /** Label */
+            label?: string;
+            /** Label Set By Operator */
+            label_set_by_operator?: boolean;
             /** Last Opened At */
             last_opened_at?: string | null;
             /** Manual Estimate H */
@@ -2667,6 +3536,8 @@ export interface components {
             inputs?: {
                 [key: string]: unknown;
             };
+            /** Label */
+            label?: string | null;
             /** Manual Estimate H */
             manual_estimate_h?: number | string | null;
             /** Model */
@@ -2695,6 +3566,30 @@ export interface components {
             template_name: string;
             /** Template Version */
             template_version: number;
+        };
+        /**
+         * RunLabelIn
+         * @description `PATCH /runs/{id}`'s body: a string sets the label, `null` restores the default.
+         */
+        RunLabelIn: {
+            /** Label */
+            label: string | null;
+        };
+        /** RunMetricsOut */
+        RunMetricsOut: {
+            /** Items */
+            items: components["schemas"]["MetricValueOut"][];
+            /** Latest */
+            latest: number | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Values So Far */
+            values_so_far: boolean;
+            /** Version */
+            version: number | null;
         };
         /**
          * RunNodeOut
@@ -2742,6 +3637,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Label */
+            label?: string;
+            /** Label Set By Operator */
+            label_set_by_operator?: boolean;
             /** Park Seq */
             park_seq?: number;
             /** Pause Requested */
@@ -2771,6 +3670,26 @@ export interface components {
             template: string;
             /** Version */
             version: number;
+        };
+        /** SameWorkOut */
+        SameWorkOut: {
+            /** Differs */
+            differs: boolean;
+            /** Runs */
+            runs: {
+                [key: string]: components["schemas"]["SameWorkRunOut"];
+            };
+        };
+        /** SameWorkRunOut */
+        SameWorkRunOut: {
+            /** Base Commits */
+            base_commits: {
+                [key: string]: string | null;
+            };
+            /** Initiative Folder */
+            initiative_folder: string | null;
+            /** Stories Planned */
+            stories_planned: number | null;
         };
         /**
          * SaveVersionIn
@@ -2938,6 +3857,13 @@ export interface components {
             status: string;
             /** Token */
             token: string;
+        };
+        /** StoriesDoneOut */
+        StoriesDoneOut: {
+            /** Done */
+            done: number;
+            /** Planned */
+            planned: number;
         };
         /** StoryCellOut */
         StoryCellOut: {
@@ -3111,6 +4037,13 @@ export interface components {
             in_progress: boolean;
             /** Session Lifetime Ends At */
             session_lifetime_ends_at: string | null;
+        };
+        /** ToolVersionOut */
+        ToolVersionOut: {
+            /** Tool */
+            tool: string;
+            /** Version */
+            version: string;
         };
         /**
          * ValidateIn
@@ -3636,6 +4569,289 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                     "text/plain": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_catalogue_api_v1_metrics_catalogue_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_CatalogueEntryOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_compare_api_v1_metrics_compare_get: {
+        parameters: {
+            query: {
+                /** @description Run ids, comma separated, in column order. */
+                runs: string;
+                /** @description `{run}:{n}` pairs, comma separated. */
+                v?: string;
+                /** @description Hide labels, template and model names. */
+                blind?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompareOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id, or a Run has no such version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query value is not valid, or the selection is not comparable. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_csv_api_v1_metrics_compare_csv_get: {
+        parameters: {
+            query: {
+                /** @description Run ids, comma separated, in column order. */
+                runs: string;
+                /** @description `{run}:{n}` pairs, comma separated. */
+                v?: string;
+                /** @description Hide labels, template and model names. */
+                blind?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id, or a Run has no such version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query value is not valid, or the selection is not comparable. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    export_json_api_v1_metrics_compare_json_get: {
+        parameters: {
+            query: {
+                /** @description Run ids, comma separated, in column order. */
+                runs: string;
+                /** @description `{run}:{n}` pairs, comma separated. */
+                v?: string;
+                /** @description Hide labels, template and model names. */
+                blind?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompareExportOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id, or a Run has no such version. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query value is not valid, or the selection is not comparable. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_runs_api_v1_metrics_runs_get: {
+        parameters: {
+            query: {
+                project: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_MetricsRunOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A query value is not valid, or the selection is not comparable. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_spend_api_v1_metrics_spend_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ProjectSpendOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
         };
@@ -4825,6 +6041,62 @@ export interface operations {
             };
         };
     };
+    patch_label_api_v1_runs__run_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunLabelIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSummaryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The label is empty or over 120 characters, or `run_id` is not a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
     report_activity_api_v1_runs__run_id__activity_post: {
         parameters: {
             query?: never;
@@ -4870,6 +6142,167 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID, or `focused_seconds` is outside [1, 3600]. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_run_analyses_api_v1_runs__run_id__analysis_get: {
+        parameters: {
+            query?: {
+                v?: number | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunAnalysesOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, or no such result version of it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_analysis_findings_api_v1_runs__run_id__analysis__analysis_id__findings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                analysis_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingsOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such analysis of the Run, or opengrep stored no findings for it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path value is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_analysis_sarif_api_v1_runs__run_id__analysis__analysis_id__sarif__tool__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                analysis_id: string;
+                tool: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stored SARIF, decompressed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/sarif+json": Record<string, never>;
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such analysis of the Run, or the tool wrote no SARIF for it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path value is not valid. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5229,6 +6662,279 @@ export interface operations {
                 };
             };
             /** @description `run_id` does not parse as a UUID. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_metrics_api_v1_runs__run_id__metrics_get: {
+        parameters: {
+            query?: {
+                v?: number | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunMetricsOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, version or calculation. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    calculate_api_v1_runs__run_id__metrics_calculate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalculationOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Run has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The Run has not ended, or a calculation of it is queued or running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_calculation_api_v1_runs__run_id__metrics_calculations__n__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                n: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalculationOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, version or calculation. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_gateway_reads_api_v1_runs__run_id__metrics_gateway_reads_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AttemptGatewayReadsOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, version or calculation. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_versions_api_v1_runs__run_id__metrics_versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ResultVersionOut_"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, version or calculation. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value is not valid. */
             422: {
                 headers: {
                     [name: string]: unknown;

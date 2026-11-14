@@ -1,68 +1,88 @@
-# Test Automation Summary — orchestrator-instance-guide / epic-3-bootstrap
+# Test Automation Summary — orchestrator-run-metrics / epic-6-analysis-tier2
 
-Generated: 2026-11-13 (dispatch mode with an empty story id, so it covers the whole epic)
-Spec: `initiatives/orchestrator-instance-guide/epic-3-bootstrap/SPEC.md` (path relative to the hub)
-Stories: 1–4 (commits `ffcc010`..`ba4a325`)
-Previous summary (epic 2): in git history at `acff0e3`.
+Generated: 2026-11-13. This run was dispatched with an empty story id, so it covers the whole epic.
+Spec: `initiatives/orchestrator-run-metrics/epic-6-analysis-tier2/SPEC.md` (the path is relative to the hub).
+Stories: 1–4 (commits `2b51768`..`a7fd657`).
+Previous summary (epic-5-analysis-tier1): in git history at `994ab1a`.
 
-Framework: the project's own, pytest + httpx in `backend-api/tests/e2e` (`make e2e-api`). The
-epic changed no UI, so no Playwright test was added.
+Framework: the project's own suites.
+- pytest and httpx in `backend-api/tests/e2e`, run by `make e2e-api`.
+- Playwright in `web-client/tests/e2e`, run by `make e2e-ui`.
+
+Stories 1 and 2 are analysis logic over the `ProcessRunner` and `AnalysisTools` ports. Their unit suites cover them with fakes and recorded Opengrep SARIF. End to end, this run reaches them where a stack adds something: their `n/a` words on a real Run, and the findings route. No existing test file was touched. No shipped template is read.
 
 ## Generated Tests
 
 ### API (e2e) tests — `make e2e-api` gate
 
-- [x] `backend-api/tests/e2e/test_bootstrap.py` (11 tests). The unit suite proves the version
-  answer through a test client and the installer against a `curl` stub. This module tests what
-  only the running image can show:
-  - **CAP-1 / C1:** `GET /api/v1/version` without a bearer gets 401. With one, the answer
-    holds a non-empty `app_version`, `bootstrap_contract == 1`, exactly the three `guide`
-    addresses, and `kit_version` as a key whose value is `null`. The MCP `version` tool returns
-    the same answer as the route. Its description names `refusal-bootstrap-contract`, says to
-    continue, and never says to stop on a mismatch. `read_guide` takes one optional `id`. The
-    three guide addresses from the answer resolve on this instance (index → a listed page →
-    the same text through `guide://{id}`). The page `errors/refusal-bootstrap-contract` is
-    served.
-  - **CAP-3:** both kit routes require the bearer. The served archive has nothing under
-    `skills/` or `bin/` and holds `bootstrap/SKILL.md.tmpl`, `install.sh` and the three `mcp/`
-    templates (AC-4). The installer served by `/kit/install.sh` is byte-identical to the
-    `install.sh` inside the archive.
-  - **CAP-2 (AC-1/AC-3 over the wire):** the served installer is piped into `bash -s --
-    --harness all --base-url <stack>/`, as the connect page documents. It runs in `tmp_path`,
-    with `HOME`, `CODEX_HOME` and `XDG_CONFIG_HOME` there too. Checked:
-    - it fetches the kit from this instance's `/kit/archive` and its probe reports
-      `bootstrap_contract 1`;
-    - all three MCP configurations parse (`json`, `tomllib`), point at `<stack>/mcp` (trailing
-      `/` stripped) and refer to the token variable by name;
-    - `bootstrap.json` holds contract 1, and each skill folder holds exactly `SKILL.md`;
-    - no written file and no output contains the token value, no written file contains the
-      instance's `app_version`, and no placeholder is left unsubstituted.
+- [x] `backend-api/tests/e2e/test_run_analysis_tier23.py` (11 tests). It reuses the helpers of `test_run_analysis.py` and `test_run_metrics_versions.py`. Its templates are fresh `e2e-tier3-<hex>` fixtures defined inline in the module.
+  - **The `stepped` fixture** runs a template that declares `metrics: step.{name}.heldout_tests` (format `junit`, path `out/heldout.xml`). Its rows are `git.worktree` → shell → `git.commit` → `git.push` → `metrics.analyse`.
+    - The shell row writes `out/heldout.xml` (18 passed, 2 failed) and `out/other.xml`, which no entry declares.
+    - The fixture waits for v1.
+  - **Findings route (story 4)**:
+    - Without the bearer: 401 problem+json.
+    - Unknown Run or analysis: 404 problem+json.
+    - Analysis id that is not a UUID: 422.
+    - The real analysis of a repository with no `sast.rules`: 404, and `rule_pack_hash` is null.
+  - **Stories 1 and 2 with no declaration**:
+    - All five Tier 2 ids read `n/a — tier 2 not declared` with no number.
+    - Both finding ids read `n/a — no rules declared`.
+  - **Story 3, the template store**:
+    - `heldout_tests` without the prefix is refused with 422 and the reason `metric id must be step.{template}.{name}`, at an integer line.
+    - Another template's prefix is refused in the same way.
+  - **Story 3, import**:
+    - v1 holds passed 18, failed 2, errored 0 and skipped 0 under the declared id, with method `{id}@1`.
+    - The analysis response's `step_entries` lists the entry by its label.
+    - The calculation output contains `not catalogued: out/other.xml` and does not contain the declared path.
 
-    The release check uses the release the instance actually serves, not the AD-33 regex,
-    because the stack address (`127.0.0.1:<port>`) matches that regex (SPEC § Constraints).
-    The regex check stays in the unit suite, which renders with host names.
+### E2E (UI) tests — `make e2e-ui` gate
 
-No assertion reads page prose or pins which pages or template steps ship (member hard rule 6).
-No existing test file was changed (member hard rule 1).
+- [x] `web-client/tests/e2e/static-signals-tier23.spec.ts` (6 tests). Every read is answered with `page.route()` through the real same-origin proxy, following the `static-signals.spec.ts` precedent. The fixture is a hub Run: repository `.` declared no Tier 2, and `repos/app` ran Tier 2 and Opengrep.
+  - **Partial totals**:
+    - The Run row of new linter warnings reads `partial · 1 of 2 repositories`.
+    - `.` reads `n/a — tier 2 not declared`.
+    - `repos/app` has no partial word.
+  - **Security findings**:
+    - The row reads `3 possible high`, `0 possible medium`, `0 possible low` and `unchanged 1`, and is partial.
+    - Clicking the count opens the drawer. It lists only the three new security findings (rule, path:line, severity, CWE), leaving out the unchanged one and the bug.
+    - The link `SARIF · opengrep · repos/app` points to `/api/runs/{id}/analysis/{aid}/sarif/opengrep`.
+  - **Footer**: `rule packs: opengrep abcdef12`.
+  - **Test-first**:
+    - The line reads `test-first order · method followed, not quality · 6 of 8 stories readable from the logs` (4/2/0/2 outcomes).
+    - Its hint opens on the three limits.
+  - **Step metric**: `held-out tests` reads `passed 18` and `failed 2`.
+  - The Tier 2 and step rows appear only under ALL METRICS, so the spec opens that set first.
 
-## Verification
+## Results
 
-- `ruff format`, `ruff check`, `mypy` on the new module: clean. `make lint`: green.
-- `pytest --collect-only tests/e2e/test_bootstrap.py`: 11 tests collected.
-- **Not run.** The SPEC forbids the Run from running `make e2e*` or starting a stack, so these
-  tests have not been run against a stack. The Operator runs them with `make e2e`, the
-  disposable `aio-e2e` stack.
-- The piped-installer test needs `bash`, `curl`, `tar` and `python3` on the e2e runner (the
-  host, through `uv run`). If any is missing, the test fails and names it; it never skips.
+- **UI:** after `pnpm build`, ran `E2E_PREVIEW_PORT=4399 E2E_STUB_BACKEND_PORT=8799 pnpm exec playwright test tests/e2e/static-signals-tier23.spec.ts`.
+  - It passes 6/6, and 18/18 with `--repeat-each=3`.
+  - eslint, prettier and `tsc --noEmit` are clean.
+  - Nothing on 4321 was touched.
+- **API:**
+  - `ruff check` and `ruff format --check` are clean, and `pytest --collect-only` collects 11 tests.
+  - The unit meta-tests over test files (`-k "source_limit or e2e or pair or marker"`) gave 1779 passed.
+  - The fixture template was validated offline:
+    - With `validate()`, the declared id passes. Both refusals give line 9 and the expected reason.
+    - The shell row was run under `sh`. `import_junit` reads its report as 18/2/0/0, and `sniff` reads `out/other.xml` as `junit`.
+  - The bearer case was run in-process (`create_app(Settings())` with `TestClient`) and returned 401 problem+json.
+  - **The other 10 API tests were not run against a stack.** The epic forbids starting or calling a running instance, and `make e2e` builds one. They will run on the next `make e2e`.
+
+## Findings (to watch, not confirmed as defects)
+
+1. **The `stepped` fixture assumes the shell row's cwd is the Run's worktree**, as in the epic 5 module. If `git.commit` finds nothing to commit, check this first.
+2. **The `n/a` assertions assume a summary row exists** for each Tier 2 and finding id at some scope on a single-repository Run. If `make e2e` reports `assert rows`, look at whether `summarise` writes words at repository scope only. The test accepts any scope.
 
 ## Coverage
 
-- C1 elements (`/mcp`, `version` keys, `read_guide(id?)`, `/llms.txt`): 4/4 against the image.
-- Epic routes touched (`/version`, `/kit/install.sh`, `/kit/archive`): 3/3, happy path + 401.
-- AC-1, AC-3, AC-4 (the parts a running stack can show): covered. AC-2 (two builds) and the
-  live session per CLI are left to the owner by hand (SPEC § Non-goals).
-- UI: none changed, so 0/0.
+- API endpoints the epic added: 1/1 (`GET /runs/{id}/analysis/{aid}/findings`): 401, 404 (unknown, and no listing), and 422. A 200 with listed findings needs an image that carries Opengrep and a repository that declares rules. That case is left to the unit router test.
+- Story acceptance criteria exercised end to end:
+  - story 1: 1/7 (no declaration → `tier 2 not declared`). Matching, Cobertura, JUnit, fail-to-pass, the timeout and the env are unit-only, on fakes.
+  - story 2: 1/6 (`n/a — no rules declared`). Matching, rename, severity, CWE, `baselineState` and the Dockerfile are unit-only.
+  - story 3: 3/5 (validates and refuses, 18/2 imported, `not catalogued`). The test-first orders need harness `event_fact` rows and stay unit-only.
+  - story 4: 3/3 on screen (partial `1 of 2`, `3 possible` with CWE in the drawer, `6 of 8` with the limits).
 
 ## Next Steps
 
-- Operator: run `make e2e` to execute the module in the disposable stack.
+- Run `make e2e` (the disposable `aio-e2e` stack) to execute the API module against Postgres, DBOS and the image.
+- Run `make e2e-ui` for the full UI suite.

@@ -38,6 +38,25 @@ ARG DOCKER_COMPOSE_SHA256_ARM64=42cfa75f51ad0ccf290bad37899e0038a8c10a0069e85233
 ARG DOCKER_BUILDX_VERSION=0.38.1
 ARG DOCKER_BUILDX_SHA256_AMD64=e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4
 ARG DOCKER_BUILDX_SHA256_ARM64=3b83b3731916ba433feccaaa689fe5bcdc81c641d92c8e6c2ea865dfa141c97a
+# The code-analysis tools (epic 5): versions are literals; each downloaded binary is pinned to a
+# sha256 per architecture, copied from the release's own checksum file.
+ARG GITLEAKS_VERSION=8.30.1
+# gitleaks_8.30.1_checksums.txt, entry gitleaks_8.30.1_linux_x64.tar.gz
+ARG GITLEAKS_SHA256_AMD64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+# gitleaks_8.30.1_checksums.txt, entry gitleaks_8.30.1_linux_arm64.tar.gz
+ARG GITLEAKS_SHA256_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
+ARG OSV_SCANNER_VERSION=2.7.1
+# osv-scanner_SHA256SUMS, entry osv-scanner_linux_amd64
+ARG OSV_SCANNER_SHA256_AMD64=fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8
+# osv-scanner_SHA256SUMS, entry osv-scanner_linux_arm64
+ARG OSV_SCANNER_SHA256_ARM64=983d22fbad9724514e3fcc6acc83b5fa64c5ffa6b0d9f510028f22c1b223ff81
+ARG LIZARD_VERSION=1.26.0
+ARG JSCPD_VERSION=5.4.3
+ARG OPENGREP_VERSION=2.0.0
+# opengrep v2.0.0 release asset opengrep_linux_x86 (the release's digest for the asset)
+ARG OPENGREP_SHA256_AMD64=37e93f4da5fd04a18c5c1febbdd12f7e98dfccd4d0c9cf2593bcb25eeb462da0
+# opengrep v2.0.0 release asset opengrep_linux_aarch64 (the release's digest for the asset)
+ARG OPENGREP_SHA256_ARM64=6257b65423a744b704af2ff9beeb8f222c2f6925236af386b56b031d4c06d6d8
 # Defaults matching `.env.example`; compose passes the real values through `env_file`.
 ARG AGENT_HOME=/home/agent
 ARG WORK_DIR=/work
@@ -143,6 +162,47 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/* /root/.npm
 
 COPY --from=uv /uv /usr/local/bin/uv
+
+# The tools a Run's analysis runs on a repository's change (AD-14, RM-5): gitleaks (secrets),
+# osv-scanner (known vulnerabilities), lizard (function complexity), jscpd (duplication; it
+# writes SARIF itself), and the Opengrep engine (possible findings). No rule pack is installed:
+# each repository declares its own (`sast.rules`). Installed as root onto the agent's PATH,
+# before the user exists.
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) gitleaks_arch=x64; osv_arch=amd64; \
+             gitleaks_sha="${GITLEAKS_SHA256_AMD64}"; osv_sha="${OSV_SCANNER_SHA256_AMD64}" ;; \
+      arm64) gitleaks_arch=arm64; osv_arch=arm64; \
+             gitleaks_sha="${GITLEAKS_SHA256_ARM64}"; osv_sha="${OSV_SCANNER_SHA256_ARM64}" ;; \
+      *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac; \
+    archive="gitleaks_${GITLEAKS_VERSION}_linux_${gitleaks_arch}.tar.gz"; \
+    curl -fsSL -o "${archive}" \
+        "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"; \
+    echo "${gitleaks_sha}  ${archive}" | sha256sum -c -; \
+    tar -xzf "${archive}" -C /usr/local/bin --no-same-owner gitleaks; \
+    rm -f "${archive}"; \
+    curl -fsSL -o /usr/local/bin/osv-scanner \
+        "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_${osv_arch}"; \
+    echo "${osv_sha}  /usr/local/bin/osv-scanner" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/osv-scanner; \
+    UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin \
+        uv tool install --python /usr/local/bin/python3 "lizard==${LIZARD_VERSION}"; \
+    npm install -g "jscpd@${JSCPD_VERSION}"; \
+    gitleaks version; osv-scanner --version; lizard --version; jscpd --version; \
+    rm -rf /root/.npm /root/.cache/uv
+
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) og_asset=opengrep_linux_x86; og_sha="${OPENGREP_SHA256_AMD64}" ;; \
+      arm64) og_asset=opengrep_linux_aarch64; og_sha="${OPENGREP_SHA256_ARM64}" ;; \
+      *) echo "unsupported architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /usr/local/bin/opengrep \
+        "https://github.com/opengrep/opengrep/releases/download/v${OPENGREP_VERSION}/${og_asset}"; \
+    echo "${og_sha}  /usr/local/bin/opengrep" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/opengrep; \
+    opengrep --version
 
 # One non-root user for the process and for every harness it spawns (NFR-3). `work` and
 # `agent-home` are mounted here, and a named volume takes its ownership from the image.

@@ -28,6 +28,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
 
+from orchestrator.domain.ports.git_analysis import AnalysisGit
+
 #: How one path changed inside a commit range. A rename is neither: the adapter reports it
 #: as the pair it is (AD-17 — moving a protected file away is losing it).
 ChangeKind = Literal["added", "modified", "deleted"]
@@ -93,7 +95,7 @@ class GitError(Exception):
 
 
 @runtime_checkable
-class Git(Protocol):
+class Git(AnalysisGit, Protocol):
     """The git commands this system runs. Later stories extend it; none of them narrow it."""
 
     def ls_remote(self, url: str, ref: str | None = None) -> RemoteRef | None:

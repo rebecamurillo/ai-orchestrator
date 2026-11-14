@@ -42,6 +42,13 @@
      signal hues, so it can never be misread as a status. */
   --color-accent: #7fd4c1;
 
+  /* Chart — colour chart marks and exports only, never chrome or status. chart-ink is below
+     4.5:1 on the app grounds (4.29:1 on bg) by the owner's accepted exception (D7, D26
+     amended, 2026-11-12). */
+  --color-chart-data-1: #3987e5;
+  --color-chart-data-2: #e0702f;
+  --color-chart-ink: #767676;
+
   /* One family, no second face, no weight above 400. Monospace is what makes ids, paths,
      hashes, commands and timestamps align without effort — the product is made of those. */
   --font-mono:

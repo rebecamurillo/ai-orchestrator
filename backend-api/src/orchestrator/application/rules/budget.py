@@ -1,7 +1,8 @@
 """`check`: whether a Run has spent past its budget (AD-11's own park kind).
 
-One rule, read off `Run.spend_usd`/`Run.budget_usd` alone: no repository, no Gateway call —
-`spend_usd` is already the sum `application/use_cases/spend.py::record_attempt_spend` wrote.
+One rule, read off `Run.gate_spend_usd`/`Run.budget_usd` alone: no repository, no Gateway
+call — `gate_spend_usd` is the higher of the gateway and harness totals
+`application/use_cases/spend.py::record_attempt_spend` recomputed (RM-4).
 `domain/values.py::Park` and `"budget"` (`domain/statuses.py::ParkKind`) already exist; this
 module builds the value, it invents nothing.
 
@@ -11,8 +12,15 @@ raised-budget resume — those are 5.7's and Epic 6's own scope (this story's ow
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.values import Park
+
+
+def figure(run: Run) -> Decimal:
+    """The spend every budget comparison uses: the higher of the gateway and harness totals."""
+    return run.gate_spend_usd
 
 
 def check(run: Run) -> Park | None:
@@ -23,7 +31,7 @@ def check(run: Run) -> Park | None:
     """
     if run.budget_usd is None:
         return None
-    if run.spend_usd <= run.budget_usd:
+    if figure(run) <= run.budget_usd:
         return None
     return forced(run)
 
@@ -42,7 +50,7 @@ def forced(run: Run) -> Park:
     if run.budget_usd is None:
         # Defensive: `--max-budget-usd` was absent so Claude cannot self-cap; the harness
         # exited for another reason. Report spend only (story 3-2, "Block If" invariant).
-        reason = f"budget ${run.spend_usd:.2f} / (no cap)"
+        reason = f"budget ${figure(run):.2f} / (no cap)"
     else:
-        reason = f"budget ${run.spend_usd:.2f} / ${run.budget_usd:.2f}"
+        reason = f"budget ${figure(run):.2f} / ${run.budget_usd:.2f}"
     return Park(kind="budget", reason=reason)

@@ -19,6 +19,7 @@ from orchestrator.infrastructure.dbos.startup import (
     dependency_startup_sweep,
     launch_engine,
     schedule_engine_jobs,
+    schedule_facts_jobs,
     schedule_jobs,
     serving,
 )
@@ -35,6 +36,7 @@ __all__ = [
     "engine_config",
     "launch_engine",
     "schedule_engine_jobs",
+    "schedule_facts_jobs",
     "schedule_jobs",
     "serving",
 ]

@@ -13,7 +13,8 @@ callees resolve, and the call chain stays within depth); the two Template names 
 default-configured instance dispatches on its own — `Settings.init_template` for
 `repositories.py`'s init Run and `Settings.readiness_template` for `harness_readiness.py`'s
 readiness Run — resolve among the shipped files; every stored version builds a graph whose
-edges and groups name its own nodes, with no indexed id and nothing `unvalidated`; and the
+edges and groups name its own nodes, with no indexed id and nothing `unvalidated` but the
+`metrics.analyse` row; and the
 tree of every root resolves.
 
 The product itself pins no Template name (Operator decision 2026-09-30: the orchestrator
@@ -29,6 +30,7 @@ from pathlib import Path
 import pytest
 
 from orchestrator.application.graph import Graph, build_template_graph
+from orchestrator.application.steps import ANALYSE_KIND
 from orchestrator.application.templates.plan import plan_run
 from orchestrator.application.templates.validate import validate
 from orchestrator.application.use_cases.plan_run import resolve_tree
@@ -99,14 +101,49 @@ def test_the_settings_defaults_resolve_among_the_shipped_files(
     assert default in stored_names(templates), (setting, default)
 
 
-def test_every_stored_version_validates_with_nothing_unvalidated(
+def unvalidated_outside_analyse(unvalidated: tuple[str, ...], graph: Graph) -> list[str]:
+    """Epic 5 story 4, operator answer 2026-11-13: only a `metrics.analyse` row may go ungated."""
+    analyse = {node.id for node in graph.nodes if node.kind == ANALYSE_KIND}
+    return [path for path in unvalidated if path not in analyse]
+
+
+def test_every_stored_version_validates_with_nothing_unvalidated_but_the_analyse_row(
     templates: FakeTemplateVersionRepository,
 ) -> None:
+    """Revised for epic 5 story 4, 2026-11-13: `unvalidated` is accepted on a `metrics.analyse`
+    row only; it was accepted nowhere."""
     for (name, _version), stored in templates.versions.items():
         result = validate(stored.yaml, templates=templates)
 
         assert result.errors == (), name
-        assert result.unvalidated == (), name
+        assert result.template is not None, name
+        graph = build_template_graph(result.template)
+        assert unvalidated_outside_analyse(result.unvalidated, graph) == [], name
+
+
+SHELL_UNGATED = """name: ungated
+version: 1
+inputs:
+  project: { type: project, required: true }
+steps:
+  - id: setup
+    role: deterministic
+    run: "make build"
+  - id: metrics
+    role: deterministic
+    uses: metrics.analyse
+"""
+
+
+def test_an_ungated_row_of_another_kind_is_still_refused() -> None:
+    """Epic 5 story 4, 2026-11-13: the predicate above passes the analyse row and names the
+    ungated `shell` row beside it, on a template this test owns."""
+    result = validate(SHELL_UNGATED, templates=FakeTemplateVersionRepository([]))
+
+    assert result.template is not None, result.errors
+    graph = build_template_graph(result.template)
+    assert set(result.unvalidated) == {"setup", "metrics"}
+    assert unvalidated_outside_analyse(result.unvalidated, graph) == ["setup"]
 
 
 def test_every_shipped_graph_is_self_contained(
@@ -131,7 +168,11 @@ def test_no_shipped_id_carries_an_index_and_nothing_reads_unvalidated(
         for found in [*(node.id for node in graph.nodes), *(group.id for group in graph.groups)]:
             assert "[" not in found and "]" not in found, (label, found)
             assert not any(segment.isdigit() for segment in found.split(".")), (label, found)
-        assert all(node.gate != "unvalidated" for node in graph.nodes), label
+        # Revised for epic 5 story 4, 2026-11-13: `unvalidated` stays refused on every kind
+        # but `metrics.analyse`.
+        assert all(
+            node.gate != "unvalidated" or node.kind == ANALYSE_KIND for node in graph.nodes
+        ), label
 
 
 def test_the_tree_of_every_shipped_root_resolves(

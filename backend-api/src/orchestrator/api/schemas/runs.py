@@ -17,7 +17,14 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from orchestrator.api.errors import ProblemError, finding_error
-from orchestrator.api.schemas.common import MAX_VERSION, MoneyStr, RunStateOut, UtcTimestamp
+from orchestrator.api.schemas.common import (
+    MAX_VERSION,
+    MoneyStr,
+    RunStateOut,
+    StorableText,
+    UtcTimestamp,
+    drop_default,
+)
 from orchestrator.application.rules.signals import run_admitted_signals
 from orchestrator.application.templates.plan_model import PlanError
 from orchestrator.application.use_cases.create_run import CreateRunRequest, CreateRunResult
@@ -75,6 +82,9 @@ class RunIn(BaseModel):
     #: The Runs this one waits for — a fan-in list (AD-12, spine amendment 2026-09-23).
     #: A non-empty list requires `save=True`.
     after_run_ids: list[UUID] = Field(default_factory=list)
+    #: The operator's own name for the Run; blank or over 120 characters is refused by
+    #: `clean_label`, so the 422 is problem+json.
+    label: StorableText | None = None
 
     def as_request(self) -> CreateRunRequest:
         return CreateRunRequest(
@@ -92,7 +102,14 @@ class RunIn(BaseModel):
             conflict_consent=self.conflict_consent,
             save=self.save,
             after_run_ids=tuple(self.after_run_ids),
+            label=self.label,
         )
+
+
+class RunLabelIn(BaseModel):
+    """`PATCH /runs/{id}`'s body: a string sets the label, `null` restores the default."""
+
+    label: StorableText | None
 
 
 class RunSummaryOut(RunStateOut):
@@ -114,6 +131,8 @@ class RunSummaryOut(RunStateOut):
     #: while it runs, the parked stop's own list while it waits on one, `[]` once it is
     #: terminal — `application/rules/signals.py::run_admitted_signals`.
     admitted_signals: tuple[SignalKind, ...]
+    label: str = Field(default="", json_schema_extra=drop_default)
+    label_set_by_operator: bool = Field(default=False, json_schema_extra=drop_default)
 
     @classmethod
     def of(
@@ -144,6 +163,8 @@ class RunSummaryOut(RunStateOut):
             park_seq=run.park_seq,
             pause_requested=run.pause_requested,
             senior_session=run.senior_session,
+            label=run.label,
+            label_set_by_operator=run.label_set_by_operator,
             admitted_signals=run_admitted_signals(
                 run, park_row_kind, park_row_status=park_row_status, rows=rows
             ),

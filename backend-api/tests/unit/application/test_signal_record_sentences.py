@@ -44,6 +44,7 @@ def a_run(**over: object) -> Run:
         "created_at": EPOCH,
         "park_kind": "budget",
         "spend_usd": Decimal("41.20"),
+        "gate_spend_usd": Decimal("41.20"),
     }
     fields.update(over)
     return Run(**fields)  # type: ignore[arg-type]

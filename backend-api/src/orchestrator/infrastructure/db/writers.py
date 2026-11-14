@@ -17,30 +17,47 @@ row that takes forty minutes holds no connection while it runs.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from types import TracebackType
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from orchestrator.application.analysis.run_analysis import AnalysisScope
 from orchestrator.application.use_cases.announce import Announcer
+from orchestrator.application.use_cases.calculate_metrics import CalculationPorts
+from orchestrator.application.use_cases.record_attempt_facts import FactsPorts
+from orchestrator.application.use_cases.run_records import RecordPorts
 from orchestrator.application.use_cases.spend import SpendPorts
 from orchestrator.application.use_cases.writers import WriterPorts
+from orchestrator.domain.entities.analysis import Analysis
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.gateway import Gateway
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.log_facts import LogFacts
 from orchestrator.domain.ports.notifier import Notifier
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyAttemptRepository,
+    SQLAlchemyFactSetRepository,
     SQLAlchemyGateRecordRepository,
+    SQLAlchemyGatewayReadRepository,
     SQLAlchemyInstanceHoldRepository,
+    SQLAlchemyMetricCalculationRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
+    SQLAlchemyResultVersionRepository,
     SQLAlchemyRunRepository,
     SQLAlchemyStepRunRepository,
     SQLAlchemyTrajectoryRepository,
 )
+from orchestrator.infrastructure.db.repositories.analysis import SQLAlchemyAnalysisRepository
+from orchestrator.infrastructure.db.repositories.run_records import (
+    SQLAlchemyRunCommitRepository,
+    SQLAlchemyRunRepositoryRecords,
+)
+from orchestrator.infrastructure.harness.facts import log_file_exists
 
 #: How a scope reaches a session: `create_session_factory`'s own return shape.
 SessionFactory = Callable[[], Session]
@@ -119,6 +136,9 @@ def open_writer_ports(
             trajectories=SQLAlchemyTrajectoryRepository(session),
             engine=engine,
             holds=SQLAlchemyInstanceHoldRepository(session),
+            run_repositories=SQLAlchemyRunRepositoryRecords(session),
+            calculations=SQLAlchemyMetricCalculationRepository(session),
+            versions=SQLAlchemyResultVersionRepository(session),
         )
     finally:
         session.close()
@@ -136,6 +156,96 @@ def open_spend_ports(session_factory: SessionFactory, gateway: Gateway) -> Itera
             runs=SQLAlchemyRunRepository(session),
             steps=SQLAlchemyStepRunRepository(session),
             attempts=SQLAlchemyAttemptRepository(session),
+            gateway_reads=SQLAlchemyGatewayReadRepository(session),
+            clock=SystemClock(),
+            uow=SessionUnitOfWork(session),
+            fact_sets=SQLAlchemyFactSetRepository(session),
+        )
+    finally:
+        session.close()
+
+
+@contextmanager
+def open_facts_ports(
+    session_factory: SessionFactory,
+    extractors: Mapping[str, LogFacts],
+    log_exists: Callable[[str], bool] = log_file_exists,
+    subscription_auth: bool | None = None,
+) -> Iterator[FactsPorts]:
+    """One session's worth of `FactsPorts`, closed on every path."""
+    session = session_factory()
+    try:
+        yield FactsPorts(
+            facts=SQLAlchemyFactSetRepository(session),
+            uow=SessionUnitOfWork(session),
+            clock=SystemClock(),
+            extractors=extractors,
+            log_exists=log_exists,
+            subscription_auth=subscription_auth,
+        )
+    finally:
+        session.close()
+
+
+@contextmanager
+def open_record_ports(session_factory: SessionFactory) -> Iterator[RecordPorts]:
+    """One session's worth of `RecordPorts` for an executor's side record, closed on every path."""
+    session = session_factory()
+    try:
+        yield RecordPorts(
+            repositories=SQLAlchemyRunRepositoryRecords(session),
+            commits=SQLAlchemyRunCommitRepository(session),
+            uow=SessionUnitOfWork(session),
+        )
+    finally:
+        session.close()
+
+
+@contextmanager
+def open_calculation_ports(
+    session_factory: SessionFactory,
+    gateway: Gateway,
+    extractors: Mapping[str, LogFacts],
+    log_exists: Callable[[str], bool] = log_file_exists,
+    analysis: Callable[[UUID, UUID], Sequence[Analysis]] | None = None,
+) -> Iterator[CalculationPorts]:
+    """One session's worth of `CalculationPorts` for the metrics job, closed on every path."""
+    session = session_factory()
+    try:
+        yield CalculationPorts(
+            runs=SQLAlchemyRunRepository(session),
+            steps=SQLAlchemyStepRunRepository(session),
+            attempts=SQLAlchemyAttemptRepository(session),
+            records=SQLAlchemyGateRecordRepository(session),
+            holds=SQLAlchemyInstanceHoldRepository(session),
+            calculations=SQLAlchemyMetricCalculationRepository(session),
+            versions=SQLAlchemyResultVersionRepository(session),
+            fact_sets=SQLAlchemyFactSetRepository(session),
+            gateway_reads=SQLAlchemyGatewayReadRepository(session),
+            run_records=SQLAlchemyRunRepositoryRecords(session),
+            gateway=gateway,
+            extractors=extractors,
+            log_exists=log_exists,
+            clock=SystemClock(),
+            uow=SessionUnitOfWork(session),
+            analyses=SQLAlchemyAnalysisRepository(session),
+            analysis=analysis,
+        )
+    finally:
+        session.close()
+
+
+@contextmanager
+def open_analysis_ports(session_factory: SessionFactory) -> Iterator[AnalysisScope]:
+    """One session's worth of `AnalysisScope`: records to read, analyses to write."""
+    session = session_factory()
+    try:
+        yield AnalysisScope(
+            steps=SQLAlchemyStepRunRepository(session),
+            attempts=SQLAlchemyAttemptRepository(session),
+            run_records=SQLAlchemyRunRepositoryRecords(session),
+            run_commits=SQLAlchemyRunCommitRepository(session),
+            analyses=SQLAlchemyAnalysisRepository(session),
             uow=SessionUnitOfWork(session),
         )
     finally:

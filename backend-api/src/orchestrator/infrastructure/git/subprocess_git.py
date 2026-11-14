@@ -38,6 +38,7 @@ import weakref
 from pathlib import Path
 
 from orchestrator.domain.ports.git import CloneResult, GitError, RemoteRef
+from orchestrator.infrastructure.git.analysis import AnalysisCommands
 from orchestrator.infrastructure.git.submodules import SubmoduleCommands
 from orchestrator.infrastructure.git.worktrees import WorktreeCommands
 from orchestrator.infrastructure.redact import redact
@@ -138,7 +139,7 @@ def discard_partial_clone(dest: Path, *, existed: bool) -> None:
     shutil.rmtree(dest, ignore_errors=True)
 
 
-class SubprocessGit(WorktreeCommands, SubmoduleCommands):
+class SubprocessGit(AnalysisCommands, WorktreeCommands, SubmoduleCommands):
     """The `Git` port over `git(1)`.
 
     The worktree, staging, commit and push half lives in `WorktreeCommands` and the submodule

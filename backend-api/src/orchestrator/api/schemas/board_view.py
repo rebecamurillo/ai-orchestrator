@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from orchestrator.api.schemas.common import UtcTimestamp
+from orchestrator.api.schemas.common import UtcTimestamp, drop_default
 from orchestrator.application.use_cases.run_views import BoardView, Card, Progress
 from orchestrator.domain.statuses import ParkKind, RunStatus
 
@@ -53,6 +53,8 @@ class CardOut(BaseModel):
     kind_label: str | None
     age_seconds: float
     needs_you_since: UtcTimestamp | None
+    label: str = Field(default="", json_schema_extra=drop_default)
+    label_set_by_operator: bool = Field(default=False, json_schema_extra=drop_default)
 
     @classmethod
     def of(cls, card: Card) -> CardOut:
@@ -72,6 +74,8 @@ class CardOut(BaseModel):
             kind_label=card.kind_label,
             age_seconds=card.age_seconds,
             needs_you_since=card.needs_you_since,
+            label=card.label,
+            label_set_by_operator=card.label_set_by_operator,
         )
 
 

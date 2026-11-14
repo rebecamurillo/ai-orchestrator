@@ -1,0 +1,105 @@
+/* The Metrics home page (`MetricsHome.tsx`). Tokens only; the status token is the one coloured cell. */
+
+.metrics-home-head {
+  padding: var(--space-8) var(--space-8) var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-section-head);
+  letter-spacing: var(--type-section-head-tracking);
+  text-transform: var(--type-section-head-transform);
+}
+
+.metrics-scroll {
+  overflow-x: auto;
+}
+
+table.metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.metrics-table th {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-rail);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  letter-spacing: var(--type-column-head-tracking);
+  text-transform: var(--type-column-head-transform);
+  text-align: left;
+}
+
+table.metrics-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-secondary);
+  font-size: var(--type-row-body);
+  line-height: var(--type-row-body-line);
+}
+
+table.metrics-table a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+table.metrics-table tr[data-current='true'] td {
+  color: var(--color-text);
+}
+
+.metrics-token[data-signal='run'] {
+  color: var(--color-signal-run);
+}
+
+.metrics-token[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.metrics-token[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.metrics-own,
+.metrics-note,
+.metrics-no-project {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.metrics-note,
+.metrics-no-project {
+  padding: var(--space-4) var(--space-8);
+}
+
+.metrics-box {
+  background: none;
+  border: 0;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.metrics-selection {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-8);
+  color: var(--color-text-secondary);
+  font-size: var(--type-control);
+}
+
+.metrics-selection a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.metrics-selection button {
+  background: none;
+  border: 0;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.metrics-selection button:disabled {
+  color: var(--color-text-tertiary);
+  cursor: default;
+}

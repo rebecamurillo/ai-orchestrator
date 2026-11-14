@@ -22,7 +22,9 @@ from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.harness import HarnessUsage
 from orchestrator.infrastructure.gateway.disabled import DisabledGateway
+from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
+from tests.unit.fakes.facts import FakeGatewayReadRepository
 from tests.unit.fakes.runs import FakeAttemptRepository, FakeRunRepository, FakeStepRunRepository
 
 NOW = datetime(2026, 9, 13, tzinfo=UTC)
@@ -46,6 +48,8 @@ class Ports:
             runs=self.runs,
             steps=self.steps,
             attempts=self.attempts,
+            gateway_reads=FakeGatewayReadRepository(),
+            clock=FakeClock(),
             uow=self.uow,
         )
 

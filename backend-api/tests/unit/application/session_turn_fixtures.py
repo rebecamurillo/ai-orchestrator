@@ -38,7 +38,9 @@ from tests.unit.application.session_fixtures import (
     probing,
 )
 from tests.unit.application.steps.agent_fixtures import RecordingEnv
+from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
+from tests.unit.fakes.facts import FakeGatewayReadRepository
 from tests.unit.fakes.gateway import FakeGateway
 from tests.unit.fakes.git import FakeGit
 from tests.unit.fakes.harness import FakeHarness
@@ -169,6 +171,8 @@ class TurnWorld:
             runs=world.ports.runs,
             steps=world.ports.steps,
             attempts=world.ports.attempts,
+            gateway_reads=FakeGatewayReadRepository(),
+            clock=FakeClock(),
             uow=uow,
         )
 

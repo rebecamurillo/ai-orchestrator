@@ -1,0 +1,162 @@
+- id: process.attempts
+  label: attempts
+  group: process
+  level: H
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  - role
+  unit: count
+  source: attempts
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: A skipped step has no attempt and is not counted.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The number of attempt records in scope.
+    parameters: {}
+- id: process.retries
+  label: retries, redispatches, your retries
+  group: process
+  level: H
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  unit: count
+  source: step `retry_count`, `redispatch_count`, gate record operator `retry`
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: Three separate counts; never merged into one figure.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: 'Three counts per scope: automatic retries from the step''s retry_count, redispatches
+      from its redispatch_count, and the retries you ordered at a gate.'
+    parameters: {}
+- id: process.failures
+  label: failed attempts
+  group: process
+  level: H
+  scopes:
+  - run
+  - epic
+  - story
+  - step
+  unit: count
+  source: attempts
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: null
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The number of attempts in scope that did not end done.
+    parameters: {}
+- id: process.stories_done
+  label: stories done of planned
+  group: process
+  level: H
+  scopes:
+  - run
+  unit: count
+  source: Run record
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: Read it with whether two Runs did the same work.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Stories that reached done, beside the stories the plan holds.
+    parameters: {}
+- id: process.attempts_per_story
+  label: attempts per story
+  group: process
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  unit: ratio
+  source: attempts
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: A ratio.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Attempts divided by stories; for a Run or epic the average and the maximum.
+    parameters: {}
+- id: process.parks
+  label: parks, by kind
+  group: process
+  level: H
+  scopes:
+  - run
+  unit: words
+  source: gate record
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: Kinds are words, not numbers.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: How many times the Run parked, by the kind of park.
+    parameters: {}
+- id: process.interventions
+  label: your interventions
+  group: process
+  level: H
+  scopes:
+  - run
+  unit: count
+  source: gate record, actor operator
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: null
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Gate records whose actor is you.
+    parameters: {}
+- id: process.gate_first_pass
+  label: gates passed on the first attempt
+  group: process
+  level: A
+  scopes:
+  - run
+  - gate
+  unit: count
+  source: gate record
+  component_of: null
+  additive: false
+  missing_words:
+  - not recorded
+  limits: null
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Per gate, whether it passed on its first attempt.
+    parameters: {}

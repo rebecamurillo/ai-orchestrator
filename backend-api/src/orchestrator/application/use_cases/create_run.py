@@ -44,10 +44,12 @@ from orchestrator.application.preflight.model import (
     Line,
     PreflightRequest,
 )
+from orchestrator.application.rules.run_label import initial_label
 from orchestrator.application.rules.signals import row_at
 from orchestrator.application.templates.plan_model import Plan
 from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
 from orchestrator.application.use_cases.queue import REASON_SAVED
+from orchestrator.application.use_cases.run_records import record_own_repository
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import Conflict, Invalid, NotFound
@@ -61,6 +63,7 @@ from orchestrator.domain.ports.repositories import (
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.run_records import RunRepositoryRecords
 from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.values import PlannedRow
@@ -87,6 +90,7 @@ class CreateRunPorts:
     #: frozen `CreateRunPorts(...)` construction predating this story keeps working
     #: unchanged. Production wiring (`api/providers.py::create_run_ports`) always sets one.
     tracer: Tracer | None = None
+    run_repositories: RunRepositoryRecords | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +116,7 @@ class CreateRunRequest:
     #: A non-empty list requires `save=True`: the Run is stored but not enqueued until
     #: every predecessor is `done` (→ enqueue) or one ends `failed | cancelled` (→ park).
     after_run_ids: tuple[UUID, ...] = ()
+    label: str | None = None
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -189,6 +194,10 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     assert plan is not None
     assert tree is not None
 
+    now = ports.clock.now()
+    label, by_operator = initial_label(
+        req.label, project.name, _inputs_dict(req), req.template_name, now
+    )
     run_id: UUID = new_id()
     trace = (
         ports.tracer.create_run_trace(run_id, project.slug, (), name=_trace_name(req))
@@ -208,10 +217,17 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         plan_ref=plan.plan_ref,
         plan_refs=dict(plan.plan_refs),
         budget_usd=req.budget_usd,
+        gateway_spend_usd=Decimal("0"),
+        harness_spend_usd=Decimal("0"),
+        gate_spend_usd=Decimal("0"),
+        gateway_reported=False,
+        harness_reported=False,
         manual_estimate_h=req.manual_estimate_h,
         re_review_done=req.re_review_done,
         trace_id=trace.trace_id if trace is not None else None,
-        created_at=ports.clock.now(),
+        created_at=now,
+        label=label,
+        label_set_by_operator=by_operator,
         partition_branch=declared_branch,
         after_run_ids=tuple(req.after_run_ids),
     )
@@ -219,6 +235,9 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
 
     ports.preflight.runs.add(run)
     ports.steps.add_many(step_rows)
+    record_own_repository(
+        ports.run_repositories, ports.preflight.git, run, repository.url, plan.base_tip
+    )
     ports.uow.commit()
     working = _working_branch(plan)
 
@@ -376,4 +395,5 @@ def _step_run(run_id: UUID, row: PlannedRow) -> StepRun:
         with_resolved=row.with_resolved,
         frame=row.frame,
         story_id=row.story_id,
+        role=row.role,
     )

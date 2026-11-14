@@ -4,8 +4,8 @@ A router of its own, on a path of its own, for the reason `api/routers/queue.py`
 `api/routers/run_files.py` each give for theirs: `tests/unit/test_runs_router.py` pins
 `api/routers/runs.py` at exactly two operations, and each of the other `/runs` modules
 carries its own frozen route-count assertion, so a new route is a new module rather than a
-third operation on a frozen one. Mounted through `main.py`'s `_mount` helper like every
-router but the two `test_graph_text_router.py` reads by AST.
+third operation on a frozen one. Mounted through `api/protected_routes.py`'s
+`mount_protected` like every router but the two `test_graph_text_router.py` reads by AST.
 
 The resource is `/steps` rather than `/runs/steps`: a row of this table belongs to an
 attempt, not to any one Run, and the whole point of the read is that it crosses Runs.

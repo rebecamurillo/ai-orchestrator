@@ -16,6 +16,7 @@ from orchestrator.domain.errors import Conflict
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.instance_hold import InstanceHoldRepository
+from orchestrator.domain.ports.metric_results import MetricCalculationRepository
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
     RunRepository,
@@ -40,13 +41,14 @@ class HoldPorts:
     holds: InstanceHoldRepository
     uow: UnitOfWork
     clock: Clock
+    calculations: MetricCalculationRepository | None = None
 
 
 def place_hold(ports: HoldPorts, ttl_seconds: int, reason: str) -> InstanceHold:
     """Hold the instance for `ttl_seconds`, or raise `HoldRefused` naming the working steps."""
     with ports.uow:
         current = ports.holds.get_for_update()
-        working = working_steps(ports.runs, ports.steps, ports.attempts)
+        working = working_steps(ports.runs, ports.steps, ports.attempts, ports.calculations)
         if working:
             raise HoldRefused(working)
         now = ports.clock.now()

@@ -52,7 +52,23 @@ class FakeRunRepository:
         self.calls.append(("update", run.id))
         if run.id not in self.runs:
             raise ValueError(f"no run with id {run.id} is stored")
+        stored = self.runs[run.id]
+        if (run.label, run.label_set_by_operator) != (stored.label, stored.label_set_by_operator):
+            run = run.model_copy(
+                update={
+                    "label": stored.label,
+                    "label_set_by_operator": stored.label_set_by_operator,
+                }
+            )
         self.runs[run.id] = run
+
+    def set_label(self, run_id: UUID, label: str, by_operator: bool) -> None:
+        self.calls.append(("set_label", run_id))
+        if run_id not in self.runs:
+            raise ValueError(f"no run with id {run_id} is stored")
+        self.runs[run_id] = self.runs[run_id].model_copy(
+            update={"label": label, "label_set_by_operator": by_operator}
+        )
 
     def list(self, *, project_id: UUID | None = None) -> list[Run]:
         self.calls.append(("list", project_id))

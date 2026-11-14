@@ -1,0 +1,109 @@
+{
+  "duplicates": [
+    {
+      "firstFile": {
+        "end": 14,
+        "endLoc": {
+          "column": 46,
+          "line": 14,
+          "position": 428
+        },
+        "name": "helpers.py",
+        "start": 3,
+        "startLoc": {
+          "column": 0,
+          "line": 3,
+          "position": 11
+        }
+      },
+      "format": "python",
+      "fragment": "def render_report(entries, width):\n    lines = []\n    for entry in entries:\n        name = str(entry[\"name\"]).ljust(width)\n        amount = \"{:>10.2f}\".format(entry[\"amount\"])\n        if entry.get(\"flag\"):\n            lines.append(name + amount + \" *\")\n        else:\n            lines.append(name + amount)\n    header = \"=\" * (width + 10)\n    footer = \"-\" * (width + 10)\n    return \"\\n\".join([header, *lines, footer])",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 12,
+      "secondFile": {
+        "end": 18,
+        "endLoc": {
+          "column": 46,
+          "line": 18,
+          "position": 453
+        },
+        "name": "helpers.py",
+        "start": 7,
+        "startLoc": {
+          "column": 0,
+          "line": 7,
+          "position": 36
+        }
+      },
+      "tokens": 102
+    },
+    {
+      "firstFile": {
+        "end": 22,
+        "endLoc": {
+          "column": 3,
+          "line": 22,
+          "position": 423
+        },
+        "name": "summary.py",
+        "start": 6,
+        "startLoc": {
+          "column": 0,
+          "line": 6,
+          "position": 33
+        }
+      },
+      "format": "python",
+      "fragment": "def compute_totals(rows, factor):\n    total = 0\n    for row in rows:\n        for cell in row:\n            if cell % 2 == 0 and cell % 3 == 0:\n                total += cell * factor\n            else:\n                total -= cell + factor\n    result = []\n    for value in range(total):\n        result.append(value * 2)\n        if value > 100:\n            break\n    return result, total\n\n\ndef summary_only():",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 17,
+      "secondFile": {
+        "end": 19,
+        "endLoc": {
+          "column": 3,
+          "line": 19,
+          "position": 401
+        },
+        "name": "invoice.py",
+        "start": 3,
+        "startLoc": {
+          "column": 0,
+          "line": 3,
+          "position": 11
+        }
+      },
+      "tokens": 81
+    }
+  ],
+  "statistics": {
+    "detectionDate": "2026-11-13T15:48:30.193Z",
+    "formats": {
+      "python": {
+        "clones": 2,
+        "duplicatedLines": 29,
+        "duplicatedTokens": 183,
+        "lines": 75,
+        "newClones": 0,
+        "newDuplicatedLines": 0,
+        "percentage": 38.666666666666664,
+        "percentageTokens": 46.21212121212121,
+        "sources": 4,
+        "tokens": 396
+      }
+    },
+    "total": {
+      "clones": 2,
+      "duplicatedLines": 29,
+      "duplicatedTokens": 183,
+      "lines": 75,
+      "newClones": 0,
+      "newDuplicatedLines": 0,
+      "percentage": 38.666666666666664,
+      "percentageTokens": 46.21212121212121,
+      "sources": 4,
+      "tokens": 396
+    }
+  }
+}

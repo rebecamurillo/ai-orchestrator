@@ -1,0 +1,210 @@
+- id: activity.messages_session
+  label: messages, session
+  group: activity
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  - attempt
+  unit: count
+  source: attempt log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Describes how the method works, not how well. Not available where the harness log lacks the
+    column.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Messages in the session conversation of the attempts in scope.
+    parameters: {}
+- id: activity.messages_subagents
+  label: messages, subagents
+  group: activity
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  - attempt
+  unit: count
+  source: attempt log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Describes how the method works, not how well. Not available where the harness log lacks the
+    column.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Messages in the subagent conversations of the attempts in scope.
+    parameters: {}
+- id: activity.pause_longest
+  label: longest pause
+  group: activity
+  level: A
+  scopes:
+  - attempt
+  - conversation
+  - run
+  unit: seconds
+  source: attempt log
+  component_of: null
+  additive: false
+  missing_words:
+  - not available
+  - not recorded
+  limits: Gaps under the minimum gap are not pauses. Not available where the harness log lacks timestamps.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The longest gap between two consecutive messages of a conversation, per conversation;
+      for a Run the maximum.
+    parameters:
+      min_gap_seconds: 60
+- id: activity.pauses_over_cache_lifetime
+  label: pauses over cache lifetime
+  group: activity
+  level: A
+  scopes:
+  - run
+  - epic
+  - story
+  - attempt
+  unit: count
+  source: attempt log
+  component_of: null
+  additive: false
+  missing_words:
+  - not available
+  - not recorded
+  - n/a — template has no story frame
+  limits: Describes how the method works, not how well.
+  fingerprint_group: true
+  methods:
+  - n: 1
+    description: Pauses longer than the cache lifetime of their conversation, which let the prompt cache
+      expire.
+    parameters:
+      session_cache_seconds: 3600
+      subagent_cache_seconds: 300
+- id: activity.tool_calls
+  label: tool calls, per tool
+  group: activity
+  level: A
+  scopes:
+  - run
+  - attempt
+  - tool
+  unit: count
+  source: attempt log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  limits: Not available where the harness log lacks tool events.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Tool calls in the attempt logs in scope, counted per tool.
+    parameters: {}
+- id: activity.tool_errors
+  label: tool errors, per tool
+  group: activity
+  level: H
+  scopes:
+  - run
+  - attempt
+  - tool
+  unit: count
+  source: attempt log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  limits: Not available where the harness log lacks tool events.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Tool calls whose result is an error, counted per tool; the headline is the total.
+    parameters: {}
+- id: activity.files_read
+  label: files read
+  group: activity
+  level: A
+  scopes:
+  - run
+  - attempt
+  unit: count
+  source: attempt log
+  component_of: null
+  additive: false
+  missing_words:
+  - not available
+  - not recorded
+  limits: 'A distinct count: it cannot be summed across attempts.'
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Distinct files read by tool calls in scope.
+    parameters: {}
+- id: activity.files_edited
+  label: files edited
+  group: activity
+  level: A
+  scopes:
+  - run
+  - attempt
+  unit: count
+  source: attempt log
+  component_of: null
+  additive: false
+  missing_words:
+  - not available
+  - not recorded
+  limits: 'A distinct count: it cannot be summed across attempts.'
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Distinct files edited by tool calls in scope.
+    parameters: {}
+- id: activity.test_runs
+  label: test runs
+  group: activity
+  level: A
+  scopes:
+  - run
+  - attempt
+  unit: count
+  source: attempt log
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not available
+  - not recorded
+  limits: Matches the command text only; a wrapper script is not recognised.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Shell tool calls whose command contains a known test command as whole words; a command counts once.
+    parameters:
+      test_run_patterns:
+      - pnpm test
+      - npm test
+      - yarn test
+      - pytest
+      - vitest
+      - jest
+      - playwright test
+      - make test
+      - go test
+      - cargo test

@@ -1,0 +1,16 @@
+{
+  "name": "demo",
+  "version": "1.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "demo",
+      "version": "1.0.0",
+      "dependencies": { "zod": "^3.22.0" }
+    },
+    "node_modules/zod": { "version": "3.22.4" },
+    "node_modules/old-dep": { "version": "2.0.0" },
+    "node_modules/a/node_modules/@scope/nested": { "version": "1.1.0" }
+  }
+}

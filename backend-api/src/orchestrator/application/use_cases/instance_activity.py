@@ -23,12 +23,16 @@ from orchestrator.application.use_cases.queue import QueuePorts, list_queue
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
+from orchestrator.domain.ports.metric_results import MetricCalculationRepository
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
     RunRepository,
     StepRunRepository,
 )
 from orchestrator.domain.statuses import TERMINAL_RUN, ParkKind, RunStatus
+
+CALCULATION_KIND = "calculation"
+CALCULATION_PATH = "metrics v{n}"
 
 _ENGINE_STATUSES: tuple[RunStatus, ...] = ("queued", "running", "needs_you")
 
@@ -71,6 +75,7 @@ class ActivityPorts:
     queue: QueuePorts
     attempts: AttemptRepository
     dbos_application_version: str
+    calculations: MetricCalculationRepository | None = None
 
 
 def read_activity(ports: ActivityPorts) -> InstanceActivity:
@@ -79,7 +84,9 @@ def read_activity(ports: ActivityPorts) -> InstanceActivity:
     stored = None if holds is None else holds.get()
     active = stored is not None and stored.active(ports.queue.clock.now())
     return InstanceActivity(
-        working=working_steps(ports.queue.runs, ports.queue.steps, ports.attempts),
+        working=working_steps(
+            ports.queue.runs, ports.queue.steps, ports.attempts, ports.calculations
+        ),
         in_engine=_in_engine(ports),
         hold=HoldView(stored.held_at, stored.expires_at, stored.reason)
         if stored is not None and active
@@ -89,7 +96,10 @@ def read_activity(ports: ActivityPorts) -> InstanceActivity:
 
 
 def working_steps(
-    runs: RunRepository, steps: StepRunRepository, attempts: AttemptRepository
+    runs: RunRepository,
+    steps: StepRunRepository,
+    attempts: AttemptRepository,
+    calculations: MetricCalculationRepository | None = None,
 ) -> list[WorkingStep]:
     open_attempts = attempts.list_open()
     running = steps.list_running()
@@ -129,6 +139,18 @@ def working_steps(
                 started_at=attempt.started_at,
             )
         )
+    for calculation in [] if calculations is None else calculations.list_by_state("running"):
+        run = runs.get(calculation.run_id)
+        if run is not None:
+            found.append(
+                WorkingStep(
+                    run_id=run.id,
+                    run_label=run_label(run),
+                    path=CALCULATION_PATH.format(n=calculation.target_n),
+                    kind=CALCULATION_KIND,
+                    started_at=calculation.started_at,
+                )
+            )
     return sorted(found, key=_working_order)
 
 

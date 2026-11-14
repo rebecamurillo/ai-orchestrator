@@ -29,6 +29,8 @@ interface Props {
   /** True while any signal on this screen is in flight — every button is refused meanwhile. */
   disabled: boolean;
   onConfirm: () => void;
+  /** Render the confirm already open (a link that asks for it). */
+  initialOpen?: boolean;
 }
 
 export default function ConfirmAction({
@@ -39,8 +41,9 @@ export default function ConfirmAction({
   keepLabel,
   disabled,
   onConfirm,
+  initialOpen,
 }: Props) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen ?? false);
 
   if (!open) {
     return (

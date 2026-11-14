@@ -12,6 +12,10 @@ from orchestrator.infrastructure.db.repositories.chat import (
     SQLAlchemyChatNoticeRepository,
     SQLAlchemyChatThreadRepository,
 )
+from orchestrator.infrastructure.db.repositories.facts import (
+    SQLAlchemyFactSetRepository,
+    SQLAlchemyGatewayReadRepository,
+)
 from orchestrator.infrastructure.db.repositories.gate_records import (
     SQLAlchemyGateRecordRepository,
 )
@@ -19,6 +23,10 @@ from orchestrator.infrastructure.db.repositories.harnesses import SQLAlchemyHarn
 from orchestrator.infrastructure.db.repositories.history import SQLAlchemyHistoryQuery
 from orchestrator.infrastructure.db.repositories.instance_hold import (
     SQLAlchemyInstanceHoldRepository,
+)
+from orchestrator.infrastructure.db.repositories.metric_results import (
+    SQLAlchemyMetricCalculationRepository,
+    SQLAlchemyResultVersionRepository,
 )
 from orchestrator.infrastructure.db.repositories.project_channel import (
     SQLAlchemyProjectChannelRepository,
@@ -42,13 +50,17 @@ __all__ = [
     "SQLAlchemyAttemptRepository",
     "SQLAlchemyChatNoticeRepository",
     "SQLAlchemyChatThreadRepository",
+    "SQLAlchemyFactSetRepository",
     "SQLAlchemyGateRecordRepository",
+    "SQLAlchemyGatewayReadRepository",
     "SQLAlchemyHarnessRepository",
     "SQLAlchemyHistoryQuery",
     "SQLAlchemyInstanceHoldRepository",
+    "SQLAlchemyMetricCalculationRepository",
     "SQLAlchemyProjectChannelRepository",
     "SQLAlchemyProjectRepository",
     "SQLAlchemyRepositoryRepository",
+    "SQLAlchemyResultVersionRepository",
     "SQLAlchemyRunRepository",
     "SQLAlchemyStepRunRepository",
     "SQLAlchemyTemplateVersionRepository",

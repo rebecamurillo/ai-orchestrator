@@ -138,10 +138,20 @@ class RealEngine:
         DBOS.register_queue(name, global_concurrency=concurrency, partition_concurrency=1)
 
     def enqueue(self, queue: str, workflow: F, run_id: str, *, partition_key: str) -> None:
-        # the workflow id *is* the Run id, so an enqueue that is retried after a lost
-        # response finds the workflow it already started instead of starting a second one
-        with SetWorkflowID(run_id), SetEnqueueOptions(queue_partition_key=partition_key):
-            DBOS.enqueue_workflow(queue, workflow, run_id)
+        def top_level() -> None:
+            # the workflow id *is* the Run id, so an enqueue that is retried after a lost
+            # response finds the workflow it already started instead of starting a second one
+            with SetWorkflowID(run_id), SetEnqueueOptions(queue_partition_key=partition_key):
+                DBOS.enqueue_workflow(queue, workflow, run_id)
+
+        if DBOS.step_id is None:
+            top_level()
+            return
+        # The library refuses to start a workflow from inside a step (an assertion in
+        # `create_start_workflow_child`), and a Run's terminal write runs in one. A fresh
+        # context makes it the same top-level enqueue a route makes; a crash between the
+        # step's commit and this call leaves a queued row the start-up sweep enqueues.
+        contextvars.Context().run(top_level)
 
     def send(self, workflow_id: str, message: Any, topic: str) -> None:
         """Deliver one message, or do nothing when there is no workflow left to receive it.

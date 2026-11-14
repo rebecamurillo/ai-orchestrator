@@ -61,6 +61,10 @@ packages = ["src/orchestrator"]
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+# Epic 5 story 3, epic 6 story 2: sample programs and rule sources the recorded jscpd, lizard and
+# Opengrep outputs were recorded on; reformatting or "fixing" them would no longer be the input
+# the recorded output describes.
+extend-exclude = ["tests/unit/fixtures/analysis/tier1b", "tests/unit/fixtures/analysis/tier2"]
 
 [tool.ruff.lint]
 # DTZ/T20/RUF added after review: they make "no naive datetime", "no print" and
@@ -75,6 +79,22 @@ select = ["E", "F", "I", "B", "UP", "PL", "C90", "DTZ", "T20", "RUF"]
 "tests/unit/test_null_tracer.py" = ["I001", "PLC0415"]
 "tests/unit/test_providers_tracing_off.py" = ["I001"]
 "tests/unit/test_startup_tracing_off.py" = ["E501"]
+# Epic 5 story 2: the expected counts of the committed diff fixtures are literals the tests state.
+"tests/unit/application/analysis/test_tier1a.py" = ["PLR2004"]
+"tests/unit/application/analysis/test_summary.py" = ["PLR2004"]
+"tests/unit/application/analysis/test_signals.py" = ["PLR2004"]
+"tests/unit/application/analysis/test_secrets.py" = ["PLR2004"]
+"tests/unit/application/test_metrics_methods_code.py" = ["PLR2004"]
+"tests/unit/infrastructure/test_analysis_tools.py" = ["PLR2004"]
+# Epic 5 story 3: the expected figures of the recorded outputs and sample lock files are literals.
+"tests/unit/application/analysis/test_dependencies.py" = ["PLR2004"]
+"tests/unit/application/analysis/test_signals_collect.py" = ["PLR2004"]
+"tests/unit/application/analysis/test_tier1b.py" = ["PLR2004"]
+"tests/unit/application/analysis/test_toolset.py" = ["PLR2004"]
+"tests/unit/infrastructure/test_metrics_catalogue_code_tier1b.py" = ["PLR2004"]
+"tests/unit/infrastructure/test_package_lookup.py" = ["PLR2004"]
+"tests/unit/application/analysis/test_summary_open_sources.py" = ["PLR2004"]
+"tests/unit/infrastructure/test_analysis_tools_version.py" = ["PLR2004"]
 
 [tool.ruff.format]
 # Story 9-2 left these test files with formatting that hard rule 1 forbids fixing.

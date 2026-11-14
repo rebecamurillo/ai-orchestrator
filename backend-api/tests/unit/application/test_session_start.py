@@ -191,13 +191,17 @@ def test_no_worktree_is_refused() -> None:
 
 
 def test_no_remaining_budget_is_refused() -> None:
-    session = a_session_world(budget_usd=Decimal("5.00"), spend_usd=Decimal("5.00"))
+    session = a_session_world(
+        budget_usd=Decimal("5.00"), spend_usd=Decimal("5.00"), gate_spend_usd=Decimal("5.00")
+    )
 
     assert refused(session, Conflict) == "no remaining budget"
 
 
 def test_an_unlimited_budget_never_refuses() -> None:
-    session = a_session_world(budget_usd=None, spend_usd=Decimal("500.00"))
+    session = a_session_world(
+        budget_usd=None, spend_usd=Decimal("500.00"), gate_spend_usd=Decimal("500.00")
+    )
 
     session.start()
 

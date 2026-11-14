@@ -36,7 +36,7 @@ from collections.abc import Sequence
 import structlog
 
 from orchestrator.application.rules.protected_paths import uncommitted
-from orchestrator.application.steps import agent_answer, agent_tail
+from orchestrator.application.steps import agent_answer, agent_tail, records
 from orchestrator.application.steps.context import (
     StepContext,
     redispatched,
@@ -47,6 +47,7 @@ from orchestrator.application.steps.context import (
 )
 from orchestrator.application.story_file import after_verify
 from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY, STORY_ID_KEY
+from orchestrator.domain.entities.run_records import ROOT_PATH
 from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.values import Park, StepResult
 
@@ -93,7 +94,8 @@ def _write_and_commit(ctx: StepContext, *, moves_only: bool) -> None:
         git.stage(worktree, target)
     if not _staged(git.status(worktree), targets):
         return
-    git.commit(worktree, PREPARE_MESSAGE.format(id=_text(ctx, STORY_ID_KEY), n=ctx.attempt.n))
+    sha = git.commit(worktree, PREPARE_MESSAGE.format(id=_text(ctx, STORY_ID_KEY), n=ctx.attempt.n))
+    records.note_commits(ctx, ((ROOT_PATH, sha),), "prepare")
 
 
 def _park(ctx: StepContext, error: GitError) -> StepResult:

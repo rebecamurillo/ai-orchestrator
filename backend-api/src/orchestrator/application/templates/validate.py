@@ -52,7 +52,9 @@ from orchestrator.application.templates.model import (
     ValidationResult,
 )
 from orchestrator.application.templates.on_fail import parse_redispatch_consult
+from orchestrator.application.templates.step_metrics import parse_metrics
 from orchestrator.application.templates.table import (
+    ROLE_KEY,
     RUN_KEY,
     RUN_SUGAR_KIND,
     WITH_KEY,
@@ -180,6 +182,7 @@ def parse(root: LinedMap) -> ParsedTemplate:
         description=_text(root.get("description")),
         inputs=tuple(_input(inputs, name) for name in inputs),
         steps=tuple(_entry(node) for node in child_steps(root)),
+        metrics=parse_metrics(root),
     )
 
 
@@ -241,6 +244,7 @@ def _step(node: LinedMap) -> Step:
         id=node["id"],
         uses=kind,
         meta=KIND_META[kind],
+        role=node.get(ROLE_KEY),
         params=_params(node, params, kind),
         gate=node.get("gate"),
         timeout_min=node.get("timeout_min"),

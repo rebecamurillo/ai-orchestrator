@@ -18,6 +18,7 @@
  * shows the new result.
  */
 import type { components } from '../../api/schema';
+import MetricHint from '../../islands/MetricHint';
 import Button from '../../components/Button.astro';
 import EmptyState from '../../components/EmptyState.astro';
 import ProjectListRow from '../../components/ProjectListRow.astro';
@@ -214,6 +215,14 @@ function pluralize(count: number, noun: string): string {
           {project.log_prompt_content ? 'on' : 'off'}
           {project.monthly_spend_usd != null &&
             ` · this month $${project.monthly_spend_usd}${project.monthly_spend_provisional ? ' provisional' : ''}`}
+          {project.monthly_spend_usd != null && (
+            <MetricHint client:load metricId="spend.month_recorded" />
+          )}
+        </p>
+        <p class="hint">
+          <a href={`/metrics?project=${project.id}`} data-testid="projects-metrics-link">
+            metrics for this project
+          </a>
         </p>
         <p class="hint" data-testid="projects-export-hint">
           one line per done story · newest first · JSON lines ·{' '}

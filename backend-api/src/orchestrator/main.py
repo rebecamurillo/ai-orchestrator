@@ -38,7 +38,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 import structlog
 import uvicorn
-from fastapi import APIRouter, Depends, FastAPI
+from fastapi import Depends, FastAPI
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
@@ -46,6 +46,12 @@ from orchestrator.api.deps import require_bearer
 from orchestrator.api.errors import UNAUTHORIZED_RESPONSE, install_error_handlers
 from orchestrator.api.mcp_mount import install_mcp
 from orchestrator.api.open_routes import install_open_routes
+from orchestrator.api.protected_routes import (
+    API_PREFIX,
+    HTTP_UNAUTHORIZED,
+    install_metrics_routes,
+    mount_protected,
+)
 from orchestrator.api.providers_channel import CHAT
 from orchestrator.api.routers import (
     clone_check,
@@ -106,6 +112,7 @@ from orchestrator.infrastructure.dbos import (
     dependency_startup_sweep,
     launch_engine,
     schedule_engine_jobs,
+    schedule_facts_jobs,
     schedule_jobs,
     serving,
 )
@@ -117,15 +124,13 @@ from orchestrator.infrastructure.git import SubprocessGit
 # imports it from `orchestrator.main`.
 from orchestrator.infrastructure.harness import build_harnesses  # noqa: F401
 from orchestrator.infrastructure.logging import configure_logging
+from orchestrator.infrastructure.metrics_catalogue import validate_shipped_catalogue
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.skills_install import install_operator_skills
 from orchestrator.infrastructure.template_folder_seed import seed_folder_templates
 from orchestrator.infrastructure.templates_loader import load_shipped_templates
 
 log = structlog.get_logger(__name__)
-
-API_PREFIX = "/api/v1"
-HTTP_UNAUTHORIZED = 401
 
 
 #: What FastAPI accepts as `lifespan`: a callable taking the app and yielding once.
@@ -194,6 +199,7 @@ def run_migrations(settings: Settings) -> str:
     # (re)installed on every boot, after the migration and before the launch (AD-16)
     install_operator_skills(settings)
     seed_shipped_templates(settings)
+    validate_shipped_catalogue()
     seed_folder_templates(settings)
     seed_harness_table(settings)
     # last, and inside this function: see `infrastructure/dbos/startup.py`. A process that
@@ -205,6 +211,7 @@ def run_migrations(settings: Settings) -> str:
     # the jobs that signal a Run rather than sweep one, and so need the engine itself
     # (SPEC CAP-7, FR-21) — `infrastructure/terminal_jobs.py` says why they register apart
     schedule_engine_jobs(settings)
+    schedule_facts_jobs(settings)
     # re-enqueue or park any dependency-waiting Runs left unresolved by a crash (story 5-4)
     dependency_startup_sweep(settings)
     return head
@@ -277,14 +284,14 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         repositories.router,
         clone_check.router,
     ):
-        _mount(app, router)
-    _mount(app, repository_init.router)
+        mount_protected(app, router)
+    mount_protected(app, repository_init.router)
     # before `templates.router`, and that is load-bearing: Starlette matches in registration
     # order and `templates.router` registers `GET /templates/{name}/{version}` last, so a
     # three-segment `GET /templates/{name}/graph` mounted after it would be swallowed as
     # `version="graph"` and answered 422 instead of reaching this operation at all.
     # `test_graph_text_router.py` reads this pair's own literal source, so unlike every
-    # other router above and below, neither goes through the `_mount` helper.
+    # other router above and below, neither goes through the `mount_protected` helper.
     app.include_router(
         graph_text.router,
         prefix=API_PREFIX,
@@ -298,7 +305,7 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
     )
     for router in (graph.router, runs.router):
-        _mount(app, router)
+        mount_protected(app, router)
     # after `runs.router`, and that is load-bearing the same way `graph_text.router` before
     # `templates.router` is: `GET /runs/{run_id}` and `GET /runs/preflight` are the same
     # shape to Starlette, which matches registration order, so the literal path has to be
@@ -321,22 +328,13 @@ def create_app(  # noqa: PLR0913 — one keyword per optional adapter, `git`'s o
         spec_folders.router,
         harness_models.router,
     ):
-        _mount(app, router)
-    _mount(app, harness_readiness.router)
-    _mount(app, harness_probe.router)
+        mount_protected(app, router)
+    mount_protected(app, harness_readiness.router)
+    mount_protected(app, harness_probe.router)
+    install_metrics_routes(app)
     install_open_routes(app)
     install_mcp(app)
     return app
-
-
-def _mount(app: FastAPI, router: APIRouter) -> None:
-    """One feature router, on the versioned prefix, behind the one bearer dependency (AD-4)."""
-    app.include_router(
-        router,
-        prefix=API_PREFIX,
-        dependencies=[Depends(require_bearer)],
-        responses={HTTP_UNAUTHORIZED: UNAUTHORIZED_RESPONSE},
-    )
 
 
 def main() -> None:

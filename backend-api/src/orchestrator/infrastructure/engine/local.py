@@ -69,3 +69,6 @@ class LocalWorkflowEngine:
 
     def enqueue_session_turn(self, run_id: UUID, attempt_id: UUID) -> None:
         """Nothing here runs a turn, as nothing here runs a walk."""
+
+    def enqueue_calculation(self, calculation_id: UUID) -> None:
+        """Nothing here runs a calculation, as nothing here runs a walk."""

@@ -140,6 +140,7 @@ def plan_run(
         plan_refs=dict(reader.plan_refs),
         rows=numbered(rows, tree.root),
         branches=allocator.allocated,
+        base_tip=reader.known(inputs.base_branch),
     )
 
 

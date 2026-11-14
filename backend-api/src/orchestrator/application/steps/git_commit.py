@@ -61,7 +61,7 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 
 from orchestrator.application.rules import protected_paths
-from orchestrator.application.steps import WORKDIR_KEY
+from orchestrator.application.steps import WORKDIR_KEY, records
 from orchestrator.application.steps.context import (
     StepContext,
     require_cwd,
@@ -69,6 +69,7 @@ from orchestrator.application.steps.context import (
     resolved_text,
 )
 from orchestrator.application.steps.registry import register
+from orchestrator.domain.entities.run_records import ROOT_PATH
 from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.values import Park, StepResult
 
@@ -140,6 +141,7 @@ class GitCommitExecutor:
             sha = git.commit(worktree, message)
         except GitError as error:
             return _park(ctx, COMMIT_FAILED, output=error.output)
+        records.note_commits(ctx, ((ROOT_PATH, sha),), "git.commit")
         return StepResult(status="done", gate=ctx.row.gate, output_ref=sha)
 
 
@@ -179,6 +181,8 @@ def _in_workdir(ctx: StepContext, workdir: str, message: str) -> StepResult:
             reason=reason,
             park=Park(kind="misconfigured", reason=reason, path=ctx.row.path),
         )
+    records.note_member(ctx, workdir)
+    records.note_commits(ctx, ((normalised, sha),), "git.commit")
     return StepResult(status="done", gate=ctx.row.gate, output_ref=sha)
 
 

@@ -41,6 +41,7 @@ class FakeWorkflowEngine:
         self._uow = uow
         self._next_ref = 0
         self.session_turn_error: Exception | None = None
+        self.calculation_error: Exception | None = None
 
     def _note_commit_state(self) -> None:
         if self._uow is not None:
@@ -85,3 +86,10 @@ class FakeWorkflowEngine:
         self._note_commit_state()
         if self.session_turn_error is not None:
             raise self.session_turn_error
+
+    # epic 2 story 5, 2026-11-13: a Run's metrics calculation is its own workflow.
+    def enqueue_calculation(self, calculation_id: UUID) -> None:
+        self.calls.append(("enqueue_calculation", calculation_id))
+        self._note_commit_state()
+        if self.calculation_error is not None:
+            raise self.calculation_error

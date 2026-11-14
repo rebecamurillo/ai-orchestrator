@@ -50,6 +50,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from orchestrator.application.rules import session
+from orchestrator.application.rules.budget import figure
 from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -180,7 +181,7 @@ def _raises_the_budget(
     `Decimal("Infinity")` would be accepted as a budget no spend can ever exceed.
     """
     budget = _raised_budget(signal.payload)
-    return budget is not None and budget.is_finite() and budget > run.spend_usd
+    return budget is not None and budget.is_finite() and budget > figure(run)
 
 
 def _has_story_frame(

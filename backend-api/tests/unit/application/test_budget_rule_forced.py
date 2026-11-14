@@ -26,6 +26,7 @@ def a_run(*, spend_usd: Decimal, budget_usd: Decimal) -> Run:
         status="running",
         budget_usd=budget_usd,
         spend_usd=spend_usd,
+        gate_spend_usd=spend_usd,
         created_at=NOW,
     )
 

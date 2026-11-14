@@ -107,7 +107,7 @@ def test_a_cancel_is_admitted_on_a_run_that_never_parked() -> None:
 
 
 def test_a_budget_raise_above_the_spend_is_admitted() -> None:
-    run = parked("budget", spend_usd=Decimal("3"))
+    run = parked("budget", spend_usd=Decimal("3"), gate_spend_usd=Decimal("3"))
     signal = Signal(kind="budget_raise", payload={BUDGET_KEY: "4"})
 
     assert validate(run, a_row("agent", "blocked"), signal) is VALID["budget_raise"]
@@ -244,14 +244,14 @@ def test_a_run_parked_with_no_kind_at_all_admits_nothing() -> None:
     [{}, {BUDGET_KEY: "not a number"}, {BUDGET_KEY: "1"}, {BUDGET_KEY: "NaN"}],
 )
 def test_a_budget_raise_that_does_not_exceed_the_spend_is_refused(payload: dict[str, str]) -> None:
-    run = parked("budget", spend_usd=Decimal("3"))
+    run = parked("budget", spend_usd=Decimal("3"), gate_spend_usd=Decimal("3"))
 
     with pytest.raises(Conflict):
         validate(run, a_row(), Signal(kind="budget_raise", payload=payload))
 
 
 def test_a_budget_raise_of_something_that_is_not_a_number_at_all_is_refused() -> None:
-    run = parked("budget", spend_usd=Decimal("3"))
+    run = parked("budget", spend_usd=Decimal("3"), gate_spend_usd=Decimal("3"))
 
     with pytest.raises(Conflict):
         validate(run, a_row(), Signal(kind="budget_raise", payload={BUDGET_KEY: None}))
@@ -292,7 +292,7 @@ def test_a_files_payload_that_is_not_a_list_accepts_nothing() -> None:
 
 
 def test_an_infinite_budget_is_refused_rather_than_accepted_as_unbounded() -> None:
-    run = parked("budget", spend_usd=Decimal("3"))
+    run = parked("budget", spend_usd=Decimal("3"), gate_spend_usd=Decimal("3"))
 
     with pytest.raises(Conflict):
         validate(run, a_row(), Signal(kind="budget_raise", payload={BUDGET_KEY: "Infinity"}))

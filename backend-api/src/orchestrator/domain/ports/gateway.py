@@ -49,6 +49,8 @@ class AttemptSpend:
     #: How many spend-log rows this figure was summed from.
     calls: int
     provisional: bool
+    #: The log's own `total_is_capped`: the total may be incomplete.
+    capped: bool = False
 
 
 @runtime_checkable

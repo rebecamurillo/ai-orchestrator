@@ -49,6 +49,7 @@ import structlog
 from orchestrator.application.steps import StepPorts
 from orchestrator.application.steps.context import RunEnvironment
 from orchestrator.application.use_cases import walk
+from orchestrator.application.use_cases.calculate_metrics import CalculationPorts
 from orchestrator.application.use_cases.walk import Held, WalkPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.statuses import GateEvent
@@ -134,6 +135,8 @@ class WalkerDeps:
     on_terminal: Callable[[UUID], None] | None = None
     #: How a step waits on a hold; a test replaces it.
     sleep: Callable[[float], None] = time.sleep
+    #: The metrics calculation's scope (epic 2 story 5); `None` where no job is wired.
+    calculation_writes: Callable[[], AbstractContextManager[CalculationPorts]] | None = None
 
 
 def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]:

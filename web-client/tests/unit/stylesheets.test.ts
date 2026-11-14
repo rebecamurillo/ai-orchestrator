@@ -155,3 +155,52 @@ it('reads the source of every component under src/', () => {
   // is not — it would mean the rules above stopped covering the tree
   expect(Object.keys(components).length).toBeGreaterThan(10);
 });
+
+// Chart colours colour chart marks and exports only (epic 3 story 1, D7/T18, 2026-11-13).
+const SOURCE_EXTENSIONS = ['.css', '.astro', '.ts', '.tsx', '.mjs'];
+
+function sourcesUnder(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return sourcesUnder(path);
+    return SOURCE_EXTENSIONS.some((extension) => entry.name.endsWith(extension)) ? [path] : [];
+  });
+}
+
+function chartTokenOffenders(files: { path: string; source: string }[]): string[] {
+  return files
+    .filter(
+      (file) =>
+        file.path !== 'src/styles/tokens.css' &&
+        !file.path.startsWith('src/lib/charts/') &&
+        !file.path.startsWith('src/components/charts/') &&
+        /--color-chart-[a-z0-9-]+/.test(file.source),
+    )
+    .map((file) => file.path);
+}
+
+describe('chart colour tokens', () => {
+  const files = sourcesUnder(SRC).map((path) => ({
+    path: `src/${path.slice(SRC.length)}`,
+    source: readFileSync(path, 'utf8'),
+  }));
+
+  it('are named only in tokens.css and the two chart folders', () => {
+    expect(chartTokenOffenders(files)).toEqual([]);
+  });
+
+  it('flags a file outside the chart folders and spares the chart folders', () => {
+    expect(
+      chartTokenOffenders([
+        { path: 'src/components/run/CostBlock.tsx', source: 'fill: var(--color-chart-data-1)' },
+        { path: 'src/lib/charts/a.ts', source: '--color-chart-ink' },
+        { path: 'src/components/charts/b.tsx', source: '--color-chart-data-2' },
+      ]),
+    ).toEqual(['src/components/run/CostBlock.tsx']);
+  });
+
+  it('walks the tree it is meant to check', () => {
+    expect(files.map((file) => file.path)).toContain('src/styles/tokens.css');
+    expect(files.filter((file) => file.path.endsWith('.tsx')).length).toBeGreaterThan(10);
+  });
+});

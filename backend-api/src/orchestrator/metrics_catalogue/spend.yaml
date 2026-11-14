@@ -1,0 +1,81 @@
+- id: spend.month
+  label: spend this month
+  group: spend
+  level: H
+  scopes:
+  - project
+  unit: USD
+  source: Runs started this calendar month
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  limits: Counts Runs by start date, not by when the money was spent.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: Money spent by the Project's Runs that started in the current calendar month, from the
+      gateway figure.
+    parameters: {}
+- id: spend.month_cancelled
+  label: of which cancelled Runs
+  group: spend
+  level: H
+  scopes:
+  - project
+  unit: USD
+  source: Runs started this calendar month and ended cancelled
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  limits: A subset of spend.month.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: The part of this month's spend that belongs to Runs that ended cancelled.
+    parameters: {}
+- id: spend.recorded
+  label: recorded spend
+  group: spend
+  level: A
+  scopes:
+  - attempt
+  - step
+  - story
+  - epic
+  - run
+  unit: USD
+  source: the attempt record
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  - n/a — template has no story frame
+  limits: Describes today's stored figure exactly; it mixes sources by design, which is why the gateway
+    and harness figures are kept apart as cost.gateway and cost.harness.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: 'The per-attempt spend figure stored today: the gateway''s figure when the gateway answered,
+      otherwise the harness''s figure, flagged provisional.'
+    parameters: {}
+- id: spend.month_recorded
+  label: recorded spend this month
+  group: spend
+  level: A
+  scopes:
+  - project
+  unit: USD
+  source: sum of spend.recorded
+  component_of: null
+  additive: within_scope_type
+  missing_words:
+  - not recorded
+  limits: Distinct from spend.month, which uses the gateway figure only.
+  fingerprint_group: false
+  methods:
+  - n: 1
+    description: 'The monthly line shown today on the project page and list: the sum of spend.recorded
+      over the Project''s Runs this month.'
+    parameters: {}

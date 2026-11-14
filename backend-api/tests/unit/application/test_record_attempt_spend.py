@@ -16,7 +16,9 @@ from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.gateway import AttemptSpend, ModelSpend
 from orchestrator.domain.ports.harness import HarnessUsage
+from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
+from tests.unit.fakes.facts import FakeGatewayReadRepository
 from tests.unit.fakes.gateway import FakeGateway
 from tests.unit.fakes.runs import FakeAttemptRepository, FakeRunRepository, FakeStepRunRepository
 
@@ -79,6 +81,8 @@ class Harness:
             runs=self.runs,
             steps=self.steps,
             attempts=self.attempts,
+            gateway_reads=FakeGatewayReadRepository(),
+            clock=FakeClock(),
             uow=self.uow,
         )
 

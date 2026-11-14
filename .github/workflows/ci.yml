@@ -171,6 +171,22 @@ jobs:
           sed -i "s|^INIT_TEMPLATE=.*|INIT_TEMPLATE=e2e-repo-init|" .env
       - name: Start postgres
         run: docker compose up -d --wait postgres
+      - name: Install the gitleaks the image pins
+        # A Run's analysis shells `gitleaks`, which only the image installs
+        # (backend-api/Dockerfile); without it a source run stores no gitleaks SARIF. The
+        # version and checksum are read from the Dockerfile so the two cannot drift.
+        run: |
+          version=$(sed -n 's/^ARG GITLEAKS_VERSION=//p' backend-api/Dockerfile)
+          sha=$(sed -n 's/^ARG GITLEAKS_SHA256_AMD64=//p' backend-api/Dockerfile)
+          test -n "$version" && test -n "$sha"
+          archive="gitleaks_${version}_linux_x64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${version}/${archive}"
+          echo "${sha}  $RUNNER_TEMP/${archive}" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/bin" gitleaks
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/gitleaks" version
       - name: Start backend-api from source
         # Three contract values name things that exist only inside the compose network, and
         # a run on the runner itself has none of them. DATABASE_URL names the postgres

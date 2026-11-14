@@ -65,6 +65,12 @@ class Run(BaseModel):
     budget_usd: Decimal | None
     spend_usd: Decimal = Decimal("0")
     spend_provisional: bool = False
+    #: Gateway and harness totals kept apart; the gate figure is `rules/budget.figure` (RM-4).
+    gateway_spend_usd: Decimal = Decimal("0")
+    harness_spend_usd: Decimal = Decimal("0")
+    gate_spend_usd: Decimal = Decimal("0")
+    gateway_reported: bool = False
+    harness_reported: bool = False
     #: Hours the Operator estimated the same work would take by hand. Immutable after start.
     manual_estimate_h: Decimal | None = None
     re_review_done: bool = False
@@ -123,6 +129,9 @@ class Run(BaseModel):
     active_seconds: int = 0
     last_opened_at: datetime | None = None
     last_opened_before: datetime | None = None
+    #: `RunRepository.set_label` is the only writer after creation.
+    label: str = ""
+    label_set_by_operator: bool = False
     created_at: datetime
     #: When this row was last written, maintained by the database rather than by any use
     #: case (AD-8): `None` on a Run that has not been stored yet, which is what a planner

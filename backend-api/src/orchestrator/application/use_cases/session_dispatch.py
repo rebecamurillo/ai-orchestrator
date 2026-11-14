@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from orchestrator.application.rules import consult, session
-from orchestrator.application.steps import agent_env, agent_tail, agent_workdir
+from orchestrator.application.steps import agent_env, agent_tail, agent_workdir, records
 from orchestrator.application.steps.agent import (
     DEFAULT_STALL_MIN,
     INDEX_LOCK,
@@ -97,7 +97,7 @@ def dispatch(turn: Turn) -> None:
         return
     if session.needs_sweep(turn.turns, ctx.attempt):
         try:
-            agent_workdir.sweep(ctx, session.WIP_MESSAGE)
+            records.note_commits(ctx, agent_workdir.sweep(ctx, session.WIP_MESSAGE), "session")
         except GitError as error:
             record(ctx, status="error", output_ref=git_words(error))
             return
