@@ -62,7 +62,7 @@ services:
     restart: always
 
   backend-api:
-    image: ghcr.io/rebecamurillo/ai-orchestrator/backend-api:1.0.0-beta.4
+    image: ghcr.io/rebecamurillo/ai-orchestrator/backend-api:1.0.0-beta.5
     env_file:
       # the release's version pins first, then the one process that holds every credential
       # (AD-5); both required, because a stack that silently started without its contract
@@ -106,7 +106,7 @@ services:
     restart: always
 
   web-client:
-    image: ghcr.io/rebecamurillo/ai-orchestrator/web-client:1.0.0-beta.4
+    image: ghcr.io/rebecamurillo/ai-orchestrator/web-client:1.0.0-beta.5
     environment:
       # exactly five (AD-5). Never GITHUB_TOKEN, never LITELLM_SPEND_KEY, never DATABASE_URL.
       ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN:?set it in .env, copied from .env.example}
@@ -195,7 +195,7 @@ services:
   # `up`. It reads no env_file and mounts no harness config, login, `work` or `.env`, so a
   # client script cannot see a secret; its own network keeps it off the stack's.
   setup:
-    image: ghcr.io/rebecamurillo/ai-orchestrator/backend-api:1.0.0-beta.4
+    image: ghcr.io/rebecamurillo/ai-orchestrator/backend-api:1.0.0-beta.5
     profiles: ["setup"]
     entrypoint: ["/app/scripts/setup/run.sh"]
     restart: "no"
