@@ -86,7 +86,10 @@ jobs:
           fi
           echo "ci is green for ${{ github.sha }} ($runs successful run(s))"
 
+      # DISABLED with deploy.yml (Operator, 2026-11-14): `make test-deploy` runs locally before
+      # a tag instead. Remove the `if` to require a green deploy run again.
       - name: The deploy workflow succeeded for this commit
+        if: false
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
