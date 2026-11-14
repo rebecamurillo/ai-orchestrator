@@ -34,6 +34,7 @@ from tests.e2e.test_run_creation import (
     TEMPLATES,
     clone_check,
     create_repository,
+    project_id_of,
     run_payload,
 )
 from tests.e2e.test_signals import TWO_STEP_TEMPLATE, signal, wait_for
@@ -140,6 +141,7 @@ def save(api: httpx.Client, name: str, yaml: str) -> None:
 
 
 def start(api: httpx.Client, name: str, repository_id: str, **extra: object) -> dict[str, Any]:
+    extra.setdefault("project_id", project_id_of(api, repository_id))
     response = api.post(RUNS, json=run_payload(name, repository_id, **extra))
     assert response.status_code == HTTP_CREATED, response.text
     run: dict[str, Any] = response.json()["run"]
@@ -289,11 +291,14 @@ def test_a_declared_role_reaches_the_planned_row(
     repository_id, _ = new_repository(api, fixtures, settings)
     run = start(api, name, repository_id)
 
-    roles = connection.execute(
-        text("select role from public.step_run where run_id = :run_id"), {"run_id": run["id"]}
-    ).scalars()
+    rows = connection.execute(
+        text("select path, role from public.step_run where run_id = :run_id"),
+        {"run_id": run["id"]},
+    ).all()
 
-    assert list(roles) == ["implement"]
+    # the planner adds rows of its own, which declare no role
+    assert [role for path, role in rows if path.endswith("touch")] == ["implement"]
+    assert {role for path, role in rows if not path.endswith("touch")} <= {""}
     wait_for(api, run["id"], TERMINAL)
 
 
@@ -381,7 +386,9 @@ def test_a_run_that_ends_gets_v1_and_a_manual_calculation_gets_v2(
     latest = api.get(f"{RUNS}/{run_id}/metrics").json()
     assert latest["version"] == SECOND
     assert latest["latest"] == SECOND
-    assert api.get(f"{RUNS}/{run_id}/metrics", params={"v": 1}).json() == first.json()
+    # `latest` names the Run's newest version, so only it moves once v2 exists
+    again = api.get(f"{RUNS}/{run_id}/metrics", params={"v": 1}).json()
+    assert again == {**first.json(), "latest": SECOND}
     missing = api.get(f"{RUNS}/{run_id}/metrics", params={"v": 3})
     assert missing.status_code == HTTP_NOT_FOUND
 
