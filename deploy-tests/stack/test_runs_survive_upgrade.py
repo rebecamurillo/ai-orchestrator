@@ -49,8 +49,10 @@ AGENT_TEMPLATE = (
     "      harness: fake\n"
     # Own-text form, no `skill`: the scripted `fake` harness has no skill catalog, so a named
     # skill fails pre-flight (409). AC-9/AC-9a need a Run blocked across the upgrade; the
-    # skill is incidental (retro F2, Operator 2026-11-12).
-    '      prompt: "Write story 1 of specs/s and stop at its blocking question."\n'
+    # skill is incidental (retro F2, Operator 2026-11-12). The fake finds its scenario only from
+    # the `spec folder …, story id ….` sentence: any other wording reads no scenario, writes no
+    # Story file and parks `no story file` (fixed 2026-11-14).
+    '      prompt: "Write the story: spec folder specs/s, story id 1."\n'
     "    prompts:\n"
     "      answer: 'Answer from the operator to the blocking condition"
     ' "{{condition}}": {{answer}}\'\n'
