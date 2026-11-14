@@ -317,6 +317,12 @@ def test_a_hold_is_refused_409_naming_the_working_step_and_nothing_is_held(
 def test_a_run_started_under_a_hold_waits_queued_then_finishes_after_release(
     api: httpx.Client, repository_id: str, released: None
 ) -> None:
+    # Revised: a running metrics calculation is a working step against a hold (run-metrics
+    # epic 2 story 5, 2026-11-13); the Runs earlier tests ended may still be calculating.
+    wait_until(
+        "earlier Runs' calculations to end",
+        lambda: not any(w.get("kind") == "calculation" for w in activity(api)["working"]),
+    )
     placed = api.post(HOLD, json={"ttl_seconds": HOLD_TTL_SECONDS, "reason": "e2e upgrade"})
     assert placed.status_code == HTTP_CREATED, placed.text
 
