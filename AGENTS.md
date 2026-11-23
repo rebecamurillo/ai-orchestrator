@@ -1,6 +1,6 @@
 # AGENTS.md — ai-orchestrator (root)
 
-Read this first, then the `AGENTS.md` of the component you are changing. This file is the constitution: it describes what the repository is, the rules no task may relax, and the commands that decide whether work is done. Rules here are checkable; if a rule cannot be checked, it belongs in a review, not here. `README.md` is the human-facing counterpart: setup, boot, and the operator walkthrough live there — do not duplicate them here.
+Read this first, then the `AGENTS.md` of the component you are changing. This file is the constitution: it describes what the repository is, the rules no task may relax, and the commands that decide whether work is done. Rules here are checkable; if a rule cannot be checked, it belongs in a review, not here. `README.md` is the human-facing counterpart (what it is, how it is used); the operator walkthrough is `INSTALL.md` and the checkout setup is `DEVELOPMENT.md` — do not duplicate them here.
 
 ## What this repository is
 
@@ -71,7 +71,7 @@ make openapi     # export contracts/openapi.json, then `pnpm gen:api` in web-cli
 
 ## Releasing a new version
 
-A version is published only when the Operator asks for one. The checklist is `README.md` →
+A version is published only when the Operator asks for one. The checklist is `DEVELOPMENT.md` →
 "Publish a new version"; the rules an agent must not bend:
 
 - `VERSION` is the only place the number is chosen. The same change sets it in
@@ -125,4 +125,4 @@ path 2, not a new table, file or export.
 
 ## Operator setup and diagnostics
 
-Setup, boot, demo, and troubleshooting live in `README.md` — when asked, walk the operator through it in its order rather than improvising (deployment: `DEPLOY.md`; host services: `deploy/llm-platform/README.md`). Fix setup by naming the exact command, not by editing code, and never relax an anchor or a gate to get a machine green.
+Setup, boot, demo, and troubleshooting live in `INSTALL.md` (a released instance) and `DEVELOPMENT.md` (a checkout) — when asked, walk the operator through it in its order rather than improvising (deployment: `DEPLOY.md`; host services: `deploy/llm-platform/README.md`). Fix setup by naming the exact command, not by editing code, and never relax an anchor or a gate to get a machine green.
