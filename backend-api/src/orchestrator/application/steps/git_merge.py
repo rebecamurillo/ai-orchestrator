@@ -34,9 +34,20 @@ the adapter (AD-5), so storing it verbatim cannot leak a credential.
 from __future__ import annotations
 
 from orchestrator.application.steps import records
-from orchestrator.application.steps.context import StepContext, require_cwd, require_env
+from orchestrator.application.steps.context import (
+    StepContext,
+    require_cwd,
+    require_env,
+    resolved_text,
+)
 from orchestrator.application.steps.git_sync import NO_UPSTREAM as NO_UPSTREAM_REASON
 from orchestrator.application.steps.registry import register
+from orchestrator.application.steps.step_log import (
+    GitRecorder,
+    head_or_none,
+    logged,
+    refs_line,
+)
 from orchestrator.domain.entities.run_records import ROOT_PATH
 from orchestrator.domain.ports.git import NO_UPSTREAM, GitError
 from orchestrator.domain.values import Park, StepResult
@@ -63,29 +74,38 @@ class GitMergeExecutor:
     """Merge the declared branch into the one this Run's worktree is on."""
 
     def execute(self, ctx: StepContext) -> StepResult:
-        env = require_env(ctx)
-        worktree = require_cwd(ctx)
-        recorded = env.worktree_at(ctx.cwd)
-        if recorded is None:
-            raise RuntimeError(UNKNOWN_WORKTREE.format(path=ctx.cwd))
-        source = str(ctx.with_resolved[FROM_KEY])
-        try:
-            output = ctx.ports.git.merge(worktree, source)
-        except GitError as error:
-            reason = CONFLICT.format(**{FROM_KEY: source, "branch": recorded.branch})
-            return StepResult(
-                status="error",
-                gate=ctx.row.gate,
-                output_ref=error.output,
-                reason=reason,
-                park=Park(kind="merge_conflict", reason=reason, path=ctx.row.path),
-            )
-        if output is NO_UPSTREAM:
-            return StepResult(status="done", gate=ctx.row.gate, reason=NO_UPSTREAM_REASON)
-        if output is None:
-            return StepResult(status="done", gate=ctx.row.gate, reason=ALREADY_MERGED)
-        records.note_head_commit(ctx, ROOT_PATH, worktree, "git.merge")
-        return StepResult(status="done", gate=ctx.row.gate, output_ref=output)
+        return logged(ctx, _merge)
+
+
+def _merge(ctx: StepContext, recorder: GitRecorder) -> StepResult:
+    env = require_env(ctx)
+    worktree = require_cwd(ctx)
+    recorded = env.worktree_at(ctx.cwd)
+    if recorded is None:
+        raise RuntimeError(UNKNOWN_WORKTREE.format(path=ctx.cwd))
+    source = str(ctx.with_resolved[FROM_KEY])
+    before = head_or_none(ctx.ports.git, worktree)
+    try:
+        output = ctx.ports.git.merge(worktree, source)
+    except GitError as error:
+        reason = CONFLICT.format(**{FROM_KEY: source, "branch": recorded.branch})
+        return StepResult(
+            status="error",
+            gate=ctx.row.gate,
+            output_ref=error.output,
+            reason=reason,
+            park=Park(kind="merge_conflict", reason=reason, path=ctx.row.path),
+        )
+    branch = resolved_text(ctx.with_resolved, "branch") or recorded.branch
+    moved = refs_line(before, head_or_none(ctx.ports.git, worktree), branch)
+    if moved is not None:
+        recorder.lines.append(moved)
+    if output is NO_UPSTREAM:
+        return StepResult(status="done", gate=ctx.row.gate, reason=NO_UPSTREAM_REASON)
+    if output is None:
+        return StepResult(status="done", gate=ctx.row.gate, reason=ALREADY_MERGED)
+    records.note_head_commit(ctx, ROOT_PATH, worktree, "git.merge")
+    return StepResult(status="done", gate=ctx.row.gate, output_ref=output)
 
 
 register(KIND, GitMergeExecutor())

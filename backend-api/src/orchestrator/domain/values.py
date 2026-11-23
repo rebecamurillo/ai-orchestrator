@@ -142,11 +142,13 @@ class StepResult(BaseModel):
     output_ref: str | None = None
     #: The file `ProcessRunner.start` appended this row's stdout and stderr into, written to
     #: `attempt.log_path` by `apply_step_result` — the column `latest.log_tail` is read from.
-    #: Set only by a kind that started a process, and only on a result of that process, so
-    #: the reader is never handed a path to a file nothing wrote. It is deliberately not
-    #: `output_ref`: `git.commit` puts a sha there and `pr.link` a URL. `None` is "this
-    #: result says nothing about a log", never "this attempt has none" — the `agent` kind
-    #: records its own through `mark_finished` before this result is ever applied.
+    #: Set by a kind that started a process (on a result of that process) and by the
+    #: deterministic kinds `git.sync`, `git.commit`, `git.push`, `git.merge`, `git.worktree`,
+    #: `git.submodule`, `plan.check` and `pr.link`, which write theirs through `StepLog`
+    #: (AD-40), so the reader is never handed a path to a file nothing wrote. It is
+    #: deliberately not `output_ref`: `git.commit` puts a sha there and `pr.link` a URL. `None`
+    #: is "this result says nothing about a log", never "this attempt has none" — the `agent`
+    #: kind records its own through `mark_finished` before this result is ever applied.
     log_path: str | None = None
     #: Set when the result stops the Run — `apply_step_result` writes `run.park_kind`,
     #: `run.park_path` and the `gate_record` together from it (AD-8).

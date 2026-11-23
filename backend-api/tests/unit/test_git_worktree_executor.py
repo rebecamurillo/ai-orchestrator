@@ -14,7 +14,12 @@ from pathlib import Path
 import pytest
 
 from orchestrator.application.steps import ATTACH_MODE
-from orchestrator.application.steps.context import NO_ENVIRONMENT, NO_WORKSPACE, StepExecutor
+from orchestrator.application.steps.context import (
+    NO_ENVIRONMENT,
+    NO_WORKSPACE,
+    StepExecutor,
+    log_path,
+)
 from orchestrator.application.steps.git_worktree import (
     BASE_CLONE_FAILED,
     DIRTY,
@@ -412,14 +417,16 @@ def test_the_executor_starts_no_process_at_all() -> None:
     assert runner.called("start") == []
 
 
-def test_a_fresh_worktree_reports_done_with_its_updates_and_no_log() -> None:
-    """No process ran, so there is no file to name — and `tail` must not be sent a path
-    to a file nothing ever wrote."""
-    result = GitWorktreeExecutor().execute(a_context(a_worktree_row()))
+def test_a_fresh_worktree_reports_done_with_its_updates_and_its_step_log() -> None:
+    """The log is the one `StepLog` wrote, not a process file; revised for story 2 of
+    epic-1-step-logs (2026-11-23): deterministic kinds return a `log_path`."""
+    context = a_context(a_worktree_row())
+
+    result = GitWorktreeExecutor().execute(context)
 
     assert result.status == "done"
     assert result.reason is None
-    assert result.log_path is None
+    assert result.log_path == str(log_path(context))
     assert result.run_updates is not None
     assert result.run_updates.worktree_path == WORKTREE
 

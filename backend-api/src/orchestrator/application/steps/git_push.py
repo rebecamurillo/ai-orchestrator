@@ -49,6 +49,7 @@ from orchestrator.application.steps.context import (
 )
 from orchestrator.application.steps.git_sync import DIVERGED
 from orchestrator.application.steps.registry import register
+from orchestrator.application.steps.step_log import logged
 from orchestrator.domain.entities.run_records import ROOT_PATH
 from orchestrator.domain.ports.git import Git, GitError
 from orchestrator.domain.values import Park, RunUpdates, StepResult, Worktree
@@ -78,33 +79,37 @@ class GitPushExecutor:
     """Refuse the default branch, sync on a retry, push, and record that it landed."""
 
     def execute(self, ctx: StepContext) -> StepResult:
-        env = require_env(ctx)
-        worktree = require_cwd(ctx)
-        branch = str(ctx.with_resolved[BRANCH_KEY])
-        workdir = resolved_text(ctx.with_resolved, WORKDIR_KEY)
-        git = ctx.ports.git
-        if workdir:
-            return _execute_workdir(ctx, git, worktree, branch, workdir)
-        if branch == env.default_branch:
-            return _park(ctx, DEFAULT_BRANCH.format(branch=branch), output=None)
-        recorded = env.worktree_at(ctx.cwd)
-        created = recorded is not None and recorded.created_branch
-        if ctx.resume_signal is not None and ctx.resume_signal.event == RETRY:
-            try:
-                git.sync(worktree, branch)
-            except GitError as error:
-                return _park(ctx, DIVERGED, output=error.output)
+        return logged(ctx, lambda inner, _recorder: _push(inner))
+
+
+def _push(ctx: StepContext) -> StepResult:
+    env = require_env(ctx)
+    worktree = require_cwd(ctx)
+    branch = str(ctx.with_resolved[BRANCH_KEY])
+    workdir = resolved_text(ctx.with_resolved, WORKDIR_KEY)
+    git = ctx.ports.git
+    if workdir:
+        return _execute_workdir(ctx, git, worktree, branch, workdir)
+    if branch == env.default_branch:
+        return _park(ctx, DEFAULT_BRANCH.format(branch=branch), output=None)
+    recorded = env.worktree_at(ctx.cwd)
+    created = recorded is not None and recorded.created_branch
+    if ctx.resume_signal is not None and ctx.resume_signal.event == RETRY:
         try:
-            output = git.push(worktree, branch, created)
+            git.sync(worktree, branch)
         except GitError as error:
-            return _park(ctx, REJECTED, output=error.output)
-        records.note_pushed(ctx, ROOT_PATH, worktree)
-        return StepResult(
-            status="done",
-            gate=ctx.row.gate,
-            output_ref=output,
-            run_updates=_pushed(ctx, env.worktrees),
-        )
+            return _park(ctx, DIVERGED, output=error.output)
+    try:
+        output = git.push(worktree, branch, created)
+    except GitError as error:
+        return _park(ctx, REJECTED, output=error.output)
+    records.note_pushed(ctx, ROOT_PATH, worktree)
+    return StepResult(
+        status="done",
+        gate=ctx.row.gate,
+        output_ref=output,
+        run_updates=_pushed(ctx, env.worktrees),
+    )
 
 
 def _execute_workdir(

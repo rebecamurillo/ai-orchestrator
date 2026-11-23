@@ -26,8 +26,19 @@ the adapter (AD-5), so storing it verbatim cannot leak a credential.
 
 from __future__ import annotations
 
-from orchestrator.application.steps.context import StepContext, require_cwd, require_env
+from orchestrator.application.steps.context import (
+    StepContext,
+    require_cwd,
+    require_env,
+    resolved_text,
+)
 from orchestrator.application.steps.registry import register
+from orchestrator.application.steps.step_log import (
+    GitRecorder,
+    head_or_none,
+    logged,
+    refs_line,
+)
 from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.values import Park, StepResult
 
@@ -49,24 +60,33 @@ class GitSyncExecutor:
     """Fetch and fast-forward the branch this Run's worktree is on."""
 
     def execute(self, ctx: StepContext) -> StepResult:
-        env = require_env(ctx)
-        worktree = require_cwd(ctx)
-        recorded = env.worktree_at(ctx.cwd)
-        if recorded is None:
-            raise RuntimeError(UNKNOWN_WORKTREE.format(path=ctx.cwd))
-        try:
-            output = ctx.ports.git.sync(worktree, recorded.branch)
-        except GitError as error:
-            return StepResult(
-                status="error",
-                gate=ctx.row.gate,
-                output_ref=error.output,
-                reason=DIVERGED,
-                park=Park(kind="push_rejected", reason=DIVERGED, path=ctx.row.path),
-            )
-        if output is None:
-            return StepResult(status="done", gate=ctx.row.gate, reason=NO_UPSTREAM)
-        return StepResult(status="done", gate=ctx.row.gate, output_ref=output)
+        return logged(ctx, _sync)
+
+
+def _sync(ctx: StepContext, recorder: GitRecorder) -> StepResult:
+    env = require_env(ctx)
+    worktree = require_cwd(ctx)
+    recorded = env.worktree_at(ctx.cwd)
+    if recorded is None:
+        raise RuntimeError(UNKNOWN_WORKTREE.format(path=ctx.cwd))
+    before = head_or_none(ctx.ports.git, worktree)
+    try:
+        output = ctx.ports.git.sync(worktree, recorded.branch)
+    except GitError as error:
+        return StepResult(
+            status="error",
+            gate=ctx.row.gate,
+            output_ref=error.output,
+            reason=DIVERGED,
+            park=Park(kind="push_rejected", reason=DIVERGED, path=ctx.row.path),
+        )
+    branch = resolved_text(ctx.with_resolved, "branch") or recorded.branch
+    moved = refs_line(before, head_or_none(ctx.ports.git, worktree), branch)
+    if moved is not None:
+        recorder.lines.append(moved)
+    if output is None:
+        return StepResult(status="done", gate=ctx.row.gate, reason=NO_UPSTREAM)
+    return StepResult(status="done", gate=ctx.row.gate, output_ref=output)
 
 
 register(KIND, GitSyncExecutor())
