@@ -3007,7 +3007,8 @@
                   "retry_auto",
                   "consult",
                   "senior_answer",
-                  "senior_accept"
+                  "senior_accept",
+                  "close_discarded"
                 ],
                 "type": "string"
               },

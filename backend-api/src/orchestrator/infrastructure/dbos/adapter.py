@@ -98,7 +98,7 @@ class DbosWorkflowEngine:
         self._walk = build_walk(self._engine, self._deps)
         # before `start`, which recovers a turn a dead backend left running only once its
         # workflow is registered (AD-23)
-        self._turn = build_session_turn(self._engine, self._deps)
+        self._turn = build_session_turn(self._engine, self._deps, self)
         self._calculation = build_calculation(self._engine, self._deps)
         self._engine.start()
         # after `start`, and that is the library's order rather than a preference: declaring

@@ -45,6 +45,8 @@ OPENING_SKILL = "senior-session"
 EMPTY_FACT = "-"
 #: Where every turn leaves its answer, in the dispatch tree's self-ignored folder.
 REPLY_FILE = ".orchestrator/session/reply.md"
+#: Where a step session's agent attests, for one turn, that the owner said we are done.
+CLOSE_FILE = ".orchestrator/session/close"
 REPLY_LIMIT = 64 * 1024
 WIP_MESSAGE = "wip: before session (orchestrator)"
 TURN_MESSAGE = "session: turn {k} (orchestrator)"

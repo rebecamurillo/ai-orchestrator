@@ -13,8 +13,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from orchestrator.application.rules import consult, session
-from orchestrator.application.rules.conversation import STEP_KEY
-from orchestrator.application.steps import agent_env, agent_tail, agent_workdir, records
+from orchestrator.application.rules.conversation import STEP_KEY, close_clause
+from orchestrator.application.steps import (
+    CONVERSATION_KIND,
+    agent_env,
+    agent_tail,
+    agent_workdir,
+    records,
+)
 from orchestrator.application.steps.agent import (
     DEFAULT_STALL_MIN,
     INDEX_LOCK,
@@ -120,7 +126,7 @@ def dispatch(turn: Turn) -> None:
     if workspace.is_link(REPLY_FOLDER):
         record(ctx, status="error", output_ref=UNDER_LINK)
         return
-    for path in (consult.IGNORE_FILE, session.REPLY_FILE):
+    for path in (consult.IGNORE_FILE, session.REPLY_FILE, session.CLOSE_FILE):
         workspace.remove(path)
     workspace.write(consult.IGNORE_FILE, consult.IGNORE_ALL)
     workspace.write(session.REPLY_FILE, "")
@@ -192,16 +198,27 @@ def _start(
         "stall_min": ctx.with_resolved.get(STALL_KEY, DEFAULT_STALL_MIN),
         "add_dirs": agent_env.add_dirs(ctx, tree),
     }
+    text = _harness_text(turn, started)
     resumed = session.resumable(turn.turns, started)
     if resumed is not None:
-        return harness.start_resume(session_id=resumed, message=started.message, **common)
+        return harness.start_resume(session_id=resumed, message=text, **common)
     if turn.scope == session.STEP_SCOPE:
         resolved = ctx.row.with_resolved
         facts: tuple[str | None, ...] = (resolved.get(STEP_KEY), resolved.get(PERSONA_KEY))
-        prompt = session.opening_line(facts, started.message, skill=ref)
+        prompt = session.opening_line(facts, text, skill=ref)
     else:
         prompt = session.opening_line(_facts(turn), started.message)
     return harness.start(prompt=prompt, session_id=str(new_id()), **common)
+
+
+def _harness_text(turn: Turn, started: Attempt) -> str:
+    """The owner's message, and on a conversation step session the row's close instruction
+    after a blank line; the stored message stays the owner's text alone."""
+    row = turn.ctx.row
+    if turn.scope != session.STEP_SCOPE or row.kind != CONVERSATION_KIND:
+        return started.message
+    clause = close_clause(row, started.id)
+    return f"{started.message}\n\n{clause}" if clause else started.message
 
 
 def _step_ref(turn: Turn) -> str | None:

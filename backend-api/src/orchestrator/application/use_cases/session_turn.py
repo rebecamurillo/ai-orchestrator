@@ -37,11 +37,12 @@ from orchestrator.application.steps.context import (
     committed,
     require_workspace,
 )
-from orchestrator.application.use_cases import conversation_session, session_dispatch
+from orchestrator.application.use_cases import conversation_session, session_close, session_dispatch
 from orchestrator.application.use_cases.instance_hold import hold_active
 from orchestrator.application.use_cases.session_checks import NO_BUDGET
 from orchestrator.application.use_cases.session_dispatch import SESSION_CLOSED, Turn
 from orchestrator.application.use_cases.session_view import SessionTurn, turn_of
+from orchestrator.application.use_cases.signal_apply import SignalPorts
 from orchestrator.application.use_cases.signal_effects import TURN_RUNNING
 from orchestrator.application.use_cases.spend import record_attempt_spend
 from orchestrator.application.use_cases.start_attempt import INTERRUPTED
@@ -85,6 +86,8 @@ class TurnPorts:
     writers: WriterPorts
     step: StepPorts
     read_environment: ReadEnvironment | None = None
+    #: What the turn end sends `step_close` through; `None` where nothing is wired to.
+    signal: SignalPorts | None = None
 
 
 def post_message(ports: MessagePorts, run_id: UUID, text: str) -> SessionTurn:
@@ -232,10 +235,11 @@ def commit_turn(ports: TurnPorts, attempt_id: UUID) -> None:
     finished = attempt.model_copy(update={**fields, "ended_at": ctx.ports.clock.now()})
     committed(ctx, lambda attempts: attempts.mark_finished(finished))
     agent_tail.record_facts(ctx, finished)
-    if ctx.ports.spend_writes is None:
-        return
-    with ctx.ports.spend_writes() as spend_ports:
-        record_attempt_spend(spend_ports, turn.run, finished, None, locked=True)
+    if ctx.ports.spend_writes is not None:
+        with ctx.ports.spend_writes() as spend_ports:
+            record_attempt_spend(spend_ports, turn.run, finished, None, locked=True)
+    if turn.run.park_kind == CONVERSATION:
+        session_close.after_turn(ports, attempt_id)
 
 
 def _guarded(turn: Turn, fields: dict[str, Any], part: Callable[[Turn], dict[str, Any]]) -> None:

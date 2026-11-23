@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
+from uuid import UUID
 
 from orchestrator.application.steps import CONVERSATION_KIND
 from orchestrator.domain.entities.step_run import StepRun
@@ -16,6 +17,8 @@ ROUND_STEPS_INPUT = "round_steps"
 FIRST_TURN_INPUT = "first_turn"
 PROMPTS_KEY = "prompts"
 OPEN_KEY = "open"
+CLOSE_KEY = "close"
+ATTEMPT_TOKEN = "{attempt_id}"
 
 
 def round_list(inputs: Mapping[str, Any]) -> tuple[str, ...]:
@@ -56,3 +59,9 @@ def _takes_first_turn(row: StepRun, rows: Sequence[StepRun], inputs: Mapping[str
         return _step_of(row) in names
     first = min((entry.seq for entry in rows if entry.kind == CONVERSATION_KIND), default=None)
     return row.seq == first
+
+
+def close_clause(row: StepRun, attempt_id: UUID | str) -> str:
+    """The row's `prompts.close` with this turn's attempt id in place of every token."""
+    prompts = row.with_resolved.get(PROMPTS_KEY) or {}
+    return str(prompts.get(CLOSE_KEY) or "").replace(ATTEMPT_TOKEN, str(attempt_id))

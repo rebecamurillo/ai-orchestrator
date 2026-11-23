@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from orchestrator.application.rules.conversation import (
+    close_clause,
     first_turn,
     round_list,
     round_names_no_step,
@@ -82,3 +83,19 @@ def test_a_round_naming_no_conversation_step_is_misconfigured() -> None:
     assert round_names_no_step(plan(), {"round_steps": "sync"}) is True
     assert round_names_no_step(plan(), {}) is False
     assert round_names_no_step(plan(), {"round_steps": ","}) is False
+
+
+def test_the_close_clause_names_the_attempt_wherever_the_token_stands() -> None:
+    target = row(2, "intake")
+    prompts = {"close": "write {attempt_id} to the file; again {attempt_id}"}
+    target = target.model_copy(update={"with_resolved": {"prompts": prompts}})
+
+    assert close_clause(target, "A2") == "write A2 to the file; again A2"
+
+
+def test_a_row_without_a_close_prompt_has_no_close_clause() -> None:
+    bare = row(2, "intake").model_copy(update={"with_resolved": {}})
+    blank = row(2, "intake").model_copy(update={"with_resolved": {"prompts": {"close": None}}})
+
+    assert close_clause(bare, "A2") == ""
+    assert close_clause(blank, "A2") == ""

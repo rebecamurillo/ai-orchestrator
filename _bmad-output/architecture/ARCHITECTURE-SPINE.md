@@ -520,6 +520,14 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
     - the initiative's first message, for round 1, first step;
     - the step's defects or the reopen reason, in later rounds;
     - otherwise the row's `prompts.open`.
+  - **Her word.** It may be worded freely, in any language (FR-12). Recognising it is the agent's job, told by `prompts.close`. The agent confirms in one line, writes the step file, and writes the attestation `.orchestrator/session/close`. That file sits in the self-ignored folder beside `reply.md` and holds the id of the attempt it answers.
+  - **Turn start.** The dispatcher removes any attestation left by an earlier turn.
+  - **Turn end**, after the turn's commit:
+    - the attestation names a different attempt → it is discarded, with a gate record;
+    - it names this attempt, but a later message is still unfinished → it is discarded, with the gate record `close deferred: later message`. The next turn runs, and the agent re-attests if her word still stands;
+    - otherwise the dispatcher removes it, writes the `step_close` gate record and sends `step_close` with the current `park_seq`, in that order, in one unit of work before the send.
+
+    Without an attestation nothing closes. A step file that turned `done` is only shown.
 
 First turn as a Run input (owner B8, 2026-11-22): the initiative use cases pass it as the Run input first_turn; the executor reads no initiative.
 

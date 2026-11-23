@@ -123,7 +123,14 @@ LIFECYCLE_EVENTS: tuple[LifecycleEvent, ...] = get_args(LifecycleEvent)
 #: AD-17). Not `continue`: that is the Operator's signal, and `signal_run` is its one writer
 #: (AD-8). `expired` is not here: AD-13 applies the 30-day `recv` expiry as Run `failed`,
 #: which is a lifecycle event the Run already has.
-MachineEvent = Literal["redispatch", "retry_auto", "consult", "senior_answer", "senior_accept"]
+MachineEvent = Literal[
+    "redispatch",
+    "retry_auto",
+    "consult",
+    "senior_answer",
+    "senior_accept",
+    "close_discarded",
+]
 MACHINE_EVENTS: tuple[MachineEvent, ...] = get_args(MachineEvent)
 
 #: AD-8's own three alphabets, concatenated: what a `gate_record.event` carries for a Run

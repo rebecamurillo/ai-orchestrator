@@ -76,6 +76,7 @@ from orchestrator.infrastructure.db.writers import (
 from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
 from orchestrator.infrastructure.dbos.config import engine_config
 from orchestrator.infrastructure.dbos.facade import RealEngine
+from orchestrator.infrastructure.dbos.step_close import step_close_ports
 from orchestrator.infrastructure.dbos.walker import WalkerDeps
 from orchestrator.infrastructure.facts_jobs import facts_jobs
 from orchestrator.infrastructure.gateway import build_gateway
@@ -317,7 +318,10 @@ def dependency_startup_sweep(settings: Settings) -> None:
             held = engine.held_session_turns()
             deps = engine.walker_deps
             turn_ports = TurnPorts(
-                writers=ports, step=deps.step_ports, read_environment=deps.read_environment
+                writers=ports,
+                step=deps.step_ports,
+                read_environment=deps.read_environment,
+                signal=step_close_ports(ports, engine),
             )
             sweep_session_turns(turn_ports, engine, held)
         if engine.walker_deps.calculation_writes is not None:

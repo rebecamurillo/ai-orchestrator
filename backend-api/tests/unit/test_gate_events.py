@@ -45,12 +45,15 @@ def test_the_machine_events_are_ad_9s_two_bounded_re_executions() -> None:
     # transition, like the two re-executions.
     # Story 1-5, 2026-11-02: `senior_accept` joins, as AD-17's and AD-22's amendments
     # (2026-11-01) declare — the senior's own acceptance record, not the Operator's `continue`.
+    # Epic 5 story 1, 2026-11-23: `close_discarded` joins, the record of an attestation that
+    # closed nothing (AD-38 "Turn end").
     assert MACHINE_EVENTS == (
         "redispatch",
         "retry_auto",
         "consult",
         "senior_answer",
         "senior_accept",
+        "close_discarded",
     )
 
 

@@ -17,6 +17,7 @@ from uuid import UUID
 
 import pytest
 
+from orchestrator.application.rules import session
 from orchestrator.application.use_cases.session_turn import INTERRUPTED
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.ids import new_id
@@ -33,7 +34,9 @@ from orchestrator.infrastructure.dbos.session_walker import build_session_turn
 from orchestrator.infrastructure.dbos.walker import WalkerDeps
 from orchestrator.infrastructure.engine.local import LocalWorkflowEngine
 from orchestrator.infrastructure.settings import Settings
-from tests.unit.application.session_turn_fixtures import TurnWorld, a_turn_world
+from tests.unit.application.session_fixtures import BUILD
+from tests.unit.application.session_turn_fixtures import TurnWorld, a_result, a_turn_world
+from tests.unit.application.test_session_close import a_conversation
 from tests.unit.fakes.clock import EPOCH
 from tests.unit.fakes.dbos import FakeDurableEngine, a_queued_workflow
 
@@ -241,4 +244,22 @@ def test_the_startup_sweep_runs_the_session_sweep_after_the_dependency_sweep(
     ((ports, held),) = swept
     assert ports.writers is world.writers  # type: ignore[attr-defined]
     assert ports.step is engine.walker_deps.step_ports  # type: ignore[attr-defined]
+    # epic 5 story 1, 2026-11-23: the sweep's turn ports carry the turn end's signal ports
+    assert ports.signal is not None  # type: ignore[attr-defined]
+    assert ports.signal.engine is engine  # type: ignore[attr-defined]
     assert held == frozenset()
+
+
+def test_a_turn_with_a_workflow_engine_closes_the_step_on_its_attestation() -> None:
+    world = a_conversation(results=[a_result(session_id="s-1")])
+    posted = world.post("one")
+    world.harness.on_wait = lambda: world.workspace().write(
+        session.CLOSE_FILE, str(posted.attempt_id)
+    )
+    turn = build_session_turn(FakeDurableEngine(), deps_for(world), world.session.world.engine)
+
+    turn(str(posted.attempt_id))
+
+    records = world.session.world.records()
+    assert [r.event for r in records if r.event == "step_close"] == ["step_close"]
+    assert world.session.world.row(BUILD).status == "queued"
