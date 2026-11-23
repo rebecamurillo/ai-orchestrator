@@ -169,7 +169,7 @@ class DbosWorkflowEngine:
         """Deliver one Operator signal (AD-13) to the Run's single `recv` wait."""
         self._engine.send(
             str(run_id),
-            signal.model_dump(mode="json", exclude={"stop"}),
+            signal.model_dump(mode="json"),
             HUMAN_TOPIC.format(run_id=run_id),
         )
 

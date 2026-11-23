@@ -112,6 +112,7 @@ graph LR
 - **Amendment** *(2026-11-02, lead review of stories 2-3 and 2-5, within AD-23)***:** The port gains a seventh method, `enqueue_session_turn(run_id, attempt_id)`, for AD-23's turn workflow. `DBOS_APPLICATION_VERSION` is bumped deliberately when the step sequence of the walker or of the session turn changes.
 - **Amendment** *(initiative orchestrator-initiative-steps, 2026-11-22)***:**
   - The port's method becomes `enqueue(run_id, partition_key, lane: Literal["walk", "interactive"])`. The use case derives `lane` from the planned template: `interactive` when its `type` is `interactive` (AD-15, amended) and its plan holds a `conversation` row, `walk` otherwise. The adapter reads no database.
+- **Amendment** *(initiative orchestrator-initiative-steps, 2026-11-22)***:** DBOS_APPLICATION_VERSION is 2 from this release: the walk gained the stale-signal step (AD-13 amended) and the session turn the attestation check (AD-38).
 
 ### AD-7 — A Run is planned completely, purely, from the remote branch, before it is enqueued
 
@@ -214,6 +215,7 @@ stateDiagram-v2
   - A new signal, `step_close`, is sent by the machine only (AD-38). It carries `park_seq`.
   - `skip_step` with `payload.forced: true` carries `park_seq` and is admitted on a `conversation` stop. Its reason reads `skipped, forced`. A plain `skip_step` on a `conversation` stop is refused, so it can't become a second way to end a step.
   - Every skipping signal (`skip_step`, `skip_story`, `skip_epic`, forced or not) is refused on a row of role `spec-gate` of a Run in the `interactive` lane (`run.lane`, AD-12 amended), the spec workflow's gate (FR-8). The per-epic `spec-gate` rows of a `walk` Run, the build's, keep today's skips (gate item 2, § 10).
+  - `signal_run` refuses a `park_seq` mismatch (AD-24). The walk discards a received message whose `park_seq` is not the Run's current one and waits again. That is a walker change.
   - `chat_close.VERBS` gains `step_close: "step closed"`. The announcer and `chat_poll` post nothing for a `conversation` stop. The board and the lists are how she is told (FR-21).
 
 | `Signal.kind` | Valid when | `signal_run` writes | Effects in the resumed engine step | Row transition |

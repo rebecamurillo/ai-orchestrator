@@ -279,6 +279,12 @@ def close_run(ports: WalkPorts, run_id: UUID) -> RunStatus:
     return run.status
 
 
+def current_stop(ports: WalkPorts, run_id: UUID) -> int:
+    """The Run's current `park_seq`: what a received signal's stop is compared with."""
+    with ports.writers.uow:
+        return require_run(ports.writers, run_id).park_seq
+
+
 def expire(ports: WalkPorts, run_id: UUID) -> RunStatus:
     """The 30-day `recv` reached its deadline: the Run fails, unless a signal beat it."""
     writers = ports.writers

@@ -140,7 +140,24 @@ def test_a_signal_is_sent_to_the_runs_own_topic() -> None:
     workflow_id, message, topic = fake.sent[0]
     assert workflow_id == str(RUN_A)
     assert topic == HUMAN_TOPIC.format(run_id=RUN_A)
-    assert message == {"kind": "continue", "payload": {"accepted": ["a.py"]}}
+    # story 2 (epic 4 conversation stop), 2026-11-22: the message keeps its stop
+    assert message == {"kind": "continue", "payload": {"accepted": ["a.py"]}, "stop": None}
+
+
+def test_a_signal_carries_the_stop_it_was_validated_against() -> None:
+    fake = FakeDurableEngine()
+    engine = a_launched_engine(fake)
+
+    engine.signal(RUN_A, Signal(kind="continue", payload={"a": 1}, stop=4))
+
+    assert fake.sent[0][1] == {"kind": "continue", "payload": {"a": 1}, "stop": 4}
+
+
+def test_a_cancel_still_sends_no_stop() -> None:
+    fake = FakeDurableEngine()
+    a_launched_engine(fake).cancel(RUN_A)
+
+    assert fake.sent[0][1] == {"kind": "cancel"}
 
 
 def test_cancel_stops_the_workflow_of_that_run() -> None:

@@ -108,6 +108,8 @@ class Applied:
     run: Run
     rule: Rule
     effect: Effect
+    #: The Run's `park_seq` as read under lock, before any write: the stop this signal answers.
+    stop: int
 
 
 def apply_signal(
@@ -117,6 +119,7 @@ def apply_signal(
     table's. Refusals raise before anything is written."""
     writers = ports.writers
     refuse_stale_stop(run, signal)
+    stop = run.park_seq
     rows = writers.steps.list_for_run(run.id)
     park_row = _park_row(rows, run.park_path)
     rule = validate(run, park_row, signal, rows)
@@ -137,7 +140,7 @@ def apply_signal(
     # Park dependents in the same UoW when this run reaches `cancelled` (story 5-4).
     if run.status == "cancelled":
         park_dependents(writers, run)
-    return Applied(run=run, rule=rule, effect=effect)
+    return Applied(run=run, rule=rule, effect=effect, stop=stop)
 
 
 def finish_signal(
@@ -146,7 +149,8 @@ def finish_signal(
     """After the commit: tell the engine, and enqueue a done Run's dependents."""
     run, rule, effect = applied.run, applied.rule, applied.effect
     resumed = effect.resume and rule.run_event is not None and run.status == RUNNING
-    _tell_the_engine(ports, run_id, signal, resumed=resumed, finished=effect.finished)
+    stamped = signal.model_copy(update={"stop": applied.stop})
+    _tell_the_engine(ports, run_id, stamped, resumed=resumed, finished=effect.finished)
     # Two-phase enqueue for done dependents after signal (e.g. skip-to-done, story 5-4).
     if run.status == "done":
         enqueue_dependents(ports.writers, ports.writers.engine, run)

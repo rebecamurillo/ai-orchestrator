@@ -142,7 +142,7 @@ class Settings(BaseSettings):
 
     # ── Database (AD-6) ──────────────────────────────────────────────────────
     database_url: SecretStr
-    dbos_application_version: Annotated[int, Field(ge=1)] = 1
+    dbos_application_version: Annotated[int, Field(ge=1)] = 2
     max_active_runs: Annotated[int, Field(ge=1)] = 2
     max_interactive_runs: Annotated[int, Field(ge=1)] = 4
     #: The single `recv` the walker parks in lasts this long (AD-13). A setting rather

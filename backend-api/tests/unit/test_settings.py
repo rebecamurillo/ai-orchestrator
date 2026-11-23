@@ -32,7 +32,8 @@ CREDENTIAL_VARIABLES = {
 
 EXPECTED_BACKEND_API_PORT = 8000
 EXPECTED_MAX_ACTIVE_RUNS = 2
-EXPECTED_DBOS_APPLICATION_VERSION = 1
+# story 2 (epic 4 conversation stop), 2026-11-22: the walk gained a durable step
+EXPECTED_DBOS_APPLICATION_VERSION = 2
 
 
 def test_every_backend_variable_is_a_typed_field(env: dict[str, str]) -> None:
