@@ -33,8 +33,19 @@ INPUT_TYPE_KEY = "type"
 DESCRIPTION_KEY = "description"
 
 METRICS_KEY = "metrics"
+TEMPLATE_TYPE_KEY = "type"
+TEMPLATE_TYPES = ("interactive", "auto")
+DEFAULT_TEMPLATE_TYPE = "auto"
 TEMPLATE_KEYS = frozenset(
-    {NAME_KEY, VERSION_KEY, DESCRIPTION_KEY, INPUTS_KEY, STEPS_KEY, METRICS_KEY}
+    {
+        NAME_KEY,
+        VERSION_KEY,
+        DESCRIPTION_KEY,
+        INPUTS_KEY,
+        STEPS_KEY,
+        METRICS_KEY,
+        TEMPLATE_TYPE_KEY,
+    }
 )
 INPUT_KEYS = frozenset({INPUT_TYPE_KEY, "required", "default", "values", DESCRIPTION_KEY})
 ROLE_KEY = "role"

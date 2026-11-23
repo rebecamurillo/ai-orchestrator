@@ -54,9 +54,11 @@ from orchestrator.application.templates.model import (
 from orchestrator.application.templates.on_fail import parse_redispatch_consult
 from orchestrator.application.templates.step_metrics import parse_metrics
 from orchestrator.application.templates.table import (
+    DEFAULT_TEMPLATE_TYPE,
     ROLE_KEY,
     RUN_KEY,
     RUN_SUGAR_KIND,
+    TEMPLATE_TYPE_KEY,
     WITH_KEY,
     WRITES_KEY,
     is_count,
@@ -183,6 +185,7 @@ def parse(root: LinedMap) -> ParsedTemplate:
         inputs=tuple(_input(inputs, name) for name in inputs),
         steps=tuple(_entry(node) for node in child_steps(root)),
         metrics=parse_metrics(root),
+        type=root.get(TEMPLATE_TYPE_KEY, DEFAULT_TEMPLATE_TYPE),
     )
 
 

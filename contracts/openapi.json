@@ -8718,6 +8718,15 @@
             "title": "Pinned By",
             "type": "integer"
           },
+          "type": {
+            "description": "`interactive`: a workflow of conversation steps on its own lane; `auto`: every other workflow (AD-15)",
+            "enum": [
+              "interactive",
+              "auto"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -8736,7 +8745,8 @@
           "called_by",
           "pinned_by",
           "created_at",
-          "inputs"
+          "inputs",
+          "type"
         ],
         "title": "TemplateVersionOut",
         "type": "object"

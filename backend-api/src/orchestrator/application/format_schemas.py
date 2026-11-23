@@ -58,6 +58,8 @@ from orchestrator.application.templates.table import (
     STEP_KEYS,
     SUB_MAPS,
     TEMPLATE_KEYS,
+    TEMPLATE_TYPE_KEY,
+    TEMPLATE_TYPES,
     USES_KEY,
     VERSION_KEY,
     WITH_KEY,
@@ -102,6 +104,7 @@ def _template_root() -> Schema:
         VERSION_KEY: {"type": "integer", "minimum": MIN_COUNT, "maximum": MAX_COUNT},
         STEPS_KEY: _steps_array(),
         INPUTS_KEY: {"type": "object", "additionalProperties": _ref("input")},
+        TEMPLATE_TYPE_KEY: {"enum": sorted(TEMPLATE_TYPES)},
     }
     required = [*REQUIRED_TEMPLATE_KEYS, STEPS_KEY]
     return _closed(TEMPLATE_KEYS, values, required)

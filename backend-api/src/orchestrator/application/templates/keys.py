@@ -56,6 +56,7 @@ from orchestrator.application.templates.model import (
     INVALID_SLUG,
     INVALID_SUBMODULE_FORM,
     INVALID_TIMEOUT,
+    INVALID_VALUE,
     MISSING_KEY,
     NON_LITERAL_VERSION,
     UNKNOWN_KEY,
@@ -79,6 +80,8 @@ from orchestrator.application.templates.table import (
     STEP_KEYS,
     STEP_ROLES,
     TEMPLATE_KEYS,
+    TEMPLATE_TYPE_KEY,
+    TEMPLATE_TYPES,
     USES_KEY,
     VERSION_KEY,
     is_count,
@@ -102,8 +105,18 @@ def check_keys(root: LinedMap) -> tuple[list[ValidationError], list[str]]:
 # --- template level -----------------------------------------------------------------------
 
 
+def _check_type(root: LinedMap) -> list[ValidationError]:
+    if TEMPLATE_TYPE_KEY not in root:
+        return []
+    value = root[TEMPLATE_TYPE_KEY]
+    if isinstance(value, str) and value in TEMPLATE_TYPES:
+        return []
+    return [problem(key_line(root, TEMPLATE_TYPE_KEY, root.line), INVALID_VALUE)]
+
+
 def _check_template(root: LinedMap) -> list[ValidationError]:
     errors = unknown_keys(root, TEMPLATE_KEYS)
+    errors += _check_type(root)
     if NAME_KEY not in root:
         errors.append(problem(root.line, MISSING_KEY))
     elif not is_slug(root[NAME_KEY]):

@@ -32,6 +32,7 @@ InputType = Literal["project", "repository", "string", "path", "enum", "number",
 #: What a step does when it fails, in its plain form. The `{redispatch, max}` form is two
 #: fields on `Step`, because a two-key mapping is not a third action.
 OnFailAction = Literal["escalate", "fail", "continue"]
+TemplateType = Literal["interactive", "auto"]
 
 #: What a Template may write as a scalar: an input default, or one call binding.
 Scalar = str | int | float | bool
@@ -332,6 +333,7 @@ class ParsedTemplate(BaseModel):
     inputs: tuple[InputDecl, ...] = ()
     steps: tuple[Step | ForEach, ...] = ()
     metrics: tuple[StepMetric, ...] = ()
+    type: TemplateType = "auto"
 
 
 # --- the result --------------------------------------------------------------------------

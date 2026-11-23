@@ -4263,6 +4263,12 @@ export interface components {
              * @description How many Runs, of any status, pin this exact Version — root or callee (AD-15, SPEC CAP-4).
              */
             pinned_by: number;
+            /**
+             * Type
+             * @description `interactive`: a workflow of conversation steps on its own lane; `auto`: every other workflow (AD-15)
+             * @enum {string}
+             */
+            type: "interactive" | "auto";
             /** Version */
             version: number;
             /** Yaml */
