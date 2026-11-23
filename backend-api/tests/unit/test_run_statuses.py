@@ -54,6 +54,8 @@ EXPECTED_RUN: dict[tuple[RunStatus, RunEvent], RunStatus] = {
     ("needs_you", "skip_epic"): "running",
     ("needs_you", "budget_raise"): "running",
     ("needs_you", "terminal_resume"): "running",
+    # story 1 (epic 4 conversation stop), 2026-11-22: a conversation stop closes on `step_close`.
+    ("needs_you", "step_close"): "running",
     ("needs_you", "expire"): "failed",
     ("needs_you", "cancel"): "cancelled",
 }
@@ -124,10 +126,12 @@ def test_the_park_kinds_are_the_thirteen_the_brief_lists() -> None:
         "dependency",
         "merge_conflict",
         "paused",
+        # story 1 (epic 4 conversation stop), 2026-11-22: AD-13 amended adds the park kind.
+        "conversation",
     )
 
 
-def test_the_signal_kinds_are_the_fifteen_ad_13_names() -> None:
+def test_the_signal_kinds_are_the_sixteen_ad_13_names() -> None:
     # story 2-3, 2026-11-02: "session_start" and "session_end" added, as AD-13's 2026-11-01
     # amendment declares; they open and close the Operator's senior session (AD-23).
     # story 2-1, 2026-11-02: "pause" added, as AD-13's 2026-11-01 amendment declares.
@@ -150,6 +154,8 @@ def test_the_signal_kinds_are_the_fifteen_ad_13_names() -> None:
         "pause",
         "session_start",
         "session_end",
+        # story 1 (epic 4 conversation stop), 2026-11-22: AD-13 amended adds `step_close`.
+        "step_close",
     )
 
 

@@ -77,7 +77,8 @@
                   "internal",
                   "dependency",
                   "merge_conflict",
-                  "paused"
+                  "paused",
+                  "conversation"
                 ],
                 "type": "string"
               },
@@ -918,7 +919,8 @@
                   "internal",
                   "dependency",
                   "merge_conflict",
-                  "paused"
+                  "paused",
+                  "conversation"
                 ],
                 "type": "string"
               },
@@ -2321,7 +2323,8 @@
                   "internal",
                   "dependency",
                   "merge_conflict",
-                  "paused"
+                  "paused",
+                  "conversation"
                 ],
                 "type": "string"
               },
@@ -2962,7 +2965,8 @@
                   "internal",
                   "dependency",
                   "merge_conflict",
-                  "paused"
+                  "paused",
+                  "conversation"
                 ],
                 "type": "string"
               },
@@ -2982,7 +2986,8 @@
                   "start",
                   "pause",
                   "session_start",
-                  "session_end"
+                  "session_end",
+                  "step_close"
                 ],
                 "type": "string"
               },
@@ -6461,7 +6466,8 @@
                 "start",
                 "pause",
                 "session_start",
-                "session_end"
+                "session_end",
+                "step_close"
               ],
               "type": "string"
             },
@@ -6575,7 +6581,8 @@
                 "start",
                 "pause",
                 "session_start",
-                "session_end"
+                "session_end",
+                "step_close"
               ],
               "type": "string"
             },
@@ -6784,7 +6791,8 @@
                 "start",
                 "pause",
                 "session_start",
-                "session_end"
+                "session_end",
+                "step_close"
               ],
               "type": "string"
             },
@@ -6822,7 +6830,8 @@
                   "internal",
                   "dependency",
                   "merge_conflict",
-                  "paused"
+                  "paused",
+                  "conversation"
                 ],
                 "type": "string"
               },
@@ -7583,7 +7592,8 @@
                 "start",
                 "pause",
                 "session_start",
-                "session_end"
+                "session_end",
+                "step_close"
               ],
               "type": "string"
             },
@@ -8019,7 +8029,8 @@
               "start",
               "pause",
               "session_start",
-              "session_end"
+              "session_end",
+              "step_close"
             ],
             "title": "Kind",
             "type": "string"

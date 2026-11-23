@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from orchestrator.application.rules import budget
+from orchestrator.application.rules import budget, signals_conversation
 from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
 from orchestrator.application.rules.signals_table import (
     ACCEPTED,
@@ -134,6 +134,8 @@ def admitted_signals(park_kind: ParkKind, row_kind: str) -> tuple[SignalKind, ..
     that has both. `validate` stays the authority: it also checks the frame a skip needs,
     the budget a raise has to exceed and the terminal session, none of which this knows.
     """
+    if park_kind == signals_conversation.CONVERSATION:
+        return ("cancel",)
     return tuple(
         kind
         for kind, rule in VALID.items()

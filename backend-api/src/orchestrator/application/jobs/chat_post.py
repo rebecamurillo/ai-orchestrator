@@ -35,6 +35,7 @@ from orchestrator.application.jobs.chat_ports import (
     redacted,
 )
 from orchestrator.application.rules.chat_message import StopFacts, compose_stop, run_link
+from orchestrator.application.rules.signals_conversation import CONVERSATION
 from orchestrator.domain.entities.chat_thread import ChatThread, ChatThreadState
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ids import new_id
@@ -63,7 +64,7 @@ def due_kind(run: Run) -> ParkKind | None:
     not paused, and no session holding the Run."""
     if run.status != "needs_you" or run.senior_session or run.terminal_session:
         return None
-    return None if run.park_kind == PAUSED else run.park_kind
+    return None if run.park_kind in (PAUSED, CONVERSATION) else run.park_kind
 
 
 def post_stops(ports: ChatPollPorts, opened: OpenedChannel) -> None:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from orchestrator.application.rules.signals_conversation import CONVERSATION
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.notifier import NOTIFIED_STATUSES, Notifier, RunNotification
@@ -36,6 +37,8 @@ class Announcer:
     def transition(self, before: Run, after: Run, reason: str | None = None) -> None:
         """Announce `before → after` when it enters one of `NOTIFIED_STATUSES`."""
         if after.status == before.status or after.status not in NOTIFIED_STATUSES:
+            return
+        if after.park_kind == CONVERSATION:
             return
         project = self.projects.get(after.project_id)
         repository = self.repositories.get(after.repository_id)

@@ -1324,7 +1324,7 @@ export interface components {
             chat_thread?: components["schemas"]["ChatThreadOut"] | null;
             checkpoint_story?: components["schemas"]["CheckpointStoryOut"] | null;
             /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | null;
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused" | "conversation") | null;
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -1574,7 +1574,7 @@ export interface components {
             /** Needs You Since */
             needs_you_since: string | null;
             /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | null;
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused" | "conversation") | null;
             progress: components["schemas"]["ProgressOut"] | null;
             /** Project Name */
             project_name: string;
@@ -2042,7 +2042,7 @@ export interface components {
         /** EngineRunOut */
         EngineRunOut: {
             /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | null;
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused" | "conversation") | null;
             /** Queue Reason */
             queue_reason: string | null;
             /**
@@ -2268,7 +2268,7 @@ export interface components {
             /** Attempt N */
             attempt_n: number | null;
             /** Event */
-            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end") | ("start" | "done" | "failed" | "cancelled" | "started_by_operator") | ("redispatch" | "retry_auto" | "consult" | "senior_answer" | "senior_accept") | "spec_edit";
+            event: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused" | "conversation") | ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end" | "step_close") | ("start" | "done" | "failed" | "cancelled" | "started_by_operator") | ("redispatch" | "retry_auto" | "consult" | "senior_answer" | "senior_accept") | "spec_edit";
             /**
              * Id
              * Format: uuid
@@ -3442,7 +3442,7 @@ export interface components {
          */
         RunDetailOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end" | "step_close")[];
             alert: components["schemas"]["AlertOut"] | null;
             cost: components["schemas"]["CostOut"];
             /** Gate Record */
@@ -3467,7 +3467,7 @@ export interface components {
             /** Accepted Paths */
             accepted_paths: string[];
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end" | "step_close")[];
             /** Branch */
             branch: string;
             /** Budget Usd */
@@ -3536,13 +3536,13 @@ export interface components {
          */
         RunEventsOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end" | "step_close")[];
             /** Budget Usd */
             budget_usd: string | null;
             /** Changed */
             changed: boolean;
             /** Park Kind */
-            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused") | null;
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused" | "conversation") | null;
             /** Park Path */
             park_path: string | null;
             /** Park Seq */
@@ -3842,7 +3842,7 @@ export interface components {
          */
         RunSummaryOut: {
             /** Admitted Signals */
-            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end")[];
+            admitted_signals: ("answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end" | "step_close")[];
             /** Branch */
             branch: string;
             /** Budget Usd */
@@ -3992,7 +3992,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end";
+            kind: "answer" | "continue" | "retry" | "skip_step" | "skip_story" | "skip_epic" | "budget_raise" | "cancel" | "terminal_start" | "terminal_release" | "terminal_resume" | "start" | "pause" | "session_start" | "session_end" | "step_close";
             /** Payload */
             payload?: {
                 [key: string]: unknown;

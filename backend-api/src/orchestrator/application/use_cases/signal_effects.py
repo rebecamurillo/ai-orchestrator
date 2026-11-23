@@ -31,8 +31,7 @@ recorded plan proceeds". The spine binds: `plan_stale` and `protected_path` both
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Sequence
 from typing import Any
 
 from orchestrator.application.rules import session, signals
@@ -53,6 +52,12 @@ from orchestrator.application.steps import (
     LINK_KIND,
     PUSH_KIND,
 )
+from orchestrator.application.use_cases import conversation_effects
+from orchestrator.application.use_cases.signal_effect import (
+    CancelPlan,
+    Effect,
+    EffectFn,
+)
 from orchestrator.application.use_cases.writers import (
     FINISHED,
     WriterPorts,
@@ -63,7 +68,9 @@ from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import Conflict
 from orchestrator.domain.statuses import SignalKind, StepEvent, step_transition
-from orchestrator.domain.values import Signal, Worktree
+from orchestrator.domain.values import Signal
+
+__all__ = ["CancelPlan", "Effect", "EffectFn"]
 
 #: The reason a row skipped by the Operator carries (FR-20, PRD §4.6).
 SKIPPED_BY_OPERATOR = "skipped by operator"
@@ -85,34 +92,6 @@ PUSH_REJECTED = "push_rejected"
 
 #: What a close is refused with while one of the session's turns has not ended (AD-23).
 TURN_RUNNING = "turn running"
-
-
-@dataclass(frozen=True)
-class CancelPlan:
-    """The worktree and process effects `cancel` leaves to its caller (4.9, AD-13)."""
-
-    #: Every process group a live Attempt of this Run recorded.
-    pgids: tuple[int, ...]
-    #: Every worktree the Run holds, with the branch each one is on.
-    worktrees: tuple[Worktree, ...]
-
-
-@dataclass(frozen=True)
-class Effect:
-    """What one signal did to the rows, and what it asks `signal_run` to do to the Run."""
-
-    #: Run fields the table lists beside the status change.
-    run_update: dict[str, Any] = field(default_factory=dict)
-    #: False when the Run keeps the status it had (the terminal kinds, a held budget raise).
-    resume: bool = True
-    #: True when the resumed Run has no row left to run and ends `done` instead.
-    finished: bool = False
-    #: Set by `cancel` only.
-    cancel_plan: CancelPlan | None = None
-
-
-#: One effect: the ports and the Run, the whole plan, the parked row, and the signal.
-EffectFn = Callable[[WriterPorts, Run, Sequence[StepRun], StepRun | None, Signal], Effect]
 
 
 def resume_from(ports: WriterPorts, park_row: StepRun) -> bool:
@@ -137,13 +116,13 @@ def _parked(park_row: StepRun | None) -> StepRun:
     return park_row
 
 
-def _skip(ports: WriterPorts, row: StepRun) -> StepRun:
+def _skip(ports: WriterPorts, row: StepRun, reason: str = SKIPPED_BY_OPERATOR) -> StepRun:
     """Mark one row `skipped` by the Operator, through the machine."""
     return set_row(
         ports,
         row,
         status=step_transition(row.status, "skip"),
-        reason=SKIPPED_BY_OPERATOR,
+        reason=reason,
     )
 
 
@@ -193,7 +172,11 @@ def _retry(
 
 
 def _skip_step(
-    ports: WriterPorts, _run: Run, _rows: Sequence[StepRun], park_row: StepRun | None, _s: Signal
+    ports: WriterPorts,
+    _run: Run,
+    _rows: Sequence[StepRun],
+    park_row: StepRun | None,
+    signal: Signal,
 ) -> Effect:
     """Skip the one parked row and resume the Run at the next unfinished row (AD-13, story 1).
 
@@ -203,7 +186,8 @@ def _skip_step(
     assert safely here.
     """
     row = _parked(park_row)
-    _skip(ports, row)
+    forced = conversation_effects.is_forced(signal)
+    _skip(ports, row, conversation_effects.SKIPPED_FORCED if forced else SKIPPED_BY_OPERATOR)
     return Effect(finished=not resume_from(ports, row))
 
 
@@ -392,4 +376,5 @@ EFFECTS: dict[SignalKind, EffectFn] = {
     "pause": _pause,
     "session_start": _session_start,
     "session_end": _session_end,
+    "step_close": conversation_effects.step_close,
 }

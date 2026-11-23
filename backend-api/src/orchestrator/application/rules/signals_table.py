@@ -44,31 +44,27 @@ the other way would make the two modules import each other.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Sequence
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from orchestrator.application.rules import session
+from orchestrator.application.rules import session, signals_conversation
 from orchestrator.application.rules.budget import figure
 from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
+from orchestrator.application.rules.signal_rule import PARKED, Rule
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.statuses import (
     PARK_KINDS,
     RUN_STATUSES,
     TERMINAL_RUN,
-    Actor,
     ParkKind,
-    RunEvent,
     RunStatus,
     SignalKind,
-    StepStatus,
 )
 from orchestrator.domain.values import Signal
 
-#: The `Run.status` values a signal that is not `cancel` is sent to.
-PARKED: frozenset[RunStatus] = frozenset({"needs_you"})
+__all__ = ["PARKED", "Rule"]
 
 #: Every non-terminal Run status — what `cancel` and the terminal kinds are admitted in.
 #: Derived rather than listed, so a new Run status is admitted or refused by AD-8's own
@@ -126,41 +122,6 @@ TERMINAL_RESUMED = "story file done and tree clean, resumed by terminal"
 #: PRD §4.6 is "the reason-text and admitted-signal contract", and the Story that park is
 #: about has already been skipped, so `skip_story` has nothing left to skip.
 REBASELINE_FAILED = "re-baseline failed after skip"
-
-
-@dataclass(frozen=True)
-class Rule:
-    """When one `Signal.kind` is admitted, and what its gate record says."""
-
-    #: The park kinds this signal is admitted on, read only while the Run is `needs_you`.
-    park_kinds: frozenset[ParkKind]
-    #: The Run statuses it is admitted in.
-    run_statuses: frozenset[RunStatus] = PARKED
-    #: The parked row's `kind`, or `None` when any kind is admitted.
-    row_kinds: frozenset[str] | None = None
-    #: The parked row's `status`, or `None` when any status is admitted.
-    row_statuses: frozenset[StepStatus] | None = None
-    #: What the table states in words rather than in columns; `None` when it states nothing.
-    #: Called with the Run, the parked row, the signal, and every row of the Run.
-    extra: Callable[[Run, StepRun | None, Signal, Sequence[StepRun]], bool] | None = None
-    #: The refusal `extra` alone earns, where the table has a better sentence than `INVALID`.
-    #: Formatted with the Run, so a `budget_raise` can name the spend it has to beat.
-    extra_refusal: str | None = None
-    #: The Run transition this signal applies, or `None` when the Run's status is unchanged.
-    run_event: RunEvent | None = None
-    #: Who the gate record names.
-    actor: Actor = "operator"
-    #: The sentence the gate record carries when the payload supplies none.
-    text: str = ""
-    #: The payload key whose value is the gate record's text instead of `text`.
-    text_key: str | None = None
-    #: The gate record's text, built from the payload — for a sentence that has to quote a
-    #: *validated* value, which is what `text_key` (the payload's own string, verbatim)
-    #: cannot do. `None` from the builder falls through to `text`.
-    text_from: Callable[[dict[str, Any]], str | None] | None = None
-    #: True for the actions a person takes on the Run detail — what `admitted_signals`
-    #: answers with. The terminal kinds are driven by the browser and the poll job.
-    operator_action: bool = True
 
 
 def _raised_budget(payload: dict[str, Any]) -> Decimal | None:
@@ -302,19 +263,21 @@ VALID: dict[SignalKind, Rule] = {
     "skip_step": Rule(
         park_kinds=ANY_PARK - frozenset({PAUSED}),
         row_statuses=frozenset({"blocked", "checkpoint", "error"}),
+        extra=signals_conversation.skip_step_admitted,
         run_event="skip_step",
         text="step skipped by the operator",
+        text_from=signals_conversation.forced_text,
     ),
     "skip_story": Rule(
         park_kinds=ANY_PARK
         - frozenset({"budget", "plan_stale", "push_rejected", MERGE_CONFLICT, PAUSED}),
-        extra=_has_story_frame,
+        extra=signals_conversation.no_gate_skip(_has_story_frame),
         run_event="skip_story",
         text="story skipped by the operator",
     ),
     "skip_epic": Rule(
         park_kinds=ANY_PARK - frozenset({"budget", "plan_stale", MERGE_CONFLICT, PAUSED}),
-        extra=_has_epic_frame,
+        extra=signals_conversation.no_gate_skip(_has_epic_frame),
         run_event="skip_epic",
         text="epic skipped by the operator",
     ),
@@ -390,6 +353,7 @@ VALID: dict[SignalKind, Rule] = {
         text_from=session.ended_text,
         operator_action=False,
     ),
+    "step_close": signals_conversation.STEP_CLOSE,
 }
 
 #: The refusal sentence, verbatim from the brief.
