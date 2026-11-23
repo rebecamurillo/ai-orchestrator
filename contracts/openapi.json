@@ -2056,6 +2056,234 @@
         "title": "CreateRunOut",
         "type": "object"
       },
+      "DrawerAttemptOut": {
+        "properties": {
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "queued",
+              "running",
+              "done",
+              "blocked",
+              "checkpoint",
+              "error",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "status"
+        ],
+        "title": "DrawerAttemptOut",
+        "type": "object"
+      },
+      "DrawerCommitOut": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "sha": {
+            "title": "Sha",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sha",
+          "message"
+        ],
+        "title": "DrawerCommitOut",
+        "type": "object"
+      },
+      "DrawerHeaderOut": {
+        "properties": {
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "gate": {
+            "enum": [
+              "liveness",
+              "deterministic",
+              "human",
+              "unvalidated"
+            ],
+            "title": "Gate",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "queued",
+              "running",
+              "done",
+              "blocked",
+              "checkpoint",
+              "error",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "path",
+          "label",
+          "kind",
+          "gate",
+          "status",
+          "token",
+          "n",
+          "started_at",
+          "ended_at",
+          "exit_code",
+          "cost_usd"
+        ],
+        "title": "DrawerHeaderOut",
+        "type": "object"
+      },
+      "DrawerLogOut": {
+        "properties": {
+          "attempt_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "removed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed At"
+          },
+          "state": {
+            "enum": [
+              "text",
+              "no_output",
+              "removed",
+              "not_run"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "state",
+          "removed_at",
+          "reason"
+        ],
+        "title": "DrawerLogOut",
+        "type": "object"
+      },
       "EdgeOut": {
         "description": "One arrow, keyed `from` and `to` \u2014 the names `from_id`/`to_id` stand in for.",
         "properties": {
@@ -2451,6 +2679,114 @@
           "cells"
         ],
         "title": "FamilyOut",
+        "type": "object"
+      },
+      "FileStatOut": {
+        "properties": {
+          "added": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "removed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed"
+          }
+        },
+        "required": [
+          "path",
+          "added",
+          "removed"
+        ],
+        "title": "FileStatOut",
+        "type": "object"
+      },
+      "FilesReadOut": {
+        "properties": {
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Paths",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "not_recorded",
+              "none"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "paths"
+        ],
+        "title": "FilesReadOut",
+        "type": "object"
+      },
+      "FilesWrittenOut": {
+        "properties": {
+          "commit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DrawerCommitOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileStatOut"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Refs",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "files",
+              "commit",
+              "refs",
+              "none"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "files",
+          "commit",
+          "refs"
+        ],
+        "title": "FilesWrittenOut",
         "type": "object"
       },
       "FindingOut": {
@@ -7749,6 +8085,49 @@
           "attempts"
         ],
         "title": "StepDetailOut",
+        "type": "object"
+      },
+      "StepDrawerOut": {
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/DrawerAttemptOut"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "files_read": {
+            "$ref": "#/components/schemas/FilesReadOut"
+          },
+          "files_written": {
+            "$ref": "#/components/schemas/FilesWrittenOut"
+          },
+          "header": {
+            "$ref": "#/components/schemas/DrawerHeaderOut"
+          },
+          "log": {
+            "$ref": "#/components/schemas/DrawerLogOut"
+          },
+          "run_order": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOrderFrameOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "header",
+          "attempts",
+          "run_order",
+          "log",
+          "files_read",
+          "files_written"
+        ],
+        "title": "StepDrawerOut",
         "type": "object"
       },
       "StepRowOut": {
@@ -13539,6 +13918,109 @@
           }
         ],
         "summary": "Signal a Run: cancel, retry, or continue",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/steps/{seq}/attempts/{n}/drawer": {
+      "get": {
+        "operationId": "get_step_drawer_api_v1_runs__run_id__steps__seq__attempts__n__drawer_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "seq",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "Seq",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "n",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "N",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepDrawerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such Run, step or attempt."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A path segment does not parse."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one step's drawer: log state, files read and written, attempts, run order",
         "tags": [
           "runs"
         ]

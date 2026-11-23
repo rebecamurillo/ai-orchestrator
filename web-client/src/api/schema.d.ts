@@ -952,6 +952,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/steps/{seq}/attempts/{n}/drawer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one step's drawer: log state, files read and written, attempts, run order */
+        get: operations["get_step_drawer_api_v1_runs__run_id__steps__seq__attempts__n__drawer_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/steps/{step_path}": {
         parameters: {
             query?: never;
@@ -1914,6 +1931,70 @@ export interface components {
             /** Waiting */
             waiting: string;
         };
+        /** DrawerAttemptOut */
+        DrawerAttemptOut: {
+            /** N */
+            n: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "queued" | "running" | "done" | "blocked" | "checkpoint" | "error" | "skipped";
+        };
+        /** DrawerCommitOut */
+        DrawerCommitOut: {
+            /** Message */
+            message: string | null;
+            /** Sha */
+            sha: string;
+        };
+        /** DrawerHeaderOut */
+        DrawerHeaderOut: {
+            /** Cost Usd */
+            cost_usd: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /** Exit Code */
+            exit_code: number | null;
+            /**
+             * Gate
+             * @enum {string}
+             */
+            gate: "liveness" | "deterministic" | "human" | "unvalidated";
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** N */
+            n: number | null;
+            /** Path */
+            path: string;
+            /** Seq */
+            seq: number;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "queued" | "running" | "done" | "blocked" | "checkpoint" | "error" | "skipped";
+            /** Token */
+            token: string;
+        };
+        /** DrawerLogOut */
+        DrawerLogOut: {
+            /** Attempt Id */
+            attempt_id: string | null;
+            /** Reason */
+            reason: string | null;
+            /** Removed At */
+            removed_at: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "text" | "no_output" | "removed" | "not_run";
+        };
         /**
          * EdgeOut
          * @description One arrow, keyed `from` and `to` — the names `from_id`/`to_id` stand in for.
@@ -2059,6 +2140,38 @@ export interface components {
             source: string | null;
             /** Step Structure Differs */
             step_structure_differs: boolean;
+        };
+        /** FileStatOut */
+        FileStatOut: {
+            /** Added */
+            added: number | null;
+            /** Path */
+            path: string;
+            /** Removed */
+            removed: number | null;
+        };
+        /** FilesReadOut */
+        FilesReadOut: {
+            /** Paths */
+            paths: string[];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "not_recorded" | "none";
+        };
+        /** FilesWrittenOut */
+        FilesWrittenOut: {
+            commit: components["schemas"]["DrawerCommitOut"] | null;
+            /** Files */
+            files: components["schemas"]["FileStatOut"][];
+            /** Refs */
+            refs: string[];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "files" | "commit" | "refs" | "none";
         };
         /** FindingOut */
         FindingOut: {
@@ -3877,6 +3990,16 @@ export interface components {
             with_resolved: {
                 [key: string]: unknown;
             };
+        };
+        /** StepDrawerOut */
+        StepDrawerOut: {
+            /** Attempts */
+            attempts: components["schemas"]["DrawerAttemptOut"][];
+            files_read: components["schemas"]["FilesReadOut"];
+            files_written: components["schemas"]["FilesWrittenOut"];
+            header: components["schemas"]["DrawerHeaderOut"];
+            log: components["schemas"]["DrawerLogOut"];
+            run_order: components["schemas"]["RunOrderFrameOut"] | null;
         };
         /** StepRowOut */
         StepRowOut: {
@@ -7229,6 +7352,60 @@ export interface operations {
                 };
             };
             /** @description The posted body does not match the shape below. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_step_drawer_api_v1_runs__run_id__steps__seq__attempts__n__drawer_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                seq: number;
+                n: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepDrawerOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, step or attempt. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path segment does not parse. */
             422: {
                 headers: {
                     [name: string]: unknown;

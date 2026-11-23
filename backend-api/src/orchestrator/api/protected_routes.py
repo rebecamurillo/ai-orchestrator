@@ -20,6 +20,7 @@ from orchestrator.api.routers import (
     run_gateway_reads,
     run_label,
     run_metrics,
+    run_step_drawer,
 )
 
 API_PREFIX = "/api/v1"
@@ -45,3 +46,8 @@ def install_metrics_routes(app: FastAPI) -> None:
     mount_protected(app, run_analysis.router)
     mount_protected(app, run_findings.router)
     mount_protected(app, run_gateway_reads.router)
+    install_run_page_routes(app)
+
+
+def install_run_page_routes(app: FastAPI) -> None:
+    mount_protected(app, run_step_drawer.router)
