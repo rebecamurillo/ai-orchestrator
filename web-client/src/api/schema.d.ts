@@ -789,6 +789,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs/{run_id}/files-by-epic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a Run's spec files and changed paths, grouped by epic and Story */
+        get: operations["get_files_by_epic_api_v1_runs__run_id__files_by_epic_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/files-by-epic/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one changed path's unified diff over a Story's attempts */
+        get: operations["get_story_diff_api_v1_runs__run_id__files_by_epic_diff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs/{run_id}/graph": {
         parameters: {
             query?: never;
@@ -2043,6 +2077,19 @@ export interface components {
             name: string;
             /** Value */
             value?: string | null;
+        };
+        /** EpicFilesOut */
+        EpicFilesOut: {
+            /** Files */
+            files: string[];
+            /** Folder */
+            folder: string;
+            /** Index */
+            index: number;
+            /** Stories */
+            stories: components["schemas"]["StoryFilesOut"][];
+            /** Title */
+            title: string;
         };
         /**
          * EvaluationLineOut
@@ -3592,6 +3639,11 @@ export interface components {
             /** Size */
             size: number;
         };
+        /** RunFilesByEpicOut */
+        RunFilesByEpicOut: {
+            /** Epics */
+            epics: components["schemas"]["EpicFilesOut"][];
+        };
         /**
          * RunFilesTreeChangedOut
          * @description `GET /runs/{id}/files` with no `path` (8-3): `{root, entries[]}` with `changed` marks.
@@ -4046,6 +4098,30 @@ export interface components {
             state: string;
             /** Story Id */
             story_id: string;
+        };
+        /** StoryDiffOut */
+        StoryDiffOut: {
+            /** Diff */
+            diff: string;
+            /** From Sha */
+            from_sha: string;
+            /** Path */
+            path: string;
+            /** To Sha */
+            to_sha: string;
+        };
+        /** StoryFilesOut */
+        StoryFilesOut: {
+            /** Changed */
+            changed: string[];
+            /** Id */
+            id: string;
+            /** Started */
+            started: boolean;
+            /** Story File */
+            story_file: string | null;
+            /** Title */
+            title: string;
         };
         /** SummaryOut */
         SummaryOut: {
@@ -6781,6 +6857,114 @@ export interface operations {
                 };
             };
             /** @description The path escapes the workspace (`..`, or absolute). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_files_by_epic_api_v1_runs__run_id__files_by_epic_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunFilesByEpicOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The Run id does not parse. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    get_story_diff_api_v1_runs__run_id__files_by_epic_diff_get: {
+        parameters: {
+            query: {
+                epic: number;
+                story: string;
+                path: string;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoryDiffOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No such Run, epic, story or changed path. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description A path or query value does not parse. */
             422: {
                 headers: {
                     [name: string]: unknown;

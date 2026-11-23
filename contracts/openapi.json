@@ -2418,6 +2418,45 @@
         "title": "EnvVarIn",
         "type": "object"
       },
+      "EpicFilesOut": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "stories": {
+            "items": {
+              "$ref": "#/components/schemas/StoryFilesOut"
+            },
+            "title": "Stories",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "title",
+          "folder",
+          "files",
+          "stories"
+        ],
+        "title": "EpicFilesOut",
+        "type": "object"
+      },
       "EvaluationLineOut": {
         "description": "One line `evaluate` produced: `{check, ok, text}`, the brief's own literal shape.",
         "properties": {
@@ -6989,6 +7028,22 @@
         "title": "RunFileOut",
         "type": "object"
       },
+      "RunFilesByEpicOut": {
+        "properties": {
+          "epics": {
+            "items": {
+              "$ref": "#/components/schemas/EpicFilesOut"
+            },
+            "title": "Epics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "epics"
+        ],
+        "title": "RunFilesByEpicOut",
+        "type": "object"
+      },
       "RunFilesTreeChangedOut": {
         "description": "`GET /runs/{id}/files` with no `path` (8-3): `{root, entries[]}` with `changed` marks.\n\nThe tree branch of `GET /runs/{run_id}/files` returns this type instead of\n`RunFilesTreeOut`; all other branches are unchanged.",
         "properties": {
@@ -8267,6 +8322,77 @@
           "state"
         ],
         "title": "StoryCellOut",
+        "type": "object"
+      },
+      "StoryDiffOut": {
+        "properties": {
+          "diff": {
+            "title": "Diff",
+            "type": "string"
+          },
+          "from_sha": {
+            "title": "From Sha",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "to_sha": {
+            "title": "To Sha",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "from_sha",
+          "to_sha",
+          "diff"
+        ],
+        "title": "StoryDiffOut",
+        "type": "object"
+      },
+      "StoryFilesOut": {
+        "properties": {
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "started": {
+            "title": "Started",
+            "type": "boolean"
+          },
+          "story_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Story File"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "story_file",
+          "started",
+          "changed"
+        ],
+        "title": "StoryFilesOut",
         "type": "object"
       },
       "SummaryOut": {
@@ -12981,6 +13107,202 @@
           }
         ],
         "summary": "Write one file inside a Run's own spec folder while parked",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/files-by-epic": {
+      "get": {
+        "operationId": "get_files_by_epic_api_v1_runs__run_id__files_by_epic_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunFilesByEpicOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such Run."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The Run id does not parse."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read a Run's spec files and changed paths, grouped by epic and Story",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/v1/runs/{run_id}/files-by-epic/diff": {
+      "get": {
+        "operationId": "get_story_diff_api_v1_runs__run_id__files_by_epic_diff_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "epic",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "Epic",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "story",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Story",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryDiffOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No such Run, epic, story or changed path."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "A path or query value does not parse."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read one changed path's unified diff over a Story's attempts",
         "tags": [
           "runs"
         ]

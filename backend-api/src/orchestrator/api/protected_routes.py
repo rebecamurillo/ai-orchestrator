@@ -16,6 +16,7 @@ from orchestrator.api.routers import (
     metrics_catalogue,
     run_analyses,
     run_analysis,
+    run_files_by_epic,
     run_findings,
     run_gateway_reads,
     run_label,
@@ -51,3 +52,4 @@ def install_metrics_routes(app: FastAPI) -> None:
 
 def install_run_page_routes(app: FastAPI) -> None:
     mount_protected(app, run_step_drawer.router)
+    mount_protected(app, run_files_by_epic.router)

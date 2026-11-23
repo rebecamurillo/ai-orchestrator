@@ -63,6 +63,8 @@ class SubprocessGitHistory:
                 env=environment,
                 capture_output=True,
                 text=True,
+                # a diff carries file contents, which need not be UTF-8
+                errors="replace",
                 timeout=self._timeout,
                 check=False,
             )
@@ -98,3 +100,18 @@ class SubprocessGitHistory:
     def commit_subject(self, repo: Path, sha: str) -> str | None:
         subject = self._run(repo, "log", "-1", "--format=%s", "--end-of-options", sha, "--").strip()
         return subject or None
+
+    def diff_path(self, repo: Path, from_sha: str, to_sha: str, path: str) -> str:
+        return self._run(
+            repo,
+            # `path` is a name git listed, which may hold `*` or `:(` — never a pattern
+            "--literal-pathspecs",
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            "--end-of-options",
+            from_sha,
+            to_sha,
+            "--",
+            path,
+        )

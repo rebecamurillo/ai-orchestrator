@@ -16,10 +16,12 @@ class FakeGitHistory:
         stats: dict[tuple[str, str, str], tuple[FileStat, ...]] | None = None,
         subjects: dict[tuple[str, str], str] | None = None,
         error: GitError | None = None,
+        diffs: dict[tuple[str, str, str, str], str] | None = None,
     ) -> None:
         self.stats = stats or {}
         self.subjects = subjects or {}
         self.error = error
+        self.diffs = diffs or {}
         self.calls: list[tuple[str, ...]] = []
 
     def diff_stat(self, repo: Path, from_sha: str, to_sha: str) -> tuple[FileStat, ...]:
@@ -33,3 +35,9 @@ class FakeGitHistory:
         if self.error is not None:
             raise self.error
         return self.subjects.get((str(repo), sha))
+
+    def diff_path(self, repo: Path, from_sha: str, to_sha: str, path: str) -> str:
+        self.calls.append(("diff_path", str(repo), from_sha, to_sha, path))
+        if self.error is not None:
+            raise self.error
+        return self.diffs.get((str(repo), from_sha, to_sha, path), "")

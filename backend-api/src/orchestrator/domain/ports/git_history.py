@@ -1,6 +1,6 @@
-"""The `GitHistory` port: what a range of commits changed, for the step drawer (AD-40).
+"""The `GitHistory` port: what a range of commits changed, for the drawer and files (AD-40).
 
-Split from `Git` for its 400-line module cap. Both methods raise `GitError` on failure.
+Split from `Git` for its 400-line module cap. Every method raises `GitError` on failure.
 """
 
 from __future__ import annotations
@@ -29,4 +29,8 @@ class GitHistory(Protocol):
 
     def commit_subject(self, repo: Path, sha: str) -> str | None:
         """The commit's subject line, `None` when empty; raises `GitError`."""
+        ...
+
+    def diff_path(self, repo: Path, from_sha: str, to_sha: str, path: str) -> str:
+        """Unified diff of one path between two commits; raises `GitError`."""
         ...
