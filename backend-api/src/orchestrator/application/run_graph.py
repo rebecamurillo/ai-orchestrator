@@ -18,7 +18,7 @@ from orchestrator.application.graph_schema import (
 )
 from orchestrator.application.rules.frames import epic_frame, rows_in_frame, story_frame
 from orchestrator.application.run_order import STEP_TOKENS, build_run_order
-from orchestrator.application.steps import AGENT_KIND, CHECKPOINT_KIND
+from orchestrator.application.steps import AGENT_KIND, CHECKPOINT_KIND, CONVERSATION_KIND
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -114,7 +114,7 @@ def _row_node(row: StepRun, attempts: Sequence[Attempt], *, current: bool) -> No
         label=row.label,
         gate=row.gate,
         agent=row.kind == AGENT_KIND,
-        human=row.gate == HUMAN_GATE or row.kind == CHECKPOINT_KIND,
+        human=row.gate == HUMAN_GATE or row.kind in (CHECKPOINT_KIND, CONVERSATION_KIND),
         status=row.status,
         token=STEP_TOKENS[row.status],
         current=current,

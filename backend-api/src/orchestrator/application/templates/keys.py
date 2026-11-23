@@ -23,6 +23,7 @@ from collections.abc import Sequence
 
 from orchestrator.application.steps import (
     AGENT_KIND,
+    CONVERSATION_KIND,
     GATES,
     KIND_META,
     SUBMODULE_BRANCH_KEY,
@@ -239,7 +240,8 @@ def _check_step(
     unvalidated: list[str],
 ) -> list[ValidationError]:
     kind, errors = _kind_of(node)
-    errors += unknown_keys(node, STEP_KEYS | AGENT_KEYS if kind == AGENT_KIND else STEP_KEYS)
+    if kind != CONVERSATION_KIND:
+        errors += unknown_keys(node, STEP_KEYS | AGENT_KEYS if kind == AGENT_KIND else STEP_KEYS)
     errors += _check_role(node)
     if kind is None:
         return errors

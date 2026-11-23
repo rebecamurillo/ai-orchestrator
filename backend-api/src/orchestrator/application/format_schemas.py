@@ -17,6 +17,7 @@ from orchestrator.application.spec_folder import (
 from orchestrator.application.spec_folder import ID_KEY as LIST_ID_KEY
 from orchestrator.application.steps import (
     AGENT_KIND,
+    CONVERSATION_KIND,
     GATES,
     KIND_META,
     TEMPLATE_CALL_KIND,
@@ -36,6 +37,9 @@ from orchestrator.application.templates.table import (
     CONSULT_KEYS,
     CONSULT_PROMPTS_KEYS,
     CONSULT_REQUIRED,
+    CONVERSATION_EXPECT_KEYS,
+    CONVERSATION_KEYS,
+    CONVERSATION_PROMPTS_KEYS,
     DESCRIPTION_KEY,
     FOR_EACH_KEYS,
     GATE_KEY,
@@ -53,6 +57,7 @@ from orchestrator.application.templates.table import (
     REQUIRED_INPUT_KEYS,
     REQUIRED_STEP_KEYS,
     REQUIRED_TEMPLATE_KEYS,
+    ROLE_KEY,
     RUN_KEY,
     SLUG,
     STEP_KEYS,
@@ -133,6 +138,8 @@ def _kind_branch(kind: str) -> Schema:
     keys = STEP_KEYS - {RUN_KEY}
     if kind == AGENT_KIND:
         keys = keys | AGENT_KEYS
+    if kind == CONVERSATION_KIND:
+        keys = keys | CONVERSATION_KEYS
     if kind == TEMPLATE_CALL_KIND:
         keys = keys - set(CALL_TIMING_KEYS)
     with_keys = KIND_META[kind].with_keys
@@ -145,8 +152,22 @@ def _kind_branch(kind: str) -> Schema:
         with_required = [NAME_KEY]
     values = _shared("on_fail_shell" if kind == RUN_KIND else "on_fail")
     values[USES_KEY] = {"const": kind}
+    if kind == CONVERSATION_KIND:
+        with_required = sorted(with_keys)
+        required += [ROLE_KEY, WITH_KEY, "expect", PROMPTS_KEY]
+        values.update(_conversation_values())
     values[WITH_KEY] = _closed(with_keys, {}, with_required)
     return _closed(keys, values, required)
+
+
+def _conversation_values() -> dict[str, Schema]:
+    """The shape AD-15 amended states, as far as one step's schema can say it (the
+    `type: interactive` rule spans the file and is the validator's alone)."""
+    return {
+        ROLE_KEY: {"const": "plan"},
+        "expect": _closed(CONVERSATION_EXPECT_KEYS, {}, ["files", "success"]),
+        PROMPTS_KEY: _closed(CONVERSATION_PROMPTS_KEYS, {}, sorted(CONVERSATION_PROMPTS_KEYS)),
+    }
 
 
 def _run_branch() -> Schema:

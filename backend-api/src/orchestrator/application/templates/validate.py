@@ -21,9 +21,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from orchestrator.application.steps import AGENT_KIND, KIND_META, TEMPLATE_CALL_KIND
+from orchestrator.application.steps import (
+    AGENT_KIND,
+    CONVERSATION_KIND,
+    KIND_META,
+    TEMPLATE_CALL_KIND,
+)
 from orchestrator.application.templates.calls import check_calls
 from orchestrator.application.templates.consult import parse_consult
+from orchestrator.application.templates.conversation import (
+    check_conversations,
+    parse_conversation,
+)
 from orchestrator.application.templates.expressions import check_expressions
 from orchestrator.application.templates.keys import check_keys
 from orchestrator.application.templates.lines import (
@@ -94,6 +103,7 @@ def validate(
         unstorable.sort(key=lambda record: record.line)
         return ValidationResult(errors=tuple(_stamped(record, root) for record in unstorable))
     found, unvalidated = check_keys(root)
+    found += check_conversations(root)
     found += check_expressions(root)
     found += check_calls(root, templates, root_version)
     unique = _deduplicated(found)
@@ -258,6 +268,7 @@ def _step(node: LinedMap) -> Step:
         redispatch_consult=parse_redispatch_consult(node),
         agent=_agent(node) if kind == AGENT_KIND else None,
         call=_call(params) if kind == TEMPLATE_CALL_KIND else None,
+        conversation=parse_conversation(node) if kind == CONVERSATION_KIND else None,
     )
 
 

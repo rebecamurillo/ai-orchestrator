@@ -24,6 +24,7 @@ from typing import Any, Literal, get_args
 from pydantic import BaseModel, ConfigDict
 
 from orchestrator.application.steps import Gate, KindMeta
+from orchestrator.application.templates.conversation_model import ConversationExtras
 from orchestrator.application.templates.step_metric_model import StepMetric
 
 #: The declared type of a Template input (brief, key table "input").
@@ -299,6 +300,7 @@ class Step(BaseModel):
     redispatch_consult: ConsultDecl | None = None
     agent: AgentExtras | None = None
     call: TemplateCall | None = None
+    conversation: ConversationExtras | None = None
 
 
 class ForEach(BaseModel):

@@ -155,6 +155,8 @@ class RunEnvironment:
     story_baseline_sha: str | None = None
     #: The image's BMAD installer when it exists, else `None` and `npx` is the fallback (AD-16).
     bmad_bin: str | None = None
+    #: The Run's rows, resolved by the walker for a `conversation` row only.
+    plan_rows: tuple[StepRun, ...] = ()
 
     def base_dir(self, work_dir: str) -> Path:
         """`{work_dir}/{project.slug}/{repository.slug}/base` — the one layout (AD-14)."""

@@ -97,6 +97,7 @@ KIND_META: dict[str, KindMeta] = {
     # empty-command shell skip already used (multi-repo initiative S5, spine AD-7
     # amendment, 2026-09-23).
     "checkpoint": KindMeta("human", None, frozenset({"when"})),
+    "conversation": KindMeta("human", None, frozenset({"skill", "persona", "step"})),
     "template": KindMeta(None, None, frozenset({"name", "version", "inputs"})),
     "bmad.install": KindMeta("deterministic", 30, frozenset()),
     # No gate default: a `metrics.analyse` row without a `gate` stays `unvalidated` (epic 5
@@ -119,6 +120,10 @@ AGENT_KIND = "agent"
 #: marks its node `human` by kind rather than by gate, and AD-9 says a kind is named here
 #: or nowhere.
 CHECKPOINT_KIND = "checkpoint"
+
+#: The kind whose step is a conversation with the agent a package names; a Run holding one
+#: from an `interactive` template walks in the interactive lane.
+CONVERSATION_KIND = "conversation"
 
 #: The kind whose step runs a command. Named here because the planner skips a row of this
 #: kind whose command resolved to nothing, and that test is a test about the kind.
@@ -215,6 +220,7 @@ __all__ = [
     "CHECKPOINT_KIND",
     "COMMIT_KIND",
     "COMMIT_MESSAGE_KEY",
+    "CONVERSATION_KIND",
     "EXECUTORS",
     "GATES",
     "KIND_META",

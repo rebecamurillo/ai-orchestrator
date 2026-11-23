@@ -96,6 +96,12 @@ CONSULT_ON = frozenset({"blocked", "protected_path"})
 REDISPATCH_CONSULT_ON = frozenset({"verify_failed"})
 REDISPATCH_CONSULT_REQUIRED = ("model", "skill", PROMPTS_KEY)
 
+#: The keys only a `uses: conversation` step carries beside `STEP_KEYS`, and the names inside
+#: its `prompts` and `expect` blocks (AD-15 amended).
+CONVERSATION_KEYS = frozenset({"expect", WRITES_KEY, PROMPTS_KEY})
+CONVERSATION_PROMPTS_KEYS = frozenset({"open", "close"})
+CONVERSATION_EXPECT_KEYS = frozenset({"files", "success", "blocked"})
+
 #: The three dispatch forms an `agent` `with` block may carry — only one at a time.
 AGENT_DISPATCH_KEYS: frozenset[str] = frozenset({"skill", "prompt", "prompt_file"})
 #: The intent key for the intent dispatch form (IMP-002 accepted 2026-09-15).

@@ -65,6 +65,8 @@ SPINE = {
     # empty-command shell skip already used (multi-repo initiative S5, spine AD-7
     # amendment, 2026-09-23).
     "checkpoint": ("human", None, frozenset({"when"}), False),
+    # Added: `conversation` (epic 4 story 3, orchestrator-initiative-steps, 2026-11-22).
+    "conversation": ("human", None, frozenset({"skill", "persona", "step"}), False),
     "template": (None, None, frozenset({"name", "version", "inputs"}), False),
     "bmad.install": ("deterministic", 30, frozenset(), False),
     # Revised: `metrics.analyse` — no gate default, so an ungated row stays `unvalidated`
@@ -72,16 +74,17 @@ SPINE = {
     "metrics.analyse": (None, None, frozenset(), False),
 }
 
-#: Revised to fifteen by `git.branch_delete` (epic 3 story 4, 2026-11-22), from fourteen below;
+#: Revised to sixteen by `conversation` (epic 4 story 3, 2026-11-22), from fifteen by
+#: `git.branch_delete` (epic 3 story 4, 2026-11-22), from fourteen below;
 #: revised from twelve by the `git.submodule` row above, which was itself revised from
 #: eleven by `git.merge` (hub-Run initiative H1, 2026-09-23), then to fourteen by
 #: `metrics.analyse` (epic 5 story 4, 2026-11-13).
-FIFTEEN = 15
+SIXTEEN = 16
 
 
-def test_the_registry_holds_exactly_the_fifteen_shipped_kinds() -> None:
+def test_the_registry_holds_exactly_the_sixteen_shipped_kinds() -> None:
     assert set(KIND_META) == set(SPINE)
-    assert len(KIND_META) == FIFTEEN
+    assert len(KIND_META) == SIXTEEN
 
 
 @pytest.mark.parametrize("kind", sorted(SPINE))

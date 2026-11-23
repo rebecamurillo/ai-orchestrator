@@ -20,7 +20,7 @@ from dataclasses import replace
 from uuid import UUID
 
 from orchestrator.application.rules.consult import delivers, diagnosis
-from orchestrator.application.steps import WORKDIR_KEY, StepContext, StepPorts
+from orchestrator.application.steps import CONVERSATION_KIND, WORKDIR_KEY, StepContext, StepPorts
 from orchestrator.application.steps.verify_failure import VerifyFailure
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY, REDISPATCH_TARGET_SEQ
 from orchestrator.application.templates.rows import COMMAND_KEY
@@ -98,6 +98,8 @@ def _step_ports(  # noqa: PLR0913 — the row, its frame and its attempts, each 
         verify_failure=_verify_failure(writers, step, run.id, row),
         story_baseline_sha=_story_baseline_sha(row, attempts),
     )
+    if row.kind == CONVERSATION_KIND:
+        environment = replace(environment, plan_rows=tuple(writers.steps.list_for_run(run.id)))
     if row.frame is None:
         return replace(step, run_env=environment)
     rule = frame_anchors(step.git, run, environment, frame, row)

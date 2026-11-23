@@ -241,6 +241,8 @@ STEP_TRANSITIONS: dict[tuple[StepStatus, StepEvent], StepStatus] = {
     ("running", "blocked"): "blocked",
     ("running", "checkpoint"): "checkpoint",
     ("running", "error"): "error",
+    # An executor may end its own row `skipped` (AD-15 amended "The round"; Operator 2026-11-23).
+    ("running", "skip"): "skipped",
     ("done", "redispatch"): "queued",
     ("blocked", "answer"): "queued",
     ("blocked", "terminal_resume"): "done",

@@ -70,6 +70,8 @@ EXPECTED_STEP: dict[tuple[StepStatus, StepEvent], StepStatus] = {
     ("running", "blocked"): "blocked",
     ("running", "checkpoint"): "checkpoint",
     ("running", "error"): "error",
+    # Epic 4 story 3, 2026-11-23: an executor may end its own row `skipped` (AD-15 amended).
+    ("running", "skip"): "skipped",
     ("done", "redispatch"): "queued",
     ("blocked", "answer"): "queued",
     ("blocked", "terminal_resume"): "done",
