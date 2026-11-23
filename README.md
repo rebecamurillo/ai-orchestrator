@@ -243,11 +243,16 @@ Stated as facts, each checkable in the repository.
 
 ## Planned
 
-One thing, in progress: **initiatives inside the orchestrator**. Today an initiative is
-planned outside (in the brain repository, by hand or by personas) and the orchestrator runs
-the build. The next step is the whole path in the product — from the spec to autonomous
-development, the full quality checks, and the deployment — where an initiative is a
-first-class object that holds one or several workflows. No date is attached.
+Two things, no date attached.
+
+- **Initiatives inside the orchestrator** — in progress. Today an initiative is planned
+  outside (in the brain repository, by hand or by personas) and the orchestrator runs the
+  build. The next step is the whole path in the product — from the spec to autonomous
+  development, the full quality checks, and the deployment — where an initiative is a
+  first-class object that holds one or several workflows.
+- **Chat channels** — Slack and Mattermost integration: a park reaches you in the channel
+  with its reason and the signals the Run admits, and your answer goes back from there, so
+  a Run does not wait on an open browser tab.
 
 Bugs and smaller improvements are the issue tracker:
 [github.com/rebecamurillo/ai-orchestrator/issues](https://github.com/rebecamurillo/ai-orchestrator/issues).
