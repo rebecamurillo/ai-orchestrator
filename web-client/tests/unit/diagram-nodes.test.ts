@@ -344,3 +344,24 @@ describe('a card is the focusable thing', () => {
     expect(html).toContain('class="wf-node-title"');
   });
 });
+
+describe('the Files button (epic 2 story 1)', () => {
+  it('is on epic and story cards with nodrag, and not on root or agent cards', () => {
+    const epic = renderToStaticMarkup(
+      createElement(EpicCard, { node: node('epics[1]'), onToggle: noop }),
+    );
+    const story = renderToStaticMarkup(
+      createElement(StoryCard, { node: node('epics[1].stories[0]'), onToggle: noop }),
+    );
+    expect(epic).toMatch(
+      /class="wf-node-files nodrag"[^>]*data-testid="wf-diagram-files-epics\.1"/,
+    );
+    expect(story).toContain('data-testid="wf-diagram-files-epics.1.stories.0"');
+    const root = renderToStaticMarkup(createElement(RootCard, { node: node('root') }));
+    const agent = renderToStaticMarkup(
+      createElement(AgentCard, { node: node('epics[1].stories[0].build'), runId: 'r1' }),
+    );
+    expect(root).not.toContain('wf-diagram-files-');
+    expect(agent).not.toContain('wf-diagram-files-');
+  });
+});

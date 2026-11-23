@@ -16,7 +16,8 @@
  * **Click grammar** (EXPERIENCE-v1 §2.2, 2026-09-24): the card body is a drag handle, never
  * a link. The only navigation is the *Open step* CTA, and the only state change is the
  * expand caret; both are real `<button>`s and both carry `nodrag` so a click on them is a
- * click and not the start of a drag.
+ * click and not the start of a drag. The *Files* button on epic and story cards is a third
+ * control: it changes only the files focus (`stores/files-focus.ts`).
  *
  * **The card is the focusable thing.** `FlowCanvas` turns React Flow's own node focus off, so
  * Tab lands on the card itself — a labelled group announcing `{title} · {status word}` — and
@@ -28,6 +29,7 @@ import { Handle, Position } from '@xyflow/react';
 
 import type { FlowNodeData } from '../../../lib/diagram/flow-layout';
 import { statusWord, type HierarchyNode } from '../../../lib/diagram/run-tree';
+import { focusFiles } from '../../../stores/files-focus';
 import { GuardrailStrip, RetryCard, RetryMoreCard } from './strips';
 
 export interface CardProps {
@@ -92,6 +94,17 @@ function Head({ node, onToggle }: { node: HierarchyNode; onToggle?: (id: string)
       <span className="wf-node-eyebrow" data-now={node.current}>
         {node.eyebrow}
       </span>
+      {onToggle === undefined ? null : (
+        <button
+          type="button"
+          className="wf-node-files nodrag"
+          data-testid={`wf-diagram-files-${node.path}`}
+          aria-label={`files of ${node.title}`}
+          onClick={() => focusFiles(node.id)}
+        >
+          Files
+        </button>
+      )}
       <Token token={node.token} />
     </div>
   );

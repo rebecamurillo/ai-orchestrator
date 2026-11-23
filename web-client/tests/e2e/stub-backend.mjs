@@ -739,6 +739,42 @@ createServer(async (request, response) => {
     send(response, 200, JSON_TYPE, JSON.stringify(project));
     return;
   }
+  const filesByEpicMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)\/files-by-epic$/);
+  if (filesByEpicMatch && request.method === 'GET') {
+    const body = {
+      epics: [
+        {
+          index: 0,
+          title: 'models',
+          folder: 'specs/epic-1-models',
+          files: ['specs/epic-1-models/SPEC.md', 'specs/epic-1-models/stories.yaml'],
+          stories: [
+            {
+              id: '1',
+              title: 'model list',
+              started: true,
+              story_file: 'specs/epic-1-models/stories/1-model-list.md',
+              changed: ['src/models.py', 'tests/test_models.py'],
+            },
+          ],
+        },
+      ],
+    };
+    send(response, 200, JSON_TYPE, JSON.stringify(body));
+    return;
+  }
+  const filesByEpicDiffMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)\/files-by-epic\/diff$/);
+  if (filesByEpicDiffMatch && request.method === 'GET') {
+    const path = new URL(request.url, 'http://stub').searchParams.get('path') ?? '';
+    const diff = `--- a/${path}\n+++ b/${path}\n-old\n+new\n`;
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({ path, from_sha: 'aaa1111', to_sha: 'bbb2222', diff }),
+    );
+    return;
+  }
   const exportMatch = pathname.match(/^\/api\/v1\/projects\/([^/]+)\/trajectories\.jsonl$/);
   if (exportMatch && request.method === 'GET') {
     const project = projects[exportMatch[1]];

@@ -177,7 +177,8 @@ describe('the ArtifactsPanel island fragment', () => {
     expect(typeof ArtifactsPanel).toBe('function');
   });
 
-  it('renders the ARTIFACTS heading before its own fetch effect has run', () => {
+  // Revised: epic 2 story 1, EXPERIENCE § 12 delta 5, 2026-11-23 — the panel groups files by epic and story.
+  it('renders the FILES · BY EPIC AND STORY heading before its own fetch effect has run', () => {
     const markup = renderToStaticMarkup(
       createElement(ArtifactsPanel, {
         runId: 'r1',
@@ -207,6 +208,6 @@ describe('the ArtifactsPanel island fragment', () => {
     );
 
     expect(markup).toContain('data-testid="wf-artifacts"');
-    expect(markup).toContain('ARTIFACTS');
+    expect(markup).toContain('FILES · BY EPIC AND STORY');
   });
 });
