@@ -1,72 +1,105 @@
-# Test Automation Summary — orchestrator-initiative-steps / epic-2-run-page-review
+# Test Automation Summary — orchestrator-initiative-steps / epic-3-interactive-lane
 
 Generated: 2026-11-23. Dispatched with an empty story id, so this covers the whole epic.
-Spec: `initiatives/orchestrator-initiative-steps/epic-2-run-page-review/SPEC.md` (relative to the hub).
-Stories: 1–4 (commits `3624a257`..`000ad823`).
-Previous summary (epic-1-step-logs): in git history at `a11f801d`.
+Spec: `initiatives/orchestrator-initiative-steps/epic-3-interactive-lane/SPEC.md` (relative to the hub).
+Stories: 1–4 (commits `d828c9a5`..`d3f67fab`).
+Previous summary (epic-2-run-page-review): in git history at `7ab6f6a3`.
 
-Framework: Playwright (`web-client/tests/e2e`, the `make e2e-ui` gate), with `page.route` mocks as in
-`run-step-drawer.spec.ts`. This epic changes no backend code, so no API test is added. The epic-1 module
-`backend-api/tests/e2e/test_step_logs.py` already covers the reads it renders.
+Framework: pytest + httpx (`backend-api/tests/e2e`, the `make e2e-api` gate). The module follows the
+patterns of `test_queue.py` and `test_run_creation.py`. This epic only regenerates `schema.d.ts` in the
+web-client, so no Playwright test is added.
 
-The stories wrote three specs (`run-files-by-epic`, `run-step-drawer`, the `run-diagram` additions). The new
-module covers what those specs left out. No existing test file was touched, and no shipped template is read.
+The stories' own tests are unit tests over fakes. The new module proves the same behaviour on the running
+stack: real HTTP, Postgres, DBOS queues, git and a bare remote. No existing test file was touched, and no
+shipped template is read. Every template is a fresh name the module owns, and every Run it starts is
+cancelled when its test ends.
 
 ## Generated Tests
 
-### E2E tests — `web-client/tests/e2e/run-page-review.spec.ts` (12 tests)
+### API tests — `backend-api/tests/e2e/test_interactive_templates.py` (16 tests)
 
-- **CAP-2, the step drawer (story 2):**
-  - Agent step: the heading takes focus, `2 attempts · $1.25`, the files-read paths, `src/a.ts +3 −1`, and the
-    `full page` href.
-  - Deterministic step: `deterministic step · files read are not recorded; the command is in the log`,
-    `no file · refs updated: …`, and `2m · exit 0`.
-  - Commit step: `commit abcdef1 · {message}` comes before the files, and `{path} binary` is shown when counts
-    are null.
-  - A run-order row is marked `aria-current`. Clicking another row requests `seq/0` and reloads the drawer.
-  - *close* removes the drawer and the row selection, and returns focus to the opener.
-- **CAP-4, logs in words (story 4), in the drawer:**
-  - `text`: the lines and *download raw* (`?download=true`).
-  - `no_output` with no reason: `no output · the command ran and printed nothing`, with *download raw*.
-  - `no_output` with a reason: `no output · no log was recorded for this attempt`, with no *download raw*.
-  - `removed` with `removed_at`: `log removed by the retention sweep on 2026-11-29 · exit 1 · 42s were recorded`,
-    with no *download raw*.
-  - A skipped row (`not_run`): `not run · skipped · no command`, with no log viewer.
-  - The step page (`StepDetail`) shows *download raw* when the log exists.
-- **CAP-1, files by epic (story 1):** a story that has not started reads `no file yet`. A started story with no
-  change shows neither `no file yet` nor `changed:`.
+- **CAP-1, the template type (story 1):**
+  - A stored version with `type: interactive`, `type: auto` or no `type` reads that type back from the
+    `201` save body and from `GET /templates/{name}/1` (`interactive` / `auto` / `auto`).
+  - `type: manual` and `type: [auto]`:
+    - `POST /versions` answers `422` with `line 4:`.
+    - `POST /validate` answers `200` with exactly one error: line 4, code `template-invalid-value`.
+- **CAP-2, the lane (story 2):**
+  - Every `GET /queue` row has `lane` ∈ {`walk`, `interactive`}.
+  - Positions are numbered 1..n within each lane.
+  - A Run from an `interactive` template with no `conversation` row is parked at a checkpoint. It is listed
+    in `GET /queue` with `lane: walk`, which is the gate item 5 rule.
+- **CAP-3, frozen versions (story 3):** the template `e2e-frozen-*` is stored at versions 1 and 2. Version
+  1 has a `link` row and version 2 does not.
+  - A Run at version 1 reads `version: 1` and plans `touch` and `link`.
+  - A Run at version 2 plans `touch` only.
+  - Version 9:
+    - `POST /runs` answers `422` with `errors[0].template` set to the name and `errors[0].version` set to
+      `"9"`, and the Project lists no Run at that version.
+    - `POST /runs/preflight` returns a `plan_error` naming the same template and version `9`.
+- **CAP-4, `git.branch_delete` (story 4):**
+  - `POST /validate` accepts a `git.branch_delete` step with `{branch}` and refuses an unknown `with` key
+    (`force`).
+  - The template graph has exactly one `git.branch_delete` node, `delete`. It is `deterministic` and not
+    an agent node.
+  - The real engine walks a Run on a fresh bare remote that holds `spec/demo`:
+    - The Run ends `done`, and the row reason is `deleted origin/spec/demo`.
+    - The remote no longer holds the branch.
+    - The attempt's log has the line `git push origin --delete spec/demo` and the answer `deleted`.
+  - A branch the remote never held: the Run ends `done · already gone`, and the log has the operation line
+    and `already gone`.
+  - `branch: main`, the default branch: the Run parks `needs_you` with `misconfigured` and the reason
+    `refuses to delete the default branch main`. `main` is still on the remote.
 
 ## Coverage
 
-- UI capabilities of this epic: 4 of 4 are exercised in a browser.
-  - CAP-1: the new spec and `run-files-by-epic.spec.ts`. The latter is broken; see below.
-  - CAP-2: the new spec, `run-step-drawer.spec.ts` and `run-diagram.spec.ts`.
-  - CAP-3: `run-diagram.spec.ts`.
-  - CAP-4: the new spec.
-- Covered by vitest only:
-  - the epic strip `AFTER STORIES` with `+k` truncation
-  - the unsplit strip for a card with no `run_order`
-  - `files_read=none`
-  - `removed` with `removed_at` null
+- Capabilities of this epic: 4 of 4 are exercised on the running stack.
+- Covered by unit tests only:
+  - The `interactive` lane being chosen. No `conversation` kind exists until epic 4 story 3, so no real
+    template can produce an interactive Run yet.
+  - `MAX_ACTIVE_RUNS=1` with a parked walk Run.
+  - The three registered queue widths.
+  - The migration default `walk`.
+  - A `GitError` → `push_rejected`.
+  - An adapter without `RemoteBranches`.
 
 ## Verification
 
-- `tsc --noEmit`, eslint and prettier pass on the new module.
-- Run against the built web-client and the stub backend on spare ports (port 4321 is never bound; no running
-  instance is touched):
-  `pnpm build && E2E_PREVIEW_PORT=4399 E2E_STUB_BACKEND_PORT=8799 npx playwright test <specs>`
-  - `run-page-review`: 12 passed.
-  - `run-step-drawer`, `run-diagram`: passed.
-  - `run-detail-artifacts`, `run-detail-epic-6-screens`, `run-detail-last-opened`, `step-detail`: 29 passed.
-  - **`run-files-by-epic.spec.ts` (story 1): 2 of 2 fail.**
-    - The spec mocks `files-by-epic` but not `/runs/{id}/detail`. The stub backend does not know its `RUN_ID`, so
-      the page shows `COULD NOT REACH BACKEND-API … /detail → 404` and the panel never renders.
-    - This is a defect in the test, not the product: the new spec's CAP-1 case passes once the detail and graph
-      are mocked.
-    - It is left unchanged. It is story 1's protected test (hard rule 1), so the fix goes to the lead or Operator.
+- `ruff check` and `ruff format --check` pass on the new module. The `mypy` gate covers only
+  `src/orchestrator/{domain,application}`.
+- The run used the gate's own disposable stack, project `aio-e2e`:
+  - It was brought up with the `make e2e` compose command, `.env.e2e` and database `orchestrator_e2e`.
+    `check_e2e_target.sh` passed.
+  - It was destroyed with `down -v` afterwards. No other stack or container was touched.
+- `pytest tests/e2e/test_interactive_templates.py`: **16 passed**, twice in a row against the same stack
+  (the suite must be re-runnable).
+- `test_queue.py`, `test_templates.py`, `test_run_creation.py` and `test_template_graph.py` against the
+  same stack: 28 passed.
+
+## Findings (not fixed: tests only)
+
+1. **Story 1's refusal does not name the key or the value.** The story asked for "the validator's
+   existing invalid-value error, naming the key `type`, the value and the line".
+   - The wire carries `line: 4`, `reason: "invalid value"` and `code: template-invalid-value`. The words
+     `type` and `manual` appear only through the line number.
+   - The unit test `test_template_type.py` pins the same thing.
+   - The new e2e test pins what ships (line and code). Whether the reason should name `type`/`manual` is
+     for the Operator to decide.
+2. **`.dockerignore` excludes only the root `.venv`.**
+   - In a checkout where `backend-api/.venv` exists, that venv is copied into the backend image.
+   - Its entry-point shebangs point at host paths, so the container exits 127 at
+     `/app/backend-api/.venv/bin/alembic`, and `make e2e` cannot start.
+   - Workaround used for this run: move `backend-api/.venv` aside during the build, then put it back.
+   - Suggested fix (not applied): add `**/.venv` to `.dockerignore`.
+3. **The `Fixtures` host route in `test_clone_check.py`.**
+   - On a host where `WORK_DIR` (`/work`) exists and is writable but is not the container's `work`
+     volume, `Fixtures` creates the bare repositories on the host. The containerised backend then cannot
+     clone them.
+   - For this run, a failing `git` shim on `PATH` forced the `docker compose exec` route.
+   - On CI, the backend runs from source, so the two paths are the same and this does not arise.
 
 ## Next Steps
 
-- Fix `run-files-by-epic.spec.ts`: mock `**/api/runs/${RUN_ID}/detail**` and `/graph` with
-  `runDetail(withSteps(twoEpicSteps()))` and `twoEpicGraph()`, as `run-page-review.spec.ts` does.
-- The lead runs `make e2e` in the disposable `aio-e2e` stack before the pull request.
+- The lead runs `make e2e` in the disposable `aio-e2e` stack before the pull request (after finding 2 is
+  addressed or worked around).
+- Epic 4 story 3 adds an e2e case where a real `conversation` row puts a Run on `lane: interactive`.
