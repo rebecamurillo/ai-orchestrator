@@ -1,68 +1,72 @@
-# Test Automation Summary — orchestrator-initiative-steps / epic-1-step-logs
+# Test Automation Summary — orchestrator-initiative-steps / epic-2-run-page-review
 
-Generated: 2026-11-23. This run was dispatched with an empty story id, so it covers the whole epic.
-Spec: `initiatives/orchestrator-initiative-steps/epic-1-step-logs/SPEC.md` (the path is relative to the hub).
-Stories: 1–7 (commits `04dca98c`..`792089c5`).
-Previous summary (orchestrator-run-metrics epic-6-analysis-tier2): in git history at `9c0433db`.
+Generated: 2026-11-23. Dispatched with an empty story id, so this covers the whole epic.
+Spec: `initiatives/orchestrator-initiative-steps/epic-2-run-page-review/SPEC.md` (relative to the hub).
+Stories: 1–4 (commits `3624a257`..`000ad823`).
+Previous summary (epic-1-step-logs): in git history at `a11f801d`.
 
-Framework: the project's own suites.
-- pytest and httpx in `backend-api/tests/e2e`, run by `make e2e-api` (inside `make e2e`).
-- This epic changes no web-client code apart from the regenerated `schema.d.ts`. No Playwright test is added.
+Framework: Playwright (`web-client/tests/e2e`, the `make e2e-ui` gate), with `page.route` mocks as in
+`run-step-drawer.spec.ts`. This epic changes no backend code, so no API test is added. The epic-1 module
+`backend-api/tests/e2e/test_step_logs.py` already covers the reads it renders.
 
-Every story is covered by unit tests on fakes. The e2e module checks what only a real Run shows: the walker writes the logs to disk through the real `FsStepLog`, real git answers the drawer and files-by-epic reads, and the graph, the steps table and the drawer report the same `(seq, n)` for one Run. No existing test file was touched. No shipped template is read. The module uses the suite's own `tests/e2e/templates/hub*.yaml` and `fixtures/hub-repo`.
+The stories wrote three specs (`run-files-by-epic`, `run-step-drawer`, the `run-diagram` additions). The new
+module covers what those specs left out. No existing test file was touched, and no shipped template is read.
 
 ## Generated Tests
 
-### API (e2e) tests — `make e2e-api` gate
+### E2E tests — `web-client/tests/e2e/run-page-review.spec.ts` (12 tests)
 
-- [x] `backend-api/tests/e2e/test_step_logs.py` (27 tests).
-  - **Fixture.** One hub Run is started with `start_hub_run` from `test_hub_run.py` and walked to alpha-epic's done checkpoint. The module reads the Run's graph once, then cancels the Run when it ends.
-  - **CAP-4 (story 4), identity and run order:**
-    - Each row that ran has a node with `seq`, ascending `attempt_ns`, and `attempt_n = max(attempt_ns)`. The steps-table row's `attempt_ns` is the same.
-    - A row that is only planned (beta's story build) has `attempt_n` null and `attempt_ns` empty.
-    - Story frame `epics[0].stories[0]`: `sync` is BEFORE, `build` is AGENT, `commit-guard` is AFTER, and every row is in seq order.
-    - Epic frame `epics[0]`: `branch` and `baseline` are BEFORE, `spec-gate` is AGENT, and the done checkpoint is AFTER. The frame contains no story row.
-    - Root frame: `checkout` and `submodules` are BEFORE.
-  - **CAP-5/6 (stories 5–6), the drawer:**
-    - With `n=0`, the drawer shows the latest attempt, lists every attempt, and its `run_order.frame` is the story frame. A drawer opened by an explicit `n` shows that attempt.
-    - A build attempt on the fake harness reports `files_read` as `not_recorded`.
-    - The workdir `commit-guard` row reports `files_written.state=commit`, with the sha and the subject `story 1: Ship the alpha feature (orchestrator)`. Its file list contains `repos/alpha/src/alpha_feature.py`.
-    - The skipped `setup` row has `n` null, no attempts, and log `not_run` with the row's own reason.
-    - An unknown Run, seq or attempt gets a 404 problem+json. A request without the bearer gets a 401.
-  - **CAP-1/2/3 (stories 1–3), logs:**
-    - For `git.submodule`, `git.merge` (story sync) and `git.commit`, the drawer's log state is `text`. The log endpoint returns `state=text`, `eof`, and lines starting `> `.
-    - The commit log contains a `> commit …` line.
-    - No log line of five deterministic rows contains `ORCHESTRATOR_TOKEN`.
-  - **CAP-7 (story 7), files by epic:**
-    - Both epics are listed in plan order, with folder and title.
-    - Alpha lists `SPEC.md`, `stories.yaml` and `spec-gate-result.md` in that order. `RETROSPECTIVE.md` is absent, so it is left out.
-    - Beta lists only its seeded `SPEC.md` and `stories.yaml`.
-    - Alpha story 1 has `started` true and `story_file` `…/stories/1-work.md`. Beta story 1 has `started` false, no file and no change.
-    - Every path in `changed` gets a 200 from the diff route. An unchanged path, an epic index outside the list, and an unknown Run each get a 404.
+- **CAP-2, the step drawer (story 2):**
+  - Agent step: the heading takes focus, `2 attempts · $1.25`, the files-read paths, `src/a.ts +3 −1`, and the
+    `full page` href.
+  - Deterministic step: `deterministic step · files read are not recorded; the command is in the log`,
+    `no file · refs updated: …`, and `2m · exit 0`.
+  - Commit step: `commit abcdef1 · {message}` comes before the files, and `{path} binary` is shown when counts
+    are null.
+  - A run-order row is marked `aria-current`. Clicking another row requests `seq/0` and reloads the drawer.
+  - *close* removes the drawer and the row selection, and returns focus to the opener.
+- **CAP-4, logs in words (story 4), in the drawer:**
+  - `text`: the lines and *download raw* (`?download=true`).
+  - `no_output` with no reason: `no output · the command ran and printed nothing`, with *download raw*.
+  - `no_output` with a reason: `no output · no log was recorded for this attempt`, with no *download raw*.
+  - `removed` with `removed_at`: `log removed by the retention sweep on 2026-11-29 · exit 1 · 42s were recorded`,
+    with no *download raw*.
+  - A skipped row (`not_run`): `not run · skipped · no command`, with no log viewer.
+  - The step page (`StepDetail`) shows *download raw* when the log exists.
+- **CAP-1, files by epic (story 1):** a story that has not started reads `no file yet`. A started story with no
+  change shows neither `no file yet` nor `changed:`.
 
 ## Coverage
 
-- API endpoints added or changed by this epic: 5 of 5 are exercised end to end:
-  - `GET /runs/{id}/graph` (node identity and `run_order`)
-  - steps-table `attempt_ns`
-  - `GET /runs/{id}/attempts/{aid}/log` (state `text`)
-  - `GET /runs/{id}/steps/{seq}/attempts/{n}/drawer`
-  - `GET /runs/{id}/files-by-epic` and `/diff`
-- Covered by unit tests only:
-  - the log states `no_output` and `removed`, and the sweep mark (getting them on a stack needs retention to pass)
-  - `refs updated:` lines (the fixture's heads do not move during sync)
-  - `files_read=listed` (needs the Claude extractor)
+- UI capabilities of this epic: 4 of 4 are exercised in a browser.
+  - CAP-1: the new spec and `run-files-by-epic.spec.ts`. The latter is broken; see below.
+  - CAP-2: the new spec, `run-step-drawer.spec.ts` and `run-diagram.spec.ts`.
+  - CAP-3: `run-diagram.spec.ts`.
+  - CAP-4: the new spec.
+- Covered by vitest only:
+  - the epic strip `AFTER STORIES` with `+k` truncation
+  - the unsplit strip for a card with no `run_order`
+  - `files_read=none`
+  - `removed` with `removed_at` null
 
 ## Verification
 
-- `ruff check`, `ruff format --check` and `pytest --collect-only` (27 collected) pass on the new module.
-- **Not run against a stack.** The epic's spec forbids starting, stopping or calling a running instance. Its quality gate is lint, test and openapi drift, with no e2e. So `make e2e` was not run in this dispatch. Before relying on this module, run `make e2e` on a machine where the disposable `aio-e2e` stack is allowed.
-- Assertions that rest on code reading rather than an observed run:
-  - the `commit-guard` subject and member path prefix
-  - the exact list of alpha spec files at the checkpoint
-  - the story file path
+- `tsc --noEmit`, eslint and prettier pass on the new module.
+- Run against the built web-client and the stub backend on spare ports (port 4321 is never bound; no running
+  instance is touched):
+  `pnpm build && E2E_PREVIEW_PORT=4399 E2E_STUB_BACKEND_PORT=8799 npx playwright test <specs>`
+  - `run-page-review`: 12 passed.
+  - `run-step-drawer`, `run-diagram`: passed.
+  - `run-detail-artifacts`, `run-detail-epic-6-screens`, `run-detail-last-opened`, `step-detail`: 29 passed.
+  - **`run-files-by-epic.spec.ts` (story 1): 2 of 2 fail.**
+    - The spec mocks `files-by-epic` but not `/runs/{id}/detail`. The stub backend does not know its `RUN_ID`, so
+      the page shows `COULD NOT REACH BACKEND-API … /detail → 404` and the panel never renders.
+    - This is a defect in the test, not the product: the new spec's CAP-1 case passes once the detail and graph
+      are mocked.
+    - It is left unchanged. It is story 1's protected test (hard rule 1), so the fix goes to the lead or Operator.
 
 ## Next Steps
 
-- Run `make e2e` and fix any assertion the live stack contradicts.
-- Epic 2 (Run page review) adds the Playwright side of these reads.
+- Fix `run-files-by-epic.spec.ts`: mock `**/api/runs/${RUN_ID}/detail**` and `/graph` with
+  `runDetail(withSteps(twoEpicSteps()))` and `twoEpicGraph()`, as `run-page-review.spec.ts` does.
+- The lead runs `make e2e` in the disposable `aio-e2e` stack before the pull request.
