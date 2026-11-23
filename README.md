@@ -1,10 +1,18 @@
 # ai-orchestrator
 
-A self-hosted software factory for coding agents. You write the spec; the orchestrator plans
-every step of the work up front, dispatches each story to a coding-agent CLI (Claude Code,
-Codex, OpenCode) inside a container, verifies the result with your repository's own test and
-quality-gate commands, commits and pushes, and stops for you only at the checkpoints you
-declared or when an agent is blocked. One operator, one machine, one token.
+A self-hosted workflow engine for coding agents. A workflow is a YAML file, the way a GitHub
+Actions workflow is: steps that check out a branch, run shell commands, dispatch a
+coding-agent CLI (Claude Code, Codex, OpenCode) with a prompt and a skill, loop over the
+items of a file, commit, push, and stop for a human at the points you declare. The
+orchestrator plans every step up front, executes them durably inside a container, verifies
+each result with the repository's own commands, meters what every agent step cost, and
+analyses what it changed.
+
+The workflows that ship are the ones I use — a spec-driven development process with tests
+first, three agent sessions per story, and a review gate — and they are examples, not the
+product: edit them, or write your own for any process a repository can hold, from a
+migration to a documentation pass to a business workflow that happens to live in git. One
+operator, one machine, one token.
 
 ![The board: every Run as a card, by status](docs/images/board.jpg)
 
@@ -48,10 +56,26 @@ I used to write code... Now I build the systems that write it.
 
 A **Run** is one workflow template, applied to one repository, on one branch, with a budget
 in USD. The template is a YAML file of steps — git operations, shell commands, agent
-dispatches, loops over the stories of a spec folder — planned in full before the first step
-executes and executed durably: the backend can be restarted mid-Run and the Run completes.
+dispatches, loops over the entries of a list file in the repository — planned in full before
+the first step executes and executed durably: the backend can be restarted mid-Run and the
+Run completes.
 
-**A story, in the shipped `staged-initiative-*` templates**, is three agent sessions and one
+**The templates are open.** A step is a git built-in (`git.worktree`, `git.merge`,
+`git.commit`, `git.push`, `git.submodule`), a shell command (`run:`, the repository's own
+commands), an agent dispatch (`uses: agent`, with its harness, model, skill and prompts), or a
+loop (`for_each`) over a file such as `epics.yaml` or `stories.yaml`, nested up to two levels.
+Each step declares its gate, its time limit, what happens on failure (a bounded redispatch,
+a consult with a senior model), and where the Run pauses for a human
+(`pause_when`, `pause_after_item_when`). Edit a
+template at `/templates` with validation and versioning, or drop a file in the instance's
+`templates/` folder; a saved version never changes, and a Run keeps the version it was
+planned from. The format, with three working examples, is
+[`templates/README.md`](templates/README.md); the guide page `workflows/customize` teaches a
+connected agent to propose and validate a change for you.
+
+![The templates page: versions on the left, the YAML with validation, the declared inputs on the right](docs/images/templates.jpg)
+
+**A story, in the shipped `staged-initiative-*` examples**, is three agent sessions and one
 deterministic gate:
 
 | Step | Who | What happens |
@@ -81,22 +105,41 @@ story, skip the epic, raise the budget, cancel. Nothing proceeds past a park wit
 
 ![Answering: the text box, the resume mode, and the signals the Run admits](docs/images/run-detail-answer.jpg)
 
-**The templates are yours.** Five ship (`staged-initiative-hub`, `staged-initiative-repo`,
-`repo-init`, `agent-smoke`, and the off-menu `harness-readiness`), one file each, and every
-one is meant to be edited: which steps, which model per step, which prompts, which
-timeouts, where the checkpoints are. Edit at `/templates` with validation and versioning, or
-drop a file in the instance's `templates/` folder; a saved version never changes, and a Run
-keeps the version it was planned from.
+**Every Run is measured.** Each finished agent attempt records, once and append-only, what
+it cost and what it did; each Run's pushed change is analysed in a scratch clone against its
+base; every stored value carries its metric id, its method version and its origin, so a
+figure can always be traced to how it was computed. The catalogue
+(`backend-api/src/orchestrator/metrics_catalogue/`) is the authority; in short:
 
-![The templates page: versions on the left, the YAML with validation, the declared inputs on the right](docs/images/templates.jpg)
+| Group | What is measured | How |
+| --- | --- | --- |
+| Cost and spend | gateway figure and harness figure per Run, the gap between them, the share spent on retries and failed attempts, cost per story done, spend per project per month | the LiteLLM gateway's metered spend when configured (the budget gate acts on it); the harness's own figure otherwise, marked provisional |
+| Tokens and activity | input, cached and output tokens per model and conversation; messages, tool calls and tool errors per tool, files read and edited, test runs, pauses | the harness's session log |
+| Time and process | wall-clock, machine time, time waiting on you, time per role (plan, implement, review), attempts and retries per story, parks by kind, gates passed on the first attempt | the Run's own records |
+| Change size and shape | lines added and removed by class (production, unit test, e2e, docs, configuration, generated), files touched, test files and test cases opened, dependency manifest changes | `git numstat` and `name-status` with rename detection, a glob classifier per repository |
+| Agent shortcuts | suppressions added (`eslint-disable`, `# noqa`, `@ts-ignore`, …), type escapes (`as any`, `typing.Any`, …), skip and focus markers (`.skip(`, `.only(`, `@pytest.mark.skip`, …), pre-existing tests changed or deleted | pattern counts over the added lines, rated per 100 production lines |
+| Secrets | possible secrets in the added lines | [gitleaks](https://github.com/gitleaks/gitleaks), SARIF report kept as the artefact |
+| Dependencies | added, removed, upgraded; not found in the registry; published less than 30 days ago; licences; known vulnerabilities | lock files at base and head; the npm and PyPI registries; [osv-scanner](https://google.github.io/osv-scanner/) over the [OSV](https://osv.dev) database |
+| Duplication | duplicated lines the change adds | [jscpd](https://github.com/kucherenko/jscpd) over the changed production files |
+| Complexity | functions over a threshold of 15, and the worst, for cyclomatic complexity ([McCabe, 1976](https://doi.org/10.1109/TSE.1976.233837)) and cognitive complexity ([Campbell, SonarSource, 2018](https://www.sonarsource.com/resources/cognitive-complexity/)) | [lizard](https://github.com/terryyin/lizard) over the changed functions, 60-odd languages |
+| Static analysis | possible security findings by severity with their [CWE](https://cwe.mitre.org/), and possible bug findings, new at head versus base | [Opengrep](https://github.com/opengrep/opengrep) with the rule pack the repository declares; no rule ships with the product |
+| The repository's own gates | new linter warnings, new type-check errors, coverage of the changed lines, test cases executed base → head, new tests that fail at base (fail-to-pass) | the repository's own `lint`, `typecheck`, `coverage` and `test_report` commands at base and at head; Cobertura or JaCoCo and JUnit reports |
+| Method | test-first order followed per story (experimental) | the order of test and production writes in the attempt's events |
 
-**Every Run is metered.** With a LiteLLM gateway configured, spend is read from the gateway
-and the budget gate acts on it; without one, the harness's own figures are shown and marked
-provisional. Each finished attempt records its token usage per model and source, its tool
-activity and its duration; a per-project metrics page and a compare view put Runs side by
-side, which is what the benchmarks below are read from.
+Reports are [SARIF](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) where
+the tool writes one, stored as the analysis artefact; a value that could not be computed
+reads `not run`, `n/a`, `partial` or `small change` rather than 0.
 
 ![Metrics: spend this month per project, gateway and harness figures side by side](docs/images/metrics.jpg)
+
+**Metrics as evaluation.** Because a template is a file and a Run is one template on one
+base branch to one destination branch, evaluating models is a matter of launching the same
+workflow several times: same base, same spec, a different model (or harness, or template
+version) per Run, each on its own branch. The compare view puts the Runs side by side on
+every row above — cost, time, interventions, test cases, duplication, complexity, findings
+— and the trajectory export (JSONL per project) holds the raw material. This is how the
+benchmarks in "How I use it" are read; the method is the guide page `initiatives/run` and
+the compare page at `/metrics/compare`.
 
 **The agents in your projects can drive it.** The instance serves its own bootstrap
 installer and an MCP endpoint behind the same token: a Claude Code, Codex or OpenCode
@@ -129,17 +172,19 @@ human reads. [`INSTALL.md` § 7](INSTALL.md#7-connect-a-projects-agents-mcp-and-
   agent, and the metrics and traces compared afterwards. The findings become posts on
   [rebecamurillo.com](https://rebecamurillo.com).
 
-## Use cases
+## The shipped workflows, and yours
 
-| You want to… | Template | How |
-| --- | --- | --- |
-| Build a planned initiative across several repositories | `staged-initiative-hub` | a hub repository with `repos/*` submodules, an initiative folder with `epics.yaml` and one spec folder per epic; one Run, one branch name everywhere |
-| Build a feature in one repository | `staged-initiative-repo` | the same initiative folder in the repository itself |
-| Bring a repository to the method | `repo-init` | installs BMAD (`_bmad/`), generates the repository's `AGENTS.md`, opens it as a pull request |
-| Check an install or a harness before spending a budget | `agent-smoke` | five minutes: one agent creates one file, the Run verifies, commits and pushes it |
-| Prove a harness end to end | the readiness diagnostic (Fleet, or `POST /api/v1/harnesses/{name}/readiness`) | a one-story fixture the instance ships, through the real CLI |
-| Compare models, harnesses or workflow shapes on the same work | a copy of a staged template with other models or steps | one Run per arm on the same frozen spec; the compare view and the trajectory export |
-| Let your coding agent operate the factory | the bootstrap installer | `.mcp.json` / `config.toml` / `opencode.json` with the `orchestrator` MCP server |
+Five files ship in [`templates/`](templates/); they are my process, and every one is meant
+to be copied and changed.
+
+| Workflow | What it does |
+| --- | --- |
+| `staged-initiative-hub` | builds every epic of a planned initiative across several repositories: a hub repository whose `repos/*` submodules are the members, an initiative folder with `epics.yaml` and one spec folder per epic; one Run, one branch name everywhere |
+| `staged-initiative-repo` | the same initiative shape on one plain repository |
+| `repo-init` | brings a repository to the method: installs BMAD (`_bmad/`), generates its `AGENTS.md`, opens it as a pull request |
+| `agent-smoke` | checks an install or a harness in five minutes: one agent creates one file, the Run verifies, commits and pushes it |
+| `harness-readiness` (off the menu) | the instance's own diagnostic: a one-story fixture through the real CLI, run from the Fleet page |
+| **Your custom process** | any sequence of checkout, shell, agent, loop and checkpoint steps over files your repository holds: a review-only pass, a migration, a documentation or translation pass, a release procedure, a business process whose records live in git. Start from `templates/README.md`'s three examples and `workflows/customize` |
 
 ## Quick start
 
@@ -186,8 +231,8 @@ Stated as facts, each checkable in the repository.
   `127.0.0.1`, and sends nothing anywhere but your model provider, your gateway and your
   git remotes.
 - **No per-user access control.** One bearer token is the whole authentication; whoever
-  holds it can do everything. Scoped tokens are planned (below). Do not expose the ports to
-  a network you do not trust (`INSTALL.md` § 10).
+  holds it can do everything. Do not expose the ports to a network you do not trust
+  (`INSTALL.md` § 10).
 - **No model gateway and no tracing of its own.** LiteLLM and Langfuse are optional and
   yours to run; a starter stack is in `deploy/llm-platform/`.
 - **No silent retry.** A failed command is reported with its output; the only automatic
@@ -201,26 +246,14 @@ Stated as facts, each checkable in the repository.
 
 ## Planned
 
-Labelled as planned; nothing here exists yet, and no date is attached.
+One thing, in progress: **initiatives inside the orchestrator**. Today an initiative is
+planned outside (in the brain repository, by hand or by personas) and the orchestrator runs
+the build. The next step is the whole path in the product — from the spec to autonomous
+development, the full quality checks, and the deployment — where an initiative is a
+first-class object that holds one or several workflows. No date is attached.
 
-- **Scoped tokens** — a read-only token and an operate-only token, so a remote agent or a
-  second person can hold less than everything.
-- **Notifications out, decisions in** — a channel (Slack, Mattermost, phone) that carries a
-  park to you and your answer back, so a Run does not wait on an open browser tab.
-- **An escalation agent** — on a parked step, dispatch a senior model into the working
-  folder to investigate or unblock, instead of a human reading the log.
-- **Resume an initiative from a remaining epic**, instead of a whole Run.
-- **A red baseline parks instead of failing** — when the base branch's own gates are red
-  before the Run changed anything, offer the operator a way out rather than a dead Run.
-- **Fewer parks** — the per-epic checkpoint becomes opt-in when the retrospective accepted
-  the epic; a `protected_path` hit can be rejected, not only accepted; a worktree that
-  drifted from origin can be resynced from the UI.
-- **Harness isolation** — a dispatched agent sees only the Project's environment, not the
-  host user's connectors or logins.
-- **Open-model support in the metrics** — a harness figure for a model the harness cannot
-  price is marked unknown and kept out of the budget gate.
-
-The open issues are the backlog: [github.com/rebecamurillo/ai-orchestrator/issues](https://github.com/rebecamurillo/ai-orchestrator/issues).
+Bugs and smaller improvements are the issue tracker:
+[github.com/rebecamurillo/ai-orchestrator/issues](https://github.com/rebecamurillo/ai-orchestrator/issues).
 
 ## Contributing
 

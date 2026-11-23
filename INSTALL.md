@@ -397,8 +397,7 @@ curl -fs $ORCHESTRATOR_BASE_URL/guide/runs/launch.md    # one page
 
 **The one-token risk.** There is one token, and every tool added over MCP widens what it can
 do: an agent holding it can register repositories, start Runs that spend money and push
-branches, and answer parks. This is accepted for the owner's own projects; scoped tokens are
-planned (`README.md` § Planned).
+branches, and answer parks. This is accepted for the owner's own projects.
 
 ## 8. The hub pattern: a planning repository with submodules
 
