@@ -18,10 +18,15 @@ from orchestrator.api.providers_step_drawer import step_drawer_ports
 from orchestrator.api.routers import run_step_drawer as router_module
 from orchestrator.api.schemas import run_step_drawer as schemas
 from orchestrator.application.use_cases.run_step_drawer import StepDrawerPorts
+from orchestrator.domain.entities.facts import AttemptFacts, EventFact, FactSet
+from orchestrator.domain.ids import new_id
+from orchestrator.domain.ports.log_facts import LogFactsCapabilities
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.main import create_app
 from tests.unit.application.test_run_step_drawer import NOW, a_row, a_run, an_attempt
+from tests.unit.fakes.facts import FakeFactSetRepository
 from tests.unit.fakes.git_history import FakeGitHistory
+from tests.unit.fakes.log_facts import ScriptedLogFacts
 from tests.unit.fakes.logs import FakeLogReader
 from tests.unit.fakes.runs import FakeAttemptRepository, FakeRunRepository, FakeStepRunRepository
 
@@ -47,6 +52,8 @@ class Api:
             attempts=FakeAttemptRepository([self.attempt]),
             logs=FakeLogReader(),
             history=FakeGitHistory(),
+            facts=FakeFactSetRepository(),
+            extractors={},
         )
         self.app: FastAPI = create_app(Settings(**{k.lower(): v for k, v in env.items()}))
         self.app.dependency_overrides[step_drawer_ports] = lambda: self.ports
@@ -83,6 +90,41 @@ async def test_a_known_row_answers_the_drawer(api: Api) -> None:
     assert body["files_written"]["state"] == "none"
     assert body["run_order"] is None
     assert body["attempts"] == [{"n": 1, "status": "done"}]
+
+
+async def test_an_agent_attempt_with_read_events_lists_its_paths(api: Api) -> None:
+    row = a_row(api.run, kind="agent")
+    attempt = an_attempt(row, started_at=NOW)
+    extractor = ScriptedLogFacts(name="claude", version=2)
+    extractor.capabilities = LogFactsCapabilities(False, False, False, False, files_read=True)
+    facts = FakeFactSetRepository()
+    fact_set = FactSet(
+        id=new_id(),
+        attempt_id=attempt.id,
+        run_id=api.run.id,
+        extractor="claude",
+        extractor_version=2,
+        read_at=NOW,
+        status="ok",
+    )
+    events = tuple(
+        EventFact(at=NOW, conversation="main", kind="read", path=p) for p in ("b.py", "a.py")
+    )
+    facts.add(fact_set, AttemptFacts(events=events))
+    api.ports = StepDrawerPorts(
+        runs=api.ports.runs,
+        steps=FakeStepRunRepository([row]),
+        attempts=FakeAttemptRepository([attempt]),
+        logs=FakeLogReader(),
+        history=FakeGitHistory(),
+        facts=facts,
+        extractors={"claude": extractor},
+    )
+
+    async with api.client() as client:
+        response = await client.get(api.url(seq=row.seq))
+
+    assert response.json()["files_read"] == {"state": "listed", "paths": ["a.py", "b.py"]}
 
 
 async def test_unknown_run_seq_and_attempt_are_404_problems(api: Api) -> None:

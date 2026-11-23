@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -15,13 +16,17 @@ from uuid import UUID
 
 from orchestrator.application.graph_schema import RunOrderFrame
 from orchestrator.application.run_order import STEP_TOKENS, build_run_order
+from orchestrator.application.steps import AGENT_KIND
 from orchestrator.application.use_cases.attempt_log import read_log_page
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.facts import FactSet
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import NotFound
+from orchestrator.domain.ports.facts import FactSetRepository
 from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.ports.git_history import FileStat, GitHistory
+from orchestrator.domain.ports.log_facts import LogFacts
 from orchestrator.domain.ports.logs import LogReader
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
@@ -34,6 +39,7 @@ COMMIT_KIND = "git.commit"
 SHA = re.compile(r"^[0-9a-f]{7,40}$")
 REFS_PREFIX = "refs updated: "
 REFS_TAIL_LINES = 10000
+READABLE = ("ok", "partial")
 
 
 @dataclass(frozen=True)
@@ -43,6 +49,8 @@ class StepDrawerPorts:
     attempts: AttemptRepository
     logs: LogReader
     history: GitHistory
+    facts: FactSetRepository
+    extractors: Mapping[str, LogFacts]
 
 
 @dataclass(frozen=True)
@@ -77,8 +85,11 @@ class DrawerLog:
 
 @dataclass(frozen=True)
 class FilesRead:
-    state: Literal["not_recorded", "none"]
+    state: Literal["listed", "not_recorded", "none"]
     paths: tuple[str, ...]
+
+
+NOT_RECORDED = FilesRead("not_recorded", ())
 
 
 @dataclass(frozen=True)
@@ -167,6 +178,33 @@ def _files_written(
     return _refs_written(ports.logs, attempt)
 
 
+def _current(extractors: Mapping[str, LogFacts], fact_set: FactSet) -> bool:
+    extractor = extractors.get(fact_set.extractor)
+    return (
+        extractor is not None
+        and extractor.capabilities.files_read
+        and fact_set.extractor_version == extractor.version
+    )
+
+
+def _files_read(ports: StepDrawerPorts, row: StepRun, attempt: Attempt | None) -> FilesRead:
+    if attempt is None:
+        return FilesRead("none", ())
+    if row.kind != AGENT_KIND:
+        return NOT_RECORDED
+    sets = [
+        s
+        for s in ports.facts.list_for_attempt(attempt.id)
+        if s.status in READABLE and _current(ports.extractors, s)
+    ]
+    if not sets:
+        return NOT_RECORDED
+    latest = max(sets, key=lambda s: s.read_at)
+    events = ports.facts.rows(latest.id).events
+    paths = tuple(sorted({e.path for e in events if e.kind == "read" and e.path}))
+    return FilesRead("listed", paths) if paths else FilesRead("none", ())
+
+
 def _log(ports: StepDrawerPorts, run_id: UUID, row: StepRun, attempt: Attempt | None) -> DrawerLog:
     if attempt is None:
         return DrawerLog(attempt_id=None, state="not_run", removed_at=None, reason=row.reason)
@@ -216,6 +254,6 @@ def step_drawer(ports: StepDrawerPorts, run_id: UUID, seq: int, n: int) -> StepD
         attempts=tuple(DrawerAttempt(a.n, a.status) for a in attempts),
         run_order=next((f for f in frames if any(r.seq == seq for r in f.rows)), None),
         log=_log(ports, run_id, row, attempt),
-        files_read=FilesRead("not_recorded" if attempt else "none", ()),
+        files_read=_files_read(ports, row, attempt),
         files_written=_files_written(ports, run, row, attempt),
     )

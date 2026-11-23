@@ -2158,7 +2158,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "not_recorded" | "none";
+            state: "listed" | "not_recorded" | "none";
         };
         /** FilesWrittenOut */
         FilesWrittenOut: {

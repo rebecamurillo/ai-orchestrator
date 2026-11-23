@@ -42,7 +42,7 @@ class DrawerLogOut(BaseModel):
 
 
 class FilesReadOut(BaseModel):
-    state: Literal["not_recorded", "none"]
+    state: Literal["listed", "not_recorded", "none"]
     paths: list[str]
 
 

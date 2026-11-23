@@ -20,6 +20,7 @@ from orchestrator.domain.errors import NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.ports.git_history import FileStat
+from tests.unit.fakes.facts import FakeFactSetRepository
 from tests.unit.fakes.git_history import FakeGitHistory
 from tests.unit.fakes.logs import FakeLogReader
 from tests.unit.fakes.runs import FakeAttemptRepository, FakeRunRepository, FakeStepRunRepository
@@ -94,6 +95,8 @@ class Rig:
             attempts=FakeAttemptRepository(attempts),
             logs=logs or FakeLogReader(),
             history=self.history,
+            facts=FakeFactSetRepository(),
+            extractors={},
         )
 
     def drawer(self, seq: int = 1, n: int = 0):  # type: ignore[no-untyped-def]

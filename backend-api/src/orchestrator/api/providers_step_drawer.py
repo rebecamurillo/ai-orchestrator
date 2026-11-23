@@ -10,11 +10,13 @@ from orchestrator.api.providers_base import SESSION_FACTORY, SETTINGS, from_stat
 from orchestrator.application.use_cases.run_step_drawer import StepDrawerPorts
 from orchestrator.infrastructure.db import (
     SQLAlchemyAttemptRepository,
+    SQLAlchemyFactSetRepository,
     SQLAlchemyRunRepository,
     SQLAlchemyStepRunRepository,
     SQLAlchemyUnitOfWork,
 )
 from orchestrator.infrastructure.git.git_history import SubprocessGitHistory
+from orchestrator.infrastructure.harness.facts import build_log_facts
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
 
 
@@ -28,4 +30,6 @@ def step_drawer_ports(request: Request) -> Iterator[StepDrawerPorts]:
             attempts=SQLAlchemyAttemptRepository(uow.session),
             logs=RealLogReader(log_secrets(settings)),
             history=SubprocessGitHistory(),
+            facts=SQLAlchemyFactSetRepository(uow.session),
+            extractors=build_log_facts(settings),
         )

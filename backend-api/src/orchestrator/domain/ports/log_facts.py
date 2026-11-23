@@ -17,6 +17,7 @@ class LogFactsCapabilities:
     activity: bool
     events: bool
     harness_money_per_model: bool
+    files_read: bool = False
 
 
 @runtime_checkable

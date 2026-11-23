@@ -494,6 +494,7 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
     - `files_written` is the diff from `attempt.start_sha` to `attempt.end_sha`;
     - `files_read` comes from the attempt's facts on run-metrics path 2 **[experiment]**. If the facts keep no paths, the drawer reads `not recorded` for agent steps too, no capture path is added, and FR-29's path consequence goes to the product-lead as a PRD change.
   - **The order.** The before / agent / after strip comes from the plan rows of the frame. The API sends it, and `RunDiagram` renders only what it gets.
+- **Amendment** *(2026-11-22, initiative orchestrator-initiative-steps, decision B6)***:** The facts kept no read path at 505f9b09, so read paths become a new fact kind on run-metrics path 2, with no new table: `EventKind` gains `read`, the Claude extractor writes one `read` event per distinct path (extractor version 2), and Codex and OpenCode declare files read not available. This replaces the fallback's "no capture path is added".
 
 ## Consistency Conventions
 

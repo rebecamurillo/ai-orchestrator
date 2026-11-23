@@ -1,6 +1,7 @@
 """The registry of log extractors, keyed by harness name (AGENTS.md "Data capture").
 
-Every extractor is wrapped so an event's command is redacted before it is stored (AD-5).
+Every extractor is wrapped so an event's command and path are redacted before they are stored
+(AD-5).
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from orchestrator.infrastructure.settings import Settings
 
 
 class RedactingLogFacts:
-    """An extractor whose stored commands carry no instance secret."""
+    """An extractor whose stored commands and paths carry no instance secret."""
 
     def __init__(self, inner: LogFacts, secrets: tuple[str, ...]) -> None:
         self._inner = inner
@@ -34,17 +35,22 @@ class RedactingLogFacts:
     def extract(self, attempt: Attempt, log_path: str) -> AttemptFacts:
         facts = self._inner.extract(attempt, log_path)
         events = tuple(
-            event.model_copy(update={"command": self._redacted(event.command)})
+            event.model_copy(
+                update={
+                    "command": self._redacted(event.command),
+                    "path": self._redacted(event.path),
+                }
+            )
             for event in facts.events
         )
         return facts.model_copy(update={"events": events})
 
-    def _redacted(self, command: str | None) -> str | None:
-        if command is None:
+    def _redacted(self, text: str | None) -> str | None:
+        if text is None:
             return None
         for secret in self._secrets:
-            command = redact(command, secret)
-        return command
+            text = redact(text, secret)
+        return text
 
 
 def build_log_facts(settings: Settings) -> dict[str, LogFacts]:

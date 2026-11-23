@@ -2729,6 +2729,7 @@
           },
           "state": {
             "enum": [
+              "listed",
               "not_recorded",
               "none"
             ],
