@@ -13,9 +13,11 @@ import {
   filesReadLines,
   filesWrittenLines,
   headerLines,
+  headerSeconds,
   logHeading,
   runOrderView,
 } from '../../lib/run/step-drawer';
+import { notRunLine } from '../../lib/run/log-state';
 import { encode } from '../../lib/step-path';
 import { $originTarget } from '../../stores/metric-ui';
 import { $poll } from '../../stores/poll';
@@ -147,14 +149,16 @@ export default function StepDrawer({ runId }: { runId: string }) {
           ) : null}
           <section data-testid="wf-step-drawer-log">
             <h3 className="wf-step-drawer-label">{logHeading(out.header.n ?? target.n)}</h3>
-            {out.log.attempt_id !== null ? (
+            {out.log.state === 'not_run' ? (
+              <p className="wf-log-words">{notRunLine(out.log.reason ?? null)}</p>
+            ) : out.log.attempt_id !== null ? (
               <LogViewer
                 key={out.log.attempt_id}
                 runId={runId}
                 attemptId={out.log.attempt_id}
                 isRunning={out.header.status === 'running'}
-                // stand-in until story 4 changes LogViewer's props: download shows only for text
-                logPath={out.log.state === 'text' ? out.log.attempt_id : null}
+                exitCode={out.header.exit_code}
+                seconds={headerSeconds(out.header)}
               />
             ) : null}
           </section>

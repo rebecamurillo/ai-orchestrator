@@ -7,10 +7,11 @@
  * up pauses following; clicking "follow" resumes it.
  *
  * **Download**: the "download raw" link opens `?download=true`, which streams the full
- * file as a `text/plain` attachment.
+ * file as a `text/plain` attachment; shown only when a file exists.
  *
- * **GC'd log**: the backend returns `"log no longer on disk"` as a plain text line (not
- * an error) — the viewer renders it like any other line.
+ * **States**: a page's `state` decides what the panel says. `text` renders the lines; any
+ * other state renders exactly one words line (`lib/run/log-state.ts`), so the panel is never
+ * empty once its first page has loaded.
  *
  * All log access is via the web-client proxy (AD-1); the browser never touches the log
  * volume directly.
@@ -19,21 +20,25 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@nanostores/react';
 
 import { api } from '../../api/client';
+import { logWords, showsDownload } from '../../lib/run/log-state';
 import { $poll } from '../../stores/poll';
+import type { components } from '../../api/schema';
+
+type Meta = Pick<components['schemas']['LogPageOut'], 'state' | 'reason' | 'removed_at'>;
 
 interface Props {
   runId: string;
   attemptId: string;
   isRunning: boolean;
-  /** The attempt's `log_path` — used only to determine whether the download link is
-   * meaningful.  The viewer always polls the paged endpoint regardless. */
-  logPath: string | null;
+  exitCode: number | null;
+  seconds: number | null;
 }
 
-export default function LogViewer({ runId, attemptId, isRunning, logPath }: Props) {
+export default function LogViewer({ runId, attemptId, isRunning, exitCode, seconds }: Props) {
   const [lines, setLines] = useState<string[]>([]);
   const [cursor, setCursor] = useState(0);
   const [eof, setEof] = useState(false);
+  const [meta, setMeta] = useState<Meta | null>(null);
   const [following, setFollowing] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const pollTick = useStore($poll);
@@ -43,6 +48,7 @@ export default function LogViewer({ runId, attemptId, isRunning, logPath }: Prop
       params: { path: { run_id: runId, attempt_id: attemptId }, query: { cursor: from } },
     });
     if (!data) return;
+    setMeta({ state: data.state, reason: data.reason, removed_at: data.removed_at });
     if (data.lines.length > 0) {
       setLines((prev) => [...prev, ...data.lines]);
       setCursor(data.next_cursor);
@@ -55,6 +61,7 @@ export default function LogViewer({ runId, attemptId, isRunning, logPath }: Prop
     setLines([]);
     setCursor(0);
     setEof(false);
+    setMeta(null);
     setFollowing(true);
     void fetchPage(0);
   }, [attemptId]);
@@ -78,9 +85,11 @@ export default function LogViewer({ runId, attemptId, isRunning, logPath }: Prop
     if (!atBottom) setFollowing(false);
   }
 
-  const downloadUrl = logPath
-    ? `/api/v1/runs/${runId}/attempts/${attemptId}/log?download=true`
-    : undefined;
+  const words = meta && logWords({ ...meta, lines }, exitCode, seconds);
+  const downloadUrl =
+    meta !== null && showsDownload(meta)
+      ? `/api/v1/runs/${runId}/attempts/${attemptId}/log?download=true`
+      : undefined;
 
   return (
     <div className="wf-log-viewer">
@@ -111,15 +120,16 @@ export default function LogViewer({ runId, attemptId, isRunning, logPath }: Prop
         onScroll={handleScroll}
         data-testid="wf-log-lines"
       >
-        {lines.length === 0 && !isRunning && eof && (
-          <span className="wf-log-empty">no log output</span>
+        {words ? (
+          <p className="wf-log-words">{words}</p>
+        ) : (
+          lines.map((line, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: log lines have no stable id
+            <div key={i} className="wf-log-line">
+              {line}
+            </div>
+          ))
         )}
-        {lines.map((line, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: log lines have no stable id
-          <div key={i} className="wf-log-line">
-            {line}
-          </div>
-        ))}
         {isRunning && !eof && <div className="wf-log-tail" aria-label="loading" />}
       </div>
     </div>

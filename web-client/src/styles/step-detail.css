@@ -294,3 +294,10 @@ table.wf-step-attempts tr[data-selected='true'] td {
   line-height: var(--type-meta-line);
   color: var(--color-text-tertiary);
 }
+
+.wf-log-words {
+  margin: 0;
+  padding: var(--space-7) var(--space-6);
+  font-size: var(--type-row-body);
+  color: var(--color-text-tertiary);
+}

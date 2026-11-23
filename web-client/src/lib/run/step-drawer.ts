@@ -32,10 +32,14 @@ export function isAgentStep(header: DrawerHeaderOut): boolean {
   return header.kind === 'agent';
 }
 
+export function headerSeconds(header: DrawerHeaderOut): number | null {
+  if (header.started_at === null || header.ended_at === null) return null;
+  return (Date.parse(header.ended_at) - Date.parse(header.started_at)) / 1000;
+}
+
 function durationText(header: DrawerHeaderOut): string {
-  if (header.started_at === null || header.ended_at === null) return '—';
-  const seconds = (Date.parse(header.ended_at) - Date.parse(header.started_at)) / 1000;
-  return ageText(Math.floor(seconds));
+  const seconds = headerSeconds(header);
+  return seconds === null ? '—' : ageText(Math.floor(seconds));
 }
 
 export function headerLines(out: StepDrawerOut): HeaderLines {

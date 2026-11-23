@@ -123,7 +123,9 @@ describe('StepDrawer', () => {
       expect.objectContaining({
         runId: 'r1',
         attemptId: 'att-2',
-        logPath: 'att-2',
+        // epic 2 story 4, 2026-11-23: logPath removed
+        exitCode: null,
+        seconds: null,
         isRunning: true,
       }),
     );

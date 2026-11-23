@@ -1537,3 +1537,10 @@ table.wf-steps tr.wf-step-selected td:first-child {
   font: inherit;
   cursor: pointer;
 }
+
+.wf-log-words {
+  margin: 0;
+  padding: var(--space-7) var(--space-6);
+  font-size: var(--type-row-body);
+  color: var(--color-text-tertiary);
+}
