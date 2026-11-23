@@ -41,7 +41,9 @@ def test_enqueue_is_a_no_op_when_the_engine_has_steps_for_that_run() -> None:
     fake = FakeDurableEngine(steps=[existing_step])
     engine = a_launched_engine(fake)
 
-    reference = engine.enqueue(RUN_A, partition_key=PARTITION_KEY)
+    reference = engine.enqueue(
+        RUN_A, partition_key=PARTITION_KEY, lane="walk"
+    )  # epic 3 story 2, 2026-11-22: enqueue takes the lane (AD-6/AD-12 amended)
 
     # The engine's enqueue list must be empty — no second walk was started.
     assert fake.enqueued == []
@@ -54,7 +56,9 @@ def test_enqueue_proceeds_when_the_engine_has_no_steps_for_that_run() -> None:
     fake = FakeDurableEngine(steps=[])
     engine = a_launched_engine(fake)
 
-    engine.enqueue(RUN_A, partition_key=PARTITION_KEY)
+    engine.enqueue(
+        RUN_A, partition_key=PARTITION_KEY, lane="walk"
+    )  # epic 3 story 2, 2026-11-22: enqueue takes the lane (AD-6/AD-12 amended)
 
     assert len(fake.enqueued) == 1
     # The partition key must be forwarded verbatim to the durable engine (AD-12).

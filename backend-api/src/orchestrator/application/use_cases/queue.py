@@ -40,6 +40,7 @@ from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.engine import QueueEntry, WorkflowEngine
 from orchestrator.domain.ports.instance_hold import InstanceHoldRepository
 from orchestrator.domain.ports.repositories import RunRepository, StepRunRepository
+from orchestrator.domain.statuses import Lane
 
 #: The fixed reasons (SPEC CAP-11, AD-12). A queue row states one of these, verbatim.
 REASON_RUNNING = "running"
@@ -70,6 +71,7 @@ class QueueRow:
     reason: str
     waiting_since: datetime
     waiting_seconds: float
+    lane: Lane = "walk"
 
 
 @dataclass(frozen=True)
@@ -156,6 +158,7 @@ def _dependency_row(ports: QueuePorts, run: Run) -> QueueRow:
         ),
         waiting_since=run.created_at,
         waiting_seconds=(ports.clock.now() - run.created_at).total_seconds(),
+        lane=run.lane,
     )
 
 
@@ -169,6 +172,7 @@ def _saved_row(ports: QueuePorts, run: Run) -> QueueRow:
         reason=REASON_SAVED,
         waiting_since=run.created_at,
         waiting_seconds=(ports.clock.now() - run.created_at).total_seconds(),
+        lane=run.lane,
     )
 
 
@@ -186,6 +190,7 @@ def _row(ports: QueuePorts, entry: QueueEntry, held: bool) -> QueueRow | None:
         reason=reason,
         waiting_since=entry.enqueued_at,
         waiting_seconds=(ports.clock.now() - entry.enqueued_at).total_seconds(),
+        lane=entry.lane,
     )
 
 

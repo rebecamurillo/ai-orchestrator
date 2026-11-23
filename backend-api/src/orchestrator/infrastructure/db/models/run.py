@@ -141,6 +141,7 @@ class RunRow(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     worktrees_removed: Mapped[bool] = mapped_column(Boolean())
     partition_branch: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    lane: Mapped[str] = mapped_column(Text(), nullable=False, server_default=text("'walk'"))
     #: The fan-in predecessor list (AD-12, spine amendment 2026-09-23). A real `uuid[]`
     #: rather than `jsonb`, unlike every other list on this table, because this one *is*
     #: queried into: `list_dependents` asks which Runs name a predecessor, and only an

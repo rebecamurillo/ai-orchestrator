@@ -31,14 +31,14 @@ discards every one of these rows.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
 
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.template import TemplateRef
-from orchestrator.domain.statuses import TERMINAL_RUN, RunStatus
+from orchestrator.domain.statuses import TERMINAL_RUN, Lane, RunStatus
 from orchestrator.domain.values import Worktree
 from orchestrator.infrastructure.db.models.run import RunRow
 
@@ -106,6 +106,7 @@ def to_entity(row: RunRow) -> Run:
         ended_at=row.ended_at,
         worktrees_removed=row.worktrees_removed,
         partition_branch=row.partition_branch,
+        lane=cast(Lane, row.lane or "walk"),
         # `or ()` for the reason `spend_provisional` reads `or False` just above: the
         # column's default is the database's, so a `RunRow` built in memory and not yet
         # flushed still carries `None` here.
@@ -170,6 +171,7 @@ def row_values(run: Run) -> dict[str, Any]:
         "ended_at": run.ended_at,
         "worktrees_removed": run.worktrees_removed,
         "partition_branch": run.partition_branch,
+        "lane": run.lane,
         "after_run_ids": list(run.after_run_ids),
     }
 

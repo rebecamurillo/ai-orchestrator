@@ -26,8 +26,8 @@ def test_satisfies_the_protocol() -> None:
 def test_enqueue_returns_a_distinct_opaque_ref_each_time() -> None:
     engine = LocalWorkflowEngine()
 
-    first = engine.enqueue(RUN_A, REPOSITORY)
-    second = engine.enqueue(RUN_B, REPOSITORY)
+    first = engine.enqueue(RUN_A, REPOSITORY, lane="walk")
+    second = engine.enqueue(RUN_B, REPOSITORY, lane="walk")
 
     assert first != second
     assert isinstance(first, dict)
@@ -35,8 +35,8 @@ def test_enqueue_returns_a_distinct_opaque_ref_each_time() -> None:
 
 def test_list_queue_reports_every_enqueued_run_oldest_first() -> None:
     engine = LocalWorkflowEngine()
-    engine.enqueue(RUN_A, REPOSITORY)
-    engine.enqueue(RUN_B, REPOSITORY)
+    engine.enqueue(RUN_A, REPOSITORY, lane="walk")
+    engine.enqueue(RUN_B, REPOSITORY, lane="walk")
 
     entries = engine.list_queue()
 
@@ -46,7 +46,7 @@ def test_list_queue_reports_every_enqueued_run_oldest_first() -> None:
 
 def test_cancel_removes_the_run_from_the_queue() -> None:
     engine = LocalWorkflowEngine()
-    engine.enqueue(RUN_A, REPOSITORY)
+    engine.enqueue(RUN_A, REPOSITORY, lane="walk")
 
     engine.cancel(RUN_A)
 
@@ -59,7 +59,7 @@ def test_cancel_an_unknown_run_does_not_raise() -> None:
 
 def test_attempt_record_answers_none() -> None:
     engine = LocalWorkflowEngine()
-    ref = engine.enqueue(RUN_A, REPOSITORY)
+    ref = engine.enqueue(RUN_A, REPOSITORY, lane="walk")
 
     assert engine.attempt_record(ref) is None
 

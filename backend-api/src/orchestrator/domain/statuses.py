@@ -32,6 +32,11 @@ from typing import Literal, get_args
 RunStatus = Literal["queued", "running", "needs_you", "done", "failed", "cancelled"]
 RUN_STATUSES: tuple[RunStatus, ...] = get_args(RunStatus)
 
+#: Which engine queue a Run waits in (AD-6, AD-12): `walk` holds `MAX_ACTIVE_RUNS` slots,
+#: `interactive` holds `MAX_INTERACTIVE_RUNS` slots for conversation workflows.
+Lane = Literal["walk", "interactive"]
+LANES: tuple[Lane, ...] = get_args(Lane)
+
 #: What a `step_run.status` — and the `attempt.status` that reached it — can be.
 StepStatus = Literal[
     "planned", "queued", "running", "done", "blocked", "checkpoint", "error", "skipped"

@@ -160,4 +160,6 @@ def test_create_run_enqueues_with_repository_colon_declared_branch_key() -> None
 
     run_id = result.run.id  # type: ignore[attr-defined]
     expected_key = f"{fixtures.REPOSITORY.id}:{fixtures.INIT_BRANCH}"
-    assert harness.engine.calls == [("enqueue", (run_id, expected_key))]
+    assert harness.engine.calls == [
+        ("enqueue", (run_id, expected_key, "walk"))
+    ]  # epic 3 story 2, 2026-11-22: enqueue takes the lane (AD-6/AD-12 amended)

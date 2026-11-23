@@ -137,7 +137,7 @@ def test_normally_queued_run_not_in_saved_set() -> None:
     normal = a_run(engine_ref={"ref": 1}, status="queued")
     ports, engine = ports_with([normal])
     # add the run to the engine's own queue
-    engine.enqueue(normal.id, partition_key="repo:branch")
+    engine.enqueue(normal.id, partition_key="repo:branch", lane="walk")
 
     view = list_queue(ports)
 

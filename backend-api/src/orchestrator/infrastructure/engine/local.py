@@ -26,6 +26,7 @@ from typing import Any
 from uuid import UUID
 
 from orchestrator.domain.ports.engine import EngineRecord, QueueEntry
+from orchestrator.domain.statuses import Lane
 from orchestrator.domain.values import Signal
 
 
@@ -37,7 +38,7 @@ class LocalWorkflowEngine:
         self._queue: dict[UUID, QueueEntry] = {}
         self._next_ref = 0
 
-    def enqueue(self, run_id: UUID, partition_key: str) -> dict[str, Any]:
+    def enqueue(self, run_id: UUID, partition_key: str, lane: Lane) -> dict[str, Any]:
         with self._lock:
             self._next_ref += 1
             ref = self._next_ref
@@ -46,6 +47,7 @@ class LocalWorkflowEngine:
                 engine_state="enqueued",
                 position=len(self._queue) + 1,
                 enqueued_at=datetime.now(UTC),
+                lane=lane,
             )
         return {"engine": "local", "ref": ref}
 

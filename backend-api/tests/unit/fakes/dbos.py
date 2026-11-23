@@ -13,7 +13,7 @@ the thirty-day expiry are both driven from a list of dictionaries.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Any
 
@@ -29,7 +29,7 @@ class FakeDurableEngine:
     def __init__(
         self,
         messages: list[Any] | None = None,
-        queued: list[QueuedWorkflow] | None = None,
+        queued: list[QueuedWorkflow] | Mapping[str, list[QueuedWorkflow]] | None = None,
         steps: list[StepRecord] | None = None,
     ) -> None:
         self.calls: list[tuple[str, Any]] = []
@@ -41,7 +41,9 @@ class FakeDurableEngine:
         self.recvs: list[tuple[str, int]] = []
         self.configured: dict[str, Any] | None = None
         self.messages = list(messages or [])
-        self._queued = list(queued or [])
+        # epic 3 story 2, 2026-11-22: queues are keyed by name; a plain list is reported by
+        # every queue, as before.
+        self._queued = queued if isinstance(queued, Mapping) else list(queued or [])
         self._steps = list(steps or [])
         self._step_id = FIRST_STEP_ID
 
@@ -78,6 +80,8 @@ class FakeDurableEngine:
 
     def queued(self, queue: str) -> list[QueuedWorkflow]:
         self.calls.append(("queued", queue))
+        if isinstance(self._queued, Mapping):
+            return list(self._queued.get(queue, []))
         return list(self._queued)
 
     def steps(self, workflow_id: str) -> list[StepRecord]:

@@ -171,7 +171,7 @@ def _continue_dependency_run(ports: SignalPorts, run_id: UUID, signal: Signal) -
     partition_key = (
         f"{run.repository_id}:{run.partition_branch or run.inputs.get('base_branch', '')}"
     )
-    engine_ref = ports.engine.enqueue(run.id, partition_key=partition_key)
+    engine_ref = ports.engine.enqueue(run.id, partition_key=partition_key, lane=run.lane)
     with writers.uow:
         run = set_run(writers, run, engine_ref=engine_ref)
         writers.uow.commit()
@@ -218,7 +218,7 @@ def _start_saved_run(ports: SignalPorts, run_id: UUID, signal: Signal) -> Signal
     partition_key = (
         f"{run.repository_id}:{run.partition_branch or run.inputs.get('base_branch', '')}"
     )
-    engine_ref = ports.engine.enqueue(run.id, partition_key=partition_key)
+    engine_ref = ports.engine.enqueue(run.id, partition_key=partition_key, lane=run.lane)
     with writers.uow:
         run = set_run(writers, run, engine_ref=engine_ref)
         writers.uow.commit()

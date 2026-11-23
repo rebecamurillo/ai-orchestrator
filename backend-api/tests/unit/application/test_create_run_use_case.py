@@ -147,7 +147,10 @@ def test_repo_init_persists_eight_rows_pins_one_version_and_enqueues_once() -> N
     assert all(row.status == "planned" for row in rows)
     # operator revision 2026-09-15: partition by (repository, branch)
     assert harness.engine.calls == [
-        ("enqueue", (result.run.id, f"{fixtures.REPOSITORY.id}:{fixtures.INIT_BRANCH}"))
+        (
+            "enqueue",
+            (result.run.id, f"{fixtures.REPOSITORY.id}:{fixtures.INIT_BRANCH}", "walk"),
+        )  # epic 3 story 2, 2026-11-22: enqueue takes the lane (AD-6/AD-12 amended)
     ]
     assert result.starts_now is True
 

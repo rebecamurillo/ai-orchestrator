@@ -26,8 +26,11 @@ from typing import Any
 
 from orchestrator.infrastructure.settings import Settings
 
-#: The one queue every Run is enqueued on (AD-12). Partitioned by `repository_id`.
+#: The queue every walk-lane Run is enqueued on (AD-12). Partitioned by `repository_id`.
 QUEUE_NAME = "runs"
+
+#: The queue every Run in the interactive lane is enqueued on (AD-12), `MAX_INTERACTIVE_RUNS` wide.
+INTERACTIVE_QUEUE = "interactive"
 
 #: The queue every senior session turn is enqueued on (AD-23). Partitioned by Run.
 SESSION_QUEUE = "sessions"
@@ -52,10 +55,11 @@ class EngineConfig:
     database_url: str
     application_version: str
     max_active_runs: int
+    max_interactive_runs: int = 4
 
 
 def engine_config(settings: Settings) -> EngineConfig:
-    """The typed environment, narrowed to the engine's three values (AD-20).
+    """The typed environment, narrowed to the engine's four values (AD-20).
 
     `HUMAN_WAIT_SECONDS` is deliberately not here: the deadline is the walker's, and it
     reaches it through `startup.walker_deps`. Carrying it on both would read as the wiring
@@ -65,6 +69,7 @@ def engine_config(settings: Settings) -> EngineConfig:
         database_url=settings.database_url.get_secret_value(),
         application_version=str(settings.dbos_application_version),
         max_active_runs=settings.max_active_runs,
+        max_interactive_runs=settings.max_interactive_runs,
     )
 
 

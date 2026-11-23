@@ -365,7 +365,7 @@ def enqueue_saved_run(ports: WriterPorts, engine: WorkflowEngine | None, run: Ru
     partition_key = (
         f"{run.repository_id}:{run.partition_branch or run.inputs.get('base_branch', '')}"
     )
-    engine_ref = engine.enqueue(run.id, partition_key=partition_key)
+    engine_ref = engine.enqueue(run.id, partition_key=partition_key, lane=run.lane)
     with ports.uow:
         refreshed = ports.runs.get(run.id)
         if refreshed is not None:

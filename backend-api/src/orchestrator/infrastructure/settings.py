@@ -144,6 +144,7 @@ class Settings(BaseSettings):
     database_url: SecretStr
     dbos_application_version: Annotated[int, Field(ge=1)] = 1
     max_active_runs: Annotated[int, Field(ge=1)] = 2
+    max_interactive_runs: Annotated[int, Field(ge=1)] = 4
     #: The single `recv` the walker parks in lasts this long (AD-13). A setting rather
     #: than a constant so an e2e scenario can shorten the 30 days it defaults to.
     human_wait_seconds: Annotated[int, Field(ge=1)] = 2592000

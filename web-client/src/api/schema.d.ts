@@ -3257,6 +3257,12 @@ export interface components {
          * @description One row: a Run the engine is holding, and why it waits.
          */
         QueueItemOut: {
+            /**
+             * Lane
+             * @description the engine lane the Run waits in: `walk` (MAX_ACTIVE_RUNS) or `interactive` (MAX_INTERACTIVE_RUNS), positions count per lane (AD-12)
+             * @enum {string}
+             */
+            lane?: "walk" | "interactive";
             /** Next Step Label */
             next_step_label: string;
             /** Position */

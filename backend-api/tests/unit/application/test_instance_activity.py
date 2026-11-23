@@ -69,7 +69,7 @@ class World:
         run = Run(**fields)  # type: ignore[arg-type]
         self.runs.add(run)
         if engine and status in ("queued", "running", "needs_you"):
-            self.engine.enqueue(run.id, "p")
+            self.engine.enqueue(run.id, "p", lane="walk")
         return run
 
     def row(self, run: Run, seq: int, status: str, kind: str = "shell") -> StepRun:

@@ -157,6 +157,7 @@ opinion about are few — walk these and leave the rest alone:
 | `WEB_CLIENT_PORT`, `BACKEND_API_PORT` | 4321 or 8000 already taken on their machine |
 | `BIND_ADDRESS` | `0.0.0.0` exposes the UI and API to the network. One bearer token is the entire authentication and nothing rate-limits it — read the README's *Exposure* section to them before they do this |
 | `MAX_ACTIVE_RUNS` | how many Runs the engine holds at once; a parked Run keeps its slot |
+| `MAX_INTERACTIVE_RUNS` | how many interactive (conversation) Runs the engine holds at once, apart from MAX_ACTIVE_RUNS |
 | `READINESS_MODELS` | the default model per harness; every model named must exist in the gateway |
 | `READINESS_BUDGET_USD` | the budget the readiness diagnostic gives itself |
 | `WORKTREE_RETENTION_DAYS` | how long a finished Run's worktrees and logs survive |

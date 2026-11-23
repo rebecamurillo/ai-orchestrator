@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Any, Literal, Protocol, runtime_checkable
 from uuid import UUID
 
+from orchestrator.domain.statuses import Lane
 from orchestrator.domain.values import Signal
 
 #: Whether a queued Run is running behind the engine's own concurrency limit (`enqueued`)
@@ -37,6 +38,7 @@ class QueueEntry:
     #: `None` once the engine itself is running the Run — a position is a queue's own idea.
     position: int | None
     enqueued_at: datetime
+    lane: Lane = "walk"
 
 
 @dataclass(frozen=True)
@@ -56,8 +58,9 @@ class EngineRecord:
 class WorkflowEngine(Protocol):
     """The durable engine, behind one interface (AD-6). `application/` never imports DBOS."""
 
-    def enqueue(self, run_id: UUID, partition_key: str) -> dict[str, Any]:
-        """Put a Run behind its (Repository, declared-branch) partition (AD-12).
+    def enqueue(self, run_id: UUID, partition_key: str, lane: Lane) -> dict[str, Any]:
+        """Put a Run behind its (Repository, declared-branch) partition (AD-12), on the queue
+        of its lane: `walk` is `MAX_ACTIVE_RUNS` wide, `interactive` `MAX_INTERACTIVE_RUNS`.
 
         Returns the `engine_ref` for the enqueued workflow.
         """

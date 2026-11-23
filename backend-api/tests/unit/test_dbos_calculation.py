@@ -29,6 +29,7 @@ from tests.unit.fakes.engine import FakeWorkflowEngine
 from tests.unit.fakes.git import FakeGit
 
 TWO = 2
+THREE = 3
 
 
 def deps_for(job: Job | None, sleeps: list[float] | None = None) -> WalkerDeps:
@@ -144,7 +145,8 @@ def test_launching_declares_the_workflow_before_start_and_adds_no_queue() -> Non
         ("start", None)
     )
     assert [a for n, a in fake.calls if n == "register_queue"][-1][0] == SESSION_QUEUE
-    assert len([1 for n, _ in fake.calls if n == "register_queue"]) == TWO
+    # epic 3 story 2, 2026-11-22: walk, interactive and session queues
+    assert len([1 for n, _ in fake.calls if n == "register_queue"]) == THREE
 
 
 def test_a_calculation_is_enqueued_on_the_session_queue_under_its_own_id() -> None:

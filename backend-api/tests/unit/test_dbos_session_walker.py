@@ -23,7 +23,12 @@ from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.gateway import AttemptSpend
 from orchestrator.infrastructure.dbos import startup as startup_module
 from orchestrator.infrastructure.dbos.adapter import NOT_LAUNCHED, DbosWorkflowEngine
-from orchestrator.infrastructure.dbos.config import QUEUE_NAME, SESSION_QUEUE, EngineConfig
+from orchestrator.infrastructure.dbos.config import (
+    INTERACTIVE_QUEUE,
+    QUEUE_NAME,
+    SESSION_QUEUE,
+    EngineConfig,
+)
 from orchestrator.infrastructure.dbos.session_walker import build_session_turn
 from orchestrator.infrastructure.dbos.walker import WalkerDeps
 from orchestrator.infrastructure.engine.local import LocalWorkflowEngine
@@ -33,6 +38,7 @@ from tests.unit.fakes.clock import EPOCH
 from tests.unit.fakes.dbos import FakeDurableEngine, a_queued_workflow
 
 CONCURRENCY = 3
+INTERACTIVE = 4
 COST = Decimal("0.250000")
 
 
@@ -153,7 +159,12 @@ def test_launching_declares_the_session_queue_after_the_runs_queue() -> None:
     an_engine(fake).launch()
 
     queues = [args for name, args in fake.calls if name == "register_queue"]
-    assert queues == [(QUEUE_NAME, CONCURRENCY), (SESSION_QUEUE, CONCURRENCY)]
+    # epic 3 story 2, 2026-11-22: three queues, session width the sum (AD-12 amended)
+    assert queues == [
+        (QUEUE_NAME, CONCURRENCY),
+        (INTERACTIVE_QUEUE, INTERACTIVE),
+        (SESSION_QUEUE, CONCURRENCY + INTERACTIVE),
+    ]
     assert SESSION_QUEUE == "sessions"
     assert ("workflow", "run_session_turn") in fake.declared
 
