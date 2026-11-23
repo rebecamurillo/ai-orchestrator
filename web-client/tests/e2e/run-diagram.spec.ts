@@ -28,6 +28,7 @@ import {
   withSteps,
   type DetailOverrides,
 } from '../fixtures/run-detail';
+import { agentDrawer } from '../fixtures/step-drawer';
 import type { components } from '../../src/api/schema';
 
 type RunGraphOut = components['schemas']['RunGraphOut'];
@@ -244,19 +245,29 @@ test.describe('/workflows/[id] — the run diagram (v3)', () => {
     await expect(page.getByTestId('wf-diagram-retry-epics.1.stories.0.build-2')).toHaveCount(0);
   });
 
-  test('navigates from the CTA alone — the card body is a drag handle', async ({ page }) => {
-    await mockRun(page, twoEpic());
+  test('opens the step drawer from the CTA alone — the card body is a drag handle (epic 2 story 2, EXPERIENCE § 12 delta 4, 2026-11-23)', async ({
+    page,
+  }) => {
+    const fixture = {
+      graph: twoEpicGraph({ seq: 13, attempt_n: 1 }),
+      steps: withSteps(twoEpicSteps(), {}),
+    };
+    await mockRun(page, fixture);
+    await page.route(`**/api/runs/${RUN_ID}/steps/13/attempts/1/drawer`, (route) =>
+      route.fulfill({ json: agentDrawer() }),
+    );
     await openDiagram(page);
 
     const card = page.getByTestId('wf-diagram-node-epics.1.stories.0.build');
     await card.locator('.wf-node-title').click();
     await expect(page).toHaveURL(new RegExp(`${RUN_ID}$`));
+    await expect(page.getByTestId('wf-step-drawer')).toHaveCount(0);
 
-    // a real link: the URL is on the element, so cmd-click and copy-link work too
     const cta = page.getByTestId('wf-diagram-open-epics.1.stories.0.build');
-    await expect(cta).toHaveAttribute('href', `${BASE_URL}/steps/epics.1.stories.0.build`);
+    await expect(cta).not.toHaveAttribute('href', /.*/);
     await cta.click();
-    await expect(page).toHaveURL(`${BASE_URL}/steps/epics.1.stories.0.build`);
+    await expect(page.getByTestId('wf-step-drawer')).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`${RUN_ID}$`));
   });
 
   test('gives the blue border to the current step alone, and the RUN word to its ancestors', async ({

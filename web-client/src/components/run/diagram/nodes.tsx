@@ -4,37 +4,36 @@
  * live in `strips.tsx`; `flow-layout.ts` decides where any of it goes.
  *
  * Each card comes in two pieces on purpose. `…Card` is the markup and nothing else: no
- * React Flow, no store, no context, so it renders under `renderToStaticMarkup` in the
+ * React Flow and no context (cards write `focusFiles`/`openStepDrawer`; the agent card reads
+ * `$stepDrawer` for its selection mark), so it renders under `renderToStaticMarkup` in the
  * `environment: 'node'` suite where every test-id and word token is asserted. `…Node` is the
- * React Flow node type: the same card between the handles an edge attaches to, narrowing the
- * discriminated `FlowNodeData` rather than asserting what it was handed.
+ * React Flow node type: the same card between the handles an edge attaches to.
  *
- * **Handles are named** because an agent card carries two targets — `in` on its left, where
- * its story joins it, and `retry` on its right, where a chip in the attempts gutter loops
- * back into it (`lib/diagram/flow-layout.ts` writes the matching edge).
+ * **Handles are named**: an agent card has `in` on its left and `retry` on its right.
  *
  * **Click grammar** (EXPERIENCE-v1 §2.2, 2026-09-24): the card body is a drag handle, never
- * a link. The only navigation is the *Open step* CTA, and the only state change is the
- * expand caret; both are real `<button>`s and both carry `nodrag` so a click on them is a
- * click and not the start of a drag. The *Files* button on epic and story cards is a third
- * control: it changes only the files focus (`stores/files-focus.ts`).
+ * a link. *Open step* opens the step drawer and the caret expands; both are real
+ * `<button>`s carrying `nodrag`, so a click on them is not the start of a drag. *Files* on epic
+ * and story cards changes only the files focus (`stores/files-focus.ts`).
  *
  * **The card is the focusable thing.** `FlowCanvas` turns React Flow's own node focus off, so
- * Tab lands on the card itself — a labelled group announcing `{title} · {status word}` — and
- * then on the controls inside it, in reading order. Colour is never the sole carrier: the
- * word token sits beside every border, and the guardrail words are text.
+ * Tab lands on the card — a labelled group announcing `{title} · {status word}` — then its
+ * controls. Colour is never the sole carrier: the word token sits beside every border, and the
+ * guardrail words are text.
  */
+import { useStore } from '@nanostores/react';
 import type { ReactNode } from 'react';
 import { Handle, Position } from '@xyflow/react';
 
 import type { FlowNodeData } from '../../../lib/diagram/flow-layout';
 import { statusWord, type HierarchyNode } from '../../../lib/diagram/run-tree';
 import { focusFiles } from '../../../stores/files-focus';
+import { $stepDrawer, openStepDrawer } from '../../../stores/step-drawer';
 import { GuardrailStrip, RetryCard, RetryMoreCard } from './strips';
 
 export interface CardProps {
   node: HierarchyNode;
-  /** `/workflows/{runId}/steps/{path}` is built here, so the card needs the Run. */
+  /** Still passed by `FlowCanvas`; unread now that the step page sits behind the drawer. */
   runId: string;
   onToggle: (id: string) => void;
 }
@@ -65,25 +64,20 @@ function Caret({ node, onToggle }: { node: HierarchyNode; onToggle: (id: string)
   );
 }
 
-/**
- * The one explicit navigation on the surface; omitted when no step row joins the node.
- *
- * A real link, not a button that assigns `location`: middle-click, cmd-click, *open in new
- * tab*, *copy link address* and the status-bar URL preview are all things the leaf-node
- * navigation this replaced already had, and a `<button>` takes every one of them away.
- * "The card body is a drag handle, never a link" is satisfied by a link *inside* the card —
- * which is what `nodrag` marks: a click here is a click, not the start of a drag.
- */
-function OpenStep({ node, runId }: { node: HierarchyNode; runId: string }) {
-  if (!node.joined) return null;
+/** The step page is one click further, through the drawer's `full page` (EXPERIENCE § 12 delta 4). */
+function OpenStep({ node }: { node: HierarchyNode }) {
+  if (!node.joined || node.seq === null) return null;
+  const id = `wf-open-step-${node.path}`;
   return (
-    <a
+    <button
+      type="button"
       className="wf-node-cta nodrag"
+      id={id}
       data-testid={`wf-diagram-open-${node.path}`}
-      href={`/workflows/${runId}/steps/${node.path}`}
+      onClick={() => openStepDrawer(node.seq!, node.attemptN, id)}
     >
       Open step
-    </a>
+    </button>
   );
 }
 
@@ -110,10 +104,18 @@ function Head({ node, onToggle }: { node: HierarchyNode; onToggle?: (id: string)
   );
 }
 
-function Shell({ node, children }: { node: HierarchyNode; children: ReactNode }) {
+function Shell({
+  node,
+  selected = false,
+  children,
+}: {
+  node: HierarchyNode;
+  selected?: boolean;
+  children: ReactNode;
+}) {
   return (
     <div
-      className="wf-node"
+      className={selected ? 'wf-node wf-node-selected' : 'wf-node'}
       data-testid={`wf-diagram-node-${node.path}`}
       data-kind={node.kind}
       data-rank={node.rank}
@@ -146,8 +148,7 @@ export function RootCard({ node }: { node: HierarchyNode }) {
       <p className="wf-node-meta" title={node.meta}>
         {node.meta}
       </p>
-      {/* a frame-less Run's `plan`, `checkout` and `submodules` rows own no frame and live
-          here — built without a renderer, they vanished (operator amendment, 2026-09-24) */}
+      {/* a frame-less Run's `plan`, `checkout` and `submodules` rows own no frame and live here */}
       <GuardrailStrip strip={node.guardrail} />
     </Shell>
   );
@@ -180,9 +181,10 @@ export function StoryCard({ node, onToggle }: Omit<CardProps, 'runId'>) {
   );
 }
 
-export function AgentCard({ node, runId }: Omit<CardProps, 'onToggle'>) {
+export function AgentCard({ node }: Omit<CardProps, 'onToggle'>) {
+  const open = useStore($stepDrawer);
   return (
-    <Shell node={node}>
+    <Shell node={node} selected={open !== null && open.seq === node.seq}>
       <Head node={node} />
       <p className="wf-node-title" title={node.title}>
         {node.title}
@@ -192,7 +194,7 @@ export function AgentCard({ node, runId }: Omit<CardProps, 'onToggle'>) {
       </p>
       <div className="wf-node-ctarow">
         <span className="wf-node-duration">{node.duration}</span>
-        <OpenStep node={node} runId={runId} />
+        <OpenStep node={node} />
       </div>
     </Shell>
   );

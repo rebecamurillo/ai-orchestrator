@@ -739,6 +739,46 @@ createServer(async (request, response) => {
     send(response, 200, JSON_TYPE, JSON.stringify(project));
     return;
   }
+  const drawerMatch = pathname.match(
+    /^\/api\/v1\/runs\/([^/]+)\/steps\/(\d+)\/attempts\/(\d+)\/drawer$/,
+  );
+  if (drawerMatch && request.method === 'GET') {
+    const seq = Number(drawerMatch[2]);
+    const frame = 'epics[0].stories[0]';
+    const rows = ['sync', 'build', 'verify', 'commit', 'push'].map((label, i) => ({
+      kind: label === 'build' ? 'agent' : 'shell',
+      label,
+      path: `${frame}.${label}`,
+      phase: i < 1 ? 'BEFORE' : i === 1 ? 'AGENT' : 'AFTER',
+      seq: 10 + i,
+      token: 'DON',
+      with_resolved: {},
+    }));
+    const row = rows.find((r) => r.seq === seq) ?? rows[4];
+    const body = {
+      attempts: [{ n: 1, status: 'done' }],
+      files_read: { state: 'not_recorded', paths: [] },
+      files_written: { state: 'refs', commit: null, files: [], refs: ['main aaa1111 → bbb2222'] },
+      header: {
+        cost_usd: null,
+        ended_at: '2026-11-23T10:02:00Z',
+        exit_code: 0,
+        gate: 'deterministic',
+        kind: row.kind,
+        label: row.label,
+        n: 1,
+        path: row.path,
+        seq: row.seq,
+        started_at: '2026-11-23T10:00:00Z',
+        status: 'done',
+        token: 'DON',
+      },
+      log: { attempt_id: 'att-1', reason: null, removed_at: null, state: 'text' },
+      run_order: { frame, rows },
+    };
+    send(response, 200, JSON_TYPE, JSON.stringify(body));
+    return;
+  }
   const filesByEpicMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)\/files-by-epic$/);
   if (filesByEpicMatch && request.method === 'GET') {
     const body = {

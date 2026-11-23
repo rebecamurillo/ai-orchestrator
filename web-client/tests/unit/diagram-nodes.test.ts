@@ -99,21 +99,19 @@ describe('StoryCard', () => {
 });
 
 describe('AgentCard', () => {
-  it('carries the Open step CTA, and the CTA alone navigates', () => {
+  it('carries the Open step CTA as a button that opens the drawer, not a link (epic 2 story 2, EXPERIENCE § 12 delta 4, 2026-11-23)', () => {
     const html = renderToStaticMarkup(
-      createElement(AgentCard, { node: node('epics[1].stories[0].build'), runId: 'r1' }),
+      createElement(AgentCard, {
+        node: { ...node('epics[1].stories[0].build'), seq: 13, attemptN: 2 },
+        runId: 'r1',
+      }),
     );
 
     expect(html).toContain('data-testid="wf-diagram-open-epics.1.stories.0.build"');
-    expect(html).toMatch(/class="wf-node-cta nodrag"/);
+    expect(html).toMatch(/<button type="button" class="wf-node-cta nodrag"/);
     expect(html).toContain('Open step');
-    // a real link, so middle-click, cmd-click and copy-link-address all work; `nodrag`
-    // is what keeps a click on it a click rather than the start of a drag. The card body
-    // is still a drag handle: the title and meta carry no href of their own.
-    expect(html).toMatch(
-      /<a class="wf-node-cta nodrag"[^>]*href="\/workflows\/r1\/steps\/epics\.1\.stories\.0\.build"/,
-    );
-    expect([...html.matchAll(/<a /g)]).toHaveLength(1);
+    // `nodrag` keeps a click on it a click; the card body is still a drag handle
+    expect(html).not.toContain('<a ');
     expect(html).not.toMatch(/<p class="wf-node-title"[^>]*href/);
   });
 

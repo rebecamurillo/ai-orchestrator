@@ -33,6 +33,7 @@ import { api } from '../api/client';
 import type { components } from '../api/schema';
 import FailedFetch from '../components/FailedFetch';
 import OriginDrawer from '../components/metrics/OriginDrawer';
+import StepDrawer from '../components/run/StepDrawer';
 import ArtifactsPanel from '../components/run/ArtifactsPanel';
 import Banner from '../components/run/Banner';
 import CancelModal from '../components/run/CancelModal';
@@ -492,6 +493,7 @@ export default function RunDetail({ runId }: Props) {
           <button
             type="button"
             className="wf-tab-btn"
+            id="wf-steps-heading"
             aria-pressed={activeTab === 'steps'}
             onClick={() => pickTab('steps')}
           >
@@ -549,6 +551,7 @@ export default function RunDetail({ runId }: Props) {
         />
       ) : null}
       <OriginDrawer />
+      <StepDrawer runId={runId} />
     </div>
   );
 }

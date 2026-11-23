@@ -11,20 +11,21 @@
  * promotes briefly on arrival. `data-anchored` is a neutral promotion — the status token is
  * still the only signal-coloured cell in the row (NFR-6).
  *
- * Stateless (`renderToStaticMarkup`).
+ * Reads `$stepDrawer` for the selected row; a row's path opens the step drawer (epic 2 story 2).
  */
+import { useStore } from '@nanostores/react';
 import { Fragment } from 'react';
 import type { RunDetailOut, StepRowOut } from '../../lib/run/detail';
 import HintControl from '../metrics/HintControl';
 import { currentStepPath, stepStatusText } from '../../lib/run/detail';
 import { ageText, tokenSignal } from '../../lib/board/format';
 import { stepAnchorId } from '../../lib/run/anchor';
-import { encode } from '../../lib/step-path';
+import { $stepDrawer, openStepDrawer } from '../../stores/step-drawer';
 
 interface Props {
   detail: RunDetailOut;
   anchoredSeq?: number | null;
-  /** The run id, used to build step-detail page links (story 1-2). */
+  /** Still passed by callers; the path now opens the step drawer, which owns the page link. */
   runId?: string;
 }
 
@@ -46,7 +47,8 @@ function attemptsSuffix(step: StepRowOut): string {
   return step.attempts > 1 ? ` · ${step.attempts} attempts` : '';
 }
 
-export default function StepsTable({ detail, anchoredSeq = null, runId }: Props) {
+export default function StepsTable({ detail, anchoredSeq = null }: Props) {
+  const open = useStore($stepDrawer);
   const current = currentStepPath(detail);
   return (
     <div className="wf-steps-scroll">
@@ -63,8 +65,7 @@ export default function StepsTable({ detail, anchoredSeq = null, runId }: Props)
         </thead>
         <tbody>
           {detail.steps.map((step) => {
-            const href =
-              runId && step.path ? `/workflows/${runId}/steps/${encode(step.path)}` : undefined;
+            const openerId = `wf-step-open-${step.seq}`;
             return (
               <Fragment key={step.seq}>
                 <tr
@@ -72,8 +73,18 @@ export default function StepsTable({ detail, anchoredSeq = null, runId }: Props)
                   data-testid={`wf-step-${step.seq}`}
                   data-current={step.path === current}
                   data-anchored={step.seq === anchoredSeq}
+                  className={open?.seq === step.seq ? 'wf-step-selected' : undefined}
                 >
-                  <td>{href ? <a href={href}>{step.path}</a> : step.path}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="wf-step-open"
+                      id={openerId}
+                      onClick={() => openStepDrawer(step.seq, step.latest?.n ?? 0, openerId)}
+                    >
+                      {step.path}
+                    </button>
+                  </td>
                   <td>{step.kind}</td>
                   <td>{step.gate}</td>
                   <td>

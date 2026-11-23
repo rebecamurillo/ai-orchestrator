@@ -175,8 +175,12 @@ export interface HierarchyNode {
   retries: RetryChip[];
   /** Failed attempts the gutter did not draw; `0` when every one of them fits. */
   retryOverflow: number;
-  /** `/workflows/{runId}/steps/{path}` needs a joined row; `false` omits the CTA. */
+  /** The CTA needs a joined row; `false` omits it. */
   joined: boolean;
+  /** The graph node's step `seq`, the step drawer's key; `null` on the root and on groups. */
+  seq: number | null;
+  /** The graph node's `attempt_n ?? 0`; `0` on the root and on groups. */
+  attemptN: number;
 }
 
 export interface Hierarchy {
@@ -491,6 +495,8 @@ export function buildHierarchy(
       retries: [],
       retryOverflow: 0,
       joined: false,
+      seq: null,
+      attemptN: 0,
     });
   }
 
@@ -526,6 +532,8 @@ export function buildHierarchy(
       retries: [],
       retryOverflow: 0,
       joined: false,
+      seq: null,
+      attemptN: 0,
     });
   }
 
@@ -557,6 +565,8 @@ export function buildHierarchy(
       retries: retries.chips,
       retryOverflow: retries.overflow,
       joined: row !== undefined,
+      seq: node.seq ?? null,
+      attemptN: node.attempt_n ?? 0,
     });
   }
 
