@@ -57,6 +57,8 @@ SPINE = {
     # "Template DSL v1 keys" AD-9/AD-14 amendment, 2026-09-23).
     "git.commit": ("deterministic", 5, frozenset({"message", "workdir"}), False),
     "git.push": ("deterministic", 5, frozenset({"branch", "workdir"}), False),
+    # Added: `git.branch_delete` (epic 3 story 4, orchestrator-initiative-steps, 2026-11-22).
+    "git.branch_delete": ("deterministic", 5, frozenset({"branch"}), False),
     "pr.link": ("liveness", 5, frozenset({"branch"}), False),
     # Revised: the shipped-kinds row for `checkpoint` gained `when` — a resolved falsy
     # value plans the row `skipped · no checkpoint`, the same plan-time rule the
@@ -70,15 +72,16 @@ SPINE = {
     "metrics.analyse": (None, None, frozenset(), False),
 }
 
-#: Revised from twelve by the `git.submodule` row above, which was itself revised from
+#: Revised to fifteen by `git.branch_delete` (epic 3 story 4, 2026-11-22), from fourteen below;
+#: revised from twelve by the `git.submodule` row above, which was itself revised from
 #: eleven by `git.merge` (hub-Run initiative H1, 2026-09-23), then to fourteen by
 #: `metrics.analyse` (epic 5 story 4, 2026-11-13).
-FOURTEEN = 14
+FIFTEEN = 15
 
 
-def test_the_registry_holds_exactly_the_fourteen_shipped_kinds() -> None:
+def test_the_registry_holds_exactly_the_fifteen_shipped_kinds() -> None:
     assert set(KIND_META) == set(SPINE)
-    assert len(KIND_META) == FOURTEEN
+    assert len(KIND_META) == FIFTEEN
 
 
 @pytest.mark.parametrize("kind", sorted(SPINE))

@@ -37,6 +37,7 @@ from orchestrator.application.steps import StepPorts
 from orchestrator.application.steps import agent as _agent  # noqa: F401
 from orchestrator.application.steps import bmad_install as _bmad_install  # noqa: F401
 from orchestrator.application.steps import checkpoint as _checkpoint  # noqa: F401
+from orchestrator.application.steps import git_branch_delete as _git_branch_delete  # noqa: F401
 from orchestrator.application.steps import git_commit as _git_commit  # noqa: F401
 from orchestrator.application.steps import git_merge as _git_merge  # noqa: F401
 from orchestrator.application.steps import git_push as _git_push  # noqa: F401

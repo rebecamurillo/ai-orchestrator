@@ -90,6 +90,7 @@ KIND_META: dict[str, KindMeta] = {
     # "Template DSL v1 keys" AD-9/AD-14 amendment, 2026-09-23).
     "git.commit": KindMeta("deterministic", 5, frozenset({"message", "workdir"})),
     "git.push": KindMeta("deterministic", 5, frozenset({"branch", "workdir"})),
+    "git.branch_delete": KindMeta("deterministic", 5, frozenset({"branch"})),
     "pr.link": KindMeta("liveness", 5, frozenset({"branch"})),
     # Revised: the shipped-kinds row for `checkpoint` gained `when` — a resolved falsy
     # value plans the row `skipped · no checkpoint` at plan time, the same rule the
@@ -190,6 +191,9 @@ COMMIT_MESSAGE_KEY = "message"
 #: The two kinds that end an epic on the remote. `skip_epic` marks them `skipped` when the
 #: push itself is the stop (AD-13), so they are named here rather than spelled in the rule.
 PUSH_KIND = "git.push"
+
+#: The kind that deletes the merged spec branch on the remote.
+BRANCH_DELETE_KIND = "git.branch_delete"
 LINK_KIND = "pr.link"
 
 # Every `steps/<kind>.py` module reads `KIND_META` and friends back from *this* package, so
@@ -207,6 +211,7 @@ __all__ = [
     "AGENT_KIND",
     "ANALYSE_KIND",
     "ATTACH_MODE",
+    "BRANCH_DELETE_KIND",
     "CHECKPOINT_KIND",
     "COMMIT_KIND",
     "COMMIT_MESSAGE_KEY",
