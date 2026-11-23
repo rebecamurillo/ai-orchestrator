@@ -84,13 +84,14 @@ def test_the_step_polls_every_five_seconds_until_the_hold_ends(executor: Done) -
     assert holds.calls.count("get_shared") == 4  # noqa: PLR2004 — three tries on row 1, one on row 2
     assert executor.seen == ["plan", "checkout"]
     assert world.stored_run().status == "done"
-    # story 2 (epic 4 conversation stop), 2026-11-22: the declared steps end in current_stop
+    # epic 4 story 5, 2026-11-22: open_turns is declared between expire and current_stop
     assert [name for kind, name in engine.declared if kind == "step"] == [
         "next_row",
         "attempt_row",
         "apply_result",
         "close_run",
         "expire",
+        "open_turns",
         "current_stop",
     ]
     assert [name for kind, name in engine.declared if kind == "workflow"] == ["run_walk"]

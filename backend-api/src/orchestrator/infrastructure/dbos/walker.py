@@ -1,7 +1,7 @@
 """The walker: the durable loop that executes a Run's rows, one at a time, exactly once.
 
 Every rule this loop needs is in `application/use_cases/walk.py`; what is here is the
-durability. `build_walk` declares six durable steps and the workflow that calls them, and
+durability. `build_walk` declares seven durable steps and the workflow that calls them, and
 the workflow's body is deliberately tiny: each branch tests a value a step returned, so a
 replay after a restart takes the same branch it took before it. Nothing here reads a clock,
 a database or an environment outside a step (AD-6).
@@ -23,7 +23,8 @@ The loop, once:
    was told — so the walker only carries its kind forward as the next row's `resume_signal`
    and loops. A message carrying a `stop` other than the Run's current `park_seq` (read in the
    `current_stop` step) was written for an earlier stop: it is logged and discarded, and the
-   walk waits again. A message with no stop is taken as it is.
+   walk waits again. A message with no stop is taken as it is. After a message that resumes
+   (never `cancel`), the walk waits until `open_turns` finds no session turn still running.
 5. A `recv` that returns `None` is the deadline, and `expire` decides what that means: the
    Run fails `parked 30 days`, unless a signal won the race, in which case it answers with
    the status that signal left and the walk carries on rather than abandoning a Run that is
@@ -88,6 +89,10 @@ SIGNAL_KIND = "kind"
 STOP = "stop"
 STALE_SIGNAL = "stale signal discarded"
 
+#: The wake-up that never waits for a killed turn, and what is logged once when a wait starts.
+CANCEL_KIND = "cancel"
+WAITING_FOR_KILLED_TURN = "waiting for killed turn"
+
 #: What the walker logs when a message arrives carrying no signal kind it can read.
 UNREADABLE = "unreadable resume message"
 
@@ -147,7 +152,7 @@ class WalkerDeps:
 
 
 def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]:
-    """Declare the walker's six steps and its workflow on `engine`, and return the workflow.
+    """Declare the walker's seven steps and its workflow on `engine`, and return the workflow.
 
     Each step is its own small factory so that this function stays a composition and the
     library's decorators are applied in exactly one place per step.
@@ -158,6 +163,7 @@ def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]
         apply_result=engine.step(_apply_result(deps)),
         close_run=engine.step(_close_run(deps)),
         expire=engine.step(_expire(deps)),
+        open_turns=engine.step(_open_turns(deps)),
         current_stop=engine.step(_current_stop(deps)),
     )
     return engine.workflow(_walk(engine, deps, steps))
@@ -165,18 +171,19 @@ def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]
 
 @dataclass(frozen=True)
 class _Steps:
-    """The six durable steps a walk is made of, already declared on the engine."""
+    """The seven durable steps a walk is made of, already declared on the engine."""
 
     next_row: Callable[[str], int | None]
     attempt_row: Callable[[str, int, str | None], dict[str, Any]]
     apply_result: Callable[[str, int, dict[str, Any]], str]
     close_run: Callable[[str], str]
     expire: Callable[[str], str]
+    open_turns: Callable[[str], int]
     current_stop: Callable[[str], int]
 
 
 def _walk(engine: DurableEngine, deps: WalkerDeps, steps: _Steps) -> Callable[[str], None]:
-    """The workflow body: six calls and four branches, each on a value a step returned."""
+    """The workflow body: seven calls and four branches, each on a value a step returned."""
 
     def run_walk(run_id: str) -> None:
         log.info(WALK_STARTED, run_id=run_id)
@@ -192,6 +199,8 @@ def _walk(engine: DurableEngine, deps: WalkerDeps, steps: _Steps) -> Callable[[s
                 message = _receive(engine, deps, steps, run_id)
                 if message is not None:
                     resume = _kind(message, run_id)
+                    if resume != CANCEL_KIND:
+                        _settle(deps, steps, run_id)
                     continue
                 status = steps.expire(run_id)
                 if status == RUNNING:
@@ -310,6 +319,24 @@ def _expire(deps: WalkerDeps) -> Callable[[str], str]:
             return walk.expire(_walk_ports(deps, ports), UUID(run_id))
 
     return expire
+
+
+def _open_turns(deps: WalkerDeps) -> Callable[[str], int]:
+    def open_turns(run_id: str) -> int:
+        with deps.open_ports() as ports:
+            return walk.open_turns(_walk_ports(deps, ports), UUID(run_id))
+
+    return open_turns
+
+
+def _settle(deps: WalkerDeps, steps: _Steps, run_id: str) -> None:
+    """Poll until no session turn of the Run is running; each answer is a recorded step."""
+    count = steps.open_turns(run_id)
+    if count:
+        log.info(WAITING_FOR_KILLED_TURN, run_id=run_id, count=count)
+    while count:
+        deps.sleep(HOLD_POLL_SECONDS)
+        count = steps.open_turns(run_id)
 
 
 def _current_stop(deps: WalkerDeps) -> Callable[[str], int]:

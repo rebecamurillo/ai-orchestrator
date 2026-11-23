@@ -52,6 +52,7 @@ from uuid import UUID
 
 import structlog
 
+from orchestrator.application.rules import session
 from orchestrator.application.steps import StepPorts, execute
 from orchestrator.application.use_cases import walk_context
 from orchestrator.application.use_cases.apply_step_result import (
@@ -283,6 +284,21 @@ def current_stop(ports: WalkPorts, run_id: UUID) -> int:
     """The Run's current `park_seq`: what a received signal's stop is compared with."""
     with ports.writers.uow:
         return require_run(ports.writers, run_id).park_seq
+
+
+def open_turns(ports: WalkPorts, run_id: UUID) -> int:
+    """How many session turns of the Run are still running: a killed one closes only when its
+    own workflow has swept its trees, and the walk must not touch them before then."""
+    writers = ports.writers
+    with writers.uow:
+        return sum(
+            1
+            for row in writers.steps.list_for_run(run_id)
+            for attempt in writers.attempts.list_for_row(row.id)
+            if attempt.role == session.SESSION_ROLE
+            and attempt.status == "running"
+            and attempt.ended_at is None
+        )
 
 
 def expire(ports: WalkPorts, run_id: UUID) -> RunStatus:

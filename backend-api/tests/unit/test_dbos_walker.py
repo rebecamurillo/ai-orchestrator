@@ -36,7 +36,7 @@ from tests.unit.fakes.git import FakeGit
 WAIT_SECONDS = 5
 WORK_DIR = "/work"
 KINDS = ("plan.check", "git.worktree")
-EXPECTED_STEPS = 6  # story 2 (epic 4 conversation stop), 2026-11-22: current_stop is the sixth step
+EXPECTED_STEPS = 7  # epic 4 story 5, 2026-11-22: the walk gains open_turns before current_stop
 EXPECTED_ROWS = 2
 
 
@@ -106,13 +106,14 @@ def test_the_walk_declares_five_steps_and_one_workflow(registry: None) -> None:
     build_walk(engine, deps_for(a_world()))
 
     declared = [name for kind, name in engine.declared if kind == "step"]
-    # story 2 (epic 4 conversation stop), 2026-11-22: the declared steps end in current_stop
+    # epic 4 story 5, 2026-11-22: open_turns is declared between expire and current_stop
     assert declared == [
         "next_row",
         "attempt_row",
         "apply_result",
         "close_run",
         "expire",
+        "open_turns",
         "current_stop",
     ]
     assert [name for kind, name in engine.declared if kind == "workflow"] == ["run_walk"]

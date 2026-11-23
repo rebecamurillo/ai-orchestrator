@@ -54,6 +54,7 @@ __all__ = [
     "BUDGET_KEY",
     "BUDGET_RAISED",
     "BUDGET_TOO_LOW",
+    "CONVERSATION_SESSION_SIGNALS",
     "FILES_KEY",
     "INVALID",
     "NON_TERMINAL",
@@ -83,6 +84,14 @@ TERMINAL_SESSION_SIGNALS: tuple[SignalKind, ...] = ("cancel", "terminal_release"
 
 #: The only kinds an open senior session admits and offers (AD-23), in `VALID`'s order.
 SENIOR_SESSION_SIGNALS: tuple[SignalKind, ...] = ("cancel", "session_end")
+#: What an open session on a `conversation` stop admits: its own end, the step's close, and
+#: the two that stop it (a forced skip, `cancel`) even while its agent answers (AD-23 amended).
+CONVERSATION_SESSION_SIGNALS: tuple[SignalKind, ...] = (
+    "cancel",
+    "session_end",
+    "skip_step",
+    "step_close",
+)
 
 #: What every other kind is refused with while the session holds the Run.
 SENIOR_SESSION_OPEN = "senior session open: end it before {kind}"
@@ -109,7 +118,7 @@ def validate(
     The senior session's lock comes first (AD-23): it holds every caller of `signal_run`,
     the chat reply and `terminal_poll` included, not only the router.
     """
-    if run.senior_session and signal.kind not in SENIOR_SESSION_SIGNALS:
+    if run.senior_session and signal.kind not in _session_signals(run):
         raise Conflict(SENIOR_SESSION_OPEN.format(kind=signal.kind))
     rule = VALID[signal.kind]
     if run.status not in rule.run_statuses:
@@ -125,6 +134,22 @@ def validate(
     if rule.extra is not None and not rule.extra(run, park_row, signal, rows):
         raise _refuse_extra(run, rule, signal)
     return rule
+
+
+def _session_signals(run: Run) -> tuple[SignalKind, ...]:
+    if run.park_kind == signals_conversation.CONVERSATION:
+        return CONVERSATION_SESSION_SIGNALS
+    return SENIOR_SESSION_SIGNALS
+
+
+def _session_offer(run: Run) -> tuple[SignalKind, ...]:
+    if not run.senior_session:
+        return TERMINAL_SESSION_SIGNALS
+    return (
+        ("cancel",)
+        if run.park_kind == signals_conversation.CONVERSATION
+        else SENIOR_SESSION_SIGNALS
+    )
 
 
 def admitted_signals(park_kind: ParkKind, row_kind: str) -> tuple[SignalKind, ...]:
@@ -201,7 +226,7 @@ def run_admitted_signals(
     if run.status in TERMINAL_RUN:
         return ()
     if run.senior_session or run.terminal_session:
-        return SENIOR_SESSION_SIGNALS if run.senior_session else TERMINAL_SESSION_SIGNALS
+        return _session_offer(run)
     if run.status == "queued" and not run.engine_ref:
         return ("start", "cancel")
     if run.status != "needs_you":

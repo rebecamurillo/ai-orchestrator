@@ -112,7 +112,7 @@ graph LR
 - **Amendment** *(2026-11-02, lead review of stories 2-3 and 2-5, within AD-23)***:** The port gains a seventh method, `enqueue_session_turn(run_id, attempt_id)`, for AD-23's turn workflow. `DBOS_APPLICATION_VERSION` is bumped deliberately when the step sequence of the walker or of the session turn changes.
 - **Amendment** *(initiative orchestrator-initiative-steps, 2026-11-22)***:**
   - The port's method becomes `enqueue(run_id, partition_key, lane: Literal["walk", "interactive"])`. The use case derives `lane` from the planned template: `interactive` when its `type` is `interactive` (AD-15, amended) and its plan holds a `conversation` row, `walk` otherwise. The adapter reads no database.
-- **Amendment** *(initiative orchestrator-initiative-steps, 2026-11-22)***:** DBOS_APPLICATION_VERSION is 2 from this release: the walk gained the stale-signal step (AD-13 amended) and the session turn the attestation check (AD-38).
+- **Amendment** *(initiative orchestrator-initiative-steps, 2026-11-22)***:** DBOS_APPLICATION_VERSION is 2 from this release: the walk gained the stale-signal step (AD-13 amended) and the session turn the attestation check (AD-38). The walk also waits, after a resuming message, until the Run has no open session attempt (AD-23 amended, gate item 4, 2026-11-23).
 
 ### AD-7 — A Run is planned completely, purely, from the remote branch, before it is enqueued
 
@@ -334,6 +334,8 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
   - **Opening.** On a `conversation` stop, the session opens by itself: the machine writes `session_start` with `scope: step` in the same unit of work as the park. `SessionScope`, `scopes_at` and the API enum gain `step`.
   - **Skill.** The opening line names the parked row's `with.skill`, plus `with.persona` when the row has one. A row with no skill keeps `OPENING_SKILL = "senior-session"`. The same rule gives a `merge_conflict` stop the merge row's own skill (AD-37).
   - Skill by name or path (owner B7, 2026-11-22): a with.skill holding / is a repository path and is named by it; a bare name the harness catalog does not list fails the turn.
+  - **Queued messages.** A message posted while a turn runs is a `session` attempt with `status = queued` and `started_at` set at post time, as today. Order is the attempt's `n`. Each post enqueues its own turn at once, under the Run's session partition, and nothing else dispatches. On a `conversation` stop the post is never refused with 409. On the senior session the 409 stays.
+  - **Signals.** While a conversation session is open, `cancel` and `skip_step` with `forced` are accepted besides `session_end`. Each one first kills the running turn's process group. After a forced skip, the walk executes the next row only once every `session` attempt of the Run has ended (`ended_at` set): the killed turn's own workflow commits and closes its attempt, and the walk waits for that. `cancel` ends the walk and waits for nothing, as today (gate item 4, § 10). Queued turns of the row then close `error · step skipped` (or `· Run cancelled`), and their messages stay shown.
 
 ### AD-24 — A stop has an identity, and a stale answer is refused *(ratified 2026-11-01, senior unblock)*
 
