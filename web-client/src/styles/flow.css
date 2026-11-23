@@ -301,6 +301,34 @@
   align-items: center;
 }
 
+button.wf-guardrail-entry {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button.wf-guardrail-entry:hover,
+button.wf-guardrail-entry:focus-visible {
+  color: var(--color-accent);
+}
+
+.wf-guardrail-entry-selected,
+button.wf-guardrail-entry.wf-guardrail-entry-selected {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.wf-guardrail-lab {
+  letter-spacing: var(--type-control-tracking);
+}
+
+.wf-guardrail-agent {
+  color: var(--color-text-secondary);
+}
+
 /* the separator is markup, not `content`: a generated `·` is absent from the accessible
    name, and the strip read `syncverifycommit-guard` */
 .wf-guardrail-sep {

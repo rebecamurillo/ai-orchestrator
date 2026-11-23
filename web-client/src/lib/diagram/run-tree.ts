@@ -29,6 +29,8 @@
  * **Failure data is a client-side join** on `path` against the `RunDetailOut.steps[]` the
  * Run detail already polls — this story adds no field to `RunNodeOut` and no backend call.
  *
+ * A strip's before/after split is read from `run_order` (AD-40 "The order"), not derived.
+ *
  * Pure and DOM-free: no React, no React Flow, no dagre. Unit-tested under
  * `environment: 'node'` in `tests/unit/run-tree.test.ts`.
  */
@@ -126,6 +128,10 @@ export interface GuardrailEntry {
   word: string;
   /** This row is a stop: it survives truncation ahead of every settled row. */
   stop: boolean;
+  /** The row's step `seq`, the step drawer's key. */
+  seq: number;
+  /** The attempt the drawer opens on (`attempt_n ?? 0`). */
+  n: number;
 }
 
 export interface Guardrail {
@@ -134,6 +140,12 @@ export interface Guardrail {
   /** That node's dot-index path — the `<path>` of `wf-diagram-guardrail-<path>`. */
   ownerPath: string;
   entries: GuardrailEntry[];
+  /** Phases come from the graph's `run_order`, never derived; both empty means unsplit. */
+  before: GuardrailEntry[];
+  after: GuardrailEntry[];
+  /** The frame's agent labels joined with ` ▸ `; `null` on an epic and on an unsplit strip. */
+  agent: string | null;
+  afterLabel: 'AFTER' | 'AFTER STORIES';
   /** How many further entries the strip did not draw; `0` when none were dropped. */
   overflow: number;
   /** Every entry is still queued, so the whole strip is drawn quieter still. */
@@ -587,12 +599,18 @@ export function buildHierarchy(
       token,
       word: statusWord(token),
       stop: STOP_BORDERS.has(dot),
+      seq: node.seq ?? 0,
+      n: node.attempt_n ?? 0,
     };
     if (owner.guardrail === null) {
       owner.guardrail = {
         ownerId: owner.id,
         ownerPath: owner.path,
         entries: [entry],
+        before: [],
+        after: [],
+        agent: null,
+        afterLabel: 'AFTER',
         overflow: 0,
         muted: true,
       };
@@ -601,8 +619,12 @@ export function buildHierarchy(
     }
   }
 
+  const orderByFrame = new Map((graph.run_order ?? []).map((frame) => [frame.frame, frame]));
   for (const node of built.values()) {
-    if (node.guardrail !== null) node.guardrail = truncate(node.guardrail);
+    if (node.guardrail === null) continue;
+    const frame = orderByFrame.get(node.id);
+    node.guardrail =
+      frame === undefined ? truncate(node.guardrail) : split(node.guardrail, frame, node.kind);
   }
 
   for (const node of built.values()) {
@@ -665,12 +687,8 @@ export function buildHierarchy(
  * put back into plan order, because a strip that re-sorts itself around a stop is a strip
  * whose reading order changes under the operator (operator amendment, 2026-09-24).
  */
-function truncate(strip: Guardrail): Guardrail {
-  const all = strip.entries;
-  const muted = all.every((entry) => entry.token === 'QUE' || entry.token === null);
-  if (all.length <= MAX_GUARDRAIL_ENTRIES) {
-    return { ...strip, muted, overflow: 0 };
-  }
+function truncateList(all: GuardrailEntry[]): { shown: GuardrailEntry[]; dropped: number } {
+  if (all.length <= MAX_GUARDRAIL_ENTRIES) return { shown: all, dropped: 0 };
   const chosen = new Set<GuardrailEntry>();
   for (const entry of all) {
     if (entry.stop && chosen.size < MAX_GUARDRAIL_ENTRIES) chosen.add(entry);
@@ -679,11 +697,58 @@ function truncate(strip: Guardrail): Guardrail {
     if (chosen.size >= MAX_GUARDRAIL_ENTRIES) break;
     chosen.add(entry);
   }
+  return { shown: all.filter((entry) => chosen.has(entry)), dropped: all.length - chosen.size };
+}
+
+function isMuted(all: GuardrailEntry[]): boolean {
+  return all.every((entry) => entry.token === 'QUE' || entry.token === null);
+}
+
+function truncate(strip: Guardrail): Guardrail {
+  const { shown, dropped } = truncateList(strip.entries);
+  return { ...strip, muted: isMuted(strip.entries), entries: shown, overflow: dropped };
+}
+
+/**
+ * Places a strip's entries before or after the agent as the graph's `run_order` frame says
+ * (AD-40 "The order"); the island derives no phase. An entry the frame has no row for, or
+ * whose row is the agent's, means contract drift, and the strip stays unsplit so no stop is
+ * hidden. Each list is truncated on its own, so six own rows on an epic keep all of `BEFORE`
+ * and all of `AFTER STORIES`.
+ */
+function split(
+  strip: Guardrail,
+  frame: components['schemas']['RunOrderFrameOut'],
+  kind: HierarchyNode['kind'],
+): Guardrail {
+  const rowOf = new Map(frame.rows.map((row) => [row.path, row]));
+  if (strip.entries.some((entry) => (rowOf.get(entry.path)?.phase ?? 'AGENT') === 'AGENT')) {
+    return truncate(strip);
+  }
+  const before: GuardrailEntry[] = [];
+  const after: GuardrailEntry[] = [];
+  for (const row of frame.rows) {
+    const entry = strip.entries.find((candidate) => candidate.path === row.path);
+    if (entry === undefined || row.phase === 'AGENT') continue;
+    (row.phase === 'BEFORE' ? before : after).push({
+      ...entry,
+      seq: entry.seq || row.seq,
+    });
+  }
+  const agents = frame.rows
+    .filter((row) => row.phase === 'AGENT')
+    .map((row) => row.label.split(' · ').pop()!);
+  const b = truncateList(before);
+  const a = truncateList(after);
   return {
     ...strip,
-    muted,
-    entries: all.filter((entry) => chosen.has(entry)),
-    overflow: all.length - chosen.size,
+    before: b.shown,
+    after: a.shown,
+    agent: kind === 'epic' || agents.length === 0 ? null : agents.join(' ▸ '),
+    afterLabel: kind === 'epic' ? 'AFTER STORIES' : 'AFTER',
+    entries: [...b.shown, ...a.shown],
+    overflow: b.dropped + a.dropped,
+    muted: isMuted(strip.entries),
   };
 }
 

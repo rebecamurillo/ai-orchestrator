@@ -149,6 +149,11 @@ describe('GuardrailStrip', () => {
           ownerPath: 'epics.0',
           overflow: 4,
           muted: false,
+          // epic 2 story 3, EXPERIENCE § 12 delta 3, 2026-11-23: new required fields, strip stays unsplit
+          before: [],
+          after: [],
+          agent: null,
+          afterLabel: 'AFTER' as const,
           entries: ['branch', 'setup', 'baseline', 'commit-e2e'].map((label) => ({
             stepId: label,
             path: `epics[0].${label}`,
@@ -157,6 +162,8 @@ describe('GuardrailStrip', () => {
             token: 'DON',
             word: 'done',
             stop: false,
+            seq: 0,
+            n: 0,
           })),
         },
       }),
@@ -246,6 +253,11 @@ describe('the guardrail strip speaks as well as it draws', () => {
       ownerPath: 'epics.0',
       overflow,
       muted: false,
+      // epic 2 story 3, EXPERIENCE § 12 delta 3, 2026-11-23: new required fields, strip stays unsplit
+      before: [],
+      after: [],
+      agent: null,
+      afterLabel: 'AFTER' as const,
       entries: [
         {
           stepId: 'sync',
@@ -255,6 +267,8 @@ describe('the guardrail strip speaks as well as it draws', () => {
           token: 'DON',
           word: 'done',
           stop: false,
+          seq: 0,
+          n: 0,
         },
         {
           stepId: 'verify',
@@ -264,6 +278,8 @@ describe('the guardrail strip speaks as well as it draws', () => {
           token: 'QUE',
           word: 'queued',
           stop: false,
+          seq: 0,
+          n: 0,
         },
       ],
     };

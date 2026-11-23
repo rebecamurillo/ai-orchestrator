@@ -16,40 +16,97 @@
  * story card, so the shape carries it on screen and the word carries it in the accessible
  * name.
  */
-import { DOT_GLYPH, type Guardrail, type RetryChip } from '../../../lib/diagram/run-tree';
+import { Fragment } from 'react';
+import { useStore } from '@nanostores/react';
+import {
+  DOT_GLYPH,
+  type Guardrail,
+  type GuardrailEntry,
+  type RetryChip,
+} from '../../../lib/diagram/run-tree';
+import { $stepDrawer, openStepDrawer } from '../../../stores/step-drawer';
+
+const SEP = <span className="wf-guardrail-sep"> · </span>;
+
+function Entry({ entry, ownerPath }: { entry: GuardrailEntry; ownerPath: string }) {
+  const open = useStore($stepDrawer);
+  const id = `wf-guardrail-${ownerPath}-${entry.stepId}`;
+  const selected = open?.seq === entry.seq;
+  return (
+    <button
+      type="button"
+      className={`wf-guardrail-entry nodrag${selected ? ' wf-guardrail-entry-selected' : ''}`}
+      id={id}
+      data-testid={`wf-diagram-guardrail-${ownerPath}-${entry.stepId}`}
+      title={`${entry.label} · ${entry.word}`}
+      data-selected={selected || undefined}
+      onClick={() => openStepDrawer(entry.seq, entry.n, id)}
+    >
+      <i className="wf-guardrail-dot" data-status={entry.dot} aria-hidden="true">
+        {DOT_GLYPH[entry.dot]}
+      </i>
+      {entry.label}
+      <span className="wf-visually-hidden"> {entry.word}</span>
+    </button>
+  );
+}
+
+function entryList(entries: GuardrailEntry[], ownerPath: string) {
+  return entries.map((entry, index) => (
+    <Fragment key={entry.path}>
+      {index > 0 ? SEP : null}
+      <Entry entry={entry} ownerPath={ownerPath} />
+    </Fragment>
+  ));
+}
 
 /**
- * The deterministic and `checkpoint` rows a card owns, as words with a status dot each.
- * Information only — not clickable, not connected, and deliberately the quietest thing on
- * the card. A truncated strip has already kept every stop in the visible set
- * (`run-tree.ts::truncate`), so `+k` never hides the reason a run is parked.
+ * The deterministic and `checkpoint` rows a card owns, as words with a status dot each,
+ * the quietest thing on the card. The graph's `run_order` splits them around the agent:
+ * `BEFORE · … ▸ agent ▸ AFTER · …` (`AFTER STORIES` on an epic); a card with no `run_order`
+ * entry lists its entries in plan order with no phase word. Each entry is a button that
+ * opens the step drawer, and Tab order is reading order. A truncated strip has already kept
+ * every stop in the visible set (`run-tree.ts::truncate`), so `+k` never hides the reason a
+ * run is parked.
  */
 export function GuardrailStrip({ strip }: { strip: Guardrail | null }) {
   if (strip === null) return null;
+  const { ownerPath, before, after } = strip;
+  const split = before.length > 0 || after.length > 0;
   return (
     <div
       className="wf-guardrail"
       data-muted={strip.muted}
-      data-testid={`wf-diagram-guardrail-${strip.ownerPath}`}
+      data-testid={`wf-diagram-guardrail-${ownerPath}`}
     >
-      {strip.entries.map((entry, index) => (
-        <span
-          key={entry.path}
-          className="wf-guardrail-entry"
-          data-testid={`wf-diagram-guardrail-${strip.ownerPath}-${entry.stepId}`}
-          title={`${entry.label} · ${entry.word}`}
-        >
-          {index > 0 ? <span className="wf-guardrail-sep"> · </span> : null}
-          <i className="wf-guardrail-dot" data-status={entry.dot} aria-hidden="true">
-            {DOT_GLYPH[entry.dot]}
-          </i>
-          {entry.label}
-          <span className="wf-visually-hidden"> {entry.word}</span>
-        </span>
-      ))}
+      {split ? (
+        <>
+          {before.length > 0 ? (
+            <>
+              <span className="wf-guardrail-lab">BEFORE</span>
+              {SEP}
+              {entryList(before, ownerPath)}
+            </>
+          ) : null}
+          {strip.agent !== null ? (
+            <span className="wf-guardrail-agent"> ▸ {strip.agent} ▸ </span>
+          ) : before.length > 0 && after.length > 0 ? (
+            SEP
+          ) : null}
+          {after.length > 0 ? (
+            <>
+              <span className="wf-guardrail-lab">{strip.afterLabel}</span>
+              {SEP}
+              {entryList(after, ownerPath)}
+            </>
+          ) : null}
+        </>
+      ) : (
+        entryList(strip.entries, ownerPath)
+      )}
       {strip.overflow > 0 ? (
         <span className="wf-guardrail-more">
-          <span className="wf-guardrail-sep"> · </span>+{strip.overflow}
+          {SEP}+{strip.overflow}
         </span>
       ) : null}
     </div>
