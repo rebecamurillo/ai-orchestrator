@@ -83,6 +83,7 @@ from orchestrator.infrastructure.jobs import scheduled_jobs
 from orchestrator.infrastructure.notify import build_notifier
 from orchestrator.infrastructure.process import RealProcessRunner
 from orchestrator.infrastructure.process.logs import RealLogReader, log_secrets
+from orchestrator.infrastructure.process.step_log import FsStepLog
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.skill_catalog import FsSkillCatalog
 from orchestrator.infrastructure.terminal_jobs import CHAT_SLOT, current_chat, engine_jobs
@@ -168,6 +169,7 @@ def walker_deps(
             harness_env=build_harness_env(settings),
             attempt_writes=partial(open_writer_ports, session_factory),
             logs=RealLogReader(log_secrets(settings)),
+            step_log=FsStepLog(str(settings.work_dir), log_secrets(settings)),
             spend_writes=partial(open_spend_ports, session_factory, gateway),
             facts_writes=partial(
                 open_facts_ports,

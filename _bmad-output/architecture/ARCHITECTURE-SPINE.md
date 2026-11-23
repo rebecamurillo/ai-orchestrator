@@ -477,6 +477,24 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
     - Both are generated at build and never committed; a unit test in `make test` fails when a key of the tables is missing from the schema (`make lint` holds exactly five `uv` invocations, pinned by `test_makefile.py`).
     - No schema is written by hand.
 
+### AD-40 — Every step that ran has a log, and one key joins its views *(ratified 2026-11-22, initiative orchestrator-initiative-steps)*
+
+- **Binds:** a new `StepLog` port and its adapter, `steps/git_*.py`, `steps/pr_link.py`, `steps/plan_check.py`, `apply_step_result._close_attempt`, the retention sweep, `api/routers/run_attempts.py`, `GET /runs/{id}/graph`, the Run page islands
+- **Prevents:** an empty log shown without a reason (FR-31, SM-4); a token in a log; a node, a row and a drawer that point at different attempts (FR-29); a second capture path for files read
+- **Rule:**
+  - **Writing.** Every deterministic executor writes through one port, `StepLog.write(run_id, seq, n, lines)`, which stores `/work/logs/{run_id}/{seq:03d}-{n}.log` and returns the path. Each line is an operation asked of the `Git` or `PullRequests` port and its answer, in words. Every line passes `redact()`, the one function the harness env already uses.
+  - **The endpoint** answers one of three states, read from `log_path`, the file and `attempt.log_removed_at`:
+    - the text;
+    - `no output`, for an empty file;
+    - today's `log no longer on disk`, for a swept file. The sweep sets `attempt.log_removed_at`.
+
+    A skipped row says it has no attempt.
+  - **The step identity** on the wire is `(run_id, seq, n)`, with the latest attempt as the default. The graph's nodes, the steps table and the drawer all carry it, and the drawer lists the attempts.
+  - **The drawer's payload** is `{log, files_read, files_written}`:
+    - `files_written` is the diff from `attempt.start_sha` to `attempt.end_sha`;
+    - `files_read` comes from the attempt's facts on run-metrics path 2 **[experiment]**. If the facts keep no paths, the drawer reads `not recorded` for agent steps too, no capture path is added, and FR-29's path consequence goes to the product-lead as a PRD change.
+  - **The order.** The before / agent / after strip comes from the plan rows of the frame. The API sends it, and `RunDiagram` renders only what it gets.
+
 ## Consistency Conventions
 
 | Concern | Convention |
