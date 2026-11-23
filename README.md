@@ -27,9 +27,6 @@ operator, one machine, one token.
 
 ## Why I built this
 
-> Draft in the owner's words, from her published writing and notes; to be validated or
-> rewritten by her before this README is public.
-
 In 2026 a training on TDD and BDD with AI opened my mind to another level of AI coding:
 agents that implement a story end to end against tests written first. I started dispatching
 real features of my own projects to them, and quickly (and painfully) understood three
