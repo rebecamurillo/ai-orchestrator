@@ -1,88 +1,68 @@
-# Test Automation Summary — orchestrator-run-metrics / epic-6-analysis-tier2
+# Test Automation Summary — orchestrator-initiative-steps / epic-1-step-logs
 
-Generated: 2026-11-13. This run was dispatched with an empty story id, so it covers the whole epic.
-Spec: `initiatives/orchestrator-run-metrics/epic-6-analysis-tier2/SPEC.md` (the path is relative to the hub).
-Stories: 1–4 (commits `2b51768`..`a7fd657`).
-Previous summary (epic-5-analysis-tier1): in git history at `994ab1a`.
+Generated: 2026-11-23. This run was dispatched with an empty story id, so it covers the whole epic.
+Spec: `initiatives/orchestrator-initiative-steps/epic-1-step-logs/SPEC.md` (the path is relative to the hub).
+Stories: 1–7 (commits `04dca98c`..`792089c5`).
+Previous summary (orchestrator-run-metrics epic-6-analysis-tier2): in git history at `9c0433db`.
 
 Framework: the project's own suites.
-- pytest and httpx in `backend-api/tests/e2e`, run by `make e2e-api`.
-- Playwright in `web-client/tests/e2e`, run by `make e2e-ui`.
+- pytest and httpx in `backend-api/tests/e2e`, run by `make e2e-api` (inside `make e2e`).
+- This epic changes no web-client code apart from the regenerated `schema.d.ts`. No Playwright test is added.
 
-Stories 1 and 2 are analysis logic over the `ProcessRunner` and `AnalysisTools` ports. Their unit suites cover them with fakes and recorded Opengrep SARIF. End to end, this run reaches them where a stack adds something: their `n/a` words on a real Run, and the findings route. No existing test file was touched. No shipped template is read.
+Every story is covered by unit tests on fakes. The e2e module checks what only a real Run shows: the walker writes the logs to disk through the real `FsStepLog`, real git answers the drawer and files-by-epic reads, and the graph, the steps table and the drawer report the same `(seq, n)` for one Run. No existing test file was touched. No shipped template is read. The module uses the suite's own `tests/e2e/templates/hub*.yaml` and `fixtures/hub-repo`.
 
 ## Generated Tests
 
 ### API (e2e) tests — `make e2e-api` gate
 
-- [x] `backend-api/tests/e2e/test_run_analysis_tier23.py` (11 tests). It reuses the helpers of `test_run_analysis.py` and `test_run_metrics_versions.py`. Its templates are fresh `e2e-tier3-<hex>` fixtures defined inline in the module.
-  - **The `stepped` fixture** runs a template that declares `metrics: step.{name}.heldout_tests` (format `junit`, path `out/heldout.xml`). Its rows are `git.worktree` → shell → `git.commit` → `git.push` → `metrics.analyse`.
-    - The shell row writes `out/heldout.xml` (18 passed, 2 failed) and `out/other.xml`, which no entry declares.
-    - The fixture waits for v1.
-  - **Findings route (story 4)**:
-    - Without the bearer: 401 problem+json.
-    - Unknown Run or analysis: 404 problem+json.
-    - Analysis id that is not a UUID: 422.
-    - The real analysis of a repository with no `sast.rules`: 404, and `rule_pack_hash` is null.
-  - **Stories 1 and 2 with no declaration**:
-    - All five Tier 2 ids read `n/a — tier 2 not declared` with no number.
-    - Both finding ids read `n/a — no rules declared`.
-  - **Story 3, the template store**:
-    - `heldout_tests` without the prefix is refused with 422 and the reason `metric id must be step.{template}.{name}`, at an integer line.
-    - Another template's prefix is refused in the same way.
-  - **Story 3, import**:
-    - v1 holds passed 18, failed 2, errored 0 and skipped 0 under the declared id, with method `{id}@1`.
-    - The analysis response's `step_entries` lists the entry by its label.
-    - The calculation output contains `not catalogued: out/other.xml` and does not contain the declared path.
-
-### E2E (UI) tests — `make e2e-ui` gate
-
-- [x] `web-client/tests/e2e/static-signals-tier23.spec.ts` (6 tests). Every read is answered with `page.route()` through the real same-origin proxy, following the `static-signals.spec.ts` precedent. The fixture is a hub Run: repository `.` declared no Tier 2, and `repos/app` ran Tier 2 and Opengrep.
-  - **Partial totals**:
-    - The Run row of new linter warnings reads `partial · 1 of 2 repositories`.
-    - `.` reads `n/a — tier 2 not declared`.
-    - `repos/app` has no partial word.
-  - **Security findings**:
-    - The row reads `3 possible high`, `0 possible medium`, `0 possible low` and `unchanged 1`, and is partial.
-    - Clicking the count opens the drawer. It lists only the three new security findings (rule, path:line, severity, CWE), leaving out the unchanged one and the bug.
-    - The link `SARIF · opengrep · repos/app` points to `/api/runs/{id}/analysis/{aid}/sarif/opengrep`.
-  - **Footer**: `rule packs: opengrep abcdef12`.
-  - **Test-first**:
-    - The line reads `test-first order · method followed, not quality · 6 of 8 stories readable from the logs` (4/2/0/2 outcomes).
-    - Its hint opens on the three limits.
-  - **Step metric**: `held-out tests` reads `passed 18` and `failed 2`.
-  - The Tier 2 and step rows appear only under ALL METRICS, so the spec opens that set first.
-
-## Results
-
-- **UI:** after `pnpm build`, ran `E2E_PREVIEW_PORT=4399 E2E_STUB_BACKEND_PORT=8799 pnpm exec playwright test tests/e2e/static-signals-tier23.spec.ts`.
-  - It passes 6/6, and 18/18 with `--repeat-each=3`.
-  - eslint, prettier and `tsc --noEmit` are clean.
-  - Nothing on 4321 was touched.
-- **API:**
-  - `ruff check` and `ruff format --check` are clean, and `pytest --collect-only` collects 11 tests.
-  - The unit meta-tests over test files (`-k "source_limit or e2e or pair or marker"`) gave 1779 passed.
-  - The fixture template was validated offline:
-    - With `validate()`, the declared id passes. Both refusals give line 9 and the expected reason.
-    - The shell row was run under `sh`. `import_junit` reads its report as 18/2/0/0, and `sniff` reads `out/other.xml` as `junit`.
-  - The bearer case was run in-process (`create_app(Settings())` with `TestClient`) and returned 401 problem+json.
-  - **The other 10 API tests were not run against a stack.** The epic forbids starting or calling a running instance, and `make e2e` builds one. They will run on the next `make e2e`.
-
-## Findings (to watch, not confirmed as defects)
-
-1. **The `stepped` fixture assumes the shell row's cwd is the Run's worktree**, as in the epic 5 module. If `git.commit` finds nothing to commit, check this first.
-2. **The `n/a` assertions assume a summary row exists** for each Tier 2 and finding id at some scope on a single-repository Run. If `make e2e` reports `assert rows`, look at whether `summarise` writes words at repository scope only. The test accepts any scope.
+- [x] `backend-api/tests/e2e/test_step_logs.py` (27 tests).
+  - **Fixture.** One hub Run is started with `start_hub_run` from `test_hub_run.py` and walked to alpha-epic's done checkpoint. The module reads the Run's graph once, then cancels the Run when it ends.
+  - **CAP-4 (story 4), identity and run order:**
+    - Each row that ran has a node with `seq`, ascending `attempt_ns`, and `attempt_n = max(attempt_ns)`. The steps-table row's `attempt_ns` is the same.
+    - A row that is only planned (beta's story build) has `attempt_n` null and `attempt_ns` empty.
+    - Story frame `epics[0].stories[0]`: `sync` is BEFORE, `build` is AGENT, `commit-guard` is AFTER, and every row is in seq order.
+    - Epic frame `epics[0]`: `branch` and `baseline` are BEFORE, `spec-gate` is AGENT, and the done checkpoint is AFTER. The frame contains no story row.
+    - Root frame: `checkout` and `submodules` are BEFORE.
+  - **CAP-5/6 (stories 5–6), the drawer:**
+    - With `n=0`, the drawer shows the latest attempt, lists every attempt, and its `run_order.frame` is the story frame. A drawer opened by an explicit `n` shows that attempt.
+    - A build attempt on the fake harness reports `files_read` as `not_recorded`.
+    - The workdir `commit-guard` row reports `files_written.state=commit`, with the sha and the subject `story 1: Ship the alpha feature (orchestrator)`. Its file list contains `repos/alpha/src/alpha_feature.py`.
+    - The skipped `setup` row has `n` null, no attempts, and log `not_run` with the row's own reason.
+    - An unknown Run, seq or attempt gets a 404 problem+json. A request without the bearer gets a 401.
+  - **CAP-1/2/3 (stories 1–3), logs:**
+    - For `git.submodule`, `git.merge` (story sync) and `git.commit`, the drawer's log state is `text`. The log endpoint returns `state=text`, `eof`, and lines starting `> `.
+    - The commit log contains a `> commit …` line.
+    - No log line of five deterministic rows contains `ORCHESTRATOR_TOKEN`.
+  - **CAP-7 (story 7), files by epic:**
+    - Both epics are listed in plan order, with folder and title.
+    - Alpha lists `SPEC.md`, `stories.yaml` and `spec-gate-result.md` in that order. `RETROSPECTIVE.md` is absent, so it is left out.
+    - Beta lists only its seeded `SPEC.md` and `stories.yaml`.
+    - Alpha story 1 has `started` true and `story_file` `…/stories/1-work.md`. Beta story 1 has `started` false, no file and no change.
+    - Every path in `changed` gets a 200 from the diff route. An unchanged path, an epic index outside the list, and an unknown Run each get a 404.
 
 ## Coverage
 
-- API endpoints the epic added: 1/1 (`GET /runs/{id}/analysis/{aid}/findings`): 401, 404 (unknown, and no listing), and 422. A 200 with listed findings needs an image that carries Opengrep and a repository that declares rules. That case is left to the unit router test.
-- Story acceptance criteria exercised end to end:
-  - story 1: 1/7 (no declaration → `tier 2 not declared`). Matching, Cobertura, JUnit, fail-to-pass, the timeout and the env are unit-only, on fakes.
-  - story 2: 1/6 (`n/a — no rules declared`). Matching, rename, severity, CWE, `baselineState` and the Dockerfile are unit-only.
-  - story 3: 3/5 (validates and refuses, 18/2 imported, `not catalogued`). The test-first orders need harness `event_fact` rows and stay unit-only.
-  - story 4: 3/3 on screen (partial `1 of 2`, `3 possible` with CWE in the drawer, `6 of 8` with the limits).
+- API endpoints added or changed by this epic: 5 of 5 are exercised end to end:
+  - `GET /runs/{id}/graph` (node identity and `run_order`)
+  - steps-table `attempt_ns`
+  - `GET /runs/{id}/attempts/{aid}/log` (state `text`)
+  - `GET /runs/{id}/steps/{seq}/attempts/{n}/drawer`
+  - `GET /runs/{id}/files-by-epic` and `/diff`
+- Covered by unit tests only:
+  - the log states `no_output` and `removed`, and the sweep mark (getting them on a stack needs retention to pass)
+  - `refs updated:` lines (the fixture's heads do not move during sync)
+  - `files_read=listed` (needs the Claude extractor)
+
+## Verification
+
+- `ruff check`, `ruff format --check` and `pytest --collect-only` (27 collected) pass on the new module.
+- **Not run against a stack.** The epic's spec forbids starting, stopping or calling a running instance. Its quality gate is lint, test and openapi drift, with no e2e. So `make e2e` was not run in this dispatch. Before relying on this module, run `make e2e` on a machine where the disposable `aio-e2e` stack is allowed.
+- Assertions that rest on code reading rather than an observed run:
+  - the `commit-guard` subject and member path prefix
+  - the exact list of alpha spec files at the checkpoint
+  - the story file path
 
 ## Next Steps
 
-- Run `make e2e` (the disposable `aio-e2e` stack) to execute the API module against Postgres, DBOS and the image.
-- Run `make e2e-ui` for the full UI suite.
+- Run `make e2e` and fix any assertion the live stack contradicts.
+- Epic 2 (Run page review) adds the Playwright side of these reads.
