@@ -336,6 +336,7 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
   - Skill by name or path (owner B7, 2026-11-22): a with.skill holding / is a repository path and is named by it; a bare name the harness catalog does not list fails the turn.
   - **Queued messages.** A message posted while a turn runs is a `session` attempt with `status = queued` and `started_at` set at post time, as today. Order is the attempt's `n`. Each post enqueues its own turn at once, under the Run's session partition, and nothing else dispatches. On a `conversation` stop the post is never refused with 409. On the senior session the 409 stays.
   - **Signals.** While a conversation session is open, `cancel` and `skip_step` with `forced` are accepted besides `session_end`. Each one first kills the running turn's process group. After a forced skip, the walk executes the next row only once every `session` attempt of the Run has ended (`ended_at` set): the killed turn's own workflow commits and closes its attempt, and the walk waits for that. `cancel` ends the walk and waits for nothing, as today (gate item 4, § 10). Queued turns of the row then close `error · step skipped` (or `· Run cancelled`), and their messages stay shown.
+  - **Restart.** `POST /runs/{id}/session/retry` re-dispatches the last failed turn, resuming the same harness session (FR-13). It goes into the contract. It gets no MCP tool, because remote conversation is a PRD non-goal.
 
 ### AD-24 — A stop has an identity, and a stale answer is refused *(ratified 2026-11-01, senior unblock)*
 

@@ -1,5 +1,6 @@
-"""`GET /api/v1/runs/{run_id}/session` and `POST .../session/messages` (AD-23): the
-Operator's senior session on one Run, and one message to it.
+"""`GET /api/v1/runs/{run_id}/session`, `POST .../session/messages` and `POST .../session/retry`
+(AD-23): the Operator's senior session on one Run, one message to it, and the restart of its
+last failed turn.
 
 The session opens and closes through `POST /runs/{id}/signals` (`session_start`,
 `session_end`). A message queues one turn and answers 202 before the senior has run; the
@@ -22,6 +23,7 @@ from orchestrator.api.errors import (
 from orchestrator.api.providers_session import message_ports, session_ports
 from orchestrator.api.schemas.session import MessageIn, SessionOut, SessionTurnOut
 from orchestrator.application.use_cases.session_checks import SessionPorts
+from orchestrator.application.use_cases.session_retry import retry_turn
 from orchestrator.application.use_cases.session_turn import MessagePorts, post_message
 from orchestrator.application.use_cases.session_view import session_view
 
@@ -31,6 +33,7 @@ Ports = Annotated[SessionPorts, Depends(session_ports)]
 Messages = Annotated[MessagePorts, Depends(message_ports)]
 
 HTTP_ACCEPTED = 202
+HTTP_CREATED = 201
 HTTP_NOT_FOUND = 404
 HTTP_CONFLICT = 409
 HTTP_SERVER_ERROR = 500
@@ -56,6 +59,15 @@ MESSAGE_REFUSALS: dict[int | str, dict[str, object]] = {
     HTTP_SERVER_ERROR: _refusal("The turn could not be enqueued; it was closed `error`."),
 }
 
+RETRY_REFUSALS: dict[int | str, dict[str, object]] = {
+    HTTP_NOT_FOUND: _refusal("No Run has that id."),
+    HTTP_CONFLICT: _refusal(
+        "No session is open, a turn is running, the last turn did not fail, or no budget remains."
+    ),
+    HTTP_UNPROCESSABLE_CONTENT: _refusal("`run_id` does not parse as a UUID."),
+    HTTP_SERVER_ERROR: _refusal("The turn could not be enqueued; it was closed `error`."),
+}
+
 
 @router.get(
     "/runs/{run_id}/session",
@@ -76,3 +88,14 @@ def get_session(run_id: UUID, ports: Ports) -> SessionOut:
 )
 def post_session_message(run_id: UUID, payload: MessageIn, ports: Messages) -> SessionTurnOut:
     return SessionTurnOut.of(post_message(ports, run_id, payload.text))
+
+
+@router.post(
+    "/runs/{run_id}/session/retry",
+    status_code=HTTP_CREATED,
+    response_model=SessionTurnOut,
+    summary="Restart the last failed turn",
+    responses=RETRY_REFUSALS,
+)
+def post_session_retry(run_id: UUID, ports: Messages) -> SessionTurnOut:
+    return SessionTurnOut.of(retry_turn(ports, run_id))

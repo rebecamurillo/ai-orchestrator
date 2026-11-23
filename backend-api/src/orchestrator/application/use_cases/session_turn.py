@@ -128,7 +128,7 @@ def post_message(ports: MessagePorts, run_id: UUID, text: str) -> SessionTurn:
             ports.engine.enqueue_session_turn(run_id, opened)
         ports.engine.enqueue_session_turn(run_id, attempt.id)
     except Exception as error:
-        _close(writers, attempt, str(error))
+        close_turn(writers, attempt, str(error))
         raise
     return turn_of(attempt, len(turns) + 1)
 
@@ -266,7 +266,7 @@ def _reply(turn: Turn) -> dict[str, Any]:
     return {"reply": session.capped(text)}
 
 
-def _close(writers: WriterPorts, attempt: Attempt, reason: str) -> None:
+def close_turn(writers: WriterPorts, attempt: Attempt, reason: str) -> None:
     with writers.uow:
         closed = attempt.model_copy(
             update={"status": "error", "output_ref": reason, "ended_at": writers.clock.now()}
