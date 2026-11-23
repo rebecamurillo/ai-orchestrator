@@ -6697,6 +6697,13 @@
             },
             "title": "Nodes",
             "type": "array"
+          },
+          "run_order": {
+            "items": {
+              "$ref": "#/components/schemas/RunOrderFrameOut"
+            },
+            "title": "Run Order",
+            "type": "array"
           }
         },
         "required": [
@@ -6973,6 +6980,24 @@
             "title": "Agent",
             "type": "boolean"
           },
+          "attempt_n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt N"
+          },
+          "attempt_ns": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Attempt Ns",
+            "type": "array"
+          },
           "call": {
             "anyOf": [
               {
@@ -7024,6 +7049,17 @@
             "title": "Label",
             "type": "string"
           },
+          "seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seq"
+          },
           "status": {
             "anyOf": [
               {
@@ -7060,6 +7096,70 @@
           "current"
         ],
         "title": "RunNodeOut",
+        "type": "object"
+      },
+      "RunOrderFrameOut": {
+        "properties": {
+          "frame": {
+            "title": "Frame",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/RunOrderRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "frame",
+          "rows"
+        ],
+        "title": "RunOrderFrameOut",
+        "type": "object"
+      },
+      "RunOrderRowOut": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "BEFORE",
+              "AGENT",
+              "AFTER"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "path",
+          "label",
+          "kind",
+          "token",
+          "phase"
+        ],
+        "title": "RunOrderRowOut",
         "type": "object"
       },
       "RunSummaryOut": {
@@ -7653,6 +7753,13 @@
       },
       "StepRowOut": {
         "properties": {
+          "attempt_ns": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Attempt Ns",
+            "type": "array"
+          },
           "attempts": {
             "title": "Attempts",
             "type": "integer"

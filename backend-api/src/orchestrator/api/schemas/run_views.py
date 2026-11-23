@@ -234,6 +234,7 @@ class StepRowOut(BaseModel):
     cost_usd: MoneyStr = Field(default=Decimal("0"), json_schema_extra=_drop_default)
     #: The resolved retry prompt (story 3-5). `None` / absent when the step has no retry block.
     retry_prompt: str | None = Field(default=None, json_schema_extra=_drop_default)
+    attempt_ns: list[int] = Field(default_factory=list, json_schema_extra=_drop_default)
 
     @classmethod
     def of(cls, row: StepRowView) -> StepRowOut:
@@ -250,6 +251,7 @@ class StepRowOut(BaseModel):
             latest=None if row.latest is None else LatestAttemptOut.of(row.latest),
             cost_usd=row.cost_usd,
             retry_prompt=row.retry_prompt,
+            attempt_ns=list(row.attempt_ns),
         )
 
 

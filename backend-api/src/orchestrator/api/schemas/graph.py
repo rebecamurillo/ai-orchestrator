@@ -26,8 +26,10 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from orchestrator.api.schemas.common import drop_default
 from orchestrator.api.schemas.templates import ValidateIn
 from orchestrator.application.graph import Edge, Graph, Group, Node, NodeCall, NodeGate
+from orchestrator.application.graph_schema import RunOrderFrame, RunOrderPhase, RunOrderRow
 
 
 class NodeCallOut(BaseModel):
@@ -161,6 +163,9 @@ class RunNodeOut(BaseModel):
     token: str | None
     #: True on the running row, or the parked row while nothing is running.
     current: bool
+    seq: int | None = Field(default=None, json_schema_extra=drop_default)
+    attempt_n: int | None = Field(default=None, json_schema_extra=drop_default)
+    attempt_ns: list[int] = Field(default_factory=list, json_schema_extra=drop_default)
 
     @classmethod
     def of(cls, node: Node) -> RunNodeOut:
@@ -175,6 +180,9 @@ class RunNodeOut(BaseModel):
             status=node.status,
             token=node.token,
             current=node.current,
+            seq=node.seq,
+            attempt_n=node.attempt_n,
+            attempt_ns=list(node.attempt_ns),
         )
 
 
@@ -207,12 +215,35 @@ class RunGroupOut(BaseModel):
         )
 
 
+class RunOrderRowOut(BaseModel):
+    seq: int
+    path: str
+    label: str
+    kind: str
+    token: str
+    phase: RunOrderPhase
+
+    @classmethod
+    def of(cls, row: RunOrderRow) -> RunOrderRowOut:
+        return cls(**row.model_dump())
+
+
+class RunOrderFrameOut(BaseModel):
+    frame: str
+    rows: list[RunOrderRowOut]
+
+    @classmethod
+    def of(cls, frame: RunOrderFrame) -> RunOrderFrameOut:
+        return cls(frame=frame.frame, rows=[RunOrderRowOut.of(row) for row in frame.rows])
+
+
 class RunGraphOut(BaseModel):
     """`GET /runs/{run_id}/graph`. Three lists, never `null` — same shape as `GraphOut`."""
 
     nodes: list[RunNodeOut]
     edges: list[EdgeOut]
     groups: list[RunGroupOut]
+    run_order: list[RunOrderFrameOut] = Field(default_factory=list, json_schema_extra=drop_default)
 
     @classmethod
     def of(cls, graph: Graph) -> RunGraphOut:
@@ -220,4 +251,5 @@ class RunGraphOut(BaseModel):
             nodes=[RunNodeOut.of(node) for node in graph.nodes],
             edges=[EdgeOut.of(edge) for edge in graph.edges],
             groups=[RunGroupOut.of(group) for group in graph.groups],
+            run_order=[RunOrderFrameOut.of(frame) for frame in graph.run_order],
         )

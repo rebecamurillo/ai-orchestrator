@@ -3503,6 +3503,8 @@ export interface components {
             groups: components["schemas"]["RunGroupOut"][];
             /** Nodes */
             nodes: components["schemas"]["RunNodeOut"][];
+            /** Run Order */
+            run_order?: components["schemas"]["RunOrderFrameOut"][];
         };
         /**
          * RunGroupOut
@@ -3611,6 +3613,10 @@ export interface components {
         RunNodeOut: {
             /** Agent */
             agent: boolean;
+            /** Attempt N */
+            attempt_n?: number | null;
+            /** Attempt Ns */
+            attempt_ns?: number[];
             call: components["schemas"]["NodeCallOut"] | null;
             /** Current */
             current: boolean;
@@ -3627,10 +3633,37 @@ export interface components {
             kind: string;
             /** Label */
             label: string;
+            /** Seq */
+            seq?: number | null;
             /** Status */
             status: string | null;
             /** Token */
             token: string | null;
+        };
+        /** RunOrderFrameOut */
+        RunOrderFrameOut: {
+            /** Frame */
+            frame: string;
+            /** Rows */
+            rows: components["schemas"]["RunOrderRowOut"][];
+        };
+        /** RunOrderRowOut */
+        RunOrderRowOut: {
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Path */
+            path: string;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "BEFORE" | "AGENT" | "AFTER";
+            /** Seq */
+            seq: number;
+            /** Token */
+            token: string;
         };
         /**
          * RunSummaryOut
@@ -3847,6 +3880,8 @@ export interface components {
         };
         /** StepRowOut */
         StepRowOut: {
+            /** Attempt Ns */
+            attempt_ns?: number[];
             /** Attempts */
             attempts: number;
             /** Cost Usd */

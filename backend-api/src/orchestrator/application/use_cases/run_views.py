@@ -345,6 +345,7 @@ def _step_row(ports: RunViewPorts, row: StepRun, attempts: Sequence[Attempt]) ->
         latest=_latest_attempt(ports, latest) if latest is not None else None,
         cost_usd=cost_usd,
         retry_prompt=retry_prompt if isinstance(retry_prompt, str) else None,
+        attempt_ns=tuple(sorted(attempt.n for attempt in attempts)),
     )
 
 

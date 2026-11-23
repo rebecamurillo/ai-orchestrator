@@ -81,6 +81,12 @@ class Node(BaseModel):
     token: str | None = None
     #: True on the running row, or the parked row while none is running (SPEC CAP-12).
     current: bool = False
+    #: The row's `seq`; `None` on the run graph's root node and on a Template's graph.
+    seq: int | None = None
+    #: The highest attempt `n` of the row, `None` while it has none.
+    attempt_n: int | None = None
+    #: Every attempt `n` of the row, ascending.
+    attempt_ns: tuple[int, ...] = ()
 
 
 class Edge(BaseModel):
@@ -115,6 +121,31 @@ class Group(BaseModel):
     n: int = 0
 
 
+RunOrderPhase = Literal["BEFORE", "AGENT", "AFTER"]
+
+
+class RunOrderRow(BaseModel):
+    """One own row of a frame, with where it sits around the frame's agent."""
+
+    model_config = ConfigDict(frozen=True)
+
+    seq: int
+    path: str
+    label: str
+    kind: str
+    token: str
+    phase: RunOrderPhase
+
+
+class RunOrderFrame(BaseModel):
+    """One frame holding an agent row at any depth, and its own rows in `seq` order."""
+
+    model_config = ConfigDict(frozen=True)
+
+    frame: str
+    rows: tuple[RunOrderRow, ...]
+
+
 class Graph(BaseModel):
     """A Template's or a Run's shape. No layout: 3.6 draws it, `Node`/`Group` colour it."""
 
@@ -123,3 +154,4 @@ class Graph(BaseModel):
     nodes: tuple[Node, ...] = ()
     edges: tuple[Edge, ...] = ()
     groups: tuple[Group, ...] = ()
+    run_order: tuple[RunOrderFrame, ...] = ()

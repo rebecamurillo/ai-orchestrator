@@ -64,11 +64,11 @@ from orchestrator.application.graph_schema import (
 )
 from orchestrator.application.run_graph import (
     ROOT_ID,
-    STEP_TOKENS,
     _run_token,  # noqa: F401 - tests read the Board-token rule through `graph`
     build_run_graph,
     group_status,
 )
+from orchestrator.application.run_order import STEP_TOKENS
 from orchestrator.application.steps import (
     AGENT_KIND,
     CHECKPOINT_KIND,

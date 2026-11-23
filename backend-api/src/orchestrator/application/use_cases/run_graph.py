@@ -29,4 +29,5 @@ def run_graph_for(ports: RunViewPorts, run_id: UUID) -> Graph:
     if run is None:
         raise NotFound(f"no run {run_id}")
     rows = ports.steps.list_for_run(run_id)
-    return build_run_graph(rows, run)
+    attempts = {row.id: ports.attempts.list_for_row(row.id) for row in rows}
+    return build_run_graph(rows, run, attempts)

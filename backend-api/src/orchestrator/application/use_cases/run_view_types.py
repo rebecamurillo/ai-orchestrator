@@ -237,6 +237,7 @@ class StepRowView:
     #: The resolved retry prompt from `with_resolved["retry"]["prompt"]` (story 3-5).
     #: `None` when the step has no retry block or the prompt key is absent.
     retry_prompt: str | None = None
+    attempt_ns: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
