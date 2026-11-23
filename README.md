@@ -296,6 +296,6 @@ Built and run by [Rebeca Murillo](https://rebecamurillo.com), software and produ
 for her own projects first, so that a design partner is possible later. Issues, questions
 and findings from your own repositories: the issue tracker above.
 
-**Licence: not yet chosen.** Until a `LICENSE` file is in this repository, the code is
-all rights reserved; the images are private on GitHub Container Registry and read access is
-granted per person.
+**Licence: [Apache License 2.0](LICENSE)** (`NOTICE` holds the copyright line). The
+licence covers the source; the published images are private on GitHub Container Registry,
+and read access to them is granted per person.
