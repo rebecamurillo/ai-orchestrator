@@ -16,6 +16,7 @@ they made — one unit of work per transition (AD-8) — as on what they stored.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime
 from uuid import UUID
 
 from orchestrator.domain.entities.attempt import Attempt, agent_attempts
@@ -185,6 +186,12 @@ class FakeAttemptRepository:
         ):
             raise ValueError(f"row {attempt.step_run_id} already has attempt {attempt.n}")
         self.attempts[attempt.id] = attempt
+
+    def mark_logs_removed(self, run_id: UUID, at: datetime) -> None:
+        self.calls.append(("mark_logs_removed", run_id))
+        for attempt_id, stored in self.attempts.items():
+            if stored.run_id == run_id and stored.log_removed_at is None:
+                self.attempts[attempt_id] = stored.model_copy(update={"log_removed_at": at})
 
     def get(self, attempt_id: UUID) -> Attempt | None:
         self.calls.append(("get", attempt_id))

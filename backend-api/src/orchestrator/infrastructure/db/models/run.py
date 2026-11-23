@@ -202,6 +202,7 @@ class AttemptRow(Base):
     root_end_sha: Mapped[str | None] = mapped_column(Text(), nullable=True)
     frozen_test_files: Mapped[list[str] | None] = mapped_column(JSONB(), nullable=True)
     log_path: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    log_removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     exit_code: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     output_ref: Mapped[str | None] = mapped_column(Text(), nullable=True)
     harness: Mapped[str | None] = mapped_column(Text(), nullable=True)

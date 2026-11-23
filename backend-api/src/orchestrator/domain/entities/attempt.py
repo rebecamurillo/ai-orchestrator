@@ -66,6 +66,8 @@ class Attempt(BaseModel):
     #: every attempt that is not that one.
     frozen_test_files: tuple[str, ...] | None = None
     log_path: str | None = None
+    #: Set by the retention sweep when it removed this attempt's log file (AD-40).
+    log_removed_at: datetime | None = None
     exit_code: int | None = None
     #: The log path or a short output, whichever the kind produced.
     output_ref: str | None = None

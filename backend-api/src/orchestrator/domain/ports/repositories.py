@@ -217,6 +217,10 @@ class AttemptRepository(Protocol):
         """The Attempt with this id, or `None` — direct lookup for the log endpoint."""
         ...
 
+    def mark_logs_removed(self, run_id: UUID, at: datetime) -> None:
+        """Set `log_removed_at = at` on every attempt of the Run whose value is null."""
+        ...
+
     def get_latest(self, step_run_id: UUID) -> Attempt | None:
         """The highest-`n` attempt at this row, or `None` if it has never run."""
         ...

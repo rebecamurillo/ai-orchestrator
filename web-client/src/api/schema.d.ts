@@ -2462,6 +2462,10 @@ export interface components {
          *     `next_cursor` is the byte offset immediately after the last `\n` in `lines`.
          *     Pass it as `?cursor=` on the next poll to receive only newly appended content.
          *     `eof=True` means no bytes follow `next_cursor` at the time this page was read.
+         *
+         *     `state` says why a page is empty or gone (AD-40): `text` (the lines are the log),
+         *     `no_output` (the attempt produced none; `reason` when nothing was recorded) or
+         *     `removed` (the file is gone; `removed_at` when the sweep stamped it).
          */
         LogPageOut: {
             /** Eof */
@@ -2470,6 +2474,15 @@ export interface components {
             lines: string[];
             /** Next Cursor */
             next_cursor: number;
+            /** Reason */
+            reason?: string | null;
+            /** Removed At */
+            removed_at?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state?: "text" | "no_output" | "removed";
         };
         /**
          * MaskedEnvVarOut

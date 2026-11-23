@@ -366,6 +366,7 @@ NULLABLE = {
     },
     "step_run": {"reason", "frame", "story_id"},
     "attempt": {
+        "log_removed_at",  # epic 1 story 3, AD-40, 2026-11-23: set by the retention sweep
         "started_at",
         "ended_at",
         "start_sha",

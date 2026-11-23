@@ -29,6 +29,7 @@ from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
+    SQLAlchemyAttemptRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
     SQLAlchemyRunRepository,
@@ -79,6 +80,7 @@ def _worktree_gc_job(
                 runs=SQLAlchemyRunRepository(uow.session),
                 git=git,
                 logs=FsWorkspace(logs_root),
+                attempts=SQLAlchemyAttemptRepository(uow.session),
                 clock=SystemClock(),
                 read_environment=partial(
                     read_run_environment, session_factory, settings.bmad_version
