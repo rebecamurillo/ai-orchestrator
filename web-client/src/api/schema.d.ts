@@ -3937,9 +3937,9 @@ export interface components {
             /** Model */
             model: string | null;
             /** Scope */
-            scope: ("story" | "epic" | "run") | null;
+            scope: ("story" | "epic" | "run" | "step") | null;
             /** Scopes */
-            scopes: ("story" | "epic" | "run")[];
+            scopes: ("story" | "epic" | "run" | "step")[];
             /** Turn Running */
             turn_running: boolean;
             /** Turns */

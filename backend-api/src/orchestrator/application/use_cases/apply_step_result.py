@@ -60,6 +60,7 @@ from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
 from orchestrator.application.use_cases import apply_redispatch
 from orchestrator.application.use_cases.apply_consult import apply_consult, attempt_status
+from orchestrator.application.use_cases.conversation_session import open_step_session
 from orchestrator.application.use_cases.metric_calculations import enqueue_queued
 from orchestrator.application.use_cases.pause_stop import park_before_next
 from orchestrator.application.use_cases.record_trajectory import record_trajectory
@@ -157,12 +158,28 @@ def apply_step_result(
         run = _route(ports, run, row, result, attempt)
         if after_route is not None:
             after_route(run, row, result)
+        run, turn = _open_conversation(ports, run, row, result)
         if run.status == "failed":  # park dependents in same UoW (story 5-4)
             park_dependents(ports, run)
         ports.uow.commit()
     if run.status == "done":  # two-phase: commit first, enqueue after (story 5-4)
         enqueue_dependents(ports, ports.engine, run)
+    if turn is not None and ports.engine is not None:
+        ports.engine.enqueue_session_turn(run.id, turn)
     enqueue_queued(ports.engine, ports.calculations, run)
+
+
+def _open_conversation(
+    ports: WriterPorts, run: Run, row: StepRun, result: StepResult
+) -> tuple[Run, UUID | None]:
+    """The Run re-read, since `after_route` may have re-parked it, and the first turn of
+    the session its `conversation` park opens."""
+    run = require_run(ports, run.id)
+    parked = result.park is not None and result.park.kind == "conversation"
+    if not parked or run.status != "needs_you" or run.park_kind != "conversation":
+        return run, None
+    turn = open_step_session(ports, run, ports.steps.list_for_run(run.id), row)
+    return require_run(ports, run.id), turn
 
 
 def _apply_run_updates(ports: WriterPorts, run: Run, result: StepResult) -> Run:

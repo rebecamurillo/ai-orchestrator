@@ -7851,7 +7851,8 @@
                 "enum": [
                   "story",
                   "epic",
-                  "run"
+                  "run",
+                  "step"
                 ],
                 "type": "string"
               },
@@ -7866,7 +7867,8 @@
               "enum": [
                 "story",
                 "epic",
-                "run"
+                "run",
+                "step"
               ],
               "type": "string"
             },

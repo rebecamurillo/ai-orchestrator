@@ -330,6 +330,10 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
 - **Binds:** SPEC-senior-unblock CAP-7
 - **Prevents:** two writers in one worktree; a web request waiting on an agent; turns lost on restart; a session changing a status
 - **Rule:** A session exists only between `session_start` and `session_end`, on the parked row, so a `dependency` stop offers none. While `run.senior_session` is true, every signal but `session_end` and `cancel` is refused, chat replies included, and `POST /runs/{id}/session/messages` refuses with 409 while a turn runs. Each message is one `session` attempt run by a durable workflow through a new `Engine.enqueue_session_turn(run_id, attempt_id)`, on its own queue, never inside the walk. A turn resumes the newest `session` attempt started after the Run's last `session_start` record, otherwise it starts a new harness session with `scope`'s context: story, epic or Run. After each turn its changes are committed as `session: turn {n} (orchestrator)` in each tree the Run spans. `session_end` diffs from the session's first `start_sha` and lists every anchor changed, tests excluded: an Operator's test edit in conversation is declared under hard rule 1.
+- **Amendment** *(initiative orchestrator-initiative-steps, 2026-11-22)***:**
+  - **Opening.** On a `conversation` stop, the session opens by itself: the machine writes `session_start` with `scope: step` in the same unit of work as the park. `SessionScope`, `scopes_at` and the API enum gain `step`.
+  - **Skill.** The opening line names the parked row's `with.skill`, plus `with.persona` when the row has one. A row with no skill keeps `OPENING_SKILL = "senior-session"`. The same rule gives a `merge_conflict` stop the merge row's own skill (AD-37).
+  - Skill by name or path (owner B7, 2026-11-22): a with.skill holding / is a repository path and is named by it; a bare name the harness catalog does not list fails the turn.
 
 ### AD-24 — A stop has an identity, and a stale answer is refused *(ratified 2026-11-01, senior unblock)*
 

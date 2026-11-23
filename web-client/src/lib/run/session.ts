@@ -45,6 +45,7 @@ export const SCOPE_LABELS: Record<SessionScope, string> = {
   story: 'story',
   epic: 'epic',
   run: 'Run',
+  step: 'step',
 };
 
 const SESSION_START: SignalKind = 'session_start';

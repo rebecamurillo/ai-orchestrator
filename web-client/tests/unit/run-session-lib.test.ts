@@ -19,6 +19,7 @@ import {
   offersSession,
   opensReview,
   reconcileModel,
+  SCOPE_LABELS,
   revertMessage,
   sessionOpen,
   sessionRequestPath,
@@ -77,6 +78,10 @@ describe('offersSession and sessionOpen', () => {
 });
 
 describe('the start form', () => {
+  it('labels the step scope', () => {
+    expect(SCOPE_LABELS.step).toBe('step');
+  });
+
   it('preselects the narrowest scope the stop has', () => {
     expect(defaultScope(['story', 'epic', 'run'])).toBe('story');
     expect(defaultScope(['epic', 'run'])).toBe('epic');

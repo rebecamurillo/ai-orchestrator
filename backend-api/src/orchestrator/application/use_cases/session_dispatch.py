@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from orchestrator.application.rules import consult, session
+from orchestrator.application.rules.conversation import STEP_KEY
 from orchestrator.application.steps import agent_env, agent_tail, agent_workdir, records
 from orchestrator.application.steps.agent import (
     DEFAULT_STALL_MIN,
@@ -40,12 +41,15 @@ from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.ports.harness import Harness, HarnessHandle
 
 UNKNOWN_HARNESS = "unknown harness {name}"
+NOT_INSTALLED = "skill {name} is not installed on {harness}; name its repository path in with.skill"
 UNDER_LINK = "reply file is under a link"
 SESSION_CLOSED = "session closed"
 #: The folder both turn files live under; `is_link` on it covers `.orchestrator` too.
 REPLY_FOLDER = ".orchestrator/session"
 #: The Run input naming its spec folder, for a parked row that resolved none of its own.
 SPEC_FOLDER_INPUT = "spec_folder"
+SKILL_KEY = "skill"
+PERSONA_KEY = "persona"
 
 
 @dataclass(frozen=True)
@@ -95,6 +99,15 @@ def dispatch(turn: Turn) -> None:
     if harness is None:
         record(ctx, status="error", output_ref=UNKNOWN_HARNESS.format(name=ctx.attempt.harness))
         return
+    ref = _step_ref(turn)
+    if ref is None:
+        skill = str(ctx.row.with_resolved.get(SKILL_KEY) or "").strip()
+        record(
+            ctx,
+            status="error",
+            output_ref=NOT_INSTALLED.format(name=skill, harness=ctx.attempt.harness),
+        )
+        return
     if session.needs_sweep(turn.turns, ctx.attempt):
         try:
             records.note_commits(ctx, agent_workdir.sweep(ctx, session.WIP_MESSAGE), "session")
@@ -117,16 +130,16 @@ def dispatch(turn: Turn) -> None:
     committed(ctx, lambda attempts: attempts.mark_started(started))
     tracer = ctx.ports.tracer
     if tracer is None:
-        _run(turn, harness, started, "")
+        _run(turn, harness, started, "", ref)
         return
     with tracer.attempt_span(require_run(ctx), ctx.row, started) as span:
-        _run(turn, harness, started, span.traceparent)
+        _run(turn, harness, started, span.traceparent, ref)
 
 
-def _run(turn: Turn, harness: Harness, started: Attempt, traceparent: str) -> None:
+def _run(turn: Turn, harness: Harness, started: Attempt, traceparent: str, ref: str) -> None:
     """Start or resume, commit the group and the session, wait, record the exit (AD-14)."""
     ctx = turn.ctx
-    handle = _start(turn, harness, started, traceparent)
+    handle = _start(turn, harness, started, traceparent, ref)
     running = started.model_copy(
         update={"pgid": handle.pgid, "session_id": handle.session_id or None}
     )
@@ -163,7 +176,9 @@ def _commit_group(ctx: StepContext, running: Attempt) -> bool:
     return run is not None and session.session_open(run)
 
 
-def _start(turn: Turn, harness: Harness, started: Attempt, traceparent: str) -> HarnessHandle:
+def _start(
+    turn: Turn, harness: Harness, started: Attempt, traceparent: str, ref: str
+) -> HarnessHandle:
     """The resumed session with the text alone, or a new one opened by the skill's line."""
     ctx = turn.ctx
     tree = agent_workdir.tree(ctx)
@@ -180,8 +195,29 @@ def _start(turn: Turn, harness: Harness, started: Attempt, traceparent: str) -> 
     resumed = session.resumable(turn.turns, started)
     if resumed is not None:
         return harness.start_resume(session_id=resumed, message=started.message, **common)
-    prompt = session.opening_line(_facts(turn), started.message)
+    if turn.scope == session.STEP_SCOPE:
+        resolved = ctx.row.with_resolved
+        facts: tuple[str | None, ...] = (resolved.get(STEP_KEY), resolved.get(PERSONA_KEY))
+        prompt = session.opening_line(facts, started.message, skill=ref)
+    else:
+        prompt = session.opening_line(_facts(turn), started.message)
     return harness.start(prompt=prompt, session_id=str(new_id()), **common)
+
+
+def _step_ref(turn: Turn) -> str | None:
+    """The skill a new step session opens with; resumed turns and other scopes keep the
+    senior's. A catalog that cannot answer, or raises, names the skill as written."""
+    ctx = turn.ctx
+    if turn.scope != session.STEP_SCOPE or session.resumable(turn.turns, ctx.attempt):
+        return session.OPENING_SKILL
+    catalog = ctx.ports.skill_catalog
+    installed = None
+    if catalog is not None:
+        try:
+            installed = catalog.installed_skills(ctx.attempt.harness or "")
+        except Exception:
+            installed = None
+    return session.step_skill_ref(ctx.row.with_resolved.get(SKILL_KEY), installed)
 
 
 def _facts(turn: Turn) -> tuple[str | None, ...]:

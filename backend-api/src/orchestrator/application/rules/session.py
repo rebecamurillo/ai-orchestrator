@@ -13,6 +13,7 @@ from typing import Any, Literal, get_args
 
 from orchestrator.application.rules import protected_paths
 from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
+from orchestrator.application.steps import CONVERSATION_KIND
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
@@ -25,8 +26,9 @@ SESSION_ROLE: AttemptRole = "session"
 SESSION_START: SignalKind = "session_start"
 
 #: The context a session opens with: the parked Story, its epic, or the whole Run.
-SessionScope = Literal["story", "epic", "run"]
+SessionScope = Literal["story", "epic", "run", "step"]
 SCOPES: tuple[SessionScope, ...] = get_args(SessionScope)
+STEP_SCOPE: SessionScope = "step"
 
 SCOPE_KEY = "scope"
 HARNESS_KEY = "harness"
@@ -119,6 +121,8 @@ def scopes_at(park_path: str | None, rows: Sequence[StepRun]) -> tuple[SessionSc
     """The scopes a session opened at `park_path` has a frame for, in `SCOPES` order."""
     if park_path is None:
         return ()
+    if any(row.path == park_path and row.kind == CONVERSATION_KIND for row in rows):
+        return (STEP_SCOPE,)
     found: list[SessionScope] = []
     if story_frame(park_path) is not None:
         found.append("story")
@@ -173,10 +177,21 @@ def needs_sweep(turns: Sequence[Attempt], attempt: Attempt) -> bool:
     return not any(turn.n < attempt.n and turn.start_sha for turn in turns)
 
 
-def opening_line(facts: Sequence[str | None], text: str) -> str:
+def opening_line(facts: Sequence[str | None], text: str, skill: str = OPENING_SKILL) -> str:
     """The skill and the stop's facts, values only and `-` when empty, then the text."""
     values = (" ".join(str(fact or "").split()) or EMPTY_FACT for fact in facts)
-    return f"{OPENING_SKILL} {' '.join(values)}\n{text}"
+    return f"{skill} {' '.join(values)}\n{text}"
+
+
+def step_skill_ref(skill: str | None, installed: frozenset[str] | None) -> str | None:
+    """How a step session names its skill: a path as written, a bare name only when the
+    harness catalog lists it or cannot answer, blank as the senior skill; else `None`."""
+    name = (skill or "").strip()
+    if not name:
+        return OPENING_SKILL
+    if "/" in name or installed is None or name in installed:
+        return name
+    return None
 
 
 def capped(reply: str | None) -> str:
