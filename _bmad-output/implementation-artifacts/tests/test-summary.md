@@ -1,99 +1,97 @@
-# Test Automation Summary — orchestrator-initiative-steps / epic-4-conversation-stop
+# Test Automation Summary — orchestrator-initiative-steps / epic-5-step-close
 
-Generated: 2026-11-23. Dispatched with an empty story id, so this covers the whole epic.
-Spec: `initiatives/orchestrator-initiative-steps/epic-4-conversation-stop/SPEC.md` (relative to the hub).
-Stories: 1–6 (through commit `9bb0f055`).
-Previous summary (epic-3-interactive-lane): in git history at `2fc80729`.
+Generated: 2026-11-24. Dispatched with an empty story id, so this covers the whole epic.
+Spec: `initiatives/orchestrator-initiative-steps/epic-5-step-close/SPEC.md` (relative to the hub).
+Stories: 1–3 (through commit `76a5cddb`).
+Previous summary (epic-4-conversation-stop): in git history at `9005c1ae`.
 
-Framework: pytest + httpx (`backend-api/tests/e2e`, the `make e2e-api` gate). The module follows
-`test_interactive_templates.py` and `test_skip_step.py`. The web-client change in this epic is the
-regenerated `schema.d.ts` and one scope label, so no Playwright test is added.
+Framework: pytest + httpx (`backend-api/tests/e2e`, the `make e2e-api` gate). The new module follows
+`test_conversation_stop.py` and reuses its helpers (`talking_origin`, `parked_on`, `signal`,
+`turns_of`, `wait_for`). The epic changes no UI; its one contract change is `close_discarded` in
+`MachineEvent`, so no Playwright test is added.
 
 The stories' own tests are unit tests over fakes. The new module proves the same behaviour on the running
 stack: real HTTP, Postgres, the DBOS walker and interactive queue, git, and the scripted `fake` harness.
 No existing test file was touched and no shipped template is read. Every template is a fresh name the
-module owns. Every repository is a fresh bare origin whose `.fake-harness/attempt-1.yaml` and
-`default.yaml` script the turns (a conversation prompt names no story). Every Run is cancelled when its
-test ends.
+module owns. Every repository is a fresh bare origin whose `.fake-harness/` scripts the turns. Every Run
+is cancelled when its test ends.
+
+The `fake` harness cannot write an attempt id it does not know. While the turn's process sleeps, the
+test therefore writes the attestation `.orchestrator/session/close` into the Run's worktree itself
+(`docker compose exec`, with a fallback to the host). The write happens after the turn's prompt file
+exists, which is after the dispatcher's turn-start removal. A "nothing was sent" check uses a barrier:
+one more message, whose turn must end. Session turns run one after another, so by then every earlier
+turn's end, including its attestation check, has run.
 
 ## Generated Tests
 
-### API tests — `backend-api/tests/e2e/test_conversation_stop.py` (10 tests)
+### API tests — `backend-api/tests/e2e/test_step_close.py` (11 tests)
 
-- **CAP-3, the kind (story 3):**
-  - [x] A `conversation` row validates in an `interactive` template. It is refused with no `type` (auto)
-    and when `prompts.close` is missing.
-  - [x] `GET /templates/{name}/1/graph` draws one `conversation` node per row.
-  - [x] With `round_steps: ux`, the `product` row ends `skipped · not in this round`. `ux` parks and its
-    first turn is the Run's `first_turn`.
-- **CAP-1 and CAP-4, the stop and its session (stories 1 and 4):**
-  - [x] The row parks `checkpoint`, with the Run at `needs_you` and park kind `conversation`.
-    `senior_session` is true and the session reads `scope: step` and `scopes: [step]`. There is one
-    `session_start` record and one session turn, carrying `first_turn`.
-  - [x] Each of these answers `409` and the row stays `checkpoint`: a plain `skip_step`; a forced
-    `skip_step` without its stop; `skip_story`; `continue`; `step_close` without a stop; `step_close`
-    for a stale stop.
-  - [x] `step_close` with the current stop answers `200`. The row parks again on a higher `park_seq`
-    with no second first turn. The gate record holds one `step_close` (`machine`, `step closed`), and the
-    old stop is then refused `409`.
-- **CAP-5, messages, forced skip and cancel mid-turn (story 5):**
-  - [ ] **Fails: product defect, see below.** Two messages posted during a running turn each answer
-    `202 queued`. A forced skip with the stop answers `200` and the row reads `skipped, forced`. The
-    killed turn ends. The two queued turns close `error · step skipped` with their text kept. `ux` opens
-    with `Open ux.`, and that turn must start after the killed turn's `ended_at`.
-  - [x] Cancel during a running turn, with one queued message: the Run ends `cancelled`, and the queued
-    turn closes `error · Run cancelled` with its text kept.
-- **CAP-6, restart (story 6):**
-  - [x] After a failed first turn, `POST /session/retry` answers `201` with the failed turn's message. A
-    second retry while that turn runs answers `409`. The restarted turn ends `done`, after which retry
-    answers `409`. The restarted attempt carries the failed turn's harness `session_id`.
-  - [x] Retry answers `409` once the Run is cancelled and no session is open.
+- **CAP-1, the attestation (story 1):**
+  - [x] Her own turn's id. The harness prompt holds `{first_turn}`, a blank line, then
+    `Close product as {attempt id}.` The stored message is the first turn alone. After the turn ends,
+    `step_close` is sent: one `step_close` record (`machine`, `step closed`) and no `close_discarded`.
+    The row is `done`, the next row parks on a higher `park_seq`, and the file is gone.
+  - [x] Another attempt's id. One `close_discarded` record reads `close discarded: attempt {id}`. No
+    `step_close`, the row stays `checkpoint`, `park_seq` is unchanged, and the file is gone.
+  - [x] Its own id while a later message is queued. One record reads `close deferred: later message`.
+    Nothing is sent, and the next turn still runs.
+  - [x] Its own id on a turn that exits 1. The turn is `error` and one record reads
+    `close discarded: turn failed`. Nothing is sent.
+  - [x] A step file reading `status: done` with no attestation. No `step_close` and no
+    `close_discarded`; the row stays `checkpoint`.
+  - [x] An attestation an earlier turn left behind (written after that turn ended) is removed when
+    the next turn starts. Nothing is discarded or sent, and the file is gone.
+- **CAP-3, the resumed execute routes the step file (story 3), via her `step_close`:**
+  - [x] `status: draft`, `status: blocked` and a missing file (3 parametrised cases). The row parks
+    `conversation` again with the exact EXPERIENCE § 5.3 sentence. The Run is `needs_you`,
+    `senior_session` is true, the session is active, no new session turn is added, and the next row
+    stays `planned`.
+- **CAP-2 with CAP-3, the initiative folder (story 2):**
+  - [x] Run inputs `initiative_folder: initiatives` and `slug: demo`, `writes: [docs/product.md,
+    epics.yaml]`. A session that wrote `initiatives/demo/epics.yaml` and a done step file ends the row
+    `done` on `step_close`, with no `protected_path` record, and the next row parks.
+  - [x] The same session also writes `backend-api/AGENTS.md`. The row parks `protected_path` with
+    `hits == [backend-api/AGENTS.md]`. The reason names that path and not the folder anchor. The row
+    is `error`. `continue` with `files: [backend-api/AGENTS.md]` lets the close proceed: the row is
+    `done` and the next row parks.
 
-Not covered end to end (unit tests only): `spec-gate` skip refusal on an interactive Run (parking an
-agent `spec-gate` row needs a blocked agent scenario); the announcer and chat poster sending nothing;
-the unlisted-bare-skill turn failure (the `fake` harness has no skill catalog); the CAP-2 walker
-discard on the DBOS fake.
+Not covered end to end (unit tests only):
+- A `git.commit` row after a conversation row committing an in-folder anchor, or parking on an
+  `AGENTS.md`. The session's own commit has already committed the tree, so that row finds nothing
+  staged.
+- The `auto`-Run and merge-shaped (`lane: walk`) anchor results.
+- The member `AGENTS.md` R1 line.
+- `after_turn` on a Run parked on another stop kind.
+- The `step close not wired` and `step close refused` log lines.
 
 ## Results
 
 Run against the disposable `aio-e2e` stack (`docker compose -p aio-e2e`, `.env.e2e`), which was
-destroyed afterwards: **9 passed, 1 failed.** The failure reproduced on 4 of 4 runs.
+destroyed afterwards. Only the new module and the epic-4 module were run, not the full `make e2e`:
 
-### Defect found (CAP-5, AD-23 amended "Signals"; gate item 4)
-
-`test_a_forced_skip_mid_turn_closes_the_queued_turns_and_the_walk_waits_for_the_killed_one` fails at
-`ux[0].started_at >= killed.ended_at`. The next row's turn is stamped 3–4 ms before the killed turn's
-`ended_at`.
-
-**Cause.** `application/use_cases/walk.py::open_turns` counts only attempts with `status == "running"`
-and `ended_at is None`. `session_dispatch._run` commits the killed turn's final `status` (`error`) with
-`ended_at` still `None`. `session_turn` sets `ended_at` later, in a separate commit (line 232). In that
-gap `open_turns` returns 0, and the walk executes the next row before the attempt has ended. The SPEC
-says the walk waits "until that attempt has `ended_at`". The likely fix is to drop the `status ==
-"running"` condition, so that any session attempt with `ended_at is None` counts as open. That is a code
-change for a story, so it was not made here.
+- `test_step_close.py`: **11 passed**, on 3 of 3 runs (about 2 min each).
+- `test_conversation_stop.py` (epic 4, unchanged): **9 passed, 1 failed**. The failure is the known
+  defect from the epic-4 summary,
+  `test_a_forced_skip_mid_turn_closes_the_queued_turns_and_the_walk_waits_for_the_killed_one`
+  (`ux[0].started_at` 3 ms before the killed turn's `ended_at`). The `open_turns` cause recorded at
+  `9005c1ae` is still unfixed. Epic 5 did not introduce it.
 
 ### Environment notes (not test changes)
 
-- `.dockerignore` excludes only a root-level `.venv`. A host `backend-api/.venv` is copied into the
-  image and overwrites the image's own venv, and the container then exits with code 127 at
-  `alembic`. The stack was built with the host venv moved aside temporarily.
-- On a host where `WORK_DIR` (`/work`) exists and is writable, the shared `Fixtures` helper writes
-  fixture repositories on the host, where the containerised backend cannot see them. The new module
-  therefore tries `docker compose exec` first and falls back to the host.
-- A signal that kills a running turn answers after the process runner's 10 s SIGTERM grace, so the
-  module gives signals a 60 s client timeout.
+- The host `backend-api/.venv` was moved aside again during the image build and restored right
+  after. `.dockerignore` still excludes only a root-level `.venv`.
 
 ## Coverage
 
-- SPEC capabilities with an e2e test: CAP-1, CAP-3, CAP-4, CAP-5, CAP-6 (5 of 6). CAP-2 is walker-internal
-  and covered by unit tests on the DBOS fake.
-- Endpoints touched by the epic: 5 of 5 (`POST /templates/{name}/validate`, `POST /runs/{id}/signals`
-  with `step_close` and forced `skip_step`, `GET /runs/{id}/session`, `POST /runs/{id}/session/messages`,
-  `POST /runs/{id}/session/retry`).
+- SPEC capabilities with an e2e test: CAP-1, CAP-2, CAP-3 (3 of 3).
+- Endpoints the epic's behaviour runs through: `POST /runs/{id}/signals` (`step_close`, `continue`
+  with `files`), `POST /runs/{id}/session/messages`, `GET /runs/{id}/session`,
+  `GET /runs/{id}/detail` (gate records `step_close` and `close_discarded`, alert reason and hits).
 - UI features: none in scope.
 
 ## Next Steps
 
-- Fix `open_turns` (above), then rerun `make e2e`. The failing test is the regression check.
-- Exclude `**/.venv` in `.dockerignore` so `make e2e` works on a machine with a host venv.
+- Run the full `make e2e` in CI.
+- Fix `open_turns` (epic-4 summary), then rerun the epic-4 module.
+- Exclude `**/.venv` in `.dockerignore`.
