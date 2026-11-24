@@ -82,20 +82,28 @@ def anchor_edits(
     what it holds uncommitted, and spelled the way `steps/agent_workdir.changes` spells an
     attempt's changes. A tree with no start SHA contributes nothing.
     """
+    changes = session_changes(ports.git, run, row, turns(ports, run, row))
+    return session.anchor_edits(changes, run_anchors(run, rows))
+
+
+def session_changes(
+    git: Git, run: Run, row: StepRun | None, attempts: Sequence[Attempt]
+) -> tuple[Change, ...]:
+    """What the session's `attempts` changed in the Run's trees, uncommitted included."""
     if run.worktree_path is None:
         return ()
-    start_sha, root_start_sha = session.first_shas(turns(ports, run, row))
+    start_sha, root_start_sha = session.first_shas(attempts)
     root = Path(run.worktree_path)
     workdir = row_workdir(row)
-    changes = list(_tree_changes(ports.git, root / workdir if workdir else root, start_sha))
+    changes = list(tree_changes(git, root / workdir if workdir else root, start_sha))
     if workdir:
         changes = [replace(change, path=f"{workdir}/{change.path}") for change in changes]
         changes.extend(
             change
-            for change in _tree_changes(ports.git, root, root_start_sha)
+            for change in tree_changes(git, root, root_start_sha)
             if change.path != workdir and not change.path.startswith(f"{workdir}/")
         )
-    return session.anchor_edits(changes, _anchors(run, rows))
+    return tuple(changes)
 
 
 def _refuse_start(ports: SessionPorts, run: Run, rows: Sequence[StepRun], signal: Signal) -> None:
@@ -149,7 +157,7 @@ def _refuse_end(
     signal.payload[session.TURNS_KEY] = len(read)
 
 
-def _tree_changes(git: Git, tree: Path, start_sha: str | None) -> tuple[Change, ...]:
+def tree_changes(git: Git, tree: Path, start_sha: str | None) -> tuple[Change, ...]:
     if start_sha is None:
         return ()
     head = git.head_sha(tree)
@@ -157,7 +165,7 @@ def _tree_changes(git: Git, tree: Path, start_sha: str | None) -> tuple[Change, 
     return (*ranged, *protected_paths.uncommitted(git.status(tree)))
 
 
-def _anchors(run: Run, rows: Sequence[StepRun]) -> frozenset[str]:
+def run_anchors(run: Run, rows: Sequence[StepRun]) -> frozenset[str]:
     folders = {str(run.inputs.get(SPEC_FOLDER_INPUT) or "")}
     folders.update(str(row.with_resolved.get(SPEC_FOLDER_KEY) or "") for row in rows)
     return protected_paths.build(

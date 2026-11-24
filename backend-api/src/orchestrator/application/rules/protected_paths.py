@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -165,6 +166,55 @@ def check(
     return tuple(hits.values())
 
 
+def folder_patterns(writes: Sequence[str], initiative_folder: str, slug: str) -> tuple[str, ...]:
+    """A conversation row's `writes` as patterns under `{initiative_folder}/{slug}/`.
+
+    Blank folder or slug is a Run that cannot say where its product is: it exempts nothing.
+    """
+    if not initiative_folder.strip() or not slug.strip():
+        return ()
+    return tuple(f"{initiative_folder}/{slug}/{entry}" for entry in writes)
+
+
+def matches(path: str, pattern: str) -> bool:
+    """Segment by segment: equal `/` counts, each segment `fnmatchcase`.
+
+    A path with a `.` or `..` segment, or an absolute one, never matches: it could name a
+    place outside the folder the pattern spells.
+    """
+    segments = path.split("/")
+    if path.startswith("/") or "." in segments or ".." in segments:
+        return False
+    parts = pattern.split("/")
+    return len(segments) == len(parts) and all(map(fnmatchcase, segments, parts, strict=True))
+
+
+def check_interactive(
+    changed: Sequence[Change],
+    protected: frozenset[str],
+    accepted: Sequence[str],
+    allowed: Sequence[str],
+) -> tuple[Change, ...]:
+    """`check` for an interactive Run (AD-17 amended, R1): every document is an anchor wherever
+    it sits, minus what the Operator accepted and the paths `allowed` lets through.
+
+    An `AGENTS.md` is never let through by a pattern.
+    """
+    excluded = frozenset(accepted)
+    hits: dict[str, Change] = {}
+    for change in changed:
+        path = change.path
+        if path in excluded or path in hits:
+            continue
+        name = PurePosixPath(path).name
+        if path not in protected and name not in DOCUMENTS:
+            continue
+        if name != AGENTS_FILENAME and any(matches(path, pattern) for pattern in allowed):
+            continue
+        hits[path] = change
+    return tuple(hits.values())
+
+
 @dataclass(frozen=True)
 class FrameAnchors:
     """One Story frame's anchors and agent ranges, as `StepPorts.protected_paths` (AD-17).
@@ -188,6 +238,10 @@ class FrameAnchors:
     #: the one `run.accepted_paths` excludes by, and the one the frame's anchor set already
     #: holds a workdir frame's frozen tests under (`steps/agent_workdir.py`).
     workdir: str = ""
+    #: An `interactive`-lane Run: every document is an anchor, minus `allowed` (R1).
+    interactive: bool = False
+    #: The patterns the nearest `conversation` row's `writes` let through, in the folder.
+    allowed: tuple[str, ...] = ()
 
     def check(self, *, changed: Sequence[str], accepted: Sequence[str]) -> tuple[str, ...]:
         """AD-17's second call site: the frame's agent ranges, plus what the row staged."""
@@ -197,7 +251,12 @@ class FrameAnchors:
             agent.extend(self.git.diff_changes(tree, start, end))
         if self.workdir:
             agent = [replace(hit, path=f"{self.workdir}/{hit.path}") for hit in agent]
-        return tuple(hit.path for hit in check([*agent, *_staged(changed)], self.anchors, accepted))
+        seen = [*agent, *_staged(changed)]
+        if self.interactive:
+            return tuple(
+                h.path for h in check_interactive(seen, self.anchors, accepted, self.allowed)
+            )
+        return tuple(hit.path for hit in check(seen, self.anchors, accepted))
 
 
 def _staged(changed: Sequence[str]) -> list[Change]:
