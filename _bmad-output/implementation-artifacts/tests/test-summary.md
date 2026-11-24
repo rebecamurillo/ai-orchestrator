@@ -1,97 +1,134 @@
-# Test Automation Summary — orchestrator-initiative-steps / epic-5-step-close
+# Test Automation Summary — orchestrator-initiative-steps / epic-6-package
 
 Generated: 2026-11-24. Dispatched with an empty story id, so this covers the whole epic.
-Spec: `initiatives/orchestrator-initiative-steps/epic-5-step-close/SPEC.md` (relative to the hub).
-Stories: 1–3 (through commit `76a5cddb`).
-Previous summary (epic-4-conversation-stop): in git history at `9005c1ae`.
+Spec: `initiatives/orchestrator-initiative-steps/epic-6-package/SPEC.md` (relative to the hub).
+Stories: 1–3 (through commit `27f2f9d9`).
+Previous summary (epic-5-step-close): in git history at `e7f0c149`.
 
-Framework: pytest + httpx (`backend-api/tests/e2e`, the `make e2e-api` gate). The new module follows
-`test_conversation_stop.py` and reuses its helpers (`talking_origin`, `parked_on`, `signal`,
-`turns_of`, `wait_for`). The epic changes no UI; its one contract change is `close_discarded` in
-`MachineEvent`, so no Playwright test is added.
+Framework: pytest + httpx (`backend-api/tests/e2e`, the `make e2e-api` gate). The epic changes no UI;
+its contract changes are backend operations plus the regenerated `schema.d.ts`. No Playwright test
+is added.
 
-The stories' own tests are unit tests over fakes. The new module proves the same behaviour on the running
-stack: real HTTP, Postgres, the DBOS walker and interactive queue, git, and the scripted `fake` harness.
-No existing test file was touched and no shipped template is read. Every template is a fresh name the
-module owns. Every repository is a fresh bare origin whose `.fake-harness/` scripts the turns. Every Run
-is cancelled when its test ends.
-
-The `fake` harness cannot write an attempt id it does not know. While the turn's process sleeps, the
-test therefore writes the attestation `.orchestrator/session/close` into the Run's worktree itself
-(`docker compose exec`, with a fallback to the host). The write happens after the turn's prompt file
-exists, which is after the dispatcher's turn-start removal. A "nothing was sent" check uses a barrier:
-one more message, whose turn must end. Session turns run one after another, so by then every earlier
-turn's end, including its attestation check, has run.
+The stories' own tests are unit tests over the shared fakes. The new module proves the same behaviour
+on the running stack: real HTTP, Postgres, Alembic, the real `Git` adapter reading a bare origin,
+`POST /runs` and pre-flight, and the MCP endpoint. No existing test file was touched and no shipped
+template is read or named. Every package name (`e2e-pkg-<hex>`) and template name is fresh, and every
+origin is a new bare repository the module writes. The origin is written through the container first
+(as `talking_origin` does), so the backend can always read it.
 
 ## Generated Tests
 
-### API tests — `backend-api/tests/e2e/test_step_close.py` (11 tests)
+### API tests — `backend-api/tests/e2e/test_project_package.py` (44 tests)
 
-- **CAP-1, the attestation (story 1):**
-  - [x] Her own turn's id. The harness prompt holds `{first_turn}`, a blank line, then
-    `Close product as {attempt id}.` The stored message is the first turn alone. After the turn ends,
-    `step_close` is sent: one `step_close` record (`machine`, `step closed`) and no `close_discarded`.
-    The row is `done`, the next row parks on a higher `park_seq`, and the file is gone.
-  - [x] Another attempt's id. One `close_discarded` record reads `close discarded: attempt {id}`. No
-    `step_close`, the row stays `checkpoint`, `park_seq` is unchanged, and the file is gone.
-  - [x] Its own id while a later message is queued. One record reads `close deferred: later message`.
-    Nothing is sent, and the next turn still runs.
-  - [x] Its own id on a turn that exits 1. The turn is `error` and one record reads
-    `close discarded: turn failed`. Nothing is sent.
-  - [x] A step file reading `status: done` with no attestation. No `step_close` and no
-    `close_discarded`; the row stays `checkpoint`.
-  - [x] An attestation an earlier turn left behind (written after that turn ended) is removed when
-    the next turn starts. Nothing is discarded or sent, and the file is gone.
-- **CAP-3, the resumed execute routes the step file (story 3), via her `step_close`:**
-  - [x] `status: draft`, `status: blocked` and a missing file (3 parametrised cases). The row parks
-    `conversation` again with the exact EXPERIENCE § 5.3 sentence. The Run is `needs_you`,
-    `senior_session` is true, the session is active, no new session turn is added, and the next row
-    stays `planned`.
-- **CAP-2 with CAP-3, the initiative folder (story 2):**
-  - [x] Run inputs `initiative_folder: initiatives` and `slug: demo`, `writes: [docs/product.md,
-    epics.yaml]`. A session that wrote `initiatives/demo/epics.yaml` and a done step file ends the row
-    `done` on `step_close`, with no `protected_path` record, and the next row parks.
-  - [x] The same session also writes `backend-api/AGENTS.md`. The row parks `protected_path` with
-    `hits == [backend-api/AGENTS.md]`. The reason names that path and not the folder anchor. The row
-    is `error`. `continue` with `files: [backend-api/AGENTS.md]` lets the close proceed: the row is
-    `done` and the next row parks.
+- **CAP-1, run defaults (story 1):**
+  - [x] A new project reads all five defaults `null` on create and on read.
+  - [x] `PUT …/run-defaults` stores and returns the five values. A second read returns them, the
+    full-replace `PUT /projects/{id}` leaves them unchanged, and an all-`null` body clears them.
+  - [x] A budget of `0` or `-1` is refused 422 naming `default_budget_usd`, and nothing is stored.
+  - [x] An unknown key, or an omitted key, is refused 422. An unknown project is 404.
+- **CAP-2, the initiative folder (story 2):**
+  - [x] A new repository reads `initiatives`. `PUT …/initiative-folder` stores and returns
+    `specs/initiatives`.
+  - [x] `""`, `/abs`, `a/../b`, `a/` and `a//b` are each refused 422, and the folder stays as it was.
+    An unknown repository is 404.
+  - [x] With a root template that declares `initiative_folder`:
+    - an omitted input is stored on the created Run (`/runs/{id}/detail` → `run.inputs`) as
+      `initiatives`;
+    - `initiatives/snake` is kept as given;
+    - `docs/initiative`, `initiatives/../x`, `initiatives//a` and `3` are each refused 422 with the
+      exact reason, and the project lists no Run. Pre-flight reports the same `plan_error.reason`
+      with `start_allowed: false`.
+  - [x] After the folder changes to `specs/work`, an omitted input binds `specs/work` and
+    `initiatives` is refused.
+  - [x] A template that declares no `initiative_folder` input gets none bound.
+- **CAP-3, the package install (story 3):**
+  - [x] A valid fixture package installs. The fixture is `spec` (interactive: two `conversation` rows
+    and a `spec-gate` row) plus `merge` (interactive, no conversation row).
+    - The answer carries `sha`, `name`, the hub `repository` block, `gate` and `status_map`.
+    - `spec` reads `shown_as: workflow` with steps
+      `[conversation, conversation, automatic gate]`, and each step's skill, persona, file and
+      `writes` are exact. `merge` reads `shown_as: step`.
+    - `GET …/package` returns the same payload. `GET /templates/{name}.spec/1` reads the stored text
+      through one path segment.
+  - [x] Installing again at the same sha keeps the record id and stores no new version.
+  - [x] 13 malformed packages are each refused 422 naming the file and the exact reason. Nothing is
+    stored: no record, and no `{name}.spec` or `{name}.merge` version. The cases:
+    - in `package.yaml`: an unknown key, `Bad_Name`, an empty sequence, a duplicate workflow, a `..`
+      template path, an unknown shipped name, a word in both `pass` and `fail`, no spec-gate row,
+      and the `finished` status word;
+    - in a template file: a missing file, a template that fails `judge_text`, a `name:` that differs
+      from the stem, and a spec-gate row missing a gate word.
+  - [x] Two templates with the stem `spec` (`a/`, `b/`) are refused with the exact reason.
+  - [x] A missing `package.yaml` reads `file not found`, and a `../pkg` path is refused 422.
+  - [x] A ref the remote lacks is 409 naming it. A repository of another project is 404.
+  - [x] The same origin and path installs on two projects. A different package of the same name is
+    409 naming a holding project, and nothing is stored.
+  - [x] `DELETE` answers 204. Afterwards `GET` and a second `DELETE` are 404, and every template
+    version stays.
+  - [x] `GET`, `PUT` and `DELETE …/package`, `PUT …/run-defaults` and `PUT …/initiative-folder` all
+    need the bearer (401).
+- **CAP-4, the MCP tools:**
+  - [x] `tools/list` holds the five tools. `set_run_defaults`, `set_initiative_folder`,
+    `install_package`, `read_package` and `remove_package` each reach their operation over
+    `POST /mcp`, and the effect is read back over REST.
 
 Not covered end to end (unit tests only):
-- A `git.commit` row after a conversation row committing an in-folder anchor, or parking on an
-  `AGENTS.md`. The session's own commit has already committed the tree, so that row finds nothing
-  staged.
-- The `auto`-Run and merge-shaped (`lane: walk`) anchor results.
-- The member `AGENTS.md` R1 line.
-- `after_turn` on a Run parked on another stop kind.
-- The `step close not wired` and `step close refused` log lines.
+- A shipped-name sequence entry on the happy path. The stack's only shipped templates are the
+  repository's `templates/*.yaml`, which no test may name (hard rule 6). Only the refusal of an
+  unknown shipped name is covered here.
+- A new sha storing the next version (needs a second commit pushed to the origin mid-test).
+- The tool-set order and the 28-operation allow-list (`test_mcp_allow_list.py`, `test_mcp_endpoint.py`).
+- The migrations' downgrades.
 
 ## Results
 
-Run against the disposable `aio-e2e` stack (`docker compose -p aio-e2e`, `.env.e2e`), which was
-destroyed afterwards. Only the new module and the epic-4 module were run, not the full `make e2e`:
+### Defect found: story 2's migration breaks start-up on Postgres
 
-- `test_step_close.py`: **11 passed**, on 3 of 3 runs (about 2 min each).
-- `test_conversation_stop.py` (epic 4, unchanged): **9 passed, 1 failed**. The failure is the known
-  defect from the epic-4 summary,
-  `test_a_forced_skip_mid_turn_closes_the_queued_turns_and_the_walk_waits_for_the_killed_one`
-  (`ux[0].started_at` 3 ms before the killed turn's `ended_at`). The `open_turns` cause recorded at
-  `9005c1ae` is still unfixed. Epic 5 did not introduce it.
+`backend-api/alembic/versions/0046_repository_initiative_folder.py` declares
+`revision = "0046_repository_initiative_folder"`, which is 33 characters. `alembic_version.version_num`
+is `varchar(32)`, so the backend exits 1 at the migrate step of start-up:
+
+```
+sqlalchemy.exc.DataError: (psycopg.errors.StringDataRightTruncation) value too long for type character varying(32)
+[SQL: UPDATE public.alembic_version SET version_num='0046_repository_initiative_folder' WHERE public.alembic_version.version_num = '0045_project_run_defaults']
+```
+
+This blocks `make e2e`, `make up` and any upgrade of a running instance to this branch. The unit
+migration tests do not catch it. The fix is a shorter revision id in `0046_…` and in `0047`'s
+`down_revision`. It is not applied here: this run generates tests only.
+
+### Run of the new module
+
+The new module could only run with that id shortened. It ran from a scratch git worktree of
+`27f2f9d9` with `revision = "0046_repo_initiative_folder"` in `0046` and `0047`, against the
+disposable `aio-e2e` stack (`docker compose -p aio-e2e`, `.env.e2e`). Both the scratch worktree and
+the stack were destroyed afterwards. The member tree is unchanged apart from the new test file.
+
+- `test_project_package.py`: **44 passed**, twice in a row against the same stack (re-runnable).
+- `test_migrations.py`, `test_projects.py`, `test_repositories.py` (unchanged, on the same stack):
+  passed.
+- `test_mcp_setup_path.py` (unchanged): **1 failed**. This is environmental and predates this epic.
+  `Fixtures.make` tries the host route first; on this machine the host can write `/work`, but the
+  backend container cannot see what it writes there, so the clone check reads `fatal: … does not
+  appear to be a git repository`. `test_project_package.py` avoids this by writing through the
+  container first.
 
 ### Environment notes (not test changes)
 
-- The host `backend-api/.venv` was moved aside again during the image build and restored right
-  after. `.dockerignore` still excludes only a root-level `.venv`.
+- The host `backend-api/.venv` was moved aside during the image build and restored right after.
+  `.dockerignore` still excludes only a root-level `.venv`.
 
 ## Coverage
 
-- SPEC capabilities with an e2e test: CAP-1, CAP-2, CAP-3 (3 of 3).
-- Endpoints the epic's behaviour runs through: `POST /runs/{id}/signals` (`step_close`, `continue`
-  with `files`), `POST /runs/{id}/session/messages`, `GET /runs/{id}/session`,
-  `GET /runs/{id}/detail` (gate records `step_close` and `close_discarded`, alert reason and hits).
+- SPEC capabilities with an e2e test: CAP-1, CAP-2, CAP-3, CAP-4 (4 of 4).
+- Endpoints, all 5 new operations: `PUT /projects/{id}/run-defaults`,
+  `PUT /repositories/{id}/initiative-folder`, and `PUT`, `GET` and `DELETE /projects/{id}/package`.
+  Also exercised through the changed behaviour: `POST /runs`, `POST /runs/preflight`,
+  `PUT /projects/{id}`, `GET /templates/{name}/{version}` and `POST /mcp`.
 - UI features: none in scope.
 
 ## Next Steps
 
-- Run the full `make e2e` in CI.
-- Fix `open_turns` (epic-4 summary), then rerun the epic-4 module.
+- Shorten the `0046` revision id (and `0047`'s `down_revision`), then run the full `make e2e`.
+- Make `Fixtures.make` try the container first, as `talking_origin` and `package_origin` do.
 - Exclude `**/.venv` in `.dockerignore`.
