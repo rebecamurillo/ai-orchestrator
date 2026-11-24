@@ -54,6 +54,8 @@ function repository(overrides: Partial<RepositoryOut> = {}): RepositoryOut {
     verify_skipped: false,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
+    // RepositoryOut gains initiative_folder (story 2 of epic 6, 2026-11-22).
+    initiative_folder: 'initiatives',
     ...overrides,
   };
 }
