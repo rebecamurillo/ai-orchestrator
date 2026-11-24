@@ -535,6 +535,10 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
 
     Without an attestation nothing closes. A step file that turned `done` is only shown.
 
+  - **Resumed execute.** On `step_close`, the AD-17 close check runs first. Then the executor routes the step file with `rules/routing.route` and the row's contract:
+    - `done` → the row is `done`, and the next rows (`git.commit`, `git.push` on `spec/{slug}`) run (FR-12);
+    - anything else → the row parks `conversation` again, with the routing sentence as the reason, and the session reopens (FR-12, the step shows why; UX Q4).
+
 First turn as a Run input (owner B8, 2026-11-22): the initiative use cases pass it as the Run input first_turn; the executor reads no initiative.
 
 ### AD-40 — Every step that ran has a log, and one key joins its views *(ratified 2026-11-22, initiative orchestrator-initiative-steps)*

@@ -26,6 +26,7 @@ from tests.unit.application.writer_fixtures import World, a_world, an_attempt
 from tests.unit.fakes.clock import EPOCH, FakeClock
 from tests.unit.fakes.db import FakeUnitOfWork
 from tests.unit.fakes.git import FakeGit
+from tests.unit.fakes.workspace import FakeWorkspace
 
 TREE = "/work/wt"
 WRITES = ["epics.yaml", "*/SPEC.md", "*/stories.yaml"]
@@ -68,7 +69,9 @@ def a_closing_world(
     return World(run=stored, ports=world.ports, engine=world.engine, clock=world.clock)
 
 
-def context_of(world: World, event: str, git: FakeGit) -> StepContext:
+def context_of(
+    world: World, event: str, git: FakeGit, workspace: FakeWorkspace | None = None
+) -> StepContext:
     row = world.row("tech")
     environment = RunEnvironment(
         run_id=world.run.id,
@@ -108,6 +111,7 @@ def context_of(world: World, event: str, git: FakeGit) -> StepContext:
             work_dir="/work",
             run_env=environment,
             attempt_writes=writes,
+            workspace=(lambda _root: workspace) if workspace is not None else None,
         ),
     )
 
@@ -132,9 +136,13 @@ def test_ac5_a_step_close_with_an_out_of_writes_anchor_parks_protected_path() ->
 
 
 def test_ac6_the_continue_with_the_files_accepted_closes_the_row() -> None:
-    world = a_closing_world(accepted=("backend-api/AGENTS.md",))
+    # Epic 5 story 3, 2026-11-24: the resumed execute routes the step file, so the row declares one.
+    world = a_closing_world(
+        accepted=("backend-api/AGENTS.md",), expect={"files": ["PRD.md"], "success": ["final"]}
+    )
+    tree = FakeWorkspace(root=TREE, files={"PRD.md": "---\nstatus: final\n---\n"})
 
-    result = ConversationExecutor().execute(context_of(world, "continue", a_git()))
+    result = ConversationExecutor().execute(context_of(world, "continue", a_git(), tree))
 
     assert result.status == "done"
     assert result.park is None
