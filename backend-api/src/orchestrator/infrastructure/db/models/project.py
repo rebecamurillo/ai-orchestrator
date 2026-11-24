@@ -49,7 +49,7 @@ class ProjectRow(Base):
     context_paths: Mapped[list[str]] = mapped_column(JSONB())
     env_vars_enc: Mapped[list[dict[str, Any]]] = mapped_column(JSONB())
     log_prompt_content: Mapped[bool] = mapped_column(Boolean())
-    default_budget_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    default_budget_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6), nullable=True)
     default_harness: Mapped[str | None] = mapped_column(Text(), nullable=True)
     default_model: Mapped[str | None] = mapped_column(Text(), nullable=True)
     default_autonomy: Mapped[str | None] = mapped_column(Text(), nullable=True)

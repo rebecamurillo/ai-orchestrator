@@ -26,6 +26,7 @@ from orchestrator.domain.entities.project import EncryptedEnvVar, Project
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.repositories import ProjectRepository
 from orchestrator.infrastructure.db import Base, ProjectRow, SQLAlchemyProjectRepository
+from orchestrator.infrastructure.db.models.run import MONEY
 from orchestrator.infrastructure.db.repositories.projects import env_vars_json, to_entity
 
 AT = datetime(2026, 9, 4, 12, 0, tzinfo=UTC)
@@ -169,9 +170,15 @@ def test_the_timestamps_carry_their_zone() -> None:
         assert TABLE.columns[column].type.timezone is True  # type: ignore[attr-defined]
 
 
-def test_the_budget_default_is_numeric_12_2() -> None:
+def test_the_budget_default_is_money_numeric_12_6_like_the_run_budget() -> None:
+    """Operator ruling, 2026-11-24 (story 1 of epic 6): the default budget takes the shared
+    MONEY type, so a sub-cent budget `BudgetUsd` accepts is stored as sent, never rounded to 0."""
     column_type = TABLE.columns["default_budget_usd"].type
-    assert (column_type.precision, column_type.scale) == (12, 2)  # type: ignore[attr-defined]
+    assert (column_type.precision, column_type.scale) == (12, 6)  # type: ignore[attr-defined]
+    assert (column_type.precision, column_type.scale) == (MONEY.precision, MONEY.scale)
+    stored = Decimal("0.004").quantize(Decimal(1).scaleb(-column_type.scale))  # type: ignore[attr-defined]
+    assert stored == Decimal("0.004")
+    assert stored != 0
 
 
 def test_only_the_five_run_defaults_are_nullable() -> None:

@@ -19,7 +19,7 @@ depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("project", sa.Column("default_budget_usd", sa.Numeric(12, 2), nullable=True))
+    op.add_column("project", sa.Column("default_budget_usd", sa.Numeric(12, 6), nullable=True))
     op.add_column("project", sa.Column("default_harness", sa.Text(), nullable=True))
     op.add_column("project", sa.Column("default_model", sa.Text(), nullable=True))
     op.add_column("project", sa.Column("default_autonomy", sa.Text(), nullable=True))

@@ -41,7 +41,7 @@ def test_the_upgrade_adds_five_nullable_columns() -> None:
     source = ast.unparse(function("upgrade"))
 
     assert source.count("op.add_column(") == len(COLUMNS)
-    assert "'project', sa.Column('default_budget_usd', sa.Numeric(12, 2), nullable=True)" in source
+    assert "'project', sa.Column('default_budget_usd', sa.Numeric(12, 6), nullable=True)" in source
     for name in ("default_harness", "default_model", "default_autonomy", "default_senior_model"):
         assert f"'project', sa.Column('{name}', sa.Text(), nullable=True)" in source
 

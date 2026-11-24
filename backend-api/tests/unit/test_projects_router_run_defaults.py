@@ -108,6 +108,17 @@ async def test_a_zero_or_negative_budget_is_a_422_naming_the_field_and_stores_no
     assert {key: (await get(api, identifier))[key] for key in KEYS} == NULLS
 
 
+async def test_a_sub_cent_budget_reads_back_as_sent_not_as_zero(api: Harness) -> None:
+    """Operator ruling, 2026-11-24: `0.004` is a valid budget and is kept, not rounded to 0."""
+    identifier = (await create(api)).json()["id"]
+
+    response = await put(api, identifier, {**FULL, "default_budget_usd": "0.004"})
+
+    assert response.status_code == HTTP_OK
+    assert Decimal(response.json()["default_budget_usd"]) == Decimal("0.004")
+    assert Decimal((await get(api, identifier))["default_budget_usd"]) == Decimal("0.004")
+
+
 async def test_a_malformed_body_is_a_422(api: Harness) -> None:
     identifier = (await create(api)).json()["id"]
     missing = {k: v for k, v in FULL.items() if k != "default_model"}
