@@ -30,7 +30,8 @@ FORBIDDEN_FRAGMENTS = ("/readiness", "/probe")
 #: Story 5 of epic 2, 2026-11-12 (AD-34): read_guide joins (index and page).
 #: Story 1 of epic 6, 2026-11-22 (Project run defaults): set_run_defaults joins.
 #: Story 2 of epic 6, 2026-11-22 (initiative folder): set_initiative_folder joins.
-TWENTY_FIVE = 25
+#: Story 3 of epic 6, 2026-11-22 (package): install_package, read_package, remove_package join.
+TWENTY_EIGHT = 28
 
 PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "version": {},
@@ -47,6 +48,9 @@ PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "init_repository": {"repository_id": ID},
     "set_run_defaults": {"project_id": ID, "body": {}},
     "set_initiative_folder": {"repository_id": ID, "body": {}},
+    "install_package": {"project_id": ID, "body": {}},
+    "read_package": {"project_id": ID},
+    "remove_package": {"project_id": ID},
     "validate_template": {"name": "fixture", "yaml": ""},
     "save_template": {"name": "fixture", "yaml": ""},
     "reload_templates": {},
@@ -66,6 +70,9 @@ NEW_PATH_TOOLS = {
     "init_repository": ("repository_id", {}),
     "set_run_defaults": ("project_id", {"body": {}}),
     "set_initiative_folder": ("repository_id", {"body": {}}),
+    "install_package": ("project_id", {"body": {}}),
+    "read_package": ("project_id", {}),
+    "remove_package": ("project_id", {}),
 }
 
 
@@ -89,6 +96,10 @@ class RecordingApi:
 
     async def put(self, path: str, body: Any = None) -> Any:
         self.calls.append(("PUT", API_PREFIX + path))
+        return {}
+
+    async def delete(self, path: str) -> Any:
+        self.calls.append(("DELETE", API_PREFIX + path))
         return {}
 
 
@@ -155,7 +166,7 @@ def test_every_tool_has_placeholders() -> None:
 
 async def test_every_tool_makes_one_call_to_an_allowed_operation(paths: dict[str, Any]) -> None:
     assert await violations(_tools, ALLOWED_OPERATION_IDS, paths) == []
-    assert len(ALLOWED_OPERATION_IDS) == TWENTY_FIVE
+    assert len(ALLOWED_OPERATION_IDS) == TWENTY_EIGHT
 
 
 async def test_a_tool_calling_an_unlisted_operation_is_reported(paths: dict[str, Any]) -> None:

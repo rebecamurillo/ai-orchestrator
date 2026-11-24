@@ -74,6 +74,12 @@ class _Guarded:
         except Exception as error:
             raise PortRaised(error) from error
 
+    def get_by_package_sha(self, name: str, sha: str) -> TemplateVersion | None:
+        try:
+            return self._inner.get_by_package_sha(name, sha)
+        except Exception as error:
+            raise PortRaised(error) from error
+
     # Last: see the note in `domain/ports/templates.py` on a method named `list`.
     def list(self) -> list[TemplateSummary]:
         try:

@@ -1,4 +1,4 @@
-"""`set_run_defaults` over `/mcp` (story 1 of epic 6): one `PUT`, a UUID-checked path."""
+"""The package tools over `/mcp` (stories 1 to 3 of epic 6): one call each, a UUID-checked path."""
 
 from __future__ import annotations
 
@@ -74,7 +74,14 @@ def test_the_initiative_folder_docstring_names_the_folder_rule() -> None:
 def test_the_tools_list_in_order() -> None:
     names = [tool.__name__ for tool in package_tools(InProcessApi(object(), lambda: "t"))]
 
-    assert names == ["set_run_defaults", "set_initiative_folder"]
+    # Story 3 of epic 6, 2026-11-22: the three package tools are appended.
+    assert names == [
+        "set_run_defaults",
+        "set_initiative_folder",
+        "install_package",
+        "read_package",
+        "remove_package",
+    ]
 
 
 def test_set_initiative_folder_follows_set_run_defaults_in_the_tool_order() -> None:
@@ -87,3 +94,53 @@ def test_the_tool_follows_init_repository_in_the_tool_order() -> None:
     names = [tool.__name__ for tool in build_tools(InProcessApi(object(), lambda: "t"))]
 
     assert names[names.index("init_repository") + 1] == "set_run_defaults"
+
+
+async def test_install_package_makes_one_put() -> None:
+    recorder = Recorder()
+
+    await tools(recorder)["install_package"](project_id=ID, body={"path": "p"})  # type: ignore[operator]
+
+    assert recorder.calls == [("PUT", f"/api/v1/projects/{ID}/package", "")]
+
+
+async def test_read_package_makes_one_get_and_remove_package_one_delete() -> None:
+    recorder = Recorder()
+
+    await tools(recorder)["read_package"](project_id=ID)  # type: ignore[operator]
+    await tools(recorder)["remove_package"](project_id=ID)  # type: ignore[operator]
+
+    assert recorder.calls == [
+        ("GET", f"/api/v1/projects/{ID}/package", ""),
+        ("DELETE", f"/api/v1/projects/{ID}/package", ""),
+    ]
+
+
+@pytest.mark.parametrize("name", ["install_package", "read_package", "remove_package"])
+@pytest.mark.parametrize("hostile", ["not-a-uuid", "../instance/hold?x=", ""])
+async def test_a_non_uuid_project_id_is_refused_by_the_package_tools(
+    name: str, hostile: str
+) -> None:
+    recorder = Recorder()
+    arguments = {"project_id": hostile, **({"body": {}} if name == "install_package" else {})}
+
+    with pytest.raises(ToolFailure):
+        await tools(recorder)[name](**arguments)  # type: ignore[operator]
+
+    assert recorder.calls == []
+
+
+def test_the_package_docstrings_state_their_rules() -> None:
+    install = " ".join((tools(Recorder())["install_package"].__doc__ or "").lower().split())
+    remove = " ".join((tools(Recorder())["remove_package"].__doc__ or "").lower().split())
+
+    for phrase in ("branch", "every error named", "already started keep their sequence"):
+        assert phrase in install, phrase
+    assert "open" in remove
+
+
+def test_the_package_tools_follow_set_initiative_folder_in_the_tool_order() -> None:
+    names = [tool.__name__ for tool in build_tools(InProcessApi(object(), lambda: "t"))]
+    start = names.index("set_initiative_folder")
+
+    assert names[start + 1 : start + 4] == ["install_package", "read_package", "remove_package"]

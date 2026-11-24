@@ -124,5 +124,5 @@ def test_the_route_is_in_the_contract_and_not_an_mcp_tool(api: Api) -> None:
     ref = operation["responses"]["201"]["content"]["application/json"]["schema"]["$ref"]
     assert ref.endswith("/SessionTurnOut")
     assert operation["operationId"] not in ALLOWED_OPERATION_IDS
-    # 25: story 2 of epic 6, 2026-11-22 — set_initiative_folder joins the allow-list
-    assert len(ALLOWED_OPERATION_IDS) == 25  # noqa: PLR2004
+    # 28: story 3 of epic 6, 2026-11-22 — the three package tools join the allow-list
+    assert len(ALLOWED_OPERATION_IDS) == 28  # noqa: PLR2004

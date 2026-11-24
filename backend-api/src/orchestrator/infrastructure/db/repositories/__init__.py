@@ -28,6 +28,9 @@ from orchestrator.infrastructure.db.repositories.metric_results import (
     SQLAlchemyMetricCalculationRepository,
     SQLAlchemyResultVersionRepository,
 )
+from orchestrator.infrastructure.db.repositories.packages import (
+    SQLAlchemyProjectPackageRepository,
+)
 from orchestrator.infrastructure.db.repositories.project_channel import (
     SQLAlchemyProjectChannelRepository,
 )
@@ -58,6 +61,7 @@ __all__ = [
     "SQLAlchemyInstanceHoldRepository",
     "SQLAlchemyMetricCalculationRepository",
     "SQLAlchemyProjectChannelRepository",
+    "SQLAlchemyProjectPackageRepository",
     "SQLAlchemyProjectRepository",
     "SQLAlchemyRepositoryRepository",
     "SQLAlchemyResultVersionRepository",

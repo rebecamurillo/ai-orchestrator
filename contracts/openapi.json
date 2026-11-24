@@ -2921,6 +2921,36 @@
         "title": "FindingsOut",
         "type": "object"
       },
+      "GateOut": {
+        "description": "The gate words; `pass` is a Python keyword, so the field is aliased.",
+        "properties": {
+          "fail": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fail",
+            "type": "array"
+          },
+          "owners_key": {
+            "title": "Owners Key",
+            "type": "string"
+          },
+          "pass": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pass",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pass",
+          "fail",
+          "owners_key"
+        ],
+        "title": "GateOut",
+        "type": "object"
+      },
       "GateRecordOut": {
         "properties": {
           "actor": {
@@ -4805,6 +4835,138 @@
           "base_commit_na"
         ],
         "title": "OriginOut",
+        "type": "object"
+      },
+      "PackageIn": {
+        "additionalProperties": false,
+        "description": "Where the package is: a folder of the Project's hub repository, at a branch.",
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "ref": {
+            "minLength": 1,
+            "title": "Ref",
+            "type": "string"
+          },
+          "repository_id": {
+            "format": "uuid",
+            "title": "Repository Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository_id",
+          "path",
+          "ref"
+        ],
+        "title": "PackageIn",
+        "type": "object"
+      },
+      "PackageOut": {
+        "properties": {
+          "gate": {
+            "$ref": "#/components/schemas/GateOut"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "installed_at": {
+            "title": "Installed At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/PackageRepositoryOut"
+          },
+          "repository_id": {
+            "format": "uuid",
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "sequence": {
+            "items": {
+              "$ref": "#/components/schemas/SequenceEntryOut"
+            },
+            "title": "Sequence",
+            "type": "array"
+          },
+          "sha": {
+            "title": "Sha",
+            "type": "string"
+          },
+          "status_map": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Status Map",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "repository_id",
+          "path",
+          "ref",
+          "sha",
+          "name",
+          "installed_at",
+          "repository",
+          "sequence",
+          "gate",
+          "status_map"
+        ],
+        "title": "PackageOut",
+        "type": "object"
+      },
+      "PackageRepositoryOut": {
+        "description": "The hub the package was read from.",
+        "properties": {
+          "default_branch": {
+            "title": "Default Branch",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "initiative_folder": {
+            "title": "Initiative Folder",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "default_branch",
+          "initiative_folder"
+        ],
+        "title": "PackageRepositoryOut",
         "type": "object"
       },
       "Page_AttemptGatewayReadsOut_": {
@@ -7971,6 +8133,62 @@
         "title": "SaveVersionIn",
         "type": "object"
       },
+      "SequenceEntryOut": {
+        "properties": {
+          "shown_as": {
+            "enum": [
+              "workflow",
+              "step"
+            ],
+            "title": "Shown As",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepDeclOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "interactive",
+              "auto"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "workflow": {
+            "title": "Workflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow",
+          "template",
+          "version",
+          "type",
+          "shown_as",
+          "steps"
+        ],
+        "title": "SequenceEntryOut",
+        "type": "object"
+      },
       "SessionOut": {
         "description": "Whether a session holds the Run, whether one can start here, and what it changed.",
         "properties": {
@@ -8259,6 +8477,72 @@
           "files"
         ],
         "title": "SpecFolderIn",
+        "type": "object"
+      },
+      "StepDeclOut": {
+        "properties": {
+          "file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "conversation",
+              "automatic"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "skill": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill"
+          },
+          "writes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Writes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "skill",
+          "persona",
+          "file",
+          "writes"
+        ],
+        "title": "StepDeclOut",
         "type": "object"
       },
       "StepDetailOut": {
@@ -10975,6 +11259,287 @@
           }
         ],
         "summary": "Probe a Project's saved chat channel",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/package": {
+      "delete": {
+        "description": "Delete the record; every stored template version stays.",
+        "operationId": "remove_package_api_v1_projects__project_id__package_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project or repository of it has that id, or it has no package."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Initiatives created from the package are still open."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The package or the request broke a rule; `errors[]` names each file and reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove a Project's installed package",
+        "tags": [
+          "projects"
+        ]
+      },
+      "get": {
+        "description": "The installed record, its declaration and the hub.",
+        "operationId": "read_package_api_v1_projects__project_id__package_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project or repository of it has that id, or it has no package."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The package or the request broke a rule; `errors[]` names each file and reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read a Project's installed package",
+        "tags": [
+          "projects"
+        ]
+      },
+      "put": {
+        "description": "Read `package.yaml` and its templates at `ref` of the hub; store them only if all pass.",
+        "operationId": "install_package_api_v1_projects__project_id__package_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project or repository of it has that id, or it has no package."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The ref is not a branch of the remote, or another project holds a different package of the same name."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The package or the request broke a rule; `errors[]` names each file and reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Install a package on a Project",
         "tags": [
           "projects"
         ]

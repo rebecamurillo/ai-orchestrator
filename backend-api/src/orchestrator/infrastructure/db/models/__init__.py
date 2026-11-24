@@ -27,6 +27,7 @@ from orchestrator.infrastructure.db.models.metric_results import (
 )
 from orchestrator.infrastructure.db.models.project import ProjectRow
 from orchestrator.infrastructure.db.models.project_channel import ProjectChannelRow
+from orchestrator.infrastructure.db.models.project_package import ProjectPackageRow
 from orchestrator.infrastructure.db.models.repository import RepositoryRow
 from orchestrator.infrastructure.db.models.run import (
     AttemptRow,
@@ -55,6 +56,7 @@ __all__ = [
     "MetricCalculationRow",
     "MetricValueRow",
     "ProjectChannelRow",
+    "ProjectPackageRow",
     "ProjectRow",
     "RepositoryRow",
     "RequestFactRow",

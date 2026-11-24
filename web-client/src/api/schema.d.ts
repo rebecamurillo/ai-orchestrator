@@ -404,6 +404,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/package": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a Project's installed package
+         * @description The installed record, its declaration and the hub.
+         */
+        get: operations["read_package_api_v1_projects__project_id__package_get"];
+        /**
+         * Install a package on a Project
+         * @description Read `package.yaml` and its templates at `ref` of the hub; store them only if all pass.
+         */
+        put: operations["install_package_api_v1_projects__project_id__package_put"];
+        post?: never;
+        /**
+         * Remove a Project's installed package
+         * @description Delete the record; every stored template version stays.
+         */
+        delete: operations["remove_package_api_v1_projects__project_id__package_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/repositories": {
         parameters: {
             query?: never;
@@ -2316,6 +2344,18 @@ export interface components {
             /** Items */
             items: components["schemas"]["FindingOut"][];
         };
+        /**
+         * GateOut
+         * @description The gate words; `pass` is a Python keyword, so the field is aliased.
+         */
+        GateOut: {
+            /** Fail */
+            fail: string[];
+            /** Owners Key */
+            owners_key: string;
+            /** Pass */
+            pass: string[];
+        };
         /** GateRecordOut */
         GateRecordOut: {
             /**
@@ -2911,6 +2951,74 @@ export interface components {
             template_name: string;
             /** Template Version */
             template_version: number;
+        };
+        /**
+         * PackageIn
+         * @description Where the package is: a folder of the Project's hub repository, at a branch.
+         */
+        PackageIn: {
+            /** Path */
+            path: string;
+            /** Ref */
+            ref: string;
+            /**
+             * Repository Id
+             * Format: uuid
+             */
+            repository_id: string;
+        };
+        /** PackageOut */
+        PackageOut: {
+            gate: components["schemas"]["GateOut"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Installed At */
+            installed_at: string;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Ref */
+            ref: string;
+            repository: components["schemas"]["PackageRepositoryOut"];
+            /**
+             * Repository Id
+             * Format: uuid
+             */
+            repository_id: string;
+            /** Sequence */
+            sequence: components["schemas"]["SequenceEntryOut"][];
+            /** Sha */
+            sha: string;
+            /** Status Map */
+            status_map: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * PackageRepositoryOut
+         * @description The hub the package was read from.
+         */
+        PackageRepositoryOut: {
+            /** Default Branch */
+            default_branch: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Initiative Folder */
+            initiative_folder: string;
+            /** Slug */
+            slug: string;
         };
         /** Page[AttemptGatewayReadsOut] */
         Page_AttemptGatewayReadsOut_: {
@@ -4020,6 +4128,27 @@ export interface components {
             /** Yaml */
             yaml: string;
         };
+        /** SequenceEntryOut */
+        SequenceEntryOut: {
+            /**
+             * Shown As
+             * @enum {string}
+             */
+            shown_as: "workflow" | "step";
+            /** Steps */
+            steps: components["schemas"]["StepDeclOut"][];
+            /** Template */
+            template: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "interactive" | "auto";
+            /** Version */
+            version: number | null;
+            /** Workflow */
+            workflow: string;
+        };
         /**
          * SessionOut
          * @description Whether a session holds the Run, whether one can start here, and what it changed.
@@ -4116,6 +4245,24 @@ export interface components {
             files: {
                 [key: string]: string;
             };
+        };
+        /** StepDeclOut */
+        StepDeclOut: {
+            /** File */
+            file: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "conversation" | "automatic";
+            /** Persona */
+            persona: string | null;
+            /** Skill */
+            skill: string | null;
+            /** Writes */
+            writes: string[];
         };
         /**
          * StepDetailOut
@@ -5615,6 +5762,184 @@ export interface operations {
                 };
             };
             /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_package_api_v1_projects__project_id__package_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackageOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project or repository of it has that id, or it has no package. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The package or the request broke a rule; `errors[]` names each file and reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    install_package_api_v1_projects__project_id__package_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PackageIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackageOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project or repository of it has that id, or it has no package. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The ref is not a branch of the remote, or another project holds a different package of the same name. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The package or the request broke a rule; `errors[]` names each file and reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    remove_package_api_v1_projects__project_id__package_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project or repository of it has that id, or it has no package. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Initiatives created from the package are still open. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The package or the request broke a rule; `errors[]` names each file and reason. */
             422: {
                 headers: {
                     [name: string]: unknown;

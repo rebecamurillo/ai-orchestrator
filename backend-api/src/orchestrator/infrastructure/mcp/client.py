@@ -64,6 +64,9 @@ class InProcessApi:
     async def put(self, path: str, body: Any = None) -> Any:
         return _payload(await self._call("PUT", f"{API_PREFIX}{path}", json=body))
 
+    async def delete(self, path: str) -> Any:
+        return _payload(await self._call("DELETE", f"{API_PREFIX}{path}"))
+
     async def get_open(self, path: str) -> str:
         """A GET on one of the application's own open routes, which carry no `/api/v1` prefix."""
         return (await self._call("GET", path)).text

@@ -541,6 +541,38 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
 
 First turn as a Run input (owner B8, 2026-11-22): the initiative use cases pass it as the Run input first_turn; the executor reads no initiative.
 
+### AD-39 — a client package is a folder in the hub, installed per project by reference *(ratified 2026-11-22, initiative orchestrator-initiative-steps)*
+
+- **Binds:** `domain/entities/project_package.py` (new), `use_cases/packages.py` (new), the template store, REST and MCP operations, the guide
+- **Prevents:** a second copy of a persona or skill (FR-25); one package refused on a second project; a project silently picking up another project's install; two owners of the initiative folder
+- **Rule:**
+  - **The format.** A package is `package.yaml` plus the files it names, in the project's hub repository:
+
+    ```yaml
+    name: rebecamurillo-initiatives
+    sequence:                             # workflow templates, in order (FR-10)
+      - { workflow: spec,  template: templates/spec.yaml }
+      - { workflow: merge, template: templates/merge.yaml }
+      - { workflow: build, template: staged-initiative-hub }   # a shipped template, by name
+    gate: { pass: [pass], fail: [fail], owners_key: owners }
+    status_map:                           # step-file words → initiative statuses (FR-5, FR-14)
+      final: done
+      blocked: waiting for her
+    ```
+
+  - **The folder.** The initiative folder is not a package key. Its only source is `repository.initiative_folder`, default `initiatives` (owner answer 4). `create_run` binds the Run input `initiative_folder` from it: an omitted value is the repository's folder, a value equal to the repository's folder or under it is kept, and any other value is refused naming both. Spec and merge Runs get the repository's folder; the build Run gets `{folder}/{slug}`, so the shipped `staged-initiative-hub` is unchanged. The out-of-folder check and AD-17 read only that input.
+  - **Install.** The record `project_package` holds `{project_id, path, ref, sha, installed_at}`. The repository is the project's hub, so personas resolve in the Run's worktree, the same repository. Install reads `package.yaml` at `ref` through the `Git` port, validates it and its templates with AD-15's one function, and stores each template under the qualified name `{package.name}.{template}`, tagged with `sha`.
+  - **Two projects, one package.** The same package on two projects is allowed: Familio and the orchestrator project both run the hub's process. A project's new initiatives resolve its sequence through its own `sha`. A name clash is refused only between different packages.
+  - **No copies.** A `conversation` row's `persona` and `skill` resolve in the Run's worktree, at the Run's branch. A change to a persona therefore applies from the next step (FR-9), and the local lead sessions read the same text (FR-25).
+  - **Remove** is refused while an initiative created from the package has neither `cancelled_at` nor `pr_merged_at`. The refusal names them (FR-23).
+  - **Operations:**
+    - `PUT`, `GET` and `DELETE /projects/{id}/package`;
+    - `PUT /projects/{id}/run-defaults` (`default_budget_usd`, `default_harness`, `default_model`, `default_autonomy`);
+    - `PUT /repositories/{id}/initiative-folder`.
+
+    Each gets an MCP tool in `ALLOWED_OPERATION_IDS` (AD-34). This is the install path without a screen (FR-26). The existing full-replace `PUT`s are untouched.
+  - **The guide** gains a page that documents `package.yaml`, the `conversation` kind, the step file and its words, and the status map (FR-27). The chain procedure (`initiatives/spec`, `initiatives/chain`) moves into the hub's package. The guide keeps a pointer page saying that a package carries its own procedure. AD-32, amended: the guide's `initiatives/spec` and `initiatives/chain` may be pointer pages to the package's procedure.
+
 ### AD-40 — Every step that ran has a log, and one key joins its views *(ratified 2026-11-22, initiative orchestrator-initiative-steps)*
 
 - **Binds:** a new `StepLog` port and its adapter, `steps/git_*.py`, `steps/pr_link.py`, `steps/plan_check.py`, `apply_step_result._close_attempt`, the retention sweep, `api/routers/run_attempts.py`, `GET /runs/{id}/graph`, the Run page islands

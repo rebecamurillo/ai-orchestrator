@@ -64,6 +64,15 @@ class FakeTemplateVersionRepository:
         self.add(version)
         self.descriptions[version.name] = description
 
+    # Story 3 of epic 6, 2026-11-22: the store reads a version by its package commit.
+    def get_by_package_sha(self, name: str, sha: str) -> TemplateVersion | None:
+        matching = [
+            stored
+            for (stored_name, _), stored in sorted(self.versions.items())
+            if stored_name == name and stored.package_sha == sha
+        ]
+        return matching[0] if matching else None
+
     def names_with_source(self, source: str) -> frozenset[str]:
         return frozenset(v.name for v in self.versions.values() if v.source == source)
 
