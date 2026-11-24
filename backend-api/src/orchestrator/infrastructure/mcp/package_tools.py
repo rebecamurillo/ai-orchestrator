@@ -1,4 +1,4 @@
-"""The tools that prepare a Project's build Run (story 1 of epic 6)."""
+"""The tools that prepare a Project's build Run: run defaults and initiative folder."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from orchestrator.infrastructure.mcp.client import InProcessApi
 
 
 def package_tools(api: InProcessApi) -> list[tools.Tool]:
-    """What sets a Project's run defaults."""
+    """What sets a Project's run defaults and a Repository's initiative folder."""
 
     async def set_run_defaults(project_id: str, body: dict[str, Any]) -> Any:
         """Set the defaults a Project's build Run starts with.
@@ -22,4 +22,14 @@ def package_tools(api: InProcessApi) -> list[tools.Tool]:
         pid = tools._path_id("project_id", project_id)
         return await api.put(f"/projects/{pid}/run-defaults", body)
 
-    return [set_run_defaults]
+    async def set_initiative_folder(repository_id: str, body: dict[str, Any]) -> Any:
+        """Set the folder where every initiative of a Repository lives.
+
+        The body is `{initiative_folder}`: one or more `[A-Za-z0-9._-]` segments joined by `/`, with
+        no `.` or `..` segment and no leading or trailing `/`. A Run's `initiative_folder` must
+        equal it or lie under it, and an omitted one is bound to it.
+        """
+        rid = tools._path_id("repository_id", repository_id)
+        return await api.put(f"/repositories/{rid}/initiative-folder", body)
+
+    return [set_run_defaults, set_initiative_folder]

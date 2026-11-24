@@ -26,6 +26,7 @@ against the result it describes.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Literal
@@ -141,6 +142,21 @@ class CloneCheck(BaseModel):
         return ""
 
 
+DEFAULT_INITIATIVE_FOLDER = "initiatives"
+_FOLDER_SEGMENT = re.compile(r"[A-Za-z0-9._-]+")
+
+
+def is_valid_folder(path: str) -> bool:
+    """One or more `[A-Za-z0-9._-]` segments joined by `/`, none of them `.` or `..`.
+
+    An empty segment covers `""`, a leading or trailing `/` and a doubled one.
+    """
+    return all(
+        _FOLDER_SEGMENT.fullmatch(segment) is not None and segment not in (".", "..")
+        for segment in path.split("/")
+    )
+
+
 class Repository(BaseModel):
     """A git repository a Run works in, as it is stored."""
 
@@ -159,6 +175,7 @@ class Repository(BaseModel):
     clone_check: CloneCheck
     created_at: datetime
     updated_at: datetime
+    initiative_folder: str = DEFAULT_INITIATIVE_FOLDER
 
     @property
     def verify_skipped(self) -> bool:

@@ -70,6 +70,7 @@ EXPECTED_TOOLS = (
     "check_clone",
     "init_repository",
     "set_run_defaults",
+    "set_initiative_folder",
     "validate_template",
     "save_template",
     "reload_templates",

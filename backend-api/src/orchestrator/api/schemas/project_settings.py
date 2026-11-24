@@ -1,4 +1,4 @@
-"""The body of `PUT /projects/{id}/run-defaults`: five keys, all required, each nullable."""
+"""The bodies of the run-defaults and initiative-folder `PUT`s."""
 
 from __future__ import annotations
 
@@ -30,3 +30,11 @@ class RunDefaultsIn(BaseModel):
             default_autonomy=self.default_autonomy,
             default_senior_model=self.default_senior_model,
         )
+
+
+class InitiativeFolderIn(BaseModel):
+    """The folder rule is the use case's, so a bad folder is a 422 from `Invalid`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    initiative_folder: str

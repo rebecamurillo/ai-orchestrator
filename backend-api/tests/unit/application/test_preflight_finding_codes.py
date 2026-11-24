@@ -10,8 +10,9 @@ from orchestrator.application.preflight.model import (
 from orchestrator.application.templates.plan_model import PlanError
 from orchestrator.application.use_cases.preflight import run_preflight
 from tests.unit.application.templates import plan_fixtures as fixtures
-from tests.unit.application.test_preflight_use_case import line, ports
+from tests.unit.application.test_preflight_use_case import line, ports, repository
 from tests.unit.fakes.git import FakeGit
+from tests.unit.fakes.projects import FakeRepositoryRepository
 
 DUPLICATE_EPICS = (
     "- id: e1\n  title: A\n  branch: b\n  spec_folder: epic-1\n"
@@ -39,7 +40,16 @@ def test_ac4_a_duplicate_epic_id_line_carries_its_code() -> None:
         inputs={"initiative_folder": fixtures.INITIATIVE_FOLDER},
     )
 
-    result = run_preflight(ports(git=git), req)
+    # story 2 of epic 6, 2026-11-22: the repository's folder is the fixture's, so the value is kept.
+    result = run_preflight(
+        ports(
+            git=git,
+            repositories=FakeRepositoryRepository(
+                [repository(initiative_folder=fixtures.INITIATIVE_FOLDER)]
+            ),
+        ),
+        req,
+    )
 
     epics = line(result, "epics.yaml")
     assert epics.status == "fail"

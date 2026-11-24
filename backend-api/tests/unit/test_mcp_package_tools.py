@@ -43,6 +43,46 @@ def test_the_docstring_states_the_replace_together_and_never_invent_rules() -> N
         assert phrase in doc, phrase
 
 
+async def test_set_initiative_folder_makes_one_put_to_the_route() -> None:
+    recorder = Recorder()
+
+    await tools(recorder)["set_initiative_folder"](  # type: ignore[operator]
+        repository_id=ID, body={"initiative_folder": "specs"}
+    )
+
+    assert recorder.calls == [("PUT", f"/api/v1/repositories/{ID}/initiative-folder", "")]
+    assert recorder.authorization == ["Bearer tok"]
+
+
+@pytest.mark.parametrize("hostile", ["not-a-uuid", "../instance/hold?x=", ""])
+async def test_a_non_uuid_repository_id_is_refused_before_any_call(hostile: str) -> None:
+    recorder = Recorder()
+
+    with pytest.raises(ToolFailure):
+        await tools(recorder)["set_initiative_folder"](repository_id=hostile, body={})  # type: ignore[operator]
+
+    assert recorder.calls == []
+
+
+def test_the_initiative_folder_docstring_names_the_folder_rule() -> None:
+    doc = " ".join((tools(Recorder())["set_initiative_folder"].__doc__ or "").lower().split())
+
+    for phrase in ("every initiative", "initiative_folder", "lie under it", "omitted"):
+        assert phrase in doc, phrase
+
+
+def test_the_tools_list_in_order() -> None:
+    names = [tool.__name__ for tool in package_tools(InProcessApi(object(), lambda: "t"))]
+
+    assert names == ["set_run_defaults", "set_initiative_folder"]
+
+
+def test_set_initiative_folder_follows_set_run_defaults_in_the_tool_order() -> None:
+    names = [tool.__name__ for tool in build_tools(InProcessApi(object(), lambda: "t"))]
+
+    assert names[names.index("set_run_defaults") + 1] == "set_initiative_folder"
+
+
 def test_the_tool_follows_init_repository_in_the_tool_order() -> None:
     names = [tool.__name__ for tool in build_tools(InProcessApi(object(), lambda: "t"))]
 

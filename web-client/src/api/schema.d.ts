@@ -569,6 +569,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repository_id}/initiative-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set a Repository's initiative folder
+         * @description Where every initiative of the Repository lives; the only writer of the folder.
+         */
+        put: operations["set_initiative_folder_api_v1_repositories__repository_id__initiative_folder_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs": {
         parameters: {
             query?: never;
@@ -2584,6 +2604,14 @@ export interface components {
             reason: string;
         };
         /**
+         * InitiativeFolderIn
+         * @description The folder rule is the use case's, so a bad folder is a 422 from `Invalid`.
+         */
+        InitiativeFolderIn: {
+            /** Initiative Folder */
+            initiative_folder: string;
+        };
+        /**
          * InputDeclOut
          * @description One entry of the Template's `inputs:` map, for the screen's inputs table.
          */
@@ -3398,6 +3426,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Initiative Folder
+             * @default initiatives
+             */
+            initiative_folder: string;
             /** Install Command */
             install_command: string;
             /** Package Manager */
@@ -6179,6 +6212,62 @@ export interface operations {
             };
             /** @description The clone check has failed, or an initialisation Run is already running on this Repository. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    set_initiative_folder_api_v1_repositories__repository_id__initiative_folder_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                repository_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitiativeFolderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepositoryOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project or Repository has that id. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -32,8 +32,10 @@ from orchestrator.api.errors import (
 )
 from orchestrator.api.providers import project_ports
 from orchestrator.api.schemas.common import Page
+from orchestrator.api.schemas.project_settings import InitiativeFolderIn
 from orchestrator.api.schemas.projects import RepositoryCreate, RepositoryOut, RepositoryUpdate
 from orchestrator.application.use_cases import projects as use_cases
+from orchestrator.application.use_cases import repository_settings
 from orchestrator.application.use_cases.projects import ProjectPorts
 
 router = APIRouter(tags=["repositories"])
@@ -113,3 +115,18 @@ def update_repository(
 ) -> RepositoryOut:
     """Replace a Repository's editable fields. Its `clone_check` and slug are untouched."""
     return RepositoryOut.of(use_cases.update_repository(ports, repository_id, payload.as_draft()))
+
+
+@router.put(
+    "/repositories/{repository_id}/initiative-folder",
+    response_model=RepositoryOut,
+    summary="Set a Repository's initiative folder",
+    responses=READ_REFUSALS,
+)
+def set_initiative_folder(
+    repository_id: UUID, payload: InitiativeFolderIn, ports: Ports
+) -> RepositoryOut:
+    """Where every initiative of the Repository lives; the only writer of the folder."""
+    return RepositoryOut.of(
+        repository_settings.set_initiative_folder(ports, repository_id, payload.initiative_folder)
+    )

@@ -42,6 +42,7 @@ ALLOWED_OPERATION_IDS: frozenset[str] = frozenset(
         "create_project_api_v1_projects_post",
         "update_project_api_v1_projects__project_id__put",
         "set_run_defaults_api_v1_projects__project_id__run_defaults_put",
+        "set_initiative_folder_api_v1_repositories__repository_id__initiative_folder_put",
         "add_repository_api_v1_projects__project_id__repositories_post",
         "run_clone_check_api_v1_repositories__repository_id__clone_check_post",
         "init_api_v1_repositories__repository_id__init_post",

@@ -29,7 +29,8 @@ FORBIDDEN_FRAGMENTS = ("/readiness", "/probe")
 #: Story 4 of epic 2, 2026-11-12 (AD-34): list_models joins.
 #: Story 5 of epic 2, 2026-11-12 (AD-34): read_guide joins (index and page).
 #: Story 1 of epic 6, 2026-11-22 (Project run defaults): set_run_defaults joins.
-TWENTY_FOUR = 24
+#: Story 2 of epic 6, 2026-11-22 (initiative folder): set_initiative_folder joins.
+TWENTY_FIVE = 25
 
 PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "version": {},
@@ -45,6 +46,7 @@ PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "check_clone": {"repository_id": ID},
     "init_repository": {"repository_id": ID},
     "set_run_defaults": {"project_id": ID, "body": {}},
+    "set_initiative_folder": {"repository_id": ID, "body": {}},
     "validate_template": {"name": "fixture", "yaml": ""},
     "save_template": {"name": "fixture", "yaml": ""},
     "reload_templates": {},
@@ -63,6 +65,7 @@ NEW_PATH_TOOLS = {
     "check_clone": ("repository_id", {}),
     "init_repository": ("repository_id", {}),
     "set_run_defaults": ("project_id", {"body": {}}),
+    "set_initiative_folder": ("repository_id", {"body": {}}),
 }
 
 
@@ -152,7 +155,7 @@ def test_every_tool_has_placeholders() -> None:
 
 async def test_every_tool_makes_one_call_to_an_allowed_operation(paths: dict[str, Any]) -> None:
     assert await violations(_tools, ALLOWED_OPERATION_IDS, paths) == []
-    assert len(ALLOWED_OPERATION_IDS) == TWENTY_FOUR
+    assert len(ALLOWED_OPERATION_IDS) == TWENTY_FIVE
 
 
 async def test_a_tool_calling_an_unlisted_operation_is_reported(paths: dict[str, Any]) -> None:

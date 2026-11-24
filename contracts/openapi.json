@@ -3781,6 +3781,21 @@
         "title": "HoldOut",
         "type": "object"
       },
+      "InitiativeFolderIn": {
+        "additionalProperties": false,
+        "description": "The folder rule is the use case's, so a bad folder is a 422 from `Invalid`.",
+        "properties": {
+          "initiative_folder": {
+            "title": "Initiative Folder",
+            "type": "string"
+          }
+        },
+        "required": [
+          "initiative_folder"
+        ],
+        "title": "InitiativeFolderIn",
+        "type": "object"
+      },
       "InputDeclOut": {
         "description": "One entry of the Template's `inputs:` map, for the screen's inputs table.",
         "properties": {
@@ -6298,6 +6313,11 @@
           "id": {
             "format": "uuid",
             "title": "Id",
+            "type": "string"
+          },
+          "initiative_folder": {
+            "default": "initiatives",
+            "title": "Initiative Folder",
             "type": "string"
           },
           "install_command": {
@@ -11934,6 +11954,100 @@
           }
         ],
         "summary": "Initialise this Repository for the method",
+        "tags": [
+          "repositories"
+        ]
+      }
+    },
+    "/api/v1/repositories/{repository_id}/initiative-folder": {
+      "put": {
+        "description": "Where every initiative of the Repository lives; the only writer of the folder.",
+        "operationId": "set_initiative_folder_api_v1_repositories__repository_id__initiative_folder_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repository_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Repository Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiativeFolderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project or Repository has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set a Repository's initiative folder",
         "tags": [
           "repositories"
         ]

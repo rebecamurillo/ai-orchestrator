@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from orchestrator.api.schemas.project_settings import RunDefaultsIn
+from orchestrator.api.schemas.project_settings import InitiativeFolderIn, RunDefaultsIn
 
 FULL: dict[str, Any] = {
     "default_budget_usd": "25.00",
@@ -69,3 +69,14 @@ def test_a_bad_budget_names_its_field(budget: str) -> None:
 )
 def test_a_rule_breaking_value_is_refused(field: str, value: str) -> None:
     assert refused({**FULL, field: value}).errors()[0]["loc"] == (field,)
+
+
+def test_initiative_folder_in_accepts_a_string_and_refuses_a_missing_or_unknown_key() -> None:
+    # story 2 of epic 6, 2026-11-22
+    assert (
+        InitiativeFolderIn.model_validate({"initiative_folder": "specs"}).initiative_folder
+        == "specs"
+    )
+    for body in ({}, {"initiative_folder": "a", "extra": 1}):
+        with pytest.raises(ValidationError):
+            InitiativeFolderIn.model_validate(body)

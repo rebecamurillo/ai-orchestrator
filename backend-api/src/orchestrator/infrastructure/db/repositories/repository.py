@@ -42,6 +42,7 @@ MUTABLE_FIELDS = (
     "quality_gate_command",
     "unit_test_command",
     "package_manager",
+    "initiative_folder",
     "updated_at",
 )
 
@@ -92,6 +93,7 @@ def to_entity(row: RepositoryRow) -> Repository:
         test_globs=tuple(row.test_globs),
         package_manager=row.package_manager,
         clone_check=clone_check_from_entity(row.clone_check),
+        initiative_folder=row.initiative_folder,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -117,6 +119,7 @@ class SQLAlchemyRepositoryRepository:
                 test_globs=list(repository.test_globs),
                 package_manager=repository.package_manager,
                 clone_check=clone_check_json(repository.clone_check),
+                initiative_folder=repository.initiative_folder,
                 created_at=repository.created_at,
                 updated_at=repository.updated_at,
             )

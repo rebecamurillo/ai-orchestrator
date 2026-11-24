@@ -160,6 +160,7 @@ class RepositoryOut(BaseModel):
     verify_skipped: bool
     created_at: UtcTimestamp
     updated_at: UtcTimestamp
+    initiative_folder: str = "initiatives"
 
     @classmethod
     def of(cls, repository: Repository) -> RepositoryOut:
@@ -186,6 +187,7 @@ class RepositoryOut(BaseModel):
             verify_skipped=repository.verify_skipped,
             created_at=repository.created_at,
             updated_at=repository.updated_at,
+            initiative_folder=repository.initiative_folder,
         )
 
 

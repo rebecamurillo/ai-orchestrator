@@ -74,6 +74,9 @@ def repository() -> Repository:
         clone_check=CloneCheck(status="ok", at=NOW, output="", bmad_version=fixtures.BMAD_VERSION),
         created_at=NOW,
         updated_at=NOW,
+        # story 2 of epic 6, 2026-11-22: the fixture's initiative folder lies outside the
+        # default `initiatives`, which the binding now refuses; the repository names it.
+        initiative_folder=fixtures.INITIATIVE_FOLDER,
     )
 
 

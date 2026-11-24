@@ -287,7 +287,14 @@ def test_an_initiative_request_carries_the_epics_yaml_line() -> None:
         inputs={"initiative_folder": fixtures.INITIATIVE_FOLDER},
     )
 
-    result = run_preflight(ports(git=fixtures.initiative_git()), req)
+    # story 2 of epic 6, 2026-11-22: the repository's folder is the fixture's, so the value is kept.
+    initiative_ports = ports(
+        git=fixtures.initiative_git(),
+        repositories=FakeRepositoryRepository(
+            [repository(initiative_folder=fixtures.INITIATIVE_FOLDER)]
+        ),
+    )
+    result = run_preflight(initiative_ports, req)
 
     epics_line = line(result, "epics.yaml")
     assert epics_line.status == "ok"

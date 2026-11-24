@@ -208,7 +208,7 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
 
     now = ports.clock.now()
     label, by_operator = initial_label(
-        req.label, project.name, _inputs_dict(req), req.template_name, now
+        req.label, project.name, _inputs_dict(req, preflighted.inputs), req.template_name, now
     )
     run_id: UUID = new_id()
     trace = (
@@ -224,7 +224,7 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         template_name=req.template_name,
         template_version=req.template_version,
         pinned_versions=tree.pinned_versions(),
-        inputs=_inputs_dict(req),
+        inputs=_inputs_dict(req, preflighted.inputs),
         status="queued",
         plan_ref=plan.plan_ref,
         plan_refs=dict(plan.plan_refs),
@@ -294,7 +294,7 @@ def _trace_name(req: CreateRunRequest) -> str:
     return f"run {req.template_name}@{req.template_version} {req.base_branch}"
 
 
-def _inputs_dict(req: CreateRunRequest) -> dict[str, Any]:
+def _inputs_dict(req: CreateRunRequest, inputs: dict[str, Any]) -> dict[str, Any]:
     """`Run.inputs`: the bound `base_branch`, `harness`, `model`, and the Template's own
     declared inputs — never the Project or Repository snapshot, which the Run's own foreign
     keys already name."""
@@ -302,7 +302,7 @@ def _inputs_dict(req: CreateRunRequest) -> dict[str, Any]:
         "base_branch": req.base_branch,
         "harness": req.harness or DEFAULT_HARNESS,
         "model": req.model,
-        **(req.inputs or {}),
+        **inputs,
     }
 
 
