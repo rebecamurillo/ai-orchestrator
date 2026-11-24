@@ -5756,6 +5756,65 @@
             "title": "Created At",
             "type": "string"
           },
+          "default_autonomy": {
+            "anyOf": [
+              {
+                "enum": [
+                  "auto",
+                  "checkpoints"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Autonomy"
+          },
+          "default_budget_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Budget Usd"
+          },
+          "default_harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Harness"
+          },
+          "default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Model"
+          },
+          "default_senior_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Senior Model"
+          },
           "env_vars": {
             "items": {
               "$ref": "#/components/schemas/MaskedEnvVarOut"
@@ -6445,6 +6504,92 @@
           "items"
         ],
         "title": "RunAnalysesOut",
+        "type": "object"
+      },
+      "RunDefaultsIn": {
+        "additionalProperties": false,
+        "description": "Replaces all five run defaults together; `null` clears one, an omitted key is refused.",
+        "properties": {
+          "default_autonomy": {
+            "anyOf": [
+              {
+                "enum": [
+                  "auto",
+                  "checkpoints"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Autonomy"
+          },
+          "default_budget_usd": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                    "type": "string"
+                  }
+                ],
+                "gt": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Budget Usd"
+          },
+          "default_harness": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Harness"
+          },
+          "default_model": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Model"
+          },
+          "default_senior_model": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Senior Model"
+          }
+        },
+        "required": [
+          "default_budget_usd",
+          "default_harness",
+          "default_model",
+          "default_autonomy",
+          "default_senior_model"
+        ],
+        "title": "RunDefaultsIn",
         "type": "object"
       },
       "RunDetailOut": {
@@ -11003,6 +11148,115 @@
         "summary": "Register a Repository under a Project",
         "tags": [
           "repositories"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/run-defaults": {
+      "put": {
+        "description": "Replace the five defaults a Project's build Run starts with, together.\n\nA key sent as `null` clears that default; a key left out is refused. No budget is ever\ninvented.",
+        "operationId": "set_run_defaults_api_v1_projects__project_id__run_defaults_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunDefaultsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Another Project already holds that name."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set a Project's run defaults",
+        "tags": [
+          "projects"
         ]
       }
     },

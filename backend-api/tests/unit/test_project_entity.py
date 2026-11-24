@@ -8,6 +8,7 @@ the original, so a drift is a failure here and not a surprise in the browser.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import pytest
 
@@ -30,6 +31,13 @@ from orchestrator.domain.entities.project import (
 from orchestrator.domain.ids import new_id
 
 AT = datetime(2026, 9, 4, 12, 0, tzinfo=UTC)
+RUN_DEFAULTS = (
+    "default_budget_usd",
+    "default_harness",
+    "default_model",
+    "default_autonomy",
+    "default_senior_model",
+)
 
 
 def a_project(**overrides: object) -> Project:
@@ -256,3 +264,23 @@ def test_a_view_never_serialises_the_plaintext_it_was_masked_from() -> None:
     assert plaintext not in rendered
     assert "gAAAAA-token" not in rendered
     assert mask(plaintext) in rendered
+
+
+def test_the_five_run_defaults_read_none_until_set() -> None:
+    project = a_project()
+    view = project.view({})
+    for name in RUN_DEFAULTS:
+        assert getattr(project, name) is None
+        assert getattr(view, name) is None
+
+
+def test_view_copies_the_run_defaults() -> None:
+    values: dict[str, object] = {
+        "default_budget_usd": Decimal("25.00"),
+        "default_harness": "claude",
+        "default_model": "m",
+        "default_autonomy": "checkpoints",
+        "default_senior_model": "s",
+    }
+    view = a_project(**values).view({})
+    assert {name: getattr(view, name) for name in values} == values

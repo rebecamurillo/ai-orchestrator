@@ -51,9 +51,15 @@ from orchestrator.api.errors import (
 from orchestrator.api.providers import project_ports
 from orchestrator.api.providers_trajectories import trajectory_repository
 from orchestrator.api.schemas.common import Page
+from orchestrator.api.schemas.project_settings import RunDefaultsIn
 from orchestrator.api.schemas.projects import ProjectCreate, ProjectRead, ProjectUpdate
 from orchestrator.application.use_cases import clone_check as clone_check_use_cases
-from orchestrator.application.use_cases import project_runs, project_spend, trajectory_export
+from orchestrator.application.use_cases import (
+    project_run_defaults,
+    project_runs,
+    project_spend,
+    trajectory_export,
+)
 from orchestrator.application.use_cases import projects as use_cases
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.domain.entities.project import ProjectView
@@ -189,4 +195,25 @@ def update_project(
     """
     view = use_cases.update_project(ports, project_id, payload.as_draft())
     _check_repositories(ports, view, settings)
+    return _read(ports, view, trajectories)
+
+
+@router.put(
+    "/projects/{project_id}/run-defaults",
+    response_model=ProjectRead,
+    summary="Set a Project's run defaults",
+    responses=UPDATE_REFUSALS,
+)
+def set_run_defaults(
+    project_id: UUID,
+    payload: RunDefaultsIn,
+    ports: Ports,
+    trajectories: Trajectories,
+) -> ProjectRead:
+    """Replace the five defaults a Project's build Run starts with, together.
+
+    A key sent as `null` clears that default; a key left out is refused. No budget is ever
+    invented.
+    """
+    view = project_run_defaults.set_run_defaults(ports, project_id, payload.as_defaults())
     return _read(ports, view, trajectories)

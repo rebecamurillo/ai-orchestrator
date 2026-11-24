@@ -23,10 +23,11 @@ value is ever written to this table.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, Text, Uuid
+from sqlalchemy import Boolean, DateTime, Numeric, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,5 +49,10 @@ class ProjectRow(Base):
     context_paths: Mapped[list[str]] = mapped_column(JSONB())
     env_vars_enc: Mapped[list[dict[str, Any]]] = mapped_column(JSONB())
     log_prompt_content: Mapped[bool] = mapped_column(Boolean())
+    default_budget_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    default_harness: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    default_model: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    default_autonomy: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    default_senior_model: Mapped[str | None] = mapped_column(Text(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

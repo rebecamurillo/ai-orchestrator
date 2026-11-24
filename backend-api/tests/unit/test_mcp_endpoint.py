@@ -55,6 +55,7 @@ REPOSITORY_ID = UUID("01960000-0000-7000-9000-00000000a0f2")
 #: Story 3 of epic 2, 2026-11-12 (AD-34): validate_spec_folder.
 #: Story 4 of epic 2, 2026-11-12 (AD-34): list_models.
 #: Story 5 of epic 2, 2026-11-12 (AD-32/AD-34): read_guide.
+#: Story 1 of epic 6, 2026-11-22 (Project run defaults): set_run_defaults, after init_repository.
 EXPECTED_TOOLS = (
     "version",
     "list_templates",
@@ -68,6 +69,7 @@ EXPECTED_TOOLS = (
     "add_repository",
     "check_clone",
     "init_repository",
+    "set_run_defaults",
     "validate_template",
     "save_template",
     "reload_templates",

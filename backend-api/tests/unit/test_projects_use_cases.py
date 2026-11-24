@@ -450,3 +450,17 @@ def test_the_guard_also_sees_a_direct_import() -> None:
     leak = "from orchestrator.application.use_cases.projects import decrypt_env_vars\n"
 
     assert PLAINTEXT_FUNCTION in _names_used(leak)
+
+
+def test_an_update_keeps_the_stored_run_defaults(ports: Ports) -> None:
+    """Story 1 of epic 6, 2026-11-22: only `set_run_defaults` writes the five."""
+    created = create_project(ports.ports, a_draft(), log_prompt_content_default=False)
+    stored = ports.projects.get(created.id)
+    assert stored is not None
+    ports.projects.update(
+        stored.model_copy(update={"default_harness": "claude", "default_model": "m"})
+    )
+
+    updated = update_project(ports.ports, created.id, a_draft(name="Renamed"))
+
+    assert (updated.default_harness, updated.default_model) == ("claude", "m")

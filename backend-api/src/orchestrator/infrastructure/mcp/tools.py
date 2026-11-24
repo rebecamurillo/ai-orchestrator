@@ -21,6 +21,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import quote
 
+from orchestrator.infrastructure.mcp import package_tools as package_tools_module
 from orchestrator.infrastructure.mcp.client import InProcessApi
 from orchestrator.infrastructure.mcp.facade import ToolFailure
 
@@ -40,6 +41,7 @@ ALLOWED_OPERATION_IDS: frozenset[str] = frozenset(
         "read_queue_api_v1_queue_get",
         "create_project_api_v1_projects_post",
         "update_project_api_v1_projects__project_id__put",
+        "set_run_defaults_api_v1_projects__project_id__run_defaults_put",
         "add_repository_api_v1_projects__project_id__repositories_post",
         "run_clone_check_api_v1_repositories__repository_id__clone_check_post",
         "init_api_v1_repositories__repository_id__init_post",
@@ -106,6 +108,7 @@ def build_tools(api: InProcessApi) -> list[Tool]:
         *_instance_tools(api),
         *_guide_tools(api),
         *_setup_tools(api),
+        *package_tools_module.package_tools(api),
         *_workflow_tools(api),
         *_dispatch_tools(api),
         *_watch_tools(api),

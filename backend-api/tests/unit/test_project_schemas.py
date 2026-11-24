@@ -14,6 +14,7 @@ they leave as a 500.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -331,3 +332,30 @@ def test_the_two_variable_shapes_share_one_name_rule() -> None:
     for model in (EnvVarIn, EnvVarCreate):
         with pytest.raises(ValidationError):
             model(name="lower", value="x")
+
+
+def test_the_read_renders_the_run_defaults_with_a_money_string_budget() -> None:
+    """Story 1 of epic 6, 2026-11-22."""
+    at = datetime(2026, 9, 4, tzinfo=UTC)
+    view = ProjectView(
+        id=new_id(),
+        slug="s",
+        name="n",
+        context_text="",
+        context_paths=(),
+        env_vars=(),
+        log_prompt_content=False,
+        default_budget_usd=Decimal("25.00"),
+        default_harness="claude",
+        default_autonomy="auto",
+        created_at=at,
+        updated_at=at,
+    )
+
+    body = ProjectRead.of(view).model_dump(mode="json")
+
+    assert Decimal(body["default_budget_usd"]) == Decimal("25.00")
+    assert isinstance(body["default_budget_usd"], str)
+    assert (body["default_harness"], body["default_autonomy"]) == ("claude", "auto")
+    assert body["default_model"] is None
+    assert body["default_senior_model"] is None

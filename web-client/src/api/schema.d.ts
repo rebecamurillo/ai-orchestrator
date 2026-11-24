@@ -428,6 +428,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/run-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set a Project's run defaults
+         * @description Replace the five defaults a Project's build Run starts with, together.
+         *
+         *     A key sent as `null` clears that default; a key left out is refused. No budget is ever
+         *     invented.
+         */
+        put: operations["set_run_defaults_api_v1_projects__project_id__run_defaults_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/trajectories.jsonl": {
         parameters: {
             query?: never;
@@ -3160,6 +3183,16 @@ export interface components {
             context_text: string;
             /** Created At */
             created_at: string;
+            /** Default Autonomy */
+            default_autonomy?: ("auto" | "checkpoints") | null;
+            /** Default Budget Usd */
+            default_budget_usd?: string | null;
+            /** Default Harness */
+            default_harness?: string | null;
+            /** Default Model */
+            default_model?: string | null;
+            /** Default Senior Model */
+            default_senior_model?: string | null;
             /** Env Vars */
             env_vars: components["schemas"]["MaskedEnvVarOut"][];
             /** Failed Recent Count */
@@ -3452,6 +3485,22 @@ export interface components {
             step_entries: components["schemas"]["CatalogueEntryOut"][];
             /** Version */
             version: number | null;
+        };
+        /**
+         * RunDefaultsIn
+         * @description Replaces all five run defaults together; `null` clears one, an omitted key is refused.
+         */
+        RunDefaultsIn: {
+            /** Default Autonomy */
+            default_autonomy: ("auto" | "checkpoints") | null;
+            /** Default Budget Usd */
+            default_budget_usd: (number | string) | null;
+            /** Default Harness */
+            default_harness: string | null;
+            /** Default Model */
+            default_model: string | null;
+            /** Default Senior Model */
+            default_senior_model: string | null;
         };
         /**
          * RunDetailOut
@@ -5641,6 +5690,72 @@ export interface operations {
                 };
             };
             /** @description Another Repository in this Project already holds that url. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    set_run_defaults_api_v1_projects__project_id__run_defaults_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunDefaultsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRead"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Another Project already holds that name. */
             409: {
                 headers: {
                     [name: string]: unknown;

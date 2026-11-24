@@ -124,4 +124,5 @@ def test_the_route_is_in_the_contract_and_not_an_mcp_tool(api: Api) -> None:
     ref = operation["responses"]["201"]["content"]["application/json"]["schema"]["$ref"]
     assert ref.endswith("/SessionTurnOut")
     assert operation["operationId"] not in ALLOWED_OPERATION_IDS
-    assert len(ALLOWED_OPERATION_IDS) == 23  # noqa: PLR2004
+    # 24: story 1 of epic 6, 2026-11-22 — set_run_defaults joins the allow-list
+    assert len(ALLOWED_OPERATION_IDS) == 24  # noqa: PLR2004

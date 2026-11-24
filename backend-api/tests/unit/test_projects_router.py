@@ -350,8 +350,11 @@ async def test_every_operation_is_published_with_a_summary(api: Harness) -> None
             assert operation["summary"]
 
 
-def test_the_router_declares_four_operations_and_repeats_no_dependency() -> None:
-    """The bearer is attached to the whole `/api/v1` prefix by `main.py` (AD-4)."""
+def test_the_router_declares_five_operations_and_repeats_no_dependency() -> None:
+    """The bearer is attached to the whole `/api/v1` prefix by `main.py` (AD-4).
+
+    Revised: story 1 of epic 6, 2026-11-22 — `PUT /projects/{project_id}/run-defaults` joins.
+    """
     routes = [(sorted(route.methods), route.path) for route in router_module.router.routes]
 
     assert sorted(routes) == [
@@ -359,6 +362,7 @@ def test_the_router_declares_four_operations_and_repeats_no_dependency() -> None
         (["GET"], "/projects/{project_id}"),
         (["POST"], "/projects"),
         (["PUT"], "/projects/{project_id}"),
+        (["PUT"], "/projects/{project_id}/run-defaults"),
     ]
     for route in router_module.router.routes:
         assert route.dependencies == []
