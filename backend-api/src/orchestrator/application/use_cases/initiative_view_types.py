@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -10,14 +10,18 @@ from uuid import UUID
 from orchestrator.application.rules.attention import Attention
 from orchestrator.application.rules.initiative_status import InitiativeStatusValue, RunFacts
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.initiative import Initiative
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.statuses import RunStatus, StepStatus
+from orchestrator.domain.statuses import ParkKind, RunStatus
 
 InitiativeFilter = Literal["ongoing", "needs_you", "all"]
 InitiativeStepStatus = Literal["planned", "running", "waiting for her", "done", "skipped", "failed"]
 WorkflowState = Literal["completed", "ongoing"]
+TurnStatus = Literal["queued", "running", "done", "failed"]
+FilesState = Literal["done", "open", "to come", "skipped, forced", "failed"]
+StepToken = Literal["RUN", "BLK", "DON", "ERR", "CAN", "QUE", "SKP"]
 
 
 @dataclass(frozen=True)
@@ -87,17 +91,60 @@ class Turn:
     run_id: UUID
     round: int
     n: int
-    status: StepStatus
+    status: TurnStatus
     message: str
     reply: str
     started_at: datetime | None
     ended_at: datetime | None
+    author: Literal["operator", "gate"] = "operator"
+    defects: int | None = None
+    owner: str | None = None
+    model: str | None = None
+    failure_reason: str | None = None
 
 
 @dataclass(frozen=True)
 class StepFile:
     path: str
     draft: bool
+    run_id: UUID | None = None
+    time: datetime | None = None
+    changed: bool = False
+
+
+@dataclass(frozen=True)
+class ProjectRef:
+    id: UUID
+    name: str
+
+
+@dataclass(frozen=True)
+class HubRef:
+    id: UUID
+    slug: str
+
+
+@dataclass(frozen=True)
+class WorkflowFile:
+    path: str
+    run_id: UUID
+
+
+@dataclass(frozen=True)
+class SessionEntry:
+    workflow: str
+    step: str | None
+    kind: Literal["session", "run"]
+    id: UUID
+    round: int
+    state: str
+
+
+@dataclass(frozen=True)
+class PriorView:
+    """The `last_opened_at` a read found before it wrote a new one."""
+
+    at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -111,6 +158,17 @@ class DetailStep:
     line: str
     turns: list[Turn]
     files: list[StepFile]
+    number: str = ""
+    agent: str | None = None
+    harness: str | None = None
+    model: str | None = None
+    run_id: UUID | None = None
+    park_seq: int | None = None
+    park_kind: ParkKind | None = None
+    park_reason: str | None = None
+    token: StepToken = "QUE"
+    files_state: FilesState = "to come"
+    conflict_files: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -123,6 +181,8 @@ class DetailWorkflow:
     status: RunStatus | None
     run_id: UUID | None
     steps: list[DetailStep]
+    line: str = ""
+    files: list[WorkflowFile] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -150,6 +210,16 @@ class InitiativeDetail:
     park_seq: int
     workflows: list[DetailWorkflow]
     runs: list[DetailRun]
+    project: ProjectRef | None = None
+    hub: HubRef | None = None
+    folder: str = ""
+    workflow_count: int = 0
+    sequence_fixed_at: datetime | None = None
+    current_position: int = 1
+    current_step: str | None = None
+    last_opened_at: datetime | None = None
+    owners: list[str] = field(default_factory=list)
+    sessions: list[SessionEntry] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -161,3 +231,4 @@ class Loaded:
     rows: dict[UUID, list[StepRun]]
     attempts: dict[UUID, list[Attempt]]
     facts: dict[UUID, RunFacts]
+    records: dict[UUID, list[GateRecord]] = field(default_factory=dict)

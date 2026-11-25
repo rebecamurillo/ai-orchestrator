@@ -8,16 +8,36 @@ Run of the initiative, oldest Run first.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from pathlib import Path
 
+from orchestrator.application.rules.initiative_lines import (
+    files_state,
+)
 from orchestrator.application.steps import CONVERSATION_KIND
+from orchestrator.application.use_cases.initiative_detail_lines import (
+    At,
+    MergeFact,
+    StepContext,
+    at_of,
+    auto_files_of,
+    facts_of,
+    is_current,
+    strip_of,
+    token_of,
+    track_line,
+)
 from orchestrator.application.use_cases.initiative_facts import (
     conversation_step,
-    current_conversation_row,
     entry_steps,
     session_turns,
     shown_indices,
     shown_number,
+)
+from orchestrator.application.use_cases.initiative_step_parts import (
+    conflicts_of,
+    forced,
+    step_number,
+    timed_files,
+    turn_status,
 )
 from orchestrator.application.use_cases.initiative_view_types import (
     DetailRun,
@@ -25,7 +45,6 @@ from orchestrator.application.use_cases.initiative_view_types import (
     DetailWorkflow,
     InitiativeStepStatus,
     Loaded,
-    StepFile,
     Turn,
 )
 from orchestrator.domain.entities.attempt import Attempt
@@ -33,7 +52,6 @@ from orchestrator.domain.entities.initiative import FrozenWorkflow
 from orchestrator.domain.entities.project_package import StepDecl
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
-from orchestrator.domain.ports.git import Git, GitError
 
 GATE_ROLE = "spec-gate"
 
@@ -55,15 +73,18 @@ _RUN_STATUS: dict[str, InitiativeStepStatus] = {
 }
 
 
-def detail_workflows(loaded: Loaded, git: Git, folder: str | None) -> list[DetailWorkflow]:
+def detail_workflows(ctx: StepContext) -> list[DetailWorkflow]:
+    loaded = ctx.loaded
     sequence = loaded.initiative.sequence
     result: list[DetailWorkflow] = []
+    names = [sequence.workflows[i].workflow for i in shown_indices(sequence)]
     for number, index in enumerate(shown_indices(sequence), start=1):
         entry = sequence.workflows[index]
         latest = _latest_at(loaded, index)
+        listed = entry_steps(sequence, index)
         steps = [
-            _step(loaded, git, folder, index, entry, step_id, kind)
-            for step_id, kind in entry_steps(sequence, index)
+            _step(ctx, entry, at_of(ctx, entry, index, number, listed, k), step_id, kind)
+            for k, (step_id, kind) in enumerate(listed, start=1)
         ]
         result.append(
             DetailWorkflow(
@@ -75,6 +96,8 @@ def detail_workflows(loaded: Loaded, git: Git, folder: str | None) -> list[Detai
                 status=None if latest is None else latest.status,
                 run_id=None if latest is None else latest.id,
                 steps=steps,
+                line=track_line(ctx, entry, number, index, listed, names),
+                files=auto_files_of(ctx, entry, latest),
             )
         )
     return result
@@ -100,37 +123,52 @@ def _latest_at(loaded: Loaded, index: int) -> Run | None:
     return max(at, key=lambda run: run.created_at, default=None)
 
 
-def _step(  # noqa: PLR0913, PLR0917 — one fact per argument, read once by the caller
-    loaded: Loaded,
-    git: Git,
-    folder: str | None,
-    index: int,
-    entry: FrozenWorkflow,
-    step_id: str,
-    kind: str,
-) -> DetailStep:
+def _step(ctx: StepContext, entry: FrozenWorkflow, at: At, step_id: str, kind: str) -> DetailStep:
     decl = next((d for d in entry.steps if d.id == step_id), None)
     if decl is None:
-        return _merge_step(loaded, step_id)
+        return _merge_step(ctx, step_id, at)
     if kind == CONVERSATION_KIND:
-        return _conversation(loaded, git, folder, index, decl.id, decl)
-    return _gate(loaded, index, decl)
+        return _conversation(ctx, at, decl)
+    return _gate(ctx, at, decl)
 
 
-def _merge_step(loaded: Loaded, workflow: str) -> DetailStep:
+def _merge_step(ctx: StepContext, workflow: str, at: At) -> DetailStep:
+    loaded = ctx.loaded
     sequence = loaded.initiative.sequence
     index = next(i for i, e in enumerate(sequence.workflows) if e.workflow == workflow)
     latest = _latest_at(loaded, index)
+    status: InitiativeStepStatus = "planned" if latest is None else _RUN_STATUS[latest.status]
+    conflicts = (
+        []
+        if latest is None
+        else conflicts_of(latest, loaded.rows[latest.id], loaded.attempts[latest.id])
+    )
+    line = strip_of(
+        ctx,
+        at,
+        status=status,
+        kind="automatic",
+        run=latest,
+        row=None,
+        turns=[],
+        files=[],
+        merge=MergeFact(len(conflicts), None if latest is None else latest.park_reason),
+    )
     return DetailStep(
         id=workflow,
         kind="automatic",
         persona=None,
         skill=None,
         file=None,
-        status="planned" if latest is None else _RUN_STATUS[latest.status],
-        line="" if latest is None else latest.park_reason or "",
+        status=status,
+        line=line,
         turns=[],
         files=[],
+        number=step_number(at.number, at.k),
+        token=token_of(ctx, status, None),
+        files_state=files_state(status, forced=False),
+        conflict_files=conflicts,
+        **facts_of(ctx, latest, None, None),
     )
 
 
@@ -140,7 +178,7 @@ def _row_status(
     if row is None or run is None:
         return "planned"
     facts = loaded.facts[run.id]
-    if mapped and run.status == "running" and _is_current(run, row, loaded):
+    if mapped and run.status == "running" and is_current(run, row, loaded):
         word = facts.step_word
         status_map: Mapping[str, str] = loaded.initiative.sequence.status_map
         if word is not None and word in status_map:
@@ -148,11 +186,6 @@ def _row_status(
     if row.status == "checkpoint":
         return "waiting for her" if facts.attention == "blocked" else "running"
     return _ROW_STATUS.get(row.status, "planned")
-
-
-def _is_current(run: Run, row: StepRun, loaded: Loaded) -> bool:
-    current = current_conversation_row(run, loaded.rows[run.id])
-    return current is not None and current.id == row.id
 
 
 def _holders(loaded: Loaded, index: int, match: object) -> tuple[Run | None, StepRun | None]:
@@ -167,32 +200,11 @@ def _holders(loaded: Loaded, index: int, match: object) -> tuple[Run | None, Ste
     return found
 
 
-def _gate(loaded: Loaded, index: int, decl: StepDecl) -> DetailStep:
-    run, row = _holders(loaded, index, lambda r: r.role == GATE_ROLE)
-    return DetailStep(
-        id=decl.id,
-        kind=decl.kind,
-        persona=decl.persona,
-        skill=decl.skill,
-        file=decl.file,
-        status=_row_status(row, run, loaded, mapped=False),
-        line="" if row is None else row.reason or "",
-        turns=[],
-        files=[],
-    )
-
-
-def _conversation(  # noqa: PLR0913, PLR0917 — one fact per argument
-    loaded: Loaded, git: Git, folder: str | None, index: int, step_id: str, decl: StepDecl
-) -> DetailStep:
-    run, row = _holders(
-        loaded,
-        index,
-        lambda r: r.kind == CONVERSATION_KIND and conversation_step(r) == step_id,
-    )
-    status = _row_status(row, run, loaded, mapped=True)
-    by_run = _turns_by_run(loaded, step_id)
-    turns = [_turn(run_, a) for run_, attempts in by_run for a in attempts]
+def _gate(ctx: StepContext, at: At, decl: StepDecl) -> DetailStep:
+    loaded = ctx.loaded
+    run, row = _holders(loaded, at.index, lambda r: r.role == GATE_ROLE)
+    status = _row_status(row, run, loaded, mapped=False)
+    line = strip_of(ctx, at, status=status, kind="automatic", run=run, row=row, turns=[], files=[])
     return DetailStep(
         id=decl.id,
         kind=decl.kind,
@@ -200,9 +212,45 @@ def _conversation(  # noqa: PLR0913, PLR0917 — one fact per argument
         skill=decl.skill,
         file=decl.file,
         status=status,
-        line="" if row is None else row.reason or "",
+        line=line,
+        turns=[],
+        files=[],
+        number=step_number(at.number, at.k),
+        token=token_of(ctx, status, row),
+        files_state=files_state(status, forced=forced(row)),
+        **facts_of(ctx, run, row, decl),
+    )
+
+
+def _conversation(ctx: StepContext, at: At, decl: StepDecl) -> DetailStep:
+    loaded = ctx.loaded
+    run, row = _holders(
+        loaded,
+        at.index,
+        lambda r: r.kind == CONVERSATION_KIND and conversation_step(r) == decl.id,
+    )
+    status = _row_status(row, run, loaded, mapped=True)
+    by_run = _turns_by_run(loaded, decl.id)
+    turns = [_turn(run_, a) for run_, attempts in by_run for a in attempts]
+    files = timed_files(by_run, ctx.git, ctx.folder, draft=status != "done", prior=ctx.prior)
+    holder = [a for r, attempts in by_run if run is not None and r.id == run.id for a in attempts]
+    line = strip_of(
+        ctx, at, status=status, kind="conversation", run=run, row=row, turns=holder, files=files
+    )
+    return DetailStep(
+        id=decl.id,
+        kind=decl.kind,
+        persona=decl.persona,
+        skill=decl.skill,
+        file=decl.file,
+        status=status,
+        line=line,
         turns=turns,
-        files=_files(by_run, git, folder, draft=status != "done"),
+        files=files,
+        number=step_number(at.number, at.k),
+        token=token_of(ctx, status, row),
+        files_state=files_state(status, forced=forced(row)),
+        **facts_of(ctx, run, row, decl),
     )
 
 
@@ -219,38 +267,17 @@ def _turns_by_run(loaded: Loaded, step_id: str) -> list[tuple[Run, list[Attempt]
 
 
 def _turn(run: Run, attempt: Attempt) -> Turn:
+    status = turn_status(attempt)
     return Turn(
         attempt_id=attempt.id,
         run_id=run.id,
         round=run.initiative_round or 1,
         n=attempt.n,
-        status=attempt.status,
+        status=status,
         message=attempt.message,
         reply=attempt.reply,
         started_at=attempt.started_at,
         ended_at=attempt.ended_at,
+        model=attempt.model,
+        failure_reason=attempt.output_ref if status == "failed" else None,
     )
-
-
-def _files(
-    by_run: list[tuple[Run, list[Attempt]]],
-    git: Git,
-    folder: str | None,
-    *,
-    draft: bool,
-) -> list[StepFile]:
-    paths: list[str] = []
-    for run, attempts in by_run:
-        if folder is None or not run.worktree_path or run.worktrees_removed:
-            continue
-        first, last = attempts[0].start_sha, attempts[-1].end_sha
-        if first is None or last is None:
-            continue
-        try:
-            changes = git.diff_changes(Path(run.worktree_path), first, last)
-        except GitError:
-            continue
-        for change in changes:
-            if change.path.startswith(folder) and change.path not in paths:
-                paths.append(change.path)
-    return [StepFile(path=path, draft=draft) for path in paths]

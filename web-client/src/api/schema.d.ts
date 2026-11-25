@@ -135,6 +135,9 @@ export interface paths {
         /**
          * Read an initiative
          * @description The row, its workflows with their steps and turns, and its Runs.
+         *
+         *     `?opened=true` moves `last_opened_at` to now first and marks the files changed since the
+         *     previous view; without it nothing is written.
          */
         get: operations["read_initiative_api_v1_initiatives__initiative_id__get"];
         put?: never;
@@ -2194,10 +2197,21 @@ export interface components {
         };
         /** DetailStepOut */
         DetailStepOut: {
+            /** Agent */
+            agent: string | null;
+            /** Conflict Files */
+            conflict_files: string[];
             /** File */
             file: string | null;
             /** Files */
             files: components["schemas"]["StepFileOut"][];
+            /**
+             * Files State
+             * @enum {string}
+             */
+            files_state: "done" | "open" | "to come" | "skipped, forced" | "failed";
+            /** Harness */
+            harness: string | null;
             /** Id */
             id: string;
             /**
@@ -2207,8 +2221,20 @@ export interface components {
             kind: "conversation" | "automatic";
             /** Line */
             line: string;
+            /** Model */
+            model: string | null;
+            /** Number */
+            number: string;
+            /** Park Kind */
+            park_kind: ("blocked" | "checkpoint" | "verify_failed" | "budget" | "timeout" | "push_rejected" | "protected_path" | "misconfigured" | "plan_stale" | "internal" | "dependency" | "merge_conflict" | "paused" | "conversation") | null;
+            /** Park Reason */
+            park_reason: string | null;
+            /** Park Seq */
+            park_seq: number | null;
             /** Persona */
             persona: string | null;
+            /** Run Id */
+            run_id: string | null;
             /** Skill */
             skill: string | null;
             /**
@@ -2216,11 +2242,20 @@ export interface components {
              * @enum {string}
              */
             status: "planned" | "running" | "waiting for her" | "done" | "skipped" | "failed";
+            /**
+             * Token
+             * @enum {string}
+             */
+            token: "RUN" | "BLK" | "DON" | "ERR" | "CAN" | "QUE" | "SKP";
             /** Turns */
             turns: components["schemas"]["TurnOut"][];
         };
         /** DetailWorkflowOut */
         DetailWorkflowOut: {
+            /** Files */
+            files: components["schemas"]["WorkflowFileOut"][];
+            /** Line */
+            line: string;
             /** Position */
             position: number;
             /** Run Id */
@@ -2828,6 +2863,16 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** HubRefOut */
+        HubRefOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Slug */
+            slug: string;
+        };
         /**
          * InitiativeDetailOut
          * @description `GET /initiatives/{id}`: the row's fields, with `workflows` carrying steps and Runs.
@@ -2841,17 +2886,28 @@ export interface components {
             cancelled_at: string | null;
             /** Created At */
             created_at: string;
+            /** Current Position */
+            current_position: number;
+            /** Current Step */
+            current_step: string | null;
             /** First Message */
             first_message: string;
+            /** Folder */
+            folder: string;
+            hub: components["schemas"]["HubRefOut"] | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Last Opened At */
+            last_opened_at: string | null;
             /** Line */
             line: string;
             /** Name */
             name: string;
+            /** Owners */
+            owners: string[];
             /** Package */
             package: string;
             /** Park Seq */
@@ -2862,6 +2918,7 @@ export interface components {
             pr_merged_at: string | null;
             /** Progress */
             progress: string;
+            project: components["schemas"]["ProjectRefOut"] | null;
             /**
              * Project Id
              * Format: uuid
@@ -2882,6 +2939,10 @@ export interface components {
             round: number;
             /** Runs */
             runs: components["schemas"]["DetailRunOut"][];
+            /** Sequence Fixed At */
+            sequence_fixed_at: string | null;
+            /** Sessions */
+            sessions: components["schemas"]["SessionEntryOut"][];
             /** Sha */
             sha: string;
             /** Slug */
@@ -3724,6 +3785,16 @@ export interface components {
             /** Updated At */
             updated_at: string;
         };
+        /** ProjectRefOut */
+        ProjectRefOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /**
          * ProjectRunOut
          * @description One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the record
@@ -4517,6 +4588,27 @@ export interface components {
             /** Workflow */
             workflow: string;
         };
+        /** SessionEntryOut */
+        SessionEntryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "session" | "run";
+            /** Round */
+            round: number;
+            /** State */
+            state: string;
+            /** Step */
+            step: string | null;
+            /** Workflow */
+            workflow: string;
+        };
         /**
          * SessionOut
          * @description Whether a session holds the Run, whether one can start here, and what it changed.
@@ -4683,10 +4775,16 @@ export interface components {
         };
         /** StepFileOut */
         StepFileOut: {
+            /** Changed */
+            changed: boolean;
             /** Draft */
             draft: boolean;
             /** Path */
             path: string;
+            /** Run Id */
+            run_id: string | null;
+            /** Time */
+            time: string | null;
         };
         /** StepRowOut */
         StepRowOut: {
@@ -4940,12 +5038,25 @@ export interface components {
              * Format: uuid
              */
             attempt_id: string;
+            /**
+             * Author
+             * @enum {string}
+             */
+            author: "operator" | "gate";
+            /** Defects */
+            defects: number | null;
             /** Ended At */
             ended_at: string | null;
+            /** Failure Reason */
+            failure_reason: string | null;
             /** Message */
             message: string;
+            /** Model */
+            model: string | null;
             /** N */
             n: number;
+            /** Owner */
+            owner: string | null;
             /** Reply */
             reply: string;
             /** Round */
@@ -4961,7 +5072,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "planned" | "queued" | "running" | "done" | "blocked" | "checkpoint" | "error" | "skipped";
+            status: "queued" | "running" | "done" | "failed";
         };
         /**
          * ValidateIn
@@ -5003,6 +5114,16 @@ export interface components {
             harness_versions: components["schemas"]["HarnessVersions"];
             /** Kit Version */
             kit_version: string | null;
+        };
+        /** WorkflowFileOut */
+        WorkflowFileOut: {
+            /** Path */
+            path: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
         };
         /** WorkflowFootOut */
         WorkflowFootOut: {
@@ -5426,7 +5547,9 @@ export interface operations {
     };
     read_initiative_api_v1_initiatives__initiative_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                opened?: boolean;
+            };
             header?: never;
             path: {
                 initiative_id: string;

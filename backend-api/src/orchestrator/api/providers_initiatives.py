@@ -5,9 +5,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import cast
+from typing import Annotated, cast
 
-from fastapi import Request
+from fastapi import Query, Request
 
 from orchestrator.api import providers_base
 from orchestrator.api.providers import _preflight_ports, signal_effect_ports
@@ -15,11 +15,13 @@ from orchestrator.api.providers_base import ENGINE, SESSION_FACTORY, SETTINGS, f
 from orchestrator.application.use_cases.create_run import CreateRunPorts
 from orchestrator.application.use_cases.initiative_views import InitiativeReadPorts
 from orchestrator.application.use_cases.initiatives import InitiativePorts
+from orchestrator.application.use_cases.open_initiative import OpenInitiativePorts
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.remote_branches import RemoteBranches
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
     SQLAlchemyAttemptRepository,
+    SQLAlchemyGateRecordRepository,
     SQLAlchemyInitiativeAdvanceRepository,
     SQLAlchemyInitiativeRepository,
     SQLAlchemyProjectPackageRepository,
@@ -31,6 +33,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyUnitOfWork,
 )
 from orchestrator.infrastructure.db.repositories.run_records import SQLAlchemyRunRepositoryRecords
+from orchestrator.infrastructure.git.git_history import SubprocessGitHistory
 from orchestrator.infrastructure.tracing import build_tracer
 from orchestrator.infrastructure.workspace.fs import FsWorkspace
 
@@ -92,5 +95,23 @@ def initiative_read_ports(request: Request) -> Iterator[InitiativeReadPorts]:
             attempts=SQLAlchemyAttemptRepository(uow.session),
             git=git,
             workspace=FsWorkspace,
+            clock=SystemClock(),
+            records=SQLAlchemyGateRecordRepository(uow.session),
+            history=SubprocessGitHistory(),
+        )
+
+
+def open_initiative_ports(
+    request: Request, opened: Annotated[bool, Query()] = False
+) -> Iterator[OpenInitiativePorts | None]:
+    """What `?opened=true` writes through; `None` without it, so a plain read opens no session."""
+    if not opened:
+        yield None
+        return
+    session_factory = from_state(request, SESSION_FACTORY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        yield OpenInitiativePorts(
+            initiatives=SQLAlchemyInitiativeRepository(uow.session),
+            uow=uow,
             clock=SystemClock(),
         )

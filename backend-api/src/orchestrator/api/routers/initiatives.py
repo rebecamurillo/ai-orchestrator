@@ -13,7 +13,11 @@ from orchestrator.api.errors import (
     PROBLEM_SCHEMA_REF,
     ProblemDetail,
 )
-from orchestrator.api.providers_initiatives import initiative_ports, initiative_read_ports
+from orchestrator.api.providers_initiatives import (
+    initiative_ports,
+    initiative_read_ports,
+    open_initiative_ports,
+)
 from orchestrator.api.schemas.initiatives import (
     InitiativeDetailOut,
     InitiativeIn,
@@ -24,6 +28,7 @@ from orchestrator.application.use_cases import initiative_start_next, initiative
 from orchestrator.application.use_cases.initiative_view_types import InitiativeFilter
 from orchestrator.application.use_cases.initiative_views import InitiativeReadPorts
 from orchestrator.application.use_cases.initiatives import InitiativePorts
+from orchestrator.application.use_cases.open_initiative import OpenInitiativePorts, open_initiative
 
 router = APIRouter(tags=["initiatives"])
 
@@ -33,6 +38,7 @@ HTTP_CREATED = 201
 
 Ports = Annotated[InitiativeReadPorts, Depends(initiative_read_ports)]
 WritePorts = Annotated[InitiativePorts, Depends(initiative_ports)]
+OpenPorts = Annotated[OpenInitiativePorts | None, Depends(open_initiative_ports)]
 Filter = Annotated[InitiativeFilter, Query(alias="filter")]
 
 
@@ -89,9 +95,20 @@ def list_project_initiatives(
     summary="Read an initiative",
     responses=_refusals("No initiative has that id."),
 )
-def read_initiative(initiative_id: UUID, ports: Ports) -> InitiativeDetailOut:
-    """The row, its workflows with their steps and turns, and its Runs."""
-    return InitiativeDetailOut.of(initiative_views.initiative_detail(ports, initiative_id))
+def read_initiative(
+    initiative_id: UUID, ports: Ports, open_ports: OpenPorts
+) -> InitiativeDetailOut:
+    """The row, its workflows with their steps and turns, and its Runs.
+
+    `?opened=true` moves `last_opened_at` to now first and marks the files changed since the
+    previous view; without it nothing is written.
+    """
+    if open_ports is None:
+        return InitiativeDetailOut.of(initiative_views.initiative_detail(ports, initiative_id))
+    prior = open_initiative(open_ports, initiative_id)
+    return InitiativeDetailOut.of(
+        initiative_views.initiative_detail(ports, initiative_id, prior=prior)
+    )
 
 
 @router.post(

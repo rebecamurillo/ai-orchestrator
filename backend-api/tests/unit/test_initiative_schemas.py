@@ -129,6 +129,8 @@ def test_the_detail_maps_workflows_steps_turns_files_and_runs() -> None:
     (workflow,) = out["workflows"]
     assert workflow["run_id"] == str(run_id)
     (mapped,) = workflow["steps"]
+    # Revised by story 6 of epic 7 (2026-11-22): the turn gains `author`, `defects`, `owner`,
+    # `model` and `failure_reason`; every old key keeps its value.
     assert mapped["turns"][0] == {
         "attempt_id": str(attempt_id),
         "run_id": str(run_id),
@@ -139,8 +141,22 @@ def test_the_detail_maps_workflows_steps_turns_files_and_runs() -> None:
         "reply": "hello",
         "started_at": "2026-11-24T09:00:00Z",
         "ended_at": "2026-11-24T09:00:00Z",
+        "author": "operator",
+        "defects": None,
+        "owner": None,
+        "model": None,
+        "failure_reason": None,
     }
-    assert mapped["files"] == [{"path": "initiatives/snake/PRD.md", "draft": True}]
+    # Revised by story 6 of epic 7 (2026-11-22): the file gains `run_id`, `time`, `changed`.
+    assert mapped["files"] == [
+        {
+            "path": "initiatives/snake/PRD.md",
+            "draft": True,
+            "run_id": None,
+            "time": None,
+            "changed": False,
+        }
+    ]
     assert out["runs"][0]["round"] == 1
     assert out["first_message"] == "make it"
     assert out["sha"] == "abc"

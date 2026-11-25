@@ -17,6 +17,8 @@ from orchestrator.application.rules.initiative_status import (
     initiative_status,
 )
 from orchestrator.application.steps.context import WorkspaceFactory
+from orchestrator.application.use_cases import initiative_detail_extras as extras
+from orchestrator.application.use_cases.initiative_detail_lines import StepContext
 from orchestrator.application.use_cases.initiative_detail_steps import (
     detail_runs,
     detail_workflows,
@@ -38,9 +40,11 @@ from orchestrator.application.use_cases.initiative_view_types import (
     InitiativeRow,
     ListCounts,
     Loaded,
+    PriorView,
     WorkflowFoot,
     WorkflowState,
 )
+from orchestrator.application.use_cases.run_files_by_epic import FilesByEpicPorts
 from orchestrator.application.use_cases.run_views_board import board_current_step_label
 from orchestrator.application.use_cases.run_views_summary import progress
 from orchestrator.application.use_cases.walk_frame import row_workdir
@@ -49,10 +53,12 @@ from orchestrator.domain.entities.run import Run
 from orchestrator.domain.errors import NotFound
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.git_history import GitHistory
 from orchestrator.domain.ports.initiative_runs import InitiativeRunReads
 from orchestrator.domain.ports.initiatives import InitiativeAdvanceRepository, InitiativeRepository
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
+    GateRecordRepository,
     ProjectRepository,
     RepositoryRepository,
     RunRepository,
@@ -86,6 +92,8 @@ class InitiativeReadPorts:
     git: Git
     workspace: WorkspaceFactory
     clock: Clock
+    records: GateRecordRepository | None = None
+    history: GitHistory | None = None
 
 
 def list_initiatives(
@@ -97,9 +105,7 @@ def list_initiatives(
     """Rows newest change first, narrowed by `filter`; `columns` and `counts` over the kept rows."""
     if project_id is not None and ports.projects.get(project_id) is None:
         raise NotFound(f"no project {project_id}")
-    pairs = [
-        (i, _row(ports, _load(ports, i))) for i in ports.initiatives.list(project_id=project_id)
-    ]
+    pairs = [(i, _listed(ports, i)) for i in ports.initiatives.list(project_id=project_id)]
     now = ports.clock.now()
     kept = [(i, row) for i, row in pairs if _kept(i, row, filter, now)]
     kept.sort(key=lambda pair: pair[1].updated_at, reverse=True)
@@ -107,16 +113,31 @@ def list_initiatives(
     return InitiativeList(items=rows, columns=_columns([i for i, _ in kept]), counts=_counts(rows))
 
 
-def initiative_detail(ports: InitiativeReadPorts, initiative_id: UUID) -> InitiativeDetail:
+def initiative_detail(
+    ports: InitiativeReadPorts, initiative_id: UUID, *, prior: PriorView | None = None
+) -> InitiativeDetail:
+    """The page's every fact. `prior` is what `open_initiative` found before it wrote a new
+    `last_opened_at`; `None` means no write happened and the stored value is the cutoff."""
     initiative = ports.initiatives.get(initiative_id)
     if initiative is None:
         raise NotFound(f"no initiative {initiative_id}")
     loaded = _load(ports, initiative)
-    row = _row(ports, loaded)
+    reading = _reading(ports, loaded)
+    row = _row(ports, loaded, reading)
     repository = ports.repositories.get(initiative.repository_id)
-    folder = None if repository is None else f"{repository.initiative_folder}/{initiative.slug}/"
+    base = None if repository is None else f"{repository.initiative_folder}/{initiative.slug}"
     latest = _latest(loaded.runs)
     stop = _NoRun if latest is None else latest
+    cutoff = initiative.last_opened_at if prior is None else prior.at
+    context = StepContext(
+        loaded=loaded,
+        git=ports.git,
+        folder=None if base is None else f"{base}/",
+        row=row,
+        reading=reading,
+        prior=cutoff,
+        history_files=extras.auto_files(_files_ports(ports)),
+    )
     return InitiativeDetail(
         row=row,
         first_message=initiative.first_message,
@@ -128,8 +149,31 @@ def initiative_detail(ports: InitiativeReadPorts, initiative_id: UUID) -> Initia
         package=initiative.sequence.package,
         sha=initiative.sequence.sha,
         park_seq=stop.park_seq,
-        workflows=detail_workflows(loaded, ports.git, folder),
+        workflows=detail_workflows(context),
         runs=detail_runs(loaded),
+        project=extras.project_ref(ports.projects, initiative),
+        hub=extras.hub_ref(repository),
+        folder=base or "",
+        workflow_count=row.workflow_count,
+        sequence_fixed_at=initiative.created_at,
+        current_position=row.position,
+        current_step=extras.current_step(loaded, latest),
+        last_opened_at=initiative.last_opened_at,
+        owners=extras.owners(loaded),
+        sessions=extras.sessions(loaded),
+    )
+
+
+def _files_ports(ports: InitiativeReadPorts) -> FilesByEpicPorts | None:
+    if ports.history is None:
+        return None
+    return FilesByEpicPorts(
+        runs=ports.runs,
+        steps=ports.steps,
+        attempts=ports.attempts,
+        git=ports.git,
+        history=ports.history,
+        workspace=ports.workspace,
     )
 
 
@@ -143,7 +187,8 @@ def _load(ports: InitiativeReadPorts, initiative: Initiative) -> Loaded:
     facts = {
         run.id: run_facts(run, rows[run.id], attempts[run.id], ports.workspace) for run in runs
     }
-    return Loaded(initiative, runs, rows, attempts, facts)
+    records = {run.id: ports.records.list_for_run(run.id) for run in runs} if ports.records else {}
+    return Loaded(initiative, runs, rows, attempts, facts, records)
 
 
 def _latest(runs: list[Run]) -> Run | None:
@@ -181,14 +226,23 @@ def _counts(rows: list[InitiativeRow]) -> ListCounts:
     )
 
 
-def _row(ports: InitiativeReadPorts, loaded: Loaded) -> InitiativeRow:
+def _listed(ports: InitiativeReadPorts, initiative: Initiative) -> InitiativeRow:
+    loaded = _load(ports, initiative)
+    return _row(ports, loaded, _reading(ports, loaded))
+
+
+def _reading(ports: InitiativeReadPorts, loaded: Loaded) -> StatusReading:
     initiative = loaded.initiative
-    reading = initiative_status(
+    return initiative_status(
         initiative,
         list(loaded.facts.values()),
         ports.advances.list_for_initiative(initiative.id),
         initiative.sequence.status_map,
     )
+
+
+def _row(ports: InitiativeReadPorts, loaded: Loaded, reading: StatusReading) -> InitiativeRow:
+    initiative = loaded.initiative
     latest = _latest(loaded.runs)
     position = None if latest is None else latest.initiative_position
     number = shown_number(initiative.sequence, position)

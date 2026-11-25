@@ -2168,6 +2168,24 @@
       },
       "DetailStepOut": {
         "properties": {
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "conflict_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conflict Files",
+            "type": "array"
+          },
           "file": {
             "anyOf": [
               {
@@ -2186,6 +2204,28 @@
             "title": "Files",
             "type": "array"
           },
+          "files_state": {
+            "enum": [
+              "done",
+              "open",
+              "to come",
+              "skipped, forced",
+              "failed"
+            ],
+            "title": "Files State",
+            "type": "string"
+          },
+          "harness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Harness"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -2202,6 +2242,70 @@
             "title": "Line",
             "type": "string"
           },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "number": {
+            "title": "Number",
+            "type": "string"
+          },
+          "park_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "blocked",
+                  "checkpoint",
+                  "verify_failed",
+                  "budget",
+                  "timeout",
+                  "push_rejected",
+                  "protected_path",
+                  "misconfigured",
+                  "plan_stale",
+                  "internal",
+                  "dependency",
+                  "merge_conflict",
+                  "paused",
+                  "conversation"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Kind"
+          },
+          "park_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Reason"
+          },
+          "park_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Park Seq"
+          },
           "persona": {
             "anyOf": [
               {
@@ -2212,6 +2316,18 @@
               }
             ],
             "title": "Persona"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
           },
           "skill": {
             "anyOf": [
@@ -2236,6 +2352,19 @@
             "title": "Status",
             "type": "string"
           },
+          "token": {
+            "enum": [
+              "RUN",
+              "BLK",
+              "DON",
+              "ERR",
+              "CAN",
+              "QUE",
+              "SKP"
+            ],
+            "title": "Token",
+            "type": "string"
+          },
           "turns": {
             "items": {
               "$ref": "#/components/schemas/TurnOut"
@@ -2253,13 +2382,35 @@
           "status",
           "line",
           "turns",
-          "files"
+          "files",
+          "number",
+          "agent",
+          "harness",
+          "model",
+          "run_id",
+          "park_seq",
+          "park_kind",
+          "park_reason",
+          "token",
+          "files_state",
+          "conflict_files"
         ],
         "title": "DetailStepOut",
         "type": "object"
       },
       "DetailWorkflowOut": {
         "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowFileOut"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
           "position": {
             "title": "Position",
             "type": "integer"
@@ -2327,7 +2478,9 @@
           "type",
           "status",
           "run_id",
-          "steps"
+          "steps",
+          "line",
+          "files"
         ],
         "title": "DetailWorkflowOut",
         "type": "object"
@@ -4085,6 +4238,25 @@
         "title": "HoldOut",
         "type": "object"
       },
+      "HubRefOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug"
+        ],
+        "title": "HubRefOut",
+        "type": "object"
+      },
       "InitiativeDetailOut": {
         "description": "`GET /initiatives/{id}`: the row's fields, with `workflows` carrying steps and Runs.",
         "properties": {
@@ -4131,14 +4303,54 @@
             "title": "Created At",
             "type": "string"
           },
+          "current_position": {
+            "title": "Current Position",
+            "type": "integer"
+          },
+          "current_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Step"
+          },
           "first_message": {
             "title": "First Message",
             "type": "string"
+          },
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "hub": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HubRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "last_opened_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Opened At"
           },
           "line": {
             "title": "Line",
@@ -4147,6 +4359,13 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "owners": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Owners",
+            "type": "array"
           },
           "package": {
             "title": "Package",
@@ -4174,6 +4393,16 @@
           "progress": {
             "title": "Progress",
             "type": "string"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "project_id": {
             "format": "uuid",
@@ -4209,6 +4438,24 @@
               "$ref": "#/components/schemas/DetailRunOut"
             },
             "title": "Runs",
+            "type": "array"
+          },
+          "sequence_fixed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence Fixed At"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/SessionEntryOut"
+            },
+            "title": "Sessions",
             "type": "array"
           },
           "sha": {
@@ -4282,7 +4529,16 @@
           "package",
           "sha",
           "park_seq",
-          "runs"
+          "runs",
+          "project",
+          "hub",
+          "folder",
+          "sequence_fixed_at",
+          "current_position",
+          "current_step",
+          "last_opened_at",
+          "owners",
+          "sessions"
         ],
         "title": "InitiativeDetailOut",
         "type": "object"
@@ -6851,6 +7107,25 @@
         "title": "ProjectRead",
         "type": "object"
       },
+      "ProjectRefOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ProjectRefOut",
+        "type": "object"
+      },
       "ProjectRunOut": {
         "description": "One row of a Project's **RUNS ON THIS PROJECT** list (SPEC CAP-10, UX-DR12): the record\nrow's own fields, plus what a Repository row's control reads about the Run it started.",
         "properties": {
@@ -8955,6 +9230,56 @@
         "title": "SequenceEntryOut",
         "type": "object"
       },
+      "SessionEntryOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "session",
+              "run"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "round": {
+            "title": "Round",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "workflow": {
+            "title": "Workflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow",
+          "step",
+          "kind",
+          "id",
+          "round",
+          "state"
+        ],
+        "title": "SessionEntryOut",
+        "type": "object"
+      },
       "SessionOut": {
         "description": "Whether a session holds the Run, whether one can start here, and what it changed.",
         "properties": {
@@ -9442,6 +9767,10 @@
       },
       "StepFileOut": {
         "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
           "draft": {
             "title": "Draft",
             "type": "boolean"
@@ -9449,11 +9778,37 @@
           "path": {
             "title": "Path",
             "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time"
           }
         },
         "required": [
           "path",
-          "draft"
+          "draft",
+          "run_id",
+          "time",
+          "changed"
         ],
         "title": "StepFileOut",
         "type": "object"
@@ -10079,6 +10434,25 @@
             "title": "Attempt Id",
             "type": "string"
           },
+          "author": {
+            "enum": [
+              "operator",
+              "gate"
+            ],
+            "title": "Author",
+            "type": "string"
+          },
+          "defects": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Defects"
+          },
           "ended_at": {
             "anyOf": [
               {
@@ -10090,13 +10464,46 @@
             ],
             "title": "Ended At"
           },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
           "message": {
             "title": "Message",
             "type": "string"
           },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
           "n": {
             "title": "N",
             "type": "integer"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
           },
           "reply": {
             "title": "Reply",
@@ -10124,14 +10531,10 @@
           },
           "status": {
             "enum": [
-              "planned",
               "queued",
               "running",
               "done",
-              "blocked",
-              "checkpoint",
-              "error",
-              "skipped"
+              "failed"
             ],
             "title": "Status",
             "type": "string"
@@ -10143,10 +10546,15 @@
           "round",
           "n",
           "status",
+          "author",
           "message",
           "reply",
           "started_at",
-          "ended_at"
+          "ended_at",
+          "defects",
+          "owner",
+          "model",
+          "failure_reason"
         ],
         "title": "TurnOut",
         "type": "object"
@@ -10244,6 +10652,25 @@
           "harness_versions"
         ],
         "title": "VersionOut",
+        "type": "object"
+      },
+      "WorkflowFileOut": {
+        "properties": {
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "run_id"
+        ],
+        "title": "WorkflowFileOut",
         "type": "object"
       },
       "WorkflowFootOut": {
@@ -10972,7 +11399,7 @@
     },
     "/api/v1/initiatives/{initiative_id}": {
       "get": {
-        "description": "The row, its workflows with their steps and turns, and its Runs.",
+        "description": "The row, its workflows with their steps and turns, and its Runs.\n\n`?opened=true` moves `last_opened_at` to now first and marks the files changed since the\nprevious view; without it nothing is written.",
         "operationId": "read_initiative_api_v1_initiatives__initiative_id__get",
         "parameters": [
           {
@@ -10983,6 +11410,16 @@
               "format": "uuid",
               "title": "Initiative Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "opened",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Opened",
+              "type": "boolean"
             }
           }
         ],

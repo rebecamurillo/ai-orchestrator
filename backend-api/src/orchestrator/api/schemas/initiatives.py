@@ -2,31 +2,47 @@
 
 from __future__ import annotations
 
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from orchestrator.api.schemas.common import UtcTimestamp
+from orchestrator.api.schemas.initiative_detail import (
+    DetailStepOut,
+    DetailWorkflowOut,
+    HubRefOut,
+    ProjectRefOut,
+    SessionEntryOut,
+    StepFileOut,
+    TurnOut,
+)
 from orchestrator.api.schemas.signals import StopNumber
 from orchestrator.application.rules.attention import Attention
 from orchestrator.application.rules.initiative_status import InitiativeStatusValue
 from orchestrator.application.use_cases.initiative_view_types import (
     Column,
     DetailRun,
-    DetailStep,
-    DetailWorkflow,
     InitiativeDetail,
     InitiativeList,
     InitiativeRow,
-    InitiativeStepStatus,
     ListCounts,
-    StepFile,
-    Turn,
     WorkflowFoot,
     WorkflowState,
 )
-from orchestrator.domain.statuses import RunStatus, StepStatus
+from orchestrator.domain.statuses import RunStatus
+
+__all__ = [
+    "ColumnOut",
+    "DetailStepOut",
+    "DetailWorkflowOut",
+    "InitiativeDetailOut",
+    "InitiativeIn",
+    "InitiativeListOut",
+    "InitiativeRowOut",
+    "StartNextIn",
+    "StepFileOut",
+    "TurnOut",
+]
 
 
 class ColumnOut(BaseModel):
@@ -131,91 +147,6 @@ class InitiativeListOut(BaseModel):
         )
 
 
-class TurnOut(BaseModel):
-    attempt_id: UUID
-    run_id: UUID
-    round: int
-    n: int
-    status: StepStatus
-    message: str
-    reply: str
-    started_at: UtcTimestamp | None
-    ended_at: UtcTimestamp | None
-
-    @classmethod
-    def of(cls, turn: Turn) -> TurnOut:
-        return cls(
-            attempt_id=turn.attempt_id,
-            run_id=turn.run_id,
-            round=turn.round,
-            n=turn.n,
-            status=turn.status,
-            message=turn.message,
-            reply=turn.reply,
-            started_at=turn.started_at,
-            ended_at=turn.ended_at,
-        )
-
-
-class StepFileOut(BaseModel):
-    path: str
-    draft: bool
-
-    @classmethod
-    def of(cls, file: StepFile) -> StepFileOut:
-        return cls(path=file.path, draft=file.draft)
-
-
-class DetailStepOut(BaseModel):
-    id: str
-    kind: Literal["conversation", "automatic"]
-    persona: str | None
-    skill: str | None
-    file: str | None
-    status: InitiativeStepStatus
-    line: str
-    turns: list[TurnOut]
-    files: list[StepFileOut]
-
-    @classmethod
-    def of(cls, step: DetailStep) -> DetailStepOut:
-        return cls(
-            id=step.id,
-            kind=step.kind,  # type: ignore[arg-type]
-            persona=step.persona,
-            skill=step.skill,
-            file=step.file,
-            status=step.status,
-            line=step.line,
-            turns=[TurnOut.of(turn) for turn in step.turns],
-            files=[StepFileOut.of(file) for file in step.files],
-        )
-
-
-class DetailWorkflowOut(BaseModel):
-    position: int
-    workflow: str
-    template: str
-    version: int
-    type: str
-    status: RunStatus | None
-    run_id: UUID | None
-    steps: list[DetailStepOut]
-
-    @classmethod
-    def of(cls, workflow: DetailWorkflow) -> DetailWorkflowOut:
-        return cls(
-            position=workflow.position,
-            workflow=workflow.workflow,
-            template=workflow.template,
-            version=workflow.version,
-            type=workflow.type,
-            status=workflow.status,
-            run_id=workflow.run_id,
-            steps=[DetailStepOut.of(step) for step in workflow.steps],
-        )
-
-
 class DetailRunOut(BaseModel):
     id: UUID
     template_name: str
@@ -252,6 +183,15 @@ class InitiativeDetailOut(RowCoreOut):
     sha: str
     park_seq: int
     runs: list[DetailRunOut]
+    project: ProjectRefOut | None
+    hub: HubRefOut | None
+    folder: str
+    sequence_fixed_at: UtcTimestamp | None
+    current_position: int
+    current_step: str | None
+    last_opened_at: UtcTimestamp | None
+    owners: list[str]
+    sessions: list[SessionEntryOut]
 
     @classmethod
     def of(cls, detail: InitiativeDetail) -> InitiativeDetailOut:
@@ -268,6 +208,15 @@ class InitiativeDetailOut(RowCoreOut):
             sha=detail.sha,
             park_seq=detail.park_seq,
             runs=[DetailRunOut.of(run) for run in detail.runs],
+            project=None if detail.project is None else ProjectRefOut.of(detail.project),
+            hub=None if detail.hub is None else HubRefOut.of(detail.hub),
+            folder=detail.folder,
+            sequence_fixed_at=detail.sequence_fixed_at,
+            current_position=detail.current_position,
+            current_step=detail.current_step,
+            last_opened_at=detail.last_opened_at,
+            owners=list(detail.owners),
+            sessions=[SessionEntryOut.of(entry) for entry in detail.sessions],
         )
 
 

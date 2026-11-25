@@ -146,7 +146,9 @@ def test_the_merge_step_follows_its_own_latest_run() -> None:
     world = ReadWorld()
     initiative = world.initiative()
     assert detail_step(world, initiative, 0, 2).status == "planned"
-    assert detail_step(world, initiative, 0, 2).line == ""
+    # Revised by story 6 of epic 7 (2026-11-22): the steps strip reads a planned step after
+    # the gate as `starts after the gate passes`; it pinned `""` before.
+    assert detail_step(world, initiative, 0, 2).line == "starts after the gate passes"
 
     run = world.run(initiative, position=1, status="needs_you", park_reason="merge it")
 

@@ -12,6 +12,7 @@ from uuid import UUID
 
 from orchestrator.application.use_cases.initiative_views import InitiativeReadPorts
 from orchestrator.domain.entities.attempt import Attempt
+from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.initiative import FrozenSequence, FrozenWorkflow, Initiative
 from orchestrator.domain.entities.project import Project
 from orchestrator.domain.entities.project_package import GateWords, StepDecl
@@ -21,10 +22,12 @@ from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ids import new_id
 from tests.unit.fakes.clock import FakeClock
 from tests.unit.fakes.git import FakeGit
+from tests.unit.fakes.git_history import FakeGitHistory
 from tests.unit.fakes.initiatives import FakeInitiativeAdvanceRepository, FakeInitiativeRepository
 from tests.unit.fakes.projects import FakeProjectRepository, FakeRepositoryRepository
 from tests.unit.fakes.runs import (
     FakeAttemptRepository,
+    FakeGateRecordRepository,
     FakeRunRepository,
     FakeStepRunRepository,
 )
@@ -135,6 +138,8 @@ class ReadWorld:
         self.steps = FakeStepRunRepository()
         self.attempts = FakeAttemptRepository()
         self.git = git or FakeGit()
+        self.records = FakeGateRecordRepository()
+        self.history = FakeGitHistory()
         self.clock = FakeClock(NOW)
         self.files: dict[str, str] = {}
         self.project = a_project()
@@ -159,6 +164,8 @@ class ReadWorld:
             git=self.git,
             workspace=self.workspace,
             clock=self.clock,
+            records=self.records,
+            history=self.history,
         )
 
     def initiative(self, **overrides: Any) -> Initiative:
@@ -231,6 +238,19 @@ class ReadWorld:
         attempt = Attempt(**values)
         self.attempts.add(attempt)
         return attempt
+
+    def session_start(self, run: Run, row: StepRun, minutes: int, **payload: Any) -> GateRecord:
+        record = GateRecord(
+            id=new_id(),
+            run_id=run.id,
+            at=AT + timedelta(minutes=minutes),
+            path=row.path,
+            event="session_start",
+            actor="operator",
+            payload={"scope": "step", **payload},
+        )
+        self.records.add(record)
+        return record
 
     def parked_spec(self, initiative: Initiative, turns: int = 2, **overrides: Any) -> Run:
         """A spec Run parked on its conversation row with `turns` ended session attempts."""

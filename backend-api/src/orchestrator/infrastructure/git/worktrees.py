@@ -30,6 +30,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
+from orchestrator.application.rules.merge_conflicts import CONFLICTED_HEADING
 from orchestrator.domain.ports.git import NO_UPSTREAM, Change, ChangeKind, GitError, NoUpstream
 
 #: Where a base clone's origin refs live. The same word `subprocess_git.py` uses.
@@ -85,10 +86,8 @@ EXCLUDE_PATHSPEC = ":!{path}"
 #: exactly one (AD-9, spine "Shipped kinds").
 MERGE_MESSAGE = "merge {branch} (orchestrator)"
 
-#: What `--diff-filter=U` answers with, and the heading the listing is put under so a
-#: reader of the park can tell git's own words from the index's.
+#: What `--diff-filter=U` answers with.
 UNMERGED = "U"
-CONFLICTED_HEADING = "conflicted paths:"
 
 
 #: `SubprocessGit._attempt`, as `_with_conflicts` below needs to see it: a command whose
