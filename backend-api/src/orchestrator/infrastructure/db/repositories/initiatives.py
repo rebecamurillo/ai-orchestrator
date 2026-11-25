@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from orchestrator.domain.entities.initiative import FrozenSequence, Initiative
 from orchestrator.domain.entities.initiative_advance import InitiativeAdvance
@@ -86,7 +87,10 @@ class SQLAlchemyInitiativeRepository:
     def add(self, initiative: Initiative) -> None:
         self._session.add(InitiativeRow(**row_values(initiative)))
         # emitted now, so a Run that references this initiative cannot be inserted first
-        self._session.flush()
+        try:
+            self._session.flush()
+        except IntegrityError as error:
+            raise ValueError(f"an open initiative {initiative.slug!r} already exists") from error
 
     def get(self, initiative_id: UUID) -> Initiative | None:
         row = self._session.get(InitiativeRow, initiative_id)

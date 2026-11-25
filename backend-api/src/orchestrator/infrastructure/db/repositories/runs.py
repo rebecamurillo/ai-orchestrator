@@ -293,10 +293,13 @@ class SQLAlchemyRunRepository:
         return None if row is None else to_entity(row)
 
     def list_for_initiative(self, initiative_id: UUID) -> list[Run]:
+        # `populate_existing`: a cancel re-lists after another session committed the Runs'
+        # new status; without it this session keeps the rows it read before
         rows = self._session.scalars(
             select(RunRow)
             .where(RunRow.initiative_id == initiative_id)
             .order_by(RunRow.created_at, RunRow.id)
+            .execution_options(populate_existing=True)
         ).all()
         return [to_entity(row) for row in rows]
 

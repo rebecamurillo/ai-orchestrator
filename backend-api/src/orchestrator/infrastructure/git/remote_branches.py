@@ -20,6 +20,27 @@ class _Runner(Protocol):
 
 
 class RemoteBranchesMixin:
+    def create_remote_branch(self: _Runner, worktree: Path, branch: str, sha: str) -> None:
+        """Never forced, never retried."""
+        ref = f"refs/heads/{branch}"
+        held = self._run("-C", str(worktree), "ls-remote", "--heads", ORIGIN, END_OF_OPTIONS, ref)
+        if held.strip():
+            raise GitError(
+                command=f"git push {ORIGIN} {ref}", exit_code=1, output=f"{branch} already exists"
+            )
+        # Git calls a push of the sha the remote already holds up to date, so the check above
+        # names that case; the empty-expect lease closes the race after it, where a plain push
+        # would fast-forward a branch created in between.
+        self._run(
+            "-C",
+            str(worktree),
+            "push",
+            f"--force-with-lease={ref}:",
+            ORIGIN,
+            END_OF_OPTIONS,
+            f"{sha}:{ref}",
+        )
+
     def delete_remote_branch(self: _Runner, worktree: Path, branch: str) -> bool:
         """Never forced, never retried; only the absent-ref answer is not an error."""
         try:
