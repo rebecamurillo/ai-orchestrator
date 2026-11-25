@@ -26,6 +26,8 @@ from orchestrator.application.steps import (
     CONVERSATION_KIND,
     GATES,
     KIND_META,
+    PUSH_KIND,
+    PUSH_RETRY_KEY,
     SUBMODULE_BRANCH_KEY,
     SUBMODULE_CHECKOUT_KEYS,
     SUBMODULE_KIND,
@@ -67,6 +69,7 @@ from orchestrator.application.templates.model import (
     unknown_role,
 )
 from orchestrator.application.templates.on_fail import check_on_fail
+from orchestrator.application.templates.push_keys import check_push_keys
 from orchestrator.application.templates.step_metrics import check_metrics
 from orchestrator.application.templates.table import (
     AGENT_DISPATCH_KEYS,
@@ -181,6 +184,7 @@ def _check_steps(root: LinedMap, unvalidated: list[str]) -> list[ValidationError
         return [problem(key_line(root, STEPS_KEY, root.line), EMPTY_STEPS)]
     walked = _walk(root)
     errors = _entries_that_are_not_steps(root) + _check_ids(root, walked)
+    errors += check_push_keys(root, walked)
     input_names = set(declared_types(root))
     earlier_agents: set[str] = set()
     lists_with_loop: set[int] = set()
@@ -241,7 +245,7 @@ def _check_step(
 ) -> list[ValidationError]:
     kind, errors = _kind_of(node)
     if kind != CONVERSATION_KIND:
-        errors += unknown_keys(node, STEP_KEYS | AGENT_KEYS if kind == AGENT_KIND else STEP_KEYS)
+        errors += unknown_keys(node, _step_keys(kind))
     errors += _check_role(node)
     if kind is None:
         return errors
@@ -253,6 +257,14 @@ def _check_step(
         errors += check_agent_extras(node)
     errors += _check_minutes(node, "timeout_min") + _check_minutes(node, "stall_min")
     return errors + check_on_fail(node, earlier_agents, kind)
+
+
+def _step_keys(kind: str | None) -> frozenset[str]:
+    if kind == AGENT_KIND:
+        return STEP_KEYS | AGENT_KEYS
+    if kind == PUSH_KIND:
+        return STEP_KEYS | {PUSH_RETRY_KEY}
+    return STEP_KEYS
 
 
 def _check_role(node: LinedMap) -> list[ValidationError]:

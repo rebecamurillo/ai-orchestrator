@@ -301,6 +301,8 @@ class Step(BaseModel):
     agent: AgentExtras | None = None
     call: TemplateCall | None = None
     conversation: ConversationExtras | None = None
+    #: A `git.push` row's declared `retry {max, sync_first}`, as plain values.
+    push_retry: dict[str, Any] | None = None
 
 
 class ForEach(BaseModel):

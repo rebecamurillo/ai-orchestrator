@@ -132,7 +132,7 @@ A step with no `gate` still runs, and is reported `unvalidated` — never shown 
 | `git.merge` | `from` | Merges `origin/{from}` into the Run's branch |
 | `git.submodule` | none or `update`, **or** `workdir` + `branch` (+ `base`) | Init/update submodules, or check out a branch inside one |
 | `git.commit` | `message`, `workdir` | Commits (the protected-path check runs here) |
-| `git.push` | `branch`, `workdir` | Pushes; refuses the default branch |
+| `git.push` | `branch`, `workdir`, `allow_default_branch` | Pushes; refuses the default branch unless `allow_default_branch: true` in an `interactive` template on an attached worktree. A step-level `retry: {max: 1-3, sync_first: true}` syncs and pushes again after a rejection, each try in the step log |
 | `pr.link` | `branch` | Records the compare URL |
 | `bmad.install` | — | Installs the BMAD method into the worktree |
 

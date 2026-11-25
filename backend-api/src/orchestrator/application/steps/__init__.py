@@ -89,7 +89,9 @@ KIND_META: dict[str, KindMeta] = {
     # submodule's own repository instead of the worktree root (hub-Run initiative H2, spine
     # "Template DSL v1 keys" AD-9/AD-14 amendment, 2026-09-23).
     "git.commit": KindMeta("deterministic", 5, frozenset({"message", "workdir"})),
-    "git.push": KindMeta("deterministic", 5, frozenset({"branch", "workdir"})),
+    "git.push": KindMeta(
+        "deterministic", 5, frozenset({"branch", "workdir", "allow_default_branch"})
+    ),
     "git.branch_delete": KindMeta("deterministic", 5, frozenset({"branch"})),
     "pr.link": KindMeta("liveness", 5, frozenset({"branch"})),
     # Revised: the shipped-kinds row for `checkpoint` gained `when` — a resolved falsy
@@ -196,6 +198,9 @@ COMMIT_MESSAGE_KEY = "message"
 #: The two kinds that end an epic on the remote. `skip_epic` marks them `skipped` when the
 #: push itself is the stop (AD-13), so they are named here rather than spelled in the rule.
 PUSH_KIND = "git.push"
+PUSH_ALLOW_DEFAULT_KEY = "allow_default_branch"
+PUSH_RETRY_KEY = "retry"
+PUSH_RETRY_KEYS = frozenset({"max", "sync_first"})
 
 #: The kind that deletes the merged spec branch on the remote.
 BRANCH_DELETE_KIND = "git.branch_delete"
@@ -226,7 +231,10 @@ __all__ = [
     "KIND_META",
     "LINK_KIND",
     "PLAN_KIND",
+    "PUSH_ALLOW_DEFAULT_KEY",
     "PUSH_KIND",
+    "PUSH_RETRY_KEY",
+    "PUSH_RETRY_KEYS",
     "SHELL_KIND",
     "SUBMODULE_BASE_KEY",
     "SUBMODULE_BRANCH_KEY",

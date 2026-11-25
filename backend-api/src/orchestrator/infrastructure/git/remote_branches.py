@@ -41,6 +41,10 @@ class RemoteBranchesMixin:
             f"{sha}:{ref}",
         )
 
+    def fast_forward_remote_branch(self: _Runner, worktree: Path, branch: str, sha: str) -> None:
+        """Never forced: git refuses a push that is not a fast-forward."""
+        self._run("-C", str(worktree), "push", ORIGIN, END_OF_OPTIONS, f"{sha}:refs/heads/{branch}")
+
     def delete_remote_branch(self: _Runner, worktree: Path, branch: str) -> bool:
         """Never forced, never retried; only the absent-ref answer is not an error."""
         try:

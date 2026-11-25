@@ -25,6 +25,8 @@ from orchestrator.application.steps import (
     AGENT_KIND,
     CONVERSATION_KIND,
     KIND_META,
+    PUSH_KIND,
+    PUSH_RETRY_KEY,
     TEMPLATE_CALL_KIND,
 )
 from orchestrator.application.templates.calls import check_calls
@@ -269,7 +271,13 @@ def _step(node: LinedMap) -> Step:
         agent=_agent(node) if kind == AGENT_KIND else None,
         call=_call(params) if kind == TEMPLATE_CALL_KIND else None,
         conversation=parse_conversation(node) if kind == CONVERSATION_KIND else None,
+        push_retry=_push_retry(node) if kind == PUSH_KIND else None,
     )
+
+
+def _push_retry(node: LinedMap) -> dict[str, Any] | None:
+    declared = as_map(node.get(PUSH_RETRY_KEY))
+    return dict(declared) if declared else None
 
 
 def _params(node: LinedMap, params: LinedMap, kind: str) -> tuple[tuple[str, Any], ...]:

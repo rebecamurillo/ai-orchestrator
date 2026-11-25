@@ -49,6 +49,7 @@ from orchestrator.api.errors import (
     ProblemDetail,
 )
 from orchestrator.api.providers import project_ports
+from orchestrator.api.providers_initiatives import advance_retry_ports
 from orchestrator.api.providers_trajectories import trajectory_repository
 from orchestrator.api.schemas.common import Page
 from orchestrator.api.schemas.project_settings import RunDefaultsIn
@@ -61,6 +62,7 @@ from orchestrator.application.use_cases import (
     trajectory_export,
 )
 from orchestrator.application.use_cases import projects as use_cases
+from orchestrator.application.use_cases.advance_retry import AdvanceRetryPorts
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.domain.entities.project import ProjectView
 from orchestrator.domain.ports.trajectories import TrajectoryRepository
@@ -93,6 +95,7 @@ UPDATE_REFUSALS = {**READ_REFUSALS, HTTP_CONFLICT: CONFLICT_RESPONSE}
 
 Ports = Annotated[ProjectPorts, Depends(project_ports)]
 Config = Annotated[Settings, Depends(get_settings)]
+Retry = Annotated[AdvanceRetryPorts, Depends(advance_retry_ports)]
 #: `None` when this application (or a test harness predating SPEC CAP-6) was built without a
 #: database session factory — `trajectory_export.trajectory_count` reads that as "not wired"
 #: and answers `0` (`api/providers_trajectories.py::trajectory_repository`'s own docstring).
@@ -208,6 +211,7 @@ def set_run_defaults(
     project_id: UUID,
     payload: RunDefaultsIn,
     ports: Ports,
+    retry: Retry,
     trajectories: Trajectories,
 ) -> ProjectRead:
     """Replace the five defaults a Project's build Run starts with, together.
@@ -215,5 +219,5 @@ def set_run_defaults(
     A key sent as `null` clears that default; a key left out is refused. No budget is ever
     invented.
     """
-    view = project_run_defaults.set_run_defaults(ports, project_id, payload.as_defaults())
+    view = project_run_defaults.set_run_defaults(ports, project_id, payload.as_defaults(), retry)
     return _read(ports, view, trajectories)

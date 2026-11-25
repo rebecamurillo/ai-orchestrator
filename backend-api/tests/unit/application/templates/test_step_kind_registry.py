@@ -56,7 +56,14 @@ SPINE = {
     # submodule's own repository instead of the worktree root (hub-Run initiative H2, spine
     # "Template DSL v1 keys" AD-9/AD-14 amendment, 2026-09-23).
     "git.commit": ("deterministic", 5, frozenset({"message", "workdir"}), False),
-    "git.push": ("deterministic", 5, frozenset({"branch", "workdir"}), False),
+    # Revised: `git.push` gained `allow_default_branch` (epic 8 story 3,
+    # orchestrator-initiative-steps, 2026-11-25).
+    "git.push": (
+        "deterministic",
+        5,
+        frozenset({"branch", "workdir", "allow_default_branch"}),
+        False,
+    ),
     # Added: `git.branch_delete` (epic 3 story 4, orchestrator-initiative-steps, 2026-11-22).
     "git.branch_delete": ("deterministic", 5, frozenset({"branch"}), False),
     "pr.link": ("liveness", 5, frozenset({"branch"}), False),

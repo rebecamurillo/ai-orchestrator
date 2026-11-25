@@ -5,12 +5,22 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
 
+from orchestrator.api.providers_initiatives import advance_retry_ports
+from orchestrator.application.use_cases.advance_retry import AdvanceRetryPorts
+from orchestrator.domain.entities.initiative import Initiative
+from orchestrator.domain.entities.initiative_advance import InitiativeAdvance
 from orchestrator.domain.entities.project import READINESS_PROJECT_SLUG, Project
 from orchestrator.domain.ids import new_id
+from tests.unit.fakes.clock import FakeClock
+from tests.unit.fakes.db import FakeUnitOfWork
+from tests.unit.fakes.engine import FakeWorkflowEngine
+from tests.unit.fakes.initiatives import FakeInitiativeAdvanceRepository, FakeInitiativeRepository
+from tests.unit.initiative_fixtures import a_sequence
 from tests.unit.test_projects_router import (
     HTTP_CONFLICT,
     HTTP_NOT_FOUND,
@@ -24,9 +34,29 @@ from tests.unit.test_projects_router import (
 )
 
 
+class RetryHarness(Harness):
+    """`Harness` with the advance-retry dependency (epic 8 story 3, 2026-11-25) over fakes."""
+
+    def __init__(self, env: dict[str, str]) -> None:
+        super().__init__(env)
+        self.initiatives = FakeInitiativeRepository()
+        self.advances = FakeInitiativeAdvanceRepository()
+        self.retry_uow = FakeUnitOfWork()
+        self.engine = FakeWorkflowEngine(clock=FakeClock(), uow=self.retry_uow)
+        self.app.dependency_overrides[advance_retry_ports] = self._retry
+
+    def _retry(self) -> AdvanceRetryPorts:
+        return AdvanceRetryPorts(
+            initiatives=self.initiatives,
+            advances=self.advances,
+            uow=self.retry_uow,
+            engine=self.engine,
+        )
+
+
 @pytest.fixture
-def api(env: dict[str, str]) -> Harness:
-    return Harness(env)
+def api(env: dict[str, str]) -> RetryHarness:
+    return RetryHarness(env)
 
 
 KEYS = (
@@ -168,3 +198,38 @@ async def test_the_readiness_project_is_a_409(api: Harness) -> None:
     response = await put(api, str(readiness.id), FULL)
 
     assert response.status_code == HTTP_CONFLICT
+
+
+async def test_setting_the_defaults_wakes_an_advance_blocked_for_want_of_a_budget(
+    api: RetryHarness,
+) -> None:
+    """Epic 8 story 3, AC8: the PUT enqueues the advance `no project budget` blocked."""
+    identifier = (await create(api)).json()["id"]
+    now = api.clock.now()
+    initiative = Initiative(
+        id=new_id(),
+        project_id=UUID(identifier),
+        repository_id=new_id(),
+        slug="snake",
+        name="Snake",
+        first_message="hi",
+        sequence=a_sequence(),
+        created_at=now,
+    )
+    api.initiatives.add(initiative)
+    blocked = InitiativeAdvance(
+        id=new_id(),
+        initiative_id=initiative.id,
+        from_run_id=new_id(),
+        round=1,
+        position=0,
+        blocked_reason="no project budget",
+    )
+    other = blocked.model_copy(update={"id": new_id(), "position": 1, "blocked_reason": "x"})
+    api.advances.add(blocked)
+    api.advances.add(other)
+
+    response = await put(api, identifier, FULL)
+
+    assert response.status_code == HTTP_OK
+    assert api.engine.calls == [("enqueue_advance", blocked.id)]

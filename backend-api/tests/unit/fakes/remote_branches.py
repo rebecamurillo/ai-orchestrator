@@ -25,6 +25,7 @@ class FakeRemoteGit(FakeGit):
         remote_branches: Iterable[str] = (),
         delete_remote_branch: list[Any] | None = None,
         create_remote_branch: list[Any] | None = None,
+        fast_forward_remote_branch: list[Any] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -33,6 +34,8 @@ class FakeRemoteGit(FakeGit):
         self._deletes = 0
         self._create_script: list[Any] = create_remote_branch or []
         self._creates = 0
+        self._fast_forward_script: list[Any] = fast_forward_remote_branch or []
+        self._fast_forwards = 0
 
     def create_remote_branch(self, worktree: Path, branch: str, sha: str) -> None:
         self.calls.append(("create_remote_branch", (worktree, branch, sha)))
@@ -45,6 +48,18 @@ class FakeRemoteGit(FakeGit):
             raise GitError(command="push", exit_code=1, output=f"{branch} already exists")
         self.remote_branches.add(branch)
         if self.refs is not None:
+            self.refs[branch] = sha
+
+    def fast_forward_remote_branch(self, worktree: Path, branch: str, sha: str) -> None:
+        self.calls.append(("fast_forward_remote_branch", (worktree, branch, sha)))
+        if self._fast_forward_script:
+            answer = self._fast_forward_script[
+                min(self._fast_forwards, len(self._fast_forward_script) - 1)
+            ]
+            self._fast_forwards += 1
+            if isinstance(answer, BaseException):
+                raise answer
+        if self.refs is not None and branch in self.refs:
             self.refs[branch] = sha
 
     def delete_remote_branch(self, worktree: Path, branch: str) -> bool:

@@ -8,10 +8,12 @@ Run of the initiative, oldest Run first.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from uuid import UUID
 
 from orchestrator.application.rules.initiative_lines import (
     files_state,
 )
+from orchestrator.application.rules.initiative_transitions import defect_count
 from orchestrator.application.steps import CONVERSATION_KIND
 from orchestrator.application.use_cases.initiative_detail_lines import (
     At,
@@ -32,6 +34,7 @@ from orchestrator.application.use_cases.initiative_facts import (
     shown_indices,
     shown_number,
 )
+from orchestrator.application.use_cases.initiative_gate_turns import gate_turns
 from orchestrator.application.use_cases.initiative_step_parts import (
     conflicts_of,
     forced,
@@ -231,7 +234,8 @@ def _conversation(ctx: StepContext, at: At, decl: StepDecl) -> DetailStep:
     )
     status = _row_status(row, run, loaded, mapped=True)
     by_run = _turns_by_run(loaded, decl.id)
-    turns = [_turn(run_, a) for run_, attempts in by_run for a in attempts]
+    gate = gate_turns(loaded)
+    turns = [_turn(run_, a, gate) for run_, attempts in by_run for a in attempts]
     files = timed_files(by_run, ctx.git, ctx.folder, draft=status != "done", prior=ctx.prior)
     holder = [a for r, attempts in by_run if run is not None and r.id == run.id for a in attempts]
     line = strip_of(
@@ -266,8 +270,9 @@ def _turns_by_run(loaded: Loaded, step_id: str) -> list[tuple[Run, list[Attempt]
     return grouped
 
 
-def _turn(run: Run, attempt: Attempt) -> Turn:
+def _turn(run: Run, attempt: Attempt, gate: Mapping[UUID, str]) -> Turn:
     status = turn_status(attempt)
+    from_gate = attempt.id in gate
     return Turn(
         attempt_id=attempt.id,
         run_id=run.id,
@@ -280,4 +285,7 @@ def _turn(run: Run, attempt: Attempt) -> Turn:
         ended_at=attempt.ended_at,
         model=attempt.model,
         failure_reason=attempt.output_ref if status == "failed" else None,
+        author="gate" if from_gate else "operator",
+        defects=defect_count(attempt.message) if from_gate else None,
+        owner=gate.get(attempt.id),
     )

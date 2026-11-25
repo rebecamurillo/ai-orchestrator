@@ -1,6 +1,7 @@
 """`initiative_advance.advance_initiative` and `sweep_advances` (epic 8 story 1, AC5-AC13).
 
-`next_run` is story 3's stub; each decision is monkeypatched in."""
+Each decision is monkeypatched in; the real `next_run` is `test_initiative_next.py`'s.
+Epic 8 story 3 (2026-11-25) replaced the stub `next_run`."""
 
 from __future__ import annotations
 
@@ -329,9 +330,23 @@ def test_ac13_a_change_between_the_read_and_the_lock_creates_nothing(
     assert case.stored().consumed_at is not None or change == "consumed"
 
 
-def test_the_stub_next_run_answers_none() -> None:
-    case = Case()
+def test_the_real_next_run_answers_a_block_for_an_entry_with_no_transition() -> None:
+    """Epic 8 story 3, 2026-11-25: `next_run` is `initiative_next.decide`, not the stub's `None`."""
+    case = Case()  # position 1 of the fixture sequence is its build, which creates nothing
     assert module.next_run(case.ports, case.initiative, case.advance, case.from_run) is None
+    odd = case.initiative.sequence.workflows[1].model_copy(
+        update={"type": "auto", "shown_as": "workflow"}
+    )
+    sequence = case.initiative.sequence.model_copy(
+        update={"workflows": (case.initiative.sequence.workflows[0], odd, odd)}
+    )
+    initiative = case.initiative.model_copy(update={"sequence": sequence})
+
+    later = case.advance.model_copy(update={"position": 2})
+
+    decision = module.next_run(case.ports, initiative, later, case.from_run)
+
+    assert decision == Blocked("no transition for build")
 
 
 def test_a_vanished_from_run_is_a_failure_that_blocks(monkeypatch: pytest.MonkeyPatch) -> None:

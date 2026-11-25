@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import cast
 
 from orchestrator.application.use_cases.create_run import CreateRunPorts
 from orchestrator.application.use_cases.initiative_advance import AdvancePorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.remote_branches import RemoteBranches
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db.repositories import (
     SQLAlchemyAttemptRepository,
@@ -100,6 +102,7 @@ def open_advance_ports(
             uow=uow,
             clock=clock,
             redact=scrub,
+            branches=cast(RemoteBranches, git),
         )
     finally:
         session.close()

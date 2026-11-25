@@ -15,6 +15,10 @@ class RemoteBranches(Protocol):
         """Create `branch` on `origin` at `sha`; an existing branch raises `GitError`."""
         ...
 
+    def fast_forward_remote_branch(self, worktree: Path, branch: str, sha: str) -> None:
+        """Move `branch` on `origin` to `sha`, never forced; a rejected push raises `GitError`."""
+        ...
+
     def delete_remote_branch(self, worktree: Path, branch: str) -> bool:
         """Delete `branch` on `origin`; `False` when the remote does not hold it."""
         ...

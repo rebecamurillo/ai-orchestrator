@@ -12,6 +12,7 @@ from fastapi import Query, Request
 from orchestrator.api import providers_base
 from orchestrator.api.providers import _preflight_ports, signal_effect_ports
 from orchestrator.api.providers_base import ENGINE, SESSION_FACTORY, SETTINGS, from_state
+from orchestrator.application.use_cases.advance_retry import AdvanceRetryPorts
 from orchestrator.application.use_cases.create_run import CreateRunPorts
 from orchestrator.application.use_cases.initiative_views import InitiativeReadPorts
 from orchestrator.application.use_cases.initiatives import InitiativePorts
@@ -20,6 +21,7 @@ from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.remote_branches import RemoteBranches
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
+    SessionUnitOfWork,
     SQLAlchemyAttemptRepository,
     SQLAlchemyGateRecordRepository,
     SQLAlchemyInitiativeAdvanceRepository,
@@ -76,6 +78,26 @@ def initiative_ports(request: Request) -> Iterator[InitiativePorts]:
                 clock=clock,
                 work_dir=settings.work_dir,
             )
+
+
+def advance_retry_ports(request: Request) -> Iterator[AdvanceRetryPorts]:
+    """What a run-defaults save wakes blocked advances through, on a session of its own.
+
+    `retry_budget_advances` enters the unit of work itself, and `SQLAlchemyUnitOfWork` refuses
+    a second entry, so the provider owns the session and hands over a `SessionUnitOfWork`.
+    """
+    session_factory = from_state(request, SESSION_FACTORY)
+    engine: WorkflowEngine = from_state(request, ENGINE)
+    session = session_factory()
+    try:
+        yield AdvanceRetryPorts(
+            initiatives=SQLAlchemyInitiativeRepository(session),
+            advances=SQLAlchemyInitiativeAdvanceRepository(session),
+            uow=SessionUnitOfWork(session),
+            engine=engine,
+        )
+    finally:
+        session.close()
 
 
 def initiative_read_ports(request: Request) -> Iterator[InitiativeReadPorts]:

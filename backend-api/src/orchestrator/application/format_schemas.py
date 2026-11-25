@@ -20,6 +20,9 @@ from orchestrator.application.steps import (
     CONVERSATION_KIND,
     GATES,
     KIND_META,
+    PUSH_KIND,
+    PUSH_RETRY_KEY,
+    PUSH_RETRY_KEYS,
     TEMPLATE_CALL_KIND,
     TEMPLATE_KINDS,
 )
@@ -152,6 +155,13 @@ def _kind_branch(kind: str) -> Schema:
         with_required = [NAME_KEY]
     values = _shared("on_fail_shell" if kind == RUN_KIND else "on_fail")
     values[USES_KEY] = {"const": kind}
+    if kind == PUSH_KIND:
+        keys = keys | {PUSH_RETRY_KEY}
+        values[PUSH_RETRY_KEY] = _closed(
+            PUSH_RETRY_KEYS,
+            {"max": {"type": "integer", "minimum": 1, "maximum": 3}, "sync_first": {"const": True}},
+            sorted(PUSH_RETRY_KEYS),
+        )
     if kind == CONVERSATION_KIND:
         with_required = sorted(with_keys)
         required += [ROLE_KEY, WITH_KEY, "expect", PROMPTS_KEY]

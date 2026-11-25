@@ -11,6 +11,10 @@ from decimal import Decimal
 from uuid import UUID
 
 from orchestrator.application.use_cases import projects as project_use_cases
+from orchestrator.application.use_cases.advance_retry import (
+    AdvanceRetryPorts,
+    retry_budget_advances,
+)
 from orchestrator.application.use_cases.projects import ProjectPorts
 from orchestrator.domain.entities.project import AUTONOMY_MODES, ProjectView
 from orchestrator.domain.errors import Invalid
@@ -45,8 +49,16 @@ def _check(defaults: RunDefaults) -> None:
         raise Invalid("default_autonomy: must be auto or checkpoints")
 
 
-def set_run_defaults(ports: ProjectPorts, project_id: UUID, defaults: RunDefaults) -> ProjectView:
-    """Replace all five defaults of a stored Project and return its masked view."""
+def set_run_defaults(
+    ports: ProjectPorts,
+    project_id: UUID,
+    defaults: RunDefaults,
+    retry: AdvanceRetryPorts | None = None,
+) -> ProjectView:
+    """Replace all five defaults of a stored Project and return its masked view.
+
+    After the commit, `retry` wakes the advances a missing budget had blocked.
+    """
     stored = project_use_cases._require(ports.projects, project_id)
     project_use_cases._refuse_builtin(stored)
     _check(defaults)
@@ -62,4 +74,6 @@ def set_run_defaults(ports: ProjectPorts, project_id: UUID, defaults: RunDefault
     )
     ports.projects.update(updated)
     ports.uow.commit()
+    if retry is not None:
+        retry_budget_advances(retry, project_id)
     return project_use_cases._masked(updated, ports.crypto)

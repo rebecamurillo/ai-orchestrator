@@ -29,7 +29,7 @@ from typing import Any
 
 from orchestrator.application.dto import RunInputs
 from orchestrator.application.graph import UNVALIDATED
-from orchestrator.application.steps import CHECKPOINT_KIND, SHELL_KIND, WHEN_KEY
+from orchestrator.application.steps import CHECKPOINT_KIND, PUSH_RETRY_KEY, SHELL_KIND, WHEN_KEY
 from orchestrator.application.templates import minutes
 from orchestrator.application.templates.agent_row import (
     PROMPT_EXTRA_KEY,
@@ -350,6 +350,8 @@ def _resolved(step: Step, frame: Frame) -> dict[str, Any]:
     """
     resolved = {key: resolve(value, frame.scope) for key, value in step.params}
     resolved.update(minutes.step_limits(step, frame.scope))
+    if step.push_retry:
+        resolved[PUSH_RETRY_KEY] = dict(step.push_retry)
     routing = _routing(step, frame)
     if routing is not None:
         resolved[ON_FAIL_KEY] = routing

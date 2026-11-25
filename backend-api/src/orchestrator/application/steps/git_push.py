@@ -40,7 +40,12 @@ from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
 
-from orchestrator.application.steps import WORKDIR_KEY, records
+from orchestrator.application.steps import (
+    PUSH_ALLOW_DEFAULT_KEY,
+    PUSH_RETRY_KEY,
+    WORKDIR_KEY,
+    records,
+)
 from orchestrator.application.steps.context import (
     StepContext,
     require_cwd,
@@ -69,6 +74,8 @@ RETRY = "retry"
 #: row's find the same fact, and an Operator reads the same words whichever row found it.
 DEFAULT_BRANCH = "push refused: {branch} is the default branch"
 REJECTED = "push rejected"
+RETRY_LANDED = "pushed after {k} sync"
+SYNC_FAILED = "sync before retry failed"
 
 #: AD-9's own sentence for a `workdir` that is not a workdir — the same words `git.submodule`
 #: and `git.commit` park with, because it is the same stop.
@@ -90,26 +97,52 @@ def _push(ctx: StepContext) -> StepResult:
     git = ctx.ports.git
     if workdir:
         return _execute_workdir(ctx, git, worktree, branch, workdir)
-    if branch == env.default_branch:
-        return _park(ctx, DEFAULT_BRANCH.format(branch=branch), output=None)
     recorded = env.worktree_at(ctx.cwd)
     created = recorded is not None and recorded.created_branch
+    attached = recorded is not None and not recorded.created_branch
+    allowed = ctx.with_resolved.get(PUSH_ALLOW_DEFAULT_KEY) is True and attached
+    if branch == env.default_branch and not allowed:
+        return _park(ctx, DEFAULT_BRANCH.format(branch=branch), output=None)
     if ctx.resume_signal is not None and ctx.resume_signal.event == RETRY:
         try:
             git.sync(worktree, branch)
         except GitError as error:
             return _park(ctx, DIVERGED, output=error.output)
-    try:
-        output = git.push(worktree, branch, created)
-    except GitError as error:
-        return _park(ctx, REJECTED, output=error.output)
+    outcome = _push_declared(ctx, git, worktree, branch, created)
+    if isinstance(outcome, StepResult):
+        return outcome
+    output, landed_after = outcome
     records.note_pushed(ctx, ROOT_PATH, worktree)
     return StepResult(
         status="done",
         gate=ctx.row.gate,
         output_ref=output,
+        reason=RETRY_LANDED.format(k=landed_after) if landed_after else None,
         run_updates=_pushed(ctx, env.worktrees),
     )
+
+
+def _push_declared(
+    ctx: StepContext, git: Git, worktree: Path, branch: str, created: bool
+) -> StepResult | tuple[str | None, int]:
+    """Push, and on a rejection sync and push again up to the row's declared `retry.max`.
+
+    Returns the push output and how many syncs it took, or the park that ended the row.
+    """
+    declared = ctx.with_resolved.get(PUSH_RETRY_KEY)
+    allowed = int(declared["max"]) if isinstance(declared, dict) else 0
+    syncs = 0
+    while True:
+        try:
+            return git.push(worktree, branch, created), syncs
+        except GitError as error:
+            if syncs == allowed:
+                return _park(ctx, REJECTED, output=error.output)
+        syncs += 1
+        try:
+            git.sync(worktree, branch)
+        except GitError as failure:
+            return _park(ctx, SYNC_FAILED, output=failure.output)
 
 
 def _execute_workdir(

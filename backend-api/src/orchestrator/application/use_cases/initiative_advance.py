@@ -31,6 +31,7 @@ from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.initiatives import InitiativeAdvanceRepository, InitiativeRepository
+from orchestrator.domain.ports.remote_branches import RemoteBranches
 from orchestrator.domain.ports.repositories import (
     AttemptRepository,
     RunRepository,
@@ -64,6 +65,7 @@ class AdvancePorts:
     redact: Callable[[str], str] = _identity
     steps: StepRunRepository | None = None
     attempts: AttemptRepository | None = None
+    branches: RemoteBranches | None = None
 
 
 @dataclass(frozen=True)
@@ -87,8 +89,10 @@ Decision = NextRun | Blocked | None
 def next_run(
     ports: AdvancePorts, initiative: Initiative, advance: InitiativeAdvance, from_run: Run
 ) -> Decision:
-    """What follows a `done` Run of the initiative. Story 3 replaces this body."""
-    return None
+    """What follows a `done` Run of the initiative (`initiative_next`, AD-37)."""
+    from orchestrator.application.use_cases import initiative_next  # noqa: PLC0415
+
+    return initiative_next.decide(ports, initiative, advance, from_run)
 
 
 def gate_verdict_of(ports: AdvancePorts, run_id: UUID) -> GateVerdict | None:
