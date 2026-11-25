@@ -2,8 +2,9 @@
 
 A create pushes `spec/{slug}` on the hub, then inserts the initiative and its spec Run in one
 unit of work; when `create_run` refuses, nothing is committed and the branch this call made is
-deleted. A cancel locks the initiative first, cancels every live Run through `signal_run`
-(its own unit of work), then deletes the branch once every Run has ended.
+deleted. A cancel locks the initiative first, cancels every live Run through `handle_signal`
+(its own unit of work, then the kill and worktree removal of its cancel plan), then deletes the
+branch once every Run has ended.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from orchestrator.application.use_cases.create_run import (
     CreateRunRequest,
     create_run,
 )
-from orchestrator.application.use_cases.signal_run import SignalPorts, signal_run
+from orchestrator.application.use_cases.signals import SignalEffectPorts, handle_signal
 from orchestrator.domain.entities.initiative import (
     FrozenSequence,
     FrozenWorkflow,
@@ -65,7 +66,7 @@ class InitiativePorts:
     git: Git
     branches: RemoteBranches
     create_run: CreateRunPorts
-    signals: SignalPorts
+    signals: SignalEffectPorts
     uow: UnitOfWork
     clock: Clock
     work_dir: Path
@@ -271,7 +272,7 @@ def cancel_initiative(ports: InitiativePorts, initiative_id: UUID) -> Initiative
 
     for run in live:
         try:
-            signal_run(ports.signals, run.id, Signal(kind="cancel"))
+            handle_signal(ports.signals, run.id, Signal(kind="cancel"))
         except Conflict:
             continue  # ended by itself meanwhile: the re-read below decides
     return _clean_branch(ports, initiative_id)

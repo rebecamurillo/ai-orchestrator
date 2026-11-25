@@ -10,9 +10,12 @@ from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
+from orchestrator.application.steps.context import RunEnvironment
 from orchestrator.application.use_cases.initiatives import InitiativePorts
 from orchestrator.application.use_cases.signal_run import SignalPorts
+from orchestrator.application.use_cases.signals import SignalEffectPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.entities.initiative import Initiative
 from orchestrator.domain.entities.project_package import (
@@ -32,6 +35,7 @@ from tests.unit.fakes.db import FakeUnitOfWork
 from tests.unit.fakes.engine import FakeWorkflowEngine
 from tests.unit.fakes.initiatives import FakeInitiativeAdvanceRepository, FakeInitiativeRepository
 from tests.unit.fakes.packages import FakeProjectPackageRepository
+from tests.unit.fakes.process import FakeProcessRunner
 from tests.unit.fakes.projects import FakeProjectRepository, FakeRepositoryRepository
 from tests.unit.fakes.remote_branches import FakeRemoteGit
 from tests.unit.fakes.runs import (
@@ -168,6 +172,25 @@ class InitiativeWorld:
             ),
             engine=self.engine,
         )
+        self.process = FakeProcessRunner()
+        self.effects = SignalEffectPorts(
+            signal=self.signals,
+            git=self.git,
+            process=self.process,
+            work_dir=str(WORK),
+            read_environment=self.environment,
+        )
+
+    def environment(self, run_id: UUID) -> RunEnvironment:
+        return RunEnvironment(
+            run_id=run_id,
+            project_slug=self.project.slug,
+            repository_slug=self.hub.slug,
+            repository_url=self.hub.url,
+            default_branch=self.hub.default_branch,
+            bmad_version="1.0.0",
+            spec_folder=None,
+        )
 
     @property
     def ports(self) -> InitiativePorts:
@@ -182,7 +205,7 @@ class InitiativeWorld:
             git=self.git,
             branches=self.git,
             create_run=self.create_ports,
-            signals=self.signals,
+            signals=self.effects,
             uow=self.uow,
             clock=self.harness.clock,
             work_dir=WORK,

@@ -69,7 +69,9 @@ async def test_every_port_sits_on_the_one_session(env: dict[str, str]) -> None:
     assert ports.git is git
     assert ports.branches is git
     assert ports.work_dir == settings.work_dir
-    assert ports.signals.writers.uow is not ports.uow
+    assert ports.signals.signal.writers.uow is not ports.uow
+    assert ports.signals.git is git
+    assert ports.signals.work_dir == settings.work_dir
 
 
 async def test_an_application_without_git_answers_a_500_naming_the_port(
