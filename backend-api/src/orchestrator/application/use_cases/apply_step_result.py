@@ -224,6 +224,8 @@ def _close_attempt(ports: WriterPorts, row: StepRun, result: StepResult) -> Atte
     # Only when named: `agent` wrote its own through `mark_finished`, and this would blank it.
     if result.log_path is not None:
         named["log_path"] = result.log_path
+    if (v := result.verdict) is not None:
+        named |= {"verdict_word": v.word, "verdict_fields": dict(v.fields), "verdict_text": v.text}
     closed = attempt.model_copy(update=named)
     ports.attempts.mark_finished(closed)
     return closed

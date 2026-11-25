@@ -17,6 +17,7 @@ from uuid import UUID
 
 import structlog
 
+from orchestrator.application.steps.gate_verdict import SPEC_GATE_ROLE
 from orchestrator.application.use_cases.create_run import (
     CreateRunPorts,
     CreateRunRequest,
@@ -30,9 +31,14 @@ from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.initiatives import InitiativeAdvanceRepository, InitiativeRepository
-from orchestrator.domain.ports.repositories import RunRepository
+from orchestrator.domain.ports.repositories import (
+    AttemptRepository,
+    RunRepository,
+    StepRunRepository,
+)
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
 from orchestrator.domain.statuses import TERMINAL_RUN
+from orchestrator.domain.values import GateVerdict
 
 log = structlog.get_logger(__name__)
 
@@ -56,6 +62,8 @@ class AdvancePorts:
     uow: UnitOfWork
     clock: Clock
     redact: Callable[[str], str] = _identity
+    steps: StepRunRepository | None = None
+    attempts: AttemptRepository | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +89,21 @@ def next_run(
 ) -> Decision:
     """What follows a `done` Run of the initiative. Story 3 replaces this body."""
     return None
+
+
+def gate_verdict_of(ports: AdvancePorts, run_id: UUID) -> GateVerdict | None:
+    """The verdict stored on the Run's `spec-gate` row, from repositories alone."""
+    if ports.steps is None or ports.attempts is None:
+        return None
+    gates = [row for row in ports.steps.list_for_run(run_id) if row.role == SPEC_GATE_ROLE]
+    attempt = ports.attempts.get_latest(gates[-1].id) if gates else None
+    if attempt is None or attempt.verdict_word is None:
+        return None
+    return GateVerdict(
+        word=attempt.verdict_word,
+        fields=dict(attempt.verdict_fields or {}),
+        text=attempt.verdict_text or "",
+    )
 
 
 def _key(run: Run) -> tuple[int, int]:

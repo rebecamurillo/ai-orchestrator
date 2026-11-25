@@ -17,6 +17,7 @@ from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db.repositories import (
+    SQLAlchemyAttemptRepository,
     SQLAlchemyHarnessRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
@@ -72,6 +73,7 @@ def open_advance_ports(
             harness_registry=build_harnesses(settings, RealProcessRunner()),
             verify_docker=settings.verify_docker,
         )
+        steps = SQLAlchemyStepRunRepository(session)
         secrets = log_secrets(settings)
 
         def scrub(text: str) -> str:
@@ -83,10 +85,12 @@ def open_advance_ports(
             initiatives=SQLAlchemyInitiativeRepository(session),
             advances=SQLAlchemyInitiativeAdvanceRepository(session),
             runs=runs,
+            steps=steps,
+            attempts=SQLAlchemyAttemptRepository(session),
             create_run=CreateRunPorts(
                 preflight=preflight,
                 engine=engine_ref[0],
-                steps=SQLAlchemyStepRunRepository(session),
+                steps=steps,
                 uow=uow,
                 clock=clock,
                 tracer=build_tracer(settings),

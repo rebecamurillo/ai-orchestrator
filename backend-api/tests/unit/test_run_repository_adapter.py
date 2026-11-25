@@ -371,6 +371,10 @@ NULLABLE = {
     "step_run": {"reason", "frame", "story_id"},
     "attempt": {
         "log_removed_at",  # epic 1 story 3, AD-40, 2026-11-23: set by the retention sweep
+        # epic 8 story 2, AD-37 "The gate's verdict", 2026-11-25: only a spec-gate row sets them
+        "verdict_word",
+        "verdict_fields",
+        "verdict_text",
         "started_at",
         "ended_at",
         "start_sha",

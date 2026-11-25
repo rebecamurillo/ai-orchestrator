@@ -33,7 +33,12 @@ from orchestrator.application.rules import (
     protected_paths,
     routing,
 )
-from orchestrator.application.steps import agent_consult, agent_failure, agent_workdir
+from orchestrator.application.steps import (
+    agent_consult,
+    agent_failure,
+    agent_workdir,
+    gate_verdict,
+)
 from orchestrator.application.steps.context import (
     StepContext,
     committed,
@@ -188,6 +193,10 @@ def _route(ctx: StepContext, result: HarnessResult) -> tuple[StepResult, str | N
         gate=ctx.row.gate,
         path=ctx.row.path,
         exit_reason=agent_failure.provider_reason(ctx, result),
+    )
+    path = story.path if story is not None else None
+    routed = gate_verdict.routed_with_verdict(
+        routed, ctx.row, path, require_workspace(ctx, ctx.cwd).read
     )
     return routed, story.blocking_condition if story is not None else None
 

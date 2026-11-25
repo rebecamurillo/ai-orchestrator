@@ -86,6 +86,10 @@ class Attempt(BaseModel):
     message: str = ""
     #: The reply file a `session` turn left, read when the turn is committed (AD-23).
     reply: str = ""
+    #: A `spec-gate` row's verdict, written by `apply_step_result` when the row ends (AD-37).
+    verdict_word: str | None = None
+    verdict_fields: dict[str, Any] | None = None
+    verdict_text: str | None = None
 
 
 def agent_attempts(attempts: Iterable[Attempt]) -> list[Attempt]:

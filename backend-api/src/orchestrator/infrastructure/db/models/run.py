@@ -241,6 +241,9 @@ class AttemptRow(Base):
     cost_provisional: Mapped[bool] = mapped_column(Boolean())
     message: Mapped[str] = mapped_column(Text(), server_default="")
     reply: Mapped[str] = mapped_column(Text(), server_default="")
+    verdict_word: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    verdict_fields: Mapped[dict[str, Any] | None] = mapped_column(JSONB(), nullable=True)
+    verdict_text: Mapped[str | None] = mapped_column(Text(), nullable=True)
 
 
 class GateRecordRow(Base):

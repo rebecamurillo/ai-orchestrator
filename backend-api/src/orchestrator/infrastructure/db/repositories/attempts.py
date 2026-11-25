@@ -66,6 +66,9 @@ FINISHED_COLUMNS = (
     "cost_usd",
     "cost_provisional",
     "reply",
+    "verdict_word",
+    "verdict_fields",
+    "verdict_text",
 )
 
 
@@ -102,6 +105,9 @@ def to_entity(row: AttemptRow) -> Attempt:
         # an unflushed row has no server default yet, and every stored row reads `''`
         message=row.message or "",
         reply=row.reply or "",
+        verdict_word=row.verdict_word,
+        verdict_fields=None if row.verdict_fields is None else dict(row.verdict_fields),
+        verdict_text=row.verdict_text,
     )
 
 
@@ -138,6 +144,11 @@ def row_values(attempt: Attempt) -> dict[str, Any]:
         "cost_provisional": attempt.cost_provisional,
         "message": attempt.message,
         "reply": attempt.reply,
+        "verdict_word": attempt.verdict_word,
+        "verdict_fields": (
+            None if attempt.verdict_fields is None else dict(attempt.verdict_fields)
+        ),
+        "verdict_text": attempt.verdict_text,
     }
 
 

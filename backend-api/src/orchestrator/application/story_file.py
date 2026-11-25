@@ -93,6 +93,13 @@ def frontmatter(text: str) -> str | None:
     return None if span is None else "\n".join(lines[span[0] : span[1]])
 
 
+def body(text: str) -> str | None:
+    """The text after the closing `---`, or `None` when the file has no frontmatter."""
+    lines = text.splitlines()
+    span = _fence(lines)
+    return None if span is None else "\n".join(lines[span[1] + 1 :])
+
+
 def section(text: str, heading: str) -> str:
     """One `## ` section whole, heading included, or `""` when the file has no such heading."""
     lines = text.splitlines()

@@ -130,6 +130,16 @@ class RunUpdates(BaseModel):
     compare_urls: tuple[str, ...] | None = None
 
 
+class GateVerdict(BaseModel):
+    """A `spec-gate` row's word, the step file's frontmatter mapping and its body (AD-37)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    word: str
+    fields: dict[str, Any] = Field(default_factory=dict)
+    text: str = ""
+
+
 class StepResult(BaseModel):
     """What a `StepExecutor` returns: the status the row reached and what came with it."""
 
@@ -175,6 +185,8 @@ class StepResult(BaseModel):
     #: Set only by the `agent` kind at a stop the row declared a consult for, and by the
     #: consult attempt that answers it (AD-22). `apply_step_result` reads it first.
     consult: Consult | None = None
+    #: Set only when a `spec-gate` row routes `done` (AD-37).
+    verdict: GateVerdict | None = None
 
 
 class Signal(BaseModel):
