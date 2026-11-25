@@ -4302,6 +4302,32 @@
         "title": "InitiativeFolderIn",
         "type": "object"
       },
+      "InitiativeIn": {
+        "additionalProperties": false,
+        "description": "`POST /initiatives`: the Project, the name that becomes the slug, the first turn.",
+        "properties": {
+          "first_message": {
+            "title": "First Message",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "first_message"
+        ],
+        "title": "InitiativeIn",
+        "type": "object"
+      },
       "InitiativeListOut": {
         "description": "`GET /initiatives`: rows, the shown workflows as columns, and the counts.",
         "properties": {
@@ -9219,6 +9245,22 @@
         "title": "SpecFolderIn",
         "type": "object"
       },
+      "StartNextIn": {
+        "additionalProperties": false,
+        "description": "`POST /initiatives/{id}/start-next`: the stop the operator saw.",
+        "properties": {
+          "park_seq": {
+            "minimum": 0.0,
+            "title": "Park Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "park_seq"
+        ],
+        "title": "StartNextIn",
+        "type": "object"
+      },
       "StepDeclOut": {
         "properties": {
           "file": {
@@ -10819,7 +10861,7 @@
                 }
               }
             },
-            "description": "An id or the `filter` is not a valid value."
+            "description": "An id, the `filter` or the body is not valid."
           }
         },
         "security": [
@@ -10828,6 +10870,101 @@
           }
         ],
         "summary": "List initiatives",
+        "tags": [
+          "initiatives"
+        ]
+      },
+      "post": {
+        "description": "Branch `spec/{slug}` on the hub and start the spec Run.",
+        "operationId": "create_initiative_route_api_v1_initiatives_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiativeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitiativeDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The slug is held by an open initiative, or the hub refuses the branch."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "An id, the `filter` or the body is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create an initiative",
         "tags": [
           "initiatives"
         ]
@@ -10903,7 +11040,7 @@
                 }
               }
             },
-            "description": "An id or the `filter` is not a valid value."
+            "description": "An id, the `filter` or the body is not valid."
           }
         },
         "security": [
@@ -10912,6 +11049,214 @@
           }
         ],
         "summary": "Read an initiative",
+        "tags": [
+          "initiatives"
+        ]
+      }
+    },
+    "/api/v1/initiatives/{initiative_id}/cancel": {
+      "post": {
+        "description": "Cancel every live Run and delete `spec/{slug}`.",
+        "operationId": "cancel_initiative_route_api_v1_initiatives__initiative_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "initiative_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Initiative Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitiativeDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No initiative has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The initiative is done or cancelled."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "An id, the `filter` or the body is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel an initiative",
+        "tags": [
+          "initiatives"
+        ]
+      }
+    },
+    "/api/v1/initiatives/{initiative_id}/start-next": {
+      "post": {
+        "description": "One forced `skip_step` naming the stop the operator saw.",
+        "operationId": "start_next_route_api_v1_initiatives__initiative_id__start_next_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "initiative_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Initiative Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartNextIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitiativeDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No initiative has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No conversation step is open, the next is not forceable, or the stop is stale."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "An id, the `filter` or the body is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Force the next conversation step",
         "tags": [
           "initiatives"
         ]
@@ -12410,7 +12755,7 @@
                 }
               }
             },
-            "description": "An id or the `filter` is not a valid value."
+            "description": "An id, the `filter` or the body is not valid."
           }
         },
         "security": [

@@ -114,7 +114,11 @@ export interface paths {
          */
         get: operations["list_initiatives_api_v1_initiatives_get"];
         put?: never;
-        post?: never;
+        /**
+         * Create an initiative
+         * @description Branch `spec/{slug}` on the hub and start the spec Run.
+         */
+        post: operations["create_initiative_route_api_v1_initiatives_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -135,6 +139,46 @@ export interface paths {
         get: operations["read_initiative_api_v1_initiatives__initiative_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/initiatives/{initiative_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel an initiative
+         * @description Cancel every live Run and delete `spec/{slug}`.
+         */
+        post: operations["cancel_initiative_route_api_v1_initiatives__initiative_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/initiatives/{initiative_id}/start-next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Force the next conversation step
+         * @description One forced `skip_step` naming the stop the operator saw.
+         */
+        post: operations["start_next_route_api_v1_initiatives__initiative_id__start_next_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2867,6 +2911,21 @@ export interface components {
             initiative_folder: string;
         };
         /**
+         * InitiativeIn
+         * @description `POST /initiatives`: the Project, the name that becomes the slug, the first turn.
+         */
+        InitiativeIn: {
+            /** First Message */
+            first_message: string;
+            /** Name */
+            name: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+        };
+        /**
          * InitiativeListOut
          * @description `GET /initiatives`: rows, the shown workflows as columns, and the counts.
          */
@@ -4555,6 +4614,14 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /**
+         * StartNextIn
+         * @description `POST /initiatives/{id}/start-next`: the stop the operator saw.
+         */
+        StartNextIn: {
+            /** Park Seq */
+            park_seq: number;
+        };
         /** StepDeclOut */
         StepDeclOut: {
             /** File */
@@ -5281,7 +5348,71 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description An id or the `filter` is not a valid value. */
+            /** @description An id, the `filter` or the body is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    create_initiative_route_api_v1_initiatives_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitiativeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitiativeDetailOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The slug is held by an open initiative, or the hub refuses the branch. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description An id, the `filter` or the body is not valid. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5333,7 +5464,135 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description An id or the `filter` is not a valid value. */
+            /** @description An id, the `filter` or the body is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    cancel_initiative_route_api_v1_initiatives__initiative_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                initiative_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitiativeDetailOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No initiative has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The initiative is done or cancelled. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description An id, the `filter` or the body is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    start_next_route_api_v1_initiatives__initiative_id__start_next_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                initiative_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartNextIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitiativeDetailOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No initiative has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No conversation step is open, the next is not forceable, or the stop is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description An id, the `filter` or the body is not valid. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6275,7 +6534,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetail"];
                 };
             };
-            /** @description An id or the `filter` is not a valid value. */
+            /** @description An id, the `filter` or the body is not valid. */
             422: {
                 headers: {
                     [name: string]: unknown;

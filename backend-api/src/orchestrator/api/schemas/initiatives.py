@@ -1,13 +1,14 @@
-"""The initiative list and detail wire shapes (`GET /initiatives`, `GET /initiatives/{id}`)."""
+"""The initiative list, detail and action-body wire shapes (`/initiatives`, SPEC CAP-4, CAP-5)."""
 
 from __future__ import annotations
 
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from orchestrator.api.schemas.common import UtcTimestamp
+from orchestrator.api.schemas.signals import StopNumber
 from orchestrator.application.rules.attention import Attention
 from orchestrator.application.rules.initiative_status import InitiativeStatusValue
 from orchestrator.application.use_cases.initiative_view_types import (
@@ -268,3 +269,21 @@ class InitiativeDetailOut(RowCoreOut):
             park_seq=detail.park_seq,
             runs=[DetailRunOut.of(run) for run in detail.runs],
         )
+
+
+class InitiativeIn(BaseModel):
+    """`POST /initiatives`: the Project, the name that becomes the slug, the first turn."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: UUID
+    name: str
+    first_message: str
+
+
+class StartNextIn(BaseModel):
+    """`POST /initiatives/{id}/start-next`: the stop the operator saw."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    park_seq: StopNumber

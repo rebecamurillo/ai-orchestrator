@@ -132,9 +132,17 @@ async def test_an_unknown_initiative_is_a_404_problem(harness: Harness) -> None:
     assert response.headers["content-type"].startswith(PROBLEM)
 
 
-def test_the_router_declares_the_three_reads() -> None:
-    assert {route.path for route in initiative_router.router.routes} == {  # type: ignore[attr-defined]
-        "/initiatives",
-        "/projects/{project_id}/initiatives",
-        "/initiatives/{initiative_id}",
+def test_the_router_declares_the_three_reads_and_the_two_actions() -> None:
+    # story 5 of epic 7, 2026-11-22: cancel and start-next join the router, and create
+    # joins `/initiatives`; the three reads stay GET-only apart from that path.
+    methods: dict[str, set[str]] = {}
+    for route in initiative_router.router.routes:
+        methods.setdefault(route.path, set()).update(route.methods)  # type: ignore[attr-defined]
+
+    assert methods == {
+        "/initiatives": {"GET", "POST"},
+        "/projects/{project_id}/initiatives": {"GET"},
+        "/initiatives/{initiative_id}": {"GET"},
+        "/initiatives/{initiative_id}/cancel": {"POST"},
+        "/initiatives/{initiative_id}/start-next": {"POST"},
     }
