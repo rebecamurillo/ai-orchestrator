@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 from uuid import UUID
 
@@ -24,6 +25,10 @@ class InitiativeRepository(Protocol):
         ...
 
     def update(self, initiative: Initiative) -> None: ...
+
+    def mark_opened(self, initiative_id: UUID, at: datetime) -> None:
+        """Set `last_opened_at` only; `updated_at` stays as it was (a view is not a change)."""
+        ...
 
     def get_open_by_slug(self, repository_id: UUID, slug: str) -> Initiative | None:
         """The initiative holding the slug (not cancelled), or `None`."""

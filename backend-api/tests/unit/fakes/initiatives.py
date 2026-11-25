@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime
 from uuid import UUID
 
 from orchestrator.domain.entities.initiative import Initiative
@@ -39,6 +40,13 @@ class FakeInitiativeRepository:
             raise ValueError(f"no initiative with id {initiative.id} is stored")
         self._refuse_second_open_slug(initiative)
         self.initiatives[initiative.id] = initiative
+
+    def mark_opened(self, initiative_id: UUID, at: datetime) -> None:
+        self.calls.append(("mark_opened", initiative_id))
+        stored = self.initiatives.get(initiative_id)
+        if stored is None:
+            raise ValueError(f"no initiative with id {initiative_id} is stored")
+        self.initiatives[initiative_id] = stored.model_copy(update={"last_opened_at": at})
 
     def list(self, *, project_id: UUID | None = None) -> list[Initiative]:
         self.calls.append(("list", project_id))

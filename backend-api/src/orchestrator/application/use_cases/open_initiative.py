@@ -29,6 +29,6 @@ def open_initiative(ports: OpenInitiativePorts, initiative_id: UUID) -> PriorVie
     initiative = ports.initiatives.get_for_update(initiative_id)
     if initiative is None:
         raise NotFound(f"no initiative {initiative_id}")
-    ports.initiatives.update(initiative.model_copy(update={"last_opened_at": ports.clock.now()}))
+    ports.initiatives.mark_opened(initiative_id, ports.clock.now())
     ports.uow.commit()
     return PriorView(at=initiative.last_opened_at)

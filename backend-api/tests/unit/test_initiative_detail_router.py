@@ -140,3 +140,29 @@ async def test_ac5_an_unknown_id_is_a_404_problem(harness: Harness, query: str) 
 
     assert response.status_code == HTTP_NOT_FOUND
     assert response.headers["content-type"].startswith("application/problem+json")
+
+
+async def test_an_opened_read_leaves_updated_at_the_list_order_and_the_oldest_wait(
+    harness: Harness,
+) -> None:
+    # Operator ruling 2026-11-25 (story 6, epic 7 review): a view is not a change.
+    world = harness.world
+    older = world.initiative(slug="older", updated_at=OPENED)
+    newer = world.initiative(slug="newer", updated_at=TURN_ENDED)
+    for initiative in (older, newer):
+        world.run(initiative, status="needs_you", park_kind="blocked", park_path="x")
+    world.clock = FakeClock(FIRST_READ)
+
+    async with harness.client() as client:
+        before = (await client.get("/api/v1/initiatives")).json()
+        opened = (await client.get(f"/api/v1/initiatives/{older.id}?opened=true")).json()
+        after = (await client.get("/api/v1/initiatives")).json()
+
+    stored = world.initiatives.get(older.id)
+    assert stored is not None
+    assert (stored.last_opened_at, stored.updated_at) == (FIRST_READ, OPENED)
+    assert opened["last_opened_at"] == "2026-11-24T22:00:00Z"
+    assert [r["slug"] for r in before["items"]] == ["newer", "older"]
+    assert [r["slug"] for r in after["items"]] == ["newer", "older"]
+    assert before["counts"]["oldest_wait_at"] == "2026-11-24T21:00:00Z"
+    assert after["counts"]["oldest_wait_at"] == before["counts"]["oldest_wait_at"]

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from orchestrator.domain.entities.initiative import FrozenSequence, Initiative
@@ -113,6 +114,16 @@ class SQLAlchemyInitiativeRepository:
         for column, value in row_values(initiative).items():
             if column != "id":
                 setattr(row, column, value)
+
+    def mark_opened(self, initiative_id: UUID, at: datetime) -> None:
+        # `updated_at` set to itself so its `onupdate=func.now()` does not fire: a view is not
+        # a change, and the list orders and ages initiatives by `updated_at`.
+        self._session.execute(
+            update(InitiativeRow)
+            .where(InitiativeRow.id == initiative_id)
+            .values(last_opened_at=at, updated_at=InitiativeRow.updated_at)
+            .execution_options(synchronize_session=False)
+        )
 
     def list(self, *, project_id: UUID | None = None) -> list[Initiative]:
         statement = select(InitiativeRow)

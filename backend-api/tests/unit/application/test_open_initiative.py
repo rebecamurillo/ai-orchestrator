@@ -65,7 +65,23 @@ def test_it_takes_the_initiative_lock_first() -> None:
     open_initiative(wired, initiative.id)
 
     names = [call[0] for call in world.initiatives.calls]
-    assert names.index("get_for_update") < names.index("update")
+    assert names.index("get_for_update") < names.index("mark_opened")
+
+
+def test_it_marks_the_view_without_the_full_row_update() -> None:
+    # Operator ruling 2026-11-25 (story 6, epic 7 review): a view is not a change, so the write
+    # goes through `mark_opened`, never `update`, and `updated_at` stays as it was.
+    world = ReadWorld()
+    changed_at = NOW - timedelta(days=2)
+    initiative = world.initiative(updated_at=changed_at)
+    wired, _ = ports(world)
+
+    open_initiative(wired, initiative.id)
+
+    stored = world.initiatives.get(initiative.id)
+    assert ("mark_opened", initiative.id) in world.initiatives.calls
+    assert "update" not in [call[0] for call in world.initiatives.calls]
+    assert stored is not None and stored.updated_at == changed_at
 
 
 def test_an_unknown_initiative_is_not_found_and_nothing_commits() -> None:
