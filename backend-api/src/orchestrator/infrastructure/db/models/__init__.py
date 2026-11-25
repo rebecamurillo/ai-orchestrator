@@ -19,6 +19,7 @@ from orchestrator.infrastructure.db.models.facts import (
     UsageFactRow,
 )
 from orchestrator.infrastructure.db.models.harness import HarnessRow
+from orchestrator.infrastructure.db.models.initiative import InitiativeAdvanceRow, InitiativeRow
 from orchestrator.infrastructure.db.models.instance_hold import InstanceHoldRow
 from orchestrator.infrastructure.db.models.metric_results import (
     MetricCalculationRow,
@@ -52,6 +53,8 @@ __all__ = [
     "GateRecordRow",
     "GatewayReadRow",
     "HarnessRow",
+    "InitiativeAdvanceRow",
+    "InitiativeRow",
     "InstanceHoldRow",
     "MetricCalculationRow",
     "MetricValueRow",

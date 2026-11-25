@@ -31,6 +31,7 @@ under *Start run* explaining what it queues behind.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -45,7 +46,12 @@ from orchestrator.application.preflight.model import (
 )
 from orchestrator.application.rules.lane import lane_of
 from orchestrator.application.rules.run_label import initial_label
-from orchestrator.application.templates.plan_model import Plan
+from orchestrator.application.use_cases.create_run_helpers import (
+    _partition_branch,
+    _step_run,
+    _trace_name,
+    _working_branch,
+)
 from orchestrator.application.use_cases.preflight import PreflightPorts, preflight_and_plan
 from orchestrator.application.use_cases.queue import REASON_SAVED
 from orchestrator.application.use_cases.run_read_ports import (
@@ -57,19 +63,19 @@ from orchestrator.application.use_cases.run_read_ports import (
     run_rows,
 )
 from orchestrator.application.use_cases.run_records import record_own_repository
+from orchestrator.domain.entities.initiative import InitiativeKey
 from orchestrator.domain.entities.run import Run
-from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import Conflict, Invalid, NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.engine import WorkflowEngine
+from orchestrator.domain.ports.initiative_runs import InitiativeRunReads
 from orchestrator.domain.ports.repositories import (
     StepRunRepository,
 )
 from orchestrator.domain.ports.run_records import RunRepositoryRecords
 from orchestrator.domain.ports.tracer import Tracer
 from orchestrator.domain.ports.unit_of_work import UnitOfWork
-from orchestrator.domain.values import PlannedRow
 
 __all__ = [
     "RunReadPorts",
@@ -103,6 +109,8 @@ class CreateRunPorts:
     #: unchanged. Production wiring (`api/providers.py::create_run_ports`) always sets one.
     tracer: Tracer | None = None
     run_repositories: RunRepositoryRecords | None = None
+    #: Required when a request carries `initiative`.
+    initiative_runs: InitiativeRunReads | None = None
 
 
 @dataclass(frozen=True)
@@ -129,6 +137,8 @@ class CreateRunRequest:
     #: every predecessor is `done` (→ enqueue) or one ends `failed | cancelled` (→ park).
     after_run_ids: tuple[UUID, ...] = ()
     label: str | None = None
+    #: The initiative step this Run is, if any (AD-36): the key is the idempotency of the advance.
+    initiative: InitiativeKey | None = None
 
     def as_preflight_request(self) -> PreflightRequest:
         return PreflightRequest(
@@ -162,12 +172,37 @@ class CreateRunResult:
     working_branch: str | None = None
 
 
-def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
-    """Re-run pre-flight, refuse what it refuses, then persist and enqueue the plan."""
+def _existing_for_key(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult | None:
+    """The Run already holding the request's initiative key, as a no-op result."""
+    if req.initiative is None:
+        return None
+    if ports.initiative_runs is None:
+        raise ValueError("create_run with an initiative key needs CreateRunPorts.initiative_runs")
+    existing = ports.initiative_runs.get_by_initiative_key(req.initiative)
+    if existing is None:
+        return None
+    return CreateRunResult(
+        run=existing, starts_now=False, waiting="already created for this initiative step"
+    )
+
+
+def create_run(
+    ports: CreateRunPorts,
+    req: CreateRunRequest,
+    *,
+    before_commit: Callable[[], None] | None = None,
+) -> CreateRunResult:
+    """Re-run pre-flight, refuse what it refuses, then persist and enqueue the plan.
+
+    `before_commit` runs inside the caller's unit of work after the Run and its rows are
+    added and before the first commit; raising from it discards all of them.
+    """
     # A dependency-waiting Run must be saved: `after_run_ids` is meaningless on a Run that
     # the engine picks up immediately — a predecessor might not even exist yet (story 5-4).
     if req.after_run_ids and not req.save:
         raise Conflict("after_run_ids requires save=True")
+    if (existing := _existing_for_key(ports, req)) is not None:
+        return existing
     preflight_req = req.as_preflight_request()
     preflighted = preflight_and_plan(ports.preflight, preflight_req)
     if preflighted.plan_error is not None:
@@ -178,19 +213,7 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     if not req.save and preflighted.result.conflict_consent_required and not req.conflict_consent:
         raise Conflict("this can lead to merge conflicts: conflict consent required")
 
-    # Live probe: validate the model against the harness's actual model list (story 2-2).
-    # `harness_registry` is a dict on `PreflightPorts`; reuse it rather than re-running
-    # pre-flight a second time.  No probe when harness is absent, adapter not in registry,
-    # probe.models is empty (gateway-disabled mode), or model is None.
-    if (
-        req.harness
-        and (_probe_adapter := ports.preflight.harness_registry.get(req.harness)) is not None
-    ):
-        probe_result = _probe_adapter.probe()
-        if not probe_result.ok:
-            raise Conflict(probe_result.failing_reason or "probe failed")
-        if req.model and probe_result.models and req.model not in probe_result.models:
-            raise Invalid(f"model {req.model!r} not in probed list: {list(probe_result.models)}")
+    _probe_harness(ports, req)
 
     resolved = preflighted.resolved
     if resolved.project is None:
@@ -243,6 +266,9 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
         partition_branch=declared_branch,
         lane=lane_of(tree.root.type, {row.kind for row in plan.rows}),
         after_run_ids=tuple(req.after_run_ids),
+        initiative_id=req.initiative.initiative_id if req.initiative else None,
+        initiative_round=req.initiative.round if req.initiative else None,
+        initiative_position=req.initiative.position if req.initiative else None,
     )
     step_rows = [_step_run(run_id, row) for row in plan.rows]
 
@@ -251,6 +277,8 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     record_own_repository(
         ports.run_repositories, ports.preflight.git, run, repository.url, plan.base_tip
     )
+    if before_commit is not None:
+        before_commit()
     ports.uow.commit()
     working = _working_branch(plan)
 
@@ -273,6 +301,22 @@ def create_run(ports: CreateRunPorts, req: CreateRunRequest) -> CreateRunResult:
     return CreateRunResult(run=run, starts_now=starts_now, waiting=waiting, working_branch=working)
 
 
+def _probe_harness(ports: CreateRunPorts, req: CreateRunRequest) -> None:
+    # Live probe: validate the model against the harness's actual model list (story 2-2).
+    # `harness_registry` is a dict on `PreflightPorts`; reuse it rather than re-running
+    # pre-flight a second time.  No probe when harness is absent, adapter not in registry,
+    # probe.models is empty (gateway-disabled mode), or model is None.
+    if (
+        req.harness
+        and (_probe_adapter := ports.preflight.harness_registry.get(req.harness)) is not None
+    ):
+        probe_result = _probe_adapter.probe()
+        if not probe_result.ok:
+            raise Conflict(probe_result.failing_reason or "probe failed")
+        if req.model and probe_result.models and req.model not in probe_result.models:
+            raise Invalid(f"model {req.model!r} not in probed list: {list(probe_result.models)}")
+
+
 def _refuse_failing_lines(lines: tuple[Line, ...], *, skip_harness_check: bool) -> None:
     """409, naming every failing line's own text — unless AD-10 says to look past it."""
     failing = [
@@ -282,16 +326,6 @@ def _refuse_failing_lines(lines: tuple[Line, ...], *, skip_harness_check: bool) 
     ]
     if failing:
         raise Conflict("; ".join(line.text for line in failing))
-
-
-def _trace_name(req: CreateRunRequest) -> str:
-    """`run {template}@{version} {branch}` — AD-11's own identity line for the root
-    observation `create_run_trace` opens. The brief's literal port signature
-    (`create_run_trace(run_id, project_slug, tags)`) has nowhere to carry this, so it is
-    added keyword-only (5.1's own precedent for `env_for`'s `traceparent`/`story_id`): keep
-    every brief-named parameter, add the one missing, stated fact rather than inventing an
-    unrelated shape."""
-    return f"run {req.template_name}@{req.template_version} {req.base_branch}"
 
 
 def _inputs_dict(req: CreateRunRequest, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -304,45 +338,3 @@ def _inputs_dict(req: CreateRunRequest, inputs: dict[str, Any]) -> dict[str, Any
         "model": req.model,
         **inputs,
     }
-
-
-def _partition_branch(plan: Plan, base_branch: str) -> str:
-    """The declared branch this Run partitions its queue slot by (AD-12).
-
-    `plan.branches` maps each branch a Template declared to the fresh name `plan_run`
-    allocated for it (AD-7), and the FIRST declared branch is the partition key — the same
-    branch the pre-flight branch-line check reads. A story or epic plan declares one; an
-    initiative plan declares one per epic frame, and the first of them is the key, exactly
-    as for any other multi-branch Template. `base_branch` is the fallback for the only
-    remaining case, a plan that declares no branch at all (no `git.worktree` row).
-    """
-    return next(iter(plan.branches), base_branch)
-
-
-def _working_branch(plan: Plan) -> str | None:
-    """The allocated name of the first branch the Template declared (AD-7), or `None`.
-
-    `_partition_branch` reads the same mapping's *key*; this reads its *value*. A merge Run's
-    `from_branch` is the epic Run's allocated branch and nothing else can supply it before
-    the epic's `git.worktree` row has run (AD-12, S6).
-    """
-    return next(iter(plan.branches.values()), None)
-
-
-def _step_run(run_id: UUID, row: PlannedRow) -> StepRun:
-    """One planned row, as `StepRunRepository.add_many` (4.1) stores it."""
-    return StepRun(
-        id=new_id(),
-        run_id=run_id,
-        seq=row.seq,
-        path=row.path,
-        label=row.label,
-        kind=row.kind,
-        gate=row.gate,
-        status=row.status,
-        reason=row.reason,
-        with_resolved=row.with_resolved,
-        frame=row.frame,
-        story_id=row.story_id,
-        role=row.role,
-    )

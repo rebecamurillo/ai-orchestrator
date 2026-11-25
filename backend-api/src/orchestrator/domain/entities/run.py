@@ -114,6 +114,10 @@ class Run(BaseModel):
     #: null, so clearing buys nothing, and the retained edges are the durable record an
     #: initiative's DAG is rendered from (spine AD-12/AD-13 amendment, 2026-09-23).
     after_run_ids: tuple[UUID, ...] = ()
+    #: Set together, at creation only, by `create_run` (AD-36).
+    initiative_id: UUID | None = None
+    initiative_round: int | None = None
+    initiative_position: int | None = None
     #: The Langfuse trace this Run's attempt spans hang under (AD-11).
     trace_id: str | None = None
     terminal_session: bool = False

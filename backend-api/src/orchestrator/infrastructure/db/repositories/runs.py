@@ -36,6 +36,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from orchestrator.domain.entities.initiative import InitiativeKey
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.template import TemplateRef
 from orchestrator.domain.statuses import TERMINAL_RUN, Lane, RunStatus
@@ -111,6 +112,9 @@ def to_entity(row: RunRow) -> Run:
         # column's default is the database's, so a `RunRow` built in memory and not yet
         # flushed still carries `None` here.
         after_run_ids=tuple(row.after_run_ids or ()),
+        initiative_id=row.initiative_id,
+        initiative_round=row.initiative_round,
+        initiative_position=row.initiative_position,
     )
 
 
@@ -173,6 +177,9 @@ def row_values(run: Run) -> dict[str, Any]:
         "partition_branch": run.partition_branch,
         "lane": run.lane,
         "after_run_ids": list(run.after_run_ids),
+        "initiative_id": run.initiative_id,
+        "initiative_round": run.initiative_round,
+        "initiative_position": run.initiative_position,
     }
 
 
@@ -274,6 +281,24 @@ class SQLAlchemyRunRepository:
                 RunRow.engine_ref == {},
             )
         )
+
+    def get_by_initiative_key(self, key: InitiativeKey) -> Run | None:
+        row = self._session.scalars(
+            select(RunRow).where(
+                RunRow.initiative_id == key.initiative_id,
+                RunRow.initiative_round == key.round,
+                RunRow.initiative_position == key.position,
+            )
+        ).first()
+        return None if row is None else to_entity(row)
+
+    def list_for_initiative(self, initiative_id: UUID) -> list[Run]:
+        rows = self._session.scalars(
+            select(RunRow)
+            .where(RunRow.initiative_id == initiative_id)
+            .order_by(RunRow.created_at, RunRow.id)
+        ).all()
+        return [to_entity(row) for row in rows]
 
     def _read(self, statement: Any) -> list[Run]:
         """Every list is newest first; the id breaks a tie within one millisecond."""

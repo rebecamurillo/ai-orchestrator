@@ -517,6 +517,48 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
     - Both are generated at build and never committed; a unit test in `make test` fails when a key of the tables is missing from the schema (`make lint` holds exactly five `uv` invocations, pinned by `test_makefile.py`).
     - No schema is written by hand.
 
+### AD-36 — an initiative stores facts, never a status *(ratified 2026-11-22, initiative orchestrator-initiative-steps)*
+
+- **Binds:** `domain/entities/initiative.py` and `initiative_advance.py` (new), their repository ports and tables, `use_cases/initiatives.py` (new), `rules/initiative_status.py` and `rules/attention.py` (new), the `run` columns below
+- **Prevents:** a third status writer; an initiative status that disagrees with its Runs; two epics deriving "waiting for her" or the board column differently; a next workflow started twice
+- **Rule:**
+  - **`initiative` fields:** `id`, `project_id`, `repository_id` (the hub), `slug`, `name`, `first_message`, `sequence`, `round` (from 1), `cancelled_at`, `branch_cleanup_error`, `pr_merged_at`, `created_at`, `updated_at`. `sequence` is the package's sequence frozen at creation: for each entry, the qualified template name, its version and its step ids (FR-9). There is no status column.
+  - **Slug.** A partial unique index `(repository_id, slug) WHERE cancelled_at IS NULL`. A refused create names the holder (FR-1). It is also refused while `branch_cleanup_error` is set.
+  - **`run` gains** `initiative_id`, `initiative_round` and `initiative_position`. All three are nullable and set together. The partial unique index on the three is the idempotency of the advance: a second insert is a no-op that returns the existing Run.
+  - **`initiative_advance`:** `{id, initiative_id, from_run_id, round, position, blocked_reason, consumed_at}`, unique on `(initiative_id, round, position)`.
+  - **Writers.** Initiative fields change only in these, and each first takes `initiatives.get_for_update`, before any Run lock:
+    - `create_initiative`;
+    - `advance_initiative`, which does nothing when `cancelled_at` is set;
+    - `cancel_initiative`, which cancels each non-terminal Run of the initiative through `signal_run(cancel)`, then deletes `spec/{slug}` through the `Git` port (a failure is recorded in `branch_cleanup_error`);
+    - `reopen_initiative` (AD-37);
+    - the `initiative_pr_check` job, for `pr_merged_at` only.
+  - **The status** comes from one pure function, `initiative_status(initiative, runs, advances, mapping) -> {status, step, reason}`, rules applied in order:
+
+    | Facts | Status |
+    | --- | --- |
+    | `cancelled_at` set | `cancelled` |
+    | `pr_merged_at` set | `done` |
+    | an advance not consumed, with `blocked_reason` | `waiting for her` (the reason) |
+    | the latest Run `queued` or `running` | `running` (reason `waiting for a slot` while queued) |
+    | the latest Run `needs_you` on `conversation`, attention `blocked` | `waiting for her` |
+    | the latest Run `needs_you` on `conversation`, attention `your_turn`, `answering` or `queued` | `running` |
+    | the latest Run `needs_you` on any other stop | `waiting for her` |
+    | the latest Run `failed` | `failed` |
+    | the latest Run `cancelled` and `cancelled_at` null | `failed` (reason `Run cancelled`) |
+    | the build Run `done`, PR not merged | `running` (reason `waiting for the pull request merge`) |
+    | anything else (an advance not consumed without `blocked_reason`, or the latest Run `done` and not the build Run) | `running` (reason `next workflow starting`) |
+
+    The package's `status_map` maps only the current step file's word, and only while the Run is not parked. An unmapped word reads `failed` and names the word (FR-5). A failed turn sets attention `blocked`, so the initiative reads `waiting for her`, and the step's own badge reads `failed` (FR-13).
+  - **Attention** comes from one pure function, `attention(run, rows, attempts)`, in `rules/attention.py`:
+    - `answering`: a session attempt is running;
+    - `queued`: an attempt is queued while another runs;
+    - `blocked`: a failed last turn, or a step-file word in the row's `blocked` list;
+    - `your_turn`: otherwise, on a `conversation` stop.
+
+    The board's Run summary and the initiative detail both call it. Only `blocked` puts a Run in the Needs-you column (UX decision 6). Islands derive nothing (hard rule 4).
+
+- **Amendment** *(initiative orchestrator-initiative-steps, 2026-11-22, after projection, EXPERIENCE § 3 and § 5.11)***:** the status table above is the amended one: a conversation stop with attention your_turn, answering or queued reads running, with attention blocked waiting for her; the build Run done with its pull request not merged reads running, reason waiting for the pull request merge; anything else reads running, reason next workflow starting. The initiative also keeps last_opened_at, a view mark no status reads.
+
 ### AD-38 — a conversation step closes on her word, attested by the agent, and on the step file *(ratified 2026-11-22, initiative orchestrator-initiative-steps)*
 
 - **Binds:** `steps/conversation.py` (new), `session_dispatch.py` (turn start and turn end), the hub package's `prompts.close`

@@ -34,6 +34,7 @@ from orchestrator.domain.errors import Conflict, Invalid, NotFound
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.initiatives import InitiativeRepository
 from orchestrator.domain.ports.packages import ProjectPackageRepository
 from orchestrator.domain.ports.repositories import ProjectRepository, RepositoryRepository
 from orchestrator.domain.ports.templates import TemplateVersionRepository
@@ -59,6 +60,8 @@ class PackagePorts:
     uow: UnitOfWork
     clock: Clock
     work_dir: Path
+    #: `None` skips the open-initiative refusal of `remove_package`.
+    initiatives: InitiativeRepository | None = None
 
 
 @dataclass(frozen=True)
@@ -281,6 +284,11 @@ def hub_of(ports: PackagePorts, package: ProjectPackage) -> Repository:
 
 def remove_package(ports: PackagePorts, project_id: UUID) -> None:
     """Delete the record and nothing else: a stored template version is immutable (AD-15)."""
-    get_package(ports, project_id)
+    package = get_package(ports, project_id)
+    if ports.initiatives is not None:
+        open_ones = ports.initiatives.list_open_for_package(project_id, package.name)
+        if open_ones:
+            slugs = ", ".join(i.slug for i in open_ones)
+            raise Conflict(f"refused: {len(open_ones)} open initiatives use this package — {slugs}")
     ports.packages.delete(project_id)
     ports.uow.commit()

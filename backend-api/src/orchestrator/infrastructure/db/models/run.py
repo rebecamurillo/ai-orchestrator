@@ -28,6 +28,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -70,6 +71,11 @@ GATE_RECORD_AT_INDEX = "ix_gate_record_run_id_at"
 #: GIN, because the question is containment in an array and no b-tree answers that.
 RUN_AFTER_RUN_IDS_INDEX = "ix_run_after_run_ids"
 
+#: The idempotency of an initiative's advance (AD-36): one Run per initiative step.
+RUN_INITIATIVE_KEY_INDEX = "uq_run_initiative_key"
+#: Rendered `ck_run_initiative_keys_together` by the naming convention.
+RUN_INITIATIVE_KEYS_CHECK = "initiative_keys_together"
+
 #: Money, and the hours an Operator estimated by hand.
 MONEY = Numeric(12, 6)
 HOURS = Numeric(10, 2)
@@ -84,6 +90,20 @@ class RunRow(Base):
         Index(RUN_STATUS_INDEX, "status"),
         Index(RUN_REPOSITORY_STATUS_INDEX, "repository_id", "status"),
         Index(RUN_AFTER_RUN_IDS_INDEX, "after_run_ids", postgresql_using="gin"),
+        CheckConstraint(
+            "(initiative_id IS NULL AND initiative_round IS NULL AND initiative_position IS NULL)"
+            " OR (initiative_id IS NOT NULL AND initiative_round IS NOT NULL"
+            " AND initiative_position IS NOT NULL)",
+            name=RUN_INITIATIVE_KEYS_CHECK,
+        ),
+        Index(
+            RUN_INITIATIVE_KEY_INDEX,
+            "initiative_id",
+            "initiative_round",
+            "initiative_position",
+            unique=True,
+            postgresql_where=text("initiative_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
@@ -151,6 +171,11 @@ class RunRow(Base):
     after_run_ids: Mapped[list[UUID]] = mapped_column(
         ARRAY(Uuid()), server_default=text("'{}'::uuid[]")
     )
+    initiative_id: Mapped[UUID | None] = mapped_column(
+        Uuid(), ForeignKey("initiative.id"), nullable=True
+    )
+    initiative_round: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    initiative_position: Mapped[int | None] = mapped_column(Integer(), nullable=True)
 
 
 class StepRunRow(Base):

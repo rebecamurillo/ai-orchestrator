@@ -12,6 +12,7 @@ from orchestrator.api.providers_base import SESSION_FACTORY, SETTINGS, from_stat
 from orchestrator.application.use_cases.packages import PackagePorts
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
+    SQLAlchemyInitiativeRepository,
     SQLAlchemyProjectPackageRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
@@ -28,6 +29,7 @@ def package_ports(request: Request) -> Iterator[PackagePorts]:
             repositories=SQLAlchemyRepositoryRepository(uow.session),
             packages=SQLAlchemyProjectPackageRepository(uow.session),
             templates=SQLAlchemyTemplateVersionRepository(uow.session),
+            initiatives=SQLAlchemyInitiativeRepository(uow.session),
             git=providers_base.required_git(request, "the package routes"),
             uow=uow,
             clock=SystemClock(),
