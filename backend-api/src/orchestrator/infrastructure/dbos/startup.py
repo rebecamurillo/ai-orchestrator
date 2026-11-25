@@ -50,6 +50,7 @@ from orchestrator.application.steps import plan_check as _plan_check  # noqa: F4
 from orchestrator.application.steps import pr_link as _pr_link  # noqa: F401
 from orchestrator.application.steps import shell as _shell  # noqa: F401
 from orchestrator.application.use_cases.dependency_sweep import sweep_dependency_waiting
+from orchestrator.application.use_cases.initiative_advance import sweep_advances
 from orchestrator.application.use_cases.instance_hold import release_hold
 from orchestrator.application.use_cases.metric_calculations import sweep_calculations
 from orchestrator.application.use_cases.session_sweep import sweep_session_turns
@@ -74,6 +75,7 @@ from orchestrator.infrastructure.db.writers import (
     open_writer_ports,
 )
 from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
+from orchestrator.infrastructure.dbos.advance_ports import open_advance_ports
 from orchestrator.infrastructure.dbos.config import engine_config
 from orchestrator.infrastructure.dbos.facade import RealEngine
 from orchestrator.infrastructure.dbos.step_close import step_close_ports
@@ -196,6 +198,7 @@ def walker_deps(
         run_finished=partial(
             run_finished_hook, session_factory, git, settings.work_dir, settings.bmad_version
         ),
+        advance_writes=partial(open_advance_ports, session_factory, settings, git, engine_ref),
         calculation_writes=partial(
             open_calculation_ports,
             session_factory,
@@ -329,6 +332,9 @@ def dependency_startup_sweep(settings: Settings) -> None:
                 sweep_calculations(
                     scope.calculations, scope.uow, scope.clock, engine, engine.held_calculations()
                 )
+        if engine.walker_deps.advance_writes is not None:
+            with engine.walker_deps.advance_writes() as advance_scope:
+                sweep_advances(advance_scope, engine, engine.held_advances())
 
 
 def schedule_engine_jobs(settings: Settings) -> None:

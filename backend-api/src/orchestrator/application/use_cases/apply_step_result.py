@@ -61,6 +61,7 @@ from orchestrator.application.templates.plan_model import ON_FAIL_KEY
 from orchestrator.application.use_cases import apply_redispatch
 from orchestrator.application.use_cases.apply_consult import apply_consult, attempt_status
 from orchestrator.application.use_cases.conversation_session import open_step_session
+from orchestrator.application.use_cases.initiative_advance import enqueue_advances, record_advance
 from orchestrator.application.use_cases.metric_calculations import enqueue_queued
 from orchestrator.application.use_cases.pause_stop import park_before_next
 from orchestrator.application.use_cases.record_trajectory import record_trajectory
@@ -161,11 +162,13 @@ def apply_step_result(
         run, turn = _open_conversation(ports, run, row, result)
         if run.status == "failed":  # park dependents in same UoW (story 5-4)
             park_dependents(ports, run)
+        record_advance(ports, run)
         ports.uow.commit()
     if run.status == "done":  # two-phase: commit first, enqueue after (story 5-4)
         enqueue_dependents(ports, ports.engine, run)
     if turn is not None and ports.engine is not None:
         ports.engine.enqueue_session_turn(run.id, turn)
+    enqueue_advances(ports.engine, ports, run)
     enqueue_queued(ports.engine, ports.calculations, run)
 
 

@@ -69,3 +69,13 @@ def test_signal_and_schedule_are_no_ops() -> None:
 
     engine.signal(RUN_A, Signal(kind="cancel"))
     engine.schedule("clone_check", "0 0 * * *", lambda: None)
+
+
+def test_enqueue_advance_is_a_no_op() -> None:
+    engine = LocalWorkflowEngine()
+    engine.enqueue(RUN_A, REPOSITORY, lane="walk")
+    before = engine.list_queue()
+
+    assert engine.enqueue_advance(RUN_B) is None
+
+    assert engine.list_queue() == before

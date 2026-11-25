@@ -131,3 +131,15 @@ class FakeInitiativeAdvanceRepository:
             (a for a in self.advances if a.consumed_at is None),
             key=lambda a: (a.round, a.position, a.id),
         )
+
+    def get(self, advance_id: UUID) -> InitiativeAdvance | None:
+        self.calls.append(("get", advance_id))
+        return next((a for a in self.advances if a.id == advance_id), None)
+
+    def update(self, advance: InitiativeAdvance) -> None:
+        self.calls.append(("update", advance.id))
+        for index, stored in enumerate(self.advances):
+            if stored.id == advance.id:
+                self.advances[index] = advance
+                return
+        raise ValueError(f"no advance with id {advance.id} is stored")

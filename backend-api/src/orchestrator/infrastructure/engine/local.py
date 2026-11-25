@@ -74,3 +74,6 @@ class LocalWorkflowEngine:
 
     def enqueue_calculation(self, calculation_id: UUID) -> None:
         """Nothing here runs a calculation, as nothing here runs a walk."""
+
+    def enqueue_advance(self, advance_id: UUID) -> None:
+        """Nothing here runs an advance, as nothing here runs a walk."""

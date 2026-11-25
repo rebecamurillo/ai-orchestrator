@@ -62,3 +62,9 @@ class InitiativeAdvanceRepository(Protocol):
     def list_unconsumed(self) -> list[InitiativeAdvance]:
         """Every advance with no `consumed_at`, in `(round, position, id)` order."""
         ...
+
+    def get(self, advance_id: UUID) -> InitiativeAdvance | None: ...
+
+    def update(self, advance: InitiativeAdvance) -> None:
+        """Write `blocked_reason` and `consumed_at` of a stored advance."""
+        ...

@@ -128,6 +128,10 @@ graph LR
 - **Amendment** *(ratified 2026-11-01, senior unblock)***:** `Actor` gains `senior` (a consult's outcome, written by `apply_step_result`) and `chat` (a thread reply, written by `signal_run` with `{platform, author_id, author}` in the payload). No status token, Run or Step, is added. A consult's requeue uses the Step transition `retry` uses. `session_turn` (AD-23) writes `attempt` rows only and no status.
 - **Amendment** *(2026-11-02, lead review of stories 2-3 and 2-5, within AD-23)***:** `session_turn` writes `attempt` rows only, their own `status` included, and no Run or Step status. Signals that write the Run read it under a row lock (`RunRepository.get_for_update`), as do the session message endpoint and a turn's spend write.
 - **Amendment** *(initiative orchestrator-initiative-steps, 2026-11-23)***:** The Step diagram gains `running --skip--> skipped`: an executor may end its own row `skipped`, applied by `apply_step_result` like any result (AD-15 amended "The round": a `conversation` row outside a non-empty `round_steps` → `skipped · not in this round`). Operator ruling, 2026-11-23.
+- **Amendment** *(initiative orchestrator-initiative-steps, 2026-11-22)***:** the initiative's writers, and the advance that follows a terminal transition.
+  - When a Run with `initiative_id` reaches a terminal status, the writer of that transition inserts one `initiative_advance` row in the same unit of work: `apply_step_result` for done or failed, `signal_run` for cancel. That is all it does for the initiative.
+  - `advance_initiative` (AD-37) runs after the commit, as its own durable workflow. It never resolves `after_run_ids`, so it is not AD-12's dependent writer.
+  - No initiative use case writes a Run or row status. A Run it creates starts at `queued` through `create_run`. A Run it stops goes through `signal_run(cancel)`.
 
 ```mermaid
 stateDiagram-v2
@@ -558,6 +562,38 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
     The board's Run summary and the initiative detail both call it. Only `blocked` puts a Run in the Needs-you column (UX decision 6). Islands derive nothing (hard rule 4).
 
 - **Amendment** *(initiative orchestrator-initiative-steps, 2026-11-22, after projection, EXPERIENCE § 3 and § 5.11)***:** the status table above is the amended one: a conversation stop with attention your_turn, answering or queued reads running, with attention blocked waiting for her; the build Run done with its pull request not merged reads running, reason waiting for the pull request merge; anything else reads running, reason next workflow starting. The initiative also keeps last_opened_at, a view mark no status reads.
+
+### AD-37 — the initiative advances by its package's declaration, after the commit *(ratified 2026-11-22, initiative orchestrator-initiative-steps)*
+
+- **Binds:** `use_cases/initiatives.py` (`advance_initiative`, `reopen_initiative`), the advance workflow and its start-up sweep, `create_run`, the `PullRequests` port (new), `package.yaml` (AD-39)
+- **Prevents:** a poller; a lost advance after a crash; the sequence's order written into code; a build planned before `epics.yaml` exists; a merge started on a failed or skipped gate
+- **Rule:**
+  - **Durability.** After the commit that inserted an `initiative_advance` row, the writer enqueues the `advance_initiative` workflow. Container start sweeps every advance with `consumed_at` null and enqueues it again. The workflow runs:
+    1. its reads (git, preflight, GitHub);
+    2. at most one `create_run`, at the frozen version (AD-15, amended), with the AD-36 keys;
+    3. `consumed_at`, set in the unit of work that inserts the Run.
+  - **Branches.** The initiative use cases create the branches before `create_run`, so every Run attaches (`mode: attach`, AD-7) and never allocates a `-n` name:
+    - `spec/{slug}` from `main`: at creation, and in a reopen when the branch does not exist;
+    - `feat/{slug}` from `main`: after the merge.
+
+    `mode: attach` on an existing branch is how a gate-fail round continues.
+  - **The gate's verdict.** It is the gate row's routed word, stored on its attempt when the row ends: the package's `pass` and `fail` words both route `done`, and the row records the word and the owners list. The advance reads that stored result, never git. It does not read the spec Run's status either: a spec Run can be `done` with a failed gate.
+  - **The transitions:**
+    - **Spec Run done**, verdict in `gate.pass` → run the existing preflight of the build template, the first `auto` entry after the spec Run's entry in the sequence, against `spec/{slug}`:
+      - it passes → create the merge Run;
+      - it fails → treat it as a `fail` owned by the tech step.
+    - **Spec Run done**, verdict in `gate.fail` → increment `round` and create a spec Run with `round_steps` = the owners, in sequence order (FR-15). Each owner's first turn is its defects.
+    - **Merge Run done** → create `feat/{slug}`, then the build Run with the project's run defaults (FR-18, FR-20). With no default budget, the advance stays unconsumed with `blocked_reason = no project budget`. The use case that sets `default_budget_usd` retries every blocked advance of the project after its commit.
+    - **Build Run done** → nothing is created. The `initiative_pr_check` job (`schedule`, AD-6) asks the new `PullRequests` port, a GitHub adapter that uses `GITHUB_TOKEN` on the backend only (hard rule 5). For each `(repository, branch)` in the build Run's `compare_urls`, it checks whether a pull request with head `feat/{slug}` was merged. When all of them were, it sets `pr_merged_at` (FR-6). If GitHub cannot be read, nothing changes and the job logs `GitHub unreadable`; the initiative's status and reason do not change.
+    - **Any Run failed or cancelled** → nothing is created. The status function reads it.
+  - **`reopen_initiative(step_id, reason)`** is the restart and reopen path (FR-5, FR-19, and FR-13 after a failed Run). It cancels the non-terminal Run, increments `round`, creates or attaches `spec/{slug}`, and creates a spec Run with `round_steps` = `step_id` plus every later conversation step of the sequence not yet done in the initiative, in sequence order, and `reason` as the first turn of each step of the round. The gate, the merge and the build follow as above. FR-19: she decides that a build stop is a spec defect, by her action "reopen step …" on the initiative page; the senior's judgment is not built.
+  - **The merge Run** is a `walk`-lane Run on the hub's `main` (`mode: attach`). Its template is `interactive`, for AD-14's `allow_default_branch` and the merge-conflict conversation, and holds no `conversation` row, so it walks in the `walk` lane (AD-12, amended). Every merge of the repository walks there, so they serialize on one partition (FR-17, AD-12). The accepted cost: a merge parked on `merge_conflict` holds one `MAX_ACTIVE_RUNS` slot while she talks to the merge agent (gate item 5, § 10). Its template, in order:
+    1. the out-of-folder check, a `shell` row that fails naming each path outside `{initiative_folder}/{slug}` (FR-16);
+    2. the agent merge row;
+    3. `git.merge`;
+    4. `git.push` with a declared `retry` that syncs first (hard rule 7 as the owner revised it, written into the member `AGENTS.md` by epic 8 story 3, gate item 3, § 10), and `allow_default_branch: true`, which AD-14, amended, accepts only in an `interactive` template;
+    5. `git.branch_delete` of `spec/{slug}` (new kind, AD-9, logged per AD-40).
+  - **A merge conflict** the agent cannot resolve parks `merge_conflict`. On a Run with `initiative_id`, the machine opens a `scope: step` session with the merge row's skill (AD-23, amended). She talks to the merge agent, and the resume is `continue`, not `retry`, so its work is kept. The held `main` partition is accepted: other merges wait (FR-17).
 
 ### AD-38 — a conversation step closes on her word, attested by the agent, and on the step file *(ratified 2026-11-22, initiative orchestrator-initiative-steps)*
 

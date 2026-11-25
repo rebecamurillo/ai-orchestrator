@@ -29,13 +29,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import structlog
 
 from orchestrator.domain.ports.engine import EngineRecord, QueueEntry, QueueState
 from orchestrator.domain.statuses import Lane
 from orchestrator.domain.values import Signal
+from orchestrator.infrastructure.dbos.advance import build_advance
 from orchestrator.infrastructure.dbos.calculation import build_calculation
 from orchestrator.infrastructure.dbos.config import (
     HUMAN_TOPIC,
@@ -91,6 +92,7 @@ class DbosWorkflowEngine:
         self._walk: Callable[[str], None] | None = None
         self._turn: Callable[[str], None] | None = None
         self._calculation: Callable[[str], None] | None = None
+        self._advance: Callable[[str], None] | None = None
 
     def launch(self) -> None:
         """Start the engine: from here it dequeues Runs and recovers interrupted ones."""
@@ -100,6 +102,8 @@ class DbosWorkflowEngine:
         # workflow is registered (AD-23)
         self._turn = build_session_turn(self._engine, self._deps, self)
         self._calculation = build_calculation(self._engine, self._deps)
+        if self._deps.advance_writes is not None:
+            self._advance = build_advance(self._engine, self._deps)
         self._engine.start()
         # after `start`, and that is the library's order rather than a preference: declaring
         # the queue writes its concurrency to the system database, which does not exist until
@@ -151,10 +155,38 @@ class DbosWorkflowEngine:
             SESSION_QUEUE, self._calculation, str(calculation_id), partition_key=str(calculation_id)
         )
 
+    def enqueue_advance(self, advance_id: UUID) -> None:
+        """One initiative advance on the session queue, partitioned by its own id. The workflow
+        id is fresh on every call: the advance is consumed by its row, not by the engine, and a
+        workflow id the engine remembers as finished would never run a second time."""
+        if self._advance is None:
+            raise RuntimeError(NOT_LAUNCHED)
+        self._engine.enqueue(
+            SESSION_QUEUE,
+            self._advance,
+            f"{advance_id}:{uuid4().hex}",
+            partition_key=str(advance_id),
+        )
+
+    def held_advances(self) -> frozenset[UUID]:
+        """The advances the session queue holds: workflow ids of the form `{advance}:{hex}`."""
+        return frozenset(
+            UUID(entry.workflow_id.partition(":")[0])
+            for entry in self._engine.queued(SESSION_QUEUE)
+            if ":" in entry.workflow_id
+        )
+
     def held_calculations(self) -> frozenset[UUID]:
         """The ids the session queue holds, enqueued or running (calculation ids never collide
-        with attempt ids: both are UUIDv7)."""
-        return frozenset(UUID(entry.workflow_id) for entry in self._engine.queued(SESSION_QUEUE))
+        with attempt ids: both are UUIDv7). An advance's workflow id holds a `:` and is not one."""
+        return self._plain_ids()
+
+    def _plain_ids(self) -> frozenset[UUID]:
+        return frozenset(
+            UUID(entry.workflow_id)
+            for entry in self._engine.queued(SESSION_QUEUE)
+            if ":" not in entry.workflow_id
+        )
 
     @property
     def walker_deps(self) -> WalkerDeps:
@@ -163,7 +195,7 @@ class DbosWorkflowEngine:
 
     def held_session_turns(self) -> frozenset[UUID]:
         """The turns the session queue holds, enqueued or running: the engine's to recover."""
-        return frozenset(UUID(entry.workflow_id) for entry in self._engine.queued(SESSION_QUEUE))
+        return self._plain_ids()
 
     def signal(self, run_id: UUID, signal: Signal) -> None:
         """Deliver one Operator signal (AD-13) to the Run's single `recv` wait."""

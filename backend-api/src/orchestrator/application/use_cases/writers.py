@@ -20,6 +20,10 @@ from uuid import UUID
 from orchestrator.application.use_cases.announce import Announcer
 from orchestrator.application.use_cases.metric_calculations import queue_terminal_calculation
 from orchestrator.application.use_cases.run_records import ended
+from orchestrator.application.use_cases.writers_enqueue import (
+    enqueue_dependents,
+    enqueue_saved_run,
+)
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
@@ -28,6 +32,7 @@ from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.clock import Clock
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.git import Git
+from orchestrator.domain.ports.initiatives import InitiativeAdvanceRepository
 from orchestrator.domain.ports.instance_hold import InstanceHoldRepository
 from orchestrator.domain.ports.metric_results import (
     MetricCalculationRepository,
@@ -52,6 +57,8 @@ from orchestrator.domain.statuses import (
     step_transition,
 )
 from orchestrator.domain.values import Park
+
+__all__ = ["RUN_EXPIRED", "enqueue_dependents", "enqueue_saved_run"]
 
 #: How a row in each status is put back on the queue. A row in any other status has no way
 #: to `queued` in AD-8's diagram, so `step_transition` refuses it by name.
@@ -93,6 +100,7 @@ class WriterPorts:
     #: Both set: a write that ends the Run queues its metrics calculation in the same unit.
     calculations: MetricCalculationRepository | None = None
     versions: ResultVersionRepository | None = None
+    advances: InitiativeAdvanceRepository | None = None
 
 
 def require_run(ports: WriterPorts, run_id: UUID, *, lock: bool = False) -> Run:
@@ -348,31 +356,6 @@ def _write_dependency_park(ports: WriterPorts, dep: Run, reason: str) -> None:
     record(ports, parked, Entry(event="dependency", actor="machine", path=None, text=reason))
 
 
-def enqueue_saved_run(ports: WriterPorts, engine: WorkflowEngine | None, run: Run) -> None:
-    """Two-phase: enqueue first, then commit the returned `engine_ref` in its own UoW.
-
-    The order is AD-8's: the engine only ever sees a Run whose row is already durable. A
-    `None` engine degrades to a no-op — every call site that predates story 5-4, and
-    `park_dependents`, which can never reach this branch anyway.
-
-    The partition key is AD-12's: the Run's **declared** branch, or `base_branch` for a plan
-    that declares none. Two callers share it rather than spelling it twice —
-    `resolve_dependent` below, and any other caller that saves a Run in exactly this
-    state: saved, `engine_ref` empty, nothing waited on.
-    """
-    if engine is None:
-        return
-    partition_key = (
-        f"{run.repository_id}:{run.partition_branch or run.inputs.get('base_branch', '')}"
-    )
-    engine_ref = engine.enqueue(run.id, partition_key=partition_key, lane=run.lane)
-    with ports.uow:
-        refreshed = ports.runs.get(run.id)
-        if refreshed is not None:
-            set_run(ports, refreshed, engine_ref=engine_ref)
-        ports.uow.commit()
-
-
 def park_dependents(ports: WriterPorts, run: Run) -> None:
     """Resolve every dependent of `run` in the same UoW as `run`'s terminal write.
 
@@ -384,17 +367,3 @@ def park_dependents(ports: WriterPorts, run: Run) -> None:
     """
     for dep in ports.runs.list_dependents(run.id):
         resolve_dependent(ports, None, dep, own_uow=False)
-
-
-def enqueue_dependents(ports: WriterPorts, engine: WorkflowEngine | None, run: Run) -> None:
-    """Resolve every dependent of `run` after `run`'s `done` write is committed.
-
-    Called with no transaction open, so each resolution owns its own. Idempotent: a
-    dependent that was already enqueued carries an `engine_ref` and is invisible to
-    `list_dependents`. Degrades to a no-op when `engine` is None (every call site that
-    predates story 5-4).
-    """
-    if engine is None:
-        return
-    for dep in ports.runs.list_dependents(run.id):
-        resolve_dependent(ports, engine, dep)

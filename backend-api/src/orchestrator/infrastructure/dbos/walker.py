@@ -53,6 +53,7 @@ from orchestrator.application.steps import StepPorts
 from orchestrator.application.steps.context import RunEnvironment
 from orchestrator.application.use_cases import walk
 from orchestrator.application.use_cases.calculate_metrics import CalculationPorts
+from orchestrator.application.use_cases.initiative_advance import AdvancePorts
 from orchestrator.application.use_cases.walk import Held, WalkPorts
 from orchestrator.application.use_cases.writers import WriterPorts
 from orchestrator.domain.statuses import GateEvent
@@ -139,16 +140,15 @@ class WalkerDeps:
     #: among them, and any process built before this hook existed.
     run_finished: Callable[[UUID], None] | None = None
     #: The readiness hook (SPEC CAP-8): called with a Run's id whenever a step of this walk
-    #: leaves it in *any* terminal status — `done`, `failed` or `cancelled`. A second,
-    #: independent hook rather than a second effect on `run_finished`, because that one's
-    #: own `DONE`-only gate is a frozen test (`_finish`'s own docstring says which). `None`
-    #: in every process that wires no such effect — every unit test among them, and any
-    #: process built before this hook existed.
+    #: leaves it in *any* terminal status. Independent of `run_finished`, whose `DONE`-only
+    #: gate is a frozen test (`_finish`'s own docstring says which). `None` where none is wired.
     on_terminal: Callable[[UUID], None] | None = None
     #: How a step waits on a hold; a test replaces it.
     sleep: Callable[[float], None] = time.sleep
     #: The metrics calculation's scope (epic 2 story 5); `None` where no job is wired.
     calculation_writes: Callable[[], AbstractContextManager[CalculationPorts]] | None = None
+    #: The initiative advance's scope; `None` where no workflow is wired.
+    advance_writes: Callable[[], AbstractContextManager[AdvancePorts]] | None = None
 
 
 def build_walk(engine: DurableEngine, deps: WalkerDeps) -> Callable[[str], None]:

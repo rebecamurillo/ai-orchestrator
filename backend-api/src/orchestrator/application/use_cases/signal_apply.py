@@ -21,6 +21,7 @@ from typing import Any
 from uuid import UUID
 
 from orchestrator.application.rules.signals import Rule, record_text, validate
+from orchestrator.application.use_cases.initiative_advance import enqueue_advances, record_advance
 from orchestrator.application.use_cases.metric_calculations import enqueue_queued
 from orchestrator.application.use_cases.preflight import PreflightPorts
 from orchestrator.application.use_cases.signal_effects import EFFECTS, CancelPlan, Effect
@@ -140,6 +141,7 @@ def apply_signal(
     # Park dependents in the same UoW when this run reaches `cancelled` (story 5-4).
     if run.status == "cancelled":
         park_dependents(writers, run)
+    record_advance(writers, run)
     return Applied(run=run, rule=rule, effect=effect, stop=stop)
 
 
@@ -155,6 +157,7 @@ def finish_signal(
     if run.status == "done":
         enqueue_dependents(ports.writers, ports.writers.engine, run)
     # `ports.engine`, not `writers.engine`: the signal providers open writers without one
+    enqueue_advances(ports.engine, ports.writers, run)
     enqueue_queued(ports.engine, ports.writers.calculations, run)
     return SignalOutcome(run=run, resumed=resumed, cancel_plan=effect.cancel_plan)
 

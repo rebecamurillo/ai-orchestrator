@@ -193,3 +193,17 @@ class SQLAlchemyInitiativeAdvanceRepository:
             )
         ).all()
         return [advance_to_entity(row) for row in rows]
+
+    def get(self, advance_id: UUID) -> InitiativeAdvance | None:
+        # refreshed: the advance workflow re-reads under the initiative's lock in the same
+        # session as its unlocked read, and the identity map would answer the stale row
+        row = self._session.get(InitiativeAdvanceRow, advance_id, populate_existing=True)
+        return None if row is None else advance_to_entity(row)
+
+    def update(self, advance: InitiativeAdvance) -> None:
+        row = self._session.get(InitiativeAdvanceRow, advance.id)
+        if row is None:
+            raise ValueError(f"no advance with id {advance.id} is stored")
+        row.blocked_reason = advance.blocked_reason
+        row.consumed_at = advance.consumed_at
+        self._session.flush()

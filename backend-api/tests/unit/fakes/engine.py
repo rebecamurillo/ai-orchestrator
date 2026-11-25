@@ -43,6 +43,7 @@ class FakeWorkflowEngine:
         self._next_ref = 0
         self.session_turn_error: Exception | None = None
         self.calculation_error: Exception | None = None
+        self.advance_error: Exception | None = None
 
     def _note_commit_state(self) -> None:
         if self._uow is not None:
@@ -96,3 +97,10 @@ class FakeWorkflowEngine:
         self._note_commit_state()
         if self.calculation_error is not None:
             raise self.calculation_error
+
+    # epic 8 story 1, 2026-11-25: an initiative advance is its own workflow.
+    def enqueue_advance(self, advance_id: UUID) -> None:
+        self.calls.append(("enqueue_advance", advance_id))
+        self._note_commit_state()
+        if self.advance_error is not None:
+            raise self.advance_error

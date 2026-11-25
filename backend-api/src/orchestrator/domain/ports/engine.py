@@ -93,3 +93,7 @@ class WorkflowEngine(Protocol):
     def enqueue_calculation(self, calculation_id: UUID) -> None:
         """Run one metrics calculation as its own workflow, outside the walk (AD-6)."""
         ...
+
+    def enqueue_advance(self, advance_id: UUID) -> None:
+        """Run one initiative advance as its own workflow, outside the walk (AD-6, AD-37)."""
+        ...
