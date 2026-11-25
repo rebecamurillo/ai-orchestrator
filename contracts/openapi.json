@@ -849,6 +849,23 @@
             "title": "Age Seconds",
             "type": "number"
           },
+          "attention": {
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "answering",
+                  "blocked",
+                  "your_turn"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attention"
+          },
           "branch": {
             "title": "Branch",
             "type": "string"
@@ -872,6 +889,16 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "initiative": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InitiativeTagOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "kind_label": {
             "anyOf": [
@@ -963,6 +990,17 @@
           "template": {
             "title": "Template",
             "type": "string"
+          },
+          "template_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Type"
           },
           "token": {
             "title": "Token",
@@ -1525,6 +1563,24 @@
         "title": "CloneCheckResultOut",
         "type": "object"
       },
+      "ColumnOut": {
+        "properties": {
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "workflow": {
+            "title": "Workflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow",
+          "type"
+        ],
+        "title": "ColumnOut",
+        "type": "object"
+      },
       "CompareCellOut": {
         "properties": {
           "attempt_n": {
@@ -2056,6 +2112,224 @@
           "waiting"
         ],
         "title": "CreateRunOut",
+        "type": "object"
+      },
+      "DetailRunOut": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "round": {
+            "title": "Round",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "needs_you",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "template_name": {
+            "title": "Template Name",
+            "type": "string"
+          },
+          "template_version": {
+            "title": "Template Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "template_name",
+          "template_version",
+          "round",
+          "position",
+          "status",
+          "created_at"
+        ],
+        "title": "DetailRunOut",
+        "type": "object"
+      },
+      "DetailStepOut": {
+        "properties": {
+          "file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/StepFileOut"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "conversation",
+              "automatic"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "skill": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "running",
+              "waiting for her",
+              "done",
+              "skipped",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/TurnOut"
+            },
+            "title": "Turns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "persona",
+          "skill",
+          "file",
+          "status",
+          "line",
+          "turns",
+          "files"
+        ],
+        "title": "DetailStepOut",
+        "type": "object"
+      },
+      "DetailWorkflowOut": {
+        "properties": {
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "running",
+                  "needs_you",
+                  "done",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/DetailStepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "workflow": {
+            "title": "Workflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "position",
+          "workflow",
+          "template",
+          "version",
+          "type",
+          "status",
+          "run_id",
+          "steps"
+        ],
+        "title": "DetailWorkflowOut",
         "type": "object"
       },
       "DrawerAttemptOut": {
@@ -3811,6 +4085,208 @@
         "title": "HoldOut",
         "type": "object"
       },
+      "InitiativeDetailOut": {
+        "description": "`GET /initiatives/{id}`: the row's fields, with `workflows` carrying steps and Runs.",
+        "properties": {
+          "attention": {
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "answering",
+                  "blocked",
+                  "your_turn"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attention"
+          },
+          "branch_cleanup_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Cleanup Error"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "first_message": {
+            "title": "First Message",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "package": {
+            "title": "Package",
+            "type": "string"
+          },
+          "park_seq": {
+            "title": "Park Seq",
+            "type": "integer"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "pr_merged_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pr Merged At"
+          },
+          "progress": {
+            "title": "Progress",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "repo_tag": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Repo Tag",
+            "type": "array"
+          },
+          "repository_id": {
+            "format": "uuid",
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "round": {
+            "title": "Round",
+            "type": "integer"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/DetailRunOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "sha": {
+            "title": "Sha",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "waiting for her",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workflow": {
+            "title": "Workflow",
+            "type": "string"
+          },
+          "workflow_count": {
+            "title": "Workflow Count",
+            "type": "integer"
+          },
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/DetailWorkflowOut"
+            },
+            "title": "Workflows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "project_name",
+          "repository_id",
+          "repo_tag",
+          "slug",
+          "name",
+          "status",
+          "step",
+          "reason",
+          "workflow",
+          "position",
+          "workflow_count",
+          "line",
+          "progress",
+          "attention",
+          "updated_at",
+          "workflows",
+          "first_message",
+          "round",
+          "created_at",
+          "cancelled_at",
+          "branch_cleanup_error",
+          "pr_merged_at",
+          "package",
+          "sha",
+          "park_seq",
+          "runs"
+        ],
+        "title": "InitiativeDetailOut",
+        "type": "object"
+      },
       "InitiativeFolderIn": {
         "additionalProperties": false,
         "description": "The folder rule is the use case's, so a bad folder is a 422 from `Invalid`.",
@@ -3824,6 +4300,214 @@
           "initiative_folder"
         ],
         "title": "InitiativeFolderIn",
+        "type": "object"
+      },
+      "InitiativeListOut": {
+        "description": "`GET /initiatives`: rows, the shown workflows as columns, and the counts.",
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ColumnOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/ListCountsOut"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InitiativeRowOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "columns",
+          "counts"
+        ],
+        "title": "InitiativeListOut",
+        "type": "object"
+      },
+      "InitiativeRowOut": {
+        "properties": {
+          "attention": {
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "answering",
+                  "blocked",
+                  "your_turn"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attention"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "progress": {
+            "title": "Progress",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "repo_tag": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Repo Tag",
+            "type": "array"
+          },
+          "repository_id": {
+            "format": "uuid",
+            "title": "Repository Id",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "waiting for her",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workflow": {
+            "title": "Workflow",
+            "type": "string"
+          },
+          "workflow_count": {
+            "title": "Workflow Count",
+            "type": "integer"
+          },
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowFootOut"
+            },
+            "title": "Workflows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "project_name",
+          "repository_id",
+          "repo_tag",
+          "slug",
+          "name",
+          "status",
+          "step",
+          "reason",
+          "workflow",
+          "position",
+          "workflow_count",
+          "line",
+          "progress",
+          "attention",
+          "updated_at",
+          "workflows"
+        ],
+        "title": "InitiativeRowOut",
+        "type": "object"
+      },
+      "InitiativeTagOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "workflow_count": {
+            "title": "Workflow Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "step",
+          "position",
+          "workflow_count"
+        ],
+        "title": "InitiativeTagOut",
         "type": "object"
       },
       "InputDeclOut": {
@@ -4100,6 +4784,41 @@
           "text"
         ],
         "title": "LineOut",
+        "type": "object"
+      },
+      "ListCountsOut": {
+        "properties": {
+          "cancelled": {
+            "title": "Cancelled",
+            "type": "integer"
+          },
+          "need_you": {
+            "title": "Need You",
+            "type": "integer"
+          },
+          "oldest_wait_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Wait At"
+          },
+          "ongoing": {
+            "title": "Ongoing",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ongoing",
+          "need_you",
+          "oldest_wait_at",
+          "cancelled"
+        ],
+        "title": "ListCountsOut",
         "type": "object"
       },
       "LogPageOut": {
@@ -6825,6 +7544,16 @@
           "header": {
             "$ref": "#/components/schemas/HeaderOut"
           },
+          "initiative": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InitiativeTagOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "reply_available": {
             "title": "Reply Available",
             "type": "boolean"
@@ -6866,6 +7595,17 @@
                 "type": "null"
               }
             ]
+          },
+          "template_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Type"
           }
         },
         "required": [
@@ -8658,6 +9398,24 @@
         "title": "StepDrawerOut",
         "type": "object"
       },
+      "StepFileOut": {
+        "properties": {
+          "draft": {
+            "title": "Draft",
+            "type": "boolean"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "draft"
+        ],
+        "title": "StepFileOut",
+        "type": "object"
+      },
       "StepRowOut": {
         "properties": {
           "attempt_ns": {
@@ -9272,6 +10030,85 @@
         "title": "ToolVersionOut",
         "type": "object"
       },
+      "TurnOut": {
+        "properties": {
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "string"
+          },
+          "round": {
+            "title": "Round",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "queued",
+              "running",
+              "done",
+              "blocked",
+              "checkpoint",
+              "error",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "run_id",
+          "round",
+          "n",
+          "status",
+          "message",
+          "reply",
+          "started_at",
+          "ended_at"
+        ],
+        "title": "TurnOut",
+        "type": "object"
+      },
       "ValidateIn": {
         "description": "`POST /templates/{name}/validate`.",
         "properties": {
@@ -9365,6 +10202,40 @@
           "harness_versions"
         ],
         "title": "VersionOut",
+        "type": "object"
+      },
+      "WorkflowFootOut": {
+        "properties": {
+          "state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "ongoing"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "workflow": {
+            "title": "Workflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow",
+          "type",
+          "state"
+        ],
+        "title": "WorkflowFootOut",
         "type": "object"
       },
       "WorkingStepOut": {
@@ -9853,6 +10724,196 @@
         "summary": "Dispatch a readiness Run for one harness",
         "tags": [
           "harnesses"
+        ]
+      }
+    },
+    "/api/v1/initiatives": {
+      "get": {
+        "description": "Every initiative with its computed status, newest change first.",
+        "operationId": "list_initiatives_api_v1_initiatives_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "default": "ongoing",
+              "enum": [
+                "ongoing",
+                "needs_you",
+                "all"
+              ],
+              "title": "Filter",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitiativeListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "An id or the `filter` is not a valid value."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List initiatives",
+        "tags": [
+          "initiatives"
+        ]
+      }
+    },
+    "/api/v1/initiatives/{initiative_id}": {
+      "get": {
+        "description": "The row, its workflows with their steps and turns, and its Runs.",
+        "operationId": "read_initiative_api_v1_initiatives__initiative_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "initiative_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Initiative Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitiativeDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No initiative has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "An id or the `filter` is not a valid value."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read an initiative",
+        "tags": [
+          "initiatives"
         ]
       }
     },
@@ -11261,6 +12322,105 @@
         "summary": "Probe a Project's saved chat channel",
         "tags": [
           "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/initiatives": {
+      "get": {
+        "description": "`GET /initiatives?project_id=` for one Project.",
+        "operationId": "list_project_initiatives_api_v1_projects__project_id__initiatives_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "required": false,
+            "schema": {
+              "default": "ongoing",
+              "enum": [
+                "ongoing",
+                "needs_you",
+                "all"
+              ],
+              "title": "Filter",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitiativeListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No Project has that id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "An id or the `filter` is not a valid value."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List a Project's initiatives",
+        "tags": [
+          "initiatives"
         ]
       }
     },

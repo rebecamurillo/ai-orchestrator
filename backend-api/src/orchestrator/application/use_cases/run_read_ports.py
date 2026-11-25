@@ -7,16 +7,20 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from orchestrator.application.rules.signals import row_at
+from orchestrator.application.steps.context import WorkspaceFactory
 from orchestrator.domain.entities.run import Run
 from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.errors import NotFound
+from orchestrator.domain.ports.initiatives import InitiativeRepository
 from orchestrator.domain.ports.repositories import (
+    AttemptRepository,
     GateRecordRepository,
     ProjectRepository,
     RepositoryRepository,
     RunRepository,
     StepRunRepository,
 )
+from orchestrator.domain.ports.templates import TemplateVersionRepository
 
 
 @dataclass(frozen=True)
@@ -38,6 +42,11 @@ class RunReadPorts:
     repositories: RepositoryRepository | None = None
     #: `None` likewise; the Board (4.12) reads this for `needs_you_since` alone.
     gate_records: GateRecordRepository | None = None
+    #: `None` for the board's attention, initiative tag and template type: each reads its own port.
+    attempts: AttemptRepository | None = None
+    initiatives: InitiativeRepository | None = None
+    templates: TemplateVersionRepository | None = None
+    workspace: WorkspaceFactory | None = None
 
 
 def get_run(ports: RunReadPorts, run_id: UUID) -> Run:

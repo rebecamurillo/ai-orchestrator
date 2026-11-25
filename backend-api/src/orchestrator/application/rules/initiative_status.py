@@ -69,7 +69,7 @@ def _latest(runs: Sequence[RunFacts]) -> RunFacts | None:
     return max(runs, key=lambda f: f.run.created_at, default=None)
 
 
-def _build_index(initiative: Initiative) -> int | None:
+def build_index(initiative: Initiative) -> int | None:
     workflows = initiative.sequence.workflows
     spec = next(
         (
@@ -85,7 +85,7 @@ def _build_index(initiative: Initiative) -> int | None:
 
 
 def _build_facts(initiative: Initiative, runs: Sequence[RunFacts]) -> RunFacts | None:
-    index = _build_index(initiative)
+    index = build_index(initiative)
     if index is None:
         return None
     return _latest([f for f in runs if f.run.initiative_position == index])

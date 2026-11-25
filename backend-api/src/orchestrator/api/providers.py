@@ -44,8 +44,9 @@ from orchestrator.api.providers_run_files import (
     run_files_ports,
     run_files_write_ports,
 )
+from orchestrator.api.providers_run_reads import run_read_ports
 from orchestrator.application.use_cases.activity import ActivityPorts
-from orchestrator.application.use_cases.create_run import CreateRunPorts, RunReadPorts
+from orchestrator.application.use_cases.create_run import CreateRunPorts
 from orchestrator.application.use_cases.harness_probe import HarnessProbePorts
 from orchestrator.application.use_cases.harness_readiness import HarnessReadinessPorts
 from orchestrator.application.use_cases.harnesses import HarnessPorts
@@ -68,6 +69,7 @@ from orchestrator.infrastructure.db import (
     SQLAlchemyGateRecordRepository,
     SQLAlchemyHarnessRepository,
     SQLAlchemyHistoryQuery,
+    SQLAlchemyInitiativeRepository,
     SQLAlchemyInstanceHoldRepository,
     SQLAlchemyProjectRepository,
     SQLAlchemyRepositoryRepository,
@@ -87,6 +89,7 @@ from orchestrator.infrastructure.setup_record import FsSetupRecord
 from orchestrator.infrastructure.skill_catalog import FsSkillCatalog
 from orchestrator.infrastructure.templates_loader import FilesystemTemplateFolders
 from orchestrator.infrastructure.tracing import build_tracer
+from orchestrator.infrastructure.workspace.fs import FsWorkspace
 
 #: Re-exports: the frozen router tests and `routers/run_files.py` import these names from
 #: here; the wiring itself lives in the capped-module siblings named in the docstring.
@@ -96,6 +99,7 @@ __all__ = [
     "run_files_diff_ports",
     "run_files_ports",
     "run_files_write_ports",
+    "run_read_ports",
 ]
 
 
@@ -245,20 +249,6 @@ def init_repository_ports(
     )
 
 
-def run_read_ports(request: Request) -> Iterator[RunReadPorts]:
-    """The ports `GET /runs`, `GET /runs/{id}` and `GET /runs?view=board` (4.12) read
-    through. Writes nothing."""
-    session_factory = from_state(request, SESSION_FACTORY)
-    with SQLAlchemyUnitOfWork(session_factory) as uow:
-        yield RunReadPorts(
-            runs=SQLAlchemyRunRepository(uow.session),
-            steps=SQLAlchemyStepRunRepository(uow.session),
-            projects=SQLAlchemyProjectRepository(uow.session),
-            repositories=SQLAlchemyRepositoryRepository(uow.session),
-            gate_records=SQLAlchemyGateRecordRepository(uow.session),
-        )
-
-
 def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
     """The ports the Run detail and the run graph route read through (4.12). The Board
     reads through `run_read_ports` instead — see `application/use_cases/run_views.py`'s own
@@ -295,6 +285,9 @@ def run_view_ports(request: Request) -> Iterator[RunViewPorts]:
             ),
             git=git_adapter(request),
             chat_threads=SQLAlchemyChatThreadRepository(uow.session),
+            initiatives=SQLAlchemyInitiativeRepository(uow.session),
+            templates=SQLAlchemyTemplateVersionRepository(uow.session),
+            workspace=FsWorkspace,
         )
 
 

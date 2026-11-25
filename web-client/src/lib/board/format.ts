@@ -85,9 +85,14 @@ export function progressText(progress: ProgressOut | null, kindLabel: string | n
 /** The oldest wait across the two columns that are waiting on something — `queued` (the
  * repository lock) and `needs_you` (the Operator). `running`/`done`/`failed` Runs are not
  * waiting. `null` when neither column holds a card, so the bar prints an em dash rather than
- * a false `0m`. */
+ * a false `0m`. A `needs_you` card whose attention is not `blocked` sits in Running (AD-36)
+ * and is not waiting on the Operator. */
 export function oldestWaitSeconds(cards: CardOut[]): number | null {
-  const waiting = cards.filter((card) => card.status === 'queued' || card.status === 'needs_you');
+  const waiting = cards.filter(
+    (card) =>
+      card.status === 'queued' ||
+      (card.status === 'needs_you' && (card.attention ?? 'blocked') === 'blocked'),
+  );
   if (waiting.length === 0) return null;
   return Math.max(...waiting.map((card) => card.age_seconds));
 }

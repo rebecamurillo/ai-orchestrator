@@ -14,19 +14,8 @@ Two seams have since been cut out of it for length rather than for design — `r
 none to spare. Both are imported straight back under the private names this module already
 used, so the paragraph above still describes how the three read models are assembled.
 
-`run_detail` and the run graph route share `RunViewPorts`, a fresh, fully-required ports bundle
-behind a brand new dependency (`api/providers.py::run_view_ports`) — both are new routes with no
-existing caller to keep working. `board_view` cannot: it answers `GET /runs?view=board`, the
-*same* route and the *same* `run_read_ports` dependency `GET /runs` (no `view`) already uses, and
-`tests/unit/test_run_router.py` overrides that dependency with a `RunReadPorts(runs=self.runs)`
-built years before this story — adding a second, required dependency to that route's handler would
-resolve it unconditionally on every call and crash that existing test's plain list. So
-`board_view` reads through `RunReadPorts` instead (`application/use_cases/create_run.py`, extended
-here with the optional `projects`/`repositories`/`gate_records` fields it needs, following the
-same "`None` where a caller does not wire it" precedent `steps` already set on that dataclass),
-and takes `now` as a plain argument rather than a `Clock` port — the router already has one free
-to call (`SystemClock` from `infrastructure/`, which `api/` may import) and a Board read gains
-nothing from making that a fourth optional port to thread through.
+The Board lives in `run_views_board.py` and is re-exported here; `run_detail` and the run
+graph route read through `RunViewPorts`.
 """
 
 from __future__ import annotations
@@ -38,7 +27,13 @@ from uuid import UUID
 
 from orchestrator.application.graph import STEP_TOKENS
 from orchestrator.application.rules.signals import row_at, run_admitted_signals
-from orchestrator.application.use_cases.create_run import RunReadPorts
+from orchestrator.application.use_cases.initiative_facts import (
+    conversation_step,
+    current_conversation_row,
+    initiative_tag,
+    template_type_of,
+)
+from orchestrator.application.use_cases.initiative_view_types import InitiativeTag
 from orchestrator.application.use_cases.run_graph import run_graph_for
 from orchestrator.application.use_cases.run_view_types import (
     Alert,
@@ -59,6 +54,7 @@ from orchestrator.application.use_cases.run_view_types import (
     Summary,
 )
 from orchestrator.application.use_cases.run_views_alert import build_alert, run_token, stop_thread
+from orchestrator.application.use_cases.run_views_board import board_view
 from orchestrator.application.use_cases.run_views_summary import (
     bracket_index,
     progress,
@@ -110,88 +106,6 @@ _story_cells = story_cells
 _summary = summary
 
 
-# ── the Board (SPEC CAP-12, CAP-14) ───────────────────────────────────────────────────────
-
-
-def board_view(ports: RunReadPorts, *, project_id: UUID | None, now: datetime) -> BoardView:
-    """Every Run, one card each, in its column — `cancelled` files under `failed` (CAP-14)."""
-    cards = [_card(ports, run, now=now) for run in ports.runs.list(project_id=project_id)]
-    columns = BoardColumns(
-        queued=[card for card in cards if card.status == "queued"],
-        running=[card for card in cards if card.status == "running"],
-        needs_you=[card for card in cards if card.status == "needs_you"],
-        done=[card for card in cards if card.status == "done"],
-        failed=[card for card in cards if card.status in ("failed", "cancelled")],
-    )
-    counts = BoardCounts(
-        running=len(columns.running),
-        queued=len(columns.queued),
-        needs_you=len(columns.needs_you),
-    )
-    return BoardView(columns=columns, counts=counts, generated_at=now)
-
-
-def _card(ports: RunReadPorts, run: Run, *, now: datetime) -> Card:
-    steps = ports.steps.list_for_run(run.id) if ports.steps is not None else []
-    project = ports.projects.get(run.project_id) if ports.projects is not None else None
-    repository = (
-        ports.repositories.get(run.repository_id) if ports.repositories is not None else None
-    )
-    return Card(
-        id=run.id,
-        token=_run_token(run),
-        status=run.status,
-        park_kind=run.park_kind,
-        branch=str(run.inputs.get("base_branch", "")),
-        project_name=project.name if project is not None else "",
-        repository_slug=repository.slug if repository is not None else "",
-        current_step_label=_board_current_step_label(run, steps),
-        harness=run.inputs.get("harness"),
-        template=run.template_name,
-        version=run.template_version,
-        progress=_progress(run, steps),
-        kind_label=_kind_label(run, steps),
-        age_seconds=(now - run.created_at).total_seconds(),
-        needs_you_since=_needs_you_since(ports, run) if run.status == "needs_you" else None,
-        label=run.label,
-        label_set_by_operator=run.label_set_by_operator,
-    )
-
-
-def _kind_label(run: Run, steps: Sequence[StepRun]) -> str | None:
-    """What a Card shows where it has no epic/story progress to show (SPEC CAP-12): the
-    Run's own Template name, the same identity `graph.py::_run_node` puts on the root node.
-
-    Was a two-entry lookup table whose keys were shipped Template names, which both named
-    them in product code and left every other Template with a blank segment (Operator
-    decision 2026-09-30: no template name hardcoded in product code). `None` once there *is*
-    progress, because the two are alternatives on the card and never both.
-    """
-    return None if _progress(run, steps) is not None else run.template_name
-
-
-def _board_current_step_label(run: Run, steps: Sequence[StepRun]) -> str:
-    """The running row's label, else the park row's, else the last `done` row's (CAP-12)."""
-    running = next((row for row in steps if row.status == "running"), None)
-    if running is not None:
-        return running.label
-    parked = row_at(steps, run.park_path)
-    if parked is not None:
-        return parked.label
-    done = [row for row in steps if row.status == "done"]
-    return done[-1].label if done else ""
-
-
-def _needs_you_since(ports: RunReadPorts, run: Run) -> datetime | None:
-    """The `.at` of the most recent gate record matching `run.park_kind` — the only durable
-    record of when a Run parked (`Run` itself carries no such timestamp)."""
-    if ports.gate_records is None:
-        return None
-    records = ports.gate_records.list_for_run(run.id)
-    matching = [record for record in records if record.event == run.park_kind]
-    return matching[-1].at if matching else None
-
-
 # ── the Run detail (SPEC CAP-12, CAP-15) ──────────────────────────────────────────────────
 
 
@@ -234,7 +148,21 @@ def run_detail(ports: RunViewPorts, run_id: UUID) -> RunDetailView:
         terminal=_terminal(ports, run, park_row, _latest_of(park_attempts), project),
         reply_available=reply_available,
         resume_unavailable_reason=resume_unavailable_reason,
+        initiative=_initiative_tag(ports, run, rows),
+        template_type=template_type_of(
+            ports.templates, run.template_name, run.template_version, {}
+        ),
     )
+
+
+def _initiative_tag(ports: RunViewPorts, run: Run, rows: Sequence[StepRun]) -> InitiativeTag | None:
+    if ports.initiatives is None or run.initiative_id is None:
+        return None
+    initiative = ports.initiatives.get(run.initiative_id)
+    if initiative is None:
+        return None
+    row = current_conversation_row(run, rows)
+    return initiative_tag(initiative, run, None if row is None else conversation_step(row))
 
 
 def _terminal(

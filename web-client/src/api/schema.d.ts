@@ -101,6 +101,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/initiatives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List initiatives
+         * @description Every initiative with its computed status, newest change first.
+         */
+        get: operations["list_initiatives_api_v1_initiatives_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/initiatives/{initiative_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an initiative
+         * @description The row, its workflows with their steps and turns, and its Runs.
+         */
+        get: operations["read_initiative_api_v1_initiatives__initiative_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instance/activity": {
         parameters: {
             query?: never;
@@ -398,6 +438,26 @@ export interface paths {
          *     platform's own text.
          */
         post: operations["test_channel_api_v1_projects__project_id__channel_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/initiatives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a Project's initiatives
+         * @description `GET /initiatives?project_id=` for one Project.
+         */
+        get: operations["list_project_initiatives_api_v1_projects__project_id__initiatives_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1642,6 +1702,8 @@ export interface components {
         CardOut: {
             /** Age Seconds */
             age_seconds: number;
+            /** Attention */
+            attention?: ("queued" | "answering" | "blocked" | "your_turn") | null;
             /** Branch */
             branch: string;
             /** Current Step Label */
@@ -1653,6 +1715,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            initiative?: components["schemas"]["InitiativeTagOut"] | null;
             /** Kind Label */
             kind_label: string | null;
             /** Label */
@@ -1675,6 +1738,8 @@ export interface components {
             status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
             /** Template */
             template: string;
+            /** Template Type */
+            template_type?: string | null;
             /** Token */
             token: string;
             /** Version */
@@ -1894,6 +1959,13 @@ export interface components {
              */
             status: "pending" | "ok" | "failed";
         };
+        /** ColumnOut */
+        ColumnOut: {
+            /** Type */
+            type: string;
+            /** Workflow */
+            workflow: string;
+        };
         /** CompareCellOut */
         CompareCellOut: {
             /** Attempt N */
@@ -2052,6 +2124,75 @@ export interface components {
             starts_now: boolean;
             /** Waiting */
             waiting: string;
+        };
+        /** DetailRunOut */
+        DetailRunOut: {
+            /** Created At */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Position */
+            position: number;
+            /** Round */
+            round: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "needs_you" | "done" | "failed" | "cancelled";
+            /** Template Name */
+            template_name: string;
+            /** Template Version */
+            template_version: number;
+        };
+        /** DetailStepOut */
+        DetailStepOut: {
+            /** File */
+            file: string | null;
+            /** Files */
+            files: components["schemas"]["StepFileOut"][];
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "conversation" | "automatic";
+            /** Line */
+            line: string;
+            /** Persona */
+            persona: string | null;
+            /** Skill */
+            skill: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "running" | "waiting for her" | "done" | "skipped" | "failed";
+            /** Turns */
+            turns: components["schemas"]["TurnOut"][];
+        };
+        /** DetailWorkflowOut */
+        DetailWorkflowOut: {
+            /** Position */
+            position: number;
+            /** Run Id */
+            run_id: string | null;
+            /** Status */
+            status: ("queued" | "running" | "needs_you" | "done" | "failed" | "cancelled") | null;
+            /** Steps */
+            steps: components["schemas"]["DetailStepOut"][];
+            /** Template */
+            template: string;
+            /** Type */
+            type: string;
+            /** Version */
+            version: number;
+            /** Workflow */
+            workflow: string;
         };
         /** DrawerAttemptOut */
         DrawerAttemptOut: {
@@ -2644,12 +2785,166 @@ export interface components {
             reason: string;
         };
         /**
+         * InitiativeDetailOut
+         * @description `GET /initiatives/{id}`: the row's fields, with `workflows` carrying steps and Runs.
+         */
+        InitiativeDetailOut: {
+            /** Attention */
+            attention: ("queued" | "answering" | "blocked" | "your_turn") | null;
+            /** Branch Cleanup Error */
+            branch_cleanup_error: string | null;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /** Created At */
+            created_at: string;
+            /** First Message */
+            first_message: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Line */
+            line: string;
+            /** Name */
+            name: string;
+            /** Package */
+            package: string;
+            /** Park Seq */
+            park_seq: number;
+            /** Position */
+            position: number;
+            /** Pr Merged At */
+            pr_merged_at: string | null;
+            /** Progress */
+            progress: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Reason */
+            reason: string;
+            /** Repo Tag */
+            repo_tag: string[];
+            /**
+             * Repository Id
+             * Format: uuid
+             */
+            repository_id: string;
+            /** Round */
+            round: number;
+            /** Runs */
+            runs: components["schemas"]["DetailRunOut"][];
+            /** Sha */
+            sha: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "waiting for her" | "done" | "failed" | "cancelled";
+            /** Step */
+            step: string;
+            /** Updated At */
+            updated_at: string;
+            /** Workflow */
+            workflow: string;
+            /** Workflow Count */
+            workflow_count: number;
+            /** Workflows */
+            workflows: components["schemas"]["DetailWorkflowOut"][];
+        };
+        /**
          * InitiativeFolderIn
          * @description The folder rule is the use case's, so a bad folder is a 422 from `Invalid`.
          */
         InitiativeFolderIn: {
             /** Initiative Folder */
             initiative_folder: string;
+        };
+        /**
+         * InitiativeListOut
+         * @description `GET /initiatives`: rows, the shown workflows as columns, and the counts.
+         */
+        InitiativeListOut: {
+            /** Columns */
+            columns: components["schemas"]["ColumnOut"][];
+            counts: components["schemas"]["ListCountsOut"];
+            /** Items */
+            items: components["schemas"]["InitiativeRowOut"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** InitiativeRowOut */
+        InitiativeRowOut: {
+            /** Attention */
+            attention: ("queued" | "answering" | "blocked" | "your_turn") | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Line */
+            line: string;
+            /** Name */
+            name: string;
+            /** Position */
+            position: number;
+            /** Progress */
+            progress: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Reason */
+            reason: string;
+            /** Repo Tag */
+            repo_tag: string[];
+            /**
+             * Repository Id
+             * Format: uuid
+             */
+            repository_id: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "waiting for her" | "done" | "failed" | "cancelled";
+            /** Step */
+            step: string;
+            /** Updated At */
+            updated_at: string;
+            /** Workflow */
+            workflow: string;
+            /** Workflow Count */
+            workflow_count: number;
+            /** Workflows */
+            workflows: components["schemas"]["WorkflowFootOut"][];
+        };
+        /** InitiativeTagOut */
+        InitiativeTagOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Position */
+            position: number;
+            /** Slug */
+            slug: string;
+            /** Step */
+            step: string | null;
+            /** Workflow Count */
+            workflow_count: number;
         };
         /**
          * InputDeclOut
@@ -2722,6 +3017,17 @@ export interface components {
             status: "ok" | "warn" | "fail" | "skip";
             /** Text */
             text: string;
+        };
+        /** ListCountsOut */
+        ListCountsOut: {
+            /** Cancelled */
+            cancelled: number;
+            /** Need You */
+            need_you: number;
+            /** Oldest Wait At */
+            oldest_wait_at: string | null;
+            /** Ongoing */
+            ongoing: number;
         };
         /**
          * LogPageOut
@@ -3655,6 +3961,7 @@ export interface components {
             /** Gate Record */
             gate_record: components["schemas"]["GateRecordOut"][];
             header: components["schemas"]["HeaderOut"];
+            initiative?: components["schemas"]["InitiativeTagOut"] | null;
             /** Reply Available */
             reply_available?: boolean;
             /** Resume Unavailable Reason */
@@ -3665,6 +3972,8 @@ export interface components {
             /** Stories */
             stories: components["schemas"]["StoryCellOut"][];
             summary: components["schemas"]["SummaryOut"] | null;
+            /** Template Type */
+            template_type?: string | null;
         };
         /**
          * RunDetailSummaryOut
@@ -4305,6 +4614,13 @@ export interface components {
             log: components["schemas"]["DrawerLogOut"];
             run_order: components["schemas"]["RunOrderFrameOut"] | null;
         };
+        /** StepFileOut */
+        StepFileOut: {
+            /** Draft */
+            draft: boolean;
+            /** Path */
+            path: string;
+        };
         /** StepRowOut */
         StepRowOut: {
             /** Attempt Ns */
@@ -4550,6 +4866,36 @@ export interface components {
             /** Version */
             version: string;
         };
+        /** TurnOut */
+        TurnOut: {
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Ended At */
+            ended_at: string | null;
+            /** Message */
+            message: string;
+            /** N */
+            n: number;
+            /** Reply */
+            reply: string;
+            /** Round */
+            round: number;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "queued" | "running" | "done" | "blocked" | "checkpoint" | "error" | "skipped";
+        };
         /**
          * ValidateIn
          * @description `POST /templates/{name}/validate`.
@@ -4590,6 +4936,15 @@ export interface components {
             harness_versions: components["schemas"]["HarnessVersions"];
             /** Kit Version */
             kit_version: string | null;
+        };
+        /** WorkflowFootOut */
+        WorkflowFootOut: {
+            /** State */
+            state: ("completed" | "ongoing") | null;
+            /** Type */
+            type: string;
+            /** Workflow */
+            workflow: string;
         };
         /** WorkingStepOut */
         WorkingStepOut: {
@@ -4874,6 +5229,111 @@ export interface operations {
                 };
             };
             /** @description `name` does not match the shape below. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_initiatives_api_v1_initiatives_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                filter?: "ongoing" | "needs_you" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitiativeListOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description An id or the `filter` is not a valid value. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    read_initiative_api_v1_initiatives__initiative_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                initiative_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitiativeDetailOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No initiative has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description An id or the `filter` is not a valid value. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5762,6 +6222,60 @@ export interface operations {
                 };
             };
             /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    list_project_initiatives_api_v1_projects__project_id__initiatives_get: {
+        parameters: {
+            query?: {
+                filter?: "ongoing" | "needs_you" | "all";
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitiativeListOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No Project has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description An id or the `filter` is not a valid value. */
             422: {
                 headers: {
                     [name: string]: unknown;

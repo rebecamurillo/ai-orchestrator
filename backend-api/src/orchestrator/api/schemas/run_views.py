@@ -19,7 +19,6 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel, Field, model_serializer
 
@@ -28,11 +27,13 @@ from orchestrator.api.schemas.board_view import (
     BoardCountsOut,
     BoardOut,
     CardOut,
+    InitiativeTagOut,
     ProgressOut,
 )
 from orchestrator.api.schemas.common import MoneyStr, UtcTimestamp
 from orchestrator.api.schemas.common import drop_default as _drop_default
 from orchestrator.api.schemas.run_alert import AlertOut, AttributionOut, CheckpointStoryOut
+from orchestrator.api.schemas.run_detail_parts import GateRecordOut, SummaryOut
 from orchestrator.api.schemas.runs import RunSummaryOut
 from orchestrator.application.use_cases.run_views import (
     Cost,
@@ -41,12 +42,10 @@ from orchestrator.application.use_cases.run_views import (
     RunDetailView,
     StepRowView,
     StoryCell,
-    Summary,
     Terminal,
 )
-from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
-from orchestrator.domain.statuses import Actor, GateEvent, SignalKind
+from orchestrator.domain.statuses import SignalKind
 from orchestrator.domain.values import Worktree
 
 __all__ = [
@@ -296,53 +295,6 @@ class CostOut(BaseModel):
         )
 
 
-class GateRecordOut(BaseModel):
-    id: UUID
-    at: UtcTimestamp
-    path: str | None
-    event: GateEvent
-    actor: Actor
-    text: str
-    attempt_n: int | None
-    #: The delivery mode the operator chose for an Answer or Retry signal (`"session"` or
-    #: `"restart"`), or `null` for a legacy record whose payload predates story 3-4 or for
-    #: records that carry no mode (e.g. `start`, `plan_stale`). `_drop_default`-guarded so
-    #: every web-client test fixture that predates this field keeps compiling without it.
-    mode: str | None = Field(default=None, json_schema_extra=_drop_default)
-
-    @classmethod
-    def of(cls, record: GateRecord) -> GateRecordOut:
-        return cls(
-            id=record.id,
-            at=record.at,
-            path=record.path,
-            event=record.event,
-            actor=record.actor,
-            text=record.text,
-            attempt_n=record.attempt_n,
-            mode=record.payload.get("mode") or None,
-        )
-
-
-class SummaryOut(BaseModel):
-    progress: ProgressOut | None
-    links: list[str]
-    skipped: list[str]
-    #: The epic numbers `skip_epic` gave up the push on (6.5). `_drop_default`-guarded like
-    #: `cost_provisional`/`row_kind` above: an existing web-client test fixture predates this
-    #: field and must keep compiling without it.
-    skipped_epics: list[int] = Field(default_factory=list, json_schema_extra=_drop_default)
-
-    @classmethod
-    def of(cls, summary: Summary) -> SummaryOut:
-        return cls(
-            progress=None if summary.progress is None else ProgressOut.of(summary.progress),
-            links=list(summary.links),
-            skipped=list(summary.skipped),
-            skipped_epics=list(summary.skipped_epics),
-        )
-
-
 class RunDetailOut(BaseModel):
     """`GET /runs/{run_id}/detail`. One request, every section the screen shows."""
 
@@ -362,6 +314,8 @@ class RunDetailOut(BaseModel):
     #: frozen router test (which pins the exact set of top-level keys) keeps passing.
     reply_available: bool = Field(default=False, json_schema_extra=_drop_default)
     resume_unavailable_reason: str | None = Field(default=None, json_schema_extra=_drop_default)
+    initiative: InitiativeTagOut | None = Field(default=None, json_schema_extra=_drop_default)
+    template_type: str | None = Field(default=None, json_schema_extra=_drop_default)
 
     @model_serializer(mode="wrap")
     def _omit_false_reply_available(self, handler: Any):
@@ -371,8 +325,9 @@ class RunDetailOut(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.reply_available:
             data.pop("reply_available", None)
-        if self.resume_unavailable_reason is None:
-            data.pop("resume_unavailable_reason", None)
+        for key in ("resume_unavailable_reason", "initiative", "template_type"):
+            if data.get(key) is None:
+                data.pop(key, None)
         return data
 
     @classmethod
@@ -393,4 +348,8 @@ class RunDetailOut(BaseModel):
             summary=None if detail.summary is None else SummaryOut.of(detail.summary),
             reply_available=detail.reply_available,
             resume_unavailable_reason=detail.resume_unavailable_reason,
+            initiative=None
+            if detail.initiative is None
+            else InitiativeTagOut.of(detail.initiative),
+            template_type=detail.template_type,
         )

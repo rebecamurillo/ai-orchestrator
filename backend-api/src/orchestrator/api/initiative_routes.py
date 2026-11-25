@@ -9,8 +9,9 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from orchestrator.api import protected_routes
-from orchestrator.api.routers import project_package
+from orchestrator.api.routers import initiatives, project_package
 
 
 def install_initiative_routes(app: FastAPI) -> None:
     protected_routes.mount_protected(app, project_package.router)
+    protected_routes.mount_protected(app, initiatives.router)

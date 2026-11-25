@@ -13,11 +13,13 @@ from orchestrator.api import providers_base
 from orchestrator.api.providers import _preflight_ports, signal_effect_ports
 from orchestrator.api.providers_base import ENGINE, SESSION_FACTORY, SETTINGS, from_state
 from orchestrator.application.use_cases.create_run import CreateRunPorts
+from orchestrator.application.use_cases.initiative_views import InitiativeReadPorts
 from orchestrator.application.use_cases.initiatives import InitiativePorts
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.remote_branches import RemoteBranches
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
+    SQLAlchemyAttemptRepository,
     SQLAlchemyInitiativeAdvanceRepository,
     SQLAlchemyInitiativeRepository,
     SQLAlchemyProjectPackageRepository,
@@ -30,6 +32,7 @@ from orchestrator.infrastructure.db import (
 )
 from orchestrator.infrastructure.db.repositories.run_records import SQLAlchemyRunRepositoryRecords
 from orchestrator.infrastructure.tracing import build_tracer
+from orchestrator.infrastructure.workspace.fs import FsWorkspace
 
 NEEDED_BY = "the initiative routes"
 
@@ -70,3 +73,24 @@ def initiative_ports(request: Request) -> Iterator[InitiativePorts]:
                 clock=clock,
                 work_dir=settings.work_dir,
             )
+
+
+def initiative_read_ports(request: Request) -> Iterator[InitiativeReadPorts]:
+    """What the initiative list and detail read through. Writes nothing."""
+    session_factory = from_state(request, SESSION_FACTORY)
+    git = providers_base.required_git(request, NEEDED_BY)
+    with SQLAlchemyUnitOfWork(session_factory) as uow:
+        runs = SQLAlchemyRunRepository(uow.session)
+        yield InitiativeReadPorts(
+            initiatives=SQLAlchemyInitiativeRepository(uow.session),
+            advances=SQLAlchemyInitiativeAdvanceRepository(uow.session),
+            projects=SQLAlchemyProjectRepository(uow.session),
+            repositories=SQLAlchemyRepositoryRepository(uow.session),
+            runs=runs,
+            initiative_runs=runs,
+            steps=SQLAlchemyStepRunRepository(uow.session),
+            attempts=SQLAlchemyAttemptRepository(uow.session),
+            git=git,
+            workspace=FsWorkspace,
+            clock=SystemClock(),
+        )
