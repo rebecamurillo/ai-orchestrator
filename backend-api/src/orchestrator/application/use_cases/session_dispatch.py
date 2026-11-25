@@ -14,8 +14,10 @@ from typing import Any
 
 from orchestrator.application.rules import consult, session
 from orchestrator.application.rules.conversation import STEP_KEY, close_clause
+from orchestrator.application.rules.merge_conflict import unmerged_paths
 from orchestrator.application.steps import (
     CONVERSATION_KIND,
+    MERGE_KIND,
     agent_env,
     agent_tail,
     agent_workdir,
@@ -32,6 +34,7 @@ from orchestrator.application.steps.context import (
     committed,
     log_path,
     require_attempt_writes,
+    require_cwd,
     require_harnesses,
     require_process,
     require_run,
@@ -42,6 +45,7 @@ from orchestrator.application.templates.agent_row import SPEC_FOLDER_KEY
 from orchestrator.application.templates.rows import STALL_KEY
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.run import Run
+from orchestrator.domain.entities.step_run import StepRun
 from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.git import GitError
 from orchestrator.domain.ports.harness import Harness, HarnessHandle
@@ -67,6 +71,7 @@ class Turn:
     run: Run
     turns: tuple[Attempt, ...]
     scope: str
+    rows: tuple[StepRun, ...] = ()
 
 
 def record(ctx: StepContext, **fields: Any) -> None:
@@ -98,6 +103,14 @@ def interrupt(ctx: StepContext, reason: str) -> None:
     record(ctx, status="error", output_ref=reason, log_path=str(log_path(ctx)))
 
 
+def session_sweep(ctx: StepContext, message: str) -> tuple[tuple[str, str | None], ...]:
+    """The tree commits of `agent_workdir.sweep`, except on a `git.merge` row whose tree
+    still holds an unmerged path: staging would mark it resolved with its markers in it."""
+    if ctx.row.kind == MERGE_KIND and unmerged_paths(ctx.ports.git.status(require_cwd(ctx))):
+        return ()
+    return agent_workdir.sweep(ctx, message)
+
+
 def dispatch(turn: Turn) -> None:
     """A queued turn, from the sweep to the recorded exit; git's refusal is the turn's."""
     ctx = turn.ctx
@@ -107,7 +120,7 @@ def dispatch(turn: Turn) -> None:
         return
     ref = _step_ref(turn)
     if ref is None:
-        skill = str(ctx.row.with_resolved.get(SKILL_KEY) or "").strip()
+        skill = session.parked_skill(ctx.row, turn.rows) or ""
         record(
             ctx,
             status="error",
@@ -116,7 +129,7 @@ def dispatch(turn: Turn) -> None:
         return
     if session.needs_sweep(turn.turns, ctx.attempt):
         try:
-            records.note_commits(ctx, agent_workdir.sweep(ctx, session.WIP_MESSAGE), "session")
+            records.note_commits(ctx, session_sweep(ctx, session.WIP_MESSAGE), "session")
         except GitError as error:
             record(ctx, status="error", output_ref=git_words(error))
             return
@@ -234,7 +247,7 @@ def _step_ref(turn: Turn) -> str | None:
             installed = catalog.installed_skills(ctx.attempt.harness or "")
         except Exception:
             installed = None
-    return session.step_skill_ref(ctx.row.with_resolved.get(SKILL_KEY), installed)
+    return session.step_skill_ref(session.parked_skill(ctx.row, turn.rows), installed)
 
 
 def _facts(turn: Turn) -> tuple[str | None, ...]:

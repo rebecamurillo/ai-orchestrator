@@ -191,6 +191,10 @@ class Git(AnalysisGit, Protocol):
         """
         ...
 
+    def merge_in_progress(self, worktree: Path) -> bool:
+        """A merge stopped in this worktree is waiting to be concluded: `MERGE_HEAD` resolves."""
+        ...
+
     def status(self, worktree: Path, *, ignore_submodules: bool = False) -> str:
         """`git status --porcelain`: the empty string when the worktree is clean.
 

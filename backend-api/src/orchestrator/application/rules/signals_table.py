@@ -78,7 +78,7 @@ ANY_PARK: frozenset[ParkKind] = frozenset(PARK_KINDS)
 #: it is subtracted from two `ANY_PARK` rows below: the spine gives it `retry` and `cancel`
 #: **only**, and a merge Run has neither a Story nor an epic frame for a skip to act on — so
 #: the exclusion is stated in the table rather than left to `_has_story_frame` to discover.
-MERGE_CONFLICT: ParkKind = "merge_conflict"
+MERGE_CONFLICT: ParkKind = signals_conversation.MERGE_CONFLICT
 
 #: The stop a pause leaves (AD-13, 2026-11-01 amendment). It admits `continue` and `cancel`
 #: only, so every `ANY_PARK` row that is not one of those subtracts it.
@@ -232,7 +232,10 @@ VALID: dict[SignalKind, Rule] = {
         text_key=ANSWER_KEY,
     ),
     "continue": Rule(
-        park_kinds=frozenset({"checkpoint", "protected_path", "plan_stale", "dependency", PAUSED}),
+        park_kinds=frozenset(
+            {"checkpoint", "protected_path", "plan_stale", "dependency", PAUSED, MERGE_CONFLICT}
+        ),
+        extra=signals_conversation.continue_admitted,
         run_event="continue",
         text="continued by the operator",
         text_from=_accepted_text,

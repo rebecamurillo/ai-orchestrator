@@ -18,6 +18,7 @@ from orchestrator.domain.statuses import ParkKind
 from orchestrator.domain.values import Signal
 
 CONVERSATION: ParkKind = "conversation"
+MERGE_CONFLICT: ParkKind = "merge_conflict"
 
 #: The row role of the spec workflow's gate.
 SPEC_GATE_ROLE = "spec-gate"
@@ -75,6 +76,13 @@ def _states_its_stop(
     _run: Run, _row: StepRun | None, signal: Signal, _rows: Sequence[StepRun]
 ) -> bool:
     return signal.stop is not None
+
+
+def continue_admitted(
+    run: Run, _row: StepRun | None, _signal: Signal, _rows: Sequence[StepRun]
+) -> bool:
+    """`continue` answers a `merge_conflict` stop only on an initiative Run (story 8.4)."""
+    return run.park_kind != MERGE_CONFLICT or run.initiative_id is not None
 
 
 STEP_CLOSE = Rule(

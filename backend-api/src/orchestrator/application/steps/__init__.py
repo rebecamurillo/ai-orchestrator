@@ -198,6 +198,10 @@ COMMIT_MESSAGE_KEY = "message"
 #: The two kinds that end an epic on the remote. `skip_epic` marks them `skipped` when the
 #: push itself is the stop (AD-13), so they are named here rather than spelled in the rule.
 PUSH_KIND = "git.push"
+
+#: The kind that merges a branch into the one the Run stands on; named here so rules and
+#: session use cases can ask for it without importing the executor module.
+MERGE_KIND = "git.merge"
 PUSH_ALLOW_DEFAULT_KEY = "allow_default_branch"
 PUSH_RETRY_KEY = "retry"
 PUSH_RETRY_KEYS = frozenset({"max", "sync_first"})
@@ -230,6 +234,7 @@ __all__ = [
     "GATES",
     "KIND_META",
     "LINK_KIND",
+    "MERGE_KIND",
     "PLAN_KIND",
     "PUSH_ALLOW_DEFAULT_KEY",
     "PUSH_KIND",

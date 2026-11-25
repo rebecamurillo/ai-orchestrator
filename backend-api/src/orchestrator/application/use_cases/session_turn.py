@@ -181,7 +181,7 @@ def read_turn(ports: TurnPorts, attempt_id: UUID) -> Turn | None:
         records = writers.records.list_for_run(run.id)
         turns = session.session_attempts(writers.attempts.list_for_row(row.id), records)
         scope = str(session.last_start_payload(records).get(session.SCOPE_KEY) or "")
-    return Turn(ctx=ctx, run=run, turns=turns, scope=scope)
+    return Turn(ctx=ctx, run=run, turns=turns, scope=scope, rows=tuple(rows))
 
 
 def run_turn(ports: TurnPorts, attempt_id: UUID) -> Held | None:
@@ -238,7 +238,7 @@ def commit_turn(ports: TurnPorts, attempt_id: UUID) -> None:
     if ctx.ports.spend_writes is not None:
         with ctx.ports.spend_writes() as spend_ports:
             record_attempt_spend(spend_ports, turn.run, finished, None, locked=True)
-    if turn.run.park_kind == CONVERSATION:
+    if turn.run.park_kind == CONVERSATION or session.merge_session(turn.run):
         session_close.after_turn(ports, attempt_id)
 
 
@@ -256,7 +256,7 @@ def _commit_trees(turn: Turn) -> dict[str, Any]:
     """Each tree's `session: turn {k}` commit; git's refusal makes the turn `error`."""
     message = session.TURN_MESSAGE.format(k=session.turn_number(turn.turns, turn.ctx.attempt))
     try:
-        made = agent_workdir.sweep(turn.ctx, message)
+        made = session_dispatch.session_sweep(turn.ctx, message)
     except GitError as error:
         return {"status": "error", "output_ref": session_dispatch.git_words(error)}
     records.note_commits(turn.ctx, made, "session")

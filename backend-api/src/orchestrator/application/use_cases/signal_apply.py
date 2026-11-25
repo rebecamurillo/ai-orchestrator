@@ -21,6 +21,7 @@ from typing import Any
 from uuid import UUID
 
 from orchestrator.application.rules.signals import Rule, record_text, validate
+from orchestrator.application.use_cases import merge_session
 from orchestrator.application.use_cases.initiative_advance import enqueue_advances, record_advance
 from orchestrator.application.use_cases.metric_calculations import enqueue_queued
 from orchestrator.application.use_cases.preflight import PreflightPorts
@@ -114,10 +115,15 @@ class Applied:
 
 
 def apply_signal(
-    ports: SignalPorts, run: Run, signal: Signal, *, actor: Actor | None = None
+    ports: SignalPorts,
+    run: Run,
+    signal: Signal,
+    *,
+    actor: Actor | None = None,
+    text: str | None = None,
 ) -> Applied:
-    """Every write of one signal on a Run read under its row lock; `actor` overrides the
-    table's. Refusals raise before anything is written."""
+    """Every write of one signal on a Run read under its row lock; `actor` and `text`
+    override the table's. Refusals raise before anything is written."""
     writers = ports.writers
     refuse_stale_stop(run, signal)
     stop = run.park_seq
@@ -125,6 +131,7 @@ def apply_signal(
     park_row = _park_row(rows, run.park_path)
     rule = validate(run, park_row, signal, rows)
     _check_mode(ports, run, signal)
+    run = merge_session.end_for_resume(writers, run, park_row, signal, actor or rule.actor)
     record(
         writers,
         run,
@@ -132,7 +139,7 @@ def apply_signal(
             event=signal.kind,
             actor=actor or rule.actor,
             path=run.park_path,
-            text=record_text(rule, signal.payload),
+            text=text or record_text(rule, signal.payload),
             payload=signal.payload,
         ),
     )

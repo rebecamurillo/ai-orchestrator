@@ -117,6 +117,8 @@ class _Runner(Protocol):
 
     def _remote(self, branch: str) -> str: ...
 
+    def merge_in_progress(self, worktree: Path) -> bool: ...
+
     def _commit_workdir(self, worktree: Path, message: str, workdir: str) -> str | None: ...
 
     def _push_workdir(
@@ -197,7 +199,7 @@ class WorktreeCommands:
         the index's own answer and it is what the Operator's stop shows. The conflicted
         merge is left in place on purpose — the abort above is the next call's business.
         """
-        if self._attempt("-C", str(worktree), "rev-parse", "--verify", "--quiet", "MERGE_HEAD"):
+        if self.merge_in_progress(worktree):
             self._run("-C", str(worktree), *NO_HOOKS, "merge", "--abort")
         if not _origin_holds(self._attempt, worktree, branch):
             return NO_UPSTREAM
@@ -224,6 +226,11 @@ class WorktreeCommands:
         except GitError as error:
             raise _with_conflicts(self._attempt, worktree, error) from error
         return self._run("-C", str(worktree), "rev-parse", "HEAD").strip()
+
+    def merge_in_progress(self: _Runner, worktree: Path) -> bool:
+        """True when `MERGE_HEAD` resolves, which is how a linked worktree answers it too."""
+        probe = ("-C", str(worktree), "rev-parse", "--verify", "--quiet", "MERGE_HEAD")
+        return self._attempt(*probe) is not None
 
     def status(self: _Runner, worktree: Path, *, ignore_submodules: bool = False) -> str:
         """`git status --porcelain`: the empty string when the worktree is clean.

@@ -13,7 +13,7 @@ from typing import Any, Literal, get_args
 
 from orchestrator.application.rules import protected_paths
 from orchestrator.application.rules.frames import epic_frame, run_is_one_epic, story_frame
-from orchestrator.application.steps import CONVERSATION_KIND
+from orchestrator.application.steps import AGENT_KIND, CONVERSATION_KIND, MERGE_KIND
 from orchestrator.domain.entities.attempt import Attempt
 from orchestrator.domain.entities.gate_record import GateRecord
 from orchestrator.domain.entities.run import Run
@@ -132,6 +132,32 @@ def scopes_at(park_path: str | None, rows: Sequence[StepRun]) -> tuple[SessionSc
         found.append("epic")
     found.append("run")
     return tuple(found)
+
+
+def opens_step_session(run: Run, kind: str) -> bool:
+    """A park of this kind opens a step session: a `conversation` stop, or an initiative
+    Run's `merge_conflict` one."""
+    return run.park_kind == kind and (
+        kind == CONVERSATION_KIND or (kind == "merge_conflict" and run.initiative_id is not None)
+    )
+
+
+def merge_session(run: Run) -> bool:
+    """The Run is parked `merge_conflict` and belongs to an initiative."""
+    return run.park_kind == "merge_conflict" and run.initiative_id is not None
+
+
+def parked_skill(row: StepRun, rows: Sequence[StepRun]) -> str | None:
+    """The skill a step session on `row` opens with: the row's own, and on a `git.merge` row
+    that of the last `agent` row before it in its frame. `None` when blank."""
+    if row.kind != MERGE_KIND:
+        return _skill_of(row)
+    earlier = [r for r in rows if r.kind == AGENT_KIND and r.seq < row.seq and r.frame == row.frame]
+    return _skill_of(max(earlier, key=lambda r: r.seq)) if earlier else None
+
+
+def _skill_of(row: StepRun) -> str | None:
+    return str(row.with_resolved.get("skill") or "").strip() or None
 
 
 def confirmed_paths(payload: dict[str, Any]) -> tuple[str, ...]:

@@ -114,6 +114,7 @@ class FakeGit(FakeAnalysisGit):
         worktree_add: list[Any] | None = None,
         sync: list[Any] | None = None,
         merge: list[Any] | None = None,
+        merge_in_progress: list[Any] | None = None,
         status: list[Any] | None = None,
         status_ignoring_submodules: list[Any] | None = None,
         stage: list[Any] | None = None,
@@ -163,6 +164,7 @@ class FakeGit(FakeAnalysisGit):
             # `None` rather than a sha: a fake nobody scripted has nothing to merge, which
             # is the answer that changes no branch (`already merged`, S4).
             "merge": merge if merge is not None else [None],
+            "merge_in_progress": merge_in_progress or [False],
             "status": status or [""],
             # Not a port method of its own: the answer `status(ignore_submodules=True)` gives
             # when a test scripted one. Unscripted, the flag changes nothing the fake says,
@@ -245,6 +247,10 @@ class FakeGit(FakeAnalysisGit):
 
     def merge(self, worktree: Path, branch: str) -> str | NoUpstream | None:
         answer: str | NoUpstream | None = self._answer("merge", (worktree, branch))
+        return answer
+
+    def merge_in_progress(self, worktree: Path) -> bool:
+        answer: bool = self._answer("merge_in_progress", (worktree,))
         return answer
 
     def status(self, worktree: Path, *, ignore_submodules: bool = False) -> str:

@@ -54,7 +54,7 @@ from uuid import UUID
 
 import structlog
 
-from orchestrator.application.rules import signals
+from orchestrator.application.rules import session, signals
 from orchestrator.application.rules.frames import rows_after
 from orchestrator.application.steps import COMMIT_KIND
 from orchestrator.application.templates.plan_model import ON_FAIL_KEY
@@ -178,8 +178,8 @@ def _open_conversation(
     """The Run re-read, since `after_route` may have re-parked it, and the first turn of
     the session its `conversation` park opens."""
     run = require_run(ports, run.id)
-    parked = result.park is not None and result.park.kind == "conversation"
-    if not parked or run.status != "needs_you" or run.park_kind != "conversation":
+    parked = result.park is not None and session.opens_step_session(run, result.park.kind)
+    if not parked or run.status != "needs_you":
         return run, None
     turn = open_step_session(ports, run, ports.steps.list_for_run(run.id), row)
     return require_run(ports, run.id), turn

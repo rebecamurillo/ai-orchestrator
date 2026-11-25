@@ -18,9 +18,10 @@ from uuid import UUID
 import structlog
 
 from orchestrator.application.rules import session
+from orchestrator.application.rules.merge_conflict import unmerged_paths
 from orchestrator.application.rules.signals_conversation import CONVERSATION
 from orchestrator.application.steps import agent_workdir
-from orchestrator.application.steps.context import require_workspace
+from orchestrator.application.steps.context import require_cwd, require_workspace
 from orchestrator.application.use_cases import session_dispatch, session_turn
 from orchestrator.application.use_cases.signal_run import signal_run
 from orchestrator.application.use_cases.writers import Entry, record
@@ -34,6 +35,7 @@ CLOSE_DISCARDED: MachineEvent = "close_discarded"
 DISCARDED_ATTEMPT = "close discarded: attempt {text}"
 DEFERRED = "close deferred: later message"
 DISCARDED_FAILED = "close discarded: turn failed"
+MERGE_RESUMED = "merge resumed after the agent's turn"
 NOT_WIRED = "step close not wired"
 REFUSED = "step close refused"
 PENDING = frozenset({"queued", "running"})
@@ -44,7 +46,12 @@ ECHO_LIMIT = 64
 def after_turn(ports: session_turn.TurnPorts, attempt_id: UUID) -> None:
     """Act on the attestation the finished turn left, if the Run is parked `conversation`."""
     turn = session_turn.read_turn(ports, attempt_id)
-    if turn is None or turn.run.park_kind != CONVERSATION:
+    if turn is None:
+        return
+    if session.merge_session(turn.run):
+        _resume_merge(ports, turn)
+        return
+    if turn.run.park_kind != CONVERSATION:
         return
     workspace = require_workspace(turn.ctx, str(agent_workdir.tree(turn.ctx)))
     # a link at the file is removed and never read through
@@ -62,6 +69,24 @@ def after_turn(ports: session_turn.TurnPorts, attempt_id: UUID) -> None:
         _discard(ports, turn, discard)
         return
     _send(ports, turn)
+
+
+def _resume_merge(ports: session_turn.TurnPorts, turn: session_dispatch.Turn) -> None:
+    """A merge-session turn that ended `done` with no unmerged path left is the agent's
+    answer: the machine sends the `continue` that resumes the `git.merge` row."""
+    run = turn.run
+    if turn.ctx.attempt.status != "done":
+        return
+    if unmerged_paths(turn.ctx.ports.git.status(require_cwd(turn.ctx))):
+        return
+    if ports.signal is None:
+        log.warning(NOT_WIRED, run_id=str(run.id))
+        return
+    signal = Signal(kind="continue", stop=run.park_seq)
+    try:
+        signal_run(ports.signal, run.id, signal, actor="machine", text=MERGE_RESUMED)
+    except (Conflict, Invalid) as error:
+        log.warning(REFUSED, reason=str(error), run_id=str(run.id))
 
 
 def _verdict(turn: session_dispatch.Turn, text: str) -> str | None:
