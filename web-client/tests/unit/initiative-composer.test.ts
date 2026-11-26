@@ -89,3 +89,11 @@ describe('Composer', () => {
     expect((screen.getByTestId('ini-send') as HTMLButtonElement).disabled).toBe(false);
   });
 });
+
+describe('Composer without a hint (story 11.5, 2026-11-26: the merge composer)', () => {
+  it('renders no hint paragraph for an empty hint', () => {
+    render(createElement(Composer, { runId: 'run-1', hint: '' }));
+    expect(document.querySelector('.ini-hint')).toBeNull();
+    expect(box()).toBeTruthy();
+  });
+});

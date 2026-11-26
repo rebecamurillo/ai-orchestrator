@@ -18,6 +18,7 @@ import ForceStartModal from '../components/initiative/ForceStartModal';
 import InitiativeHeader from '../components/initiative/InitiativeHeader';
 import SessionsAndRuns from '../components/initiative/SessionsAndRuns';
 import StepsStrip from '../components/initiative/StepsStrip';
+import StopBanner from '../components/initiative/StopBanner';
 import WorkflowTrack from '../components/initiative/WorkflowTrack';
 import { forceParkSeq, forceTarget, showsCancel } from '../lib/initiative/actions';
 import {
@@ -29,6 +30,7 @@ import {
   type InitiativeDetail,
   type Selection,
 } from '../lib/initiative/page';
+import { isMergeConflict } from '../lib/initiative/stops';
 import { logHref } from '../lib/run/session';
 import { $poll, configurePolling, forceTick, stopPolling } from '../stores/poll';
 import '../styles/initiatives.css';
@@ -175,6 +177,11 @@ export default function InitiativePage({ initiativeId, initialWorkflow }: Props)
         selected={selection.position}
         onSelect={selectWorkflow}
       />
+      <StopBanner
+        detail={detail}
+        selectedPosition={selection.position}
+        onCancel={() => setModal('cancel')}
+      />
       {workflow && isInteractive(workflow) ? (
         <StepsStrip
           workflow={workflow}
@@ -193,7 +200,7 @@ export default function InitiativePage({ initiativeId, initialWorkflow }: Props)
               previous={previousWorkflowName(detail.workflows, workflow.position)}
               projectId={detail.project?.id ?? detail.project_id}
             />
-          ) : step && step.kind === 'automatic' ? (
+          ) : step && step.kind === 'automatic' && !isMergeConflict(step) ? (
             <section className="ini-auto-step" data-testid="ini-auto-step">
               <p>{step.line}</p>
               {lastTurn ? (
@@ -204,7 +211,7 @@ export default function InitiativePage({ initiativeId, initialWorkflow }: Props)
             </section>
           ) : (
             <section className="ini-conversation" data-testid="ini-conversation">
-              {step && step.kind === 'conversation' && workflow ? (
+              {step && workflow ? (
                 <Conversation
                   key={step.id}
                   detail={detail}

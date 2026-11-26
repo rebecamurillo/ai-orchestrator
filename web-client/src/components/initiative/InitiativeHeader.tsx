@@ -10,6 +10,7 @@ import {
   statusTokenWord,
   type InitiativeDetail,
 } from '../../lib/initiative/page';
+import { stopStateLine } from '../../lib/initiative/stops';
 import Tag from '../initiatives/Tag';
 
 interface Props {
@@ -31,7 +32,9 @@ export default function InitiativeHeader({ detail, actions }: Props) {
         </span>
         <h1 className="ini-title">{detail.slug}</h1>
         <p className="ini-state">
-          {detail.status === 'cancelled' ? cancelledStateLine(detail) : headerStateLine(detail)}
+          {detail.status === 'cancelled'
+            ? cancelledStateLine(detail)
+            : (stopStateLine(detail) ?? headerStateLine(detail))}
         </p>
         <p className="ini-position">{headerPositionLine(detail)}</p>
         {actions ? <div className="ini-actions">{actions}</div> : null}

@@ -24,7 +24,16 @@ import {
   yourTurnLine,
 } from '../../lib/initiative/conversation';
 import type { DetailStep, DetailWorkflow, InitiativeDetail } from '../../lib/initiative/page';
+import {
+  failedTurnLine,
+  gateAgent,
+  isMergeConflict,
+  mergeYourTurnLine,
+  ownersLine,
+} from '../../lib/initiative/stops';
+import { logHref } from '../../lib/run/session';
 import Composer from './Composer';
+import DefectsBlock from './DefectsBlock';
 
 interface Props {
   detail: InitiativeDetail;
@@ -36,15 +45,15 @@ interface Props {
 
 function Line({
   text,
-  amber = false,
+  signal,
   children,
 }: {
   text: string;
-  amber?: boolean;
+  signal?: 'needs-you' | 'failed';
   children?: React.ReactNode;
 }) {
   return (
-    <p className="ini-sysline" role="status" data-signal={amber ? 'needs-you' : undefined}>
+    <p className="ini-sysline" role="status" data-signal={signal}>
       {text}
       {children}
     </p>
@@ -60,7 +69,10 @@ export default function Conversation({ detail, workflow, step, isCurrent, onSele
   const index = workflow.steps.findIndex((s) => s.id === step.id);
   const closed = closedLine(step, workflow.steps[index + 1] ?? null, detail.slug);
   const running = turns.find((t) => t.status === 'running');
-  const yourTurn = yourTurnLine(detail, step, isCurrent);
+  const yourTurn = mergeYourTurnLine(step, isCurrent) ?? yourTurnLine(detail, step, isCurrent);
+  const failedTurn = failedTurnLine(step);
+  const owners = ownersLine(detail, step, isCurrent);
+  const mergeComposer = isCurrent && isMergeConflict(step) && detail.status !== 'cancelled';
   const notClosed = notClosedLine(step, isCurrent);
   const blocked = blockedLine(detail, step, isCurrent);
   const forced = forcedLine(workflow.steps[index - 1] ?? null, step, detail.slug);
@@ -78,7 +90,11 @@ export default function Conversation({ detail, workflow, step, isCurrent, onSele
             {t.author === 'operator' ? (
               <p className="ini-turn-eyebrow">{operatorAttribution(t)}</p>
             ) : null}
-            <p className="ini-turn-operator">{t.message}</p>
+            {t.author === 'gate' ? (
+              <DefectsBlock turn={t} step={step} gateAgent={gateAgent(workflow, step)} />
+            ) : (
+              <p className="ini-turn-operator">{t.message}</p>
+            )}
             {t.reply !== '' ? (
               <>
                 {t.author === 'operator' ? (
@@ -99,7 +115,13 @@ export default function Conversation({ detail, workflow, step, isCurrent, onSele
       {queuedLines(turns).map((q) => (
         <Line key={q.turn.attempt_id} text={q.text} />
       ))}
+      {failedTurn ? (
+        <Line text={failedTurn.text} signal="failed">
+          <a href={logHref(failedTurn.runId, failedTurn.attemptId)}>log</a>
+        </Line>
+      ) : null}
       {yourTurn ? <Line text={yourTurn} /> : null}
+      {owners ? <Line text={owners} /> : null}
       {closed ? (
         <Line text={closed.text + (closed.next ? ` · ${closed.next} started → ` : '')}>
           {closed.next ? (
@@ -109,10 +131,10 @@ export default function Conversation({ detail, workflow, step, isCurrent, onSele
           ) : null}
         </Line>
       ) : null}
-      {notClosed ? <Line text={notClosed} amber /> : null}
-      {blocked ? <Line text={blocked} amber /> : null}
-      {showsComposer(detail, step, isCurrent) && step.run_id ? (
-        <Composer key={step.id} runId={step.run_id} hint={closingHint(step)} />
+      {notClosed ? <Line text={notClosed} signal="needs-you" /> : null}
+      {blocked ? <Line text={blocked} signal="needs-you" /> : null}
+      {(showsComposer(detail, step, isCurrent) || mergeComposer) && step.run_id ? (
+        <Composer key={step.id} runId={step.run_id} hint={mergeComposer ? '' : closingHint(step)} />
       ) : null}
     </>
   );

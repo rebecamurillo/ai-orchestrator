@@ -46,3 +46,23 @@ test('Cancel initiative lists four lines and confirms', async ({ page }) => {
   await page.getByTestId('ini-cancel-confirm').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+/** Story 11.5: a merge conflict states itself and takes a message on the merge step. */
+test('a merge conflict shows its banner and the message box', async ({ page }) => {
+  await page.goto('/initiatives/0193a000-0000-7000-8000-0000000000f2');
+  await expect(page.getByTestId('ini-stop')).toContainText(
+    'merge conflict · planning/decision-log.md',
+  );
+  await expect(page.getByTestId('ini-message')).toBeVisible();
+});
+
+/** Story 11.5: the missing-budget stop takes a number and starts the build. */
+test('the budget stop enables on a value and saves without an error', async ({ page }) => {
+  await page.goto('/initiatives/0193a000-0000-7000-8000-0000000000f3?workflow=2');
+  const set = page.getByTestId('ini-budget-set');
+  await expect(set).toBeDisabled();
+  await page.getByTestId('ini-budget').fill('60');
+  await expect(set).toBeEnabled();
+  await set.click();
+  await expect(page.getByTestId('ini-stop').getByRole('alert')).toHaveCount(0);
+});

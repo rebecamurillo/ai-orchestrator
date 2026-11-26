@@ -70,7 +70,7 @@ export default function Composer({ runId, hint }: Props) {
       >
         Send
       </button>
-      <p className="ini-hint">{hint}</p>
+      {hint !== '' ? <p className="ini-hint">{hint}</p> : null}
     </div>
   );
 }

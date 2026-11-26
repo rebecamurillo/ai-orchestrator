@@ -391,3 +391,118 @@ describe('InitiativePage forced start and cancel (story 11.4)', () => {
     expect(screen.queryByTestId('ini-cancel')).toBeNull();
   });
 });
+
+describe('InitiativePage stops (story 11.5, 2026-11-26)', () => {
+  const stopTest = (id = 'ini-stop') => screen.queryByTestId(id);
+
+  it('AC1: a merge conflict shows the banner, the conversation and a banner cancel', async () => {
+    const d = detail({
+      status: 'waiting for her',
+      attention: 'blocked',
+      current_step: 'merge',
+      workflows: [
+        workflow('spec', 1, {
+          run_id: 'run-s',
+          steps: [
+            step('merge', {
+              kind: 'automatic',
+              park_kind: 'merge_conflict',
+              conflict_files: ['planning/decision-log.md'],
+              run_id: 'run-s',
+              agent: 'merge agent',
+              turns: [turn(1)],
+            } as never),
+          ],
+        }),
+        workflow('build', 2, { type: 'auto' }),
+      ],
+    } as never);
+    GET.mockResolvedValue(ok(d));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-stop')).toBeTruthy());
+    expect(screen.getByTestId('ini-stop').textContent).toContain(
+      'merge conflict · planning/decision-log.md',
+    );
+    expect(screen.getByTestId('ini-conversation')).toBeTruthy();
+    expect(screen.queryByTestId('ini-auto-step')).toBeNull();
+    expect(screen.getByTestId('ini-message')).toBeTruthy();
+    expect(
+      screen
+        .getAllByRole('status')
+        .map((e) => e.textContent)
+        .join(),
+    ).toContain('your turn · nothing is pushed to main until the agent retries');
+    const cancels = screen.getAllByTestId('ini-cancel');
+    expect(cancels).toHaveLength(2);
+    fireEvent.click(within(screen.getByTestId('ini-stop')).getByTestId('ini-cancel'));
+    expect(screen.getByRole('dialog', { name: 'CANCEL INITIATIVE' })).toBeTruthy();
+  });
+
+  it('AC5: an advance banner shows with either selection and no ini-reopen', async () => {
+    GET.mockResolvedValue(
+      ok(detail({ status: 'waiting for her', reason: 'preflight: harness: not ready' } as never)),
+    );
+    mount();
+    await waitFor(() => expect(stopTest()).toBeTruthy());
+    expect(screen.getByTestId('ini-stop').textContent).toContain('preflight: harness: not ready');
+    fireEvent.click(screen.getByTestId('ini-workflow-build'));
+    expect(stopTest()).toBeTruthy();
+    expect(stopTest('ini-reopen')).toBeNull();
+  });
+
+  it('AC6: the budget banner shows only with build selected', async () => {
+    const d = detail({
+      status: 'waiting for her',
+      reason: 'no project budget',
+      workflows: [
+        workflow('spec', 1, { run_id: 'run-s' }),
+        workflow('build', 2, { type: 'auto', run_id: null }),
+      ],
+    } as never);
+    GET.mockResolvedValue(ok(d));
+    mount(2);
+    await waitFor(() => expect(stopTest()).toBeTruthy());
+    expect(screen.getByTestId('ini-budget')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('ini-workflow-spec'));
+    expect(stopTest()).toBeNull();
+  });
+
+  it('AC8: waiting for the pull request merge shows no banner', async () => {
+    GET.mockResolvedValue(
+      ok(detail({ status: 'running', reason: 'waiting for the pull request merge' } as never)),
+    );
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-header')).toBeTruthy());
+    expect(stopTest()).toBeNull();
+  });
+
+  it('AC2: Restart step through the island posts the session retry', async () => {
+    POST.mockResolvedValue({ data: {} });
+    const d = detail({
+      status: 'waiting for her',
+      attention: 'blocked',
+      reason: '',
+      sessions: [{ workflow: 'spec', step: 'ux', kind: 'session', state: 'open', id: 's1' }],
+      workflows: [
+        workflow('spec', 1, {
+          steps: [
+            step('ux', {
+              run_id: 'run-s',
+              turns: [turn(1, { status: 'failed', failure_reason: 'stalled' })],
+            } as never),
+          ],
+        }),
+        workflow('build', 2, { type: 'auto' }),
+      ],
+    } as never);
+    GET.mockResolvedValue(ok(d));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-restart')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('ini-restart'));
+    await waitFor(() =>
+      expect(POST).toHaveBeenCalledWith('/runs/{run_id}/session/retry', {
+        params: { path: { run_id: 'run-s' } },
+      }),
+    );
+  });
+});

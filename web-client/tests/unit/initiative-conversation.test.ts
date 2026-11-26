@@ -86,7 +86,11 @@ describe('Conversation', () => {
     expect(screen.getByRole('status').getAttribute('data-signal')).toBe('needs-you');
     cleanup();
     mount(convStep({ turns: [turn(1, { status: 'failed' })] }), blocked);
-    expect(statuses()).toEqual([]);
+    // Revised by story 11.5 (2026-11-26): a failed last turn now renders its red failed-turn
+    // line; the `step blocked` line still never shows beside it.
+    expect(statuses()).toEqual(['turn 1 failed · log']);
+    expect(statuses().some((t) => t?.startsWith('step blocked'))).toBe(false);
+    expect(screen.getByRole('status').getAttribute('data-signal')).toBe('failed');
   });
 
   it('AC7: your-turn line only without a reason', () => {
@@ -195,5 +199,92 @@ describe('Conversation forced-start line (story 11.4)', () => {
     cleanup();
     mountForced('skipped, forced · 21:44', 'SKP', true);
     expect(document.body.textContent).not.toContain('skipped, forced');
+  });
+});
+
+describe('Conversation stops (story 11.5, 2026-11-26)', () => {
+  it('AC2: the failed turn is a red line with a log link', () => {
+    mount(
+      convStep({
+        turns: [
+          turn(1),
+          turn(2, {
+            status: 'failed',
+            failure_reason: 'stalled: no activity for 30 min',
+            attempt_id: 'att-2',
+            run_id: 'run-s',
+          }),
+        ],
+      }),
+      { attention: 'blocked', reason: '' },
+    );
+    const line = screen.getByRole('status');
+    expect(line.textContent).toBe('turn 2 failed · stalled: no activity for 30 min · log');
+    expect(line.getAttribute('data-signal')).toBe('failed');
+    expect(within(line).getByText('log').getAttribute('href')).toBe(
+      '/api/runs/run-s/attempts/att-2/log',
+    );
+  });
+
+  it('AC1: the merge step has its own mechanism line and a composer', () => {
+    mount(
+      convStep({
+        kind: 'automatic',
+        park_kind: 'merge_conflict',
+        turns: [turn(1)],
+        run_id: 'run-s',
+      } as Partial<Step>),
+      { attention: 'your_turn', reason: '' },
+    );
+    expect(statuses()).toEqual(['your turn · nothing is pushed to main until the agent retries']);
+    expect(screen.getByTestId('ini-message')).toBeTruthy();
+    expect(document.querySelector('.ini-hint')).toBeNull();
+  });
+
+  it('AC7: a gate turn renders as the defects block and the owners line follows', () => {
+    const s = step('tech', {
+      kind: 'conversation',
+      turns: [
+        turn(1, {
+          author: 'gate',
+          defects: 2,
+          owner: 'tech',
+          message: '1. … 2. …',
+          reply: 'Both defects are …',
+          started_at: '2026-11-22T22:10:00Z',
+        }),
+      ],
+    } as Partial<Step>);
+    const d = detail({ round: 2, owners: ['tech'], attention: 'blocked' } as never);
+    const w = workflow('spec', 1, {
+      steps: [s, step('gate', { kind: 'automatic', agent: 'delivery-lead' })],
+    });
+    render(
+      createElement(Conversation, {
+        detail: d,
+        workflow: w,
+        step: s,
+        isCurrent: true,
+        onSelectStep: vi.fn(),
+      }),
+    );
+    const li = screen.getByTestId('ini-turn-1');
+    expect(li.querySelector('.ini-defects')).toBeTruthy();
+    expect(li.textContent).toContain('2 DEFECTS · OWNER TECH');
+    expect(li.textContent).toContain('Gate · delivery-lead · 22:10');
+    expect(li.textContent).toContain('1. … 2. …');
+    expect(li.textContent).toContain('Both defects are …');
+    expect(statuses()).toContain(
+      'after this step closes, the gate re-runs · no other step reopens',
+    );
+  });
+
+  it('AC7: no owners line in round 1', () => {
+    mount(convStep({ id: 'tech', turns: [turn(1)] } as Partial<Step>), {
+      round: 1,
+      owners: ['tech'],
+      attention: 'blocked',
+    } as never);
+    expect(statuses().join()).not.toContain('after this step closes');
   });
 });

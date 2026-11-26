@@ -78,3 +78,22 @@ describe('InitiativeHeader cancelled (story 11.4)', () => {
     expect(out).not.toContain('running · spec');
   });
 });
+
+describe('InitiativeHeader stop states (story 11.5, 2026-11-26)', () => {
+  it('AC8: waiting for the pull request merge reads the build as done', () => {
+    const out = html(
+      detail({
+        status: 'running',
+        workflow: 'build',
+        reason: 'waiting for the pull request merge',
+      } as never),
+    );
+    expect(out).toContain('running · build done · waiting for the pull request merge');
+  });
+
+  it('AC8: a done initiative reads the merge date', () => {
+    const out = html(detail({ status: 'done', pr_merged_at: '2026-11-29T08:00:00Z' } as never));
+    expect(out).toContain('DON');
+    expect(out).toContain('done · pull request merged 2026-11-29');
+  });
+});

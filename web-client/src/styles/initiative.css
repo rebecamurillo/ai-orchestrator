@@ -411,3 +411,84 @@ button.ini-file {
   opacity: 0.4;
   cursor: default;
 }
+
+.ini-stop {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border-left: 2px solid var(--color-signal-needs-you);
+}
+
+.ini-stop[data-signal='failed'] {
+  border-left-color: var(--color-signal-failed);
+}
+
+.ini-stop-head {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.ini-stop-body {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-secondary);
+}
+
+.ini-stop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.ini-stop-actions button {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  color: var(--color-text-secondary);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.ini-stop-actions button.primary {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.ini-stop-actions button.danger {
+  border-color: var(--color-signal-failed);
+  color: var(--color-signal-failed);
+}
+
+.ini-stop-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.ini-stop input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-line-strong);
+  font-family: var(--font-mono);
+}
+
+.ini-sysline[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.ini-defects {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  border-left: 2px solid var(--color-signal-needs-you);
+}
+
+.ini-defects-eyebrow {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  letter-spacing: var(--type-control-tracking);
+}
+
+.ini-defects-text {
+  margin: var(--space-2) 0 0;
+  white-space: pre-wrap;
+}

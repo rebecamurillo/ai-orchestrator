@@ -804,6 +804,46 @@ createServer(async (request, response) => {
     });
     return;
   }
+  // Story 11.5: the answers to the stops. Placed before the broader initiative branch.
+  if (/^\/api\/v1\/runs\/[^/]+\/session\/retry$/.test(pathname) && request.method === 'POST') {
+    send(
+      response,
+      201,
+      JSON_TYPE,
+      JSON.stringify({
+        attempt_id: '0193a000-0000-7000-8000-0000000000d2',
+        cost_usd: null,
+        ended_at: null,
+        exit_code: null,
+        message: '',
+        reply: '',
+        started_at: null,
+        status: 'queued',
+        turn: 15,
+      }),
+    );
+    return;
+  }
+  if (/^\/api\/v1\/initiatives\/[^/]+\/reopen$/.test(pathname) && request.method === 'POST') {
+    send(
+      response,
+      201,
+      JSON_TYPE,
+      JSON.stringify({ round: 2, run_id: '0193a000-0000-7000-8000-0000000000c1', step: 'ux' }),
+    );
+    return;
+  }
+  const runDefaultsMatch = pathname.match(/^\/api\/v1\/projects\/([^/]+)\/run-defaults$/);
+  if (runDefaultsMatch && request.method === 'PUT') {
+    const project = projects[runDefaultsMatch[1]];
+    if (!project) {
+      notFound(response, 'Project not found');
+      return;
+    }
+    await readJsonBody(request);
+    send(response, 200, JSON_TYPE, JSON.stringify(project));
+    return;
+  }
   // start-next and cancel answer the same detail body as the GET (story 11.4).
   if (
     (/^\/api\/v1\/initiatives\/[^/]+$/.test(pathname) && request.method === 'GET') ||
@@ -847,80 +887,129 @@ createServer(async (request, response) => {
           }
         : {}),
     }));
-    send(
-      response,
-      200,
-      JSON_TYPE,
-      JSON.stringify({
-        id: pathname.split('/').pop(),
-        slug: 'familio-dessin-v2',
-        name: 'Familio Dessin v2',
-        status: 'running',
-        workflow: 'spec',
-        step: 'ux',
-        current_step: 'ux',
-        current_position: 1,
-        workflow_count: 2,
-        attention: 'your_turn',
-        reason: '',
-        hub: { id: '0193a000-0000-7000-8000-0000000000a1', slug: 'hub-repo' },
-        folder: 'initiatives/familio-dessin-v2',
-        package: 'orchestrator-default',
-        sequence_fixed_at: '2026-11-20T10:00:00Z',
-        created_at: '2026-11-19T09:00:00Z',
-        project: { id: '0193a000-0000-7000-8000-0000000000b1', name: 'Familio' },
-        project_id: '0193a000-0000-7000-8000-0000000000b1',
-        project_name: 'Familio',
-        repo_tag: ['familio-web'],
-        runs: [],
-        sessions: [
-          {
-            workflow: 'spec',
-            step: 'product',
-            kind: 'session',
-            id: '0193a1b2-0000-7000-8000-0000000011ab',
-            round: 1,
-            state: 'closed',
-          },
-          {
-            workflow: 'spec',
-            step: 'ux',
-            kind: 'session',
-            id: '0193c3d4-0000-7000-8000-000000007f21',
-            round: 1,
-            state: 'open',
-          },
-        ],
-        workflows: [
-          {
-            workflow: 'spec',
-            position: 1,
-            type: 'interactive',
-            template: 'initiative-hub',
-            version: 1,
-            run_id: null,
-            status: null,
-            token: 'RUN',
-            line: 'ux · your turn',
-            steps,
-            files: [],
-          },
-          {
-            workflow: 'build',
-            position: 2,
-            type: 'auto',
-            template: 'initiative-hub-epic',
-            version: 1,
-            run_id: null,
-            status: null,
-            token: null,
-            line: 'starts when spec is done',
-            steps: [],
-            files: [],
-          },
-        ],
-      }),
-    );
+    const detailId = pathname.split('/').pop();
+    const mergeStop = detailId === '0193a000-0000-7000-8000-0000000000f2';
+    const budgetStop = detailId === '0193a000-0000-7000-8000-0000000000f3';
+    if (mergeStop) {
+      steps.push({
+        id: 'merge',
+        kind: 'automatic',
+        status: 'waiting for her',
+        token: 'BLK',
+        line: 'merge conflict',
+        agent: 'merge agent',
+        turns: [],
+        files: [],
+        files_state: 'open',
+        conflict_files: ['planning/decision-log.md'],
+        park_kind: 'merge_conflict',
+        park_seq: 8,
+        run_id: '0193a000-0000-7000-8000-0000000000c2',
+      });
+      for (const s of steps) {
+        if (s.id === 'ux') Object.assign(s, { status: 'done', token: 'DON', park_kind: null });
+      }
+    }
+    const body = {
+      id: detailId,
+      slug: 'familio-dessin-v2',
+      name: 'Familio Dessin v2',
+      status: 'running',
+      workflow: 'spec',
+      step: 'ux',
+      current_step: 'ux',
+      current_position: 1,
+      workflow_count: 2,
+      attention: 'your_turn',
+      reason: '',
+      hub: { id: '0193a000-0000-7000-8000-0000000000a1', slug: 'hub-repo' },
+      folder: 'initiatives/familio-dessin-v2',
+      package: 'orchestrator-default',
+      sequence_fixed_at: '2026-11-20T10:00:00Z',
+      created_at: '2026-11-19T09:00:00Z',
+      project: { id: '0193a000-0000-7000-8000-0000000000b1', name: 'Familio' },
+      project_id: '0193a000-0000-7000-8000-0000000000b1',
+      project_name: 'Familio',
+      repo_tag: ['familio-web'],
+      runs: [],
+      sessions: [
+        {
+          workflow: 'spec',
+          step: 'product',
+          kind: 'session',
+          id: '0193a1b2-0000-7000-8000-0000000011ab',
+          round: 1,
+          state: 'closed',
+        },
+        {
+          workflow: 'spec',
+          step: 'ux',
+          kind: 'session',
+          id: '0193c3d4-0000-7000-8000-000000007f21',
+          round: 1,
+          state: 'open',
+        },
+      ],
+      workflows: [
+        {
+          workflow: 'spec',
+          position: 1,
+          type: 'interactive',
+          template: 'initiative-hub',
+          version: 1,
+          run_id: null,
+          status: null,
+          token: 'RUN',
+          line: 'ux · your turn',
+          steps,
+          files: [],
+        },
+        {
+          workflow: 'build',
+          position: 2,
+          type: 'auto',
+          template: 'initiative-hub-epic',
+          version: 1,
+          run_id: null,
+          status: null,
+          token: null,
+          line: 'starts when spec is done',
+          steps: [],
+          files: [],
+        },
+      ],
+    };
+    if (mergeStop) {
+      Object.assign(body, {
+        status: 'waiting for her',
+        step: 'merge',
+        current_step: 'merge',
+        attention: 'blocked',
+      });
+    }
+    if (budgetStop) {
+      Object.assign(body, {
+        status: 'waiting for her',
+        step: 'build',
+        current_step: null,
+        current_position: 2,
+        attention: 'blocked',
+        reason: 'no project budget',
+        project: { id: MIXED_ID, name: 'Familio' },
+        project_id: MIXED_ID,
+      });
+      body.workflows[0].run_id = '0193a000-0000-7000-8000-0000000000c3';
+      body.workflows[0].status = 'done';
+      body.workflows[0].token = 'DON';
+      body.workflows[0].steps = body.workflows[0].steps.map((s) => ({
+        ...s,
+        status: 'done',
+        token: 'DON',
+        park_kind: null,
+      }));
+      body.sessions = [];
+    }
+    send(response, 200, JSON_TYPE, JSON.stringify(body));
     return;
   }
   if (pathname === '/api/v1/initiatives' && request.method === 'POST') {
