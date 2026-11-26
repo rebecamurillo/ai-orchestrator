@@ -62,6 +62,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 
 import { MIXED_ID, PROJECTS_BY_ID, RECHECK_REPOSITORY_ID } from './projects-fixtures.mjs';
+
+const STOPPED_BUILD_RUN = '0193a000-0000-7000-8000-0000000000c4';
 import { TEMPLATES } from './templates-fixtures.mjs';
 
 const PORT = Number(process.env.STUB_BACKEND_PORT ?? 8788);
@@ -890,6 +892,7 @@ createServer(async (request, response) => {
     const detailId = pathname.split('/').pop();
     const mergeStop = detailId === '0193a000-0000-7000-8000-0000000000f2';
     const budgetStop = detailId === '0193a000-0000-7000-8000-0000000000f3';
+    const buildStop = detailId === '0193a000-0000-7000-8000-0000000000f4';
     if (mergeStop) {
       steps.push({
         id: 'merge',
@@ -985,6 +988,52 @@ createServer(async (request, response) => {
         step: 'merge',
         current_step: 'merge',
         attention: 'blocked',
+      });
+    }
+    if (buildStop) {
+      const agents = ['intake-router', 'product-lead', 'ux-lead', 'tech-lead'];
+      Object.assign(body, {
+        status: 'waiting for her',
+        step: 'build',
+        current_step: null,
+        current_position: 2,
+        attention: 'blocked',
+        reason: 'verify failed: make test exited 2',
+        round: 1,
+        owners: [],
+        runs: [
+          {
+            id: STOPPED_BUILD_RUN,
+            status: 'needs_you',
+            created_at: '2026-11-22T10:00:00Z',
+            position: 2,
+            round: 1,
+            template_name: 'initiative-hub-epic',
+            template_version: 1,
+          },
+        ],
+      });
+      body.workflows[0].steps = ['intake', 'product', 'ux', 'tech'].map((id, i) => ({
+        id,
+        kind: 'conversation',
+        status: 'done',
+        token: 'DON',
+        line: '',
+        number: `1.${i + 1}`,
+        agent: agents[i],
+        turns: [],
+        files: [],
+        files_state: 'open',
+        park_kind: null,
+        reopened_after: null,
+      }));
+      body.workflows[0].status = 'done';
+      body.workflows[0].token = 'DON';
+      Object.assign(body.workflows[1], {
+        run_id: STOPPED_BUILD_RUN,
+        status: 'needs_you',
+        token: 'BLK',
+        line: 'verify failed: make test exited 2',
       });
     }
     if (budgetStop) {
@@ -1214,6 +1263,24 @@ createServer(async (request, response) => {
     const project = updateProject(projectMatch[1], await readJsonBody(request));
     if (!project) return notFound(response, 'no Project has that id');
     send(response, 200, JSON_TYPE, JSON.stringify(project));
+    return;
+  }
+  if (pathname === `/api/v1/runs/${STOPPED_BUILD_RUN}` && request.method === 'GET') {
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({
+        id: STOPPED_BUILD_RUN,
+        status: 'needs_you',
+        spend_usd: '1.00',
+        budget_usd: null,
+        branch: 'feat/familio-dessin-v2',
+        repository: 'familio-web',
+        template: 'initiative-hub-epic',
+        version: 1,
+      }),
+    );
     return;
   }
   const drawerMatch = pathname.match(

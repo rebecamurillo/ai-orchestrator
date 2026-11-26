@@ -3,7 +3,7 @@
  * without one, when it starts and the project defaults. `RunSummaryOut` carries no current-step
  * label or progress, so the workflow's own API token and line stand in for them.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import type { components } from '../../api/schema';
 import { api } from '../../api/client';
@@ -18,6 +18,7 @@ interface Props {
   workflow: DetailWorkflow;
   previous: string | null;
   projectId: string | null;
+  reopen?: ReactNode;
 }
 
 type Loaded =
@@ -29,7 +30,7 @@ type Loaded =
 const FIXED_LINE =
   "The diagram, the steps, the logs and the files per epic and story are on the workflow's own page. A stop of this workflow shows here as needs you, with its reason, and is answered there.";
 
-export default function AutoWorkflowSummary({ workflow, previous, projectId }: Props) {
+export default function AutoWorkflowSummary({ workflow, previous, projectId, reopen }: Props) {
   const [state, setState] = useState<Loaded>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const runId = workflow.run_id;
@@ -113,6 +114,7 @@ export default function AutoWorkflowSummary({ workflow, previous, projectId }: P
           Open workflow
         </a>
       </p>
+      {reopen}
       <p className="ini-summary-note">{FIXED_LINE}</p>
     </section>
   );

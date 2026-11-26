@@ -66,3 +66,12 @@ test('the budget stop enables on a value and saves without an error', async ({ p
   await set.click();
   await expect(page.getByTestId('ini-stop').getByRole('alert')).toHaveCount(0);
 });
+
+/** Story 11.6: a build stopped on verify is reopened on a spec step. */
+test('a stopped build is reopened on a spec step', async ({ page }) => {
+  await page.goto('/initiatives/0193a000-0000-7000-8000-0000000000f4?workflow=2');
+  await page.getByTestId('ini-reopen').click();
+  await page.getByLabel('1.4 tech · tech-lead').check();
+  await page.getByTestId('ini-reopen-confirm').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});

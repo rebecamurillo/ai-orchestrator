@@ -199,3 +199,17 @@ describe('StopBanner restart after the answer (review, 2026-11-26)', () => {
     expect((screen.getByTestId('ini-restart') as HTMLButtonElement).disabled).toBe(false);
   });
 });
+
+describe('StopBanner with a parked Run (operator resolution 2026-11-26, story 11.6)', () => {
+  it('renders no ini-stop for a build Run needs_you, with either selection', () => {
+    const d = make({}, {
+      reason: 'verify failed: make test exited 2',
+      runs: [{ id: 'run-b', status: 'needs_you', created_at: '2026-11-22T10:00:00Z' }],
+    } as Partial<Detail>);
+    mount(d, 1, 'slot content');
+    expect(screen.queryByTestId('ini-stop')).toBeNull();
+    cleanup();
+    mount(d, 2, 'slot content');
+    expect(screen.queryByTestId('ini-stop')).toBeNull();
+  });
+});

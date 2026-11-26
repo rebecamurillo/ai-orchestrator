@@ -198,6 +198,17 @@ describe('stopBanner', () => {
   });
 });
 
+describe('advance banner and a parked Run (story 11.6, operator answer 2026-11-26)', () => {
+  it('a build Run needs_you gives no advance banner for either selection', () => {
+    const d = make({}, {
+      reason: 'verify failed: make test exited 2',
+      runs: [{ id: 'run-b', status: 'needs_you', created_at: '2026-11-22T10:00:00Z' }],
+    } as Partial<Detail>);
+    expect(stopBanner(d, 1)).toBeNull();
+    expect(stopBanner(d, 2)).toBeNull();
+  });
+});
+
 describe('lines', () => {
   it('failedTurnLine and doneCount', () => {
     const s = step('ux', { turns: failedTurns } as Partial<Step>);

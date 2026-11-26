@@ -288,3 +288,37 @@ describe('Conversation stops (story 11.5, 2026-11-26)', () => {
     expect(statuses().join()).not.toContain('after this step closes');
   });
 });
+
+describe('Conversation fresh-branch line (story 11.6, 2026-11-26)', () => {
+  const mountReopened = (reopened_after: unknown) => {
+    const tech = convStep({ id: 'tech', turns: [turn(1)], reopened_after } as Partial<Step>);
+    render(
+      createElement(Conversation, {
+        detail: detail(),
+        workflow: workflow('spec', 1, { steps: [tech] }),
+        step: tech,
+        isCurrent: false,
+        onSelectStep: vi.fn(),
+      }),
+    );
+  };
+  const FRESH = 'on a fresh spec/familio-dessin-v2 from main';
+
+  it('shows before the first turn when the branch was created', () => {
+    mountReopened({ workflow: 'build', branch: 'created' });
+    const line = screen.getByText(FRESH);
+    expect(line.getAttribute('role')).toBe('status');
+    expect(
+      line.compareDocumentPosition(screen.getByTestId('ini-turn-1')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('is absent when the branch was attached or there is no reopen', () => {
+    mountReopened({ workflow: 'build', branch: 'attached' });
+    expect(screen.queryByText(FRESH)).toBeNull();
+    cleanup();
+    mountReopened(null);
+    expect(screen.queryByText(FRESH)).toBeNull();
+  });
+});

@@ -438,16 +438,18 @@ describe('InitiativePage stops (story 11.5, 2026-11-26)', () => {
     expect(screen.getByRole('dialog', { name: 'CANCEL INITIATIVE' })).toBeTruthy();
   });
 
-  it('AC5: an advance banner shows with either selection and no ini-reopen', async () => {
+  it('AC5 (revised by story 11.6, 2026-11-26): an advance banner shows with either selection and carries one ini-reopen', async () => {
     GET.mockResolvedValue(
       ok(detail({ status: 'waiting for her', reason: 'preflight: harness: not ready' } as never)),
     );
     mount();
     await waitFor(() => expect(stopTest()).toBeTruthy());
     expect(screen.getByTestId('ini-stop').textContent).toContain('preflight: harness: not ready');
+    expect(within(screen.getByTestId('ini-stop')).getAllByTestId('ini-reopen')).toHaveLength(1);
     fireEvent.click(screen.getByTestId('ini-workflow-build'));
     expect(stopTest()).toBeTruthy();
-    expect(stopTest('ini-reopen')).toBeNull();
+    expect(within(screen.getByTestId('ini-stop')).getAllByTestId('ini-reopen')).toHaveLength(1);
+    expect(screen.getAllByTestId('ini-reopen')).toHaveLength(1);
   });
 
   it('AC6: the budget banner shows only with build selected', async () => {
@@ -503,6 +505,158 @@ describe('InitiativePage stops (story 11.5, 2026-11-26)', () => {
       expect(POST).toHaveBeenCalledWith('/runs/{run_id}/session/retry', {
         params: { path: { run_id: 'run-s' } },
       }),
+    );
+  });
+});
+
+describe('InitiativePage reopen (story 11.6, 2026-11-26)', () => {
+  const RUN_S = { id: 'run-s', status: 'done', created_at: '2026-11-20T10:00:00Z' };
+  const RUN_B = { id: 'run-b', status: 'needs_you', created_at: '2026-11-22T10:00:00Z' };
+  const agents = ['intake-router', 'product-lead', 'ux-lead', 'tech-lead'];
+
+  function stopped(over: Partial<Detail> = {}): Detail {
+    const steps = ['intake', 'product', 'ux', 'tech'].map((id, i) =>
+      step(id, { number: `1.${i + 1}`, agent: agents[i], status: 'done', token: 'DON' } as never),
+    );
+    return detail({
+      status: 'waiting for her',
+      reason: 'verify failed: make test exited 2',
+      current_position: 2,
+      current_step: null,
+      step: 'build',
+      workflow: 'build',
+      round: 1,
+      runs: [RUN_S, RUN_B],
+      workflows: [
+        workflow('spec', 1, { run_id: 'run-s', steps }),
+        workflow('build', 2, {
+          type: 'auto',
+          run_id: 'run-b',
+          token: 'BLK',
+          line: 'verify failed',
+        }),
+      ],
+      ...over,
+    } as never);
+  }
+
+  function serve(d: Detail) {
+    GET.mockImplementation(async (path: string) =>
+      path === '/initiatives/{initiative_id}'
+        ? ok(d)
+        : {
+            data: {
+              id: 'run-b',
+              status: 'needs_you',
+              spend_usd: '1.00',
+              budget_usd: null,
+              branch: 'feat/x',
+              repository: 'r',
+            },
+            response: { status: 200 },
+          },
+    );
+  }
+
+  it('AC1: the build summary carries one ini-reopen and no ini-stop', async () => {
+    serve(stopped());
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-reopen')).toBeTruthy());
+    expect(screen.getAllByTestId('ini-reopen')).toHaveLength(1);
+    expect(screen.queryByTestId('ini-stop')).toBeNull();
+    expect(within(screen.getByTestId('ini-summary')).getByTestId('ini-reopen')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('ini-workflow-spec'));
+    expect(screen.queryByTestId('ini-reopen')).toBeNull();
+  });
+
+  it('AC1: none while running, done, cancelled or when run-b is not the latest Run', async () => {
+    for (const over of [
+      { status: 'running' },
+      { status: 'done' },
+      { status: 'cancelled' },
+      { runs: [RUN_B, { ...RUN_S, id: 'run-z', created_at: '2026-11-25T10:00:00Z' }] },
+    ]) {
+      serve(stopped(over as never));
+      mount();
+      await waitFor(() => expect(screen.getByTestId('ini-header')).toBeTruthy());
+      await waitFor(() => expect(screen.queryByTestId('ini-summary')).toBeTruthy());
+      expect(screen.queryByTestId('ini-reopen')).toBeNull();
+      cleanup();
+      stopPolling();
+    }
+  });
+
+  it('AC3: posts the reopen, selects the spec step and ticks once', async () => {
+    serve(stopped());
+    POST.mockResolvedValue({ response: { status: 200 } });
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-reopen')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('ini-reopen'));
+    fireEvent.click(screen.getByLabelText('1.4 tech · tech-lead'));
+    const before = initiativeCalls().length;
+    fireEvent.click(screen.getByTestId('ini-reopen-confirm'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(POST).toHaveBeenCalledWith('/initiatives/{initiative_id}/reopen', {
+      params: { path: { initiative_id: 'ini-1' } },
+      body: { step: 'tech', reason: 'build stopped: verify failed: make test exited 2' },
+    });
+    expect(screen.getByTestId('ini-conversation-head')).toBeTruthy();
+    expect(screen.getByTestId('ini-step-tech').getAttribute('data-selected')).toBe('true');
+    await waitFor(() => expect(initiativeCalls().length).toBe(before + 1));
+  });
+
+  it('AC5: the build cell reads the API token and line, and tech shows the fresh branch line', async () => {
+    const d = stopped();
+    d.workflows[1] = workflow('build', 2, {
+      type: 'auto',
+      run_id: 'run-b',
+      token: 'BLK',
+      line: 'stopped on the spec · tech reopens',
+    });
+    (d.workflows[0].steps[3] as unknown as Record<string, unknown>).reopened_after = {
+      workflow: 'build',
+      branch: 'created',
+    };
+    serve(d);
+    mount(1);
+    await waitFor(() => expect(screen.getByTestId('ini-workflow-build')).toBeTruthy());
+    const cell = screen.getByTestId('ini-workflow-build');
+    expect(cell.textContent).toContain('BLK');
+    expect(cell.textContent).toContain('stopped on the spec · tech reopens');
+    expect(cell.querySelector('[data-signal="needs-you"]') ?? cell).toBeTruthy();
+    fireEvent.click(screen.getByTestId('ini-step-tech'));
+    expect(screen.getByText('on a fresh spec/familio-dessin-v2 from main')).toBeTruthy();
+  });
+
+  it('AC6: a blocked advance puts one ini-reopen in the banner, none in the summary', async () => {
+    serve(stopped({ reason: 'preflight: harness: not ready', runs: [RUN_S] } as never));
+    mount(2);
+    await waitFor(() => expect(screen.getByTestId('ini-stop')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('ini-summary')).toBeTruthy());
+    expect(within(screen.getByTestId('ini-stop')).getAllByTestId('ini-reopen')).toHaveLength(1);
+    expect(screen.getAllByTestId('ini-reopen')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('ini-reopen'));
+    expect(document.body.textContent).toContain(
+      'first turn: "advance blocked: preflight: harness: not ready"',
+    );
+    expect(document.body.textContent).not.toContain('is cancelled and keeps');
+  });
+
+  it('AC7: a failed build has no restart and one ini-reopen with the failed-Run first turn', async () => {
+    serve(
+      stopped({
+        status: 'failed',
+        reason: '',
+        runs: [RUN_S, { ...RUN_B, status: 'failed' }],
+      } as never),
+    );
+    mount(2);
+    await waitFor(() => expect(screen.getByTestId('ini-reopen')).toBeTruthy());
+    expect(screen.queryByTestId('ini-restart')).toBeNull();
+    expect(screen.getAllByTestId('ini-reopen')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('ini-reopen'));
+    expect(document.body.textContent).toContain(
+      'first turn: "build stopped: Run run-…un-b failed"',
     );
   });
 });

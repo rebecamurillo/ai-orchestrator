@@ -6,6 +6,7 @@
 import { useState } from 'react';
 
 import { forcedLine } from '../../lib/initiative/actions';
+import { freshBranchLine } from '../../lib/initiative/reopen';
 import {
   agentAttribution,
   answeringLine,
@@ -75,6 +76,7 @@ export default function Conversation({ detail, workflow, step, isCurrent, onSele
   const mergeComposer = isCurrent && isMergeConflict(step) && detail.status !== 'cancelled';
   const notClosed = notClosedLine(step, isCurrent);
   const blocked = blockedLine(detail, step, isCurrent);
+  const fresh = freshBranchLine(step, detail.slug);
   const forced = forcedLine(workflow.steps[index - 1] ?? null, step, detail.slug);
 
   return (
@@ -84,6 +86,7 @@ export default function Conversation({ detail, workflow, step, isCurrent, onSele
         <span>{roundLine(step, detail)}</span>
       </h3>
       {forced ? <Line text={forced} /> : null}
+      {fresh ? <Line text={fresh} /> : null}
       <ol className="ini-turns">
         {shown.map((t) => (
           <li className="ini-turn" key={t.attempt_id} data-testid={`ini-turn-${t.n}`}>

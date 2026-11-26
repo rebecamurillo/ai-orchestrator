@@ -134,7 +134,12 @@ export function stopBanner(d: InitiativeDetail, selectedPosition: number): Banne
       d.workflows.find((w) => w.position >= d.current_position && w.run_id === null) ?? cw;
     return target && selectedPosition === target.position ? budgetBanner(d, target) : null;
   }
-  if (d.status === 'waiting for her' && d.reason !== '' && !d.reason.startsWith(NOT_CLOSED)) {
+  if (
+    d.status === 'waiting for her' &&
+    d.reason !== '' &&
+    !d.reason.startsWith(NOT_CLOSED) &&
+    !(d.runs ?? []).some((r) => r.status === 'needs_you')
+  ) {
     return { kind: 'advance', tone: 'amber', head: d.reason, body: null, restart: null };
   }
   return null;

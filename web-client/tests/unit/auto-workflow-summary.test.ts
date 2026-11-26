@@ -146,3 +146,52 @@ describe('AutoWorkflowSummary without a Run', () => {
     await waitFor(() => expect(screen.getByTestId('ini-summary-failed')).toBeTruthy());
   });
 });
+
+describe('AutoWorkflowSummary reopen slot (story 11.6, 2026-11-26)', () => {
+  const slot = createElement('button', { 'data-testid': 'ini-reopen' }, 'Reopen step …');
+  const run = {
+    data: {
+      id: 'run-9',
+      status: 'needs_you',
+      spend_usd: '1.00',
+      budget_usd: null,
+      branch: 'feat/x',
+      repository: 'familio-web',
+    },
+    response: { status: 200 },
+  };
+
+  it('renders under the Run summary, after the open link', async () => {
+    GET.mockResolvedValue(run);
+    render(
+      createElement(AutoWorkflowSummary, {
+        workflow: build({ run_id: 'run-9' }),
+        previous: 'spec',
+        projectId: 'p1',
+        reopen: slot,
+      }),
+    );
+    await waitFor(() => expect(screen.getByTestId('ini-reopen')).toBeTruthy());
+    const link = screen.getByTestId('ini-open-workflow');
+    expect(link.compareDocumentPosition(screen.getByTestId('ini-reopen'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it('does not render in the not-started branch', async () => {
+    GET.mockResolvedValue({
+      data: { id: 'p1', default_budget_usd: '60.00' },
+      response: { status: 200 },
+    });
+    render(
+      createElement(AutoWorkflowSummary, {
+        workflow: build({ run_id: null, token: null }),
+        previous: 'spec',
+        projectId: 'p1',
+        reopen: slot,
+      }),
+    );
+    await waitFor(() => expect(document.body.textContent).toContain('not started'));
+    expect(screen.queryByTestId('ini-reopen')).toBeNull();
+  });
+});

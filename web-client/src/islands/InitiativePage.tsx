@@ -15,6 +15,7 @@ import AutoWorkflowSummary from '../components/initiative/AutoWorkflowSummary';
 import Conversation from '../components/initiative/Conversation';
 import FilesByStep from '../components/initiative/FilesByStep';
 import ForceStartModal from '../components/initiative/ForceStartModal';
+import ReopenStepModal from '../components/initiative/ReopenStepModal';
 import InitiativeHeader from '../components/initiative/InitiativeHeader';
 import SessionsAndRuns from '../components/initiative/SessionsAndRuns';
 import StepsStrip from '../components/initiative/StepsStrip';
@@ -30,6 +31,12 @@ import {
   type InitiativeDetail,
   type Selection,
 } from '../lib/initiative/page';
+import {
+  reopenPlacement,
+  reopenRunId,
+  specWorkflow,
+  type ReopenOrigin,
+} from '../lib/initiative/reopen';
 import { isMergeConflict } from '../lib/initiative/stops';
 import { logHref } from '../lib/run/session';
 import { $poll, configurePolling, forceTick, stopPolling } from '../stores/poll';
@@ -49,6 +56,11 @@ interface ForceValues {
   nextWorkflow: string | null;
 }
 
+interface ReopenValues {
+  origin: ReopenOrigin;
+  runId: string | null;
+}
+
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'error'; status: number | null };
 
 export default function InitiativePage({ initiativeId, initialWorkflow }: Props) {
@@ -56,8 +68,9 @@ export default function InitiativePage({ initiativeId, initialWorkflow }: Props)
   const [detail, setDetail] = useState<InitiativeDetail | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   // A poll never closes an open modal: the force values are captured when it opens.
-  const [modal, setModal] = useState<'force' | 'cancel' | null>(null);
+  const [modal, setModal] = useState<'force' | 'cancel' | 'reopen' | null>(null);
   const forceRef = useRef<ForceValues | null>(null);
+  const reopenRef = useRef<ReopenValues | null>(null);
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
   const mountedTickRef = useRef(pollTick);
@@ -143,6 +156,28 @@ export default function InitiativePage({ initiativeId, initialWorkflow }: Props)
     setModal('force');
   }
 
+  const placement = reopenPlacement(detail, selection.position);
+  const reopenButton = (
+    <button type="button" data-testid="ini-reopen" onClick={openReopen}>
+      Reopen step …
+    </button>
+  );
+
+  function openReopen(): void {
+    const origin: ReopenOrigin = placement === 'banner' ? 'advance' : 'build';
+    reopenRef.current = {
+      origin,
+      runId: reopenRunId(detail as InitiativeDetail, origin, workflow?.run_id ?? null),
+    };
+    setModal('reopen');
+  }
+
+  function reopened(stepId: string): void {
+    const spec = specWorkflow(detail as InitiativeDetail);
+    setModal(null);
+    if (spec) setSelection({ position: spec.position, stepId });
+  }
+
   function selectWorkflow(position: number): void {
     const target = detail?.workflows.find((w) => w.position === position);
     const stepId =
@@ -181,6 +216,7 @@ export default function InitiativePage({ initiativeId, initialWorkflow }: Props)
         detail={detail}
         selectedPosition={selection.position}
         onCancel={() => setModal('cancel')}
+        reopen={placement === 'banner' ? reopenButton : undefined}
       />
       {workflow && isInteractive(workflow) ? (
         <StepsStrip
@@ -199,6 +235,7 @@ export default function InitiativePage({ initiativeId, initialWorkflow }: Props)
               workflow={workflow}
               previous={previousWorkflowName(detail.workflows, workflow.position)}
               projectId={detail.project?.id ?? detail.project_id}
+              reopen={placement === 'summary' ? reopenButton : undefined}
             />
           ) : step && step.kind === 'automatic' && !isMergeConflict(step) ? (
             <section className="ini-auto-step" data-testid="ini-auto-step">
@@ -235,6 +272,14 @@ export default function InitiativePage({ initiativeId, initialWorkflow }: Props)
           slug={detail.slug}
           {...forceRef.current}
           onClose={() => setModal(null)}
+        />
+      ) : null}
+      {modal === 'reopen' && reopenRef.current ? (
+        <ReopenStepModal
+          detail={detail}
+          {...reopenRef.current}
+          onClose={() => setModal(null)}
+          onReopened={reopened}
         />
       ) : null}
       {modal === 'cancel' ? (
