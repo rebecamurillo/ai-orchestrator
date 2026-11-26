@@ -56,6 +56,20 @@ the hub, package and origin are `test_initiatives.Hub`'s fixture, fresh per test
   - [x] Both operations answer 401 without the bearer.
   - [x] No MCP tool name contains `reopen` or `upgrade`.
 
+### API tests — `backend-api/tests/e2e/test_guide_package.py` (5 tests, second dispatch)
+
+Added in a second dispatch on the same epic. The first dispatch left CAP-4 to the unit tests
+only. These tests check structure, never prose (hard rule 6):
+- [x] `/llms.txt` lists `initiatives/package`, `initiatives/spec` and `initiatives/chain` under
+  Guide.
+- [x] The served package page is `kind: page`, `audience: any`, with the nine `## ` sections of
+  story 4 in order.
+- [x] Each served pointer page has at most 10 body lines and names `initiatives/package`, which
+  resolves.
+- [x] Every `METHOD /path` the package page names is in the instance's served `/openapi.json`.
+  Placeholders are normalised, and `/api/v1` is prefixed where the page omits it.
+- [x] Every MCP operation id the page names is in `tools/list`, and no tool is named `reopen`.
+
 Not covered end to end (unit tests only, by design):
 - the `initiative_pr_check` job: it would call GitHub, which CAP-5 and hard rule 5 forbid;
 - the start-up `reopen_after_upgrade` pass: it needs a backend restart (hard rule 9; `make
@@ -65,7 +79,8 @@ Not covered end to end (unit tests only, by design):
   `test_initiative_detail_reopen.py`;
 - `consumed_at` on a blocked advance during a reopen;
 - the done-initiative 409;
-- the guide pages (`check_guide.py` and the unit structure tests).
+- the guide pages' source files (`check_guide.py` and the unit structure tests). Their served
+  form is covered by `test_guide_package.py`.
 
 ## Results
 
@@ -87,6 +102,18 @@ The assumptions that only a run can confirm:
 
 If either is wrong, the failing assertion names it.
 
+The second dispatch found the same state: `docker info` still fails, and `0046` still declares
+the 33-character id. For `test_guide_package.py`, the following was verified:
+- 5 tests collected;
+- `ruff check` and `ruff format --check` are clean;
+- `check_test_pairs.py` passes;
+- an offline dry run of its page-side extraction against `guide/initiatives/*.md` and
+  `contracts/openapi.json`:
+  - 6 routes named, all in the contract;
+  - 5 operation ids named, all in `ALLOWED_OPERATION_IDS`;
+  - the nine headings in order;
+  - each pointer page has 4 body lines.
+
 ### Defect still open from epic 6: `0046` revision id overflows `alembic_version`
 
 `backend-api/alembic/versions/0046_repository_initiative_folder.py` still declares the 33-character
@@ -101,7 +128,9 @@ The migrate step at start-up fails on Postgres, so `make e2e` cannot boot until 
   - CAP-3: `upgrade-prepare` with no hold and under a hold;
   - CAP-5: the cancels go through `signal_run`, the Run through `create_run`, and there is no MCP
     tool.
-- CAP-1 and CAP-4 are unit- and lint-tested only (GitHub; guide prose).
+- CAP-4: the served package page, its pointer pages, and its routes and tools against the
+  running instance.
+- CAP-1 is unit-tested only (it would call GitHub).
 - Story 2 acceptance criteria with an e2e test: 6 of 10 (the parked reopen, `round_steps`
   narrowing, a deleted branch, two reopens, the 422s, the 409 on a cancelled initiative).
 - Story 3 acceptance criteria with an e2e test: 2 of 8 (no hold, and a cancel under a hold).
