@@ -179,3 +179,39 @@ describe('Initiatives island', () => {
     );
   });
 });
+
+describe('Initiatives island — view segment (story 10.2, 2026-11-22)', () => {
+  it('AC5: board by default, LIST switches without refetch, BOARD clears view', async () => {
+    GET.mockResolvedValue(ok(list([row('a', 'running')])));
+    window.history.replaceState(null, '', '/initiatives?filter=all');
+    mount();
+    await screen.findByTestId('initiatives-board');
+    const seg = screen.getByTestId('initiatives-view');
+    const btn = (label: string) =>
+      Array.from(seg.querySelectorAll('button')).find((b) => b.textContent === label)!;
+    expect(btn('BOARD').getAttribute('aria-current')).toBe('true');
+    const calls = GET.mock.calls.length;
+    fireEvent.click(btn('LIST'));
+    const table = await screen.findByTestId('initiatives-list');
+    expect(table.textContent).toContain('Project');
+    expect(window.location.search).toContain('view=list');
+    expect(window.location.search).toContain('filter=all');
+    expect(GET.mock.calls.length).toBe(calls);
+    fireEvent.click(btn('BOARD'));
+    await screen.findByTestId('initiatives-board');
+    expect(window.location.search).not.toContain('view');
+  });
+
+  it('AC5: initialView list renders the table on mount', async () => {
+    GET.mockResolvedValue(ok(list([row('a', 'running')])));
+    render(
+      createElement(Initiatives, {
+        initialProjectId: null,
+        initialFilter: 'ongoing',
+        initialView: 'list',
+      }),
+    );
+    await screen.findByTestId('initiatives-list');
+    expect(screen.queryByTestId('initiatives-board')).toBeNull();
+  });
+});

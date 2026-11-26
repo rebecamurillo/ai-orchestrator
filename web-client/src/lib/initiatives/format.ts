@@ -82,3 +82,11 @@ export function initiativesRequestPath(filter: InitiativeFilter, projectId: stri
 export function hasRunning(items: InitiativeRow[]): boolean {
   return items.some((i) => i.status === 'running');
 }
+
+export function byLastChange(rows: InitiativeRow[]): InitiativeRow[] {
+  return [...rows].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+}
+
+export function workflowCellText(row: InitiativeRow): string {
+  return `${row.workflow} · ${row.position} of ${row.workflow_count}`;
+}

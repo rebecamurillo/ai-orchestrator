@@ -16,6 +16,7 @@ import type { components } from '../api/schema';
 import { api } from '../api/client';
 import FailedFetch from '../components/FailedFetch';
 import InitiativeColumn from '../components/initiatives/InitiativeColumn';
+import InitiativesTable from '../components/initiatives/InitiativesTable';
 import {
   cancelledHiddenText,
   hasRunning,
@@ -32,6 +33,7 @@ type ListOut = components['schemas']['InitiativeListOut'];
 interface Props {
   initialProjectId: string | null;
   initialFilter: InitiativeFilter;
+  initialView?: 'board' | 'list';
 }
 
 type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'error'; status: number | null };
@@ -85,10 +87,11 @@ function syncRail(list: ListOut): void {
   }
 }
 
-export default function Initiatives({ initialProjectId, initialFilter }: Props) {
+export default function Initiatives({ initialProjectId, initialFilter, initialView }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [filter, setFilter] = useState<InitiativeFilter>(initialFilter);
   const [data, setData] = useState<ListOut | null>(null);
+  const [view, setView] = useState<'board' | 'list'>(initialView ?? 'board');
   const [showCancelled, setShowCancelled] = useState(false);
   const pollTick = useStore($poll);
   const requestSeqRef = useRef(0);
@@ -130,6 +133,15 @@ export default function Initiatives({ initialProjectId, initialFilter }: Props) 
     history.replaceState(null, '', `?${params.toString()}`);
     setFilter(f);
     void fetchList(f);
+  }
+
+  function switchView(v: 'board' | 'list'): void {
+    const params = new URLSearchParams(window.location.search);
+    if (v === 'list') params.set('view', 'list');
+    else params.delete('view');
+    const qs = params.toString();
+    history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
+    setView(v);
   }
 
   useEffect(() => {
@@ -178,6 +190,18 @@ export default function Initiatives({ initialProjectId, initialFilter }: Props) 
             </button>
           ))}
         </div>
+        <div className="ini-view" data-testid="initiatives-view">
+          {(['board', 'list'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-current={view === v ? 'true' : undefined}
+              onClick={() => switchView(v)}
+            >
+              {v.toUpperCase()}
+            </button>
+          ))}
+        </div>
         <p className="ini-readout" data-testid="initiatives-readout">
           {readoutText(data.counts, nowMs)}
         </p>
@@ -190,6 +214,8 @@ export default function Initiatives({ initialProjectId, initialFilter }: Props) 
             <a href="/initiatives/new">New initiative</a>
           </p>
         </section>
+      ) : view === 'list' ? (
+        <InitiativesTable rows={data.items} showProject />
       ) : (
         <div className="ini-board" data-testid="initiatives-board">
           {data.columns.map((c) => (

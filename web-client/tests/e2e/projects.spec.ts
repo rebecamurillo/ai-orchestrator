@@ -67,6 +67,15 @@ test.describe('bare /projects', () => {
 });
 
 test.describe('?id=<MIXED>', () => {
+  test('shows the INITIATIVES section without a Project column', async ({ page }) => {
+    await page.goto(`/projects?id=${MIXED_ID}`);
+
+    const detail = page.getByTestId('projects-detail');
+    await expect(detail).toContainText('INITIATIVES');
+    await expect(detail.getByTestId('initiatives-list')).toBeVisible();
+    await expect(detail.getByTestId('initiatives-list')).not.toContainText('Project');
+  });
+
   test('renders the detail pane in order, below the list pane', async ({ page }) => {
     await page.goto(`/projects?id=${MIXED_ID}`);
 

@@ -19,6 +19,8 @@ const selectedProjectId = Astro.url.searchParams.get('project');
 const filterParam = Astro.url.searchParams.get('filter');
 const filter = filterParam === 'needs_you' || filterParam === 'all' ? filterParam : 'ongoing';
 
+const view = Astro.url.searchParams.get('view') === 'list' ? 'list' : 'board';
+
 let projects: ProjectListItem[] = [];
 try {
   const { data, error } = await backend().GET('/api/v1/projects');
@@ -51,7 +53,12 @@ try {
     />
   </Fragment>
 
-  <Initiatives client:load initialProjectId={selectedProjectId} initialFilter={filter} />
+  <Initiatives
+    client:load
+    initialProjectId={selectedProjectId}
+    initialFilter={filter}
+    initialView={view}
+  />
 </Shell>
 
 <style>

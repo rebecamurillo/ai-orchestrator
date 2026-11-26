@@ -10,3 +10,12 @@ test('the Initiatives board renders its columns and a BLK card', async ({ page }
   await expect(page.getByTestId('initiatives-card-initiative-steps')).toContainText('BLK');
   await expect(page.getByTestId('nav-initiatives')).toHaveAttribute('aria-current', 'page');
 });
+
+test('the list view renders the dense table with a BLK row', async ({ page }) => {
+  await page.goto('/initiatives?view=list');
+  const row = page.getByTestId('initiatives-row-initiative-steps');
+  await expect(page.getByTestId('initiatives-list')).toBeVisible();
+  await expect(row).toContainText('BLK');
+  await expect(row).toContainText('Orchestrator');
+  await expect(row).toContainText('ux · your turn · 14 turns');
+});

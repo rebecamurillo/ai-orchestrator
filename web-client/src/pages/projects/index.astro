@@ -21,6 +21,8 @@ import type { components } from '../../api/schema';
 import MetricHint from '../../islands/MetricHint';
 import Button from '../../components/Button.astro';
 import EmptyState from '../../components/EmptyState.astro';
+import ProjectInitiatives from '../../components/projects/ProjectInitiatives.astro';
+import type { InitiativeRow } from '../../lib/initiatives/format';
 import ProjectListRow from '../../components/ProjectListRow.astro';
 import ProjectSettings from '../../components/ProjectSettings.astro';
 import RecordRow from '../../components/RecordRow.astro';
@@ -66,6 +68,18 @@ if (selectedId) {
   });
   // a 404 (or any other error) renders as "nothing selected", never a crash
   if (!error) project = data ?? null;
+}
+
+let initiativeRows: InitiativeRow[] | null = null;
+if (project) {
+  try {
+    const { data, error } = await backend().GET('/api/v1/projects/{project_id}/initiatives', {
+      params: { path: { project_id: project.id } },
+    });
+    initiativeRows = !error && Array.isArray(data?.items) ? data.items : null;
+  } catch {
+    initiativeRows = null;
+  }
 }
 
 //: `Repository.clone_check.bmad_version`'s own two "not installed yet" tokens (FR-30) —
@@ -238,6 +252,8 @@ function pluralize(count: number, noun: string): string {
 
         <SectionHead label="SETTINGS" />
         <ProjectSettings envVars={project.env_vars} />
+
+        <ProjectInitiatives projectId={project.id} rows={initiativeRows} />
 
         <SectionHead label="RUNS ON THIS PROJECT" />
         {runRows.length === 0 ? (

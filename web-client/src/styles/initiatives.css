@@ -231,3 +231,74 @@ a.ini-tag-value {
   font-size: var(--type-column-head);
   letter-spacing: var(--type-column-head-tracking);
 }
+
+.ini-view {
+  display: flex;
+  gap: var(--space-5);
+}
+
+.ini-view button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+  cursor: pointer;
+}
+
+.ini-view button[aria-current='true'] {
+  color: var(--color-text);
+}
+
+.ini-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ini-table th {
+  padding: var(--space-3) var(--space-5) var(--space-3) 0;
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-column-head);
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.ini-table td {
+  padding: var(--space-3) var(--space-5) var(--space-3) 0;
+  border-bottom: 1px solid var(--color-line);
+  font-size: var(--type-row-body);
+}
+
+.ini-table-sub {
+  color: var(--color-text-secondary);
+}
+
+.ini-table-age {
+  color: var(--color-text-tertiary);
+}
+
+.ini-table-token {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-status-token);
+  letter-spacing: var(--type-status-token-tracking);
+}
+
+.ini-table-token[data-signal='run'] {
+  color: var(--color-signal-run);
+}
+
+.ini-table-token[data-signal='failed'] {
+  color: var(--color-signal-failed);
+}
+
+.ini-table-token[data-signal='needs-you'],
+.ini-table td[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}

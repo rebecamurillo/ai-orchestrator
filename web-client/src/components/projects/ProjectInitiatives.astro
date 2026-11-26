@@ -1,0 +1,40 @@
+---
+import EmptyState from '../EmptyState.astro';
+import SectionHead from '../SectionHead.astro';
+import InitiativesTable from '../initiatives/InitiativesTable';
+import type { InitiativeRow } from '../../lib/initiatives/format';
+import '../../styles/initiatives.css';
+
+interface Props {
+  projectId: string;
+  rows: InitiativeRow[] | null;
+}
+
+const { projectId, rows } = Astro.props;
+---
+
+<SectionHead label="INITIATIVES" />
+{
+  rows === null ? (
+    <EmptyState
+      testId="project-initiatives-error"
+      headline="INITIATIVES UNAVAILABLE"
+      lines={[
+        'The list could not be read from backend-api.',
+        'Reload the page once the connection is restored.',
+      ]}
+    />
+  ) : rows.length === 0 ? (
+    <EmptyState
+      testId="project-initiatives-empty"
+      headline="NO INITIATIVES"
+      lines={['An initiative starts from a project: a name and a first message.']}
+      action={{
+        label: 'New initiative',
+        href: `/initiatives/new?project=${encodeURIComponent(projectId)}`,
+      }}
+    />
+  ) : (
+    <InitiativesTable rows={rows} showProject={false} />
+  )
+}
