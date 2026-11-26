@@ -6643,6 +6643,31 @@
         "title": "PreflightOut",
         "type": "object"
       },
+      "PreparedConversationOut": {
+        "properties": {
+          "initiative_id": {
+            "format": "uuid",
+            "title": "Initiative Id",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "initiative_id",
+          "step"
+        ],
+        "title": "PreparedConversationOut",
+        "type": "object"
+      },
       "ProbeResultOut": {
         "description": "The HTTP shape of a harness probe result (story 2-1).\n\nHTTP 200 in both the `ok=True` and `ok=False` cases \u2014 failures are reported in the body,\nnot through HTTP error codes.  `failing_reason` is `null` when `ok` is `True`.",
         "properties": {
@@ -10652,6 +10677,22 @@
         "title": "TurnOut",
         "type": "object"
       },
+      "UpgradePrepareOut": {
+        "properties": {
+          "cancelled": {
+            "items": {
+              "$ref": "#/components/schemas/PreparedConversationOut"
+            },
+            "title": "Cancelled",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cancelled"
+        ],
+        "title": "UpgradePrepareOut",
+        "type": "object"
+      },
       "ValidateIn": {
         "description": "`POST /templates/{name}/validate`.",
         "properties": {
@@ -12053,6 +12094,78 @@
           }
         ],
         "summary": "Hold the instance",
+        "tags": [
+          "instance"
+        ]
+      }
+    },
+    "/api/v1/instance/upgrade-prepare": {
+      "post": {
+        "description": "Cancel each initiative conversation that waits for the operator; reason `upgrade`.",
+        "operationId": "prepare_instance_upgrade_api_v1_instance_upgrade_prepare_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpgradePrepareOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No hold stands, or an interactive initiative Run is live on something other than a conversation; nothing was cancelled."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request broke a rule; `errors[]` names it and the reason."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Prepare the instance for an upgrade",
         "tags": [
           "instance"
         ]

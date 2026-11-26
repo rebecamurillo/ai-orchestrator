@@ -6,13 +6,18 @@ A sibling of `providers.py`, which is at its line cap (`providers_base.py`: spli
 from __future__ import annotations
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 from fastapi import Request
 
+from orchestrator.api import providers_base
+from orchestrator.api.providers import signal_effect_ports
 from orchestrator.api.providers_base import ENGINE, SESSION_FACTORY, SETTINGS, from_state
+from orchestrator.api.providers_initiatives import NEEDED_BY, build_initiative_ports
 from orchestrator.application.use_cases.instance_activity import ActivityPorts
 from orchestrator.application.use_cases.instance_hold import HoldPorts
 from orchestrator.application.use_cases.queue import QueuePorts
+from orchestrator.application.use_cases.upgrade_prepare import UpgradePorts
 from orchestrator.infrastructure.clock import SystemClock
 from orchestrator.infrastructure.db import (
     SQLAlchemyAttemptRepository,
@@ -57,3 +62,15 @@ def hold_ports(request: Request) -> Iterator[HoldPorts]:
             clock=SystemClock(),
             calculations=SQLAlchemyMetricCalculationRepository(scope.session),
         )
+
+
+def upgrade_ports(request: Request) -> Iterator[UpgradePorts]:
+    """One unit of work holds the initiative repositories and the hold's lock; `signals` commits
+    in a session of its own, as the initiative routes do."""
+    providers_base.required_git(request, NEEDED_BY)
+    with SQLAlchemyUnitOfWork(from_state(request, SESSION_FACTORY)) as uow:
+        with contextmanager(signal_effect_ports)(request) as signals:
+            yield UpgradePorts(
+                initiative=build_initiative_ports(request, uow, signals),
+                holds=SQLAlchemyInstanceHoldRepository(uow.session),
+            )

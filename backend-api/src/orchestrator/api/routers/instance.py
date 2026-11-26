@@ -12,12 +12,13 @@ from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
 
 from orchestrator.api.errors import PROBLEM_MEDIA_TYPE, PROBLEM_SCHEMA_REF, ProblemDetail
-from orchestrator.api.providers_instance import activity_ports, hold_ports
+from orchestrator.api.providers_instance import activity_ports, hold_ports, upgrade_ports
 from orchestrator.api.schemas.instance import (
     HoldConflictOut,
     HoldIn,
     HoldOut,
     InstanceActivityOut,
+    UpgradePrepareOut,
     WorkingStepOut,
 )
 from orchestrator.application.use_cases.instance_activity import (
@@ -32,11 +33,13 @@ from orchestrator.application.use_cases.instance_hold import (
     place_hold,
     release_hold,
 )
+from orchestrator.application.use_cases.upgrade_prepare import UpgradePorts, prepare_upgrade
 
 router = APIRouter(tags=["instance"])
 
 Ports = Annotated[ActivityPorts, Depends(activity_ports)]
 Holding = Annotated[HoldPorts, Depends(hold_ports)]
+Upgrading = Annotated[UpgradePorts, Depends(upgrade_ports)]
 
 
 @router.get(
@@ -96,3 +99,29 @@ def release_instance_hold(ports: Holding) -> Response:
     """Delete the hold, whether or not one exists."""
     release_hold(ports.holds, ports.uow)
     return Response(status_code=204)
+
+
+@router.post(
+    "/instance/upgrade-prepare",
+    status_code=200,
+    response_model=UpgradePrepareOut,
+    responses={
+        409: {
+            "model": ProblemDetail,
+            "description": (
+                "No hold stands, or an interactive initiative Run is live on something other "
+                "than a conversation; nothing was cancelled."
+            ),
+            "content": {PROBLEM_MEDIA_TYPE: {"schema": PROBLEM_SCHEMA_REF}},
+        },
+        422: {
+            "model": ProblemDetail,
+            "description": "The request broke a rule; `errors[]` names it and the reason.",
+            "content": {PROBLEM_MEDIA_TYPE: {"schema": PROBLEM_SCHEMA_REF}},
+        },
+    },
+    summary="Prepare the instance for an upgrade",
+)
+def prepare_instance_upgrade(ports: Upgrading) -> UpgradePrepareOut:
+    """Cancel each initiative conversation that waits for the operator; reason `upgrade`."""
+    return UpgradePrepareOut.of(prepare_upgrade(ports))

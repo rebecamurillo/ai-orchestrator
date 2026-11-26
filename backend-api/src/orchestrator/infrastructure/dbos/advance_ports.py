@@ -11,6 +11,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import cast
 
+from sqlalchemy.orm import Session
+
 from orchestrator.application.use_cases.create_run import CreateRunPorts
 from orchestrator.application.use_cases.initiative_advance import AdvancePorts
 from orchestrator.application.use_cases.preflight import PreflightPorts
@@ -45,6 +47,42 @@ from orchestrator.infrastructure.tracing import build_tracer
 ENGINE_NOT_BUILT = "the durable engine is not built: advance ports need it for create_run"
 
 
+def create_run_ports(
+    session: Session,
+    uow: SessionUnitOfWork,
+    settings: Settings,
+    git: Git,
+    engine: WorkflowEngine,
+) -> CreateRunPorts:
+    """`create_run`'s ports over `session`, so the Run commits with the caller's `uow`."""
+    runs = SQLAlchemyRunRepository(session)
+    preflight = PreflightPorts(
+        git=git,
+        templates=SQLAlchemyTemplateVersionRepository(session),
+        runs=runs,
+        harnesses=SQLAlchemyHarnessRepository(session),
+        repositories=SQLAlchemyRepositoryRepository(session),
+        projects=SQLAlchemyProjectRepository(session),
+        skill_catalog=FsSkillCatalog(settings.agent_home),
+        setup_record=FsSetupRecord(settings.agent_home),
+        bmad_version=settings.bmad_version,
+        max_active_runs=settings.max_active_runs,
+        work_dir=settings.work_dir,
+        harness_registry=build_harnesses(settings, RealProcessRunner()),
+        verify_docker=settings.verify_docker,
+    )
+    return CreateRunPorts(
+        preflight=preflight,
+        engine=engine,
+        steps=SQLAlchemyStepRunRepository(session),
+        uow=uow,
+        clock=SystemClock(),
+        tracer=build_tracer(settings),
+        run_repositories=SQLAlchemyRunRepositoryRecords(session),
+        initiative_runs=runs,
+    )
+
+
 @contextmanager
 def open_advance_ports(
     session_factory: SessionFactory,
@@ -59,23 +97,6 @@ def open_advance_ports(
     try:
         uow = SessionUnitOfWork(session)
         runs = SQLAlchemyRunRepository(session)
-        clock = SystemClock()
-        preflight = PreflightPorts(
-            git=git,
-            templates=SQLAlchemyTemplateVersionRepository(session),
-            runs=runs,
-            harnesses=SQLAlchemyHarnessRepository(session),
-            repositories=SQLAlchemyRepositoryRepository(session),
-            projects=SQLAlchemyProjectRepository(session),
-            skill_catalog=FsSkillCatalog(settings.agent_home),
-            setup_record=FsSetupRecord(settings.agent_home),
-            bmad_version=settings.bmad_version,
-            max_active_runs=settings.max_active_runs,
-            work_dir=settings.work_dir,
-            harness_registry=build_harnesses(settings, RealProcessRunner()),
-            verify_docker=settings.verify_docker,
-        )
-        steps = SQLAlchemyStepRunRepository(session)
         secrets = log_secrets(settings)
 
         def scrub(text: str) -> str:
@@ -83,24 +104,16 @@ def open_advance_ports(
                 text = redact(text, secret)
             return text
 
+        create = create_run_ports(session, uow, settings, git, engine_ref[0])
         yield AdvancePorts(
             initiatives=SQLAlchemyInitiativeRepository(session),
             advances=SQLAlchemyInitiativeAdvanceRepository(session),
             runs=runs,
-            steps=steps,
+            steps=create.steps,
             attempts=SQLAlchemyAttemptRepository(session),
-            create_run=CreateRunPorts(
-                preflight=preflight,
-                engine=engine_ref[0],
-                steps=steps,
-                uow=uow,
-                clock=clock,
-                tracer=build_tracer(settings),
-                run_repositories=SQLAlchemyRunRepositoryRecords(session),
-                initiative_runs=runs,
-            ),
+            create_run=create,
             uow=uow,
-            clock=clock,
+            clock=create.clock,
             redact=scrub,
             branches=cast(RemoteBranches, git),
         )

@@ -55,6 +55,7 @@ from orchestrator.application.use_cases.instance_hold import release_hold
 from orchestrator.application.use_cases.metric_calculations import sweep_calculations
 from orchestrator.application.use_cases.session_sweep import sweep_session_turns
 from orchestrator.application.use_cases.session_turn import TurnPorts
+from orchestrator.application.use_cases.upgrade_reopen import reopen_after_upgrade
 from orchestrator.domain.ports.chat import ChatChannelFactory
 from orchestrator.domain.ports.git import Git
 from orchestrator.infrastructure.analysis.scratch_sweep import sweep_analysis_scratch
@@ -78,6 +79,7 @@ from orchestrator.infrastructure.dbos.adapter import DbosWorkflowEngine
 from orchestrator.infrastructure.dbos.advance_ports import open_advance_ports
 from orchestrator.infrastructure.dbos.config import engine_config
 from orchestrator.infrastructure.dbos.facade import RealEngine
+from orchestrator.infrastructure.dbos.initiative_ports import open_initiative_ports
 from orchestrator.infrastructure.dbos.step_close import step_close_ports
 from orchestrator.infrastructure.dbos.walker import WalkerDeps
 from orchestrator.infrastructure.facts_jobs import facts_jobs
@@ -301,6 +303,18 @@ def schedule_jobs(settings: Settings) -> None:
             engine.schedule(name, cron, job)
 
 
+def _reopen_upgraded(
+    settings: Settings,
+    session_factory: SessionFactory,
+    git: Git | None,
+    engine: DbosWorkflowEngine,
+) -> None:
+    if git is None:
+        return
+    with open_initiative_ports(session_factory, settings, git, engine) as ports, ports.uow:
+        reopen_after_upgrade(ports)
+
+
 def dependency_startup_sweep(settings: Settings) -> None:
     """Re-enqueue or park dependency-waiting Runs that lost their resolution in a crash.
 
@@ -310,8 +324,9 @@ def dependency_startup_sweep(settings: Settings) -> None:
     runs that were already enqueued are invisible to `list_dependents` (story 5-4, AD-12).
 
     The senior session turns a crash left open are swept next, in the same scope (AD-23).
+    The conversations an upgrade cancelled are reopened last, after the advance sweep.
     """
-    for engine, session_factory, _git in _SERVING:
+    for engine, session_factory, git in _SERVING:
         if session_factory is None:
             continue
         with open_writer_ports(
@@ -335,6 +350,7 @@ def dependency_startup_sweep(settings: Settings) -> None:
         if engine.walker_deps.advance_writes is not None:
             with engine.walker_deps.advance_writes() as advance_scope:
                 sweep_advances(advance_scope, engine, engine.held_advances())
+            _reopen_upgraded(settings, session_factory, git, engine)
 
 
 def schedule_engine_jobs(settings: Settings) -> None:

@@ -17,6 +17,7 @@ from orchestrator.application.use_cases.create_run import CreateRunPorts
 from orchestrator.application.use_cases.initiative_views import InitiativeReadPorts
 from orchestrator.application.use_cases.initiatives import InitiativePorts
 from orchestrator.application.use_cases.open_initiative import OpenInitiativePorts
+from orchestrator.application.use_cases.signals import SignalEffectPorts
 from orchestrator.domain.ports.engine import WorkflowEngine
 from orchestrator.domain.ports.remote_branches import RemoteBranches
 from orchestrator.infrastructure.clock import SystemClock
@@ -42,42 +43,48 @@ from orchestrator.infrastructure.workspace.fs import FsWorkspace
 NEEDED_BY = "the initiative routes"
 
 
-def initiative_ports(request: Request) -> Iterator[InitiativePorts]:
-    """One unit of work holds every repository; `signals` commits in a session of its own."""
-    session_factory = from_state(request, SESSION_FACTORY)
-    engine: WorkflowEngine = from_state(request, ENGINE)
+def build_initiative_ports(
+    request: Request, uow: SQLAlchemyUnitOfWork, signals: SignalEffectPorts
+) -> InitiativePorts:
+    """The initiative repositories over `uow`'s session, with `signals` as given."""
     settings = from_state(request, SETTINGS)
     git = providers_base.required_git(request, NEEDED_BY)
-    with SQLAlchemyUnitOfWork(session_factory) as uow:
-        runs = SQLAlchemyRunRepository(uow.session)
-        clock = SystemClock()
-        create = CreateRunPorts(
-            preflight=_preflight_ports(request, uow, "initiatives"),
-            engine=engine,
-            steps=SQLAlchemyStepRunRepository(uow.session),
-            uow=uow,
-            clock=clock,
-            tracer=build_tracer(settings),
-            run_repositories=SQLAlchemyRunRepositoryRecords(uow.session),
-            initiative_runs=runs,
-        )
+    runs = SQLAlchemyRunRepository(uow.session)
+    clock = SystemClock()
+    create = CreateRunPorts(
+        preflight=_preflight_ports(request, uow, "initiatives"),
+        engine=from_state(request, ENGINE),
+        steps=SQLAlchemyStepRunRepository(uow.session),
+        uow=uow,
+        clock=clock,
+        tracer=build_tracer(settings),
+        run_repositories=SQLAlchemyRunRepositoryRecords(uow.session),
+        initiative_runs=runs,
+    )
+    return InitiativePorts(
+        initiatives=SQLAlchemyInitiativeRepository(uow.session),
+        advances=SQLAlchemyInitiativeAdvanceRepository(uow.session),
+        projects=SQLAlchemyProjectRepository(uow.session),
+        repositories=SQLAlchemyRepositoryRepository(uow.session),
+        packages=SQLAlchemyProjectPackageRepository(uow.session),
+        templates=SQLAlchemyTemplateVersionRepository(uow.session),
+        runs=runs,
+        git=git,
+        branches=cast(RemoteBranches, git),
+        create_run=create,
+        signals=signals,
+        uow=uow,
+        clock=clock,
+        work_dir=settings.work_dir,
+    )
+
+
+def initiative_ports(request: Request) -> Iterator[InitiativePorts]:
+    """One unit of work holds every repository; `signals` commits in a session of its own."""
+    providers_base.required_git(request, NEEDED_BY)
+    with SQLAlchemyUnitOfWork(from_state(request, SESSION_FACTORY)) as uow:
         with contextmanager(signal_effect_ports)(request) as signals:
-            yield InitiativePorts(
-                initiatives=SQLAlchemyInitiativeRepository(uow.session),
-                advances=SQLAlchemyInitiativeAdvanceRepository(uow.session),
-                projects=SQLAlchemyProjectRepository(uow.session),
-                repositories=SQLAlchemyRepositoryRepository(uow.session),
-                packages=SQLAlchemyProjectPackageRepository(uow.session),
-                templates=SQLAlchemyTemplateVersionRepository(uow.session),
-                runs=runs,
-                git=git,
-                branches=cast(RemoteBranches, git),
-                create_run=create,
-                signals=signals,
-                uow=uow,
-                clock=clock,
-                work_dir=settings.work_dir,
-            )
+            yield build_initiative_ports(request, uow, signals)
 
 
 def advance_retry_ports(request: Request) -> Iterator[AdvanceRetryPorts]:

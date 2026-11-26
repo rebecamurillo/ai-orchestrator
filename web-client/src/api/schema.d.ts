@@ -252,6 +252,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instance/upgrade-prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prepare the instance for an upgrade
+         * @description Cancel each initiative conversation that waits for the operator; reason `upgrade`.
+         */
+        post: operations["prepare_instance_upgrade_api_v1_instance_upgrade_prepare_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kit/archive": {
         parameters: {
             query?: never;
@@ -3653,6 +3673,21 @@ export interface components {
             /** Start Allowed */
             start_allowed: boolean;
         };
+        /** PreparedConversationOut */
+        PreparedConversationOut: {
+            /**
+             * Initiative Id
+             * Format: uuid
+             */
+            initiative_id: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /** Step */
+            step: string;
+        };
         /**
          * ProbeResultOut
          * @description The HTTP shape of a harness probe result (story 2-1).
@@ -5127,6 +5162,11 @@ export interface components {
              */
             status: "queued" | "running" | "done" | "failed";
         };
+        /** UpgradePrepareOut */
+        UpgradePrepareOut: {
+            /** Cancelled */
+            cancelled: components["schemas"]["PreparedConversationOut"][];
+        };
         /**
          * ValidateIn
          * @description `POST /templates/{name}/validate`.
@@ -5948,6 +5988,56 @@ export interface operations {
             };
             /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    prepare_instance_upgrade_api_v1_instance_upgrade_prepare_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpgradePrepareOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No hold stands, or an interactive initiative Run is live on something other than a conversation; nothing was cancelled. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The request broke a rule; `errors[]` names it and the reason. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

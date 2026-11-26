@@ -67,6 +67,8 @@ def test_the_router_declares_exactly_one_operation() -> None:
         (["GET"], "/instance/activity"),
         (["POST"], "/instance/hold"),
         (["DELETE"], "/instance/hold"),
+        # story 3 of epic 9, 2026-11-26: the upgrade-prepare route lands in this router
+        (["POST"], "/instance/upgrade-prepare"),
     ]
 
 

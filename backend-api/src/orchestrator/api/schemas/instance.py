@@ -17,6 +17,7 @@ from orchestrator.application.use_cases.instance_activity import (
     InstanceActivity,
     WorkingStep,
 )
+from orchestrator.application.use_cases.upgrade_prepare import PreparedConversation
 from orchestrator.domain.statuses import ParkKind, RunStatus
 
 
@@ -95,3 +96,21 @@ class InstanceActivityOut(BaseModel):
             hold=None if activity.hold is None else HoldOut.of(activity.hold),
             dbos_application_version=activity.dbos_application_version,
         )
+
+
+class PreparedConversationOut(BaseModel):
+    run_id: UUID
+    initiative_id: UUID
+    step: str
+
+    @classmethod
+    def of(cls, prepared: PreparedConversation) -> PreparedConversationOut:
+        return cls(run_id=prepared.run_id, initiative_id=prepared.initiative_id, step=prepared.step)
+
+
+class UpgradePrepareOut(BaseModel):
+    cancelled: list[PreparedConversationOut]
+
+    @classmethod
+    def of(cls, prepared: tuple[PreparedConversation, ...]) -> UpgradePrepareOut:
+        return cls(cancelled=[PreparedConversationOut.of(item) for item in prepared])
