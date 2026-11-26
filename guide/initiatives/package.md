@@ -86,10 +86,8 @@ All routes sit under `/api/v1` and take the bearer token.
   `default_autonomy`, `default_senior_model`. `null` clears one; an omitted key is refused.
 - `PUT /repositories/{id}/initiative-folder` with `{initiative_folder}` sets where the repository's initiatives live.
 
-Each has an MCP tool named by its operation id: `install_package_api_v1_projects__project_id__package_put`,
-`read_package_api_v1_projects__project_id__package_get`, `remove_package_api_v1_projects__project_id__package_delete`,
-`set_run_defaults_api_v1_projects__project_id__run_defaults_put` and
-`set_initiative_folder_api_v1_repositories__repository_id__initiative_folder_put`.
+Each has an MCP tool: `install_package`, `read_package`, `remove_package`, `set_run_defaults` and
+`set_initiative_folder`.
 
 ## Reopen
 

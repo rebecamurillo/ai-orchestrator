@@ -6,7 +6,7 @@ the image's guide build serves `initiatives/package` and the two pointer pages, 
 resolves, and that every route and MCP tool the package page names is one this instance serves
 (a client writes its package from the guide alone, FR-27).
 
-Structure only (member hard rule 6): headings, line counts, page ids, routes and operation ids.
+Structure only (member hard rule 6): headings, line counts, page ids, routes and tool names.
 """
 
 from __future__ import annotations
@@ -38,7 +38,10 @@ PACKAGE_HEADINGS = [
 ]
 
 ROUTE = re.compile(r"`(GET|PUT|POST|DELETE) (/[^\s`]+)")
-OPERATION_ID = re.compile(r"`([a-z0-9_]+_(?:get|put|post|delete))`")
+#: The paragraph naming the MCP tools, and a tool name in it. A tool is named after its function
+#: in `infrastructure/mcp/`, not its operation id (release review 2026-11-26).
+MCP_PARAGRAPH = re.compile(r"^Each has an MCP tool:(.*?)(?:\n\n|\Z)", re.MULTILINE | re.DOTALL)
+TOOL_NAME = re.compile(r"`([a-z0-9_]+)`")
 PLACEHOLDER = re.compile(r"\{[^}]+\}")
 
 
@@ -124,7 +127,9 @@ def test_every_mcp_tool_the_package_page_names_is_listed_and_reopen_has_none(
     tools = Mcp(authenticated)._post("tools/list", {})["result"]["tools"]
     listed = {tool["name"] for tool in tools}
 
-    named = set(OPERATION_ID.findall(package_page))
+    paragraph = MCP_PARAGRAPH.search(package_page)
+    assert paragraph, "the package page has no MCP tool paragraph"
+    named = set(TOOL_NAME.findall(paragraph.group(1)))
 
     assert named, "the package page names no MCP tool"
     assert named <= listed, sorted(named - listed)
