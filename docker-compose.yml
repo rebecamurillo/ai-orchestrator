@@ -88,6 +88,10 @@ services:
     #   - no-new-privileges:true
     # the worktrees and the harness configs are written at run time (NFR-3)
     read_only: false
+    # an init as PID 1 reaps the orphans a step's processes leave; the app reaps only its own
+    # children. The limit makes a leak fail this container's forks, not the host's (issue #25).
+    init: true
+    pids_limit: 16384
     depends_on:
       postgres:
         condition: service_healthy

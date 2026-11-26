@@ -280,11 +280,18 @@ docker_enabled() {
 		*) return 1 ;;
 	esac
 }
+# `compose.override.yml` is the operator's (seed_write): read after the product's file, so a
+# change there lasts across upgrades.
+compose_files() {
+	local files=(-f "$compose_file")
+	if [[ -f "${here}/compose.override.yml" ]]; then files+=(-f "${here}/compose.override.yml"); fi
+	docker compose --project-directory "$here" "${files[@]}" "$@"
+}
 compose() {
 	if docker_enabled; then compose_all "$@"
-	else docker compose --project-directory "$here" -f "$compose_file" "$@"; fi
+	else compose_files "$@"; fi
 }
-compose_all()  { docker compose --project-directory "$here" -f "$compose_file" --profile docker "$@"; }
+compose_all()  { compose_files --profile docker "$@"; }
 # The tag the compose file pins for backend-api; the folder's own VERSION is what `resolve_tag` reads.
 compose_tag() { sed -n 's/^ *image: *.*\/backend-api:\(.*\)$/\1/p' "$compose_file" | head -1; }
 compose_setup() { compose --profile setup "$@"; }

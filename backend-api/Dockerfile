@@ -86,6 +86,11 @@ RUN apt-get update \
       xz-utils \
  && rm -rf /var/lib/apt/lists/*
 
+# No background git: `git maintenance --auto` and a detached `gc` fork a child that outlives
+# the command, outside any process group a step's cleanup reaches (issue #25).
+RUN git config --system maintenance.auto false \
+ && git config --system gc.autoDetach false
+
 # Node 24 from the official distribution, checksum-verified. The NodeSource script would
 # pull whatever 24.x is current on the day the image is built.
 RUN set -eux; \

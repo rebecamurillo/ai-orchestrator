@@ -176,6 +176,10 @@ class RealProcessRunner:
                     popen.wait()
                     return Outcome(exit_code=popen.returncode, timed_out=False, stalled=True)
         finally:
+            # what the leader left in its group outlives a natural exit and, reparented to
+            # PID 1, holds its PID until the container restarts (issue #25); a no-op on a
+            # group already gone
+            self.kill_group(handle.pgid)
             _forget(handle.pgid)
 
     def kill_group(self, pgid: int) -> None:
