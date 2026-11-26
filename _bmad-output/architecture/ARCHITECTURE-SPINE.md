@@ -438,6 +438,7 @@ When an `agent` row declares `workdir` (AD-9), one attempt spans **two trees and
     - `make lint` regenerates them and fails on `git diff`, the same pattern as AD-3.
     - Nothing between markers is edited by hand.
   - **Copies for harnesses without MCP (BR-12).** All three supported harnesses ship an MCP configuration (§ 1), so the set of such harnesses is empty and no copy is generated in this release. The mechanism is deferred (§ 8).
+- **Amendment** *(initiative orchestrator-initiative-steps, 2026-11-22, decision B12)***:** The initiative procedure of the retired initiative-spec kit skill (initiatives/spec, initiatives/chain) is carried by the project's package in its hub repository (AD-39); the guide holds a pointer page for each and the package format page initiatives/package. Every other procedure of the four retired kit skills stays in the guide.
 
 ### AD-33 — the bootstrap is release-free, its contract is frozen and self-describing *(ratified 2026-11-11, initiative orchestrator-instance-guide)*
 
