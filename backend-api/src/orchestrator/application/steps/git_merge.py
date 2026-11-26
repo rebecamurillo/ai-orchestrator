@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from orchestrator.application.rules import push_anchors
 from orchestrator.application.rules.merge_conflict import unmerged_paths
 from orchestrator.application.rules.merge_conflicts import CONFLICTED_HEADING
 from orchestrator.application.steps import MERGE_KIND, git_merge_edits, records
@@ -97,7 +98,9 @@ def _merge(ctx: StepContext, recorder: GitRecorder) -> StepResult:
     if recorded is None:
         raise RuntimeError(UNKNOWN_WORKTREE.format(path=ctx.cwd))
     source = str(ctx.with_resolved[FROM_KEY])
-    edited = git_merge_edits.protected(ctx, worktree)
+    edited = (
+        git_merge_edits.protected(ctx, worktree) if push_anchors.initiative_run(env.run) else None
+    )
     if edited is not None:
         return edited
     if ctx.resume_signal is not None and ctx.resume_signal.event == "continue":

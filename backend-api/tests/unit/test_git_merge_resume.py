@@ -15,20 +15,26 @@ from orchestrator.application.steps.git_merge import (
     GitMergeExecutor,
 )
 from orchestrator.domain.entities.step_run import StepRun
+from orchestrator.domain.ids import new_id
 from tests.unit.fakes.git import FakeGit
+from tests.unit.initiative_fixtures import a_run
 from tests.unit.step_fixtures import BRANCH, a_context, a_row, a_worktree, an_environment
 
 FROM_BRANCH = "feat/epic-1"
 RESOLVED_SHA = "feed0123456789abcdefbeef0123456789abcdef"
 NEXT_SHA = "beef0123456789abcdefbeef0123456789abcdef"
+DIFF = "@@ -1 +1 @@\n-a\n+b\n"
+#: Epic 8 retrospective R2 (Operator ruling 2026-11-26): the resume check runs on an
+#: initiative Run only, so these story 8.4 tests run on one.
+INITIATIVE_RUN = a_run(initiative_id=new_id(), initiative_round=1, initiative_position=1)
 
 
 def a_merge_row() -> StepRun:
     return a_row(kind=KIND, with_resolved={FROM_KEY: FROM_BRANCH, "timeout_min": 5}, path="merge")
 
 
-def run(git: FakeGit, resume: str | None = "continue"):  # type: ignore[no-untyped-def]
-    env = an_environment(worktrees=(a_worktree(),))
+def run(git: FakeGit, resume: str | None = "continue", *, initiative: bool = True):  # type: ignore[no-untyped-def]
+    env = an_environment(worktrees=(a_worktree(),), run=INITIATIVE_RUN if initiative else a_run())
     ctx = a_context(a_merge_row(), git=git, env=env, resume=resume)  # type: ignore[arg-type]
     return GitMergeExecutor().execute(ctx)
 
@@ -94,3 +100,19 @@ def test_retry_with_no_merge_open_runs_the_merge_whole_and_never_reads_the_statu
     assert names(git).count("merge") == 1
     assert "status" not in names(git)
     assert names(git)[0] == "merge_in_progress"
+
+
+def test_a_retry_on_a_run_without_an_initiative_aborts_and_re_runs_as_at_the_epic_base() -> None:
+    """Epic 8 retrospective R2 (Operator ruling 2026-11-26): a Run without `initiative_id`
+    keeps the whole re-run, with no agent-edit check before it."""
+    git = FakeGit(
+        merge_in_progress=[True], status=["M  AGENTS.md"], diff=[DIFF, DIFF], merge=[NEXT_SHA]
+    )
+
+    result = run(git, resume="retry", initiative=False)
+
+    assert result.status == "done"
+    assert result.park is None
+    assert result.output_ref == NEXT_SHA
+    assert names(git).count("merge") == 1
+    assert not {"merge_in_progress", "status", "diff"} & set(names(git))

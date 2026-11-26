@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from orchestrator.application.rules import consult, session
+from orchestrator.application.rules import consult, push_anchors, session
 from orchestrator.application.rules.conversation import STEP_KEY, close_clause
 from orchestrator.application.rules.merge_conflict import unmerged_paths
 from orchestrator.application.steps import (
@@ -108,7 +108,9 @@ def session_sweep(ctx: StepContext, message: str) -> tuple[tuple[str, str | None
     is open: staging an unmerged path marks it resolved with its markers in it, and a commit
     concludes the merge the executor commits on `continue` and a `retry` aborts (Operator
     ruling, 2026-11-26)."""
-    if ctx.row.kind == MERGE_KIND and _merge_open(ctx):
+    env = ctx.ports.run_env
+    initiative = env is not None and push_anchors.initiative_run(env.run)
+    if ctx.row.kind == MERGE_KIND and initiative and _merge_open(ctx):
         return ()
     return agent_workdir.sweep(ctx, message)
 

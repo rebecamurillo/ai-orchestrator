@@ -178,6 +178,19 @@ def test_a_run_without_an_initiative_never_asks_about_unmerged_paths() -> None:
     assert continues(world) == []
 
 
+def test_the_turn_end_sweep_on_a_run_without_an_initiative_commits_as_before() -> None:
+    """Epic 8 retrospective R2 (Operator ruling 2026-11-26): the merge-open skip is an
+    initiative Run's; any other Run's turn is swept and committed as at the epic's base."""
+    git = FakeGit(status=[MODIFIED], merge_in_progress=[True])
+    world = a_merge_session(git, initiative=False)
+    attempt = turn(world)
+    world.commit(attempt)
+
+    assert "merge_in_progress" not in names(git)
+    assert "stage" in names(git)
+    assert "commit" in names(git)
+
+
 def test_after_turn_for_an_attempt_that_is_gone_does_nothing() -> None:
     world = a_merge_session()
 

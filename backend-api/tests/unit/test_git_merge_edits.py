@@ -15,6 +15,7 @@ from orchestrator.domain.ids import new_id
 from orchestrator.domain.ports.git import Change
 from orchestrator.domain.values import StepResult
 from tests.unit.fakes.git import FakeGit
+from tests.unit.initiative_fixtures import a_run
 from tests.unit.step_fixtures import WORKTREE, a_context, a_row, a_worktree, an_environment
 
 FROM_BRANCH = "feat/epic-1"
@@ -22,6 +23,9 @@ SPEC = "initiatives/i/epic-1/SPEC.md"
 TEST = "tests/unit/test_x.py"
 RESOLVED_SHA = "feed0123456789abcdefbeef0123456789abcdef"
 DIFF = "@@ -1 +1 @@\n-a\n+b\n"
+#: Epic 8 retrospective R2 (Operator ruling 2026-11-26): the executor checks an initiative
+#: Run only, so these story 8.4 tests run on one.
+INITIATIVE_RUN = a_run(initiative_id=new_id(), initiative_round=1, initiative_position=1)
 
 
 def a_merge_row() -> StepRun:
@@ -29,7 +33,7 @@ def a_merge_row() -> StepRun:
 
 
 def a_ctx(git: FakeGit, resume: str | None = "continue", **env: Any):  # type: ignore[no-untyped-def]
-    environment = an_environment(worktrees=(a_worktree(),), **env)
+    environment = an_environment(worktrees=(a_worktree(),), **{"run": INITIATIVE_RUN, **env})
     return a_context(a_merge_row(), git=git, env=environment, resume=resume)  # type: ignore[arg-type]
 
 

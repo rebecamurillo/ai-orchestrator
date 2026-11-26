@@ -40,18 +40,22 @@ from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
 
+from orchestrator.application.rules import protected_paths, push_anchors
 from orchestrator.application.steps import (
+    MERGE_KIND,
     PUSH_ALLOW_DEFAULT_KEY,
     PUSH_RETRY_KEY,
     WORKDIR_KEY,
     records,
 )
+from orchestrator.application.steps.agent_tail import PATH_SEPARATOR, PROTECTED
 from orchestrator.application.steps.context import (
     StepContext,
     require_cwd,
     require_env,
     resolved_text,
 )
+from orchestrator.application.steps.git_merge import FROM_KEY
 from orchestrator.application.steps.git_sync import DIVERGED
 from orchestrator.application.steps.registry import register
 from orchestrator.application.steps.step_log import logged
@@ -108,6 +112,10 @@ def _push(ctx: StepContext) -> StepResult:
             git.sync(worktree, branch)
         except GitError as error:
             return _park(ctx, DIVERGED, output=error.output)
+    if branch == env.default_branch and push_anchors.initiative_run(env.run):
+        stopped = _anchor_check(ctx, git, worktree, branch)
+        if stopped is not None:
+            return stopped
     outcome = _push_declared(ctx, git, worktree, branch, created)
     if isinstance(outcome, StepResult):
         return outcome
@@ -143,6 +151,52 @@ def _push_declared(
             git.sync(worktree, branch)
         except GitError as failure:
             return _park(ctx, SYNC_FAILED, output=failure.output)
+
+
+def _anchor_check(ctx: StepContext, git: Git, worktree: Path, branch: str) -> StepResult | None:
+    """`push_anchors` over the range the push brings to the default branch, or `None` to push."""
+    env = require_env(ctx)
+    source = _merge_source(ctx)
+    if source is None:
+        reason = push_anchors.NO_MERGE_SOURCE
+        return StepResult(
+            status="blocked",
+            gate=ctx.row.gate,
+            reason=reason,
+            park=Park(kind="blocked", reason=reason, path=ctx.row.path),
+        )
+    changes = git.diff_changes(worktree, f"origin/{branch}", "HEAD")
+    checked = push_anchors.checked(changes, env.test_globs)
+    if not checked:
+        return None
+    # `read_file` tries `origin/{ref}` first, so HEAD is read at its SHA.
+    head = git.head_sha(worktree)
+    ours = {c.path: git.read_file(worktree, head, c.path) if head else None for c in checked}
+    theirs = {c.path: git.read_file(worktree, source, c.path) for c in checked}
+    hits = push_anchors.hits(checked, ours, theirs, env.accepted_paths)
+    if not hits:
+        return None
+    reason = PROTECTED.format(paths=PATH_SEPARATOR.join(hit.path for hit in hits))
+    return StepResult(
+        status="error",
+        gate=ctx.row.gate,
+        reason=reason,
+        park=Park(kind="protected_path", reason=reason, path=ctx.row.path),
+        payload=protected_paths.hits_payload(hits),
+    )
+
+
+def _merge_source(ctx: StepContext) -> str | None:
+    """The `from` of the last `git.merge` row before this one, in plan order."""
+    merges = [
+        row
+        for row in require_env(ctx).plan_rows
+        if row.kind == MERGE_KIND and row.seq < ctx.row.seq
+    ]
+    if not merges:
+        return None
+    source = max(merges, key=lambda row: row.seq).with_resolved.get(FROM_KEY)
+    return str(source) if source else None
 
 
 def _execute_workdir(
