@@ -194,6 +194,21 @@ def prompt_of(sessions: Any, run_id: str, path: str, n: int) -> tuple[Attempt, s
     return turn, prompt
 
 
+def running_turn(sessions: Any, run_id: str, path: str, n: int) -> Attempt:
+    """The n-th turn of `path` once its harness runs. A turn's `log_path`, which `prompt_of`
+    waits for, is stored only when the turn ends: too late to attest during it."""
+
+    def read() -> Attempt | None:
+        turns = turns_of(sessions, run_id, path)
+        return turns[n - 1] if len(turns) >= n else None
+
+    turn = wait_for(
+        read, lambda found: found is not None and found.status == "running", f"turn {n} running"
+    )
+    assert turn is not None
+    return turn
+
+
 def attest(sessions: Any, run_id: str, text: str) -> None:
     done = in_stack(WRITE_CLOSE, worktree_of(sessions, run_id), text)
     assert done is not None and done.returncode == 0, done
@@ -273,11 +288,12 @@ def test_a_turn_attesting_its_own_id_closes_the_step_and_the_next_row_runs(
 ) -> None:
     run_id = start_run(scenario(seconds=TURN_SECONDS, files=step_file("done")))
     stop = parked_on(api, run_id, "product")["run"]["park_seq"]
-    turn, prompt = prompt_of(sessions, run_id, "product", 1)
+    turn = running_turn(sessions, run_id, "product", 1)
 
     attest(sessions, run_id, str(turn.id))
     detail = parked_on(api, run_id, "ux")
 
+    _, prompt = prompt_of(sessions, run_id, "product", 1)
     assert f"{FIRST_TURN}\n\nClose product as {turn.id}." in prompt
     assert turns_of(sessions, run_id, "product")[0].message == FIRST_TURN
     assert row(detail, "product")["status"] == "done"
@@ -292,7 +308,7 @@ def test_an_attestation_naming_another_attempt_is_discarded_and_sends_nothing(
 ) -> None:
     run_id = start_run(scenario(seconds=TURN_SECONDS, files=step_file("done")))
     stop = parked_on(api, run_id, "product")["run"]["park_seq"]
-    prompt_of(sessions, run_id, "product", 1)
+    running_turn(sessions, run_id, "product", 1)
     foreign = str(uuid4())
 
     attest(sessions, run_id, foreign)
@@ -311,7 +327,7 @@ def test_an_attestation_with_a_later_message_pending_is_deferred(
 ) -> None:
     run_id = start_run(scenario(seconds=TURN_SECONDS, files=step_file("done")))
     stop = parked_on(api, run_id, "product")["run"]["park_seq"]
-    turn, _ = prompt_of(sessions, run_id, "product", 1)
+    turn = running_turn(sessions, run_id, "product", 1)
     queued = api.post(f"{RUNS}/{run_id}/session/messages", json={"text": "wait, one more"})
 
     attest(sessions, run_id, str(turn.id))
@@ -331,7 +347,7 @@ def test_an_attestation_on_a_failed_turn_is_discarded(
 ) -> None:
     run_id = start_run(scenario(seconds=TURN_SECONDS, exit_code=1, files=step_file("done")))
     stop = parked_on(api, run_id, "product")["run"]["park_seq"]
-    turn, _ = prompt_of(sessions, run_id, "product", 1)
+    turn = running_turn(sessions, run_id, "product", 1)
 
     attest(sessions, run_id, str(turn.id))
     detail = recorded(api, run_id, "close_discarded")

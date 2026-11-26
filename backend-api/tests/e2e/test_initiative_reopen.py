@@ -138,7 +138,7 @@ def test_reopen_cancels_the_parked_run_and_walks_round_two_to_the_step_with_the_
     assert branch_sha(hub.url, f"spec/{slug}") == before, "an existing branch is attached"
 
     run = run_detail(api, body["run_id"])["run"]
-    assert (run["template_name"], run["template_version"]) == (f"{hub.package}.spec", 1)
+    assert (run["template"], run["version"]) == (f"{hub.package}.spec", 1)
     assert run["inputs"]["round_steps"] == "intake,product"
     assert run["inputs"]["first_turn"] == REASON
     assert run["inputs"]["branch"] == f"spec/{slug}"

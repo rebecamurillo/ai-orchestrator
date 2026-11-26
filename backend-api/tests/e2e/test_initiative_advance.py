@@ -106,6 +106,7 @@ inputs:
   first_turn:        { type: string,     required: false }
   round_steps:       { type: string,     required: false }
   initiative_folder: { type: string,     required: false }
+  harness:           { type: string,     required: false }
 steps:
   - id: checkout
     uses: git.worktree
@@ -127,7 +128,7 @@ steps:
   - id: gate
     uses: agent
     role: spec-gate
-    with: { skill: spec-gate }
+    with: { harness: '{{harness}}', skill: spec-gate }
     prompts:
       dispatch: "Run {skill}."
       rendered: "Rendered at {path}."
@@ -153,6 +154,7 @@ inputs:
   slug:              { type: string,     required: true }
   branch:            { type: string,     required: true }
   initiative_folder: { type: string,     required: false }
+  harness:           { type: string,     required: false }
 steps:
   - id: checkout
     uses: git.worktree
@@ -161,7 +163,7 @@ steps:
   - id: merge-agent
     uses: agent
     role: implement
-    with: { skill: @SKILL@ }
+    with: { harness: '{{harness}}', skill: @SKILL@ }
     prompts:
       dispatch: "Prepare the merge: spec folder merge, story id merge."
       rendered: "Rendered at {path}."
@@ -592,9 +594,9 @@ def test_a_passing_gate_merges_into_main_then_builds_on_feat_from_main(
 
     assert show(hub.url, "main", "docs/gate.md") == PASS_GATE
     assert branch_sha(hub.url, f"spec/{slug}") == ""
-    assert branch_sha(hub.url, f"feat/{slug}") == branch_sha(hub.url, "main")
-
     build_ref = run_at(api, created["id"], 1, 2)
+    # the advance pushes feat/{slug} just before it creates the build Run, after the merge ends
+    assert branch_sha(hub.url, f"feat/{slug}") == branch_sha(hub.url, "main")
     assert build_ref["template_name"] == f"{hub.package}.build"
     build = ended(api, build_ref["id"])
     assert build["run"]["status"] == "done", build["alert"]
@@ -676,6 +678,12 @@ def test_a_merge_conflict_opens_a_session_with_the_merge_skill_and_the_agents_tu
     )
     assert CONFLICT_FILE in merge_step["conflict_files"]
 
+    # outside a conversation a session takes one turn at a time: the opening turn ends first
+    wait_for(
+        lambda: session_of(api, merge_id),
+        lambda view: not view["turn_running"],
+        f"run {merge_id}'s opening merge turn ending",
+    )
     posted = api.post(f"{RUNS}/{merge_id}/session/messages", json={"text": RESOLVE_MESSAGE})
     assert posted.is_success, posted.text
 
@@ -703,7 +711,9 @@ def test_a_merge_conflict_opens_a_session_with_the_merge_skill_and_the_agents_tu
 
     merge = ended(api, merge_id)
     assert merge["run"]["status"] == "done", merge["alert"]
-    assert step_row(merge, "merge")["reason"] == "done · already merged"
+    # AD-13's `done · already merged` is the row's status and its reason
+    merged = step_row(merge, "merge")
+    assert (merged["status"], merged["reason"]) == ("done", "already merged")
     assert show(hub.url, "main", CONFLICT_FILE) == "main side and spec side\n"
     assert branch_sha(hub.url, f"spec/{slug}") == ""
     run_at(api, created["id"], 1, 2)
@@ -747,7 +757,8 @@ def test_a_merge_conflict_outside_an_initiative_opens_no_session_and_refuses_con
     try:
         stop = parked(api, run_id, "merge_conflict", "merge")
 
-        assert stop["run"]["senior_session"] is False
+        # RunOut drops `senior_session` at its default, False (api/schemas/common.py drop_default)
+        assert stop["run"].get("senior_session", False) is False
         assert session_of(api, run_id)["active"] is False
         assert "continue" not in stop["admitted_signals"]
         assert {"retry", "cancel"} <= set(stop["admitted_signals"])
