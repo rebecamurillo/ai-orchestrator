@@ -63,6 +63,11 @@
   letter-spacing: var(--type-detail-title-tracking);
 }
 
+.wf-template-type {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
 .wf-age {
   color: var(--color-text-tertiary);
   font-size: var(--type-meta);

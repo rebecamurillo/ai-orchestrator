@@ -77,6 +77,23 @@
   background: var(--color-surface);
   color: inherit;
   text-decoration: none;
+  position: relative;
+}
+
+.run-card-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.run-card-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.run-card-tag a {
+  position: relative;
+  z-index: 1;
 }
 
 .run-card[data-left-rule='needs-you'] {
@@ -121,7 +138,7 @@
   background: currentColor;
 }
 
-.run-card-harness {
+.run-card-type {
   color: var(--color-text-tertiary);
   font-size: var(--type-micro);
 }

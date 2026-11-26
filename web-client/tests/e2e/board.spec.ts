@@ -244,6 +244,41 @@ test.describe('/ (Board)', () => {
     await expect(page.getByTestId('board-card-fresh')).toBeVisible();
   });
 
+  test('a linked interactive card opens its initiative and carries the initiative tag', async ({
+    page,
+  }) => {
+    const ini = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    await mockBoard(
+      page,
+      boardResponse({
+        columns: {
+          ...EMPTY_COLUMNS,
+          running: [
+            card({
+              id: 'li1',
+              template_type: 'interactive',
+              attention: 'your_turn',
+              initiative: { id: ini, position: 1, slug: 'site', step: 'ux', workflow_count: 2 },
+            }),
+          ],
+        },
+      }),
+    );
+    await page.goto(BOARD_URL);
+
+    const linked = page.getByTestId('board-card-li1');
+    await expect(linked).toContainText('INTERACTIVE');
+    await expect(linked).toContainText('ux · your turn');
+    await expect(linked.locator('.run-card-link')).toHaveAttribute(
+      'href',
+      `/initiatives/${ini}?workflow=1`,
+    );
+    await expect(linked.getByTestId('board-initiative-tag')).toHaveAttribute(
+      'href',
+      `/initiatives/${ini}`,
+    );
+  });
+
   test('a poll that fails replaces the board with the failed-fetch readout; a successful Retry restores it and polling', async ({
     page,
   }) => {

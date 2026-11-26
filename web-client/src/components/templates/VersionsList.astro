@@ -56,7 +56,7 @@ function calledByText(calledBy: CalledByRef[]): string | null {
                 {row.name} v{row.version}
               </span>
               <span class="meta">
-                pinned by 0 runs
+                {row.type && <>{row.type} · </>}pinned by 0 runs
                 {calledByText(row.calledBy) && <> · {calledByText(row.calledBy)}</>}
               </span>
               <span class="readonly">read-only</span>

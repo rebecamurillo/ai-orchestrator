@@ -176,3 +176,30 @@ export function totalCards(board: BoardOut): number {
     columns.failed.length
   );
 }
+
+/** The card's one link: an interactive linked Run opens its initiative at its workflow
+ * (EXPERIENCE § 6), every other card opens the Run. */
+export function cardHref(card: CardOut): string {
+  if (card.template_type === 'interactive' && card.initiative) {
+    return `/initiatives/${card.initiative.id}?workflow=${card.initiative.position}`;
+  }
+  return `/workflows/${card.id}`;
+}
+
+/** The eyebrow: `INTERACTIVE`, `AUTO · {HARNESS}` or `AUTO`; an absent type reads as auto (AD-15). */
+export function cardTypeText(
+  templateType: string | null | undefined,
+  harness: string | null,
+): string {
+  if (templateType === 'interactive') return 'INTERACTIVE';
+  return harness ? `AUTO · ${harness.toUpperCase()}` : 'AUTO';
+}
+
+/** The step line: `{step} · your turn` for an interactive linked card waiting on the owner. */
+export function cardStepText(card: CardOut): string {
+  const step = card.initiative?.step;
+  if (card.template_type === 'interactive' && card.attention === 'your_turn' && step) {
+    return `${step} · your turn`;
+  }
+  return `${card.current_step_label}${card.status === 'cancelled' ? ' · cancelled' : ''}`;
+}

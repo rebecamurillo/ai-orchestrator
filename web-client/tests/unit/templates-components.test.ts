@@ -36,9 +36,24 @@ function row(overrides: Partial<VersionRow>): VersionRow {
     calledBy: [],
     href: '/templates/story/1',
     active: false,
+    type: null,
     ...overrides,
   };
 }
+
+describe('VersionsList type word', () => {
+  // Story 10.4, Operator ruling 2026-11-26
+  it('prints interactive on an interactive row', async () => {
+    const html = await render(VersionsList, { rows: [row({ type: 'interactive' })] });
+    expect(html).toContain('interactive');
+  });
+
+  it('prints no type word on a null row', async () => {
+    const html = await render(VersionsList, { rows: [row({ type: null })] });
+    expect(html).not.toContain('interactive');
+    expect(html).not.toContain('auto');
+  });
+});
 
 describe('VersionsList', () => {
   it('renders no rows as the exact voice string, and no list', async () => {

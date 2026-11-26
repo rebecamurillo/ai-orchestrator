@@ -12,8 +12,13 @@
  * documents for its `SIGNALS` table.
  */
 import type { components } from '../api/schema';
+import Tag from './initiatives/Tag';
+import '../styles/initiatives.css';
 import {
   ageText,
+  cardHref,
+  cardStepText,
+  cardTypeText,
   hasLeftRule,
   isAgedNeedsYou,
   progressText,
@@ -32,27 +37,37 @@ export default function RunCard({ card }: Props) {
   const progress = progressText(card.progress, card.kind_label);
 
   return (
-    <a
+    <article
       className="run-card"
       data-testid={`board-card-${card.id}`}
       data-left-rule={hasLeftRule(card.token) ? signal : undefined}
-      href={`/workflows/${card.id}`}
     >
       <p className="run-card-head">
         <span className="run-card-token" data-signal={signal}>
           <span className="run-card-chip" />
           <span className="run-card-token-word">{card.token}</span>
         </span>
-        {card.harness ? <span className="run-card-harness">{card.harness}</span> : null}
+        <span className="run-card-type">{cardTypeText(card.template_type, card.harness)}</span>
       </p>
-      <p className="run-card-branch">{card.branch}</p>
+      <p className="run-card-branch">
+        <a className="run-card-link" href={cardHref(card)}>
+          {card.branch}
+        </a>
+      </p>
+      {card.initiative ? (
+        <p className="run-card-tag">
+          <Tag
+            label="initiative"
+            value={card.initiative.slug}
+            href={`/initiatives/${card.initiative.id}`}
+            testId="board-initiative-tag"
+          />
+        </p>
+      ) : null}
       <p className="run-card-meta">
         {card.project_name} · {card.repository_slug}
       </p>
-      <p className="run-card-step">
-        {card.current_step_label}
-        {card.status === 'cancelled' ? ' · cancelled' : ''}
-      </p>
+      <p className="run-card-step">{cardStepText(card)}</p>
       <p className="run-card-progress">{progress}</p>
       <p className="run-card-foot">
         <span className="run-card-template">
@@ -62,6 +77,6 @@ export default function RunCard({ card }: Props) {
           {ageText(card.age_seconds)}
         </span>
       </p>
-    </a>
+    </article>
   );
 }

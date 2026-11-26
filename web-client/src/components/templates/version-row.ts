@@ -16,10 +16,14 @@ export interface CalledByRef {
   pinned: boolean;
 }
 
+export type TemplateType = 'interactive' | 'auto';
+
 export interface VersionRow {
   name: string;
   version: number;
   calledBy: CalledByRef[];
   href: string;
   active: boolean;
+  /** null for another Template's row and for a version whose detail read failed. */
+  type: TemplateType | null;
 }
