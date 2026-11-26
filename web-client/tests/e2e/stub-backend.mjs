@@ -717,6 +717,47 @@ createServer(async (request, response) => {
     send(response, 200, JSON_TYPE, JSON.stringify({ items: [], next_cursor: null }));
     return;
   }
+  if (pathname === '/api/v1/initiatives' && request.method === 'GET') {
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({
+        columns: [
+          { workflow: 'spec', type: 'interactive' },
+          { workflow: 'build', type: 'auto' },
+        ],
+        counts: { ongoing: 1, need_you: 1, cancelled: 0, oldest_wait_at: new Date().toISOString() },
+        items: [
+          {
+            attention: 'your_turn',
+            id: '0193a000-0000-7000-8000-000000000001',
+            line: 'ux · your turn · 14 turns',
+            name: 'Initiative steps',
+            position: 0,
+            progress: '1 of 3 steps',
+            project_id: '0193a000-0000-7000-8000-000000000002',
+            project_name: 'Orchestrator',
+            reason: '',
+            repo_tag: ['ai-orchestrator'],
+            repository_id: '0193a000-0000-7000-8000-000000000003',
+            slug: 'initiative-steps',
+            status: 'waiting for her',
+            step: 'ux',
+            updated_at: new Date().toISOString(),
+            workflow: 'spec',
+            workflow_count: 2,
+            workflows: [
+              { workflow: 'spec', type: 'interactive', state: 'ongoing' },
+              { workflow: 'build', type: 'auto', state: null },
+            ],
+          },
+        ],
+        next_cursor: null,
+      }),
+    );
+    return;
+  }
   if (pathname === '/api/v1/projects' && request.method === 'GET') {
     send(response, 200, JSON_TYPE, JSON.stringify({ items: [], next_cursor: null }));
     return;

@@ -8,18 +8,28 @@
  * The one exception is the amber `n need you`, and it is not rendered at all when n is 0.
  * That is what makes "an empty screen has no amber pixel" true by construction (NFR-6).
  */
-export type RailItem = 'workflows' | 'runs' | 'metrics' | 'projects' | 'templates';
+export type RailItem = 'initiatives' | 'workflows' | 'runs' | 'metrics' | 'projects' | 'templates';
 
 interface Props {
   active: RailItem;
   workflows?: number;
   runs?: number;
   needsYou?: number;
+  initiatives?: number;
+  initiativesNeedYou?: number;
 }
 
-const { active, workflows = 0, runs = 0, needsYou = 0 } = Astro.props;
+const {
+  active,
+  workflows = 0,
+  runs = 0,
+  needsYou = 0,
+  initiatives = 0,
+  initiativesNeedYou = 0,
+} = Astro.props;
 
 const items: { id: RailItem; label: string; href: string; count: number }[] = [
+  { id: 'initiatives', label: 'Initiatives', href: '/initiatives', count: initiatives },
   { id: 'workflows', label: 'Workflows', href: '/', count: workflows },
   { id: 'runs', label: 'Runs', href: '/runs', count: runs },
   { id: 'metrics', label: 'Metrics', href: '/metrics', count: 0 },
@@ -50,6 +60,11 @@ const configure: { id: RailItem; label: string; href: string }[] = [
             <span class="label">{item.label}</span>
             {item.count > 0 && <span class="count">{item.count}</span>}
           </a>
+          {item.id === 'initiatives' && initiativesNeedYou > 0 && (
+            <span class="needs-you" data-testid="nav-initiatives-needs-you" data-signal="needs-you">
+              {initiativesNeedYou} need you
+            </span>
+          )}
           {item.id === 'workflows' && needsYou > 0 && (
             <span class="needs-you" data-testid="nav-needs-you" data-signal="needs-you">
               {needsYou} need you

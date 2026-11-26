@@ -114,6 +114,16 @@ the 33-character id. For `test_guide_package.py`, the following was verified:
   - the nine headings in order;
   - each pointer page has 4 body lines.
 
+A third dispatch picked up after the second was interrupted (commit `bd1c5348`). It added no
+tests, and it found the same state: `docker info` fails, and `0046` is unchanged. What it
+re-verified on both modules:
+- 15 tests collected;
+- `ruff check` and `ruff format --check` are clean;
+- `check_test_pairs.py` passes;
+- `check_guide.py` passes (34 pages);
+- the offline dry run gives the same result: 6 routes, all in the contract; 5 operation ids,
+  all in `ALLOWED_OPERATION_IDS`; the nine headings in order; 4 body lines on each pointer page.
+
 ### Defect still open from epic 6: `0046` revision id overflows `alembic_version`
 
 `backend-api/alembic/versions/0046_repository_initiative_folder.py` still declares the 33-character
