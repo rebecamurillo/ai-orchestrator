@@ -312,10 +312,18 @@ def parked_on(api: httpx.Client, run_id: str, step: str) -> dict[str, Any]:
 
 
 def your_turn(api: httpx.Client, initiative_id: str) -> dict[str, Any]:
-    """The initiative's detail once its spec Run waits for her answer."""
+    """The initiative's detail once its spec Run waits for her answer, its first turn ended.
+
+    AD-36 reads `your_turn` for a turn queued while none runs, too: the first turn, between
+    the park and its dispatch."""
+
+    def ended(detail: dict[str, Any]) -> bool:
+        turns = [t for s in detail["workflows"][0]["steps"] for t in s["turns"]]
+        return bool(turns) and all(t["status"] not in {"queued", "running"} for t in turns)
+
     return wait_for(
         lambda: detail_of(api, initiative_id),
-        lambda detail: detail["attention"] == "your_turn",
+        lambda detail: detail["attention"] == "your_turn" and ended(detail),
         f"initiative {initiative_id} reading your_turn",
     )
 
