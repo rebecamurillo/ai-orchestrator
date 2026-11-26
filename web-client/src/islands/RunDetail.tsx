@@ -258,9 +258,17 @@ export default function RunDetail({ runId }: Props) {
     return () => window.clearTimeout(clear);
   }, [detail]);
 
+  // Panels above the tabs (files by epic) fill in after the detail and push the row back out
+  // of view, so the row is re-centred on every page resize while it is promoted.
   useEffect(() => {
     if (anchored === null || activeTab !== 'steps') return;
-    document.getElementById(stepAnchorId(anchored))?.scrollIntoView({ block: 'center' });
+    const centre = () =>
+      document.getElementById(stepAnchorId(anchored))?.scrollIntoView({ block: 'center' });
+    centre();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(centre);
+    observer.observe(document.body);
+    return () => observer.disconnect();
   }, [anchored, activeTab]);
 
   // SESSION tab default (story 1-4): set once on the first detail load when terminal is present.
