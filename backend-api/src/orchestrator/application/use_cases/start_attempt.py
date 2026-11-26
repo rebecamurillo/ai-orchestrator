@@ -84,7 +84,9 @@ def start_attempt(
     with ports.uow:
         if hold_active(ports.holds, ports.clock.now()):
             return None
-        run = require_run(ports, run_id)
+        # under the Run's row lock, as `signal_run` takes it: an unlocked read let a `cancel`
+        # committed meanwhile be written back to `running`, with an attempt nothing ends
+        run = require_run(ports, run_id, lock=True)
         row = require_row(ports, run_id, seq)
         _start_run(ports, run)
         previous, row = _open_the_row(ports, row)
