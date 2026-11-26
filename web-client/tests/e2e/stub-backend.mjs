@@ -760,6 +760,77 @@ createServer(async (request, response) => {
     );
     return;
   }
+  if (/^\/api\/v1\/initiatives\/[^/]+$/.test(pathname) && request.method === 'GET') {
+    const ids = ['product', 'arch', 'ux', 'plan', 'review', 'close'];
+    const steps = ids.map((id, i) => ({
+      id,
+      kind: 'conversation',
+      status: i < 2 ? 'done' : i === 2 ? 'running' : 'planned',
+      token: i < 2 ? 'DON' : i === 2 ? 'RUN' : 'QUE',
+      line: i === 2 ? 'your turn · 14 turns' : '',
+      agent: 'analyst',
+      turns: [],
+      files: [],
+      conflict_files: [],
+    }));
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({
+        id: pathname.split('/').pop(),
+        slug: 'familio-dessin-v2',
+        name: 'Familio Dessin v2',
+        status: 'running',
+        workflow: 'spec',
+        step: 'ux',
+        current_step: 'ux',
+        current_position: 1,
+        workflow_count: 2,
+        attention: 'your_turn',
+        reason: '',
+        hub: { id: '0193a000-0000-7000-8000-0000000000a1', slug: 'hub-repo' },
+        folder: 'initiatives/familio-dessin-v2',
+        package: 'orchestrator-default',
+        sequence_fixed_at: '2026-11-20T10:00:00Z',
+        created_at: '2026-11-19T09:00:00Z',
+        project: { id: '0193a000-0000-7000-8000-0000000000b1', name: 'Familio' },
+        project_id: '0193a000-0000-7000-8000-0000000000b1',
+        project_name: 'Familio',
+        repo_tag: ['familio-web'],
+        runs: [],
+        workflows: [
+          {
+            workflow: 'spec',
+            position: 1,
+            type: 'interactive',
+            template: 'initiative-hub',
+            version: 1,
+            run_id: null,
+            status: null,
+            token: 'RUN',
+            line: 'ux · your turn',
+            steps,
+            files: [],
+          },
+          {
+            workflow: 'build',
+            position: 2,
+            type: 'auto',
+            template: 'initiative-hub-epic',
+            version: 1,
+            run_id: null,
+            status: null,
+            token: null,
+            line: 'starts when spec is done',
+            steps: [],
+            files: [],
+          },
+        ],
+      }),
+    );
+    return;
+  }
   if (pathname === '/api/v1/initiatives' && request.method === 'POST') {
     send(
       response,

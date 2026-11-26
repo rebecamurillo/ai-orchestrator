@@ -1,0 +1,18 @@
+---
+/**
+ * One initiative (story 11.1): the `InitiativePage` island reads `GET /initiatives/{id}` itself.
+ * `?workflow={n}` is a 1-based workflow position the island selects on load.
+ */
+import Shell from '../../layouts/Shell.astro';
+import InitiativePage from '../../islands/InitiativePage';
+import { parseWorkflowParam } from '../../lib/initiative/page';
+
+export const prerender = false;
+
+const { id = '' } = Astro.params;
+const initialWorkflow = parseWorkflowParam(Astro.url.searchParams.get('workflow'));
+---
+
+<Shell active="initiatives" title="INITIATIVE">
+  <InitiativePage client:load initiativeId={id} initialWorkflow={initialWorkflow} />
+</Shell>
