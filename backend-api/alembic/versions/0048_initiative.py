@@ -59,7 +59,13 @@ def upgrade() -> None:
     op.add_column("run", sa.Column("initiative_round", sa.Integer(), nullable=True))
     op.add_column("run", sa.Column("initiative_position", sa.Integer(), nullable=True))
     op.create_foreign_key(
-        op.f("fk_run_initiative_id_initiative"), "run", "initiative", ["initiative_id"], ["id"]
+        op.f("fk_run_initiative_id_initiative"),
+        "run",
+        "initiative",
+        ["initiative_id"],
+        ["id"],
+        deferrable=True,
+        initially="DEFERRED",
     )
     op.create_check_constraint(
         op.f("ck_run_initiative_keys_together"),

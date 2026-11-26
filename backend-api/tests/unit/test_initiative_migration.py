@@ -39,6 +39,7 @@ def test_the_upgrade_creates_both_tables_and_the_run_keys() -> None:
         "op.add_column('run', sa.Column('initiative_round'",
         "op.add_column('run', sa.Column('initiative_position'",
         "fk_run_initiative_id_initiative",
+        "deferrable=True, initially='DEFERRED'",
         "ck_run_initiative_keys_together",
         "'uq_initiative_repository_slug_open'",
         "'uq_run_initiative_key'",

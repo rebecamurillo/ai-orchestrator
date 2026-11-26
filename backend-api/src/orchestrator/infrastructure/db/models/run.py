@@ -171,8 +171,12 @@ class RunRow(Base):
     after_run_ids: Mapped[list[UUID]] = mapped_column(
         ARRAY(Uuid()), server_default=text("'{}'::uuid[]")
     )
+    #: Deferred: `create_initiative` adds the spec Run before its initiative, in one
+    #: transaction (`create_run`'s `before_commit`).
     initiative_id: Mapped[UUID | None] = mapped_column(
-        Uuid(), ForeignKey("initiative.id"), nullable=True
+        Uuid(),
+        ForeignKey("initiative.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     initiative_round: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     initiative_position: Mapped[int | None] = mapped_column(Integer(), nullable=True)
