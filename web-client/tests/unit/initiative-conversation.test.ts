@@ -154,3 +154,46 @@ describe('Conversation', () => {
     expect(screen.queryByTestId('ini-message')).toBeNull();
   });
 });
+
+describe('Conversation forced-start line (story 11.4)', () => {
+  const mountForced = (prevLine: string, prevToken: 'SKP' | 'DON' = 'SKP', first = false) => {
+    const prev = step('ux', { token: prevToken, line: prevLine });
+    const tech = convStep({ id: 'tech' });
+    const steps = first ? [tech] : [prev, tech];
+    const w = workflow('spec', 1, { steps });
+    render(
+      createElement(Conversation, {
+        detail: detail(),
+        workflow: w,
+        step: tech,
+        isCurrent: false,
+        onSelectStep: vi.fn(),
+      }),
+    );
+  };
+
+  it('opens with the mechanism line, before the turns', () => {
+    mountForced('skipped, forced · 21:44');
+    const line = screen.getAllByRole('status')[0];
+    expect(line.textContent).toBe(
+      'ux skipped, forced at 21:44 · its files on spec/familio-dessin-v2 are what tech reads',
+    );
+    const turns = document.querySelector('ol.ini-turns') as HTMLElement;
+    expect(line.compareDocumentPosition(turns) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('drops the time when the line has none', () => {
+    mountForced('skipped, forced');
+    expect(screen.getAllByRole('status')[0].textContent).toBe(
+      'ux skipped, forced · its files on spec/familio-dessin-v2 are what tech reads',
+    );
+  });
+
+  it('renders nothing when the previous step is not SKP or tech is first', () => {
+    mountForced('done', 'DON');
+    expect(document.body.textContent).not.toContain('skipped, forced');
+    cleanup();
+    mountForced('skipped, forced · 21:44', 'SKP', true);
+    expect(document.body.textContent).not.toContain('skipped, forced');
+  });
+});

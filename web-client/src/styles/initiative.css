@@ -322,3 +322,92 @@ button.ini-file {
 .ini-link-workflow {
   color: var(--color-text-secondary);
 }
+
+.ini-scell-item {
+  position: relative;
+}
+
+.ini-scell-action {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.ini-plane {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ini-plane-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--color-surface-inset);
+  opacity: 0.82;
+}
+
+.ini-plane-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 520px;
+  padding: var(--space-5);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-line-strong);
+  color: var(--color-text);
+}
+
+.ini-plane-panel p,
+.ini-plane-panel ul {
+  margin: 0;
+}
+
+.ini-plane-head {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-eyebrow);
+  letter-spacing: var(--type-eyebrow-tracking);
+}
+
+.ini-plane-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.ini-actions button,
+.ini-plane-actions button,
+.ini-scell-action {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  color: var(--color-text-secondary);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.ini-actions button,
+.ini-plane-actions button {
+  font-size: var(--type-control);
+}
+
+.ini-actions button.primary,
+.ini-plane-actions button.primary {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.ini-actions button.danger,
+.ini-plane-actions button.danger {
+  border-color: var(--color-signal-failed);
+  color: var(--color-signal-failed);
+}
+
+.ini-plane-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

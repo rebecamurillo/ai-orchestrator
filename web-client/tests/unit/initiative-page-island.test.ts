@@ -309,3 +309,85 @@ describe('InitiativePage right column', () => {
     expect(screen.getByTestId('ini-files-1-ux').getAttribute('data-selected')).toBeNull();
   });
 });
+
+describe('InitiativePage forced start and cancel (story 11.4)', () => {
+  const parkedDetail = (over: Partial<Detail> = {}): Detail => {
+    const d = detail(over);
+    d.workflows[0].steps = d.workflows[0].steps.map((s) =>
+      s.id === 'ux' ? { ...s, park_kind: 'conversation', park_seq: 7, run_id: 'run-s' } : s,
+    );
+    return d;
+  };
+
+  it('shows Start now on the next step; the modal opens and survives a poll', async () => {
+    GET.mockResolvedValue(ok(parkedDetail()));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-force-plan')).toBeTruthy());
+    expect(document.querySelectorAll('[data-testid^="ini-force-"]')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('ini-force-plan'));
+    expect(screen.getByRole('dialog', { name: 'START PLAN NOW' })).toBeTruthy();
+    expect(screen.getByRole('dialog').textContent).toContain(
+      'build cannot start before spec passes it',
+    );
+    act(() => forceTick());
+    await waitFor(() => expect(initiativeCalls()).toHaveLength(2));
+    expect(screen.getByRole('dialog', { name: 'START PLAN NOW' })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(POST).not.toHaveBeenCalled();
+  });
+
+  it('keeps the modal open when a poll removes the target', async () => {
+    GET.mockResolvedValueOnce(ok(parkedDetail()));
+    GET.mockResolvedValue(ok(detail()));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-force-plan')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('ini-force-plan'));
+    act(() => forceTick());
+    await waitFor(() => expect(screen.queryByTestId('ini-force-plan')).toBeNull());
+    expect(screen.getByRole('dialog', { name: 'START PLAN NOW' })).toBeTruthy();
+  });
+
+  it('shows no Start now when the selected workflow is not the current one', async () => {
+    GET.mockResolvedValue(ok(parkedDetail()));
+    mount(2);
+    await waitFor(() => expect(screen.getByTestId('ini-header')).toBeTruthy());
+    expect(document.querySelectorAll('[data-testid^="ini-force-"]')).toHaveLength(0);
+  });
+
+  it('AC6: the header carries Cancel initiative and opens the modal', async () => {
+    GET.mockResolvedValue(ok(detail()));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-cancel')).toBeTruthy());
+    expect(screen.getByTestId('ini-cancel').textContent).toBe('Cancel initiative');
+    fireEvent.click(screen.getByTestId('ini-cancel'));
+    expect(screen.getByRole('dialog', { name: 'CANCEL INITIATIVE' })).toBeTruthy();
+    fireEvent.click(screen.getByText('Keep it'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it.each(['done', 'cancelled'] as const)('AC6: no cancel control when %s', async (status) => {
+    GET.mockResolvedValue(ok(detail({ status })));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-header')).toBeTruthy());
+    expect(screen.queryByTestId('ini-cancel')).toBeNull();
+  });
+
+  it('AC7: a cancelled initiative is a read-only record', async () => {
+    const d = parkedDetail({
+      status: 'cancelled',
+      step: 'ux',
+      cancelled_at: '2026-11-22T21:50:00Z',
+    } as Partial<Detail>);
+    GET.mockResolvedValue(ok(d));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-header')).toBeTruthy());
+    const header = screen.getByTestId('ini-header');
+    expect(header.textContent).toContain('CAN');
+    expect(header.textContent).toContain('cancelled at ux · 21:50');
+    expect(screen.queryByTestId('ini-message')).toBeNull();
+    expect(screen.queryByTestId('ini-send')).toBeNull();
+    expect(document.querySelectorAll('[data-testid^="ini-force-"]')).toHaveLength(0);
+    expect(screen.queryByTestId('ini-cancel')).toBeNull();
+  });
+});

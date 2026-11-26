@@ -17,6 +17,8 @@ const mount = (over: { current?: string | null; onSelect?: (id: string) => void 
       currentStepId: over.current === undefined ? 'ux' : over.current,
       selectedStepId: 'ux',
       onSelect: over.onSelect ?? (() => {}),
+      forceStepId: null,
+      onForce: vi.fn(),
     }),
   );
 };
@@ -63,6 +65,8 @@ describe('StepsStrip', () => {
         currentStepId: 'b',
         selectedStepId: null,
         onSelect: () => {},
+        forceStepId: null,
+        onForce: vi.fn(),
       }),
     );
     expect(screen.getByTestId('ini-step-a').querySelector('s')?.textContent).toBe('a');
@@ -79,5 +83,40 @@ describe('StepsStrip', () => {
     mount({ onSelect });
     fireEvent.click(screen.getByTestId('ini-step-product'));
     expect(onSelect).toHaveBeenCalledWith('product');
+  });
+});
+
+describe('StepsStrip Start now (story 11.4)', () => {
+  const mountForce = (forceStepId: string | null, onForce = vi.fn()) => {
+    const d = detail();
+    render(
+      createElement(StepsStrip, {
+        workflow: d.workflows[0],
+        currentStepId: 'ux',
+        selectedStepId: 'ux',
+        onSelect: () => {},
+        forceStepId,
+        onForce,
+      }),
+    );
+    return onForce;
+  };
+
+  it('renders one action beside, not inside, the cell button and calls onForce', () => {
+    const onForce = mountForce('plan');
+    const actions = document.querySelectorAll('[data-testid^="ini-force-"]');
+    expect(actions).toHaveLength(1);
+    const action = screen.getByTestId('ini-force-plan');
+    expect(action.tagName).toBe('BUTTON');
+    expect(action.textContent).toBe('Start now');
+    expect(action.closest('[data-testid="ini-step-plan"]')).toBeNull();
+    expect(action.closest('li')).toBe(screen.getByTestId('ini-step-plan').closest('li'));
+    fireEvent.click(action);
+    expect(onForce).toHaveBeenCalledWith('plan');
+  });
+
+  it('renders none without a forceStepId', () => {
+    mountForce(null);
+    expect(document.querySelectorAll('[data-testid^="ini-force-"]')).toHaveLength(0);
   });
 });

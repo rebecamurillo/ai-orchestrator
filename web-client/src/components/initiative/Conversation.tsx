@@ -5,6 +5,7 @@
  */
 import { useState } from 'react';
 
+import { forcedLine } from '../../lib/initiative/actions';
 import {
   agentAttribution,
   answeringLine,
@@ -62,6 +63,7 @@ export default function Conversation({ detail, workflow, step, isCurrent, onSele
   const yourTurn = yourTurnLine(detail, step, isCurrent);
   const notClosed = notClosedLine(step, isCurrent);
   const blocked = blockedLine(detail, step, isCurrent);
+  const forced = forcedLine(workflow.steps[index - 1] ?? null, step, detail.slug);
 
   return (
     <>
@@ -69,6 +71,7 @@ export default function Conversation({ detail, workflow, step, isCurrent, onSele
         <span>{conversationHead(step)}</span>
         <span>{roundLine(step, detail)}</span>
       </h3>
+      {forced ? <Line text={forced} /> : null}
       <ol className="ini-turns">
         {shown.map((t) => (
           <li className="ini-turn" key={t.attempt_id} data-testid={`ini-turn-${t.n}`}>

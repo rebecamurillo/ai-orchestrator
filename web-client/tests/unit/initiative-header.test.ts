@@ -67,3 +67,14 @@ describe('InitiativeHeader', () => {
     expect(html(d)).toContain('folder initiatives/familio-dessin-v2');
   });
 });
+
+describe('InitiativeHeader cancelled (story 11.4)', () => {
+  it('reads CAN and the cancelled state line', () => {
+    const out = html(
+      detail({ status: 'cancelled', step: 'ux', cancelled_at: '2026-11-22T21:50:00Z' } as never),
+    );
+    expect(out).toContain('CAN');
+    expect(out).toContain('cancelled at ux · 21:50');
+    expect(out).not.toContain('running · spec');
+  });
+});

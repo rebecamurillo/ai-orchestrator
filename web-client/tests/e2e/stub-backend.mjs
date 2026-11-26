@@ -804,7 +804,12 @@ createServer(async (request, response) => {
     });
     return;
   }
-  if (/^\/api\/v1\/initiatives\/[^/]+$/.test(pathname) && request.method === 'GET') {
+  // start-next and cancel answer the same detail body as the GET (story 11.4).
+  if (
+    (/^\/api\/v1\/initiatives\/[^/]+$/.test(pathname) && request.method === 'GET') ||
+    (/^\/api\/v1\/initiatives\/[^/]+\/(start-next|cancel)$/.test(pathname) &&
+      request.method === 'POST')
+  ) {
     const ids = ['product', 'arch', 'ux', 'plan', 'review', 'close'];
     const steps = ids.map((id, i) => ({
       id,
@@ -820,6 +825,7 @@ createServer(async (request, response) => {
       ...(id === 'ux'
         ? {
             park_kind: 'conversation',
+            park_seq: 7,
             run_id: '0193a000-0000-7000-8000-0000000000c1',
             file: 'DESIGN.md',
             files: [

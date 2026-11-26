@@ -7,9 +7,18 @@ interface Props {
   currentStepId: string | null;
   selectedStepId: string | null;
   onSelect: (stepId: string) => void;
+  forceStepId: string | null;
+  onForce: (stepId: string) => void;
 }
 
-export default function StepsStrip({ workflow, currentStepId, selectedStepId, onSelect }: Props) {
+export default function StepsStrip({
+  workflow,
+  currentStepId,
+  selectedStepId,
+  onSelect,
+  forceStepId,
+  onForce,
+}: Props) {
   return (
     <section className="ini-strip" data-testid="ini-steps">
       <p className="ini-section-head">
@@ -20,7 +29,7 @@ export default function StepsStrip({ workflow, currentStepId, selectedStepId, on
         {workflow.steps.map((s, i) => {
           const current = s.id === currentStepId;
           return (
-            <li key={s.id}>
+            <li key={s.id} className="ini-scell-item">
               <button
                 type="button"
                 className="ini-scell"
@@ -49,6 +58,16 @@ export default function StepsStrip({ workflow, currentStepId, selectedStepId, on
                   {s.line}
                 </span>
               </button>
+              {s.id === forceStepId ? (
+                <button
+                  type="button"
+                  className="ini-scell-action"
+                  data-testid={`ini-force-${s.id}`}
+                  onClick={() => onForce(s.id)}
+                >
+                  Start now
+                </button>
+              ) : null}
             </li>
           );
         })}

@@ -2,6 +2,7 @@
 import type { ReactNode } from 'react';
 
 import { tokenSignal } from '../../lib/board/format';
+import { cancelledStateLine } from '../../lib/initiative/actions';
 import {
   headerMetaLine,
   headerPositionLine,
@@ -29,7 +30,9 @@ export default function InitiativeHeader({ detail, actions }: Props) {
           {token}
         </span>
         <h1 className="ini-title">{detail.slug}</h1>
-        <p className="ini-state">{headerStateLine(detail)}</p>
+        <p className="ini-state">
+          {detail.status === 'cancelled' ? cancelledStateLine(detail) : headerStateLine(detail)}
+        </p>
         <p className="ini-position">{headerPositionLine(detail)}</p>
         {actions ? <div className="ini-actions">{actions}</div> : null}
       </div>

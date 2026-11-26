@@ -26,3 +26,23 @@ test('a file opens read-only from the right column', async ({ page }) => {
   await expect(page.getByTestId('wf-artifact-modal')).toBeVisible();
   await expect(page.getByTestId('wf-artifacts-edit')).toHaveCount(0);
 });
+
+/** Story 11.4: the forced-start confirmation opens on Start now and Escape dismisses it. */
+test('Start now opens its confirmation and Escape closes it', async ({ page }) => {
+  await page.goto('/initiatives/0193a000-0000-7000-8000-0000000000f1');
+  await page.getByTestId('ini-force-plan').click();
+  await expect(page.getByRole('dialog')).toContainText('START PLAN NOW');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+/** Story 11.4: the cancel confirmation lists what is removed and closes once confirmed. */
+test('Cancel initiative lists four lines and confirms', async ({ page }) => {
+  await page.goto('/initiatives/0193a000-0000-7000-8000-0000000000f1');
+  await page.getByTestId('ini-cancel').click();
+  const plane = page.getByRole('dialog');
+  await expect(plane).toContainText('CANCEL INITIATIVE');
+  await expect(plane.locator('li')).toHaveCount(4);
+  await page.getByTestId('ini-cancel-confirm').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
