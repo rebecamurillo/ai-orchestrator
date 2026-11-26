@@ -37,4 +37,5 @@ export interface RepositoryRow {
   //: with neither field, and that frozen fixture must keep compiling.
   methodNeedsInit?: boolean;
   run?: RepositoryRun | null;
+  initiativeFolder?: string;
 }

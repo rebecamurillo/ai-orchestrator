@@ -17,10 +17,14 @@
  * frontmatter re-fetches the detail on every render, so the next natural render already
  * shows the new result.
  */
+import { actions } from 'astro:actions';
+
 import type { components } from '../../api/schema';
 import MetricHint from '../../islands/MetricHint';
 import Button from '../../components/Button.astro';
 import EmptyState from '../../components/EmptyState.astro';
+import PackageSection from '../../components/projects/PackageSection.astro';
+import type { PackageOut } from '../../lib/projects/package';
 import ProjectInitiatives from '../../components/projects/ProjectInitiatives.astro';
 import type { InitiativeRow } from '../../lib/initiatives/format';
 import ProjectListRow from '../../components/ProjectListRow.astro';
@@ -82,6 +86,23 @@ if (project) {
   }
 }
 
+let pkg: PackageOut | null | 'unavailable' = 'unavailable';
+if (project) {
+  try {
+    const { data, error, response } = await backend().GET('/api/v1/projects/{project_id}/package', {
+      params: { path: { project_id: project.id } },
+    });
+    if (!error && Array.isArray(data?.sequence)) pkg = data;
+    else if (response?.status === 404) pkg = null;
+  } catch {
+    pkg = 'unavailable';
+  }
+}
+const refusal = {
+  install: Astro.getActionResult(actions.packages.install)?.error?.message ?? null,
+  remove: Astro.getActionResult(actions.packages.remove)?.error?.message ?? null,
+};
+
 //: `Repository.clone_check.bmad_version`'s own two "not installed yet" tokens (FR-30) —
 //: the row's own `Initialise repository` control shows itself for exactly these two.
 const NEEDS_INIT_METHODS = new Set(['missing', 'outdated']);
@@ -119,6 +140,7 @@ function repositoryRow(
     output: repository.clone_check.output,
     hint: repository.clone_check_hint,
     verifySkipped: repository.verify_skipped,
+    initiativeFolder: repository.initiative_folder,
     methodNeedsInit: NEEDS_INIT_METHODS.has(repository.clone_check.bmad_version ?? ''),
     run,
   };
@@ -249,6 +271,13 @@ function pluralize(count: number, noun: string): string {
 
         <SectionHead label="REPOSITORIES" />
         <RepositoriesTable projectId={project.id} repositories={repositoryRows} />
+
+        <PackageSection
+          projectId={project.id}
+          pkg={pkg}
+          repositories={project.repositories.map((r) => ({ id: r.id, slug: r.slug }))}
+          refusal={refusal}
+        />
 
         <SectionHead label="SETTINGS" />
         <ProjectSettings envVars={project.env_vars} />

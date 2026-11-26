@@ -61,7 +61,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 
-import { PROJECTS_BY_ID, RECHECK_REPOSITORY_ID } from './projects-fixtures.mjs';
+import { MIXED_ID, PROJECTS_BY_ID, RECHECK_REPOSITORY_ID } from './projects-fixtures.mjs';
 import { TEMPLATES } from './templates-fixtures.mjs';
 
 const PORT = Number(process.env.STUB_BACKEND_PORT ?? 8788);
@@ -276,6 +276,8 @@ function simulateCloneCheck(repository) {
     hint: repository.clone_check_hint,
   };
 }
+
+const packageOverrides = {};
 
 function readJsonBody(request) {
   return new Promise((resolve, reject) => {
@@ -768,6 +770,64 @@ createServer(async (request, response) => {
     return;
   }
   const packageMatch = /^\/api\/v1\/projects\/([^/]+)\/package$/.exec(pathname);
+  if (packageMatch && request.method === 'PUT') {
+    const body = await readJsonBody(request);
+    if (!projects[packageMatch[1]]) {
+      send(
+        response,
+        404,
+        'application/problem+json',
+        JSON.stringify({ type: 'about:blank', title: 'Not Found', status: 404 }),
+      );
+      return;
+    }
+    packageOverrides[packageMatch[1]] = {
+      path: body.path,
+      ref: body.ref,
+      repository_id: body.repository_id,
+    };
+    send(response, 200, JSON_TYPE, JSON.stringify({ project_id: packageMatch[1], ...body }));
+    return;
+  }
+  if (packageMatch && request.method === 'DELETE') {
+    if (packageMatch[1] === MIXED_ID) {
+      send(
+        response,
+        409,
+        'application/problem+json',
+        JSON.stringify({
+          type: 'about:blank',
+          title: 'Conflict',
+          status: 409,
+          detail:
+            'refused: 2 open initiatives use this package — familio-dessin-v2, familio-chores-v3',
+        }),
+      );
+      return;
+    }
+    response.writeHead(204);
+    response.end();
+    return;
+  }
+  const folderMatch = /^\/api\/v1\/repositories\/([^/]+)\/initiative-folder$/.exec(pathname);
+  if (folderMatch && request.method === 'PUT') {
+    const body = await readJsonBody(request);
+    for (const project of Object.values(projects)) {
+      const repository = project.repositories.find((r) => r.id === folderMatch[1]);
+      if (repository) {
+        repository.initiative_folder = body.initiative_folder;
+        send(response, 200, JSON_TYPE, JSON.stringify(repository));
+        return;
+      }
+    }
+    send(
+      response,
+      404,
+      'application/problem+json',
+      JSON.stringify({ type: 'about:blank', title: 'Not Found', status: 404 }),
+    );
+    return;
+  }
   if (packageMatch && request.method === 'GET') {
     if (!projects[packageMatch[1]]) {
       send(
@@ -798,6 +858,7 @@ createServer(async (request, response) => {
         path: 'package',
         project_id: packageMatch[1],
         ref: 'main',
+        ...packageOverrides[packageMatch[1]],
         repository: {
           default_branch: 'main',
           id: '0193a000-0000-7000-8000-0000000000f3',

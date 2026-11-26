@@ -4,7 +4,13 @@
  * here does not exist as far as a form is concerned.
  */
 import { login } from './login';
+import { install, remove } from './packages';
 import { save } from './projects';
-import { init, recheck } from './repositories';
+import { init, initiativeFolder, recheck } from './repositories';
 
-export const server = { login, repositories: { recheck, init }, projects: { save } };
+export const server = {
+  login,
+  repositories: { recheck, init, initiativeFolder },
+  projects: { save },
+  packages: { install, remove },
+};

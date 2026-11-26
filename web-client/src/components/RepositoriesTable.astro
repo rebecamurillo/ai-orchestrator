@@ -34,6 +34,7 @@ const NONE_DECLARED = '— none declared';
  * `id` here keeps it: the two query params combine into one reference that still carries both.
  */
 const recheckAction = `?id=${projectId}&${actions.repositories.recheck.toString().slice(1)}`;
+const folderAction = `?id=${projectId}&${actions.repositories.initiativeFolder.toString().slice(1)}`;
 const initAction = `?id=${projectId}&${actions.repositories.init.toString().slice(1)}`;
 
 function cloneCheckText(row: RepositoryRow): string {
@@ -99,6 +100,7 @@ function initControl(row: RepositoryRow): InitControl | null {
           <th scope="col">method</th>
           <th scope="col">quality gate</th>
           <th scope="col">test globs</th>
+          <th scope="col">initiative folder</th>
           <th scope="col">clone check</th>
           <th scope="col">status</th>
         </tr>
@@ -143,6 +145,19 @@ function initControl(row: RepositoryRow): InitControl | null {
               </td>
               <td>{row.qualityGateCommand || NONE_DECLARED}</td>
               <td>{row.testGlobs.length > 0 ? row.testGlobs.join(', ') : NONE_DECLARED}</td>
+              <td>
+                <form method="POST" action={folderAction}>
+                  <input type="hidden" name="repositoryId" value={row.id} />
+                  <input
+                    name="initiativeFolder"
+                    value={row.initiativeFolder ?? 'initiatives'}
+                    aria-label={`initiative folder of ${row.slug}`}
+                    data-testid={`projects-folder-${row.slug}`}
+                    required
+                  />
+                  <Button type="submit" label="save" testId={`projects-folder-${row.slug}-save`} />
+                </form>
+              </td>
               <td data-signal={row.status === 'failed' ? 'failed' : undefined}>
                 {cloneCheckText(row)}
               </td>
@@ -155,7 +170,7 @@ function initControl(row: RepositoryRow): InitControl | null {
           return [
             cells,
             <tr class="inset-row">
-              <td colspan={7}>
+              <td colspan={8}>
                 <CommandBlock label="clone check output" command={outputBlock(row)} />
                 <form method="POST" action={recheckAction}>
                   <input type="hidden" name="repositoryId" value={row.id} />
