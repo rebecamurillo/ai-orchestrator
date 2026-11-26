@@ -1,96 +1,95 @@
-# Test Automation Summary — orchestrator-initiative-steps / epic-7-initiative-record
+# Test Automation Summary — orchestrator-initiative-steps / epic-8-initiative-advance
 
-Generated: 2026-11-25. Dispatched with an empty story id, so this covers the whole epic.
-Spec: `initiatives/orchestrator-initiative-steps/epic-7-initiative-record/SPEC.md` (relative to the hub).
-Stories: 1–6 (through commit `8f89a177`).
-Previous summary (epic-6-package): in git history at `69f3dfed`.
+Generated: 2026-11-26. Dispatched with an empty story id, so this covers the whole epic.
+Spec: `initiatives/orchestrator-initiative-steps/epic-8-initiative-advance/SPEC.md` (relative to the hub).
+Stories: 1–4 (through commit `e2a7367e`).
+Previous summary (epic-7-initiative-record): in git history at `ef593633`.
 
-Framework: pytest + httpx (`backend-api/tests/e2e`, the `make e2e-api` gate). The epic changes no UI
-(web pages are epics 10 and 11; its only web change is the regenerated `schema.d.ts`), so no
-Playwright test is added.
+Framework: pytest + httpx (`backend-api/tests/e2e`, the `make e2e-api` gate). The epic is backend
+only and changes no UI, so no Playwright test is added.
 
-The stories' own tests are unit tests over the shared fakes. The new module covers the same
-operations on the running stack: real HTTP, Postgres and its partial unique indexes, the real git
-adapter pushing and deleting `spec/{slug}` on a bare origin, and the real engine walking the spec
-Run to a `conversation` stop on the scripted `fake` harness. No existing test file was touched, and
-no shipped template or hub `package/` is read. Every package (`e2e-init-<hex>`), slug and origin is
-fresh. Origins are written through the container first (as `talking_origin` does). Every initiative
-a test creates is cancelled when the test ends.
+The stories' own tests are unit tests over the shared fakes. The new module drives real initiatives
+on the running stack:
+- the real engine walks the spec Run to `done`;
+- the real `advance_initiative` workflow runs after the commit;
+- Postgres stores the gate's verdict;
+- the real git adapter merges, pushes `main`, deletes `spec/{slug}` and creates `feat/{slug}` on a
+  bare origin.
+
+No existing test file was touched, and no shipped template or hub `package/` is read (hard rule 6).
+Every package, slug and origin is fresh. The fake harness is scripted per dispatch:
+- `.fake-harness/default.yaml` for the spec turns and the gate;
+- `.fake-harness/merge/` for the merge agent;
+- `.fake-harness/resolve/` for the merge-session turn (its message carries the sentence the fake
+  harness keys a scenario by).
 
 ## Generated Tests
 
-### API tests — `backend-api/tests/e2e/test_initiatives.py` (14 tests)
+### API tests — `backend-api/tests/e2e/test_initiative_advance.py` (7 tests)
 
-- **Create (CAP-3, CAP-5):**
-  - [x] `POST /initiatives` answers 201 with the detail.
-    - `spec/{slug}` exists on the origin at `main`'s sha.
-    - `round` is 1. `project`, `hub`, `folder` (`initiatives/{slug}`) and `package` are set, and the
-      status is `running`.
-    - There is one shown workflow (the merge entry is `shown_as: step`). Its steps are
-      `intake, product, gate, merge` at the frozen `{package}.spec` v1.
-    - The spec Run has keys `(round 1, position 0)` and the inputs `slug`, `branch`, `first_turn`
-      and the bound `initiative_folder`.
-  - [x] A held slug is refused 409 naming `{holder name} ({holder id})`. After a cancel (no cleanup
-    error), the same name creates a new initiative.
-  - [x] A `spec/{slug}` already on the origin is refused 409 with the exact text. The branch is left
-    untouched and no initiative is stored.
-  - [x] Other refusals:
-    - an unknown project is 404;
-    - a project with no package is 409 `no package installed on project …`;
-    - a blank name is 422;
-    - an unknown body key is 422.
-
-    Nothing is stored.
-- **Reads over a walked Run (CAP-2, CAP-4, CAP-6):**
-  - [x] At its first conversation stop the spec Run reads `running` with attention `your_turn`.
-    - `step` and `current_step` are `intake`. `park_seq` is the Run's, and `repo_tag` is the hub's
-      slug.
-    - The `intake` step is `running`, `park_kind` `conversation`, and holds one operator turn, done,
-      with the first message. `product` is `planned`. `owners` is `[]`, and `sessions` starts with
-      the Run.
-    - `GET /runs/{id}/detail` carries the `initiative` tag (`position` 1, `workflow_count` 1) and
-      `template_type` `interactive`.
-    - On the board, the Run is in `running`, not in Needs-you, and its card carries `attention`,
-      `template_type` and the tag.
-  - [x] The lists:
-    - `?project_id=` narrows to the project;
-    - `ongoing` keeps the open initiative;
-    - `needs_you` is empty for a `your_turn` initiative;
-    - `all` adds the cancelled one;
-    - `GET /projects/{id}/initiatives` equals the narrowed list;
-    - `columns`, `counts.cancelled` and the row's `workflows` foot are correct, and `next_cursor` is
-      null.
-  - [x] Unknown initiative or project: 404. A bad `filter` or a malformed id: 422.
-  - [x] `?opened=true` sets `last_opened_at`. A plain read writes nothing, and a second open does
-    not move it backwards.
-- **start-next (CAP-5):**
-  - [x] A stale `park_seq` is 409, and the stop is unchanged.
-  - [x] With the current one it answers 200. The real walk skips `intake` (detail token `SKP`) and
-    parks on `product`.
-  - [x] From `product` (next is the gate) it is 409 with the exact "never forced" text.
-  - [x] An unknown body key or a missing `park_seq` is 422. An unknown initiative is 404. A
-    cancelled one is 409 `no conversation step is open`.
-- **Cancel (CAP-3, CAP-5):**
-  - [x] Cancelling a parked initiative answers 200 `cancelled` with no cleanup error. The spec Run
-    reads `cancelled`, and `spec/{slug}` is gone from the origin.
-  - [x] A second cancel is 409 `already cancelled`. An unknown initiative is 404.
-- **Package delete (CAP-1):**
-  - [x] `DELETE …/package` is 409 `refused: 1 open initiatives use this package — {slug}` while the
-    initiative is open, and the record stays. After the cancel, the delete answers 204.
-- **Surface (B10):**
-  - [x] All six initiative operations need the bearer (401).
-  - [x] `tools/list` has no initiative tool. `set_initiative_folder`, which comes from epic 6, is
-    the only tool with "initiative" in its name.
+- **A failing gate (CAP-1, CAP-2, CAP-3):**
+  - [x] Gate `status: fail`, `owners: [intake]`. Checked:
+    - the spec Run ends `done`;
+    - the gate attempt stores `verdict_word` `fail`, `verdict_fields.owners` and the body as
+      `verdict_text`, without the frontmatter;
+    - the advance creates the round-2 spec Run at `(2, 0)` with `round_steps` `intake`,
+      `first_turn` = the body and `branch` `spec/{slug}`;
+    - the initiative's `round` is 2 and no merge Run exists;
+    - the round-2 intake turn reads `author` `gate`, `defects` 2, `owner` `intake`.
+- **A pass whose build pre-flight fails (CAP-3):**
+  - [x] Gate `pass`, and the build loops over a missing `{initiative_folder}/epics.yaml`. The result
+    is round 2 for the tech step, with `first_turn` naming `epics.yaml`, and no merge Run.
+- **A pass, then merge, then build (CAP-3, CAP-5):**
+  - [x] The merge Run at `(1, 1)`:
+    - `interactive`, `branch` `main`, with the bound `initiative_folder` `initiatives`;
+    - the spec Run's budget;
+    - ends `done`.
+  - [x] On the origin, after the merge:
+    - `main` holds the spec branch's work;
+    - `spec/{slug}` is deleted;
+    - `feat/{slug}` sits at `main`'s tip.
+  - [x] The build Run at `(1, 2)`:
+    - carries budget $5.00, `branch` `feat/{slug}` and `initiative_folder` `initiatives/{slug}`;
+    - receives no null-default `plan_model`/`review_model`;
+    - ends `done`, and no fourth Run is created.
+- **No project budget (CAP-3):**
+  - [x] With `default_budget_usd` null, the merge ends `done`. The initiative then reads
+    `waiting for her` · `no project budget`, with no build and no `feat/{slug}`.
+  - [x] `PUT …/run-defaults` with $5.00 retries the advance: the build is created and
+    `feat/{slug}` appears at `main`'s tip.
+- **A merge conflict (CAP-4):**
+  - [x] `main` and `spec/{slug}` both change `CONFLICT.md`. The merge Run parks `merge_conflict`
+    with `merge conflict: spec/{slug} into main`, and:
+    - a `scope: step` session is open;
+    - `continue`, `retry` and `cancel` are admitted;
+    - the Run is held on the `walk` lane in `GET /queue`;
+    - the initiative's merge step lists `CONFLICT.md` in `conflict_files`.
+  - [x] A message dispatches a turn whose prompt opens with the merge agent's skill
+    (`staged-review`, not `senior-session`).
+  - [x] The turn concludes the merge. The machine then sends `continue` ("merge resumed after the
+    agent's turn"), and the row ends `done · already merged`. The resolved file reaches `main`,
+    `spec/{slug}` is deleted, and the build is created.
+- **A conflict outside an initiative (CAP-4):**
+  - [x] A plain Run's `merge_conflict` opens no session, does not admit `continue`, and refuses a
+    `continue` with 409. `retry` and `cancel` stay admitted.
+- **The `git.push` keys (CAP-3):**
+  - [x] `POST /templates/{name}/validate`:
+    - admits `allow_default_branch` and `retry {max, sync_first}` in an `interactive` template;
+    - refuses `allow_default_branch` in an `auto` template (`git.push allow_default_branch needs
+      type: interactive`);
+    - refuses `retry` on `git.commit` (`unknown key`).
 
 Not covered end to end (unit tests only):
-- `waiting for her` from a real `blocked` attention (failed turn, `step not closed`, a blocked step
-  word), and the unmapped-word `failed`.
-- Turns across rounds, `owners` from `round_steps`, files per step and their `changed` mark (no
-  reopen or gate-fail round exists before epics 8 and 9).
-- A merge `merge_conflict` stop and `conflict_files`. The build workflow line with a PR link.
-- A cancel whose branch delete fails (`branch_cleanup_error`) and its retry.
-- Rollback of a create when `create_run` refuses after the branch was pushed.
-- The migration's downgrade.
+- the start-up sweep re-enqueuing an unconsumed advance after a crash (`make durability` territory);
+- a cancelled initiative's or a superseded round's advance being consumed with nothing created;
+- `advance failed: …` on a raising read;
+- `gate owner … is not a step of …`, `gate failed with no owner` and an undeclared gate word;
+- `feat/{slug}` already on the origin (fast-forward, or `exists and is not from main`);
+- a non-spec-file pre-flight block (`preflight: harness: …`);
+- the `git.push` retry path (rejected push, then sync, then push) and `sync before retry failed`;
+- `continue` while the worktree is still conflicted, and `default_autonomy` / `default_senior_model`
+  forwarding;
+- hard rule 7's text in `AGENTS.md` (`tests/unit/test_agents_hard_rule_7.py`).
 
 ## Results
 
@@ -99,32 +98,44 @@ Not covered end to end (unit tests only):
 disposable `aio-e2e` stack. No running instance was touched (hard rule 9).
 
 What was verified:
-- `pytest tests/e2e/test_initiatives.py --collect-only`: 14 tests collected.
+- `pytest tests/e2e/test_initiative_advance.py --collect-only`: 7 tests collected.
 - `ruff check` and `ruff format --check` on the new file: clean.
 - `make lint` (whole repository): exit 0.
+
+The fixture's assumptions that only a run can confirm:
+- the fake harness's `commit: true` concludes the in-progress merge in the merge worktree;
+- `staged-review` and `spec-gate` are in the e2e image's skills manifest (the installed-skill
+  pre-flight line);
+- a bare `run: "true"` row is accepted in a `for_each` body.
+
+If one of them is wrong, the failing assertion names it.
 
 ### Defect still open from epic 6: `0046` revision id overflows `alembic_version`
 
 `backend-api/alembic/versions/0046_repository_initiative_folder.py` still declares a 33-character
-revision id. `alembic_version.version_num` is `varchar(32)`, so start-up fails at the migrate step on
-Postgres. Unless it is shortened (in `0046`, and in `0047`'s `down_revision`), `make e2e` cannot boot
-and this module cannot run. Epic 7's own `0048_initiative` is 15 characters.
+revision id, and `alembic_version.version_num` is `varchar(32)`. Start-up therefore fails at the
+migrate step on Postgres, and `make e2e` cannot boot until the id is shortened (in `0046`, and in
+`0047`'s `down_revision`). Epic 8's own `0049_attempt_verdict` is 20 characters.
 
 ## Coverage
 
-- SPEC capabilities with an e2e test: CAP-1 (package delete refusal, slug index), CAP-2 (status and
-  attention read through the API), CAP-3, CAP-4, CAP-5, CAP-6 (header fields, step park fields,
-  turns, sessions, `?opened=true`). Each has at least one test; CAP-6 only in part (see above).
-- Endpoints, all 6 new operations:
-  - `GET /initiatives`, `GET /projects/{id}/initiatives`, `GET /initiatives/{id}`;
-  - `POST /initiatives`, `POST /initiatives/{id}/cancel`, `POST /initiatives/{id}/start-next`.
-
-  Also exercised through the changed behaviour: `GET /runs?view=board`, `GET /runs/{id}/detail`,
-  `DELETE /projects/{id}/package` and `POST /mcp`.
+- SPEC capabilities with an e2e test:
+  - CAP-1: the advance after a real terminal transition, consumed once per `(round, position)`;
+  - CAP-2: the verdict stored on the gate row;
+  - CAP-3: fail round, pre-flight fail, merge, build, budget block and retry, the push keys;
+  - CAP-4: conflict session, skill, machine `continue`, non-initiative refusal;
+  - CAP-5: every Run created `queued` through `create_run` and walked by the engine.
+- Transitions of story 3's acceptance list with an e2e test: 7 of 15. The other 8 are listed above.
+- Endpoints exercised through the changed behaviour:
+  - `POST /initiatives`, `GET /initiatives/{id}`, `PUT /projects/{id}/run-defaults`;
+  - `POST /runs/{id}/signals` (`step_close`, `continue`), `GET /runs/{id}/session`,
+    `POST /runs/{id}/session/messages`;
+  - `GET /runs/{id}/detail`, `GET /queue`, `POST /templates/{name}/validate`.
 - UI features: none in scope.
 
 ## Next Steps
 
-- Shorten the `0046` revision id, then run `make e2e` with this module on a machine that has Docker.
-- Extend the module when epic 8 lands the advance (gate-fail rounds, merge and build Runs), so that
-  turns across rounds, `owners`, files and the merge/build lines get covered end to end.
+- Shorten the `0046` revision id, then run `make e2e` on a machine with Docker. That runs this module
+  and epic 7's `test_initiatives.py`, neither of which has run yet.
+- Once epic 9 lands `reopen_initiative` and `initiative_pr_check`, extend this module with reopen
+  rounds and the PR-merged end state.
