@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** Story 11.1: the Initiative page island against a mocked `src/api/client.ts` (AC5–AC7, AC10). */
 import { createElement } from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { GET, POST } = vi.hoisted(() => ({ GET: vi.fn(), POST: vi.fn() }));
@@ -269,5 +269,43 @@ describe('InitiativePage conversation', () => {
     mount();
     await waitFor(() => expect(screen.getByTestId('ini-conversation-head')).toBeTruthy());
     expect(screen.queryByTestId('ini-message')).toBeNull();
+  });
+});
+
+/** Story 11.3 (2026-11-22): the right column is mounted (AC9). */
+describe('InitiativePage right column', () => {
+  it('mounts files above sessions and follows the selection', async () => {
+    const d = detail();
+    d.workflows[0].steps[2].files = [
+      {
+        path: 'initiatives/familio-dessin-v2/DESIGN.md',
+        draft: true,
+        changed: true,
+        run_id: 'r1',
+        time: '2026-11-22T21:30:00Z',
+      },
+    ];
+    d.sessions = [
+      {
+        workflow: 'spec',
+        step: 'tech',
+        kind: 'session',
+        id: '0193a1b2-0000-7000-8000-0000000011ab',
+        round: 1,
+        state: 'closed',
+      },
+    ];
+    GET.mockResolvedValue(ok(d));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-files')).toBeTruthy());
+    const side = document.querySelector('aside.ini-side') as HTMLElement;
+    const files = within(side).getByTestId('ini-files');
+    const links = within(side).getByTestId('ini-links');
+    expect(files.compareDocumentPosition(links) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(links.textContent).toContain('tech · session 0193…11ab · closed');
+    expect(screen.getByTestId('ini-files-1-ux').getAttribute('data-selected')).toBe('true');
+    fireEvent.click(screen.getByTestId('ini-step-product'));
+    expect(screen.getByTestId('ini-files-1-product').getAttribute('data-selected')).toBe('true');
+    expect(screen.getByTestId('ini-files-1-ux').getAttribute('data-selected')).toBeNull();
   });
 });

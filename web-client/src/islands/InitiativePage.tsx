@@ -12,7 +12,9 @@ import { api } from '../api/client';
 import FailedFetch from '../components/FailedFetch';
 import AutoWorkflowSummary from '../components/initiative/AutoWorkflowSummary';
 import Conversation from '../components/initiative/Conversation';
+import FilesByStep from '../components/initiative/FilesByStep';
 import InitiativeHeader from '../components/initiative/InitiativeHeader';
+import SessionsAndRuns from '../components/initiative/SessionsAndRuns';
 import StepsStrip from '../components/initiative/StepsStrip';
 import WorkflowTrack from '../components/initiative/WorkflowTrack';
 import {
@@ -165,7 +167,10 @@ export default function InitiativePage({ initiativeId, initialWorkflow }: Props)
             </section>
           )}
         </main>
-        <aside className="ini-side" />
+        <aside className="ini-side">
+          <FilesByStep detail={detail} selection={selection} />
+          <SessionsAndRuns sessions={detail.sessions ?? []} />
+        </aside>
       </div>
     </div>
   );

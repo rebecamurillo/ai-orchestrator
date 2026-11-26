@@ -815,13 +815,22 @@ createServer(async (request, response) => {
       agent: 'analyst',
       turns: [],
       files: [],
+      files_state: i < 2 ? 'done' : i === 2 ? 'open' : 'to come',
       conflict_files: [],
       ...(id === 'ux'
         ? {
             park_kind: 'conversation',
             run_id: '0193a000-0000-7000-8000-0000000000c1',
             file: 'DESIGN.md',
-            files: [{ path: 'DESIGN.md', changed: false, draft: true, run_id: null, time: null }],
+            files: [
+              {
+                path: 'DESIGN.md',
+                changed: true,
+                draft: true,
+                run_id: '0193a000-0000-7000-8000-0000000000c1',
+                time: '2026-11-22T21:30:00Z',
+              },
+            ],
             harness: 'claude',
             model: 'claude-opus-5-5',
             turns: [
@@ -858,6 +867,24 @@ createServer(async (request, response) => {
         project_name: 'Familio',
         repo_tag: ['familio-web'],
         runs: [],
+        sessions: [
+          {
+            workflow: 'spec',
+            step: 'product',
+            kind: 'session',
+            id: '0193a1b2-0000-7000-8000-0000000011ab',
+            round: 1,
+            state: 'closed',
+          },
+          {
+            workflow: 'spec',
+            step: 'ux',
+            kind: 'session',
+            id: '0193c3d4-0000-7000-8000-000000007f21',
+            round: 1,
+            state: 'open',
+          },
+        ],
         workflows: [
           {
             workflow: 'spec',
@@ -1133,6 +1160,18 @@ createServer(async (request, response) => {
     };
     send(response, 200, JSON_TYPE, JSON.stringify(body));
     return;
+  }
+  if (/^\/api\/v1\/runs\/[^/]+\/files$/.test(pathname) && request.method === 'GET') {
+    const path = new URL(request.url, 'http://stub').searchParams.get('path');
+    if (path) {
+      send(
+        response,
+        200,
+        JSON_TYPE,
+        JSON.stringify({ path, content: '# Design\n', size: 9, mtime: 0 }),
+      );
+      return;
+    }
   }
   const filesByEpicMatch = pathname.match(/^\/api\/v1\/runs\/([^/]+)\/files-by-epic$/);
   if (filesByEpicMatch && request.method === 'GET') {

@@ -18,3 +18,11 @@ test('a sent message shows queued behind the running turn', async ({ page }) => 
     page.getByText('queued · waits for turn 15 to finish: "Also the parent can hide a drawing."'),
   ).toBeVisible();
 });
+
+/** Story 11.3: a file of the right column opens read-only in the artifact modal. */
+test('a file opens read-only from the right column', async ({ page }) => {
+  await page.goto('/initiatives/0193a000-0000-7000-8000-0000000000f1');
+  await page.getByTestId('ini-files').getByTestId('ini-file').click();
+  await expect(page.getByTestId('wf-artifact-modal')).toBeVisible();
+  await expect(page.getByTestId('wf-artifacts-edit')).toHaveCount(0);
+});
