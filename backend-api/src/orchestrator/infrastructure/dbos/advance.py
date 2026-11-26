@@ -35,7 +35,9 @@ def _scope(deps: WalkerDeps) -> AbstractContextManager[AdvancePorts]:
 
 
 def _advance_run(deps: WalkerDeps) -> Callable[[str], None]:
-    def advance_run(advance_id: str) -> None:
+    def advance_run(workflow_id: str) -> None:
+        # the facade starts a workflow with its own id, `{advance_id}:{hex}` (`enqueue_advance`)
+        advance_id = workflow_id.partition(":")[0]
         with _scope(deps) as ports:
             advance_initiative(ports, UUID(advance_id))
 
