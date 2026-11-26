@@ -160,6 +160,8 @@ class Settings(BaseSettings):
     terminal_poll_cron: str = "*/30 * * * * *"
     #: The facts sweep: fills the fact set of any ended harness attempt that has none.
     facts_sweep_cron: str = "0 * * * *"
+    #: Sets an initiative done once its build's pull requests are merged (SPEC CAP-1, CAP-5).
+    initiative_pr_check_cron: str = "*/15 * * * *"
     #: `harness_readiness.start`'s own `budget_usd` (SPEC CAP-8) — the fixture's one story
     #: is small, so a low ceiling still leaves room for a retry or two.
     readiness_budget_usd: Annotated[Decimal, Field(gt=0)] = Decimal("5")

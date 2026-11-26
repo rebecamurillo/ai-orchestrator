@@ -22,7 +22,11 @@ from orchestrator.infrastructure.dbos.startup import (
     schedule_jobs,
     serving,
 )
-from orchestrator.infrastructure.jobs import CLONE_CHECK_NAME, WORKTREE_GC_NAME
+from orchestrator.infrastructure.jobs import (
+    CLONE_CHECK_NAME,
+    INITIATIVE_PR_CHECK_NAME,
+    WORKTREE_GC_NAME,
+)
 from orchestrator.infrastructure.settings import Settings
 from orchestrator.infrastructure.terminal_jobs import TERMINAL_POLL_NAME, engine_jobs
 from tests.unit.fakes.engine import FakeWorkflowEngine
@@ -110,6 +114,8 @@ def test_the_two_registrations_together_are_the_three_jobs(env: dict[str, str]) 
     assert [name for name, _ in engine.scheduled] == [
         CLONE_CHECK_NAME,
         WORKTREE_GC_NAME,
+        # epic 9 story 1, 2026-11-26: third scheduled job initiative_pr_check
+        INITIATIVE_PR_CHECK_NAME,
         TERMINAL_POLL_NAME,
     ]
 
