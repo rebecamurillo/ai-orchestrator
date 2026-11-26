@@ -11,6 +11,7 @@ import { useStore } from '@nanostores/react';
 import { api } from '../api/client';
 import FailedFetch from '../components/FailedFetch';
 import AutoWorkflowSummary from '../components/initiative/AutoWorkflowSummary';
+import Conversation from '../components/initiative/Conversation';
 import InitiativeHeader from '../components/initiative/InitiativeHeader';
 import StepsStrip from '../components/initiative/StepsStrip';
 import WorkflowTrack from '../components/initiative/WorkflowTrack';
@@ -150,7 +151,18 @@ export default function InitiativePage({ initiativeId, initialWorkflow }: Props)
               ) : null}
             </section>
           ) : (
-            <section className="ini-conversation" data-testid="ini-conversation" />
+            <section className="ini-conversation" data-testid="ini-conversation">
+              {step && step.kind === 'conversation' && workflow ? (
+                <Conversation
+                  key={step.id}
+                  detail={detail}
+                  workflow={workflow}
+                  step={step}
+                  isCurrent={isCurrent && step.id === detail.current_step}
+                  onSelectStep={(id) => setSelection({ position: selection.position, stepId: id })}
+                />
+              ) : null}
+            </section>
           )}
         </main>
         <aside className="ini-side" />

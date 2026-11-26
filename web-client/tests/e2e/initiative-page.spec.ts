@@ -7,3 +7,14 @@ test('the Initiative page shows the workflow track and the steps strip', async (
   await expect(page.getByTestId('ini-steps')).toBeVisible();
   await expect(page.getByTestId('ini-step-ux')).toHaveAttribute('aria-current', 'step');
 });
+
+/** Story 11.2: a message sent with Ctrl+Enter shows as queued behind the running turn. */
+test('a sent message shows queued behind the running turn', async ({ page }) => {
+  await page.goto('/initiatives/0193a000-0000-7000-8000-0000000000f1');
+  const box = page.getByTestId('ini-message');
+  await box.fill('Also the parent can hide a drawing.');
+  await box.press('Control+Enter');
+  await expect(
+    page.getByText('queued · waits for turn 15 to finish: "Also the parent can hide a drawing."'),
+  ).toBeVisible();
+});

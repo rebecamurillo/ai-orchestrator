@@ -178,3 +178,65 @@
   color: var(--color-text-tertiary);
   font-size: var(--type-meta);
 }
+
+.ini-turns {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ini-turn {
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.ini-turn p {
+  margin: 0;
+  font-size: var(--type-body);
+  line-height: 1.7;
+}
+
+.ini-turn-eyebrow {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.ini-turn-operator {
+  color: var(--color-text-secondary);
+}
+
+.ini-turn-agent {
+  color: var(--color-text);
+}
+
+.ini-sysline {
+  margin: var(--space-3) 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+  line-height: var(--type-meta-line);
+}
+
+.ini-sysline[data-signal='needs-you'] {
+  color: var(--color-signal-needs-you);
+}
+
+.ini-composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.ini-composer textarea {
+  width: 100%;
+}
+
+.ini-composer button {
+  align-self: flex-start;
+}
+
+.ini-hint {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}

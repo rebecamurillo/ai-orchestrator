@@ -4,11 +4,12 @@ import { createElement } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { GET } = vi.hoisted(() => ({ GET: vi.fn() }));
-vi.mock('../../src/api/client', () => ({ api: { GET } }));
+const { GET, POST } = vi.hoisted(() => ({ GET: vi.fn(), POST: vi.fn() }));
+vi.mock('../../src/api/client', () => ({ api: { GET, POST } }));
 
 import InitiativePage from '../../src/islands/InitiativePage';
 import { forceTick, stopPolling } from '../../src/stores/poll';
+import { convStep, file, turn } from './conversation-fixtures';
 import { detail, step, workflow, type Detail } from './initiative-fixtures';
 
 const ok = (data: Detail) => ({ data, response: { status: 200 } });
@@ -192,5 +193,81 @@ describe('InitiativePage automatic step', () => {
     fireEvent.click(screen.getByTestId('ini-step-plan'));
     expect(screen.getByTestId('ini-auto-step').textContent).toContain('verify green');
     expect(screen.queryByTestId('ini-step-log')).toBeNull();
+  });
+});
+
+/* Story 11.2 (2026-11-26): the conversation region is filled. */
+describe('InitiativePage conversation', () => {
+  const withConversation = (techStatus: 'planned' | 'running', current = 'ux') => {
+    const d = detail({ current_step: current, step: current });
+    d.workflows[0].steps[2] = convStep({
+      token: 'DON',
+      status: 'done',
+      files: [file('DESIGN.md'), file('EXPERIENCE.md')],
+      turns: [turn(1)],
+    });
+    d.workflows[0].steps[3] = step('tech', {
+      status: techStatus,
+      token: techStatus === 'running' ? 'RUN' : 'QUE',
+    });
+    return d;
+  };
+
+  it('open tech selects tech; a poll with tech current keeps ux selected', async () => {
+    GET.mockResolvedValue(ok(withConversation('running')));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-conversation')).toBeTruthy());
+    expect(screen.getByTestId('ini-step-ux').getAttribute('data-selected')).toBe('true');
+    GET.mockResolvedValue(ok(withConversation('running', 'tech')));
+    act(() => forceTick());
+    await waitFor(() => expect(initiativeCalls()).toHaveLength(2));
+    await act(async () => {});
+    expect(screen.getByTestId('ini-step-ux').getAttribute('data-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'open tech' }));
+    expect(screen.getByTestId('ini-step-tech').getAttribute('data-selected')).toBe('true');
+  });
+
+  it('keeps the typed text across a poll; no composer on a step that is not current', async () => {
+    const d = detail();
+    d.workflows[0].steps[2] = convStep({ files: [file('DESIGN.md'), file('EXPERIENCE.md')] });
+    GET.mockResolvedValue(ok(d));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-message')).toBeTruthy());
+    fireEvent.change(screen.getByTestId('ini-message'), { target: { value: 'draft' } });
+    act(() => forceTick());
+    await waitFor(() => expect(initiativeCalls()).toHaveLength(2));
+    await act(async () => {});
+    expect((screen.getByTestId('ini-message') as HTMLTextAreaElement).value).toBe('draft');
+    expect(document.body.textContent).toContain(
+      'Say you are done in your own words; the agent confirms in one line and writes DESIGN.md, EXPERIENCE.md. The step closes when the file holds its done content.',
+    );
+    fireEvent.click(screen.getByTestId('ini-step-product'));
+    expect(screen.queryByTestId('ini-message')).toBeNull();
+    expect(document.body.innerHTML).not.toMatch(/step_close|session_end|skip_step/);
+  });
+
+  it('show all does not carry over to another selected step', async () => {
+    const d = detail();
+    const turns = [1, 2, 3, 4, 5].map((n) => turn(n));
+    d.workflows[0].steps[0] = convStep({ id: 'product', token: 'DON', status: 'done', turns });
+    d.workflows[0].steps[1] = convStep({ id: 'arch', token: 'DON', status: 'done', turns });
+    GET.mockResolvedValue(ok(d));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-step-product')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('ini-step-product'));
+    fireEvent.click(screen.getByRole('button', { name: 'show all 5 turns' }));
+    expect(screen.getAllByTestId(/^ini-turn-/)).toHaveLength(5);
+    fireEvent.click(screen.getByTestId('ini-step-arch'));
+    expect(screen.getAllByTestId(/^ini-turn-/)).toHaveLength(3);
+    expect(screen.getByRole('button', { name: 'show all 5 turns' })).toBeTruthy();
+  });
+
+  it('renders no composer for a cancelled initiative', async () => {
+    const d = detail({ status: 'cancelled' });
+    d.workflows[0].steps[2] = convStep();
+    GET.mockResolvedValue(ok(d));
+    mount();
+    await waitFor(() => expect(screen.getByTestId('ini-conversation-head')).toBeTruthy());
+    expect(screen.queryByTestId('ini-message')).toBeNull();
   });
 });

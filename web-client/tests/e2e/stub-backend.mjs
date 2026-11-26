@@ -68,6 +68,25 @@ const PORT = Number(process.env.STUB_BACKEND_PORT ?? 8788);
 const TOKEN = process.env.ORCHESTRATOR_TOKEN ?? '';
 
 const PROBLEM = 'application/problem+json';
+const initiativeMessages = [];
+function initiativeTurn(n, status, message, reply) {
+  return {
+    attempt_id: `0193a000-0000-7000-8000-00000000e0${n}`,
+    author: 'operator',
+    defects: null,
+    ended_at: status === 'done' ? '2026-11-26T21:16:00Z' : null,
+    failure_reason: null,
+    message,
+    model: 'claude-opus-5-5',
+    n,
+    owner: null,
+    reply,
+    round: 1,
+    run_id: '0193a000-0000-7000-8000-0000000000c1',
+    started_at: '2026-11-26T21:15:00Z',
+    status,
+  };
+}
 const JSON_TYPE = 'application/json';
 
 /**
@@ -760,6 +779,31 @@ createServer(async (request, response) => {
     );
     return;
   }
+  if (/^\/api\/v1\/runs\/[^/]+\/session\/messages$/.test(pathname) && request.method === 'POST') {
+    let raw = '';
+    request.on('data', (chunk) => (raw += chunk));
+    request.on('end', () => {
+      const { text } = JSON.parse(raw || '{}');
+      initiativeMessages.push(text);
+      send(
+        response,
+        202,
+        JSON_TYPE,
+        JSON.stringify({
+          attempt_id: '0193a000-0000-7000-8000-0000000000d1',
+          cost_usd: null,
+          ended_at: null,
+          exit_code: null,
+          message: text,
+          reply: '',
+          started_at: null,
+          status: 'queued',
+          turn: 15 + initiativeMessages.length,
+        }),
+      );
+    });
+    return;
+  }
   if (/^\/api\/v1\/initiatives\/[^/]+$/.test(pathname) && request.method === 'GET') {
     const ids = ['product', 'arch', 'ux', 'plan', 'review', 'close'];
     const steps = ids.map((id, i) => ({
@@ -772,6 +816,21 @@ createServer(async (request, response) => {
       turns: [],
       files: [],
       conflict_files: [],
+      ...(id === 'ux'
+        ? {
+            park_kind: 'conversation',
+            run_id: '0193a000-0000-7000-8000-0000000000c1',
+            file: 'DESIGN.md',
+            files: [{ path: 'DESIGN.md', changed: false, draft: true, run_id: null, time: null }],
+            harness: 'claude',
+            model: 'claude-opus-5-5',
+            turns: [
+              initiativeTurn(14, 'done', 'Which colours?', 'Warm ones.'),
+              initiativeTurn(15, 'running', 'And the fonts?', ''),
+              ...initiativeMessages.map((text, k) => initiativeTurn(16 + k, 'queued', text, '')),
+            ],
+          }
+        : {}),
     }));
     send(
       response,
