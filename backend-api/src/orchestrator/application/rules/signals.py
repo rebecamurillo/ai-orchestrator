@@ -151,6 +151,8 @@ def _session_signals(run: Run) -> tuple[SignalKind, ...]:
 def _session_offer(run: Run) -> tuple[SignalKind, ...]:
     if not run.senior_session:
         return TERMINAL_SESSION_SIGNALS
+    if session.merge_session(run):
+        return MERGE_SESSION_SIGNALS
     return (
         ("cancel",)
         if run.park_kind == signals_conversation.CONVERSATION

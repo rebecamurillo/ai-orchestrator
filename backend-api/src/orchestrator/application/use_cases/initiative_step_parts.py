@@ -84,7 +84,9 @@ def conflicts_of(
     row = row_at(rows, run.park_path)
     if row is None or row.kind != MERGE_KIND:
         return []
-    latest = max((a for a in attempts if a.step_run_id == row.id), key=lambda a: a.n, default=None)
+    # the stop's session turns share the row and carry no merge output
+    merges = (a for a in attempts if a.step_run_id == row.id and a.role != session.SESSION_ROLE)
+    latest = max(merges, key=lambda a: a.n, default=None)
     return [] if latest is None else merge_conflicts.conflict_files(latest.output_ref)
 
 
