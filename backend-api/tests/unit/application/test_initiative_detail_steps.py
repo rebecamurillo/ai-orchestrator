@@ -249,13 +249,16 @@ def test_without_a_hub_repository_there_is_no_folder_to_filter_by() -> None:
     assert git.called("diff_changes") == []
 
 
-def test_each_run_is_listed_with_its_shown_position() -> None:
+def test_each_run_is_listed_with_its_ad36_round_and_position() -> None:
+    # a Run's `round` and `position` are its AD-36 keys, not the shown workflow's number, which
+    # the spec and merge Runs share (epic 7 story 4, release review 2026-11-26)
     world = ReadWorld()
     initiative = world.initiative()
     world.run(initiative, position=0, minutes=0)
-    second = world.run(initiative, position=2, minutes=1, initiative_round=2)
+    world.run(initiative, position=1, minutes=1)
+    third = world.run(initiative, position=2, minutes=2, initiative_round=2)
 
     runs = initiative_detail(world.ports, initiative.id).runs
 
-    assert [(r.round, r.position) for r in runs] == [(1, 1), (2, 2)]
-    assert runs[1].id == second.id
+    assert [(r.round, r.position) for r in runs] == [(1, 0), (1, 1), (2, 2)]
+    assert runs[2].id == third.id

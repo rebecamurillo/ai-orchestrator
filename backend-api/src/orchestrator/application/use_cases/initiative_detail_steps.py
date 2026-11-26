@@ -33,7 +33,6 @@ from orchestrator.application.use_cases.initiative_facts import (
     entry_steps,
     session_turns,
     shown_indices,
-    shown_number,
 )
 from orchestrator.application.use_cases.initiative_gate_turns import gate_turns
 from orchestrator.application.use_cases.initiative_reopen_mark import ReopenMark, reopen_mark
@@ -120,7 +119,7 @@ def detail_runs(loaded: Loaded) -> list[DetailRun]:
             template_name=run.template_name,
             template_version=run.template_version,
             round=run.initiative_round or 1,
-            position=shown_number(loaded.initiative.sequence, run.initiative_position),
+            position=run.initiative_position or 0,
             status=run.status,
             created_at=run.created_at,
         )
