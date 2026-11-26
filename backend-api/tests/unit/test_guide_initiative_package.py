@@ -10,6 +10,7 @@ from tests.unit.conftest import REPO_ROOT
 
 GUIDE = REPO_ROOT / "guide" / "initiatives"
 SPINE = REPO_ROOT / "_bmad-output" / "architecture" / "ARCHITECTURE-SPINE.md"
+POINTER_PAGE_MAX_LINES = 10
 
 HEADINGS = (
     "package.yaml",
@@ -57,7 +58,7 @@ def test_pointer_pages_keep_front_matter_and_stay_short() -> None:
     for name, front in expected.items():
         meta, body = read(name)
         assert meta == front
-        assert len(body.strip("\n").split("\n")) <= 10
+        assert len(body.strip("\n").split("\n")) <= POINTER_PAGE_MAX_LINES
         assert "initiatives/package" in body
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from structlog.testing import capture_logs
@@ -10,6 +11,7 @@ from orchestrator.application.jobs.initiative_pr_check import (
     InitiativePrCheckPorts,
     run_initiative_pr_check,
 )
+from orchestrator.application.use_cases.initiative_reopen import reopen_initiative
 from orchestrator.domain.entities.initiative import FrozenSequence, Initiative
 from orchestrator.domain.entities.run import Run
 from tests.unit.application.initiative_transition_world import (
@@ -26,6 +28,7 @@ URL_B = "https://github.com/o/b/compare/main...feat/x"
 KEY_A = ("o", "a", "feat/x")
 KEY_B = ("o", "b", "feat/x")
 BUILD_POSITION = 2
+ROUND_THREE = 3
 
 
 def ports_for(world: TransitionWorld, pull_requests: FakePullRequests) -> InitiativePrCheckPorts:
@@ -224,3 +227,49 @@ def test_an_initiative_closed_between_the_read_and_the_write_is_left_alone() -> 
 
 def test_the_build_entry_is_the_one_the_fixture_names() -> None:
     assert sequence(BUILD).workflows[BUILD_POSITION].template == BUILD[0]
+
+
+# Epic 9 retrospective F1 (Operator ruling 2026-11-26): an initiative is checked only when its
+# build Run is also its latest Run (epic 7 SPEC "The status table, read").
+
+
+def reopened_after_a_done_build(world: TransitionWorld) -> Run:
+    world.spec_branch(epics=False)
+    build = build_run(world, URL_A)
+    world.runs.runs[build.id] = build.model_copy(
+        update={"created_at": build.created_at - timedelta(minutes=1)}
+    )
+    with world.uow:
+        return reopen_initiative(world.ports, world.initiative_row.id, "tech", "spec defect")
+
+
+def test_a_reopen_after_a_done_build_keeps_pr_merged_at_null_while_the_round_runs() -> None:
+    world = TransitionWorld()
+    spec = reopened_after_a_done_build(world)
+    world.runs.runs[spec.id] = spec.model_copy(update={"status": "needs_you"})
+    pull_requests = FakePullRequests({KEY_A: True})
+
+    assert run_initiative_pr_check(ports_for(world, pull_requests)) == ()
+
+    assert pull_requests.calls == []
+    assert stored(world).pr_merged_at is None
+    world.runs.runs[spec.id] = spec.model_copy(update={"status": "cancelled"})
+    with world.uow:
+        again = reopen_initiative(world.ports, world.initiative_row.id, "tech", "once more")
+    assert again.initiative_round == ROUND_THREE
+
+
+def test_the_new_rounds_done_build_with_its_pr_merged_sets_pr_merged_at() -> None:
+    world = TransitionWorld()
+    spec = reopened_after_a_done_build(world)
+    world.runs.runs[spec.id] = spec.model_copy(update={"status": "done"})
+    build = build_run(world, URL_B, round_=2)
+    world.runs.runs[build.id] = build.model_copy(
+        update={"created_at": FakeClock(spec.created_at).advance(60)}
+    )
+    pull_requests = FakePullRequests({KEY_A: True, KEY_B: True})
+
+    assert run_initiative_pr_check(ports_for(world, pull_requests)) == (world.initiative_row.id,)
+
+    assert pull_requests.calls == [KEY_B]
+    assert stored(world).pr_merged_at is not None

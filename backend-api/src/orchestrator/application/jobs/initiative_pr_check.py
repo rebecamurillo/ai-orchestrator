@@ -57,13 +57,13 @@ def run_initiative_pr_check(ports: InitiativePrCheckPorts) -> tuple[UUID, ...]:
 
 def _build_keys(ports: InitiativePrCheckPorts, initiative: Initiative) -> list[PullRequestKey]:
     index = build_index(initiative)
-    runs = [
-        run
-        for run in ports.runs.list_for_initiative(initiative.id)
-        if index is not None and run.initiative_position == index
-    ]
+    every = ports.runs.list_for_initiative(initiative.id)
+    runs = [run for run in every if index is not None and run.initiative_position == index]
     latest = max(runs, key=lambda run: run.created_at, default=None)
-    if latest is None or latest.status != "done":
+    newest = max(every, key=lambda run: run.created_at, default=None)
+    # Only the initiative's latest Run is read (epic 7 SPEC "The status table, read"): a done
+    # build of an earlier round, with a reopened round after it, is not checked.
+    if latest is None or newest is None or newest.id != latest.id or latest.status != "done":
         return []
     keys: list[PullRequestKey] = []
     for url in latest.compare_urls:
