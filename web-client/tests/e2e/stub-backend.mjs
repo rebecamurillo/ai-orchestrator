@@ -61,7 +61,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 
-import { MIXED_ID, PROJECTS_BY_ID, RECHECK_REPOSITORY_ID } from './projects-fixtures.mjs';
+import { CLEAN_ID, MIXED_ID, PROJECTS_BY_ID, RECHECK_REPOSITORY_ID } from './projects-fixtures.mjs';
 
 const STOPPED_BUILD_RUN = '0193a000-0000-7000-8000-0000000000c4';
 import { TEMPLATES } from './templates-fixtures.mjs';
@@ -574,6 +574,7 @@ function saveTemplateVersion(name, yamlText) {
   const saved = {
     name,
     version: declaredVersion,
+    type: template.versions[maxVersion].type,
     yaml: yamlText,
     hash: sha256Hex(yamlText),
     calls: [],
@@ -1212,6 +1213,20 @@ createServer(async (request, response) => {
     return;
   }
   if (/^\/api\/v1\/projects\/[^/]+\/initiatives$/.test(pathname) && request.method === 'GET') {
+    // the CLEAN project has nothing in flight: `projects.spec.ts` asserts it paints no signal
+    if (pathname === `/api/v1/projects/${CLEAN_ID}/initiatives`) {
+      send(
+        response,
+        200,
+        JSON_TYPE,
+        JSON.stringify({
+          columns: [],
+          counts: { ongoing: 0, need_you: 0, cancelled: 0, oldest_wait_at: null },
+          items: [],
+        }),
+      );
+      return;
+    }
     send(
       response,
       200,

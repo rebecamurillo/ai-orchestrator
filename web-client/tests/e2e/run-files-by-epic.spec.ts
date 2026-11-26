@@ -1,16 +1,34 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 
+import { twoEpicGraph, twoEpicSteps } from '../fixtures/run-graph';
+import { runDetail, RUN_ID } from '../fixtures/run-detail';
+
 /**
  * Files by epic and story (epic 2 story 1, EXPERIENCE § 6.1): the panel's heading, the
  * `changed: 2 files` list, a path's inline diff, and the diagram's Files button highlighting
- * the story's row. Written, not run by the story that adds it.
+ * the story's row. The Run's detail and graph are the shared fixtures `run-diagram.spec.ts`
+ * reads: the shared stub knows no Run.
  */
 
-const RUN_ID = '01a06887-79ab-759b-97a0-71c32ad93a01';
 const PAGE_URL = `/workflows/${RUN_ID}`;
 const FOLDER = 'specs/epic-1-models';
 
 async function mockRun(page: Page): Promise<void> {
+  // `**` admits the `?opened=true` of the first fetch (story 8-3)
+  await page.route(`**/api/runs/${RUN_ID}/detail**`, (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(runDetail(twoEpicSteps())),
+    }),
+  );
+  await page.route(`**/api/runs/${RUN_ID}/graph`, (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(twoEpicGraph()),
+    }),
+  );
   await page.route(`**/api/runs/${RUN_ID}/files-by-epic`, (route: Route) =>
     route.fulfill({
       status: 200,
@@ -29,6 +47,21 @@ async function mockRun(page: Page): Promise<void> {
                 started: true,
                 story_file: `${FOLDER}/stories/1-model-list.md`,
                 changed: ['src/models.py', 'tests/test_models.py'],
+              },
+            ],
+          },
+          {
+            index: 1,
+            title: 'views',
+            folder: 'specs/epic-2-views',
+            files: [],
+            stories: [
+              {
+                id: '1',
+                title: 'view list',
+                started: true,
+                story_file: 'specs/epic-2-views/stories/1-view-list.md',
+                changed: [],
               },
             ],
           },
@@ -67,7 +100,8 @@ test.describe('files by epic and story', () => {
   test('the diagram Files button highlights the story row', async ({ page }) => {
     await mockRun(page);
     await page.goto(PAGE_URL);
-    await page.getByTestId('wf-diagram-files-epics.0.stories.0').first().click();
-    await expect(page.locator('#files-story-0-1')).toHaveClass(/wf-files-focus/);
+    // the running epic is the one the diagram opens; a collapsed epic draws no story card
+    await page.getByTestId('wf-diagram-files-epics.1.stories.0').first().click();
+    await expect(page.locator('#files-story-1-1')).toHaveClass(/wf-files-focus/);
   });
 });

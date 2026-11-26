@@ -214,7 +214,9 @@ test.describe('?id=<CLEAN>', () => {
       .filter(
         (entry) =>
           !(
-            entry.selector === removeButton &&
+            [removeButton, `${removeButton}::before`, `${removeButton}::after`].includes(
+              entry.selector,
+            ) &&
             (entry.property === 'color' || /^border-.*-color$/.test(entry.property))
           ),
       );
