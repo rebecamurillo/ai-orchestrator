@@ -302,3 +302,109 @@ a.ini-tag-value {
 .ini-table td[data-signal='needs-you'] {
   color: var(--color-signal-needs-you);
 }
+
+/* New initiative page (story 10.3) */
+
+.ini-crumb,
+.newini-title,
+.newini-intro {
+  margin: 0;
+  padding: var(--space-5) var(--space-8) 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.ini-crumb a {
+  color: var(--color-text-tertiary);
+}
+
+.newini-title {
+  color: var(--color-text);
+  font-size: var(--type-surface-title);
+  font-weight: 400;
+  letter-spacing: var(--type-surface-title-tracking);
+}
+
+.newini {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-8);
+  padding: var(--space-7) var(--space-8);
+}
+
+.newini-form {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.newini-field {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: var(--space-5);
+}
+
+.newini-label {
+  color: var(--color-text-tertiary);
+  font-size: var(--type-control);
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.newini-field input,
+.newini-field select,
+.newini-field textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  font-family: var(--font-mono);
+}
+
+.newini-hint {
+  display: block;
+  color: var(--color-text-tertiary);
+  font-size: var(--type-meta);
+}
+
+.newini-detail {
+  margin-left: var(--space-3);
+}
+
+.newini-form [data-signal='needs-you'] {
+  margin: var(--space-3) 0 0;
+  color: var(--color-signal-needs-you);
+}
+
+.newini-actions {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+}
+
+.newini-head {
+  margin: var(--space-6) 0 var(--space-3);
+  color: var(--color-text-tertiary);
+  font-size: var(--type-control);
+  font-weight: 400;
+  letter-spacing: var(--type-control-tracking);
+  text-transform: var(--type-control-transform);
+}
+
+.newini-sequence {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.newini-sequence td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  font-size: var(--type-meta);
+}
+
+.newini-step td:first-child {
+  padding-left: var(--space-7);
+}
+
+.newini-step td,
+.newini-defaults td {
+  color: var(--color-text-tertiary);
+}

@@ -758,6 +758,88 @@ createServer(async (request, response) => {
     );
     return;
   }
+  if (pathname === '/api/v1/initiatives' && request.method === 'POST') {
+    send(
+      response,
+      201,
+      JSON_TYPE,
+      JSON.stringify({ id: '0193a000-0000-7000-8000-0000000000f1', slug: 'new-initiative' }),
+    );
+    return;
+  }
+  const packageMatch = /^\/api\/v1\/projects\/([^/]+)\/package$/.exec(pathname);
+  if (packageMatch && request.method === 'GET') {
+    if (!projects[packageMatch[1]]) {
+      send(
+        response,
+        404,
+        'application/problem+json',
+        JSON.stringify({ type: 'about:blank', title: 'Not Found', status: 404 }),
+      );
+      return;
+    }
+    const step = (id, kind, persona, writes) => ({
+      file: null,
+      id,
+      kind,
+      persona,
+      skill: null,
+      writes,
+    });
+    send(
+      response,
+      200,
+      JSON_TYPE,
+      JSON.stringify({
+        gate: {},
+        id: '0193a000-0000-7000-8000-0000000000f2',
+        installed_at: '2026-11-20T10:00:00Z',
+        name: 'stub-package',
+        path: 'package',
+        project_id: packageMatch[1],
+        ref: 'main',
+        repository: {
+          default_branch: 'main',
+          id: '0193a000-0000-7000-8000-0000000000f3',
+          initiative_folder: 'initiatives',
+          slug: 'hub',
+        },
+        repository_id: '0193a000-0000-7000-8000-0000000000f3',
+        sequence: [
+          {
+            shown_as: 'workflow',
+            steps: [
+              step('brief', 'conversation', 'analyst', ['SPEC.md']),
+              step('check', 'automatic', 'reviewer', []),
+            ],
+            template: 'initiative-hub',
+            type: 'interactive',
+            version: 1,
+            workflow: 'spec',
+          },
+          {
+            shown_as: 'step',
+            steps: [step('merge', 'automatic', 'merger', [])],
+            template: 'initiative-hub-merge',
+            type: 'auto',
+            version: 1,
+            workflow: 'merge',
+          },
+          {
+            shown_as: 'workflow',
+            steps: [],
+            template: 'staged-initiative-hub',
+            type: 'auto',
+            version: 4,
+            workflow: 'build',
+          },
+        ],
+        sha: 'abc123',
+        status_map: {},
+      }),
+    );
+    return;
+  }
   if (pathname === '/api/v1/projects' && request.method === 'GET') {
     send(response, 200, JSON_TYPE, JSON.stringify({ items: [], next_cursor: null }));
     return;
