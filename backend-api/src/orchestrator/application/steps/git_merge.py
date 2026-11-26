@@ -24,8 +24,9 @@ in progress first. A `continue` is the other resume, and the one that keeps the 
 merge agent that conversed with the owner on the stop (AD-37, story 8.4): paths still
 unmerged re-park the same sentence and abort nothing; none, with the merge still in
 progress, commits what the agent resolved; none and no merge in progress runs `Git.merge`,
-which answers `None` for work the agent concluded or merges what remains. Nothing else is
-read off `ctx.resume_signal`.
+which answers `None` for work the agent concluded or merges what remains. Before either
+resume, `git_merge_edits` parks `protected_path` on an agent edit to an anchor or an existing
+test (Operator ruling, 2026-11-26). Nothing else is read off `ctx.resume_signal`.
 
 `{branch}` in the reason is the branch the *worktree* is on, read back off `run.worktrees[]`
 where `git.worktree` recorded it — never re-derived here, because a second opinion about
@@ -42,7 +43,7 @@ from pathlib import Path
 
 from orchestrator.application.rules.merge_conflict import unmerged_paths
 from orchestrator.application.rules.merge_conflicts import CONFLICTED_HEADING
-from orchestrator.application.steps import MERGE_KIND, records
+from orchestrator.application.steps import MERGE_KIND, git_merge_edits, records
 from orchestrator.application.steps.context import (
     StepContext,
     require_cwd,
@@ -96,6 +97,9 @@ def _merge(ctx: StepContext, recorder: GitRecorder) -> StepResult:
     if recorded is None:
         raise RuntimeError(UNKNOWN_WORKTREE.format(path=ctx.cwd))
     source = str(ctx.with_resolved[FROM_KEY])
+    edited = git_merge_edits.protected(ctx, worktree)
+    if edited is not None:
+        return edited
     if ctx.resume_signal is not None and ctx.resume_signal.event == "continue":
         resumed = _resume(ctx, worktree, source, recorded.branch)
         if resumed is not None:

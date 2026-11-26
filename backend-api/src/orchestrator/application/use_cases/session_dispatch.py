@@ -104,11 +104,18 @@ def interrupt(ctx: StepContext, reason: str) -> None:
 
 
 def session_sweep(ctx: StepContext, message: str) -> tuple[tuple[str, str | None], ...]:
-    """The tree commits of `agent_workdir.sweep`, except on a `git.merge` row whose tree
-    still holds an unmerged path: staging would mark it resolved with its markers in it."""
-    if ctx.row.kind == MERGE_KIND and unmerged_paths(ctx.ports.git.status(require_cwd(ctx))):
+    """The tree commits of `agent_workdir.sweep`, except on a `git.merge` row while its merge
+    is open: staging an unmerged path marks it resolved with its markers in it, and a commit
+    concludes the merge the executor commits on `continue` and a `retry` aborts (Operator
+    ruling, 2026-11-26)."""
+    if ctx.row.kind == MERGE_KIND and _merge_open(ctx):
         return ()
     return agent_workdir.sweep(ctx, message)
+
+
+def _merge_open(ctx: StepContext) -> bool:
+    git, tree = ctx.ports.git, require_cwd(ctx)
+    return bool(unmerged_paths(git.status(tree))) or git.merge_in_progress(tree)
 
 
 def dispatch(turn: Turn) -> None:

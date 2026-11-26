@@ -83,7 +83,9 @@ def test_continue_with_a_merge_in_progress_commits_what_the_agent_resolved() -> 
     assert message == f"merge: {FROM_BRANCH} into {BRANCH} (orchestrator)"
 
 
-def test_retry_runs_the_merge_whole_and_never_reads_the_status() -> None:
+def test_retry_with_no_merge_open_runs_the_merge_whole_and_never_reads_the_status() -> None:
+    """Operator ruling 2026-11-26: a `retry` first asks whether a merge is open, for the
+    agent-edit check (`test_git_merge_edits.py`); with none it is today's whole re-run."""
     git = FakeGit(merge=[NEXT_SHA])
 
     result = run(git, resume="retry")
@@ -91,4 +93,4 @@ def test_retry_runs_the_merge_whole_and_never_reads_the_status() -> None:
     assert result.output_ref == NEXT_SHA
     assert names(git).count("merge") == 1
     assert "status" not in names(git)
-    assert "merge_in_progress" not in names(git)
+    assert names(git)[0] == "merge_in_progress"

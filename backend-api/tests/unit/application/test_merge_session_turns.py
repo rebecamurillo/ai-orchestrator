@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from orchestrator.application.rules import session
+from orchestrator.application.steps.git_merge import FROM_KEY, GitMergeExecutor
 from orchestrator.application.use_cases import session_close
 from orchestrator.application.use_cases.session_turn import commit_turn
 from orchestrator.application.use_cases.signal_apply import SignalPorts
@@ -16,6 +17,7 @@ from orchestrator.domain.ids import new_id
 from tests.unit.application.merge_world import AGENT, MERGE, PLAN, SKILL
 from tests.unit.application.session_turn_fixtures import TurnWorld, a_result, a_turn_world
 from tests.unit.fakes.git import FakeGit
+from tests.unit.step_fixtures import WORKTREE, a_context, a_worktree, an_environment
 
 UNMERGED = "UU a.md\n?? notes.md"
 UNTRACKED = "?? notes.md"
@@ -182,3 +184,24 @@ def test_after_turn_for_an_attempt_that_is_gone_does_nothing() -> None:
     session_close.after_turn(world.ports, new_id())
 
     assert continues(world) == []
+
+
+def test_the_sweep_leaves_the_merge_open_and_the_resume_commits_it() -> None:
+    """Operator ruling 2026-11-26: while the merge is in progress no turn stages or commits,
+    so `MERGE_HEAD` stays and the `continue` commits the resolution through `Git.commit`."""
+    git = FakeGit(status=[MODIFIED], merge_in_progress=[True])
+    world = a_merge_session(git)
+    attempt = turn(world)
+
+    commit_turn(with_signal(world), attempt)
+
+    assert not {"stage", "commit"} & set(names(git))
+    assert len(continues(world)) == 1
+    row = world.session.world.row(MERGE)
+    row = row.model_copy(update={"with_resolved": {**row.with_resolved, FROM_KEY: "feat/x"}})
+    env = an_environment(worktrees=(a_worktree(path=WORKTREE),))
+    result = GitMergeExecutor().execute(a_context(row, git=git, env=env, resume="continue"))
+    assert result.status == "done"
+    assert len(git.called("commit")) == 1
+    assert git.called("merge") == []
+    assert git.merge_in_progress(WORKTREE) is False  # type: ignore[arg-type]
