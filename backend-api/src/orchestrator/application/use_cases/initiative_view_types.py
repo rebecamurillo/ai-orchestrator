@@ -148,6 +148,14 @@ class PriorView:
 
 
 @dataclass(frozen=True)
+class ReopenedAfter:
+    """The `auto` workflow a reopen cancelled, and whether the reopen made or found the branch."""
+
+    workflow: str
+    branch: Literal["created", "attached"]
+
+
+@dataclass(frozen=True)
 class DetailStep:
     id: str
     kind: str
@@ -169,6 +177,7 @@ class DetailStep:
     token: StepToken = "QUE"
     files_state: FilesState = "to come"
     conflict_files: list[str] = field(default_factory=list)
+    reopened_after: ReopenedAfter | None = None
 
 
 @dataclass(frozen=True)
@@ -183,6 +192,7 @@ class DetailWorkflow:
     steps: list[DetailStep]
     line: str = ""
     files: list[WorkflowFile] = field(default_factory=list)
+    token: StepToken | None = None
 
 
 @dataclass(frozen=True)

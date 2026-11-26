@@ -22,9 +22,16 @@ from orchestrator.api.schemas.initiatives import (
     InitiativeDetailOut,
     InitiativeIn,
     InitiativeListOut,
+    ReopenIn,
+    ReopenOut,
     StartNextIn,
 )
-from orchestrator.application.use_cases import initiative_start_next, initiative_views, initiatives
+from orchestrator.application.use_cases import (
+    initiative_reopen,
+    initiative_start_next,
+    initiative_views,
+    initiatives,
+)
 from orchestrator.application.use_cases.initiative_view_types import InitiativeFilter
 from orchestrator.application.use_cases.initiative_views import InitiativeReadPorts
 from orchestrator.application.use_cases.initiatives import InitiativePorts
@@ -162,3 +169,21 @@ def start_next_route(
     """One forced `skip_step` naming the stop the operator saw."""
     moved = initiative_start_next.start_next(ports, initiative_id, body.park_seq)
     return InitiativeDetailOut.of(initiative_views.initiative_detail(reads, moved.id))
+
+
+@router.post(
+    "/initiatives/{initiative_id}/reopen",
+    status_code=HTTP_CREATED,
+    response_model=ReopenOut,
+    summary="Reopen a conversation step",
+    responses=_refusals(
+        "No initiative has that id.",
+        conflict="The initiative is cancelled or done, a Run of it is still live, or the hub's"
+        " default branch is missing from its remote.",
+    ),
+)
+def reopen_initiative_route(initiative_id: UUID, body: ReopenIn, ports: WritePorts) -> ReopenOut:
+    """Cancel every live Run and start the spec Run of the next round at `step`."""
+    run = initiative_reopen.reopen_initiative(ports, initiative_id, body.step, body.reason)
+    assert run.initiative_round is not None
+    return ReopenOut(run_id=run.id, round=run.initiative_round)

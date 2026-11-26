@@ -15,6 +15,7 @@ from orchestrator.application.use_cases.initiative_view_types import (
     HubRef,
     InitiativeStepStatus,
     ProjectRef,
+    ReopenedAfter,
     SessionEntry,
     StepFile,
     StepToken,
@@ -126,6 +127,15 @@ class StepFileOut(BaseModel):
         )
 
 
+class ReopenedAfterOut(BaseModel):
+    workflow: str
+    branch: Literal["created", "attached"]
+
+    @classmethod
+    def of(cls, mark: ReopenedAfter) -> ReopenedAfterOut:
+        return cls(workflow=mark.workflow, branch=mark.branch)
+
+
 class DetailStepOut(BaseModel):
     id: str
     kind: Literal["conversation", "automatic"]
@@ -147,6 +157,7 @@ class DetailStepOut(BaseModel):
     token: StepToken
     files_state: FilesState
     conflict_files: list[str]
+    reopened_after: ReopenedAfterOut | None
 
     @classmethod
     def of(cls, step: DetailStep) -> DetailStepOut:
@@ -171,6 +182,9 @@ class DetailStepOut(BaseModel):
             token=step.token,
             files_state=step.files_state,
             conflict_files=list(step.conflict_files),
+            reopened_after=None
+            if step.reopened_after is None
+            else ReopenedAfterOut.of(step.reopened_after),
         )
 
 
@@ -185,6 +199,7 @@ class DetailWorkflowOut(BaseModel):
     steps: list[DetailStepOut]
     line: str
     files: list[WorkflowFileOut]
+    token: StepToken | None
 
     @classmethod
     def of(cls, workflow: DetailWorkflow) -> DetailWorkflowOut:
@@ -199,4 +214,5 @@ class DetailWorkflowOut(BaseModel):
             steps=[DetailStepOut.of(step) for step in workflow.steps],
             line=workflow.line,
             files=[WorkflowFileOut.of(file) for file in workflow.files],
+            token=workflow.token,
         )

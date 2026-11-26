@@ -145,4 +145,6 @@ def test_the_router_declares_the_three_reads_and_the_two_actions() -> None:
         "/initiatives/{initiative_id}": {"GET"},
         "/initiatives/{initiative_id}/cancel": {"POST"},
         "/initiatives/{initiative_id}/start-next": {"POST"},
+        # story 2 of epic 9, 2026-11-26: the reopen route joins the initiatives router.
+        "/initiatives/{initiative_id}/reopen": {"POST"},
     }

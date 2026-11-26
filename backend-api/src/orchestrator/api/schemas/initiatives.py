@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from orchestrator.api.schemas.common import UtcTimestamp
+from orchestrator.api.schemas.common import StorableText, UtcTimestamp
 from orchestrator.api.schemas.initiative_detail import (
     DetailStepOut,
     DetailWorkflowOut,
@@ -39,6 +39,8 @@ __all__ = [
     "InitiativeIn",
     "InitiativeListOut",
     "InitiativeRowOut",
+    "ReopenIn",
+    "ReopenOut",
     "StartNextIn",
     "StepFileOut",
     "TurnOut",
@@ -236,3 +238,17 @@ class StartNextIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     park_seq: StopNumber
+
+
+class ReopenIn(BaseModel):
+    """`POST /initiatives/{id}/reopen`: the step and the reason that opens its round."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step: str
+    reason: StorableText
+
+
+class ReopenOut(BaseModel):
+    run_id: UUID
+    round: int

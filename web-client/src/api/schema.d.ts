@@ -168,6 +168,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/initiatives/{initiative_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reopen a conversation step
+         * @description Cancel every live Run and start the spec Run of the next round at `step`.
+         */
+        post: operations["reopen_initiative_route_api_v1_initiatives__initiative_id__reopen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/initiatives/{initiative_id}/start-next": {
         parameters: {
             query?: never;
@@ -2233,6 +2253,7 @@ export interface components {
             park_seq: number | null;
             /** Persona */
             persona: string | null;
+            reopened_after: components["schemas"]["ReopenedAfterOut"] | null;
             /** Run Id */
             run_id: string | null;
             /** Skill */
@@ -2266,6 +2287,8 @@ export interface components {
             steps: components["schemas"]["DetailStepOut"][];
             /** Template */
             template: string;
+            /** Token */
+            token: ("RUN" | "BLK" | "DON" | "ERR" | "CAN" | "QUE" | "SKP") | null;
             /** Type */
             type: string;
             /** Version */
@@ -3908,6 +3931,36 @@ export interface components {
             max_active_runs: number;
             /** Next Cursor */
             next_cursor?: string | null;
+        };
+        /**
+         * ReopenIn
+         * @description `POST /initiatives/{id}/reopen`: the step and the reason that opens its round.
+         */
+        ReopenIn: {
+            /** Reason */
+            reason: string;
+            /** Step */
+            step: string;
+        };
+        /** ReopenOut */
+        ReopenOut: {
+            /** Round */
+            round: number;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+        };
+        /** ReopenedAfterOut */
+        ReopenedAfterOut: {
+            /**
+             * Branch
+             * @enum {string}
+             */
+            branch: "created" | "attached";
+            /** Workflow */
+            workflow: string;
         };
         /**
          * RepoInitIn
@@ -5640,6 +5693,72 @@ export interface operations {
                 };
             };
             /** @description The initiative is done or cancelled. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description An id, the `filter` or the body is not valid. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    reopen_initiative_route_api_v1_initiatives__initiative_id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                initiative_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReopenIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReopenOut"];
+                };
+            };
+            /** @description The request carried no valid ORCHESTRATOR_TOKEN. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description No initiative has that id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The initiative is cancelled or done, a Run of it is still live, or the hub's default branch is missing from its remote. */
             409: {
                 headers: {
                     [name: string]: unknown;

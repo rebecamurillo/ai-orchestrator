@@ -110,6 +110,8 @@ def test_a_step_maps_its_new_fields() -> None:
         "token": "BLK",
         "files_state": "open",
         "conflict_files": ["README.md"],
+        # story 2 of epic 9, 2026-11-26: the step maps `reopened_after`.
+        "reopened_after": None,
     }
 
 

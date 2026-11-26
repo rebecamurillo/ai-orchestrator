@@ -18,6 +18,7 @@ from orchestrator.application.preflight.model import (
 )
 from orchestrator.application.steps import CONVERSATION_KIND
 from orchestrator.domain.entities.initiative import FrozenSequence, FrozenWorkflow
+from orchestrator.domain.entities.project_package import StepDecl
 from orchestrator.domain.entities.step_run import StepRun
 
 FEAT_PREFIX = "feat"
@@ -36,6 +37,12 @@ EPICS_FILE = "epics.yaml"
 DEFECT_PREFIX = "- "
 INTERACTIVE = "interactive"
 AUTO = "auto"
+REOPEN_NO_REASON = "a reopen needs a reason"
+REOPEN_NOT_A_STEP = "step {step} is not a conversation step of this initiative's sequence"
+REOPEN_CLOSED = "initiative {slug} is {state}; nothing reopens"
+REOPEN_REASON = "reopen"
+BRANCH_ATTACHED = "attached"
+BRANCH_CREATED = "created"
 
 
 def is_spec(entry: FrozenWorkflow) -> bool:
@@ -108,3 +115,15 @@ def offered_inputs(declared: Collection[str], offered: Mapping[str, object]) -> 
 
 def defect_count(message: str) -> int:
     return sum(1 for line in message.splitlines() if line.startswith(DEFECT_PREFIX))
+
+
+def reopen_round_steps(
+    entry_steps: Sequence[StepDecl], done_steps: Collection[str], step_id: str
+) -> tuple[str, ...]:
+    """The reopened step, then every later conversation step of the entry not yet done."""
+    ids = [step.id for step in entry_steps]
+    later = entry_steps[ids.index(step_id) + 1 :] if step_id in ids else ()
+    return (
+        step_id,
+        *(s.id for s in later if s.kind == CONVERSATION_KIND and s.id not in done_steps),
+    )

@@ -8,6 +8,7 @@ Run of the initiative, oldest Run first.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from uuid import UUID
 
 from orchestrator.application.rules.initiative_lines import (
@@ -35,6 +36,7 @@ from orchestrator.application.use_cases.initiative_facts import (
     shown_number,
 )
 from orchestrator.application.use_cases.initiative_gate_turns import gate_turns
+from orchestrator.application.use_cases.initiative_reopen_mark import ReopenMark, reopen_mark
 from orchestrator.application.use_cases.initiative_step_parts import (
     conflicts_of,
     forced,
@@ -48,6 +50,7 @@ from orchestrator.application.use_cases.initiative_view_types import (
     DetailWorkflow,
     InitiativeStepStatus,
     Loaded,
+    ReopenedAfter,
     Turn,
 )
 from orchestrator.domain.entities.attempt import Attempt
@@ -81,12 +84,13 @@ def detail_workflows(ctx: StepContext) -> list[DetailWorkflow]:
     sequence = loaded.initiative.sequence
     result: list[DetailWorkflow] = []
     names = [sequence.workflows[i].workflow for i in shown_indices(sequence)]
+    mark = reopen_mark(loaded)
     for number, index in enumerate(shown_indices(sequence), start=1):
         entry = sequence.workflows[index]
         latest = _latest_at(loaded, index)
         listed = entry_steps(sequence, index)
         steps = [
-            _step(ctx, entry, at_of(ctx, entry, index, number, listed, k), step_id, kind)
+            _step(ctx, entry, at_of(ctx, entry, index, number, listed, k), step_id, kind, mark)
             for k, (step_id, kind) in enumerate(listed, start=1)
         ]
         result.append(
@@ -99,8 +103,11 @@ def detail_workflows(ctx: StepContext) -> list[DetailWorkflow]:
                 status=None if latest is None else latest.status,
                 run_id=None if latest is None else latest.id,
                 steps=steps,
-                line=track_line(ctx, entry, number, index, listed, names),
+                line=_stopped_line(mark)
+                if mark is not None and mark.auto_index == index
+                else track_line(ctx, entry, number, index, listed, names),
                 files=auto_files_of(ctx, entry, latest),
+                token="BLK" if mark is not None and mark.auto_index == index else None,
             )
         )
     return result
@@ -126,16 +133,30 @@ def _latest_at(loaded: Loaded, index: int) -> Run | None:
     return max(at, key=lambda run: run.created_at, default=None)
 
 
-def _step(ctx: StepContext, entry: FrozenWorkflow, at: At, step_id: str, kind: str) -> DetailStep:
+def _stopped_line(mark: ReopenMark) -> str:
+    return f"stopped on the spec · {mark.step} reopens"
+
+
+def _step(  # noqa: PLR0913, PLR0917 — one fact per argument
+    ctx: StepContext,
+    entry: FrozenWorkflow,
+    at: At,
+    step_id: str,
+    kind: str,
+    mark: ReopenMark | None,
+) -> DetailStep:
     decl = next((d for d in entry.steps if d.id == step_id), None)
     if decl is None:
-        return _merge_step(ctx, step_id, at)
+        return _merge_step(ctx, step_id, at, mark)
     if kind == CONVERSATION_KIND:
-        return _conversation(ctx, at, decl)
+        step = _conversation(ctx, at, decl)
+        if mark is None or mark.step != decl.id:
+            return step
+        return replace(step, reopened_after=ReopenedAfter(mark.workflow, mark.branch))
     return _gate(ctx, at, decl)
 
 
-def _merge_step(ctx: StepContext, workflow: str, at: At) -> DetailStep:
+def _merge_step(ctx: StepContext, workflow: str, at: At, mark: ReopenMark | None) -> DetailStep:
     loaded = ctx.loaded
     sequence = loaded.initiative.sequence
     index = next(i for i, e in enumerate(sequence.workflows) if e.workflow == workflow)
@@ -157,6 +178,7 @@ def _merge_step(ctx: StepContext, workflow: str, at: At) -> DetailStep:
         files=[],
         merge=MergeFact(len(conflicts), None if latest is None else latest.park_reason),
     )
+    stopped = mark is not None and mark.workflow == workflow
     return DetailStep(
         id=workflow,
         kind="automatic",
@@ -164,11 +186,11 @@ def _merge_step(ctx: StepContext, workflow: str, at: At) -> DetailStep:
         skill=None,
         file=None,
         status=status,
-        line=line,
+        line=_stopped_line(mark) if stopped and mark is not None else line,
         turns=[],
         files=[],
         number=step_number(at.number, at.k),
-        token=token_of(ctx, status, None),
+        token="BLK" if stopped else token_of(ctx, status, None),
         files_state=files_state(status, forced=False),
         conflict_files=conflicts,
         **facts_of(ctx, latest, None, None),

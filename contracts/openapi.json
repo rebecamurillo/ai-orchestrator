@@ -2317,6 +2317,16 @@
             ],
             "title": "Persona"
           },
+          "reopened_after": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReopenedAfterOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "run_id": {
             "anyOf": [
               {
@@ -2393,7 +2403,8 @@
           "park_reason",
           "token",
           "files_state",
-          "conflict_files"
+          "conflict_files",
+          "reopened_after"
         ],
         "title": "DetailStepOut",
         "type": "object"
@@ -2457,6 +2468,26 @@
             "title": "Template",
             "type": "string"
           },
+          "token": {
+            "anyOf": [
+              {
+                "enum": [
+                  "RUN",
+                  "BLK",
+                  "DON",
+                  "ERR",
+                  "CAN",
+                  "QUE",
+                  "SKP"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
           "type": {
             "title": "Type",
             "type": "string"
@@ -2480,7 +2511,8 @@
           "run_id",
           "steps",
           "line",
-          "files"
+          "files",
+          "token"
         ],
         "title": "DetailWorkflowOut",
         "type": "object"
@@ -7391,6 +7423,67 @@
         "title": "QueueOut",
         "type": "object"
       },
+      "ReopenIn": {
+        "additionalProperties": false,
+        "description": "`POST /initiatives/{id}/reopen`: the step and the reason that opens its round.",
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "reason"
+        ],
+        "title": "ReopenIn",
+        "type": "object"
+      },
+      "ReopenOut": {
+        "properties": {
+          "round": {
+            "title": "Round",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "round"
+        ],
+        "title": "ReopenOut",
+        "type": "object"
+      },
+      "ReopenedAfterOut": {
+        "properties": {
+          "branch": {
+            "enum": [
+              "created",
+              "attached"
+            ],
+            "title": "Branch",
+            "type": "string"
+          },
+          "workflow": {
+            "title": "Workflow",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow",
+          "branch"
+        ],
+        "title": "ReopenedAfterOut",
+        "type": "object"
+      },
       "RepoInitIn": {
         "description": "`POST /repositories/{id}/init`'s optional body: the harness the Template's `agent`\nrows dispatch. Omitted (or an omitted body), `create_run`'s own default stands (AD-10).",
         "properties": {
@@ -11585,6 +11678,115 @@
           }
         ],
         "summary": "Cancel an initiative",
+        "tags": [
+          "initiatives"
+        ]
+      }
+    },
+    "/api/v1/initiatives/{initiative_id}/reopen": {
+      "post": {
+        "description": "Cancel every live Run and start the spec Run of the next round at `step`.",
+        "operationId": "reopen_initiative_route_api_v1_initiatives__initiative_id__reopen_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "initiative_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Initiative Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReopenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReopenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The request carried no valid ORCHESTRATOR_TOKEN."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "No initiative has that id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The initiative is cancelled or done, a Run of it is still live, or the hub's default branch is missing from its remote."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "An id, the `filter` or the body is not valid."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reopen a conversation step",
         "tags": [
           "initiatives"
         ]
