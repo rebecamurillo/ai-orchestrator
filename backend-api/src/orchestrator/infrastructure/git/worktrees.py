@@ -149,6 +149,10 @@ class WorktreeCommands:
         path.parent.mkdir(parents=True, exist_ok=True)
         arguments = ("-C", str(base), *NO_HOOKS, "worktree", "add")
         if start_point is None:
+            # a fetch never moves the local branch a clone made (the default one): fast-forward
+            # it to the origin's head; git refuses a non-fast-forward, keeping local commits
+            remote = f"refs/remotes/{self._remote(branch)}:{HEADS_NAMESPACE}{branch}"
+            self._attempt("-C", str(base), "fetch", "--quiet", ".", remote)
             return self._run(*arguments, str(path), END_OF_OPTIONS, branch)
         return self._run(*arguments, "-b", branch, str(path), END_OF_OPTIONS, start_point)
 
