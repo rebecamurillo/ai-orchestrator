@@ -1,7 +1,7 @@
 """project_package: the package a Project installed from its hub; template_version.package_sha.
 
 Revision ID: 0047_project_package
-Revises: 0046_repository_initiative_folder
+Revises: 0046_repository_init_folder
 Create Date: 2026-11-24
 """
 
@@ -14,7 +14,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0047_project_package"
-down_revision: str | None = "0046_repository_initiative_folder"
+down_revision: str | None = "0046_repository_init_folder"
 branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | None = None
 

@@ -27,7 +27,7 @@ def function(name: str) -> ast.FunctionDef:
 
 
 def test_the_revision_follows_project_run_defaults() -> None:
-    assert constant("revision") == "0046_repository_initiative_folder"
+    assert constant("revision") == "0046_repository_init_folder"
     assert constant("down_revision") == "0045_project_run_defaults"
 
 

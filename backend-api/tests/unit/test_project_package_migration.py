@@ -27,7 +27,7 @@ def function(name: str) -> ast.FunctionDef:
 
 def test_the_revision_follows_the_initiative_folder() -> None:
     assert constant("revision") == "0047_project_package"
-    assert constant("down_revision") == "0046_repository_initiative_folder"
+    assert constant("down_revision") == "0046_repository_init_folder"
 
 
 def test_the_upgrade_creates_the_table_with_every_column_not_null() -> None:
