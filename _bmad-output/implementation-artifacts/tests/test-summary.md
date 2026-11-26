@@ -1,158 +1,96 @@
-# Test Automation Summary — orchestrator-initiative-steps / epic-9-initiative-reopen
+# Test Automation Summary — orchestrator-initiative-steps / epic-10-initiatives-board
 
 Generated: 2026-11-26. Dispatched with an empty story id, so this covers the whole epic.
-Spec: `initiatives/orchestrator-initiative-steps/epic-9-initiative-reopen/SPEC.md` (relative to the hub).
-Stories: 1–4 (through commit `07420f7c`).
-Previous summary (epic-8-initiative-advance): in git history at `310278de`.
+Spec: `initiatives/orchestrator-initiative-steps/epic-10-initiatives-board/SPEC.md` (relative to the hub).
+Stories: 1–5 (through commit `f85e1685`).
+Previous summary (epic-9-initiative-reopen): in git history at `c6fa0368`.
 
-Framework: pytest + httpx (`backend-api/tests/e2e`, the `make e2e-api` gate). The epic is backend
-and guide only (the web-client change is the regenerated `schema.d.ts`), so no Playwright test is
-added.
-
-The stories' own tests are unit tests over the shared fakes, a `MockTransport` for the GitHub
-adapter, and structure tests for the guide. The new module drives the two new REST operations on
-the running stack:
-- the real `signal_run` cancels a real parked spec Run;
-- the real git adapter re-pushes a deleted `spec/{slug}` to a bare origin;
-- the real engine walks the next round to the reopened step, skipping rows outside `round_steps`.
-
-No existing test file was touched. No shipped template or hub `package/` is read (hard rule 6):
-the hub, package and origin are `test_initiatives.Hub`'s fixture, fresh per test.
+Framework: Playwright (`web-client/tests/e2e`, the `make e2e-ui` gate). The epic is web-client
+only, with no backend or contract change, so no API test is added. Each story already wrote
+its smoke spec (B14). The two new files cover the flows the smokes leave out. They mock the
+browser-side reads with `page.route()`, following the `board.spec.ts` precedent. No existing
+test file and no stub route was touched, and no shipped template is read (hard rule 6).
 
 ## Generated Tests
 
-### API tests — `backend-api/tests/e2e/test_initiative_reopen.py` (10 tests)
+### E2E tests — `web-client/tests/e2e/initiatives-flows.spec.ts` (6 tests, CAP-1)
 
-- **Reopen a parked step (CAP-2):**
-  - [x] The spec Run is parked on `intake`, then `reopen(intake, reason)`. Checked:
-    - the answer is 201 `{run_id, round: 2}`;
-    - the old Run is `cancelled`, with a `cancel` gate record;
-    - `spec/{slug}` keeps its sha (attached);
-    - the new Run is at the frozen version, with `round_steps` `intake,product`, `first_turn` = the
-      reason and `branch` `spec/{slug}`;
-    - it walks to `intake` at `(2, 0)` and is the initiative's only live Run;
-    - the intake turns hold both the round-1 first message and the reason;
-    - `reopened_after` is null.
-  - [x] `reopen(product, …)` gives `round_steps` `product`, and the walk skips `intake` and parks on
-    `product`.
-  - [x] With `spec/{slug}` deleted on the origin, the reopen re-creates it at `main`'s tip before the
-    new Run walks.
-  - [x] Two reopens in a row give rounds 2 then 3. Round 2's Run is cancelled, and exactly one Run
-    is live.
-- **The refusals write nothing (CAP-2):**
-  - [x] `gate`, `merge` and `deploy` each get 422 problem+json naming the step. A blank reason, an
-    unknown key and a missing reason also get 422. Afterwards the round is still 1, and the one Run
-    is still `needs_you`.
-  - [x] An unknown id gets 404. A cancelled initiative gets 409 naming its slug and `cancelled`,
-    and no Run is added.
-- **The upgrade preparation (CAP-3):**
-  - [x] With no hold, the answer is 409 `no instance hold…` and the parked Run stays `needs_you`.
-  - [x] Under a hold, the parked conversation is listed as `{run_id, initiative_id, step: intake}`.
-    It is `cancelled` with a `cancel` gate record, and the initiative stays open at round 1.
-    - The operation is instance-wide, so a live non-conversation interactive Run left by another
-      module answers 409 instead. That branch is checked too: the refusal does not name this Run,
-      and this Run still waits. The hold is released in `finally`.
-- **The surface (CAP-5, B10):**
-  - [x] Both operations answer 401 without the bearer.
-  - [x] No MCP tool name contains `reopen` or `upgrade`.
+- [x] Cards sit in the column of their current workflow. An empty column reads `—`. A `done`
+  item sits in `DONE`. A card links to `/initiatives/{id}`.
+- [x] Two cancelled items: `DONE` reads `2 cancelled, hidden · show`, and the items appear only
+  after `show`.
+- [x] The rail's `nav-initiatives-needs-you` reads `1 need you`, taken from the response counts.
+  The readout reads `2 ongoing · 1 need you`.
+- [x] `NEEDS YOU` requests `filter=needs_you` and writes `?filter=needs_you` to the URL. The mount
+  request used `filter=ongoing`.
+- [x] An empty response reads `NO INITIATIVES`, links to `/initiatives/new`, and shows no rail
+  need-you line.
+- [x] A 503 swaps the board for the failed-fetch readout, which names
+  `/api/initiatives?filter=ongoing` and offers Retry.
 
-### API tests — `backend-api/tests/e2e/test_guide_package.py` (5 tests, second dispatch)
+### E2E tests — `web-client/tests/e2e/new-initiative-refusals.spec.ts` (4 tests, CAP-3)
 
-Added in a second dispatch on the same epic. The first dispatch left CAP-4 to the unit tests
-only. These tests check structure, never prose (hard rule 6):
-- [x] `/llms.txt` lists `initiatives/package`, `initiatives/spec` and `initiatives/chain` under
-  Guide.
-- [x] The served package page is `kind: page`, `audience: any`, with the nine `## ` sections of
-  story 4 in order.
-- [x] Each served pointer page has at most 10 body lines and names `initiatives/package`, which
-  resolves.
-- [x] Every `METHOD /path` the package page names is in the instance's served `/openapi.json`.
-  Placeholders are normalised, and `/api/v1` is prefixed where the page omits it.
-- [x] Every MCP operation id the page names is in `tools/list`, and no tool is named `reopen`.
-
-Not covered end to end (unit tests only, by design):
-- the `initiative_pr_check` job: it would call GitHub, which CAP-5 and hard rule 5 forbid;
-- the start-up `reopen_after_upgrade` pass: it needs a backend restart (hard rule 9; `make
-  durability` territory);
-- `reopened_after` and the build's `BLK · stopped on the spec · {step} reopens` line: they need a
-  done gate, a merge and a parked build (epic 8's long fixture); unit tested in
-  `test_initiative_detail_reopen.py`;
-- `consumed_at` on a blocked advance during a reopen;
-- the done-initiative 409;
-- the guide pages' source files (`check_guide.py` and the unit structure tests). Their served
-  form is covered by `test_guide_package.py`.
+- [x] Create stays disabled until both the name and the first message are filled. It then reads
+  `Create and start spec`.
+- [x] A 409 with an open holder renders the exact `newini-slug-taken` line, and the holder link
+  goes to `/initiatives/{id}`. Create is disabled, and editing the name clears the line and
+  enables create.
+- [x] A 409 with no open holder (`… waits for its branch cleanup: …`) renders the problem's
+  `detail`, and create is disabled.
+- [x] A package read that answers 404 shows the line
+  `no package installed · install one in the project's Package section`. No sequence is shown,
+  and create stays disabled with both fields filled.
 
 ## Results
 
-**Not run against a stack in this session.** The Docker daemon is unreachable from this machine
-(`docker info` fails), so `make e2e` could not build the disposable `aio-e2e` stack. No running
-instance was touched (hard rule 9; SPEC constraint "never start, stop, upgrade or call a running
-instance").
+The specs were run locally on spare ports (`E2E_PREVIEW_PORT=4399 E2E_STUB_BACKEND_PORT=8799`).
+Port 4321 was not bound and no running service was touched (hard rule 9).
 
-What was verified:
-- `pytest tests/e2e/test_initiative_reopen.py --collect-only`: 10 tests collected.
-- `ruff check` and `ruff format` on the new file: clean.
-- `scripts/check_test_pairs.py`: passes. mypy in `make lint` covers only `domain/` and
-  `application/`, as for every e2e module.
+- New specs plus the epic's own smokes (`initiatives.spec.ts`, `new-initiative.spec.ts`):
+  **13 passed**.
+- `prettier --check` and `eslint` pass on both new files.
+- Related existing specs (`board`, `board-list`, `projects`, `repository-init`, `templates`,
+  `run-detail`, `shell`): **58 passed, 6 failed**. The failures are two pre-existing defects
+  that stories 2, 4 and 5 left. They are reported here and were not fixed: they are outside a
+  QA dispatch's write scope.
 
-The assumptions that only a run can confirm:
-- the cancel through `signal_run` is synchronous, so the new Run is created on the first call and
-  not refused with `Run … is still live`;
-- a parked conversation with no turn running is not a working step, so the hold can be placed.
+### Defect 1 — `templates.spec.ts`: 5 tests time out on `/templates/demo/1`
 
-If either is wrong, the failing assertion names it.
+- The SSR render throws `TypeError: Cannot read properties of undefined (reading
+  'toUpperCase')` in `src/components/templates/TemplateTypeLine.astro:9`.
+- Cause: the stub's template version payloads (`tests/e2e/templates-fixtures.mjs` /
+  `stub-backend.mjs`) carry no `type`. Story 3.1 added `type` to the contract, and story 10.4
+  reads it without a fallback.
+- Fix: add `type: 'auto'` to the stub's template version fixtures. This is a stub fixture that
+  drifted from the contract (case c, maintenance), not a change to the code.
 
-The second dispatch found the same state: `docker info` still fails, and `0046` still declares
-the 33-character id. For `test_guide_package.py`, the following was verified:
-- 5 tests collected;
-- `ruff check` and `ruff format --check` are clean;
-- `check_test_pairs.py` passes;
-- an offline dry run of its page-side extraction against `guide/initiatives/*.md` and
-  `contracts/openapi.json`:
-  - 6 routes named, all in the contract;
-  - 5 operation ids named, all in `ALLOWED_OPERATION_IDS`;
-  - the nine headings in order;
-  - each pointer page has 4 body lines.
+### Defect 2 — `projects.spec.ts:203` "paints no amber or red pixel when every Repository is ok"
 
-A third dispatch picked up after the second was interrupted (commit `bd1c5348`). It added no
-tests, and it found the same state: `docker info` fails, and `0046` is unchanged. What it
-re-verified on both modules:
-- 15 tests collected;
-- `ruff check` and `ruff format --check` are clean;
-- `check_test_pairs.py` passes;
-- `check_guide.py` passes (34 pages);
-- the offline dry run gives the same result: 6 routes, all in the contract; 5 operation ids,
-  all in `ALLOWED_OPERATION_IDS`; the nine headings in order; 4 body lines on each pointer page.
-
-### Defect still open from epic 6: `0046` revision id overflows `alembic_version`
-
-`backend-api/alembic/versions/0046_repository_initiative_folder.py` still declares the 33-character
-revision `0046_repository_initiative_folder`, and `alembic_version.version_num` is `varchar(32)`.
-The migrate step at start-up fails on Postgres, so `make e2e` cannot boot until the id is shortened
-(in `0046`, and in `0047`'s `down_revision`).
+- The CLEAN project now paints amber from two sources:
+  - the `INITIATIVES` section (story 10.2): the stub's `GET /projects/{id}/initiatives` always
+    answers a `waiting for her` row, so the `BLK` token and the amber age appear;
+  - the *Remove package* button's `::before` / `::after` pseudo-elements. Story 10.5's
+    exclusion filter matches only the exact selector, so these slip through.
+- Fix: decide whether the CLEAN fixture should answer an empty initiatives list, and widen the
+  exclusion to the button's pseudo-elements. Both change an existing test, so this goes to the
+  lead or Operator under hard rule 1.
 
 ## Coverage
 
-- SPEC capabilities with an e2e test:
-  - CAP-2: reopen, its round, branch attach and re-create, refusals;
-  - CAP-3: `upgrade-prepare` with no hold and under a hold;
-  - CAP-5: the cancels go through `signal_run`, the Run through `create_run`, and there is no MCP
-    tool.
-- CAP-4: the served package page, its pointer pages, and its routes and tools against the
-  running instance.
-- CAP-1 is unit-tested only (it would call GitHub).
-- Story 2 acceptance criteria with an e2e test: 6 of 10 (the parked reopen, `round_steps`
-  narrowing, a deleted branch, two reopens, the 422s, the 409 on a cancelled initiative).
-- Story 3 acceptance criteria with an e2e test: 2 of 8 (no hold, and a cancel under a hold).
-- Endpoints exercised:
-  - `POST /initiatives/{id}/reopen`, `POST /instance/upgrade-prepare`;
-  - `POST`/`DELETE /instance/hold`, `GET /instance/activity`;
-  - `GET /initiatives/{id}`, `GET /runs/{id}/detail`, MCP `tools/list`.
-- UI features: none in scope.
+- CAP-1 (board, rail): smoke, plus filter, cancelled toggle, rail need-you line, empty state and
+  failed read.
+- CAP-2 (list view, project section): smoke only (`initiatives.spec.ts`, `projects.spec.ts`).
+- CAP-3 (New initiative): smoke, plus the empty-field guard, both 409 paths and the missing
+  package.
+- CAP-4 (initiative tag, type): the board's linked card (`board.spec.ts`). The Run header
+  `wf-initiative-tag` and the templates type are unit-tested only. The templates e2e is blocked
+  by defect 1.
+- CAP-5 (Package section, folder): `projects.spec.ts` (package kv, refused remove, folder save).
+- UI features with an e2e flow: 5 of 5 capabilities touched; 10 new tests.
 
 ## Next Steps
 
-- Shorten the `0046` revision id, then run `make e2e` on a machine with Docker. That runs this
-  module and epics 7–8's `test_initiatives.py` and `test_initiative_advance.py`, none of which has
-  run yet.
-- Once epic 11 story 6 lands the "reopen step …" action, add a Playwright test for it.
+- Fix defects 1 and 2, then run `make e2e` in `aio-e2e` before the pull request (B14).
+- Once the stub's templates carry `type`, add a `templates-type` e2e assertion. Once a stub Run
+  fixture carries `initiative`, add one for `wf-initiative-tag`.
+- Epic 11 (the initiative page): a click-through from a card to `/initiatives/{id}`.
