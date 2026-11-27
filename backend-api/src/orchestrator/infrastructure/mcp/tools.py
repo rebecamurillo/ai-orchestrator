@@ -21,6 +21,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import quote
 
+from orchestrator.infrastructure.mcp import initiative_tools as initiative_tools_module
 from orchestrator.infrastructure.mcp import package_tools as package_tools_module
 from orchestrator.infrastructure.mcp.client import InProcessApi
 from orchestrator.infrastructure.mcp.facade import ToolFailure
@@ -31,7 +32,8 @@ type Tool = Callable[..., Awaitable[Any]]
 
 #: The operationId (as `app.openapi()` names it) of every operation a tool calls. A tool whose
 #: call is not here fails `tests/unit/test_mcp_allow_list.py`; nothing under `/instance`, `/kit`,
-#: `/readiness` or `/probe` may ever be added (AD-34).
+#: `/readiness` or `/probe` may ever be added (AD-34). `POST /initiatives/{id}/reopen` stays out:
+#: she reopens a step on the board (Operator ruling 2026-11-27, MCP initiative tools).
 ALLOWED_OPERATION_IDS: frozenset[str] = frozenset(
     {
         "read_version_api_v1_version_get",
@@ -62,6 +64,14 @@ ALLOWED_OPERATION_IDS: frozenset[str] = frozenset(
         "list_models_api_v1_harnesses__name__models_get",
         "read_index_llms_txt_get",
         "read_page_guide__page_id__md_get",
+        "list_initiatives_api_v1_initiatives_get",
+        "read_initiative_api_v1_initiatives__initiative_id__get",
+        "create_initiative_route_api_v1_initiatives_post",
+        "cancel_initiative_route_api_v1_initiatives__initiative_id__cancel_post",
+        "start_next_route_api_v1_initiatives__initiative_id__start_next_post",
+        "get_session_api_v1_runs__run_id__session_get",
+        "post_session_message_api_v1_runs__run_id__session_messages_post",
+        "post_session_retry_api_v1_runs__run_id__session_retry_post",
     }
 )
 
@@ -116,6 +126,7 @@ def build_tools(api: InProcessApi) -> list[Tool]:
         *_workflow_tools(api),
         *_dispatch_tools(api),
         *_watch_tools(api),
+        *initiative_tools_module.initiative_tools(api),
     ]
 
 

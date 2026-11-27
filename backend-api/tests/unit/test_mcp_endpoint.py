@@ -58,6 +58,8 @@ REPOSITORY_ID = UUID("01960000-0000-7000-9000-00000000a0f2")
 #: Story 1 of epic 6, 2026-11-22 (Project run defaults): set_run_defaults, after init_repository.
 #: Story 3 of epic 6, 2026-11-22 (package): install_package, read_package, remove_package, after
 #: set_initiative_folder.
+#: Operator ruling 2026-11-27, MCP initiative tools: nine initiative and session tools, after
+#: wait_run_events (no reopen).
 EXPECTED_TOOLS = (
     "version",
     "list_templates",
@@ -86,6 +88,15 @@ EXPECTED_TOOLS = (
     "get_run",
     "get_run_detail",
     "wait_run_events",
+    "list_initiatives",
+    "get_initiative",
+    "create_initiative",
+    "cancel_initiative",
+    "start_next",
+    "get_session",
+    "post_session_message",
+    "retry_session",
+    "wait_initiative",
 )
 
 PROTOCOL_HEADERS = {

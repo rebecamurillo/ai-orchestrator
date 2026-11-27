@@ -47,6 +47,7 @@ INSTRUCTIONS = (
     "The orchestrator runs BMAD dev-loop workflows against your repositories. "
     "Read version first, pre-flight before creating a Run, carry the operator's budget "
     "unchanged, and send only a Signal the Run's admitted_signals lists. "
+    "To drive an initiative for the operator, follow guide page initiatives/drive. "
     "Read the guide: read_guide with no id lists every page."
 )
 

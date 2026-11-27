@@ -31,7 +31,9 @@ FORBIDDEN_FRAGMENTS = ("/readiness", "/probe")
 #: Story 1 of epic 6, 2026-11-22 (Project run defaults): set_run_defaults joins.
 #: Story 2 of epic 6, 2026-11-22 (initiative folder): set_initiative_folder joins.
 #: Story 3 of epic 6, 2026-11-22 (package): install_package, read_package, remove_package join.
-TWENTY_EIGHT = 28
+#: Operator ruling 2026-11-27, MCP initiative tools: five initiative and three session operations
+#: join (reopen stays out).
+THIRTY_SIX = 36
 
 PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "version": {},
@@ -61,6 +63,16 @@ PLACEHOLDERS: dict[str, dict[str, Any]] = {
     "get_run": {"run_id": ID},
     "get_run_detail": {"run_id": ID},
     "wait_run_events": {"run_id": ID},
+    # Operator ruling 2026-11-27, MCP initiative tools.
+    "list_initiatives": {"project_id": ID},
+    "get_initiative": {"initiative_id": ID},
+    "create_initiative": {"body": {}},
+    "cancel_initiative": {"initiative_id": ID},
+    "start_next": {"initiative_id": ID, "park_seq": 1},
+    "get_session": {"run_id": ID},
+    "post_session_message": {"run_id": ID, "text": "ok"},
+    "retry_session": {"run_id": ID},
+    "wait_initiative": {"initiative_id": ID},
 }
 
 NEW_PATH_TOOLS = {
@@ -73,6 +85,15 @@ NEW_PATH_TOOLS = {
     "install_package": ("project_id", {"body": {}}),
     "read_package": ("project_id", {}),
     "remove_package": ("project_id", {}),
+    # Operator ruling 2026-11-27, MCP initiative tools.
+    "list_initiatives": ("project_id", {}),
+    "get_initiative": ("initiative_id", {}),
+    "cancel_initiative": ("initiative_id", {}),
+    "start_next": ("initiative_id", {"park_seq": 1}),
+    "get_session": ("run_id", {}),
+    "post_session_message": ("run_id", {"text": "ok"}),
+    "retry_session": ("run_id", {}),
+    "wait_initiative": ("initiative_id", {}),
 }
 
 
@@ -166,7 +187,7 @@ def test_every_tool_has_placeholders() -> None:
 
 async def test_every_tool_makes_one_call_to_an_allowed_operation(paths: dict[str, Any]) -> None:
     assert await violations(_tools, ALLOWED_OPERATION_IDS, paths) == []
-    assert len(ALLOWED_OPERATION_IDS) == TWENTY_EIGHT
+    assert len(ALLOWED_OPERATION_IDS) == THIRTY_SIX
 
 
 async def test_a_tool_calling_an_unlisted_operation_is_reported(paths: dict[str, Any]) -> None:
