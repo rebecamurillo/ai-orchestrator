@@ -140,8 +140,12 @@ The same operations are also exposed as MCP tools at `$ORCHESTRATOR_BASE_URL/mcp
 `get_template`, `preflight_run`, `create_run`, `get_run`, `get_run_detail`,
 `wait_run_events`, `send_signal`, `list_queue`, `list_projects`, `create_project`,
 `update_project`, `add_repository`, `check_clone`, `init_repository`, `validate_template`,
-`save_template`, `reload_templates`, `validate_spec_folder`, `list_models`. Each tool is one call to the
-route above it, so the rules in `rules` apply unchanged. `read_guide` reads this guide: with no
+`save_template`, `reload_templates`, `validate_spec_folder`, `list_models`, the package tools
+(`initiatives/package`) and the initiative tools `list_initiatives`, `get_initiative`,
+`create_initiative`, `cancel_initiative`, `start_next`, `get_session`,
+`post_session_message`, `retry_session`. Each tool is one call to the route above it, so the
+rules in `rules` apply unchanged; `wait_initiative` alone is composed, a poll of
+`GET /initiatives/{id}` every 2 s for up to 120 s (`initiatives/drive`). `read_guide` reads this guide: with no
 id it returns `/llms.txt`, with a page id it returns `/guide/{id}.md`; resources and prompts are described in `connect`. The installer writes the per-harness
 configuration from the kit's `mcp/` templates (`connect`).
 

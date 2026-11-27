@@ -117,12 +117,13 @@ async def test_an_enqueue_failure_is_500_and_the_turn_is_closed_error(api: Api) 
     assert (newest.n, newest.status) == (3, "error")
 
 
-def test_the_route_is_in_the_contract_and_not_an_mcp_tool(api: Api) -> None:
+def test_the_route_is_in_the_contract_and_an_mcp_tool(api: Api) -> None:
     operation = api.app.openapi()["paths"][PATH]["post"]
 
     assert operation["summary"] == "Restart the last failed turn"
     ref = operation["responses"]["201"]["content"]["application/json"]["schema"]["$ref"]
     assert ref.endswith("/SessionTurnOut")
-    assert operation["operationId"] not in ALLOWED_OPERATION_IDS
-    # 28: story 3 of epic 6, 2026-11-22 — the three package tools join the allow-list
-    assert len(ALLOWED_OPERATION_IDS) == 28  # noqa: PLR2004
+    # Operator ruling 2026-11-27, MCP initiative tools: AD-23's "no MCP tool" is reversed, the
+    # route is `retry_session`'s, and eight initiative and session operations join (36).
+    assert operation["operationId"] in ALLOWED_OPERATION_IDS
+    assert len(ALLOWED_OPERATION_IDS) == 36  # noqa: PLR2004

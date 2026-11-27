@@ -89,6 +89,12 @@ All routes sit under `/api/v1` and take the bearer token.
 Each has an MCP tool: `install_package`, `read_package`, `remove_package`, `set_run_defaults` and
 `set_initiative_folder`.
 
+An initiative itself is driven over MCP too: `list_initiatives`, `get_initiative`,
+`create_initiative`, `cancel_initiative` and `start_next` call `/initiatives`; `get_session`,
+`post_session_message` and `retry_session` call `/runs/{id}/session`; `wait_initiative` waits
+on `GET /initiatives/{id}`. A message sent through `post_session_message` is stored with the
+prefix `[the operator's agent] `. The procedure is `initiatives/drive`.
+
 ## Reopen
 
 `POST /api/v1/initiatives/{id}/reopen` with `{step, reason}` opens a conversation step again as the next round. It cancels every live

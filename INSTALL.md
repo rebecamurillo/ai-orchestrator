@@ -360,6 +360,7 @@ cannot, and nothing it does differently.
 | Workflows | `validate_template`, `save_template`, `reload_templates`, `validate_spec_folder` | `POST /templates/{name}/validate`, `POST /templates/{name}/versions`, `POST /templates/reload`, `POST /spec-folders/validate` |
 | Dispatch | `preflight_run`, `create_run`, `send_signal` | `POST /runs/preflight`, `POST /runs`, `POST /runs/{id}/signals` |
 | Watch | `get_run`, `get_run_detail`, `wait_run_events` (long-poll) | `GET /runs/{id}`, `GET /runs/{id}/detail`, `GET /runs/{id}/events?wait=30` |
+| Initiatives | `list_initiatives`, `get_initiative`, `create_initiative`, `cancel_initiative`, `start_next`, `get_session`, `post_session_message`, `retry_session`, `wait_initiative` (polls up to 120 s) | `GET /initiatives`, `GET /initiatives/{id}`, `POST /initiatives`, `POST /initiatives/{id}/cancel`, `POST /initiatives/{id}/start-next`, `GET /runs/{id}/session`, `POST /runs/{id}/session/messages`, `POST /runs/{id}/session/retry` |
 
 A harness that supports MCP resources also lists each guide page as `guide://{id}`, and each
 procedure page as a prompt named by its id with `/` replaced by `.` (`runs/launch` is

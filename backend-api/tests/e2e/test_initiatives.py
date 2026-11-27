@@ -646,7 +646,7 @@ def test_the_package_delete_is_refused_while_an_initiative_is_open(
     assert api.delete(url).status_code == HTTP_NO_CONTENT
 
 
-# ── The surface: bearer and no MCP tool (B10) ───────────────────────────────────────────
+# ── The surface: bearer and the MCP tools (B10; Operator ruling 2026-11-27) ─────────────
 
 
 def test_every_initiative_operation_needs_the_bearer(client: httpx.Client) -> None:
@@ -662,11 +662,21 @@ def test_every_initiative_operation_needs_the_bearer(client: httpx.Client) -> No
         assert client.request(method, url).status_code == httpx.codes.UNAUTHORIZED, (method, url)
 
 
-def test_no_mcp_tool_reaches_an_initiative_operation(api: httpx.Client) -> None:
+def test_the_declared_mcp_tools_reach_the_initiative_operations(api: httpx.Client) -> None:
     tools = Mcp(api)._post("tools/list", {})["result"]["tools"]
 
     names = {tool["name"] for tool in tools}
 
+    # Operator ruling 2026-11-27, MCP initiative tools: B10's "no MCP tool" is reversed for
+    # these operations; reopen keeps none.
     initiative_tools = {name for name in names if "initiative" in name}
-    assert initiative_tools <= {"set_initiative_folder"}, initiative_tools
-    assert not {name for name in names if "start_next" in name}
+    assert initiative_tools == {
+        "set_initiative_folder",
+        "list_initiatives",
+        "get_initiative",
+        "create_initiative",
+        "cancel_initiative",
+        "wait_initiative",
+    }, initiative_tools
+    assert {name for name in names if "start_next" in name} == {"start_next"}
+    assert not {name for name in names if "reopen" in name}
