@@ -254,9 +254,15 @@ export default function RunDetail({ runId }: Props) {
     if (seq === null) return;
     setAnchored(seq);
     setActiveTab('steps');
+  }, [detail]);
+
+  // Its own effect: a poll landing inside PROMOTED_MS re-ran the one above and cleared the
+  // timer, which left the row promoted and re-centred on every resize for good.
+  useEffect(() => {
+    if (anchored === null) return;
     const clear = window.setTimeout(() => setAnchored(null), PROMOTED_MS);
     return () => window.clearTimeout(clear);
-  }, [detail]);
+  }, [anchored]);
 
   // Panels above the tabs (files by epic) fill in after the detail and push the row back out
   // of view, so the row is re-centred on every page resize while it is promoted.
