@@ -201,7 +201,31 @@ def test_open_turns_counts_running_session_attempts_without_ended_at() -> None:
     assert walk.open_turns(walk_ports, world.run.id) == 0
 
 
-# AC6 ────────────────────────────────────────────────────────────────────────────────────
+def test_open_turns_counts_a_killed_turn_until_its_commit_sets_ended_at() -> None:
+    # PR #27 e2e-api, 2026-11-27: the killed turn's exit is written `error` before its
+    # session_commit sweeps the trees; the walk opened the next step in between
+    world = talking()
+    (running,) = [t for t in session_turns(world) if t.status == "running"]
+    world.ports.attempts.update(running.model_copy(update={"status": "error", "exit_code": -9}))
+    with_queued(world)
+    walk_ports = WalkPorts(
+        writers=world.ports,
+        step=StepPorts(
+            git=FakeGit(), clock=world.clock, work_dir="/work", process=FakeProcessRunner()
+        ),
+    )
+
+    assert walk.open_turns(walk_ports, world.run.id) == 1
+
+    world.ports.attempts.update(
+        running.model_copy(
+            update={"status": "error", "exit_code": -9, "ended_at": world.clock.now()}
+        )
+    )
+    assert walk.open_turns(walk_ports, world.run.id) == 0
+
+
+# AC6────────────────────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize("kind", ["session_end", "step_close", "cancel"])
