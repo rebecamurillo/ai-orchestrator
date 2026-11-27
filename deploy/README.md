@@ -664,7 +664,9 @@ still on the beta.4 kit is moved over once by reinstalling with the bootstrap in
 An initiative's spec conversation stays parked until the operator answers, often for days, so
 an upgrade does not wait for it to drain. The order that keeps every conversation:
 
-1. `POST /api/v1/instance/hold`.
+1. `POST /api/v1/instance/hold` with `{ttl_seconds, reason}` (`ttl_seconds` 1–3600). It
+   answers 409, naming them in `errors[]`, while any step is working: wait for them, then ask
+   again.
 2. `POST /api/v1/instance/upgrade-prepare`. It cancels each conversation that waits for the
    operator with the reason `upgrade` and lists them. It answers 409 when no hold stands, or when
    an initiative's interactive Run is queued, running or stopped on something other than a
